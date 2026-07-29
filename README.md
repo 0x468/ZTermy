@@ -3,9 +3,10 @@
 ztermy is a Windows 11-first native SSH terminal application built with Qt 6
 and C++23.
 
-The project currently has a buildable native window-shell milestone. Netcatty
-is the primary product reference for the initial feature set and visual
-direction. Its source code, assets, themes, and implementation are not copied.
+The project currently has a buildable native window shell and an interactive
+local PowerShell terminal. Netcatty is the primary product reference for the
+initial feature set and visual direction. Its source code, assets, themes, and
+implementation are not copied.
 
 ## Technology
 
@@ -25,10 +26,11 @@ Other platforms are out of scope until the Windows version is stable.
 
 ## Project status
 
-The Qt Quick shell, Windows non-client integration, engine-independent ConPTY
-transport, and first `libghostty-vt` adapter are implemented. The active
-milestone is terminal-session integration and immutable renderer snapshots.
-See [docs/V1_SCOPE.md](docs/V1_SCOPE.md) and
+The Qt Quick shell, Windows non-client integration, ConPTY transport,
+`libghostty-vt` adapter, immutable cell snapshots, and first custom terminal
+item are implemented. The active milestone is terminal interaction
+correctness, scrollback, and renderer performance. See
+[docs/V1_SCOPE.md](docs/V1_SCOPE.md) and
 [docs/V1_ACCEPTANCE.md](docs/V1_ACCEPTANCE.md).
 
 ## Building

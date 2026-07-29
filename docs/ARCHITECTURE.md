@@ -34,9 +34,8 @@ Windows shell integration.
 ```text
 ConPTY or SSH channel
   -> session I/O worker
-  -> bounded byte queue
   -> terminal parser and screen model
-  -> dirty-row snapshot
+  -> immutable cell snapshot
   -> GUI-thread handoff
   -> TerminalQuickItem
   -> Qt Quick scene graph
@@ -53,16 +52,28 @@ It must not wait for output, persistence, logging, or a UI snapshot.
 - Cross-thread messages are bounded and cancellable.
 - Large output is coalesced into damage updates; it is not converted into one
   UI event per byte or character.
+- Local terminal output is read on a dedicated `std::jthread`. Input uses a
+  separate writer with a bounded 1 MiB queue, and resizes are coalesced to the
+  latest geometry.
+- Snapshot delivery keeps only the latest immutable frame while a GUI-thread
+  delivery is pending. Session shutdown cancels blocking reads and joins both
+  workers before releasing ConPTY state.
 
 ## Terminal rendering
 
-The terminal viewport is a single custom `QQuickItem`. Its renderer batches
-backgrounds, selections, cursor geometry, decorations, and glyphs. It retains a
-glyph cache and updates only damaged rows where possible.
+The terminal viewport is a single custom `QQuickItem`. The first renderer
+paints one CPU image per immutable snapshot and uploads it as one public scene
+graph texture. This establishes correct ownership and thread boundaries
+without creating a QML object per cell.
+
+The target renderer batches backgrounds, selections, cursor geometry,
+decorations, and glyphs, retains a glyph cache, and updates only damaged rows.
+The current full-frame texture path is intentionally replaceable after
+profiling establishes the required batching and damage strategy.
 
 Formatted plain text is reserved for tests, diagnostics, and clipboard-style
-operations. Rendering will consume an immutable, ztermy-owned cell snapshot;
-the render thread will never access a mutable Ghostty terminal handle.
+operations. Rendering consumes an immutable, ztermy-owned cell snapshot; the
+render thread never accesses a mutable Ghostty terminal handle.
 
 `QQuickPaintedItem` is not the target renderer. Private QRhi APIs are not used
 until a measured public-scene-graph implementation proves insufficient.

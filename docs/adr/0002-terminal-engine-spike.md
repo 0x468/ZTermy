@@ -27,15 +27,17 @@ together.
 
 The first integration gate adopts a pinned `libghostty-vt` revision behind the
 ztermy-owned `TerminalEngine` interface. MSVC dynamic Debug and static Release
-builds, split VT input, plain-text formatting, and resize reflow have been
+builds, split VT input, plain-text formatting, resize reflow, immutable cell
+snapshots, styles, colors, cursor state, and live ConPTY handoff have been
 verified. No Ghostty type crosses the adapter boundary.
 
-This does not yet accept the complete rendering design. Unicode, IME,
-alternate-screen, selection, dirty-row behavior, sustained output performance,
-and immutable renderer snapshots must still be measured before the spike is
-complete. Contour remains the fallback if those gates fail. The ConPTY
-transport remains independent so the engine can be replaced without changing
-process I/O.
+The first renderer is accepted as a correctness baseline, not the final
+rendering design. It uploads one full-frame texture from a ztermy-owned
+immutable snapshot. Unicode, IME, alternate-screen, selection, scrollback,
+dirty-row behavior, and sustained output performance must still be measured
+before the spike is complete. Contour remains the fallback if those gates fail.
+The ConPTY transport remains independent so the engine can be replaced without
+changing process I/O.
 
 ## Decision criteria
 

@@ -60,6 +60,41 @@ target_compile_features(ztermy_terminal_engine PUBLIC cxx_std_23)
 target_include_directories(ztermy_terminal_engine PUBLIC src)
 target_link_libraries(ztermy_terminal_engine PRIVATE ghostty-vt-static)
 
+add_library(ztermy_terminal_session STATIC
+    src/application/terminal/LocalTerminalSession.cpp
+    src/application/terminal/LocalTerminalSession.h
+)
+
+target_compile_features(ztermy_terminal_session PUBLIC cxx_std_23)
+target_include_directories(ztermy_terminal_session PUBLIC src)
+target_compile_definitions(ztermy_terminal_session PRIVATE
+    NOMINMAX
+    UNICODE
+    WIN32_LEAN_AND_MEAN
+    _UNICODE
+)
+target_link_libraries(ztermy_terminal_session
+    PUBLIC ztermy_terminal_engine
+    PRIVATE
+        ztermy_terminal_transport
+        Qt6::Core
+)
+
+add_library(ztermy_terminal_ui STATIC
+    src/ui/terminal/TerminalItem.cpp
+    src/ui/terminal/TerminalItem.h
+)
+
+target_compile_features(ztermy_terminal_ui PUBLIC cxx_std_23)
+target_include_directories(ztermy_terminal_ui PUBLIC src)
+target_link_libraries(ztermy_terminal_ui
+    PUBLIC ztermy_terminal_engine
+    PRIVATE
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Quick
+)
+
 qt_add_executable(ztermy WIN32
     src/main.cpp
     src/core/logging/Logging.cpp
@@ -104,7 +139,9 @@ if(ZTERMY_STATIC_BUILD)
 endif()
 
 target_link_libraries(ztermy PRIVATE
+    ztermy_terminal_session
     ztermy_terminal_transport
+    ztermy_terminal_ui
     Qt6::Core
     Qt6::Gui
     Qt6::Quick
@@ -121,6 +158,20 @@ if(MSVC)
     )
 
     target_compile_options(ztermy_terminal_engine PRIVATE
+        /permissive-
+        /utf-8
+        /W4
+        /Zc:__cplusplus
+    )
+
+    target_compile_options(ztermy_terminal_session PRIVATE
+        /permissive-
+        /utf-8
+        /W4
+        /Zc:__cplusplus
+    )
+
+    target_compile_options(ztermy_terminal_ui PRIVATE
         /permissive-
         /utf-8
         /W4
@@ -200,4 +251,25 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME terminal-engine COMMAND ztermy_terminal_engine_tests)
+
+    qt_add_executable(ztermy_local_terminal_session_tests
+        tests/local_terminal_session_tests.cpp
+    )
+
+    target_compile_features(ztermy_local_terminal_session_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_local_terminal_session_tests PRIVATE
+        ztermy_terminal_session
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_local_terminal_session_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME local-terminal-session COMMAND ztermy_local_terminal_session_tests)
 endif()

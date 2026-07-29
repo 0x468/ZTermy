@@ -3,9 +3,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <memory>
 #include <span>
 #include <string>
 #include <system_error>
+#include <vector>
 
 namespace ztermy::terminal
 {
@@ -20,6 +22,63 @@ struct TerminalGeometry
     [[nodiscard]] bool valid() const noexcept { return columns > 0 && rows > 0; }
 };
 
+struct TerminalColor
+{
+    std::uint8_t red = 0;
+    std::uint8_t green = 0;
+    std::uint8_t blue = 0;
+
+    friend bool operator==(const TerminalColor &, const TerminalColor &) = default;
+};
+
+struct TerminalCell
+{
+    std::u32string grapheme;
+    TerminalColor foreground;
+    TerminalColor background;
+    bool bold = false;
+    bool italic = false;
+    bool underline = false;
+    bool strikethrough = false;
+    bool overline = false;
+    bool invisible = false;
+};
+
+enum class TerminalCursorStyle : std::uint8_t
+{
+    block,
+    bar,
+    underline,
+    hollowBlock,
+};
+
+struct TerminalCursor
+{
+    std::uint16_t column = 0;
+    std::uint16_t row = 0;
+    TerminalCursorStyle style = TerminalCursorStyle::block;
+    TerminalColor color;
+    bool visible = false;
+    bool blinking = false;
+};
+
+struct TerminalSnapshot
+{
+    std::uint16_t columns = 0;
+    std::uint16_t rows = 0;
+    TerminalColor defaultForeground;
+    TerminalColor defaultBackground;
+    TerminalCursor cursor;
+    std::vector<TerminalCell> cells;
+
+    [[nodiscard]] const TerminalCell &cell(const std::uint16_t column, const std::uint16_t row) const
+    {
+        return cells.at((static_cast<std::size_t>(row) * columns) + column);
+    }
+};
+
+using TerminalSnapshotPtr = std::shared_ptr<const TerminalSnapshot>;
+
 class TerminalEngine
 {
 public:
@@ -32,6 +91,7 @@ public:
 
     [[nodiscard]] virtual std::error_code feed(std::span<const std::byte> bytes) = 0;
     [[nodiscard]] virtual std::error_code resize(TerminalGeometry geometry) = 0;
+    [[nodiscard]] virtual std::expected<TerminalSnapshot, std::error_code> snapshot() = 0;
 
     // Diagnostic and clipboard-oriented representation. Rendering will consume
     // a separate immutable cell snapshot rather than formatted text.

@@ -2,6 +2,8 @@
 
 #include <ghostty/vt.h>
 
+#include <utility>
+
 namespace
 {
 
@@ -69,6 +71,72 @@ private:
     GhosttyTerminal m_handle;
 };
 
+class UniqueRenderState final
+{
+public:
+    explicit UniqueRenderState(const GhosttyRenderState handle) noexcept : m_handle(handle) {}
+    ~UniqueRenderState()
+    {
+        if (m_handle != nullptr)
+        {
+            ghostty_render_state_free(m_handle);
+        }
+    }
+
+    UniqueRenderState(const UniqueRenderState &) = delete;
+    UniqueRenderState &operator=(const UniqueRenderState &) = delete;
+
+    [[nodiscard]] GhosttyRenderState get() const noexcept { return m_handle; }
+    void release() noexcept { m_handle = nullptr; }
+
+private:
+    GhosttyRenderState m_handle;
+};
+
+class UniqueRowIterator final
+{
+public:
+    explicit UniqueRowIterator(const GhosttyRenderStateRowIterator handle) noexcept : m_handle(handle) {}
+    ~UniqueRowIterator()
+    {
+        if (m_handle != nullptr)
+        {
+            ghostty_render_state_row_iterator_free(m_handle);
+        }
+    }
+
+    UniqueRowIterator(const UniqueRowIterator &) = delete;
+    UniqueRowIterator &operator=(const UniqueRowIterator &) = delete;
+
+    [[nodiscard]] GhosttyRenderStateRowIterator get() const noexcept { return m_handle; }
+    void release() noexcept { m_handle = nullptr; }
+
+private:
+    GhosttyRenderStateRowIterator m_handle;
+};
+
+class UniqueRowCells final
+{
+public:
+    explicit UniqueRowCells(const GhosttyRenderStateRowCells handle) noexcept : m_handle(handle) {}
+    ~UniqueRowCells()
+    {
+        if (m_handle != nullptr)
+        {
+            ghostty_render_state_row_cells_free(m_handle);
+        }
+    }
+
+    UniqueRowCells(const UniqueRowCells &) = delete;
+    UniqueRowCells &operator=(const UniqueRowCells &) = delete;
+
+    [[nodiscard]] GhosttyRenderStateRowCells get() const noexcept { return m_handle; }
+    void release() noexcept { m_handle = nullptr; }
+
+private:
+    GhosttyRenderStateRowCells m_handle;
+};
+
 class UniqueFormatter final
 {
 public:
@@ -114,6 +182,11 @@ private:
     friend class ztermy::terminal::GhosttyTerminalEngine;
 };
 
+[[nodiscard]] ztermy::terminal::TerminalColor terminalColor(const GhosttyColorRgb color) noexcept
+{
+    return {.red = color.r, .green = color.g, .blue = color.b};
+}
+
 } // namespace
 
 namespace ztermy::terminal
@@ -121,10 +194,30 @@ namespace ztermy::terminal
 
 struct GhosttyTerminalEngine::Impl
 {
-    explicit Impl(const GhosttyTerminal handle) noexcept : terminal(handle) {}
+    Impl(const GhosttyTerminal terminalHandle, const GhosttyRenderState renderStateHandle,
+         const GhosttyRenderStateRowIterator rowIteratorHandle,
+         const GhosttyRenderStateRowCells rowCellsHandle) noexcept
+        : terminal(terminalHandle),
+          renderState(renderStateHandle),
+          rowIterator(rowIteratorHandle),
+          rowCells(rowCellsHandle)
+    {
+    }
 
     ~Impl()
     {
+        if (rowCells != nullptr)
+        {
+            ghostty_render_state_row_cells_free(rowCells);
+        }
+        if (rowIterator != nullptr)
+        {
+            ghostty_render_state_row_iterator_free(rowIterator);
+        }
+        if (renderState != nullptr)
+        {
+            ghostty_render_state_free(renderState);
+        }
         if (terminal != nullptr)
         {
             ghostty_terminal_free(terminal);
@@ -132,6 +225,9 @@ struct GhosttyTerminalEngine::Impl
     }
 
     GhosttyTerminal terminal = nullptr;
+    GhosttyRenderState renderState = nullptr;
+    GhosttyRenderStateRowIterator rowIterator = nullptr;
+    GhosttyRenderStateRowCells rowCells = nullptr;
 };
 
 std::expected<std::unique_ptr<GhosttyTerminalEngine>, std::error_code>
@@ -150,8 +246,37 @@ GhosttyTerminalEngine::create(const TerminalGeometry geometry)
     }
 
     UniqueTerminal terminalOwner(terminal);
-    auto impl = std::make_unique<Impl>(terminalOwner.get());
+
+    GhosttyRenderState renderState = nullptr;
+    if (const GhosttyResult renderResult = ghostty_render_state_new(nullptr, &renderState);
+        renderResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(renderResult));
+    }
+    UniqueRenderState renderStateOwner(renderState);
+
+    GhosttyRenderStateRowIterator rowIterator = nullptr;
+    if (const GhosttyResult iteratorResult = ghostty_render_state_row_iterator_new(nullptr, &rowIterator);
+        iteratorResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(iteratorResult));
+    }
+    UniqueRowIterator rowIteratorOwner(rowIterator);
+
+    GhosttyRenderStateRowCells rowCells = nullptr;
+    if (const GhosttyResult cellsResult = ghostty_render_state_row_cells_new(nullptr, &rowCells);
+        cellsResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(cellsResult));
+    }
+    UniqueRowCells rowCellsOwner(rowCells);
+
+    auto impl = std::make_unique<Impl>(terminalOwner.get(), renderStateOwner.get(), rowIteratorOwner.get(),
+                                       rowCellsOwner.get());
     terminalOwner.release();
+    renderStateOwner.release();
+    rowIteratorOwner.release();
+    rowCellsOwner.release();
     auto engine = std::unique_ptr<GhosttyTerminalEngine>(new GhosttyTerminalEngine(std::move(impl)));
     if (const std::error_code resizeError = engine->resize(geometry))
     {
@@ -183,6 +308,157 @@ std::error_code GhosttyTerminalEngine::resize(const TerminalGeometry geometry)
     const GhosttyResult result = ghostty_terminal_resize(m_impl->terminal, geometry.columns, geometry.rows,
                                                          geometry.cellWidthPixels, geometry.cellHeightPixels);
     return result == GHOSTTY_SUCCESS ? std::error_code{} : ghosttyError(result);
+}
+
+std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot()
+{
+    if (const GhosttyResult updateResult = ghostty_render_state_update(m_impl->renderState, m_impl->terminal);
+        updateResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(updateResult));
+    }
+
+    TerminalSnapshot result;
+    if (const GhosttyResult colsResult =
+            ghostty_render_state_get(m_impl->renderState, GHOSTTY_RENDER_STATE_DATA_COLS, &result.columns);
+        colsResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(colsResult));
+    }
+    if (const GhosttyResult rowsResult =
+            ghostty_render_state_get(m_impl->renderState, GHOSTTY_RENDER_STATE_DATA_ROWS, &result.rows);
+        rowsResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(rowsResult));
+    }
+
+    GhosttyRenderStateColors colors{};
+    colors.size = sizeof(colors);
+    if (const GhosttyResult colorResult = ghostty_render_state_colors_get(m_impl->renderState, &colors);
+        colorResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(colorResult));
+    }
+    result.defaultForeground = terminalColor(colors.foreground);
+    result.defaultBackground = terminalColor(colors.background);
+    result.cursor.color = terminalColor(colors.cursor_has_value ? colors.cursor : colors.foreground);
+
+    bool cursorInViewport = false;
+    bool cursorVisible = false;
+    ghostty_render_state_get(m_impl->renderState, GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_HAS_VALUE,
+                             &cursorInViewport);
+    ghostty_render_state_get(m_impl->renderState, GHOSTTY_RENDER_STATE_DATA_CURSOR_VISIBLE, &cursorVisible);
+    result.cursor.visible = cursorInViewport && cursorVisible;
+    ghostty_render_state_get(m_impl->renderState, GHOSTTY_RENDER_STATE_DATA_CURSOR_BLINKING, &result.cursor.blinking);
+    if (cursorInViewport)
+    {
+        ghostty_render_state_get(m_impl->renderState, GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_X,
+                                 &result.cursor.column);
+        ghostty_render_state_get(m_impl->renderState, GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_Y, &result.cursor.row);
+    }
+
+    GhosttyRenderStateCursorVisualStyle cursorStyle = GHOSTTY_RENDER_STATE_CURSOR_VISUAL_STYLE_BLOCK;
+    ghostty_render_state_get(m_impl->renderState, GHOSTTY_RENDER_STATE_DATA_CURSOR_VISUAL_STYLE, &cursorStyle);
+    switch (cursorStyle)
+    {
+        case GHOSTTY_RENDER_STATE_CURSOR_VISUAL_STYLE_BAR:
+            result.cursor.style = TerminalCursorStyle::bar;
+            break;
+        case GHOSTTY_RENDER_STATE_CURSOR_VISUAL_STYLE_UNDERLINE:
+            result.cursor.style = TerminalCursorStyle::underline;
+            break;
+        case GHOSTTY_RENDER_STATE_CURSOR_VISUAL_STYLE_BLOCK_HOLLOW:
+            result.cursor.style = TerminalCursorStyle::hollowBlock;
+            break;
+        case GHOSTTY_RENDER_STATE_CURSOR_VISUAL_STYLE_BLOCK:
+        default:
+            result.cursor.style = TerminalCursorStyle::block;
+            break;
+    }
+
+    result.cells.reserve(static_cast<std::size_t>(result.columns) * result.rows);
+    if (const GhosttyResult iteratorResult = ghostty_render_state_get(
+            m_impl->renderState, GHOSTTY_RENDER_STATE_DATA_ROW_ITERATOR, static_cast<void *>(&m_impl->rowIterator));
+        iteratorResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(iteratorResult));
+    }
+
+    while (ghostty_render_state_row_iterator_next(m_impl->rowIterator))
+    {
+        if (const GhosttyResult cellsResult = ghostty_render_state_row_get(
+                m_impl->rowIterator, GHOSTTY_RENDER_STATE_ROW_DATA_CELLS, static_cast<void *>(&m_impl->rowCells));
+            cellsResult != GHOSTTY_SUCCESS)
+        {
+            return std::unexpected(ghosttyError(cellsResult));
+        }
+
+        while (ghostty_render_state_row_cells_next(m_impl->rowCells))
+        {
+            TerminalCell cell;
+            cell.foreground = result.defaultForeground;
+            cell.background = result.defaultBackground;
+
+            GhosttyColorRgb foreground{};
+            if (ghostty_render_state_row_cells_get(m_impl->rowCells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_FG_COLOR,
+                                                   &foreground)
+                == GHOSTTY_SUCCESS)
+            {
+                cell.foreground = terminalColor(foreground);
+            }
+
+            GhosttyColorRgb background{};
+            if (ghostty_render_state_row_cells_get(m_impl->rowCells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_BG_COLOR,
+                                                   &background)
+                == GHOSTTY_SUCCESS)
+            {
+                cell.background = terminalColor(background);
+            }
+
+            GhosttyStyle style{};
+            style.size = sizeof(style);
+            if (const GhosttyResult styleResult = ghostty_render_state_row_cells_get(
+                    m_impl->rowCells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_STYLE, &style);
+                styleResult != GHOSTTY_SUCCESS)
+            {
+                return std::unexpected(ghosttyError(styleResult));
+            }
+            cell.bold = style.bold;
+            cell.italic = style.italic;
+            cell.underline = style.underline != 0;
+            cell.strikethrough = style.strikethrough;
+            cell.overline = style.overline;
+            cell.invisible = style.invisible;
+            if (style.inverse)
+            {
+                std::swap(cell.foreground, cell.background);
+            }
+
+            std::uint32_t graphemeLength = 0;
+            if (const GhosttyResult lengthResult = ghostty_render_state_row_cells_get(
+                    m_impl->rowCells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_LEN, &graphemeLength);
+                lengthResult != GHOSTTY_SUCCESS)
+            {
+                return std::unexpected(ghosttyError(lengthResult));
+            }
+            if (graphemeLength > 0)
+            {
+                cell.grapheme.resize(graphemeLength);
+                if (const GhosttyResult graphemeResult = ghostty_render_state_row_cells_get(
+                        m_impl->rowCells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_BUF, cell.grapheme.data());
+                    graphemeResult != GHOSTTY_SUCCESS)
+                {
+                    return std::unexpected(ghosttyError(graphemeResult));
+                }
+            }
+            result.cells.push_back(std::move(cell));
+        }
+    }
+
+    const std::size_t expectedCells = static_cast<std::size_t>(result.columns) * result.rows;
+    result.cells.resize(expectedCells,
+                        TerminalCell{.foreground = result.defaultForeground, .background = result.defaultBackground});
+    return result;
 }
 
 std::expected<std::string, std::error_code> GhosttyTerminalEngine::plainText() const

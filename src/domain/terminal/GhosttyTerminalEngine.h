@@ -17,6 +17,7 @@ public:
 
     [[nodiscard]] std::error_code feed(std::span<const std::byte> bytes) override;
     [[nodiscard]] std::error_code resize(TerminalGeometry geometry) override;
+    [[nodiscard]] std::expected<TerminalSnapshot, std::error_code> snapshot() override;
     [[nodiscard]] std::expected<std::string, std::error_code> plainText() const override;
 
 private:

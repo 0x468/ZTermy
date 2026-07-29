@@ -23,7 +23,13 @@ The project has not published a release.
 - Pinned `libghostty-vt` C ABI integration behind a replaceable C++23 terminal
   engine interface
 - Terminal-engine tests for invalid geometry, split VT sequences, plain-text
-  formatting, and resize reflow
+  formatting, resize reflow, immutable cells, styles, colors, and cursor state
+- Interactive local PowerShell sessions with independent ConPTY read/write
+  workers, bounded input buffering, resize coalescing, and prompt shutdown
+- A single custom Qt Quick terminal item for cell-grid rendering, keyboard
+  input, control sequences, cursor display, and IME commit text
+- Automated end-to-end coverage from PowerShell through ConPTY and
+  `libghostty-vt` snapshots, including input and deterministic shutdown
 - Dynamic and static Qt CMake build targets
 - Categorized rotating file logs with Debug-build diagnostics
 
@@ -41,3 +47,4 @@ The project has not published a release.
   painting native caption buttons over the custom title bar
 - Suppress legacy non-client theme painting that can flash over the custom
   title bar during maximize and restore transitions
+- Avoid double-owning scene-graph textures when replacing terminal frames

@@ -13,11 +13,17 @@ Only runtime evidence can mark a platform or UI item complete.
   area, all resize edges/corners, and maximized-state behavior.
 - Custom caption commands, maximize-button Snap Layout hover, and Win+Z were
   manually verified on the primary Windows 11 development machine.
+- A Debug runtime session displayed a real PowerShell prompt through ConPTY,
+  `libghostty-vt`, an immutable cell snapshot, and the custom terminal item
+  without a scene-graph crash.
+- Automated end-to-end coverage verifies PowerShell startup, queued input,
+  parsed sentinel output, and session shutdown.
 
 The checkboxes below remain open until the corresponding behavior has been
 manually exercised across the required Windows 11 and mixed-DPI scenarios.
-Use [testing/WINDOW_SHELL.md](testing/WINDOW_SHELL.md) for the repeatable
-window-shell procedure and expected results.
+Use [testing/WINDOW_SHELL.md](testing/WINDOW_SHELL.md) and
+[testing/TERMINAL_SESSION.md](testing/TERMINAL_SESSION.md) for the repeatable
+runtime procedures and expected results.
 
 ## Window shell
 

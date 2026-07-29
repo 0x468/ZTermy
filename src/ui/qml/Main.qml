@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Ztermy.Terminal 1.0
 
 Rectangle {
     id: root
@@ -250,41 +251,13 @@ Rectangle {
                 color: "#D90B1017"
                 border.color: root.borderColor
 
-                Column {
+                TerminalView {
+                    id: terminalViewport
+                    objectName: "terminalViewport"
                     anchors.fill: parent
-                    anchors.margins: 22
-                    spacing: 9
+                    focus: true
 
-                    Text {
-                        text: "PowerShell 7"
-                        color: root.mutedColor
-                        font.family: "Cascadia Mono"
-                        font.pixelSize: 12
-                    }
-
-                    Text {
-                        text: "PS D:\\Repo\\Qt\\ztermy>"
-                        color: root.textColor
-                        font.family: "Cascadia Mono"
-                        font.pixelSize: 14
-                    }
-
-                    Row {
-                        spacing: 7
-
-                        Rectangle {
-                            width: 8
-                            height: 17
-                            color: root.accentColor
-                        }
-
-                        Text {
-                            text: "Terminal engine milestone comes next"
-                            color: "#64748B"
-                            font.family: "Cascadia Mono"
-                            font.pixelSize: 12
-                        }
-                    }
+                    Component.onCompleted: forceActiveFocus()
                 }
             }
         }
@@ -319,7 +292,7 @@ Rectangle {
             }
 
             Text {
-                text: "Window shell ready"
+                text: terminalViewport.statusText
                 color: root.mutedColor
                 font.family: "Segoe UI Variable"
                 font.pixelSize: 10

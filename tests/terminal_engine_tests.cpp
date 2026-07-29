@@ -16,6 +16,7 @@ private slots:
     void rejectsInvalidGeometry();
     void parsesSplitVtSequences();
     void preservesContentAcrossResize();
+    void exposesImmutableStyledCells();
 };
 
 void TerminalEngineTests::rejectsInvalidGeometry()
@@ -67,6 +68,34 @@ void TerminalEngineTests::preservesContentAcrossResize()
         QFAIL(text.error().message().c_str());
     }
     QCOMPARE(*text, "abcdefghij");
+}
+
+void TerminalEngineTests::exposesImmutableStyledCells()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 12, .rows = 2});
+    if (!result)
+    {
+        QFAIL(result.error().message().c_str());
+    }
+    auto &engine = **result;
+
+    constexpr std::string_view content = "\x1b[38;2;12;34;56mA\x1b[0m";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(content))));
+
+    const auto snapshot = engine.snapshot();
+    if (!snapshot)
+    {
+        QFAIL(snapshot.error().message().c_str());
+    }
+
+    QCOMPARE(snapshot->columns, 12);
+    QCOMPARE(snapshot->rows, 2);
+    QCOMPARE(snapshot->cells.size(), std::size_t{24});
+    QCOMPARE(snapshot->cell(0, 0).grapheme, std::u32string(U"A"));
+    QCOMPARE(snapshot->cell(0, 0).foreground, (ztermy::terminal::TerminalColor{12, 34, 56}));
+    QVERIFY(snapshot->cursor.visible);
+    QCOMPARE(snapshot->cursor.column, 1);
+    QCOMPARE(snapshot->cursor.row, 0);
 }
 
 } // namespace

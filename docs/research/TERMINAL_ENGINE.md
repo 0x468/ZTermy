@@ -1,6 +1,6 @@
 # Terminal engine candidate assessment
 
-Status: first integration gate passed
+Status: renderer handoff gate passed; interaction validation in progress
 
 ## Outcome
 
@@ -36,16 +36,22 @@ The initial build and ABI gate is complete:
    incremental builds reuse the output.
 4. MSVC dynamic Debug and static Release linkage both pass.
 5. Tests cover invalid geometry, VT sequences split across writes, formatting,
-   and resize reflow.
+   resize reflow, cell styles and colors, cursor state, and dimensions.
+6. A live PowerShell session runs through independent ConPTY read/write workers
+   and publishes immutable, ztermy-owned cell snapshots to one custom Qt Quick
+   item.
+7. An end-to-end test verifies shell startup, terminal input, parsed output,
+   and prompt session shutdown.
 
 The current Windows build disables optional SIMD dependencies. This favors a
 small, deterministic first integration over maximum parser throughput. The
 choice must be benchmarked again once the live session and renderer exist.
 
-The remaining gate is the renderer handoff. The GUI must consume an immutable
-cell snapshot rather than formatted plain text or a live Ghostty terminal
-handle. Unicode, IME, alternate-screen, selection, dirty-row, and sustained
-output behavior remain part of that validation.
+The renderer handoff gate is complete: no Ghostty handle crosses into the UI or
+render thread. The first renderer uses a full-frame scene-graph texture so the
+correctness boundary can be validated before glyph caching and dirty-row
+batching are optimized. Unicode, IME, alternate-screen, selection, scrollback,
+dirty-row, and sustained-output behavior remain part of the spike.
 
 ## Risks retained
 
@@ -53,8 +59,8 @@ output behavior remain part of that validation.
   pinned changes.
 - Zig is an additional build prerequisite and its cache path should be kept
   short on Windows.
-- The adapter currently exposes plain text only for tests, diagnostics, and
-  future clipboard operations. It is not the rendering API.
+- The initial renderer recreates a full texture for each delivered snapshot.
+  It is a correctness baseline, not the final large-output rendering path.
 - Third-party license notices must be finalized before any public binary
   distribution.
 
