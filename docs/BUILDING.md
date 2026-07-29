@@ -11,6 +11,7 @@ Status: toolchain baseline
 - CMake 3.28 or newer
 - Ninja
 - Qt 6.8.3 for MSVC 2022
+- Zig 0.16.0
 - LLVM clangd, clang-format, and clang-tidy
 
 ## Local Qt installations
@@ -63,6 +64,32 @@ The dynamic Qt presets use the DLL MSVC runtime. The static Qt preset uses the
 static MSVC runtime because the local static Qt build was compiled that way.
 Dependencies must use a matching runtime.
 
+## libghostty-vt
+
+The terminal engine adapter builds `libghostty-vt` from the exact Ghostty
+revision `ae8727401d8c549671c36cdc326a94f47c94b635`. CMake verifies the source
+archive SHA-256 before extraction. The first configure requires internet
+access unless `FETCHCONTENT_SOURCE_DIR_GHOSTTY` points to an existing checkout.
+
+Put Zig 0.16.0 on `PATH`, or pass its executable explicitly:
+
+```powershell
+cmake --preset msvc-dynamic-debug -DZIG_EXECUTABLE=C:\tools\zig\zig.exe
+```
+
+Use a short global Zig cache path on Windows. Long dependency cache paths can
+exceed Windows path limits:
+
+```powershell
+$env:ZIG_GLOBAL_CACHE_DIR = "C:\zig-cache"
+```
+
+The current Windows build uses `-Dsimd=false`, producing a self-contained
+static VT library without the optional SIMD runtime dependencies. Ghostty is
+built with `ReleaseFast` in application Debug builds because its Zig Debug
+configuration is prohibitively slow. Release presets receive the equivalent
+optimization flag from Ghostty's CMake wrapper.
+
 ## clangd
 
 The default clangd compilation database is:
@@ -77,10 +104,12 @@ flags come from the compilation database rather than being duplicated in
 
 ## Current verification
 
-The native window-shell milestone has been configured and built successfully
-with both local Qt 6.8.3 installations:
+The native window shell, ConPTY transport, and pinned `libghostty-vt` adapter
+have been configured and built successfully with both local Qt 6.8.3
+installations:
 
 - dynamic Debug: MSVC DLL runtime (`/MDd`)
 - static Release: MSVC static runtime (`/MT`)
 
-The `window-hit-test` suite passes in both configurations.
+The `window-hit-test`, `conpty-process`, and `terminal-engine` suites pass in
+both configurations.

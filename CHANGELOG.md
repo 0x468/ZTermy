@@ -20,6 +20,10 @@ The project has not published a release.
   `cmd.exe` communication
 - Terminal-engine research and a spike decision record comparing
   `libghostty-vt`, Contour, Windows Terminal, and libvterm
+- Pinned `libghostty-vt` C ABI integration behind a replaceable C++23 terminal
+  engine interface
+- Terminal-engine tests for invalid geometry, split VT sequences, plain-text
+  formatting, and resize reflow
 - Dynamic and static Qt CMake build targets
 - Categorized rotating file logs with Debug-build diagnostics
 

@@ -4,12 +4,33 @@ project(
     ztermy
     VERSION 0.1.0
     DESCRIPTION "A native Windows SSH terminal"
-    LANGUAGES CXX
+    LANGUAGES C CXX
 )
 
 include(CTest)
+include(FetchContent)
 
 option(ZTERMY_STATIC_BUILD "Build ztermy with the locally provided static Qt package" OFF)
+
+set(
+    GHOSTTY_ZIG_BUILD_FLAGS
+    "-Dsimd=false"
+    CACHE STRING
+    "Additional flags passed to the libghostty-vt Zig build"
+    FORCE
+)
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    list(APPEND GHOSTTY_ZIG_BUILD_FLAGS "-Doptimize=ReleaseFast")
+endif()
+
+FetchContent_Declare(
+    ghostty
+    URL https://github.com/ghostty-org/ghostty/archive/ae8727401d8c549671c36cdc326a94f47c94b635.tar.gz
+    URL_HASH SHA256=da5a400b145aa9d1a4c7e44219d3b74d49fb7f0973666f0eb3933894f308fb02
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+FetchContent_MakeAvailable(ghostty)
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Quick QuickControls2)
 
@@ -28,6 +49,16 @@ target_compile_definitions(ztermy_terminal_transport PRIVATE
     WIN32_LEAN_AND_MEAN
     _UNICODE
 )
+
+add_library(ztermy_terminal_engine STATIC
+    src/domain/terminal/GhosttyTerminalEngine.cpp
+    src/domain/terminal/GhosttyTerminalEngine.h
+    src/domain/terminal/TerminalEngine.h
+)
+
+target_compile_features(ztermy_terminal_engine PUBLIC cxx_std_23)
+target_include_directories(ztermy_terminal_engine PUBLIC src)
+target_link_libraries(ztermy_terminal_engine PRIVATE ghostty-vt-static)
 
 qt_add_executable(ztermy WIN32
     src/main.cpp
@@ -89,6 +120,13 @@ if(MSVC)
         /Zc:__cplusplus
     )
 
+    target_compile_options(ztermy_terminal_engine PRIVATE
+        /permissive-
+        /utf-8
+        /W4
+        /Zc:__cplusplus
+    )
+
     target_compile_options(ztermy PRIVATE
         /permissive-
         /utf-8
@@ -141,4 +179,25 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME conpty-process COMMAND ztermy_conpty_process_tests)
+
+    qt_add_executable(ztermy_terminal_engine_tests
+        tests/terminal_engine_tests.cpp
+    )
+
+    target_compile_features(ztermy_terminal_engine_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_terminal_engine_tests PRIVATE
+        ztermy_terminal_engine
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_terminal_engine_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME terminal-engine COMMAND ztermy_terminal_engine_tests)
 endif()

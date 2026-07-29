@@ -1,6 +1,6 @@
 # ADR 0002: Validate the terminal engine before product implementation
 
-Status: accepted for spike
+Status: accepted, implementation validation in progress
 
 ## Context
 
@@ -25,10 +25,17 @@ candidate because the previous Rust prototype demonstrated the maintenance
 cost of owning parser, screen, scrollback, Unicode, and input behavior
 together.
 
-No dependency is adopted until its API stability, license, build footprint,
-Windows/MSVC integration, Unicode behavior, and renderer handoff have been
-measured. The ConPTY transport is implemented behind a terminal-session
-boundary so this choice does not block local process integration.
+The first integration gate adopts a pinned `libghostty-vt` revision behind the
+ztermy-owned `TerminalEngine` interface. MSVC dynamic Debug and static Release
+builds, split VT input, plain-text formatting, and resize reflow have been
+verified. No Ghostty type crosses the adapter boundary.
+
+This does not yet accept the complete rendering design. Unicode, IME,
+alternate-screen, selection, dirty-row behavior, sustained output performance,
+and immutable renderer snapshots must still be measured before the spike is
+complete. Contour remains the fallback if those gates fail. The ConPTY
+transport remains independent so the engine can be replaced without changing
+process I/O.
 
 ## Decision criteria
 

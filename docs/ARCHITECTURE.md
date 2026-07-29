@@ -19,6 +19,11 @@ and error presentation.
 Plain C++ models and state transitions represent hosts, workspaces, terminal
 sessions, connection state, known hosts, and configuration migrations.
 
+`TerminalEngine` is the application-owned boundary for terminal state. Its
+first implementation adapts the pinned `libghostty-vt` C ABI. Ghostty handles
+remain private to the adapter so upstream API changes or an engine replacement
+do not spread through session or renderer code.
+
 ### Infrastructure
 
 Adapters provide SSH, SFTP, ConPTY, persistence, credentials, logging, and
@@ -54,6 +59,10 @@ It must not wait for output, persistence, logging, or a UI snapshot.
 The terminal viewport is a single custom `QQuickItem`. Its renderer batches
 backgrounds, selections, cursor geometry, decorations, and glyphs. It retains a
 glyph cache and updates only damaged rows where possible.
+
+Formatted plain text is reserved for tests, diagnostics, and clipboard-style
+operations. Rendering will consume an immutable, ztermy-owned cell snapshot;
+the render thread will never access a mutable Ghostty terminal handle.
 
 `QQuickPaintedItem` is not the target renderer. Private QRhi APIs are not used
 until a measured public-scene-graph implementation proves insufficient.

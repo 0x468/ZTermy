@@ -13,6 +13,7 @@ direction. Its source code, assets, themes, and implementation are not copied.
 - C++23 for application, domain, platform, and terminal integration
 - MSVC with the Ninja CMake generator
 - Windows ConPTY for local terminal sessions
+- Pinned `libghostty-vt` behind a ztermy-owned C++ terminal-engine interface
 - A native SSH library for SSH and SFTP
 - A single custom Qt Quick terminal item with batched rendering
 
@@ -24,10 +25,10 @@ Other platforms are out of scope until the Windows version is stable.
 
 ## Project status
 
-The Qt Quick shell, Windows non-client integration, and the first
-engine-independent ConPTY process transport are implemented. The active
-milestone is the terminal-engine spike and terminal-session integration. See
-[docs/V1_SCOPE.md](docs/V1_SCOPE.md) and
+The Qt Quick shell, Windows non-client integration, engine-independent ConPTY
+transport, and first `libghostty-vt` adapter are implemented. The active
+milestone is terminal-session integration and immutable renderer snapshots.
+See [docs/V1_SCOPE.md](docs/V1_SCOPE.md) and
 [docs/V1_ACCEPTANCE.md](docs/V1_ACCEPTANCE.md).
 
 ## Building
