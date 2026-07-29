@@ -56,8 +56,44 @@ Expected:
 - Cursor movement agrees with the displayed cell positions.
 
 Record the Windows display scale and IME used when reporting a failure. IME
-candidate-window placement, selection, scrollback, copy/paste, and search are
-not complete in the current milestone.
+candidate-window placement and search are not complete in the current
+milestone.
+
+## Scrollback
+
+1. Run `1..100 | ForEach-Object { "history line $_" }`.
+2. Scroll upward with the mouse wheel until older lines are visible.
+3. Leave the viewport in history and run output from another process if one is
+   already active.
+4. Scroll down to the prompt, then scroll up again and press a normal character.
+
+Expected:
+
+- Wheel-up reveals older output and wheel-down returns toward the prompt.
+- The cursor is hidden while viewing history.
+- New output does not forcibly move a history viewport to the bottom.
+- Typing returns to the active prompt and clears any selection.
+
+## Selection and clipboard
+
+1. Drag from left to right across part of one output line.
+2. Press Ctrl+Shift+C and paste into Notepad.
+3. Drag upward or backward across multiple terminal lines and copy again.
+4. Hold Alt while dragging a rectangular region and copy it.
+5. Single-click the terminal without dragging.
+6. Put `Write-Output pasted-ok` on the clipboard and press Ctrl+Shift+V.
+7. Copy two lines of text, paste them at a PowerShell prompt, and inspect the
+   command line before executing it.
+
+Expected:
+
+- Selected cells use the blue selection color and reversed drag directions work.
+- Copied text contains only the selected cells; soft-wrapped lines are unwrapped.
+- Alt+drag copies a rectangular selection.
+- A click without dragging clears the previous selection.
+- Ctrl+Shift+V inserts clipboard text exactly once.
+- Multiline paste is encoded according to the terminal's bracketed-paste mode;
+  ztermy never logs clipboard contents.
 
 ## Sustained output
 

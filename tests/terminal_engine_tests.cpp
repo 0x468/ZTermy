@@ -2,7 +2,9 @@
 
 #include <QTest>
 
+#include <cstddef>
 #include <span>
+#include <string>
 #include <string_view>
 
 namespace
@@ -17,6 +19,9 @@ private slots:
     void parsesSplitVtSequences();
     void preservesContentAcrossResize();
     void exposesImmutableStyledCells();
+    void selectsAndFormatsViewportText();
+    void scrollsThroughHistory();
+    void encodesPasteForTerminalMode();
 };
 
 void TerminalEngineTests::rejectsInvalidGeometry()
@@ -96,6 +101,107 @@ void TerminalEngineTests::exposesImmutableStyledCells()
     QVERIFY(snapshot->cursor.visible);
     QCOMPARE(snapshot->cursor.column, 1);
     QCOMPARE(snapshot->cursor.row, 0);
+}
+
+void TerminalEngineTests::selectsAndFormatsViewportText()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 16, .rows = 3});
+    if (!result)
+    {
+        QFAIL(result.error().message().c_str());
+    }
+    auto &engine = **result;
+
+    constexpr std::string_view content = "alpha beta\r\nsecond";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(content))));
+    QVERIFY(!engine.setSelection(
+        ztermy::terminal::TerminalSelection{.start = {.column = 0, .row = 0}, .end = {.column = 4, .row = 0}}));
+
+    const auto selectedText = engine.selectedText();
+    if (!selectedText)
+    {
+        QFAIL(selectedText.error().message().c_str());
+    }
+    QVERIFY(selectedText->has_value());
+    QCOMPARE(**selectedText, "alpha");
+
+    const auto snapshot = engine.snapshot();
+    if (!snapshot)
+    {
+        QFAIL(snapshot.error().message().c_str());
+    }
+    for (std::uint16_t column = 0; column < 5; ++column)
+    {
+        QVERIFY(snapshot->cell(column, 0).selected);
+    }
+    QVERIFY(!snapshot->cell(5, 0).selected);
+
+    QVERIFY(!engine.setSelection(std::nullopt));
+    const auto clearedText = engine.selectedText();
+    QVERIFY(clearedText);
+    QVERIFY(!clearedText->has_value());
+}
+
+void TerminalEngineTests::scrollsThroughHistory()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 12, .rows = 3});
+    if (!result)
+    {
+        QFAIL(result.error().message().c_str());
+    }
+    auto &engine = **result;
+
+    constexpr std::string_view content = "line0\r\nline1\r\nline2\r\nline3\r\nline4\r\nline5";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(content))));
+
+    const auto bottom = engine.snapshot();
+    if (!bottom)
+    {
+        QFAIL(bottom.error().message().c_str());
+    }
+    QVERIFY(bottom->scrollbar.total > bottom->scrollbar.visible);
+    const std::uint64_t bottomOffset = bottom->scrollbar.offset;
+
+    engine.scrollViewport(-2);
+    const auto history = engine.snapshot();
+    if (!history)
+    {
+        QFAIL(history.error().message().c_str());
+    }
+    QVERIFY(history->scrollbar.offset < bottomOffset);
+    QVERIFY(!history->cursor.visible);
+
+    engine.scrollToBottom();
+    const auto restored = engine.snapshot();
+    QVERIFY(restored);
+    QCOMPARE(restored->scrollbar.offset, bottomOffset);
+}
+
+void TerminalEngineTests::encodesPasteForTerminalMode()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 12, .rows = 3});
+    if (!result)
+    {
+        QFAIL(result.error().message().c_str());
+    }
+    auto &engine = **result;
+
+    constexpr std::string_view text = "a\nb";
+    auto encoded = engine.encodePaste(std::as_bytes(std::span(text)));
+    if (!encoded)
+    {
+        QFAIL(encoded.error().message().c_str());
+    }
+    QCOMPARE(std::string(reinterpret_cast<const char *>(encoded->data()), encoded->size()), "a\rb");
+
+    constexpr std::string_view enableBracketedPaste = "\x1b[?2004h";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(enableBracketedPaste))));
+    encoded = engine.encodePaste(std::as_bytes(std::span(text)));
+    if (!encoded)
+    {
+        QFAIL(encoded.error().message().c_str());
+    }
+    QCOMPARE(std::string(reinterpret_cast<const char *>(encoded->data()), encoded->size()), "\x1b[200~a\nb\x1b[201~");
 }
 
 } // namespace

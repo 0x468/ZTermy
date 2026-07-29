@@ -1,7 +1,9 @@
 #include "ui/terminal/TerminalItem.h"
 
+#include <QClipboard>
 #include <QColor>
 #include <QFontMetricsF>
+#include <QGuiApplication>
 #include <QImage>
 #include <QInputMethodEvent>
 #include <QKeyEvent>
@@ -10,6 +12,7 @@
 #include <QQuickWindow>
 #include <QSGSimpleTextureNode>
 #include <QSGTexture>
+#include <QWheelEvent>
 
 #include <algorithm>
 #include <cmath>
@@ -137,6 +140,11 @@ void TerminalItem::setStatusText(const QString &status)
     emit statusTextChanged();
 }
 
+void TerminalItem::setClipboardText(const QString &text)
+{
+    QGuiApplication::clipboard()->setText(text, QClipboard::Clipboard);
+}
+
 void TerminalItem::requestCurrentSize()
 {
     m_reportedColumns = 0;
@@ -169,6 +177,8 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 
     const terminal::TerminalColor fallbackForeground{.red = 248, .green = 250, .blue = 252};
     const terminal::TerminalColor fallbackBackground{.red = 11, .green = 16, .blue = 23};
+    const QColor selectionBackground(42, 91, 145);
+    const QColor selectionForeground(255, 255, 255);
     const terminal::TerminalColor defaultForeground = m_snapshot ? m_snapshot->defaultForeground : fallbackForeground;
     const terminal::TerminalColor defaultBackground = m_snapshot ? m_snapshot->defaultBackground : fallbackBackground;
 
@@ -191,7 +201,11 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                 const terminal::TerminalCell &cell = m_snapshot->cell(column, row);
                 const QRectF cellRect{horizontalPadding + (column * cellWidthValue),
                                       verticalPadding + (row * cellHeightValue), cellWidthValue, cellHeightValue};
-                if (cell.background != defaultBackground)
+                if (cell.selected)
+                {
+                    painter.fillRect(cellRect, selectionBackground);
+                }
+                else if (cell.background != defaultBackground)
                 {
                     painter.fillRect(cellRect, color(cell.background));
                 }
@@ -215,7 +229,7 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                 cellFont.setStrikeOut(cell.strikethrough);
                 cellFont.setOverline(cell.overline);
                 painter.setFont(cellFont);
-                painter.setPen(color(cell.foreground));
+                painter.setPen(cell.selected ? selectionForeground : color(cell.foreground));
 
                 const QString grapheme =
                     QString::fromUcs4(cell.grapheme.data(), static_cast<qsizetype>(cell.grapheme.size()));
@@ -272,6 +286,25 @@ void TerminalItem::geometryChange(const QRectF &newGeometry, const QRectF &oldGe
 
 void TerminalItem::keyPressEvent(QKeyEvent *event)
 {
+    const bool control = event->modifiers().testFlag(Qt::ControlModifier);
+    const bool shift = event->modifiers().testFlag(Qt::ShiftModifier);
+    if (control && shift && event->key() == Qt::Key_C)
+    {
+        emit copyRequested();
+        event->accept();
+        return;
+    }
+    if (control && shift && event->key() == Qt::Key_V)
+    {
+        const QByteArray bytes = QGuiApplication::clipboard()->text(QClipboard::Clipboard).toUtf8();
+        if (!bytes.isEmpty())
+        {
+            emit pasteRequested(bytes);
+        }
+        event->accept();
+        return;
+    }
+
     const QByteArray bytes = encodedKey(event);
     if (bytes.isEmpty())
     {
@@ -309,6 +342,64 @@ QVariant TerminalItem::inputMethodQuery(const Qt::InputMethodQuery query) const
 void TerminalItem::mousePressEvent(QMouseEvent *event)
 {
     forceActiveFocus(Qt::MouseFocusReason);
+    const auto point = terminalPoint(event->position());
+    if (event->button() != Qt::LeftButton || !point)
+    {
+        QQuickItem::mousePressEvent(event);
+        return;
+    }
+
+    m_selectionAnchor = *point;
+    m_selecting = true;
+    m_selectionMoved = false;
+    emit clearSelectionRequested();
+    event->accept();
+}
+
+void TerminalItem::mouseMoveEvent(QMouseEvent *event)
+{
+    if (!m_selecting || !event->buttons().testFlag(Qt::LeftButton))
+    {
+        QQuickItem::mouseMoveEvent(event);
+        return;
+    }
+    if (const auto point = terminalPoint(event->position()))
+    {
+        m_selectionMoved = true;
+        emit selectionRequested(m_selectionAnchor.column, m_selectionAnchor.row, point->column, point->row,
+                                event->modifiers().testFlag(Qt::AltModifier));
+    }
+    event->accept();
+}
+
+void TerminalItem::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (!m_selecting || event->button() != Qt::LeftButton)
+    {
+        QQuickItem::mouseReleaseEvent(event);
+        return;
+    }
+    if (m_selectionMoved)
+    {
+        if (const auto point = terminalPoint(event->position()))
+        {
+            emit selectionRequested(m_selectionAnchor.column, m_selectionAnchor.row, point->column, point->row,
+                                    event->modifiers().testFlag(Qt::AltModifier));
+        }
+    }
+    m_selecting = false;
+    event->accept();
+}
+
+void TerminalItem::wheelEvent(QWheelEvent *event)
+{
+    m_wheelRemainder += event->angleDelta().y();
+    const int steps = m_wheelRemainder / 120;
+    m_wheelRemainder -= steps * 120;
+    if (steps != 0)
+    {
+        emit scrollRequested(-steps * 3);
+    }
     event->accept();
 }
 
@@ -329,6 +420,20 @@ void TerminalItem::reportTerminalSize()
     m_reportedRows = rows;
     emit sizeRequested(columns, rows, static_cast<quint32>(std::ceil(cellWidth())),
                        static_cast<quint32>(std::ceil(cellHeight())));
+}
+
+std::optional<terminal::TerminalPoint> TerminalItem::terminalPoint(const QPointF &position) const
+{
+    if (!m_snapshot || m_snapshot->columns == 0 || m_snapshot->rows == 0)
+    {
+        return std::nullopt;
+    }
+
+    const qreal columnValue = std::floor((position.x() - horizontalPadding) / cellWidth());
+    const qreal rowValue = std::floor((position.y() - verticalPadding) / cellHeight());
+    return terminal::TerminalPoint{
+        .column = static_cast<quint16>(std::clamp(columnValue, 0.0, static_cast<qreal>(m_snapshot->columns - 1))),
+        .row = static_cast<quint16>(std::clamp(rowValue, 0.0, static_cast<qreal>(m_snapshot->rows - 1)))};
 }
 
 qreal TerminalItem::cellWidth() const

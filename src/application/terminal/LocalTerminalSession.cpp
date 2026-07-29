@@ -11,6 +11,7 @@
 
 #include <array>
 #include <chrono>
+#include <exception>
 #include <span>
 #include <utility>
 
@@ -63,10 +64,32 @@ std::error_code LocalTerminalSession::start(const TerminalGeometry geometry)
     publishSnapshot();
 
     m_readThread = std::jthread([this](const std::stop_token &token) {
-        readLoop(token);
+        try
+        {
+            readLoop(token);
+        }
+        catch (const std::exception &exception)
+        {
+            postStatus(QStringLiteral("Terminal read worker failed: %1").arg(QString::fromUtf8(exception.what())));
+        }
+        catch (...)
+        {
+            postStatus(QStringLiteral("Terminal read worker failed with an unknown error"));
+        }
     });
     m_writeThread = std::jthread([this](const std::stop_token &token) {
-        writeLoop(token);
+        try
+        {
+            writeLoop(token);
+        }
+        catch (const std::exception &exception)
+        {
+            postStatus(QStringLiteral("Terminal write worker failed: %1").arg(QString::fromUtf8(exception.what())));
+        }
+        catch (...)
+        {
+            postStatus(QStringLiteral("Terminal write worker failed with an unknown error"));
+        }
     });
     qCInfo(terminalSessionLog) << "Local terminal session started";
     return {};
@@ -124,17 +147,29 @@ void LocalTerminalSession::queueInput(const QByteArray &bytes)
     {
         return;
     }
+    queueByteCommand(InputCommand{.bytes = bytes}, static_cast<std::size_t>(bytes.size()));
+}
 
+void LocalTerminalSession::queuePaste(const QByteArray &bytes)
+{
+    if (bytes.isEmpty() || !m_running.load())
+    {
+        return;
+    }
+    queueByteCommand(PasteCommand{.bytes = bytes}, static_cast<std::size_t>(bytes.size()));
+}
+
+void LocalTerminalSession::queueByteCommand(Command command, const std::size_t byteCount)
+{
     {
         std::scoped_lock lock(m_commandMutex);
-        const auto byteCount = static_cast<std::size_t>(bytes.size());
         if (byteCount > maximumQueuedInputBytes - std::min(m_queuedInputBytes, maximumQueuedInputBytes))
         {
             qCWarning(terminalSessionLog) << "Terminal input queue is full; input batch dropped";
             return;
         }
         m_queuedInputBytes += byteCount;
-        m_commands.emplace_back(bytes);
+        m_commands.emplace_back(std::move(command));
     }
     m_commandAvailable.notify_one();
 }
@@ -161,6 +196,85 @@ void LocalTerminalSession::requestResize(const quint16 columns, const quint16 ro
         {
             m_commands.emplace_back(geometry);
         }
+    }
+    m_commandAvailable.notify_one();
+}
+
+void LocalTerminalSession::requestScroll(const int rows)
+{
+    if (rows == 0 || !m_running.load())
+    {
+        return;
+    }
+
+    {
+        std::scoped_lock lock(m_commandMutex);
+        if (!m_commands.empty())
+        {
+            if (auto *pending = std::get_if<ScrollCommand>(&m_commands.back()))
+            {
+                pending->rows += rows;
+            }
+            else
+            {
+                m_commands.emplace_back(ScrollCommand{.rows = rows});
+            }
+        }
+        else
+        {
+            m_commands.emplace_back(ScrollCommand{.rows = rows});
+        }
+    }
+    m_commandAvailable.notify_one();
+}
+
+void LocalTerminalSession::requestSelection(const quint16 startColumn, const quint16 startRow, const quint16 endColumn,
+                                            const quint16 endRow, const bool rectangular)
+{
+    if (!m_running.load())
+    {
+        return;
+    }
+
+    SelectionCommand command{.selection = TerminalSelection{.start = {.column = startColumn, .row = startRow},
+                                                            .end = {.column = endColumn, .row = endRow},
+                                                            .rectangular = rectangular}};
+    {
+        std::scoped_lock lock(m_commandMutex);
+        if (!m_commands.empty() && std::holds_alternative<SelectionCommand>(m_commands.back()))
+        {
+            m_commands.back() = command;
+        }
+        else
+        {
+            m_commands.emplace_back(command);
+        }
+    }
+    m_commandAvailable.notify_one();
+}
+
+void LocalTerminalSession::clearSelection()
+{
+    if (!m_running.load())
+    {
+        return;
+    }
+    {
+        std::scoped_lock lock(m_commandMutex);
+        m_commands.emplace_back(SelectionCommand{});
+    }
+    m_commandAvailable.notify_one();
+}
+
+void LocalTerminalSession::copySelection()
+{
+    if (!m_running.load())
+    {
+        return;
+    }
+    {
+        std::scoped_lock lock(m_commandMutex);
+        m_commands.emplace_back(CopyCommand{});
     }
     m_commandAvailable.notify_one();
 }
@@ -219,20 +333,118 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
             }
             command = std::move(m_commands.front());
             m_commands.pop_front();
-            if (const auto *input = std::get_if<QByteArray>(&command))
+            if (const auto *input = std::get_if<InputCommand>(&command))
             {
-                m_queuedInputBytes -= static_cast<std::size_t>(input->size());
+                m_queuedInputBytes -= static_cast<std::size_t>(input->bytes.size());
+            }
+            else if (const auto *paste = std::get_if<PasteCommand>(&command))
+            {
+                m_queuedInputBytes -= static_cast<std::size_t>(paste->bytes.size());
             }
         }
 
-        if (const auto *input = std::get_if<QByteArray>(&command))
+        if (const auto *input = std::get_if<InputCommand>(&command))
         {
-            const auto bytes = std::as_bytes(std::span(input->constData(), static_cast<std::size_t>(input->size())));
+            std::error_code selectionError;
+            {
+                std::scoped_lock lock(m_engineMutex);
+                selectionError = m_engine->setSelection(std::nullopt);
+                m_engine->scrollToBottom();
+            }
+            if (selectionError)
+            {
+                postStatus(QStringLiteral("Terminal selection clear failed: %1")
+                               .arg(QString::fromStdString(selectionError.message())));
+            }
+            publishSnapshot();
+
+            const auto bytes =
+                std::as_bytes(std::span(input->bytes.constData(), static_cast<std::size_t>(input->bytes.size())));
             if (const std::error_code writeError = m_process->write(bytes))
             {
                 postStatus(
                     QStringLiteral("Terminal write failed: %1").arg(QString::fromStdString(writeError.message())));
                 break;
+            }
+            continue;
+        }
+
+        if (const auto *paste = std::get_if<PasteCommand>(&command))
+        {
+            std::expected<std::vector<std::byte>, std::error_code> encoded;
+            std::error_code selectionError;
+            {
+                std::scoped_lock lock(m_engineMutex);
+                selectionError = m_engine->setSelection(std::nullopt);
+                m_engine->scrollToBottom();
+                const auto bytes =
+                    std::as_bytes(std::span(paste->bytes.constData(), static_cast<std::size_t>(paste->bytes.size())));
+                encoded = m_engine->encodePaste(bytes);
+            }
+            if (selectionError)
+            {
+                postStatus(QStringLiteral("Terminal selection clear failed: %1")
+                               .arg(QString::fromStdString(selectionError.message())));
+            }
+            if (!encoded)
+            {
+                postStatus(
+                    QStringLiteral("Terminal paste failed: %1").arg(QString::fromStdString(encoded.error().message())));
+                continue;
+            }
+            publishSnapshot();
+            if (const std::error_code writeError = m_process->write(*encoded))
+            {
+                postStatus(
+                    QStringLiteral("Terminal write failed: %1").arg(QString::fromStdString(writeError.message())));
+                break;
+            }
+            continue;
+        }
+
+        if (const auto *scroll = std::get_if<ScrollCommand>(&command))
+        {
+            {
+                std::scoped_lock lock(m_engineMutex);
+                m_engine->scrollViewport(scroll->rows);
+            }
+            publishSnapshot();
+            continue;
+        }
+
+        if (const auto *selection = std::get_if<SelectionCommand>(&command))
+        {
+            std::error_code selectionError;
+            {
+                std::scoped_lock lock(m_engineMutex);
+                selectionError = m_engine->setSelection(selection->selection);
+            }
+            if (selectionError)
+            {
+                postStatus(QStringLiteral("Terminal selection failed: %1")
+                               .arg(QString::fromStdString(selectionError.message())));
+                continue;
+            }
+            publishSnapshot();
+            continue;
+        }
+
+        if (std::holds_alternative<CopyCommand>(command))
+        {
+            std::expected<std::optional<std::string>, std::error_code> selectedText;
+            {
+                std::scoped_lock lock(m_engineMutex);
+                selectedText = m_engine->selectedText();
+            }
+            if (!selectedText)
+            {
+                postStatus(QStringLiteral("Terminal copy failed: %1")
+                               .arg(QString::fromStdString(selectedText.error().message())));
+            }
+            else if (*selectedText)
+            {
+                emit clipboardTextReady(
+                    QString::fromUtf8((*selectedText)->data(), static_cast<qsizetype>((*selectedText)->size())));
             }
             continue;
         }

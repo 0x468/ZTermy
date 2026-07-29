@@ -2,6 +2,7 @@
 
 #include <ghostty/vt.h>
 
+#include <cstring>
 #include <utility>
 
 namespace
@@ -310,6 +311,129 @@ std::error_code GhosttyTerminalEngine::resize(const TerminalGeometry geometry)
     return result == GHOSTTY_SUCCESS ? std::error_code{} : ghosttyError(result);
 }
 
+std::error_code GhosttyTerminalEngine::setSelection(const std::optional<TerminalSelection> selection)
+{
+    if (!selection)
+    {
+        const GhosttyResult result = ghostty_terminal_set(m_impl->terminal, GHOSTTY_TERMINAL_OPT_SELECTION, nullptr);
+        return result == GHOSTTY_SUCCESS ? std::error_code{} : ghosttyError(result);
+    }
+
+    const auto gridRef = [this](const TerminalPoint point) -> std::expected<GhosttyGridRef, std::error_code> {
+        GhosttyPoint ghosttyPoint{};
+        ghosttyPoint.tag = GHOSTTY_POINT_TAG_VIEWPORT;
+        ghosttyPoint.value.coordinate = {.x = point.column, .y = point.row};
+
+        GhosttyGridRef result{};
+        if (const GhosttyResult refResult = ghostty_terminal_grid_ref(m_impl->terminal, ghosttyPoint, &result);
+            refResult != GHOSTTY_SUCCESS)
+        {
+            return std::unexpected(ghosttyError(refResult));
+        }
+        return result;
+    };
+
+    auto start = gridRef(selection->start);
+    if (!start)
+    {
+        return start.error();
+    }
+    auto end = gridRef(selection->end);
+    if (!end)
+    {
+        return end.error();
+    }
+
+    GhosttySelection ghosttySelection{};
+    ghosttySelection.size = sizeof(ghosttySelection);
+    ghosttySelection.start = *start;
+    ghosttySelection.end = *end;
+    ghosttySelection.rectangle = selection->rectangular;
+    const GhosttyResult result =
+        ghostty_terminal_set(m_impl->terminal, GHOSTTY_TERMINAL_OPT_SELECTION, &ghosttySelection);
+    return result == GHOSTTY_SUCCESS ? std::error_code{} : ghosttyError(result);
+}
+
+std::expected<std::optional<std::string>, std::error_code> GhosttyTerminalEngine::selectedText() const
+{
+    GhosttyTerminalSelectionFormatOptions options{};
+    options.size = sizeof(options);
+    options.emit = GHOSTTY_FORMATTER_FORMAT_PLAIN;
+    options.unwrap = true;
+    options.trim = true;
+
+    std::size_t required = 0;
+    const GhosttyResult sizeResult =
+        ghostty_terminal_selection_format_buf(m_impl->terminal, options, nullptr, 0, &required);
+    if (sizeResult == GHOSTTY_NO_VALUE)
+    {
+        return std::optional<std::string>{};
+    }
+    if (sizeResult != GHOSTTY_OUT_OF_SPACE && sizeResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(sizeResult));
+    }
+    if (required == 0)
+    {
+        return std::optional<std::string>{std::in_place};
+    }
+
+    std::string result(required, '\0');
+    std::size_t written = 0;
+    if (const GhosttyResult formatResult = ghostty_terminal_selection_format_buf(
+            m_impl->terminal, options, reinterpret_cast<std::uint8_t *>(result.data()), result.size(), &written);
+        formatResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(formatResult));
+    }
+    result.resize(written);
+    return std::optional<std::string>{std::move(result)};
+}
+
+void GhosttyTerminalEngine::scrollViewport(const int rows)
+{
+    GhosttyTerminalScrollViewport behavior{};
+    behavior.tag = GHOSTTY_SCROLL_VIEWPORT_DELTA;
+    behavior.value.delta = rows;
+    ghostty_terminal_scroll_viewport(m_impl->terminal, behavior);
+}
+
+void GhosttyTerminalEngine::scrollToBottom()
+{
+    GhosttyTerminalScrollViewport behavior{};
+    behavior.tag = GHOSTTY_SCROLL_VIEWPORT_BOTTOM;
+    ghostty_terminal_scroll_viewport(m_impl->terminal, behavior);
+}
+
+std::expected<std::vector<std::byte>, std::error_code>
+GhosttyTerminalEngine::encodePaste(const std::span<const std::byte> bytes) const
+{
+    std::vector<char> input(bytes.size());
+    if (!bytes.empty())
+    {
+        std::memcpy(input.data(), bytes.data(), bytes.size());
+    }
+
+    bool bracketed = false;
+    if (const GhosttyResult modeResult =
+            ghostty_terminal_mode_get(m_impl->terminal, GHOSTTY_MODE_BRACKETED_PASTE, &bracketed);
+        modeResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(modeResult));
+    }
+
+    std::vector<std::byte> result(bytes.size() + 12U);
+    std::size_t written = 0;
+    if (const GhosttyResult pasteResult = ghostty_paste_encode(
+            input.data(), input.size(), bracketed, reinterpret_cast<char *>(result.data()), result.size(), &written);
+        pasteResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(pasteResult));
+    }
+    result.resize(written);
+    return result;
+}
+
 std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot()
 {
     if (const GhosttyResult updateResult = ghostty_render_state_update(m_impl->renderState, m_impl->terminal);
@@ -342,6 +466,15 @@ std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot
     result.defaultForeground = terminalColor(colors.foreground);
     result.defaultBackground = terminalColor(colors.background);
     result.cursor.color = terminalColor(colors.cursor_has_value ? colors.cursor : colors.foreground);
+
+    GhosttyTerminalScrollbar scrollbar{};
+    if (const GhosttyResult scrollbarResult =
+            ghostty_terminal_get(m_impl->terminal, GHOSTTY_TERMINAL_DATA_SCROLLBAR, &scrollbar);
+        scrollbarResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(scrollbarResult));
+    }
+    result.scrollbar = {.total = scrollbar.total, .offset = scrollbar.offset, .visible = scrollbar.len};
 
     bool cursorInViewport = false;
     bool cursorVisible = false;
@@ -386,6 +519,15 @@ std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot
 
     while (ghostty_render_state_row_iterator_next(m_impl->rowIterator))
     {
+        GhosttyRenderStateRowSelection rowSelection{};
+        rowSelection.size = sizeof(rowSelection);
+        const GhosttyResult selectionResult =
+            ghostty_render_state_row_get(m_impl->rowIterator, GHOSTTY_RENDER_STATE_ROW_DATA_SELECTION, &rowSelection);
+        if (selectionResult != GHOSTTY_SUCCESS && selectionResult != GHOSTTY_NO_VALUE)
+        {
+            return std::unexpected(ghosttyError(selectionResult));
+        }
+
         if (const GhosttyResult cellsResult = ghostty_render_state_row_get(
                 m_impl->rowIterator, GHOSTTY_RENDER_STATE_ROW_DATA_CELLS, static_cast<void *>(&m_impl->rowCells));
             cellsResult != GHOSTTY_SUCCESS)
@@ -393,6 +535,7 @@ std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot
             return std::unexpected(ghosttyError(cellsResult));
         }
 
+        std::uint16_t column = 0;
         while (ghostty_render_state_row_cells_next(m_impl->rowCells))
         {
             TerminalCell cell;
@@ -429,6 +572,8 @@ std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot
             cell.strikethrough = style.strikethrough;
             cell.overline = style.overline;
             cell.invisible = style.invisible;
+            cell.selected =
+                selectionResult == GHOSTTY_SUCCESS && column >= rowSelection.start_x && column <= rowSelection.end_x;
             if (style.inverse)
             {
                 std::swap(cell.foreground, cell.background);
@@ -452,6 +597,7 @@ std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot
                 }
             }
             result.cells.push_back(std::move(cell));
+            ++column;
         }
     }
 

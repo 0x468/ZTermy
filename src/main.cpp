@@ -43,8 +43,20 @@ int main(int argc, char *argv[])
                      &ztermy::ui::TerminalItem::setSnapshot);
     QObject::connect(&terminalSession, &ztermy::terminal::LocalTerminalSession::statusChanged, terminalItem,
                      &ztermy::ui::TerminalItem::setStatusText);
+    QObject::connect(&terminalSession, &ztermy::terminal::LocalTerminalSession::clipboardTextReady, terminalItem,
+                     &ztermy::ui::TerminalItem::setClipboardText);
     QObject::connect(terminalItem, &ztermy::ui::TerminalItem::inputGenerated, &terminalSession,
                      &ztermy::terminal::LocalTerminalSession::queueInput);
+    QObject::connect(terminalItem, &ztermy::ui::TerminalItem::pasteRequested, &terminalSession,
+                     &ztermy::terminal::LocalTerminalSession::queuePaste);
+    QObject::connect(terminalItem, &ztermy::ui::TerminalItem::scrollRequested, &terminalSession,
+                     &ztermy::terminal::LocalTerminalSession::requestScroll);
+    QObject::connect(terminalItem, &ztermy::ui::TerminalItem::selectionRequested, &terminalSession,
+                     &ztermy::terminal::LocalTerminalSession::requestSelection);
+    QObject::connect(terminalItem, &ztermy::ui::TerminalItem::clearSelectionRequested, &terminalSession,
+                     &ztermy::terminal::LocalTerminalSession::clearSelection);
+    QObject::connect(terminalItem, &ztermy::ui::TerminalItem::copyRequested, &terminalSession,
+                     &ztermy::terminal::LocalTerminalSession::copySelection);
     QObject::connect(terminalItem, &ztermy::ui::TerminalItem::sizeRequested, &terminalSession,
                      &ztermy::terminal::LocalTerminalSession::requestResize);
 

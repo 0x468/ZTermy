@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <expected>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <system_error>
@@ -42,6 +43,29 @@ struct TerminalCell
     bool strikethrough = false;
     bool overline = false;
     bool invisible = false;
+    bool selected = false;
+};
+
+struct TerminalPoint
+{
+    std::uint16_t column = 0;
+    std::uint16_t row = 0;
+
+    friend bool operator==(const TerminalPoint &, const TerminalPoint &) = default;
+};
+
+struct TerminalSelection
+{
+    TerminalPoint start;
+    TerminalPoint end;
+    bool rectangular = false;
+};
+
+struct TerminalScrollbar
+{
+    std::uint64_t total = 0;
+    std::uint64_t offset = 0;
+    std::uint64_t visible = 0;
 };
 
 enum class TerminalCursorStyle : std::uint8_t
@@ -69,6 +93,7 @@ struct TerminalSnapshot
     TerminalColor defaultForeground;
     TerminalColor defaultBackground;
     TerminalCursor cursor;
+    TerminalScrollbar scrollbar;
     std::vector<TerminalCell> cells;
 
     [[nodiscard]] const TerminalCell &cell(const std::uint16_t column, const std::uint16_t row) const
@@ -92,9 +117,14 @@ public:
     [[nodiscard]] virtual std::error_code feed(std::span<const std::byte> bytes) = 0;
     [[nodiscard]] virtual std::error_code resize(TerminalGeometry geometry) = 0;
     [[nodiscard]] virtual std::expected<TerminalSnapshot, std::error_code> snapshot() = 0;
+    [[nodiscard]] virtual std::error_code setSelection(std::optional<TerminalSelection> selection) = 0;
+    [[nodiscard]] virtual std::expected<std::optional<std::string>, std::error_code> selectedText() const = 0;
+    virtual void scrollViewport(int rows) = 0;
+    virtual void scrollToBottom() = 0;
+    [[nodiscard]] virtual std::expected<std::vector<std::byte>, std::error_code>
+    encodePaste(std::span<const std::byte> bytes) const = 0;
 
-    // Diagnostic and clipboard-oriented representation. Rendering will consume
-    // a separate immutable cell snapshot rather than formatted text.
+    // Diagnostic representation of the active screen.
     [[nodiscard]] virtual std::expected<std::string, std::error_code> plainText() const = 0;
 
 protected:

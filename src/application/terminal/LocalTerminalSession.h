@@ -12,6 +12,7 @@
 #include <deque>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <system_error>
 #include <thread>
 #include <variant>
@@ -38,10 +39,16 @@ public:
 
 public slots:
     void queueInput(const QByteArray &bytes);
+    void queuePaste(const QByteArray &bytes);
     void requestResize(quint16 columns, quint16 rows, quint32 cellWidthPixels, quint32 cellHeightPixels);
+    void requestScroll(int rows);
+    void requestSelection(quint16 startColumn, quint16 startRow, quint16 endColumn, quint16 endRow, bool rectangular);
+    void clearSelection();
+    void copySelection();
 
 signals:
     void snapshotReady(ztermy::terminal::TerminalSnapshotPtr snapshot);
+    void clipboardTextReady(const QString &text);
     void statusChanged(const QString &status);
     void runningChanged(bool running);
 
@@ -49,8 +56,30 @@ private slots:
     void deliverLatestSnapshot();
 
 private:
-    using Command = std::variant<QByteArray, TerminalGeometry>;
+    struct InputCommand
+    {
+        QByteArray bytes;
+    };
+    struct PasteCommand
+    {
+        QByteArray bytes;
+    };
+    struct ScrollCommand
+    {
+        int rows = 0;
+    };
+    struct SelectionCommand
+    {
+        std::optional<TerminalSelection> selection;
+    };
+    struct CopyCommand
+    {
+    };
 
+    using Command =
+        std::variant<InputCommand, PasteCommand, TerminalGeometry, ScrollCommand, SelectionCommand, CopyCommand>;
+
+    void queueByteCommand(Command command, std::size_t byteCount);
     void readLoop(const std::stop_token &stopToken);
     void writeLoop(const std::stop_token &stopToken);
     void publishSnapshot();

@@ -18,6 +18,12 @@ public:
     [[nodiscard]] std::error_code feed(std::span<const std::byte> bytes) override;
     [[nodiscard]] std::error_code resize(TerminalGeometry geometry) override;
     [[nodiscard]] std::expected<TerminalSnapshot, std::error_code> snapshot() override;
+    [[nodiscard]] std::error_code setSelection(std::optional<TerminalSelection> selection) override;
+    [[nodiscard]] std::expected<std::optional<std::string>, std::error_code> selectedText() const override;
+    void scrollViewport(int rows) override;
+    void scrollToBottom() override;
+    [[nodiscard]] std::expected<std::vector<std::byte>, std::error_code>
+    encodePaste(std::span<const std::byte> bytes) const override;
     [[nodiscard]] std::expected<std::string, std::error_code> plainText() const override;
 
 private:
