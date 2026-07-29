@@ -15,19 +15,22 @@ Rectangle {
     readonly property color textColor: "#F8FAFC"
     readonly property color mutedColor: "#94A3B8"
     readonly property color accentColor: "#22C55E"
+    property string currentPage: "terminal"
 
     color: backgroundColor
 
     function reportTitleBarMetrics() {
-        windowChrome.setTitleBarMetrics(
-            titleBarHeight,
-            width - (captionButtonWidth * 3),
-            width - (captionButtonWidth * 2),
-            captionButtonWidth)
+        windowChrome.setTitleBarMetrics(titleBarHeight, width - (captionButtonWidth * 3), width - (captionButtonWidth * 2), captionButtonWidth);
     }
 
     Component.onCompleted: reportTitleBarMetrics()
     onWidthChanged: reportTitleBarMetrics()
+    onCurrentPageChanged: {
+        if (currentPage === "terminal") {
+            terminalViewport.forceActiveFocus();
+            terminalViewport.requestCurrentSize();
+        }
+    }
 
     Rectangle {
         id: titleBar
@@ -93,7 +96,7 @@ Rectangle {
                 }
 
                 Text {
-                    text: "New terminal"
+                    text: appController.sshActive ? "SSH terminal" : "Local terminal"
                     color: root.mutedColor
                     font.family: "Segoe UI Variable"
                     font.pixelSize: 12
@@ -164,7 +167,7 @@ Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 38
                     radius: 7
-                    color: root.raisedColor
+                    color: root.currentPage === "terminal" ? root.raisedColor : "transparent"
 
                     Row {
                         anchors.left: parent.left
@@ -186,14 +189,50 @@ Rectangle {
                             font.pixelSize: 13
                         }
                     }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.currentPage = "terminal"
+                        Accessible.role: Accessible.Button
+                        Accessible.name: "Terminal"
+                    }
                 }
 
-                Text {
-                    Layout.leftMargin: 15
-                    text: "Hosts"
-                    color: root.mutedColor
-                    font.family: "Segoe UI Variable"
-                    font.pixelSize: 13
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 38
+                    radius: 7
+                    color: root.currentPage === "hosts" ? root.raisedColor : "transparent"
+
+                    Row {
+                        anchors.left: parent.left
+                        anchors.leftMargin: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 10
+
+                        Rectangle {
+                            width: 3
+                            height: 16
+                            radius: 2
+                            color: root.currentPage === "hosts" ? root.accentColor : "transparent"
+                        }
+
+                        Text {
+                            text: "Hosts"
+                            color: root.currentPage === "hosts" ? root.textColor : root.mutedColor
+                            font.family: "Segoe UI Variable"
+                            font.pixelSize: 13
+                        }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.currentPage = "hosts"
+                        Accessible.role: Accessible.Button
+                        Accessible.name: "Hosts"
+                    }
                 }
 
                 Text {
@@ -235,30 +274,59 @@ Rectangle {
                             font.pixelSize: 10
                         }
                     }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            appController.startLocalTerminal();
+                            root.currentPage = "terminal";
+                        }
+                        Accessible.role: Accessible.Button
+                        Accessible.name: "Open local terminal"
+                    }
                 }
             }
         }
 
-        Rectangle {
+        Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            color: "#E60A0E14"
 
             Rectangle {
+                id: terminalPanel
                 anchors.fill: parent
-                anchors.margins: 14
-                radius: 9
-                color: "#D90B1017"
-                border.color: root.borderColor
+                color: "#E60A0E14"
+                visible: root.currentPage === "terminal"
 
-                TerminalView {
-                    id: terminalViewport
-                    objectName: "terminalViewport"
+                Rectangle {
                     anchors.fill: parent
-                    focus: true
+                    anchors.margins: 14
+                    radius: 9
+                    color: "#D90B1017"
+                    border.color: root.borderColor
 
-                    Component.onCompleted: forceActiveFocus()
+                    TerminalView {
+                        id: terminalViewport
+                        objectName: "terminalViewport"
+                        anchors.fill: parent
+                        focus: true
+
+                        Component.onCompleted: forceActiveFocus()
+                    }
                 }
+            }
+
+            HostConnectionPane {
+                anchors.fill: parent
+                visible: root.currentPage === "hosts"
+                backgroundColor: "#E60A0E14"
+                raisedColor: root.raisedColor
+                borderColor: root.borderColor
+                textColor: root.textColor
+                mutedColor: root.mutedColor
+                accentColor: root.accentColor
+                onConnectionStarted: root.currentPage = "terminal"
             }
         }
     }
@@ -308,5 +376,15 @@ Rectangle {
             font.family: "Cascadia Mono"
             font.pixelSize: 9
         }
+    }
+
+    HostKeyPrompt {
+        anchors.fill: parent
+        z: 100
+        panelColor: root.raisedColor
+        borderColor: root.borderColor
+        textColor: root.textColor
+        mutedColor: "#CBD5E1"
+        accentColor: root.accentColor
     }
 }

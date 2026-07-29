@@ -207,6 +207,8 @@ target_link_libraries(ztermy_terminal_ui
 
 qt_add_executable(ztermy WIN32
     src/main.cpp
+    src/application/AppController.cpp
+    src/application/AppController.h
     src/core/logging/Logging.cpp
     src/core/logging/Logging.h
     src/platform/windows/CrashDiagnostics.cpp
@@ -226,12 +228,22 @@ set_source_files_properties(
     src/ui/qml/Main.qml
     PROPERTIES QT_RESOURCE_ALIAS Main.qml
 )
+set_source_files_properties(
+    src/ui/qml/HostConnectionPane.qml
+    PROPERTIES QT_RESOURCE_ALIAS HostConnectionPane.qml
+)
+set_source_files_properties(
+    src/ui/qml/HostKeyPrompt.qml
+    PROPERTIES QT_RESOURCE_ALIAS HostKeyPrompt.qml
+)
 
 qt_add_qml_module(ztermy
     URI Ztermy
     VERSION 1.0
     QML_FILES
         src/ui/qml/CaptionButton.qml
+        src/ui/qml/HostConnectionPane.qml
+        src/ui/qml/HostKeyPrompt.qml
         src/ui/qml/Main.qml
 )
 
@@ -251,6 +263,7 @@ if(ZTERMY_STATIC_BUILD)
 endif()
 
 target_link_libraries(ztermy PRIVATE
+    ztermy_ssh_session
     ztermy_terminal_session
     ztermy_terminal_transport
     ztermy_terminal_ui

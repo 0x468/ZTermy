@@ -1,4 +1,4 @@
-#include "application/terminal/LocalTerminalSession.h"
+#include "application/AppController.h"
 #include "core/logging/Logging.h"
 #include "platform/windows/CrashDiagnostics.h"
 #include "platform/windows/NativeWindow.h"
@@ -6,6 +6,7 @@
 
 #include <QGuiApplication>
 #include <QLoggingCategory>
+#include <QQmlContext>
 #include <QQuickStyle>
 #include <QtQml/qqml.h>
 
@@ -27,7 +28,9 @@ int main(int argc, char *argv[])
     qRegisterMetaType<ztermy::terminal::TerminalSnapshotPtr>();
     qmlRegisterType<ztermy::ui::TerminalItem>("Ztermy.Terminal", 1, 0, "TerminalView");
 
+    ztermy::AppController appController;
     ztermy::NativeWindow window;
+    window.rootContext()->setContextProperty(QStringLiteral("appController"), &appController);
     if (!window.load())
     {
         return EXIT_FAILURE;
@@ -40,43 +43,14 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    ztermy::terminal::LocalTerminalSession terminalSession;
-    QObject::connect(&terminalSession, &ztermy::terminal::LocalTerminalSession::snapshotReady, terminalItem,
-                     &ztermy::ui::TerminalItem::setSnapshot);
-    QObject::connect(&terminalSession, &ztermy::terminal::LocalTerminalSession::statusChanged, terminalItem,
-                     &ztermy::ui::TerminalItem::setStatusText);
-    QObject::connect(&terminalSession, &ztermy::terminal::LocalTerminalSession::clipboardTextReady, terminalItem,
-                     &ztermy::ui::TerminalItem::setClipboardText);
-    QObject::connect(terminalItem, &ztermy::ui::TerminalItem::inputGenerated, &terminalSession,
-                     &ztermy::terminal::LocalTerminalSession::queueInput);
-    QObject::connect(terminalItem, &ztermy::ui::TerminalItem::pasteRequested, &terminalSession,
-                     &ztermy::terminal::LocalTerminalSession::queuePaste);
-    QObject::connect(terminalItem, &ztermy::ui::TerminalItem::scrollRequested, &terminalSession,
-                     &ztermy::terminal::LocalTerminalSession::requestScroll);
-    QObject::connect(terminalItem, &ztermy::ui::TerminalItem::selectionRequested, &terminalSession,
-                     &ztermy::terminal::LocalTerminalSession::requestSelection);
-    QObject::connect(terminalItem, &ztermy::ui::TerminalItem::clearSelectionRequested, &terminalSession,
-                     &ztermy::terminal::LocalTerminalSession::clearSelection);
-    QObject::connect(terminalItem, &ztermy::ui::TerminalItem::copyRequested, &terminalSession,
-                     &ztermy::terminal::LocalTerminalSession::copySelection);
-    QObject::connect(terminalItem, &ztermy::ui::TerminalItem::sizeRequested, &terminalSession,
-                     &ztermy::terminal::LocalTerminalSession::requestResize);
-
-    if (const std::error_code startError = terminalSession.start({.columns = 100, .rows = 30}))
-    {
-        terminalItem->setStatusText(
-            QStringLiteral("Unable to start local terminal: %1").arg(QString::fromStdString(startError.message())));
-        qCCritical(applicationLog) << "Unable to start local terminal:" << QString::fromStdString(startError.message());
-    }
-    terminalItem->requestCurrentSize();
+    appController.attachTerminal(terminalItem);
+    appController.startLocalTerminal();
 
     window.show();
     const int exitCode = application.exec();
 
     qCInfo(applicationLog) << "Application event loop stopped; beginning orderly shutdown";
-    terminalSession.stop();
-    QObject::disconnect(&terminalSession, nullptr, terminalItem, nullptr);
-    terminalItem->setSnapshot({});
+    appController.shutdown();
     window.releaseResources();
     qCInfo(applicationLog) << "Terminal and scene graph resources released";
     return exitCode;
