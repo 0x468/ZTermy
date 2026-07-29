@@ -20,10 +20,21 @@ using namespace std::chrono_literals;
 namespace
 {
 
-[[nodiscard]] bool validProfile(const ztermy::ssh::SshPrivateKeyProfile &profile) noexcept
+[[nodiscard]] bool validRequest(const ztermy::ssh::SshConnectionRequest &request) noexcept
 {
-    return !profile.host.trimmed().isEmpty() && profile.port > 0 && !profile.username.isEmpty()
-           && !profile.privateKeyPath.isEmpty() && !profile.knownHostsPath.isEmpty();
+    if (request.host.trimmed().isEmpty() || request.port == 0 || request.username.isEmpty()
+        || request.knownHostsPath.isEmpty())
+    {
+        return false;
+    }
+    switch (request.authentication)
+    {
+        case ztermy::ssh::SshAuthenticationMethod::PrivateKey:
+            return !request.privateKeyPath.isEmpty();
+        case ztermy::ssh::SshAuthenticationMethod::Password:
+            return request.privateKeyPath.isEmpty() && !request.secret.empty();
+    }
+    return false;
 }
 
 [[nodiscard]] ztermy::ssh::SshFailureKind mapTcpFailure(const ztermy::ssh::TcpConnectErrorKind kind) noexcept
@@ -155,10 +166,10 @@ SshTerminalSession::~SshTerminalSession()
     stop();
 }
 
-std::error_code SshTerminalSession::start(SshPrivateKeyProfile profile, const terminal::TerminalGeometry geometry)
+std::error_code SshTerminalSession::start(SshConnectionRequest request, const terminal::TerminalGeometry geometry)
 {
     stop();
-    if (!validProfile(profile) || !geometry.valid())
+    if (!validRequest(request) || !geometry.valid())
     {
         return std::make_error_code(std::errc::invalid_argument);
     }
@@ -178,10 +189,10 @@ std::error_code SshTerminalSession::start(SshPrivateKeyProfile profile, const te
     postPhase(SshConnectionPhase::Resolving);
     postStatus(QStringLiteral("Resolving SSH host"));
 
-    m_worker = std::jthread([this, profile = std::move(profile), geometry](const std::stop_token &stopToken) mutable {
+    m_worker = std::jthread([this, request = std::move(request), geometry](const std::stop_token &stopToken) mutable {
         try
         {
-            run(profile, geometry, stopToken);
+            run(request, geometry, stopToken);
         }
         catch (...)
         {
@@ -280,7 +291,7 @@ void SshTerminalSession::requestResize(const quint16 columns, const quint16 rows
     m_commands.emplace_back(geometry);
 }
 
-void SshTerminalSession::run(const SshPrivateKeyProfile &profile, const terminal::TerminalGeometry geometry,
+void SshTerminalSession::run(SshConnectionRequest &request, const terminal::TerminalGeometry geometry,
                              const std::stop_token &stopToken)
 {
     SshConnectionState state;
@@ -289,9 +300,9 @@ void SshTerminalSession::run(const SshPrivateKeyProfile &profile, const terminal
     postPhase(state.phase());
     postStatus(QStringLiteral("Connecting to SSH host"));
 
-    const QByteArray hostUtf8 = profile.host.trimmed().toUtf8();
+    const QByteArray hostUtf8 = request.host.trimmed().toUtf8();
     const std::string host(hostUtf8.constData(), static_cast<std::size_t>(hostUtf8.size()));
-    auto socket = WindowsTcpSocket::connect(host, profile.port, 10s, stopToken);
+    auto socket = WindowsTcpSocket::connect(host, request.port, 10s, stopToken);
     if (!socket)
     {
         const SshFailureKind failure = mapTcpFailure(socket.error().kind);
@@ -324,7 +335,7 @@ void SshTerminalSession::run(const SshPrivateKeyProfile &profile, const terminal
     postPhase(state.phase());
     postStatus(QStringLiteral("Verifying SSH host key"));
     auto hostKey = (*session)->hostKey();
-    const KnownHostsStore knownHostsStore(profile.knownHostsPath);
+    const KnownHostsStore knownHostsStore(request.knownHostsPath);
     auto knownHosts = knownHostsStore.load();
     if (!hostKey || !knownHosts)
     {
@@ -333,7 +344,7 @@ void SshTerminalSession::run(const SshPrivateKeyProfile &profile, const terminal
         return;
     }
 
-    const SshEndpoint endpoint{.host = host, .port = profile.port};
+    const SshEndpoint endpoint{.host = host, .port = request.port};
     auto trust = (*session)->verifyHostKey(endpoint, *knownHosts);
     if (!trust)
     {
@@ -410,13 +421,24 @@ void SshTerminalSession::run(const SshPrivateKeyProfile &profile, const terminal
     advanceState(state, SshConnectionPhase::Authenticating);
     postPhase(state.phase());
     postStatus(QStringLiteral("Authenticating SSH session"));
-    const QByteArray usernameUtf8 = profile.username.toUtf8();
-    const QByteArray privateKeyPathUtf8 = profile.privateKeyPath.toUtf8();
+    const QByteArray usernameUtf8 = request.username.toUtf8();
+    const QByteArray privateKeyPathUtf8 = request.privateKeyPath.toUtf8();
     const std::string username(usernameUtf8.constData(), static_cast<std::size_t>(usernameUtf8.size()));
     const std::string privateKeyPath(privateKeyPathUtf8.constData(),
                                      static_cast<std::size_t>(privateKeyPathUtf8.size()));
-    auto authentication =
-        (*session)->authenticateWithPrivateKeyFile(*socket, username, privateKeyPath, {}, 15s, stopToken);
+    std::expected<void, SshTransportError> authentication;
+    switch (request.authentication)
+    {
+        case SshAuthenticationMethod::PrivateKey:
+            authentication = (*session)->authenticateWithPrivateKeyFile(*socket, username, privateKeyPath,
+                                                                        request.secret.view(), 15s, stopToken);
+            break;
+        case SshAuthenticationMethod::Password:
+            authentication =
+                (*session)->authenticateWithPassword(*socket, username, request.secret.view(), 15s, stopToken);
+            break;
+    }
+    request.secret.clear();
     if (!authentication)
     {
         const SshFailureKind failure = mapTransportFailure(authentication.error());

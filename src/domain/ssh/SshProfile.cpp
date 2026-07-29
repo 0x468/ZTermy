@@ -33,7 +33,7 @@ bool validSshProfile(const SshProfile &profile) noexcept
         case SshAuthenticationMethod::PrivateKey:
             return nonEmptyWithin(profile.privateKeyPath, maximumPrivateKeyPathLength);
         case SshAuthenticationMethod::Password:
-            return profile.privateKeyPath.empty();
+            return profile.privateKeyPath.empty() && !profile.privateKeyPassphraseRequired;
     }
     return false;
 }

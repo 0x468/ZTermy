@@ -50,11 +50,13 @@ public:
 
     Q_INVOKABLE void startLocalTerminal();
     Q_INVOKABLE bool connectPrivateKey(const QString &host, int port, const QString &username,
-                                       const QString &privateKeyPath);
-    Q_INVOKABLE bool savePrivateKeyProfile(const QString &id, const QString &name, const QString &host, int port,
-                                           const QString &username, const QString &privateKeyPath);
+                                       const QString &privateKeyPath, const QString &passphrase);
+    Q_INVOKABLE bool connectPassword(const QString &host, int port, const QString &username, const QString &password);
+    Q_INVOKABLE bool saveHostProfile(const QString &id, const QString &name, const QString &host, int port,
+                                     const QString &username, const QString &authentication,
+                                     const QString &privateKeyPath, bool privateKeyPassphraseRequired);
     Q_INVOKABLE bool deleteHostProfile(const QString &id);
-    Q_INVOKABLE bool connectHostProfile(const QString &id);
+    Q_INVOKABLE bool connectHostProfile(const QString &id, const QString &secret);
     Q_INVOKABLE void acceptHostKey(bool remember);
     Q_INVOKABLE void rejectHostKey();
 
@@ -78,6 +80,7 @@ private:
     void setHostKeyPrompt(QString algorithm, QString fingerprint, bool changed);
     void clearHostKeyPrompt();
     void loadHostProfiles();
+    [[nodiscard]] bool startSshConnection(ssh::SshConnectionRequest request);
 
     ui::TerminalItem *m_terminal = nullptr;
     terminal::LocalTerminalSession m_localSession;

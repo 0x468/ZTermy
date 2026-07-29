@@ -61,8 +61,10 @@ constexpr qint64 currentSchemaVersion = 1;
     const QJsonValue usernameValue = object.value(QStringLiteral("username"));
     const QJsonValue authenticationValue = object.value(QStringLiteral("authentication"));
     const QJsonValue privateKeyPathValue = object.value(QStringLiteral("privateKeyPath"));
+    const QJsonValue passphraseRequiredValue = object.value(QStringLiteral("privateKeyPassphraseRequired"));
     if (!idValue.isString() || !nameValue.isString() || !hostValue.isString() || !portValue.isDouble()
-        || !usernameValue.isString() || !authenticationValue.isString() || !privateKeyPathValue.isString())
+        || !usernameValue.isString() || !authenticationValue.isString() || !privateKeyPathValue.isString()
+        || (!passphraseRequiredValue.isUndefined() && !passphraseRequiredValue.isBool()))
     {
         return std::nullopt;
     }
@@ -88,6 +90,7 @@ constexpr qint64 currentSchemaVersion = 1;
         .username = usernameValue.toString().toStdString(),
         .authentication = *authentication,
         .privateKeyPath = privateKeyPathValue.toString().toStdString(),
+        .privateKeyPassphraseRequired = passphraseRequiredValue.toBool(false),
     };
     return ztermy::ssh::validSshProfile(profile) ? std::optional{std::move(profile)} : std::nullopt;
 }
@@ -102,6 +105,7 @@ constexpr qint64 currentSchemaVersion = 1;
         {QStringLiteral("username"), QString::fromStdString(profile.username)},
         {QStringLiteral("authentication"), serializeAuthentication(profile.authentication)},
         {QStringLiteral("privateKeyPath"), QString::fromStdString(profile.privateKeyPath)},
+        {QStringLiteral("privateKeyPassphraseRequired"), profile.privateKeyPassphraseRequired},
     };
 }
 

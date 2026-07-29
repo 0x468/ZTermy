@@ -21,6 +21,7 @@ struct SshProfile
     std::string username;
     SshAuthenticationMethod authentication = SshAuthenticationMethod::PrivateKey;
     std::string privateKeyPath;
+    bool privateKeyPassphraseRequired = false;
 
     friend bool operator==(const SshProfile &, const SshProfile &) = default;
 };

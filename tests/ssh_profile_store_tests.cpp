@@ -21,6 +21,7 @@ namespace
         .username = "developer",
         .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
         .privateKeyPath = R"(C:\Users\developer\.ssh\id_ed25519)",
+        .privateKeyPassphraseRequired = true,
     };
 }
 
@@ -43,6 +44,7 @@ private slots:
     void rejectsInvalidProfilesAndDuplicateIds();
     void rejectsMalformedAndUnsupportedDocuments();
     void rejectsFractionalPortsAndUnknownAuthentication();
+    void loadsProfilesWrittenBeforePassphraseMetadata();
 };
 
 void SshProfileStoreTests::missingFileLoadsAsEmpty()
@@ -81,8 +83,27 @@ void SshProfileStoreTests::savesAndLoadsNonSecretProfiles()
     QFile file(path);
     QVERIFY(file.open(QIODevice::ReadOnly));
     const QByteArray persisted = file.readAll();
-    QVERIFY(!persisted.contains("passphrase"));
+    QVERIFY(!persisted.contains("\"password\":"));
+    QVERIFY(!persisted.contains("\"passphrase\":"));
+    QVERIFY(persisted.contains("privateKeyPassphraseRequired"));
     QVERIFY(!persisted.contains("privateKeyContent"));
+}
+
+void SshProfileStoreTests::loadsProfilesWrittenBeforePassphraseMetadata()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("profiles.json"));
+    const ztermy::ssh::SshProfileStore store(path);
+
+    QVERIFY(writeFile(
+        path,
+        QByteArrayLiteral(
+            R"({"version":1,"profiles":[{"id":"p","name":"n","host":"h","port":22,"username":"u","authentication":"private-key","privateKeyPath":"key"}]})")));
+    auto profiles = store.load();
+    QVERIFY(profiles);
+    QCOMPARE(profiles->size(), std::size_t{1});
+    QVERIFY(!profiles->front().privateKeyPassphraseRequired);
 }
 
 void SshProfileStoreTests::createsMissingParentDirectory()

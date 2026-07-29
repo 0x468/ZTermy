@@ -9,6 +9,7 @@
 #include <QVariantMap>
 
 #include <algorithm>
+#include <optional>
 #include <system_error>
 
 Q_LOGGING_CATEGORY(appControllerLog, "ztermy.application.controller")
@@ -181,6 +182,7 @@ QVariantList AppController::hostProfiles() const
                                                    ? QStringLiteral("private-key")
                                                    : QStringLiteral("password")},
             {QStringLiteral("privateKeyPath"), utf8QString(profile.privateKeyPath)},
+            {QStringLiteral("privateKeyPassphraseRequired"), profile.privateKeyPassphraseRequired},
         });
     }
     return result;
@@ -212,9 +214,10 @@ void AppController::startLocalTerminal()
 }
 
 bool AppController::connectPrivateKey(const QString &host, const int port, const QString &username,
-                                      const QString &privateKeyPath)
+                                      const QString &privateKeyPath, const QString &passphrase)
 {
-    if (host.trimmed().isEmpty() || username.isEmpty() || privateKeyPath.isEmpty() || port <= 0 || port > 65535)
+    if (host.trimmed().isEmpty() || username.trimmed().isEmpty() || privateKeyPath.trimmed().isEmpty() || port <= 0
+        || port > 65535)
     {
         if (m_terminal != nullptr)
         {
@@ -223,6 +226,44 @@ bool AppController::connectPrivateKey(const QString &host, const int port, const
         return false;
     }
 
+    ssh::SshConnectionRequest request{
+        .host = host.trimmed(),
+        .port = static_cast<std::uint16_t>(port),
+        .username = username.trimmed(),
+        .authentication = ssh::SshAuthenticationMethod::PrivateKey,
+        .privateKeyPath = privateKeyPath.trimmed(),
+        .secret = security::SensitiveByteArray(passphrase.toUtf8()),
+        .knownHostsPath = applicationDataFile(QStringLiteral("known_hosts.json")),
+    };
+    return startSshConnection(std::move(request));
+}
+
+bool AppController::connectPassword(const QString &host, const int port, const QString &username,
+                                    const QString &password)
+{
+    if (host.trimmed().isEmpty() || username.trimmed().isEmpty() || password.isEmpty() || port <= 0 || port > 65535)
+    {
+        if (m_terminal != nullptr)
+        {
+            m_terminal->setStatusText(QStringLiteral("Complete the SSH host, port, username, and password fields"));
+        }
+        return false;
+    }
+
+    ssh::SshConnectionRequest request{
+        .host = host.trimmed(),
+        .port = static_cast<std::uint16_t>(port),
+        .username = username.trimmed(),
+        .authentication = ssh::SshAuthenticationMethod::Password,
+        .privateKeyPath = {},
+        .secret = security::SensitiveByteArray(password.toUtf8()),
+        .knownHostsPath = applicationDataFile(QStringLiteral("known_hosts.json")),
+    };
+    return startSshConnection(std::move(request));
+}
+
+bool AppController::startSshConnection(ssh::SshConnectionRequest request)
+{
     clearHostKeyPrompt();
     m_localSession.stop();
     m_sshSession.stop();
@@ -235,14 +276,7 @@ bool AppController::connectPrivateKey(const QString &host, const int port, const
         m_terminal->setStatusText(QStringLiteral("Starting SSH connection..."));
     }
 
-    const ssh::SshPrivateKeyProfile profile{
-        .host = host.trimmed(),
-        .port = static_cast<std::uint16_t>(port),
-        .username = username,
-        .privateKeyPath = privateKeyPath,
-        .knownHostsPath = applicationDataFile(QStringLiteral("known_hosts.json")),
-    };
-    const std::error_code error = m_sshSession.start(profile, {.columns = 100, .rows = 30});
+    const std::error_code error = m_sshSession.start(std::move(request), {.columns = 100, .rows = 30});
     if (error)
     {
         if (m_terminal != nullptr)
@@ -258,14 +292,23 @@ bool AppController::connectPrivateKey(const QString &host, const int port, const
     return true;
 }
 
-bool AppController::savePrivateKeyProfile(const QString &id, const QString &name, const QString &host, const int port,
-                                          const QString &username, const QString &privateKeyPath)
+bool AppController::saveHostProfile(const QString &id, const QString &name, const QString &host, const int port,
+                                    const QString &username, const QString &authentication,
+                                    const QString &privateKeyPath, const bool privateKeyPassphraseRequired)
 {
     const QString normalizedName = name.trimmed();
     const QString normalizedHost = host.trimmed();
     const QString normalizedUsername = username.trimmed();
     const QString normalizedPrivateKeyPath = privateKeyPath.trimmed();
     const QString profileId = id.isEmpty() ? QUuid::createUuid().toString(QUuid::WithoutBraces) : id.trimmed();
+    const std::optional<ssh::SshAuthenticationMethod> authenticationMethod =
+        authentication == QStringLiteral("private-key") ? std::optional{ssh::SshAuthenticationMethod::PrivateKey}
+        : authentication == QStringLiteral("password")  ? std::optional{ssh::SshAuthenticationMethod::Password}
+                                                        : std::nullopt;
+    if (!authenticationMethod)
+    {
+        return false;
+    }
 
     const ssh::SshProfile profile{
         .id = utf8String(profileId),
@@ -273,8 +316,12 @@ bool AppController::savePrivateKeyProfile(const QString &id, const QString &name
         .host = utf8String(normalizedHost),
         .port = port > 0 && port <= 65535 ? static_cast<std::uint16_t>(port) : std::uint16_t{0},
         .username = utf8String(normalizedUsername),
-        .authentication = ssh::SshAuthenticationMethod::PrivateKey,
-        .privateKeyPath = utf8String(normalizedPrivateKeyPath),
+        .authentication = *authenticationMethod,
+        .privateKeyPath = *authenticationMethod == ssh::SshAuthenticationMethod::PrivateKey
+                              ? utf8String(normalizedPrivateKeyPath)
+                              : std::string{},
+        .privateKeyPassphraseRequired =
+            *authenticationMethod == ssh::SshAuthenticationMethod::PrivateKey && privateKeyPassphraseRequired,
     };
     if (!ssh::validSshProfile(profile))
     {
@@ -323,16 +370,24 @@ bool AppController::deleteHostProfile(const QString &id)
     return true;
 }
 
-bool AppController::connectHostProfile(const QString &id)
+bool AppController::connectHostProfile(const QString &id, const QString &secret)
 {
     const std::string profileId = utf8String(id);
     const auto profile = std::ranges::find(m_profiles, profileId, &ssh::SshProfile::id);
-    if (profile == m_profiles.end() || profile->authentication != ssh::SshAuthenticationMethod::PrivateKey)
+    if (profile == m_profiles.end())
+    {
+        return false;
+    }
+    if (profile->authentication == ssh::SshAuthenticationMethod::Password)
+    {
+        return connectPassword(utf8QString(profile->host), profile->port, utf8QString(profile->username), secret);
+    }
+    if (profile->privateKeyPassphraseRequired && secret.isEmpty())
     {
         return false;
     }
     return connectPrivateKey(utf8QString(profile->host), profile->port, utf8QString(profile->username),
-                             utf8QString(profile->privateKeyPath));
+                             utf8QString(profile->privateKeyPath), secret);
 }
 
 void AppController::acceptHostKey(const bool remember)

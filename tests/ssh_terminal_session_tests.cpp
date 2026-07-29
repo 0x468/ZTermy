@@ -6,6 +6,8 @@
 #include <QTest>
 
 #include <chrono>
+#include <type_traits>
+#include <utility>
 
 using namespace std::chrono_literals;
 
@@ -15,6 +17,7 @@ class SshTerminalSessionTests final : public QObject
 
 private slots:
     void rejectsInvalidStartupConfiguration();
+    void sensitiveCredentialsAreMoveOnlyAndClearable();
     void connectsAfterExplicitHostKeyConfirmation();
 };
 
@@ -25,15 +28,40 @@ void SshTerminalSessionTests::rejectsInvalidStartupConfiguration()
     auto invalidProfile = session.start({}, {.columns = 80, .rows = 24});
     QCOMPARE(invalidProfile, std::make_error_code(std::errc::invalid_argument));
 
-    const ztermy::ssh::SshPrivateKeyProfile profile{
+    ztermy::ssh::SshConnectionRequest profile{
         .host = QStringLiteral("server.example.test"),
         .port = 22,
         .username = QStringLiteral("user"),
+        .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
         .privateKeyPath = QStringLiteral("key"),
         .knownHostsPath = QStringLiteral("known_hosts.json"),
     };
-    auto invalidGeometry = session.start(profile, {.columns = 0, .rows = 24});
+    auto invalidGeometry = session.start(std::move(profile), {.columns = 0, .rows = 24});
     QCOMPARE(invalidGeometry, std::make_error_code(std::errc::invalid_argument));
+
+    ztermy::ssh::SshConnectionRequest emptyPassword{
+        .host = QStringLiteral("server.example.test"),
+        .port = 22,
+        .username = QStringLiteral("user"),
+        .authentication = ztermy::ssh::SshAuthenticationMethod::Password,
+        .knownHostsPath = QStringLiteral("known_hosts.json"),
+    };
+    QCOMPARE(session.start(std::move(emptyPassword), {.columns = 80, .rows = 24}),
+             std::make_error_code(std::errc::invalid_argument));
+}
+
+void SshTerminalSessionTests::sensitiveCredentialsAreMoveOnlyAndClearable()
+{
+    static_assert(!std::is_copy_constructible_v<ztermy::security::SensitiveByteArray>);
+    static_assert(!std::is_copy_assignable_v<ztermy::security::SensitiveByteArray>);
+
+    ztermy::security::SensitiveByteArray secret(QByteArrayLiteral("temporary-secret"));
+    QVERIFY(secret.view() == std::string_view("temporary-secret"));
+
+    ztermy::security::SensitiveByteArray moved(std::move(secret));
+    QVERIFY(moved.view() == std::string_view("temporary-secret"));
+    moved.clear();
+    QVERIFY(moved.empty());
 }
 
 void SshTerminalSessionTests::connectsAfterExplicitHostKeyConfirmation()
@@ -56,14 +84,18 @@ void SshTerminalSessionTests::connectsAfterExplicitHostKeyConfirmation()
     QSignalSpy snapshotSpy(&session, &ztermy::ssh::SshTerminalSession::snapshotReady);
     session.confirmHostKey(true);
 
-    const ztermy::ssh::SshPrivateKeyProfile profile{
-        .host = QString::fromUtf8(host),
-        .port = 22,
-        .username = QString::fromUtf8(username),
-        .privateKeyPath = QString::fromUtf8(privateKey),
-        .knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json")),
+    const QString knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json"));
+    const auto request = [&] {
+        return ztermy::ssh::SshConnectionRequest{
+            .host = QString::fromUtf8(host),
+            .port = 22,
+            .username = QString::fromUtf8(username),
+            .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
+            .privateKeyPath = QString::fromUtf8(privateKey),
+            .knownHostsPath = knownHostsPath,
+        };
     };
-    QVERIFY(!session.start(profile, {.columns = 80, .rows = 24}));
+    QVERIFY(!session.start(request(), {.columns = 80, .rows = 24}));
     QTRY_COMPARE_WITH_TIMEOUT(confirmationSpy.count(), 1, 10s);
 
     const QList<QVariant> confirmation = confirmationSpy.takeFirst();
@@ -87,12 +119,12 @@ void SshTerminalSessionTests::connectsAfterExplicitHostKeyConfirmation()
     session.requestResize(100, 30, 8, 16);
     session.stop();
 
-    QVERIFY(QFileInfo::exists(profile.knownHostsPath));
+    QVERIFY(QFileInfo::exists(knownHostsPath));
     confirmationSpy.clear();
     runningSpy.clear();
     snapshotSpy.clear();
 
-    QVERIFY(!session.start(profile, {.columns = 80, .rows = 24}));
+    QVERIFY(!session.start(request(), {.columns = 80, .rows = 24}));
     QTRY_VERIFY_WITH_TIMEOUT(
         [&runningSpy] {
             for (const QList<QVariant> &arguments : runningSpy)

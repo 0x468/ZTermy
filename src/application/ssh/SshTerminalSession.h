@@ -1,6 +1,8 @@
 #pragma once
 
+#include "core/security/SensitiveByteArray.h"
 #include "domain/ssh/SshConnectionState.h"
+#include "domain/ssh/SshProfile.h"
 #include "domain/terminal/TerminalEngine.h"
 
 #include <QByteArray>
@@ -25,12 +27,14 @@ class GhosttyTerminalEngine;
 namespace ztermy::ssh
 {
 
-struct SshPrivateKeyProfile final
+struct SshConnectionRequest final
 {
     QString host;
     std::uint16_t port = 22;
     QString username;
+    SshAuthenticationMethod authentication = SshAuthenticationMethod::PrivateKey;
     QString privateKeyPath;
+    security::SensitiveByteArray secret;
     QString knownHostsPath;
 };
 
@@ -45,7 +49,7 @@ public:
     SshTerminalSession(const SshTerminalSession &) = delete;
     SshTerminalSession &operator=(const SshTerminalSession &) = delete;
 
-    [[nodiscard]] std::error_code start(SshPrivateKeyProfile profile, terminal::TerminalGeometry geometry);
+    [[nodiscard]] std::error_code start(SshConnectionRequest request, terminal::TerminalGeometry geometry);
     void stop() noexcept;
 
 public slots:
@@ -81,8 +85,7 @@ private:
 
     using Command = std::variant<InputCommand, terminal::TerminalGeometry>;
 
-    void run(const SshPrivateKeyProfile &profile, terminal::TerminalGeometry geometry,
-             const std::stop_token &stopToken);
+    void run(SshConnectionRequest &request, terminal::TerminalGeometry geometry, const std::stop_token &stopToken);
     void publishSnapshot();
     void postStatus(const QString &status);
     void postPhase(SshConnectionPhase phase);

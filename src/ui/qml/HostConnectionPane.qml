@@ -14,6 +14,9 @@ Rectangle {
     property string editingProfileId: ""
     property string pendingDeleteId: ""
     property string pendingDeleteName: ""
+    property string pendingConnectId: ""
+    property string pendingConnectName: ""
+    property string pendingConnectAuthentication: ""
     property bool statusIsError: false
 
     signal connectionStarted
@@ -31,14 +34,23 @@ Rectangle {
         return Number(portField.text);
     }
 
-    function validate(requireName) {
-        if ((requireName && nameField.text.trim().length === 0) || hostField.text.trim().length === 0 || usernameField.text.trim().length === 0 || keyPathField.text.trim().length === 0 || portField.text.length === 0) {
+    function authenticationToken() {
+        return authenticationBox.currentIndex === 0 ? "private-key" : "password";
+    }
+
+    function validate(requireName, requireCredential) {
+        const privateKey = authenticationToken() === "private-key";
+        if ((requireName && nameField.text.trim().length === 0) || hostField.text.trim().length === 0 || usernameField.text.trim().length === 0 || (privateKey && keyPathField.text.trim().length === 0) || portField.text.length === 0) {
             showStatus("Complete every required field.", true);
             return false;
         }
         const port = portNumber();
         if (port < 1 || port > 65535) {
             showStatus("Port must be between 1 and 65535.", true);
+            return false;
+        }
+        if (requireCredential && (!privateKey || passphraseRequiredBox.checked) && credentialField.text.length === 0) {
+            showStatus(privateKey ? "Enter the private-key passphrase." : "Enter the SSH password.", true);
             return false;
         }
         return true;
@@ -55,7 +67,10 @@ Rectangle {
         hostField.text = "";
         portField.text = "22";
         usernameField.text = "";
+        authenticationBox.currentIndex = 0;
         keyPathField.text = appController.defaultPrivateKeyPath;
+        passphraseRequiredBox.checked = false;
+        credentialField.text = "";
     }
 
     function editProfile(profile) {
@@ -64,17 +79,20 @@ Rectangle {
         hostField.text = profile.host;
         portField.text = String(profile.port);
         usernameField.text = profile.username;
+        authenticationBox.currentIndex = profile.authentication === "password" ? 1 : 0;
         keyPathField.text = profile.privateKeyPath;
+        passphraseRequiredBox.checked = profile.privateKeyPassphraseRequired;
+        credentialField.text = "";
         showStatus("Editing \"" + profile.name + "\".", false);
         nameField.forceActiveFocus();
     }
 
     function saveProfile() {
         statusText.text = "";
-        if (!validate(true)) {
+        if (!validate(true, false)) {
             return;
         }
-        if (appController.savePrivateKeyProfile(editingProfileId, nameField.text, hostField.text, portNumber(), usernameField.text, keyPathField.text)) {
+        if (appController.saveHostProfile(editingProfileId, nameField.text, hostField.text, portNumber(), usernameField.text, authenticationToken(), keyPathField.text, passphraseRequiredBox.checked)) {
             clearEditor();
             showStatus("Profile saved. Passwords and key passphrases are never stored.", false);
         } else {
@@ -84,13 +102,49 @@ Rectangle {
 
     function connectCurrent() {
         statusText.text = "";
-        if (!validate(false)) {
+        if (!validate(false, true)) {
             return;
         }
-        if (appController.connectPrivateKey(hostField.text, portNumber(), usernameField.text, keyPathField.text)) {
+        const secret = credentialField.text;
+        credentialField.text = "";
+        const started = authenticationToken() === "private-key" ? appController.connectPrivateKey(hostField.text, portNumber(), usernameField.text, keyPathField.text, secret) : appController.connectPassword(hostField.text, portNumber(), usernameField.text, secret);
+        if (started) {
             connectionStarted();
         } else {
             showStatus("The connection settings could not be started.", true);
+        }
+    }
+
+    function connectSaved(profile) {
+        if (profile.authentication === "password" || profile.privateKeyPassphraseRequired) {
+            pendingConnectId = profile.id;
+            pendingConnectName = profile.name;
+            pendingConnectAuthentication = profile.authentication;
+            savedCredentialField.text = "";
+            credentialDialog.open();
+            savedCredentialField.forceActiveFocus();
+            return;
+        }
+        if (appController.connectHostProfile(profile.id, "")) {
+            connectionStarted();
+        } else {
+            showStatus("The saved profile could not be connected.", true);
+        }
+    }
+
+    function connectPendingSaved() {
+        if (savedCredentialField.text.length === 0) {
+            return;
+        }
+        const profileId = pendingConnectId;
+        const secret = savedCredentialField.text;
+        savedCredentialField.text = "";
+        if (appController.connectHostProfile(profileId, secret)) {
+            credentialDialog.close();
+            connectionStarted();
+        } else {
+            showStatus("The saved profile could not be connected.", true);
+            credentialDialog.close();
         }
     }
 
@@ -234,13 +288,7 @@ Rectangle {
                             palette.button: pane.accentColor
                             palette.buttonText: "#07130B"
                             font.weight: Font.DemiBold
-                            onClicked: {
-                                if (appController.connectHostProfile(profileCard.modelData.id)) {
-                                    pane.connectionStarted();
-                                } else {
-                                    pane.showStatus("The saved profile could not be connected.", true);
-                                }
-                            }
+                            onClicked: pane.connectSaved(profileCard.modelData)
                         }
 
                         Button {
@@ -293,7 +341,7 @@ Rectangle {
                         }
 
                         Text {
-                            text: "Ed25519 private key"
+                            text: authenticationBox.currentIndex === 0 ? "Private-key authentication" : "Password authentication"
                             color: pane.mutedColor
                             font.family: "Segoe UI Variable"
                             font.pixelSize: 11
@@ -360,14 +408,99 @@ Rectangle {
                         }
 
                         Label {
+                            text: "Authentication"
+                            color: pane.textColor
+                        }
+                        ComboBox {
+                            id: authenticationBox
+                            Layout.fillWidth: true
+                            model: ["Private key", "Password"]
+                            Accessible.name: "SSH authentication method"
+                            delegate: ItemDelegate {
+                                required property int index
+                                required property var modelData
+
+                                width: authenticationBox.width
+                                text: modelData
+                                highlighted: authenticationBox.highlightedIndex === index
+
+                                contentItem: Text {
+                                    text: parent.text
+                                    color: pane.textColor
+                                    verticalAlignment: Text.AlignVCenter
+                                    font.family: "Segoe UI Variable"
+                                    font.pixelSize: 13
+                                }
+
+                                background: Rectangle {
+                                    color: parent.highlighted ? "#1F513A" : "#172033"
+                                }
+                            }
+                            popup: Popup {
+                                y: authenticationBox.height - 1
+                                width: authenticationBox.width
+                                implicitHeight: contentItem.implicitHeight + 2
+                                padding: 1
+
+                                contentItem: ListView {
+                                    clip: true
+                                    implicitHeight: contentHeight
+                                    model: authenticationBox.popup.visible ? authenticationBox.delegateModel : null
+                                    currentIndex: authenticationBox.highlightedIndex
+                                }
+
+                                background: Rectangle {
+                                    color: "#172033"
+                                    border.color: pane.borderColor
+                                }
+                            }
+                            onCurrentIndexChanged: {
+                                credentialField.text = "";
+                                if (currentIndex === 1) {
+                                    passphraseRequiredBox.checked = false;
+                                }
+                            }
+                        }
+
+                        Label {
                             text: "Private key"
                             color: pane.textColor
+                            visible: authenticationBox.currentIndex === 0
                         }
                         TextField {
                             id: keyPathField
                             Layout.fillWidth: true
+                            visible: authenticationBox.currentIndex === 0
                             text: appController.defaultPrivateKeyPath
                             Accessible.name: "Private-key file path"
+                            selectByMouse: true
+                        }
+
+                        Item {
+                            visible: authenticationBox.currentIndex === 0
+                            implicitHeight: passphraseRequiredBox.implicitHeight
+                        }
+                        CheckBox {
+                            id: passphraseRequiredBox
+                            Layout.fillWidth: true
+                            visible: authenticationBox.currentIndex === 0
+                            text: "This private key requires a passphrase"
+                            Accessible.name: "Private key requires a passphrase"
+                            onCheckedChanged: credentialField.text = ""
+                        }
+
+                        Label {
+                            text: authenticationBox.currentIndex === 0 ? "Passphrase" : "Password"
+                            color: pane.textColor
+                            visible: authenticationBox.currentIndex === 1 || passphraseRequiredBox.checked
+                        }
+                        TextField {
+                            id: credentialField
+                            Layout.fillWidth: true
+                            visible: authenticationBox.currentIndex === 1 || passphraseRequiredBox.checked
+                            placeholderText: authenticationBox.currentIndex === 0 ? "Private-key passphrase" : "SSH password"
+                            echoMode: TextInput.Password
+                            Accessible.name: authenticationBox.currentIndex === 0 ? "Private-key passphrase" : "SSH password"
                             selectByMouse: true
                         }
                     }
@@ -415,6 +548,81 @@ Rectangle {
                             onClicked: pane.connectCurrent()
                         }
                     }
+                }
+            }
+        }
+    }
+
+    Dialog {
+        id: credentialDialog
+
+        anchors.centerIn: parent
+        modal: true
+        closePolicy: Popup.CloseOnEscape
+        padding: 20
+        onClosed: {
+            savedCredentialField.text = "";
+            pane.pendingConnectId = "";
+            pane.pendingConnectName = "";
+            pane.pendingConnectAuthentication = "";
+        }
+
+        background: Rectangle {
+            radius: 10
+            color: pane.raisedColor
+            border.color: pane.borderColor
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 14
+
+            Text {
+                text: pane.pendingConnectAuthentication === "password" ? "Enter SSH password" : "Enter key passphrase"
+                color: pane.textColor
+                font.family: "Segoe UI Variable"
+                font.pixelSize: 18
+                font.weight: Font.DemiBold
+            }
+
+            Text {
+                Layout.preferredWidth: 360
+                text: "Authenticate to \"" + pane.pendingConnectName + "\". This credential is kept only for this connection attempt."
+                color: pane.mutedColor
+                wrapMode: Text.WordWrap
+                font.family: "Segoe UI Variable"
+                font.pixelSize: 12
+            }
+
+            TextField {
+                id: savedCredentialField
+                Layout.fillWidth: true
+                placeholderText: pane.pendingConnectAuthentication === "password" ? "SSH password" : "Private-key passphrase"
+                echoMode: TextInput.Password
+                Accessible.name: placeholderText
+                selectByMouse: true
+                onAccepted: pane.connectPendingSaved()
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+
+                Item {
+                    Layout.fillWidth: true
+                }
+
+                Button {
+                    text: "Cancel"
+                    onClicked: credentialDialog.close()
+                }
+
+                Button {
+                    id: connectSavedButton
+                    text: "Connect"
+                    enabled: savedCredentialField.text.length > 0
+                    palette.button: pane.accentColor
+                    palette.buttonText: "#07130B"
+                    font.weight: Font.DemiBold
+                    onClicked: pane.connectPendingSaved()
                 }
             }
         }
