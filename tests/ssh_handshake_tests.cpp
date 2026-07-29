@@ -8,6 +8,7 @@
 #include <chrono>
 #include <memory>
 #include <stop_token>
+#include <string>
 #include <thread>
 
 using namespace std::chrono_literals;
@@ -56,6 +57,8 @@ private slots:
     void rejectsHostKeyBeforeHandshake();
     void rejectsInvalidPasswordCredentials();
     void rejectsPasswordAuthenticationBeforeHandshake();
+    void rejectsInvalidPrivateKeyCredentials();
+    void rejectsPrivateKeyAuthenticationBeforeHandshake();
 };
 
 void SshHandshakeTests::createsNonBlockingSession()
@@ -192,6 +195,52 @@ void SshHandshakeTests::rejectsPasswordAuthenticationBeforeHandshake()
     }
 
     auto result = (*session)->authenticateWithPassword(peer.socket, "user", "password", 2s);
+    QVERIFY(!result);
+    QCOMPARE(result.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidState);
+    QVERIFY(!(*session)->authenticated());
+}
+
+void SshHandshakeTests::rejectsInvalidPrivateKeyCredentials()
+{
+    ztermy::ssh::WindowsTcpSocket socket;
+    auto session = ztermy::ssh::Libssh2Session::create();
+    if (!session)
+    {
+        QFAIL("libssh2 session creation failed");
+    }
+
+    auto emptyUsername = (*session)->authenticateWithPrivateKeyFile(socket, {}, "key", {}, 2s);
+    QVERIFY(!emptyUsername);
+    QCOMPARE(emptyUsername.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidArgument);
+
+    auto emptyPath = (*session)->authenticateWithPrivateKeyFile(socket, "user", {}, {}, 2s);
+    QVERIFY(!emptyPath);
+    QCOMPARE(emptyPath.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidArgument);
+
+    const std::string embeddedNullPath("key\0path", 8);
+    auto invalidPath = (*session)->authenticateWithPrivateKeyFile(socket, "user", embeddedNullPath, {}, 2s);
+    QVERIFY(!invalidPath);
+    QCOMPARE(invalidPath.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidArgument);
+
+    const std::string embeddedNullPassphrase("pass\0phrase", 11);
+    auto invalidPassphrase =
+        (*session)->authenticateWithPrivateKeyFile(socket, "user", "key", embeddedNullPassphrase, 2s);
+    QVERIFY(!invalidPassphrase);
+    QCOMPARE(invalidPassphrase.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidArgument);
+}
+
+void SshHandshakeTests::rejectsPrivateKeyAuthenticationBeforeHandshake()
+{
+    SilentPeer peer = connectSilentPeer();
+    QVERIFY(peer.socket.valid());
+
+    auto session = ztermy::ssh::Libssh2Session::create();
+    if (!session)
+    {
+        QFAIL("libssh2 session creation failed");
+    }
+
+    auto result = (*session)->authenticateWithPrivateKeyFile(peer.socket, "user", "key", {}, 2s);
     QVERIFY(!result);
     QCOMPARE(result.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidState);
     QVERIFY(!(*session)->authenticated());

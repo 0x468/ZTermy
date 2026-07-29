@@ -2,10 +2,13 @@
 
 #include <libssh2.h>
 
+#include <windows.h>
+
 #include <algorithm>
 #include <chrono>
 #include <limits>
 #include <new>
+#include <string>
 #include <utility>
 
 namespace
@@ -97,6 +100,55 @@ waitForSessionIo(ztermy::ssh::WindowsTcpSocket &socket, LIBSSH2_SESSION *session
             return SshTransportError{.kind = SshTransportErrorKind::ProtocolError, .libssh2Code = error};
     }
 }
+
+[[nodiscard]] ztermy::ssh::SshTransportError mapPrivateKeyAuthenticationError(const int error) noexcept
+{
+    using ztermy::ssh::SshTransportError;
+    using ztermy::ssh::SshTransportErrorKind;
+
+    switch (error)
+    {
+        case LIBSSH2_ERROR_AUTHENTICATION_FAILED:
+        case LIBSSH2_ERROR_PUBLICKEY_UNVERIFIED:
+            return SshTransportError{.kind = SshTransportErrorKind::AuthenticationRejected, .libssh2Code = error};
+        case LIBSSH2_ERROR_FILE:
+        case LIBSSH2_ERROR_KEYFILE_AUTH_FAILED:
+        case LIBSSH2_ERROR_METHOD_NOT_SUPPORTED:
+            return SshTransportError{.kind = SshTransportErrorKind::AuthenticationUnavailable, .libssh2Code = error};
+        case LIBSSH2_ERROR_ALLOC:
+            return SshTransportError{.kind = SshTransportErrorKind::InitializationFailed, .libssh2Code = error};
+        case LIBSSH2_ERROR_SOCKET_DISCONNECT:
+        case LIBSSH2_ERROR_SOCKET_RECV:
+        case LIBSSH2_ERROR_SOCKET_SEND:
+            return SshTransportError{.kind = SshTransportErrorKind::ConnectionLost, .libssh2Code = error};
+        default:
+            return SshTransportError{.kind = SshTransportErrorKind::ProtocolError, .libssh2Code = error};
+    }
+}
+
+class SensitiveString final
+{
+public:
+    explicit SensitiveString(const std::string_view value) : m_value(value) {}
+
+    ~SensitiveString()
+    {
+        if (!m_value.empty())
+        {
+            SecureZeroMemory(m_value.data(), m_value.size());
+        }
+    }
+
+    SensitiveString(const SensitiveString &) = delete;
+    SensitiveString &operator=(const SensitiveString &) = delete;
+    SensitiveString(SensitiveString &&) = delete;
+    SensitiveString &operator=(SensitiveString &&) = delete;
+
+    [[nodiscard]] const char *c_str() const noexcept { return m_value.c_str(); }
+
+private:
+    std::string m_value;
+};
 
 [[nodiscard]] ztermy::ssh::HostKeyAlgorithm mapHostKeyAlgorithm(const int type) noexcept
 {
@@ -310,6 +362,65 @@ Libssh2Session::authenticateWithPassword(WindowsTcpSocket &socket, const std::st
         {
             return std::unexpected(ready.error());
         }
+    }
+}
+
+std::expected<void, SshTransportError>
+Libssh2Session::authenticateWithPrivateKeyFile(WindowsTcpSocket &socket, const std::string_view username,
+                                               const std::string_view privateKeyPath, const std::string_view passphrase,
+                                               const std::chrono::milliseconds timeout,
+                                               const std::stop_token &stopToken) noexcept
+{
+    if (username.empty() || privateKeyPath.empty() || privateKeyPath.find('\0') != std::string_view::npos
+        || passphrase.find('\0') != std::string_view::npos
+        || username.size() > static_cast<std::size_t>((std::numeric_limits<unsigned int>::max)()))
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
+    }
+    if (m_session == nullptr || !socket.valid() || !m_handshakeComplete || !m_hostKeyVerified || m_authenticated)
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
+    }
+    if (timeout <= std::chrono::milliseconds::zero())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::TimedOut});
+    }
+    if (stopToken.stop_requested())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::Cancelled});
+    }
+
+    try
+    {
+        const std::string privateKeyPathCopy(privateKeyPath);
+        const SensitiveString passphraseCopy(passphrase);
+        auto *session = static_cast<LIBSSH2_SESSION *>(m_session);
+        const auto deadline = std::chrono::steady_clock::now() + timeout;
+        while (true)
+        {
+            const int result = libssh2_userauth_publickey_fromfile_ex(
+                session, username.data(), static_cast<unsigned int>(username.size()), nullptr,
+                privateKeyPathCopy.c_str(), passphraseCopy.c_str());
+            if (result == 0)
+            {
+                m_authenticated = true;
+                return {};
+            }
+            if (result != LIBSSH2_ERROR_EAGAIN)
+            {
+                return std::unexpected(mapPrivateKeyAuthenticationError(result));
+            }
+
+            auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+            if (!ready)
+            {
+                return std::unexpected(ready.error());
+            }
+        }
+    }
+    catch (const std::bad_alloc &)
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InitializationFailed});
     }
 }
 

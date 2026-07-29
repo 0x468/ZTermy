@@ -61,6 +61,10 @@ public:
     [[nodiscard]] std::expected<void, SshTransportError>
     authenticateWithPassword(WindowsTcpSocket &socket, std::string_view username, std::string_view password,
                              std::chrono::milliseconds timeout, const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] std::expected<void, SshTransportError>
+    authenticateWithPrivateKeyFile(WindowsTcpSocket &socket, std::string_view username, std::string_view privateKeyPath,
+                                   std::string_view passphrase, std::chrono::milliseconds timeout,
+                                   const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] bool authenticated() const noexcept;
 
 private:

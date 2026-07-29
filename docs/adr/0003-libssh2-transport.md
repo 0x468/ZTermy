@@ -1,6 +1,6 @@
 # ADR 0003: Use libssh2 behind a ztermy-owned SSH transport
 
-Status: accepted, implementation validation in progress
+Status: accepted, amended 2026-07-29
 
 ## Context
 
@@ -37,11 +37,18 @@ References:
 Use the pinned libssh2 1.11.1 release behind a ztermy-owned C++ transport
 interface. No libssh2 type crosses the infrastructure boundary.
 
-The first Windows integration uses libssh2's WinCNG backend to avoid adding a
-second cryptographic runtime. The backend is provisional until the real-host
-authentication matrix passes. If WinCNG cannot authenticate the modern key
-types required for V1, retain libssh2 and switch its backend to a pinned
-OpenSSL 3 build before V1 acceptance.
+The first Windows integration used libssh2's WinCNG backend to avoid adding a
+second cryptographic runtime. Real-host validation proved that libssh2 1.11.1
+builds WinCNG with `LIBSSH2_ED25519=0`: the same `id_ed25519` key succeeded
+through Windows OpenSSH but could not be loaded by libssh2.
+
+The crypto backend is therefore OpenSSL 3. Dynamic developer builds use the
+OpenSSL runtime matching the selected MSVC runtime (`MDd` for Debug and `MD`
+for Release-like builds); packaging must deploy its Crypto DLL. The static
+release resolves the `MT` static Crypto archive. libssh2 itself remains
+statically linked and debug tracing remains disabled. This keeps modern
+Ed25519 file authentication in-process without requiring users to run an SSH
+agent or converting their keys.
 
 The transport runs on a worker thread and uses non-blocking libssh2 calls over
 a ztermy-owned socket. `LIBSSH2_ERROR_EAGAIN` is a scheduling state, not a
@@ -64,6 +71,7 @@ and terminal input are never logged.
 ## Validation gates
 
 - MSVC dynamic Debug and static Release builds use the same pinned revision.
+- The selected libssh2 crypto engine reports OpenSSL, not WinCNG.
 - Password authentication succeeds against a real OpenSSH server.
 - At least one encrypted private-key flow and Windows OpenSSH agent flow pass.
 - Required modern host-key and user-key algorithms are enumerated and tested.

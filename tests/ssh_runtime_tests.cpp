@@ -19,7 +19,7 @@ void SshRuntimeTests::initializesPinnedLibrary()
         QFAIL(runtime.error().message().c_str());
     }
     QCOMPARE(QString::fromUtf8((*runtime)->version()), QStringLiteral("1.11.1"));
-    QVERIFY((*runtime)->usesWindowsCng());
+    QVERIFY((*runtime)->usesOpenSsl());
 }
 
 void SshRuntimeTests::canRestartAfterShutdown()

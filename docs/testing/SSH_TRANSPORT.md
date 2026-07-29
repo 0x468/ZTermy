@@ -100,3 +100,28 @@ alive for the call, must not log it, and should overwrite and release their
 credential buffer as soon as the authentication attempt finishes. Real password
 authentication remains a human runtime gate and is not enabled through CTest
 environment variables or command-line arguments.
+
+## Private-key authentication gate
+
+Private-key authentication has the same handshake and exact-host-trust
+preconditions. The transport receives a UTF-8 path and lets libssh2 read and
+sign with the key; ztermy does not log the path or key contents. A call-time
+passphrase is copied only to ensure null termination, securely overwritten
+before release, and never logged.
+
+The real-host test remains skipped unless all four non-secret gate variables
+are set:
+
+```powershell
+$env:ZTERMY_TEST_SSH_HOST = "server.example.test"
+$env:ZTERMY_TEST_SSH_USERNAME = "test-user"
+$env:ZTERMY_TEST_SSH_PRIVATE_KEY = "$HOME/.ssh/id_ed25519"
+$env:ZTERMY_TEST_SSH_EXPECTED_FINGERPRINT = "SHA256:verified-value"
+build/msvc-dynamic-debug/ztermy_ssh_real_host_tests.exe
+```
+
+This automated gate intentionally supports only an unencrypted test key.
+Passphrase-protected keys must be exercised through the interactive credential
+UI so the passphrase never appears in an environment variable, command line,
+test report, or log. The test refuses authentication if the observed host
+fingerprint differs from the independently supplied expected fingerprint.

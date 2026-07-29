@@ -66,9 +66,9 @@ std::string_view Libssh2Runtime::version() const noexcept
     return m_version == nullptr ? std::string_view{} : std::string_view{m_version};
 }
 
-bool Libssh2Runtime::usesWindowsCng() const noexcept
+bool Libssh2Runtime::usesOpenSsl() const noexcept
 {
-    return libssh2_crypto_engine() == libssh2_wincng;
+    return libssh2_crypto_engine() == libssh2_openssl;
 }
 
 } // namespace ztermy::ssh

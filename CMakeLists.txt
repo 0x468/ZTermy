@@ -25,6 +25,19 @@ include(FetchContent)
 
 option(ZTERMY_STATIC_BUILD "Build ztermy with the locally provided static Qt package" OFF)
 
+set(OPENSSL_USE_STATIC_LIBS "${ZTERMY_STATIC_BUILD}")
+set(OPENSSL_MSVC_STATIC_RT "${ZTERMY_STATIC_BUILD}")
+if(ZTERMY_STATIC_BUILD)
+    # Qt's package discovery may have cached the OpenSSL DLL import libraries
+    # before this project requests a fully static release. Force FindOpenSSL to
+    # resolve the matching MT static archive instead.
+    unset(LIB_EAY_DEBUG CACHE)
+    unset(LIB_EAY_RELEASE CACHE)
+    unset(SSL_EAY_DEBUG CACHE)
+    unset(SSL_EAY_RELEASE CACHE)
+endif()
+find_package(OpenSSL 3.0 REQUIRED COMPONENTS Crypto)
+
 set(
     GHOSTTY_ZIG_BUILD_FLAGS
     "-Dsimd=false"
@@ -62,8 +75,7 @@ function(ztermy_add_libssh2)
     set(BUILD_EXAMPLES OFF)
     set(BUILD_STATIC_LIBS ON)
     set(BUILD_SHARED_LIBS OFF)
-    set(CRYPTO_BACKEND WinCNG)
-    set(ENABLE_ECDSA_WINCNG ON)
+    set(CRYPTO_BACKEND OpenSSL)
     set(ENABLE_DEBUG_LOGGING OFF)
     FetchContent_MakeAvailable(libssh2)
 endfunction()

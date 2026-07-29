@@ -21,7 +21,7 @@ public:
     Libssh2Runtime &operator=(Libssh2Runtime &&) = delete;
 
     [[nodiscard]] std::string_view version() const noexcept;
-    [[nodiscard]] bool usesWindowsCng() const noexcept;
+    [[nodiscard]] bool usesOpenSsl() const noexcept;
 
 private:
     explicit Libssh2Runtime(const char *version) noexcept;

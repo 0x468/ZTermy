@@ -18,7 +18,20 @@ class SshRealHostTests final : public QObject
 
 private slots:
     void observesUnknownHostBeforeAuthentication();
+    void authenticatesWithExplicitPrivateKey();
 };
+
+namespace
+{
+
+[[nodiscard]] std::uint16_t configuredPort()
+{
+    bool portValid = false;
+    const int port = qEnvironmentVariableIntValue("ZTERMY_TEST_SSH_PORT", &portValid);
+    return portValid && port > 0 && port <= 65535 ? static_cast<std::uint16_t>(port) : 22;
+}
+
+} // namespace
 
 void SshRealHostTests::observesUnknownHostBeforeAuthentication()
 {
@@ -28,10 +41,7 @@ void SshRealHostTests::observesUnknownHostBeforeAuthentication()
         QSKIP("Set ZTERMY_TEST_SSH_HOST to run the real-host gate");
     }
 
-    bool portValid = false;
-    const int configuredPort = qEnvironmentVariableIntValue("ZTERMY_TEST_SSH_PORT", &portValid);
-    const std::uint16_t port =
-        portValid && configuredPort > 0 && configuredPort <= 65535 ? static_cast<std::uint16_t>(configuredPort) : 22;
+    const std::uint16_t port = configuredPort();
     const std::string host(hostValue.constData(), static_cast<std::size_t>(hostValue.size()));
 
     auto socket = ztermy::ssh::WindowsTcpSocket::connect(host, port, 5s);
@@ -89,6 +99,71 @@ void SshRealHostTests::observesUnknownHostBeforeAuthentication()
     qInfo().noquote() << "Observed host key:"
                       << QString::fromUtf8(ztermy::ssh::hostKeyAlgorithmName(hostKey->algorithm))
                       << QString::fromStdString(ztermy::ssh::sha256Fingerprint(*hostKey));
+}
+
+void SshRealHostTests::authenticatesWithExplicitPrivateKey()
+{
+    const QByteArray hostValue = qgetenv("ZTERMY_TEST_SSH_HOST");
+    const QByteArray usernameValue = qgetenv("ZTERMY_TEST_SSH_USERNAME");
+    const QByteArray privateKeyValue = qgetenv("ZTERMY_TEST_SSH_PRIVATE_KEY");
+    const QByteArray expectedFingerprint = qgetenv("ZTERMY_TEST_SSH_EXPECTED_FINGERPRINT");
+    if (hostValue.isEmpty() || usernameValue.isEmpty() || privateKeyValue.isEmpty() || expectedFingerprint.isEmpty())
+    {
+        QSKIP("Set the host, username, private-key path, and expected fingerprint to run private-key auth");
+    }
+
+    const std::uint16_t port = configuredPort();
+    const std::string host(hostValue.constData(), static_cast<std::size_t>(hostValue.size()));
+    auto socket = ztermy::ssh::WindowsTcpSocket::connect(host, port, 5s);
+    if (!socket)
+    {
+        QFAIL("TCP connection failed");
+    }
+
+    auto session = ztermy::ssh::Libssh2Session::create();
+    if (!session)
+    {
+        QFAIL("libssh2 session creation failed");
+    }
+    auto handshake = (*session)->handshake(*socket, 5s);
+    if (!handshake)
+    {
+        QFAIL("SSH handshake failed");
+    }
+
+    auto hostKey = (*session)->hostKey();
+    if (!hostKey)
+    {
+        QFAIL("server host key extraction failed");
+    }
+    const QByteArray actualFingerprint = QByteArray::fromStdString(ztermy::ssh::sha256Fingerprint(*hostKey));
+    if (actualFingerprint != expectedFingerprint)
+    {
+        QFAIL(qPrintable(
+            QStringLiteral("Host fingerprint mismatch; observed %1").arg(QString::fromLatin1(actualFingerprint))));
+    }
+
+    const ztermy::ssh::SshEndpoint endpoint{.host = host, .port = port};
+    const std::vector knownHosts{ztermy::ssh::KnownHostEntry{
+        .endpoint = endpoint,
+        .algorithm = hostKey->algorithm,
+        .encodedKey = hostKey->encodedKey,
+    }};
+    auto trust = (*session)->verifyHostKey(endpoint, knownHosts);
+    QVERIFY(trust);
+    QCOMPARE(*trust, ztermy::ssh::HostKeyTrust::Trusted);
+
+    const std::string username(usernameValue.constData(), static_cast<std::size_t>(usernameValue.size()));
+    const std::string privateKey(privateKeyValue.constData(), static_cast<std::size_t>(privateKeyValue.size()));
+    auto authentication = (*session)->authenticateWithPrivateKeyFile(*socket, username, privateKey, {}, 10s);
+    if (!authentication)
+    {
+        QFAIL(qPrintable(QStringLiteral("Private-key authentication failed: kind=%1 libssh2=%2")
+                             .arg(static_cast<int>(authentication.error().kind))
+                             .arg(authentication.error().libssh2Code)));
+    }
+    QVERIFY((*session)->authenticated());
+    qInfo("Private-key authentication succeeded");
 }
 
 QTEST_GUILESS_MAIN(SshRealHostTests)
