@@ -67,6 +67,15 @@ int main(int argc, char *argv[])
     }
 
     appController.attachTerminal(terminalItem);
+    if (QCoreApplication::arguments().contains(QStringLiteral("--smoke-test")))
+    {
+        QCoreApplication::processEvents();
+        appController.shutdown();
+        window.releaseResources();
+        qCInfo(applicationLog) << "QML and native-window smoke test completed";
+        return EXIT_SUCCESS;
+    }
+
     appController.startLocalTerminal();
 
     window.show();

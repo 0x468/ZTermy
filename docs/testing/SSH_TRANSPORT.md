@@ -154,3 +154,20 @@ the complete worker-thread flow against the real server:
 7. reconnect from the persisted trust record without another confirmation.
 
 The test never sends terminal input and uses a temporary known-host store.
+
+## Failure recovery UI
+
+Exercise name-resolution failure, connection refusal, timeout,
+authentication rejection, and remote close through non-sensitive test
+endpoints.
+
+Expected:
+
+- Each failure produces its distinct non-secret status message.
+- A failed SSH tab shows a visible recovery panel with the same status instead
+  of relying only on the compact session bar.
+- **Review host** returns to Host Vault without retaining or replaying a
+  password or passphrase.
+- **Close tab** removes only the failed terminal tab.
+- Logs contain no password, passphrase, private-key content, clipboard content,
+  or terminal input.

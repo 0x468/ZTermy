@@ -3,9 +3,11 @@
 #include "platform/windows/WindowHitTest.h"
 
 #include <QEvent>
+#include <QGuiApplication>
 #include <QLoggingCategory>
 #include <QQmlContext>
 #include <QScreen>
+#include <QStyleHints>
 
 #include <Windows.h>
 #include <dwmapi.h>
@@ -22,7 +24,9 @@ constexpr DWORD kDwmUseImmersiveDarkMode = 20;
 constexpr DWORD kDwmWindowCornerPreference = 33;
 constexpr DWORD kDwmSystemBackdropType = 38;
 constexpr int kDwmWindowCornerRound = 2;
+constexpr int kDwmSystemBackdropNone = 1;
 constexpr int kDwmSystemBackdropMainWindow = 2;
+constexpr int kDwmSystemBackdropTransientWindow = 3;
 constexpr auto kNativeWindowProperty = L"ztermy.NativeWindow";
 constexpr UINT kNcUahDrawCaption = 0x00AE;
 constexpr UINT kNcUahDrawFrame = 0x00AF;
@@ -73,6 +77,10 @@ NativeWindow::NativeWindow(QWindow *parent) : QQuickView(parent)
     setMinimumSize(QSize(500, 360));
     resize(1180, 760);
     setColor(Qt::transparent);
+
+    QObject::connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged, this, [this] {
+        emit systemDarkModeChanged();
+    });
 }
 
 NativeWindow::~NativeWindow()
@@ -109,6 +117,11 @@ bool NativeWindow::maximizeButtonPressed() const noexcept
     return m_maximizeButtonPressed;
 }
 
+bool NativeWindow::systemDarkMode() const noexcept
+{
+    return QGuiApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark;
+}
+
 void NativeWindow::minimizeWindow()
 {
     showMinimized();
@@ -124,6 +137,22 @@ void NativeWindow::closeWindow()
     close();
 }
 
+bool NativeWindow::applyAppearance(const qreal opacity, const QString &backdropPreference, const bool darkMode)
+{
+    if (opacity < 0.5 || opacity > 1.0
+        || (backdropPreference != QStringLiteral("none") && backdropPreference != QStringLiteral("mica")
+            && backdropPreference != QStringLiteral("acrylic")))
+    {
+        return false;
+    }
+
+    m_applicationOpacity = opacity;
+    m_backdropPreference = backdropPreference;
+    m_darkMode = darkMode;
+    setOpacity(m_applicationOpacity);
+    return applyBackdrop();
+}
+
 void NativeWindow::setTitleBarMetrics(const qreal titleHeight, const qreal captionLeft, const qreal controlsLeft,
                                       const qreal maximizeLeft, const qreal maximizeWidth)
 {
@@ -134,9 +163,8 @@ void NativeWindow::setTitleBarMetrics(const qreal titleHeight, const qreal capti
     m_maximizeWidth = maximizeWidth;
     qCDebug(windowLog) << "title bar metrics"
                        << "height=" << m_titleHeight << "captionLeft=" << m_captionLeft
-                       << "controlsLeft=" << m_controlsLeft
-                       << "maximizeLeft=" << m_maximizeLeft << "maximizeWidth=" << m_maximizeWidth
-                       << "dpr=" << devicePixelRatio();
+                       << "controlsLeft=" << m_controlsLeft << "maximizeLeft=" << m_maximizeLeft
+                       << "maximizeWidth=" << m_maximizeWidth << "dpr=" << devicePixelRatio();
 }
 
 bool NativeWindow::event(QEvent *event)
@@ -539,15 +567,24 @@ void NativeWindow::configureNativeWindow()
     SetWindowPos(windowHandle, nullptr, 0, 0, 0, 0,
                  SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
 
-    applyBackdrop();
+    setOpacity(m_applicationOpacity);
+    (void)applyBackdrop();
 }
 
-void NativeWindow::applyBackdrop()
+bool NativeWindow::applyBackdrop()
 {
     const auto windowHandle = reinterpret_cast<HWND>(winId()); // NOLINT(performance-no-int-to-ptr)
-    const BOOL darkMode = TRUE;
+    const BOOL darkMode = m_darkMode ? TRUE : FALSE;
     const int cornerPreference = kDwmWindowCornerRound;
-    const int backdropType = kDwmSystemBackdropMainWindow;
+    int backdropType = kDwmSystemBackdropNone;
+    if (m_backdropPreference == QStringLiteral("mica"))
+    {
+        backdropType = kDwmSystemBackdropMainWindow;
+    }
+    else if (m_backdropPreference == QStringLiteral("acrylic"))
+    {
+        backdropType = kDwmSystemBackdropTransientWindow;
+    }
     const MARGINS frameMargins{
         .cxLeftWidth = 1,
         .cxRightWidth = 1,
@@ -555,10 +592,20 @@ void NativeWindow::applyBackdrop()
         .cyBottomHeight = 1,
     };
 
-    DwmSetWindowAttribute(windowHandle, kDwmUseImmersiveDarkMode, &darkMode, sizeof(darkMode));
-    DwmSetWindowAttribute(windowHandle, kDwmWindowCornerPreference, &cornerPreference, sizeof(cornerPreference));
-    DwmSetWindowAttribute(windowHandle, kDwmSystemBackdropType, &backdropType, sizeof(backdropType));
-    DwmExtendFrameIntoClientArea(windowHandle, &frameMargins);
+    const HRESULT darkResult =
+        DwmSetWindowAttribute(windowHandle, kDwmUseImmersiveDarkMode, &darkMode, sizeof(darkMode));
+    const HRESULT cornerResult =
+        DwmSetWindowAttribute(windowHandle, kDwmWindowCornerPreference, &cornerPreference, sizeof(cornerPreference));
+    const HRESULT backdropResult =
+        DwmSetWindowAttribute(windowHandle, kDwmSystemBackdropType, &backdropType, sizeof(backdropType));
+    const HRESULT frameResult = DwmExtendFrameIntoClientArea(windowHandle, &frameMargins);
+    const bool applied =
+        SUCCEEDED(darkResult) && SUCCEEDED(cornerResult) && SUCCEEDED(backdropResult) && SUCCEEDED(frameResult);
+    if (!applied)
+    {
+        qCWarning(windowLog) << "Some requested DWM appearance attributes are unavailable";
+    }
+    return applied;
 }
 
 void NativeWindow::setMaximizeButtonHovered(const bool hovered)

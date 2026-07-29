@@ -12,6 +12,7 @@ class NativeWindow final : public QQuickView
     Q_PROPERTY(bool maximized READ maximized NOTIFY maximizedChanged)
     Q_PROPERTY(bool maximizeButtonHovered READ maximizeButtonHovered NOTIFY maximizeButtonHoveredChanged)
     Q_PROPERTY(bool maximizeButtonPressed READ maximizeButtonPressed NOTIFY maximizeButtonPressedChanged)
+    Q_PROPERTY(bool systemDarkMode READ systemDarkMode NOTIFY systemDarkModeChanged)
 
 public:
     explicit NativeWindow(QWindow *parent = nullptr);
@@ -21,10 +22,12 @@ public:
     [[nodiscard]] bool maximized() const noexcept;
     [[nodiscard]] bool maximizeButtonHovered() const noexcept;
     [[nodiscard]] bool maximizeButtonPressed() const noexcept;
+    [[nodiscard]] bool systemDarkMode() const noexcept;
 
     Q_INVOKABLE void minimizeWindow();
     Q_INVOKABLE void toggleMaximize();
     Q_INVOKABLE void closeWindow();
+    Q_INVOKABLE bool applyAppearance(qreal opacity, const QString &backdropPreference, bool darkMode);
     Q_INVOKABLE void setTitleBarMetrics(qreal titleHeight, qreal captionLeft, qreal controlsLeft, qreal maximizeLeft,
                                         qreal maximizeWidth);
 
@@ -32,6 +35,7 @@ signals:
     void maximizedChanged();
     void maximizeButtonHoveredChanged();
     void maximizeButtonPressedChanged();
+    void systemDarkModeChanged();
 
 protected:
     bool event(QEvent *event) override;
@@ -46,7 +50,7 @@ private:
     void installWindowProcedure(HWND windowHandle);
     void uninstallWindowProcedure();
     void configureNativeWindow();
-    void applyBackdrop();
+    [[nodiscard]] bool applyBackdrop();
     void setMaximizeButtonHovered(bool hovered);
     void setMaximizeButtonPressed(bool pressed);
 
@@ -57,6 +61,9 @@ private:
     qreal m_maximizeWidth = 46.0;
     bool m_maximizeButtonHovered = false;
     bool m_maximizeButtonPressed = false;
+    qreal m_applicationOpacity = 1.0;
+    QString m_backdropPreference = QStringLiteral("none");
+    bool m_darkMode = true;
     HWND m_windowHandle = nullptr;
     WNDPROC m_originalWindowProcedure = nullptr;
 };

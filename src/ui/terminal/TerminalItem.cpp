@@ -172,11 +172,53 @@ TerminalItem::TerminalItem(QQuickItem *parent) : QQuickItem(parent)
     m_font.setPixelSize(14);
     m_font.setStyleHint(QFont::Monospace);
     m_font.setFixedPitch(true);
+
+    m_cursorBlinkTimer.setInterval(530);
+    QObject::connect(&m_cursorBlinkTimer, &QTimer::timeout, this, [this] {
+        if (!isVisible() || !m_snapshot || !m_snapshot->cursor.visible)
+        {
+            return;
+        }
+        m_cursorBlinkPhase = !m_cursorBlinkPhase;
+        ++m_revision;
+        update();
+    });
+    m_cursorBlinkTimer.start();
 }
 
 QString TerminalItem::statusText() const
 {
     return m_statusText;
+}
+
+QString TerminalItem::fontFamily() const
+{
+    return m_font.families().value(0);
+}
+
+int TerminalItem::fontPixelSize() const noexcept
+{
+    return m_font.pixelSize();
+}
+
+QString TerminalItem::cursorPreference() const
+{
+    return m_cursorPreference;
+}
+
+bool TerminalItem::cursorBlink() const noexcept
+{
+    return m_cursorBlink;
+}
+
+bool TerminalItem::copyOnSelect() const noexcept
+{
+    return m_copyOnSelect;
+}
+
+bool TerminalItem::confirmMultilinePaste() const noexcept
+{
+    return m_confirmMultilinePaste;
 }
 
 void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
@@ -215,6 +257,101 @@ void TerminalItem::requestCurrentSize()
     m_reportedColumns = 0;
     m_reportedRows = 0;
     reportTerminalSize();
+}
+
+void TerminalItem::setFontFamily(const QString &family)
+{
+    const QString normalized = family.trimmed();
+    if (normalized.isEmpty() || normalized.size() > 128 || fontFamily() == normalized)
+    {
+        return;
+    }
+    m_font.setFamilies({normalized, QStringLiteral("Consolas")});
+    m_reportedColumns = 0;
+    m_reportedRows = 0;
+    ++m_revision;
+    reportTerminalSize();
+    update();
+    notifyInputMethod();
+    emit fontChanged();
+}
+
+void TerminalItem::setFontPixelSize(const int pixelSize)
+{
+    if (pixelSize < 8 || pixelSize > 32 || m_font.pixelSize() == pixelSize)
+    {
+        return;
+    }
+    m_font.setPixelSize(pixelSize);
+    m_reportedColumns = 0;
+    m_reportedRows = 0;
+    ++m_revision;
+    reportTerminalSize();
+    update();
+    notifyInputMethod();
+    emit fontChanged();
+}
+
+void TerminalItem::setCursorPreference(const QString &preference)
+{
+    if ((preference != QStringLiteral("terminal") && preference != QStringLiteral("block")
+         && preference != QStringLiteral("bar") && preference != QStringLiteral("underline"))
+        || m_cursorPreference == preference)
+    {
+        return;
+    }
+    m_cursorPreference = preference;
+    ++m_revision;
+    update();
+    emit cursorAppearanceChanged();
+}
+
+void TerminalItem::setCursorBlink(const bool enabled)
+{
+    if (m_cursorBlink == enabled)
+    {
+        return;
+    }
+    m_cursorBlink = enabled;
+    m_cursorBlinkPhase = true;
+    enabled ? m_cursorBlinkTimer.start() : m_cursorBlinkTimer.stop();
+    ++m_revision;
+    update();
+    emit cursorAppearanceChanged();
+}
+
+void TerminalItem::setCopyOnSelect(const bool enabled)
+{
+    if (m_copyOnSelect == enabled)
+    {
+        return;
+    }
+    m_copyOnSelect = enabled;
+    emit copyOnSelectChanged();
+}
+
+void TerminalItem::setConfirmMultilinePaste(const bool enabled)
+{
+    if (m_confirmMultilinePaste == enabled)
+    {
+        return;
+    }
+    m_confirmMultilinePaste = enabled;
+    if (!enabled)
+    {
+        m_pendingMultilinePaste.clear();
+    }
+    emit confirmMultilinePasteChanged();
+}
+
+void TerminalItem::resolveMultilinePaste(const bool accepted)
+{
+    QByteArray pending = std::move(m_pendingMultilinePaste);
+    m_pendingMultilinePaste.clear();
+    if (accepted && !pending.isEmpty())
+    {
+        emit pasteRequested(pending);
+    }
 }
 
 QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
@@ -357,14 +494,14 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                                  QColor(255, 255, 255));
             }
         }
-        else if (m_snapshot->cursor.visible && m_snapshot->cursor.column < m_snapshot->columns
-                 && m_snapshot->cursor.row < m_snapshot->rows)
+        else if (m_snapshot->cursor.visible && (!m_cursorBlink || m_cursorBlinkPhase)
+                 && m_snapshot->cursor.column < m_snapshot->columns && m_snapshot->cursor.row < m_snapshot->rows)
         {
             const QRectF cursorCell{horizontalPadding + (m_snapshot->cursor.column * cellWidthValue),
                                     verticalPadding + (m_snapshot->cursor.row * cellHeightValue),
                                     m_snapshot->cursor.width * cellWidthValue, cellHeightValue};
             painter.setPen(QPen(color(m_snapshot->cursor.color), 1.0));
-            switch (m_snapshot->cursor.style)
+            switch (effectiveCursorStyle())
             {
                 case terminal::TerminalCursorStyle::bar:
                     painter.fillRect(QRectF(cursorCell.left(), cursorCell.top(), 2.0, cursorCell.height()),
@@ -427,7 +564,17 @@ void TerminalItem::keyPressEvent(QKeyEvent *event)
         const QByteArray bytes = QGuiApplication::clipboard()->text(QClipboard::Clipboard).toUtf8();
         if (!bytes.isEmpty())
         {
-            emit pasteRequested(bytes);
+            const qsizetype lineBreaks = bytes.count('\n') > 0 ? bytes.count('\n') : bytes.count('\r');
+            if (m_confirmMultilinePaste && lineBreaks > 0)
+            {
+                m_pendingMultilinePaste = bytes;
+                const qsizetype maximumLineCount = std::numeric_limits<int>::max();
+                emit multilinePasteConfirmationRequested(static_cast<int>(std::min(lineBreaks + 1, maximumLineCount)));
+            }
+            else
+            {
+                emit pasteRequested(bytes);
+            }
         }
         event->accept();
         return;
@@ -544,6 +691,10 @@ void TerminalItem::mouseReleaseEvent(QMouseEvent *event)
             emit selectionRequested(m_selectionAnchor.column, m_selectionAnchor.row, point->column, point->row,
                                     event->modifiers().testFlag(Qt::AltModifier));
         }
+        if (m_copyOnSelect)
+        {
+            emit copyRequested();
+        }
     }
     m_selecting = false;
     event->accept();
@@ -634,6 +785,23 @@ void TerminalItem::notifyInputMethod() const
         QGuiApplication::inputMethod()->update(Qt::ImCursorRectangle | Qt::ImSurroundingText | Qt::ImCursorPosition
                                                | Qt::ImAnchorPosition);
     }
+}
+
+terminal::TerminalCursorStyle TerminalItem::effectiveCursorStyle() const noexcept
+{
+    if (m_cursorPreference == QStringLiteral("block"))
+    {
+        return terminal::TerminalCursorStyle::block;
+    }
+    if (m_cursorPreference == QStringLiteral("bar"))
+    {
+        return terminal::TerminalCursorStyle::bar;
+    }
+    if (m_cursorPreference == QStringLiteral("underline"))
+    {
+        return terminal::TerminalCursorStyle::underline;
+    }
+    return m_snapshot ? m_snapshot->cursor.style : terminal::TerminalCursorStyle::block;
 }
 
 qreal TerminalItem::cellWidth() const

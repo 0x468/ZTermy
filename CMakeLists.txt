@@ -257,6 +257,10 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS Main.qml
 )
 set_source_files_properties(
+    src/ui/qml/SettingsPane.qml
+    PROPERTIES QT_RESOURCE_ALIAS SettingsPane.qml
+)
+set_source_files_properties(
     src/ui/qml/HostConnectionPane.qml
     PROPERTIES QT_RESOURCE_ALIAS HostConnectionPane.qml
 )
@@ -279,6 +283,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/HostConnectionPane.qml
         src/ui/qml/HostKeyPrompt.qml
         src/ui/qml/Main.qml
+        src/ui/qml/SettingsPane.qml
         src/ui/qml/Theme.qml
 )
 
@@ -781,4 +786,11 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME terminal-item COMMAND ztermy_terminal_item_tests)
+
+    add_test(
+        NAME qml-native-window-smoke
+        COMMAND ztermy
+            --smoke-test
+            --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/qml-native-window-smoke"
+    )
 endif()

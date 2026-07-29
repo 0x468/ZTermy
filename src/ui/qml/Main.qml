@@ -21,6 +21,19 @@ Rectangle {
     readonly property var controller: appController
     property string currentPage: "terminal"
     property bool terminalSearchVisible: false
+    property int pendingPasteLineCount: 0
+    readonly property var activeTerminalTab: {
+        for (const tab of controller.terminalTabs) {
+            if (tab.id === controller.activeTerminalTabId) {
+                return tab;
+            }
+        }
+        return null;
+    }
+    readonly property bool activeSshFailure: activeTerminalTab !== null
+                                                     && activeTerminalTab.kind === "ssh"
+                                                     && !activeTerminalTab.running
+                                                     && activeTerminalTab.status.length > 0
 
     color: backgroundColor
 
@@ -46,7 +59,26 @@ Rectangle {
         terminalViewport.forceActiveFocus();
     }
 
-    Component.onCompleted: reportTitleBarMetrics()
+    function applyWindowAppearance() {
+        windowChrome.applyAppearance(controller.windowOpacity, controller.backdropPreference, Theme.dark);
+    }
+
+    Binding {
+        target: Theme
+        property: "preference"
+        value: root.controller.themePreference
+    }
+
+    Binding {
+        target: Theme
+        property: "systemDark"
+        value: windowChrome.systemDarkMode
+    }
+
+    Component.onCompleted: {
+        reportTitleBarMetrics();
+        applyWindowAppearance();
+    }
     onWidthChanged: reportTitleBarMetrics()
     onCurrentPageChanged: {
         if (currentPage === "terminal") {
@@ -76,6 +108,18 @@ Rectangle {
                 searchField.text = root.controller.terminalSearchQuery;
             }
             caseSensitiveButton.checked = root.controller.terminalSearchCaseSensitive;
+        }
+
+        function onApplicationSettingsChanged() {
+            Qt.callLater(root.applyWindowAppearance);
+        }
+    }
+
+    Connections {
+        target: windowChrome
+
+        function onSystemDarkModeChanged() {
+            Qt.callLater(root.applyWindowAppearance);
         }
     }
 
@@ -328,7 +372,7 @@ Rectangle {
         Rectangle {
             Layout.fillHeight: true
             Layout.preferredWidth: visible ? 210 : 0
-            visible: root.currentPage === "hosts"
+            visible: root.currentPage === "hosts" || root.currentPage === "settings"
             color: root.panelColor
 
             ColumnLayout {
@@ -349,7 +393,7 @@ Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 38
                     radius: 7
-                    color: root.raisedColor
+                    color: root.currentPage === "hosts" ? root.raisedColor : "transparent"
 
                     Row {
                         anchors.left: parent.left
@@ -361,12 +405,12 @@ Rectangle {
                             width: 3
                             height: 16
                             radius: 2
-                            color: root.accentColor
+                            color: root.currentPage === "hosts" ? root.accentColor : "transparent"
                         }
 
                         Text {
                             text: "Hosts"
-                            color: root.textColor
+                            color: root.currentPage === "hosts" ? root.textColor : root.mutedColor
                             font.family: Theme.uiFont
                             font.pixelSize: Theme.textBody
                         }
@@ -381,12 +425,40 @@ Rectangle {
                     }
                 }
 
-                Text {
-                    Layout.leftMargin: 15
-                    text: "Settings"
-                    color: root.mutedColor
-                    font.family: Theme.uiFont
-                    font.pixelSize: Theme.textBody
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 38
+                    radius: 7
+                    color: root.currentPage === "settings" ? root.raisedColor : "transparent"
+
+                    Row {
+                        anchors.left: parent.left
+                        anchors.leftMargin: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 10
+
+                        Rectangle {
+                            width: 3
+                            height: 16
+                            radius: 2
+                            color: root.currentPage === "settings" ? root.accentColor : "transparent"
+                        }
+
+                        Text {
+                            text: "Settings"
+                            color: root.currentPage === "settings" ? root.textColor : root.mutedColor
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.textBody
+                        }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.currentPage = "settings"
+                        Accessible.role: Accessible.Button
+                        Accessible.name: "Settings"
+                    }
                 }
 
                 Item {
@@ -503,8 +575,18 @@ Rectangle {
                             objectName: "terminalViewport"
                             anchors.fill: parent
                             focus: true
+                            fontFamily: root.controller.terminalFontFamily
+                            fontPixelSize: root.controller.terminalFontSize
+                            cursorPreference: root.controller.cursorPreference
+                            cursorBlink: root.controller.cursorBlink
+                            copyOnSelect: root.controller.copyOnSelect
+                            confirmMultilinePaste: root.controller.confirmMultilinePaste
 
                             Component.onCompleted: forceActiveFocus()
+                            onMultilinePasteConfirmationRequested: lineCount => {
+                                root.pendingPasteLineCount = lineCount;
+                                multilinePasteDialog.open();
+                            }
                         }
 
                         Rectangle {
@@ -614,6 +696,78 @@ Rectangle {
                             }
                         }
 
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: Math.min(520, parent.width - 48)
+                            implicitHeight: sshFailureLayout.implicitHeight + 36
+                            visible: root.activeSshFailure
+                            z: 9
+                            radius: Theme.radiusPanel
+                            color: Theme.floatingBackground
+                            border.color: Theme.danger
+
+                            ColumnLayout {
+                                id: sshFailureLayout
+
+                                anchors.fill: parent
+                                anchors.margins: 18
+                                spacing: 10
+
+                                Text {
+                                    text: "SSH session unavailable"
+                                    color: Theme.text
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: 17
+                                    font.weight: Font.DemiBold
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: root.activeTerminalTab ? root.activeTerminalTab.status : ""
+                                    color: Theme.textSoft
+                                    wrapMode: Text.WordWrap
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.textBody
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: "Review the host and authentication settings before starting a new connection. Credentials are not retained for retry."
+                                    color: Theme.textMuted
+                                    wrapMode: Text.WordWrap
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.textLabel
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+
+                                    Item {
+                                        Layout.fillWidth: true
+                                    }
+
+                                    Button {
+                                        text: "Close tab"
+                                        Accessible.name: "Close failed SSH terminal tab"
+                                        onClicked: {
+                                            if (root.activeTerminalTab) {
+                                                root.controller.closeTerminalTab(root.activeTerminalTab.id);
+                                            }
+                                        }
+                                    }
+
+                                    Button {
+                                        text: "Review host"
+                                        Accessible.name: "Return to SSH host profiles"
+                                        palette.button: Theme.accent
+                                        palette.buttonText: Theme.accentText
+                                        font.weight: Font.DemiBold
+                                        onClicked: root.currentPage = "hosts"
+                                    }
+                                }
+                            }
+                        }
+
                         Timer {
                             id: searchDelay
 
@@ -637,6 +791,79 @@ Rectangle {
                 mutedColor: root.mutedColor
                 accentColor: root.accentColor
                 onConnectionStarted: root.currentPage = "terminal"
+            }
+
+            SettingsPane {
+                anchors.fill: parent
+                visible: root.currentPage === "settings"
+                controller: root.controller
+            }
+        }
+    }
+
+    Dialog {
+        id: multilinePasteDialog
+
+        anchors.centerIn: parent
+        modal: true
+        closePolicy: Popup.CloseOnEscape
+        padding: 20
+        onClosed: {
+            if (result !== Dialog.Accepted) {
+                terminalViewport.resolveMultilinePaste(false);
+            }
+            root.pendingPasteLineCount = 0;
+            terminalViewport.forceActiveFocus();
+        }
+
+        background: Rectangle {
+            radius: Theme.radiusPanel
+            color: Theme.elevatedBackground
+            border.color: Theme.borderStrong
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 14
+
+            Text {
+                text: "Paste multiple lines?"
+                color: Theme.text
+                font.family: Theme.uiFont
+                font.pixelSize: 18
+                font.weight: Font.DemiBold
+            }
+
+            Text {
+                Layout.preferredWidth: 380
+                text: "The clipboard contains " + root.pendingPasteLineCount + " lines. Pasting may execute commands immediately in the active terminal."
+                color: Theme.textMuted
+                wrapMode: Text.WordWrap
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.textBody
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+
+                Item {
+                    Layout.fillWidth: true
+                }
+
+                Button {
+                    text: "Cancel"
+                    onClicked: multilinePasteDialog.reject()
+                }
+
+                Button {
+                    text: "Paste"
+                    palette.button: Theme.accent
+                    palette.buttonText: Theme.accentText
+                    font.weight: Font.DemiBold
+                    onClicked: {
+                        terminalViewport.resolveMultilinePaste(true);
+                        multilinePasteDialog.accept();
+                    }
+                }
             }
         }
     }

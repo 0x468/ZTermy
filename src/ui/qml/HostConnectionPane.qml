@@ -546,7 +546,7 @@ Rectangle {
                         TextField {
                             id: hostField
                             Layout.fillWidth: true
-                            placeholderText: "server.example.com or 192.168.1.25"
+                            placeholderText: "server.example.com or 192.0.2.10"
                             Accessible.name: "SSH host"
                             selectByMouse: true
                         }

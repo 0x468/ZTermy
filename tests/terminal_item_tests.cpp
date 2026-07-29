@@ -1,7 +1,10 @@
 #include "ui/terminal/TerminalItem.h"
 #include "ui/terminal/TerminalTextLayout.h"
 
+#include <QClipboard>
+#include <QGuiApplication>
 #include <QInputMethodEvent>
+#include <QKeyEvent>
 #include <QQuickWindow>
 #include <QSignalSpy>
 #include <QTest>
@@ -16,6 +19,7 @@ class TestableTerminalItem final : public ztermy::ui::TerminalItem
 public:
     using TerminalItem::inputMethodEvent;
     using TerminalItem::inputMethodQuery;
+    using TerminalItem::keyPressEvent;
     using TerminalItem::TerminalItem;
 };
 
@@ -43,6 +47,8 @@ private slots:
     void tracksPreeditCursorWithoutSendingInput();
     void usesWideImeCursorAndShiftsSuffix();
     void commitsImeTextExactlyOnce();
+    void appliesRendererPreferences();
+    void confirmsMultilinePaste();
     void rendersImeAcrossResizeAndShutdown();
 };
 
@@ -109,6 +115,49 @@ void TerminalItemTests::commitsImeTextExactlyOnce()
     QCOMPARE(inputSpy.count(), 1);
     QCOMPARE(inputSpy.at(0).at(0).toByteArray(), QStringLiteral("中文").toUtf8());
     QCOMPARE(item.inputMethodQuery(Qt::ImCursorRectangle).toRectF(), baseCursor);
+}
+
+void TerminalItemTests::appliesRendererPreferences()
+{
+    TestableTerminalItem item;
+    QSignalSpy fontSpy(&item, &ztermy::ui::TerminalItem::fontChanged);
+    QSignalSpy cursorSpy(&item, &ztermy::ui::TerminalItem::cursorAppearanceChanged);
+
+    item.setFontFamily(QStringLiteral("Cascadia Code"));
+    item.setFontPixelSize(18);
+    item.setCursorPreference(QStringLiteral("bar"));
+    item.setCursorBlink(false);
+
+    QCOMPARE(item.fontFamily(), QStringLiteral("Cascadia Code"));
+    QCOMPARE(item.fontPixelSize(), 18);
+    QCOMPARE(item.cursorPreference(), QStringLiteral("bar"));
+    QVERIFY(!item.cursorBlink());
+    QCOMPARE(fontSpy.count(), 2);
+    QCOMPARE(cursorSpy.count(), 2);
+
+    item.setFontPixelSize(99);
+    item.setCursorPreference(QStringLiteral("invalid"));
+    QCOMPARE(item.fontPixelSize(), 18);
+    QCOMPARE(item.cursorPreference(), QStringLiteral("bar"));
+}
+
+void TerminalItemTests::confirmsMultilinePaste()
+{
+    TestableTerminalItem item;
+    QSignalSpy confirmationSpy(&item, &ztermy::ui::TerminalItem::multilinePasteConfirmationRequested);
+    QSignalSpy pasteSpy(&item, &ztermy::ui::TerminalItem::pasteRequested);
+    QGuiApplication::clipboard()->setText(QStringLiteral("first\nsecond"));
+
+    QKeyEvent pasteEvent(QEvent::KeyPress, Qt::Key_V, Qt::ControlModifier | Qt::ShiftModifier);
+    item.keyPressEvent(&pasteEvent);
+
+    QCOMPARE(confirmationSpy.count(), 1);
+    QCOMPARE(confirmationSpy.at(0).at(0).toInt(), 2);
+    QCOMPARE(pasteSpy.count(), 0);
+
+    item.resolveMultilinePaste(true);
+    QCOMPARE(pasteSpy.count(), 1);
+    QCOMPARE(pasteSpy.at(0).at(0).toByteArray(), QByteArrayLiteral("first\nsecond"));
 }
 
 void TerminalItemTests::rendersImeAcrossResizeAndShutdown()
