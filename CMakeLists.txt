@@ -262,6 +262,12 @@ set_source_files_properties(
     src/ui/qml/HostKeyPrompt.qml
     PROPERTIES QT_RESOURCE_ALIAS HostKeyPrompt.qml
 )
+set_source_files_properties(
+    src/ui/qml/Theme.qml
+    PROPERTIES
+        QT_QML_SINGLETON_TYPE TRUE
+        QT_RESOURCE_ALIAS Theme.qml
+)
 
 qt_add_qml_module(ztermy
     URI Ztermy
@@ -271,6 +277,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/HostConnectionPane.qml
         src/ui/qml/HostKeyPrompt.qml
         src/ui/qml/Main.qml
+        src/ui/qml/Theme.qml
 )
 
 target_compile_features(ztermy PRIVATE cxx_std_23)

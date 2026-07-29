@@ -7,12 +7,12 @@ import QtQuick.Layouts
 Rectangle {
     id: pane
 
-    property color backgroundColor: "#0B1017"
-    property color raisedColor: "#141E2B"
-    property color borderColor: "#263244"
-    property color textColor: "#F8FAFC"
-    property color mutedColor: "#94A3B8"
-    property color accentColor: "#22C55E"
+    property color backgroundColor: Theme.workspaceBackground
+    property color raisedColor: Theme.elevatedBackground
+    property color borderColor: Theme.border
+    property color textColor: Theme.text
+    property color mutedColor: Theme.textMuted
+    property color accentColor: Theme.accent
     required property var controller
     property string editingProfileId: ""
     property string pendingDeleteId: ""
@@ -33,13 +33,13 @@ Rectangle {
     signal connectionStarted
 
     color: backgroundColor
-    palette.base: "#0F172A"
+    palette.base: Theme.raisedBackground
     palette.text: textColor
     palette.placeholderText: mutedColor
-    palette.button: "#172033"
+    palette.button: Theme.controlBackground
     palette.buttonText: textColor
     palette.highlight: accentColor
-    palette.highlightedText: "#07130B"
+    palette.highlightedText: Theme.accentText
 
     function portNumber() {
         return Number(portField.text);

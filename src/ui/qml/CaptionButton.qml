@@ -18,20 +18,20 @@ Item {
         anchors.fill: parent
         color: {
             if (control.kind === "close" && (mouseArea.containsMouse || control.activeFocus)) {
-                return "#C42B1C"
+                return Theme.closeHover
             }
             if (control.externallyPressed || mouseArea.pressed) {
-                return "#263244"
+                return Theme.controlPressed
             }
             if (control.externallyHovered || mouseArea.containsMouse || control.activeFocus) {
-                return "#1F2A3A"
+                return Theme.controlHover
             }
             return "transparent"
         }
 
         Behavior on color {
             ColorAnimation {
-                duration: 120
+                duration: Theme.motionFast
             }
         }
     }
@@ -41,7 +41,7 @@ Item {
         anchors.fill: parent
         anchors.margins: 3
         color: "transparent"
-        border.color: "#86EFAC"
+        border.color: Theme.focus
         border.width: 1
         radius: 3
     }
@@ -55,7 +55,7 @@ Item {
         onPaint: {
             const context = getContext("2d")
             context.reset()
-            context.strokeStyle = "#E2E8F0"
+            context.strokeStyle = Theme.text
             context.lineWidth = 1
             context.lineCap = "square"
 

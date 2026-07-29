@@ -10,13 +10,13 @@ Rectangle {
 
     readonly property int titleBarHeight: 42
     readonly property int captionButtonWidth: 46
-    readonly property color backgroundColor: "#F20B0F14"
-    readonly property color panelColor: "#E6111824"
-    readonly property color raisedColor: "#1E293B"
-    readonly property color borderColor: "#263244"
-    readonly property color textColor: "#F8FAFC"
-    readonly property color mutedColor: "#94A3B8"
-    readonly property color accentColor: "#22C55E"
+    readonly property color backgroundColor: Theme.windowBackground
+    readonly property color panelColor: Theme.panelBackground
+    readonly property color raisedColor: Theme.raisedBackground
+    readonly property color borderColor: Theme.border
+    readonly property color textColor: Theme.text
+    readonly property color mutedColor: Theme.textMuted
+    readonly property color accentColor: Theme.accent
     readonly property var controller: appController
     property string currentPage: "terminal"
     property bool terminalSearchVisible: false
@@ -622,7 +622,7 @@ Rectangle {
                 anchors.fill: parent
                 visible: root.currentPage === "hosts"
                 controller: root.controller
-                backgroundColor: "#E60A0E14"
+                backgroundColor: Theme.workspaceBackground
                 raisedColor: root.raisedColor
                 borderColor: root.borderColor
                 textColor: root.textColor
@@ -673,10 +673,10 @@ Rectangle {
             anchors.right: parent.right
             anchors.rightMargin: 14
             anchors.verticalCenter: parent.verticalCenter
-            text: "UTF-8   C++23   Qt 6.8"
-            color: "#64748B"
-            font.family: "Cascadia Mono"
-            font.pixelSize: 9
+        text: "UTF-8   C++23   Qt 6.8"
+        color: Theme.textSubtle
+        font.family: Theme.terminalFont
+        font.pixelSize: Theme.textCompact
         }
     }
 
@@ -686,7 +686,7 @@ Rectangle {
         panelColor: root.raisedColor
         borderColor: root.borderColor
         textColor: root.textColor
-        mutedColor: "#CBD5E1"
+        mutedColor: Theme.textSoft
         accentColor: root.accentColor
     }
 }

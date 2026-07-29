@@ -5,18 +5,18 @@ import QtQuick.Layouts
 Item {
     id: overlay
 
-    property color panelColor: "#141E2B"
-    property color borderColor: "#334155"
-    property color textColor: "#F8FAFC"
-    property color mutedColor: "#CBD5E1"
-    property color accentColor: "#22C55E"
+    property color panelColor: Theme.elevatedBackground
+    property color borderColor: Theme.borderStrong
+    property color textColor: Theme.text
+    property color mutedColor: Theme.textSoft
+    property color accentColor: Theme.accent
 
     visible: appController.hostKeyPromptVisible
     enabled: visible
 
     Rectangle {
         anchors.fill: parent
-        color: "#99000000"
+        color: Theme.modalScrim
 
         MouseArea {
             anchors.fill: parent
@@ -27,9 +27,9 @@ Item {
         width: Math.min(560, overlay.width - 48)
         implicitHeight: promptLayout.implicitHeight + 40
         anchors.centerIn: parent
-        radius: 12
+        radius: Theme.radiusPanel
         color: overlay.panelColor
-        border.color: appController.hostKeyChangedWarning ? "#EF4444" : overlay.borderColor
+        border.color: appController.hostKeyChangedWarning ? Theme.danger : overlay.borderColor
 
         ColumnLayout {
             id: promptLayout
@@ -41,8 +41,8 @@ Item {
                 Layout.fillWidth: true
                 text: appController.hostKeyChangedWarning ? "Host identity changed" : "Verify host identity"
                 color: overlay.textColor
-                font.family: "Segoe UI Variable"
-                font.pixelSize: 20
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.textTitle
                 font.weight: Font.DemiBold
             }
 
@@ -51,15 +51,15 @@ Item {
                 text: appController.hostKeyChangedWarning ? "The saved host key does not match. The connection was blocked. Verify the server outside ztermy before changing trust." : "This host is not trusted yet. Compare the fingerprint with a value obtained from the server administrator."
                 color: overlay.mutedColor
                 wrapMode: Text.WordWrap
-                font.family: "Segoe UI Variable"
-                font.pixelSize: 13
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.textBody
             }
 
             Rectangle {
                 Layout.fillWidth: true
                 implicitHeight: fingerprintLayout.implicitHeight + 24
-                radius: 8
-                color: "#0B1017"
+                radius: Theme.radiusControl
+                color: Theme.workspaceBackground
                 border.color: overlay.borderColor
 
                 ColumnLayout {
