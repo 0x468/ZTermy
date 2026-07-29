@@ -60,6 +60,11 @@ dirty-row, and sustained-output behavior remain part of the spike.
 - Zig is an additional build prerequisite and its cache path should be kept
   short on Windows.
 - The initial renderer recreates a full texture for each delivered snapshot.
+- Immutable snapshots now carry Ghostty's full/partial/clean damage state and
+  the affected viewport rows. The adapter resets both global and row dirty
+  flags only after a snapshot is copied successfully. This metadata is the
+  handoff boundary for incremental renderer work; the current texture renderer
+  still repaints the complete frame.
   It is a correctness baseline, not the final large-output rendering path.
 - Third-party license notices must be finalized before any public binary
   distribution.

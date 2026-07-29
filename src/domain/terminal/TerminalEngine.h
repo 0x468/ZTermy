@@ -77,6 +77,13 @@ enum class TerminalCursorStyle : std::uint8_t
     hollowBlock,
 };
 
+enum class TerminalDamageKind : std::uint8_t
+{
+    none,
+    partial,
+    full,
+};
+
 struct TerminalCursor
 {
     std::uint16_t column = 0;
@@ -96,6 +103,8 @@ struct TerminalSnapshot
     TerminalColor defaultBackground;
     TerminalCursor cursor;
     TerminalScrollbar scrollbar;
+    TerminalDamageKind damage = TerminalDamageKind::full;
+    std::vector<std::uint16_t> damagedRows;
     std::vector<TerminalCell> cells;
 
     [[nodiscard]] const TerminalCell &cell(const std::uint16_t column, const std::uint16_t row) const

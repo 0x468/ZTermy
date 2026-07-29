@@ -443,6 +443,27 @@ std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot
     }
 
     TerminalSnapshot result;
+    GhosttyRenderStateDirty dirtyState = GHOSTTY_RENDER_STATE_DIRTY_FULL;
+    if (const GhosttyResult dirtyResult =
+            ghostty_render_state_get(m_impl->renderState, GHOSTTY_RENDER_STATE_DATA_DIRTY, &dirtyState);
+        dirtyResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(dirtyResult));
+    }
+    switch (dirtyState)
+    {
+        case GHOSTTY_RENDER_STATE_DIRTY_FALSE:
+            result.damage = TerminalDamageKind::none;
+            break;
+        case GHOSTTY_RENDER_STATE_DIRTY_PARTIAL:
+            result.damage = TerminalDamageKind::partial;
+            break;
+        case GHOSTTY_RENDER_STATE_DIRTY_FULL:
+        default:
+            result.damage = TerminalDamageKind::full;
+            break;
+    }
+
     if (const GhosttyResult colsResult =
             ghostty_render_state_get(m_impl->renderState, GHOSTTY_RENDER_STATE_DATA_COLS, &result.columns);
         colsResult != GHOSTTY_SUCCESS)
@@ -525,8 +546,21 @@ std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot
         return std::unexpected(ghosttyError(iteratorResult));
     }
 
+    std::uint16_t row = 0;
     while (ghostty_render_state_row_iterator_next(m_impl->rowIterator))
     {
+        bool rowDirty = false;
+        if (const GhosttyResult dirtyResult =
+                ghostty_render_state_row_get(m_impl->rowIterator, GHOSTTY_RENDER_STATE_ROW_DATA_DIRTY, &rowDirty);
+            dirtyResult != GHOSTTY_SUCCESS)
+        {
+            return std::unexpected(ghosttyError(dirtyResult));
+        }
+        if (result.damage == TerminalDamageKind::partial && rowDirty)
+        {
+            result.damagedRows.push_back(row);
+        }
+
         GhosttyRenderStateRowSelection rowSelection{};
         rowSelection.size = sizeof(rowSelection);
         const GhosttyResult selectionResult =
@@ -635,6 +669,15 @@ std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot
             result.cells.push_back(std::move(cell));
             ++column;
         }
+
+        constexpr bool clean = false;
+        if (const GhosttyResult cleanResult =
+                ghostty_render_state_row_set(m_impl->rowIterator, GHOSTTY_RENDER_STATE_ROW_OPTION_DIRTY, &clean);
+            cleanResult != GHOSTTY_SUCCESS)
+        {
+            return std::unexpected(ghosttyError(cleanResult));
+        }
+        ++row;
     }
 
     const std::size_t expectedCells = static_cast<std::size_t>(result.columns) * result.rows;
@@ -644,6 +687,14 @@ std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot
     {
         result.cursor.width =
             std::max<std::uint8_t>(1, result.cell(result.cursor.column, result.cursor.row).displayWidth);
+    }
+
+    constexpr GhosttyRenderStateDirty cleanState = GHOSTTY_RENDER_STATE_DIRTY_FALSE;
+    if (const GhosttyResult cleanResult =
+            ghostty_render_state_set(m_impl->renderState, GHOSTTY_RENDER_STATE_OPTION_DIRTY, &cleanState);
+        cleanResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(cleanResult));
     }
     return result;
 }

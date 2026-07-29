@@ -2,6 +2,7 @@
 
 #include <QTest>
 
+#include <algorithm>
 #include <cstddef>
 #include <span>
 #include <string>
@@ -20,6 +21,7 @@ private slots:
     void preservesContentAcrossResize();
     void exposesImmutableStyledCells();
     void exposesWideCellAndCursorWidth();
+    void reportsAndResetsRenderDamage();
     void selectsAndFormatsViewportText();
     void scrollsThroughHistory();
     void encodesPasteForTerminalMode();
@@ -126,6 +128,40 @@ void TerminalEngineTests::exposesWideCellAndCursorWidth()
     QCOMPARE(snapshot->cell(1, 0).displayWidth, std::uint8_t{0});
     QCOMPARE(snapshot->cursor.column, 0);
     QCOMPARE(snapshot->cursor.width, std::uint8_t{2});
+}
+
+void TerminalEngineTests::reportsAndResetsRenderDamage()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 12, .rows = 3});
+    if (!result)
+    {
+        QFAIL(result.error().message().c_str());
+    }
+    auto &engine = **result;
+
+    const auto initial = engine.snapshot();
+    QVERIFY(initial);
+    QCOMPARE(initial->damage, ztermy::terminal::TerminalDamageKind::full);
+
+    const auto clean = engine.snapshot();
+    QVERIFY(clean);
+    QCOMPARE(clean->damage, ztermy::terminal::TerminalDamageKind::none);
+    QVERIFY(clean->damagedRows.empty());
+
+    constexpr std::string_view content = "changed";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(content))));
+    const auto changed = engine.snapshot();
+    QVERIFY(changed);
+    QVERIFY(changed->damage != ztermy::terminal::TerminalDamageKind::none);
+    if (changed->damage == ztermy::terminal::TerminalDamageKind::partial)
+    {
+        QVERIFY(std::ranges::find(changed->damagedRows, std::uint16_t{0}) != changed->damagedRows.end());
+    }
+
+    QVERIFY(!engine.resize({.columns = 16, .rows = 4}));
+    const auto resized = engine.snapshot();
+    QVERIFY(resized);
+    QCOMPARE(resized->damage, ztermy::terminal::TerminalDamageKind::full);
 }
 
 void TerminalEngineTests::selectsAndFormatsViewportText()
