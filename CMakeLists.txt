@@ -91,6 +91,10 @@ target_compile_definitions(ztermy_terminal_transport PRIVATE
 add_library(ztermy_ssh_transport STATIC
     src/infrastructure/ssh/Libssh2Runtime.cpp
     src/infrastructure/ssh/Libssh2Runtime.h
+    src/infrastructure/ssh/Libssh2Session.cpp
+    src/infrastructure/ssh/Libssh2Session.h
+    src/infrastructure/ssh/WindowsTcpSocket.cpp
+    src/infrastructure/ssh/WindowsTcpSocket.h
 )
 
 add_library(ztermy_ssh_domain STATIC
@@ -103,7 +107,10 @@ target_include_directories(ztermy_ssh_domain PUBLIC src)
 
 target_compile_features(ztermy_ssh_transport PUBLIC cxx_std_23)
 target_include_directories(ztermy_ssh_transport PUBLIC src)
-target_link_libraries(ztermy_ssh_transport PRIVATE libssh2::libssh2_static)
+target_link_libraries(ztermy_ssh_transport PRIVATE
+    libssh2::libssh2_static
+    ws2_32
+)
 
 add_library(ztermy_terminal_engine STATIC
     src/domain/terminal/GhosttyTerminalEngine.cpp
@@ -261,7 +268,7 @@ if(MSVC)
 endif()
 
 if(BUILD_TESTING)
-    find_package(Qt6 6.8 REQUIRED COMPONENTS Test)
+    find_package(Qt6 6.8 REQUIRED COMPONENTS Network Test)
 
     qt_add_executable(ztermy_window_hit_test_tests
         tests/window_hit_test_tests.cpp
@@ -346,6 +353,50 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME ssh-connection-state COMMAND ztermy_ssh_connection_state_tests)
+
+    qt_add_executable(ztermy_windows_tcp_socket_tests
+        tests/windows_tcp_socket_tests.cpp
+    )
+
+    target_compile_features(ztermy_windows_tcp_socket_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_windows_tcp_socket_tests PRIVATE
+        ztermy_ssh_transport
+        Qt6::Network
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_windows_tcp_socket_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME windows-tcp-socket COMMAND ztermy_windows_tcp_socket_tests)
+
+    qt_add_executable(ztermy_ssh_handshake_tests
+        tests/ssh_handshake_tests.cpp
+    )
+
+    target_compile_features(ztermy_ssh_handshake_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ssh_handshake_tests PRIVATE
+        ztermy_ssh_transport
+        Qt6::Network
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ssh_handshake_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ssh-handshake COMMAND ztermy_ssh_handshake_tests)
 
     qt_add_executable(ztermy_terminal_engine_tests
         tests/terminal_engine_tests.cpp

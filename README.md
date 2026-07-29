@@ -15,7 +15,7 @@ implementation are not copied.
 - MSVC with the Ninja CMake generator
 - Windows ConPTY for local terminal sessions
 - Pinned `libghostty-vt` behind a ztermy-owned C++ terminal-engine interface
-- A native SSH library for SSH and SFTP
+- Pinned `libssh2` with the Windows CNG backend for SSH and future SFTP
 - A single custom Qt Quick terminal item with batched rendering
 
 ## Supported platform
@@ -27,9 +27,10 @@ Other platforms are out of scope until the Windows version is stable.
 ## Project status
 
 The Qt Quick shell, Windows non-client integration, ConPTY transport,
-`libghostty-vt` adapter, immutable cell snapshots, and first custom terminal
-item are implemented. The active milestone is terminal interaction
-correctness, scrollback, and renderer performance. See
+`libghostty-vt` adapter, immutable cell snapshots, first custom terminal item,
+and the non-blocking TCP/libssh2 handshake foundation are implemented. The
+active milestones are terminal interaction and renderer performance alongside
+strict SSH host verification and authentication. See
 [docs/V1_SCOPE.md](docs/V1_SCOPE.md) and
 [docs/V1_ACCEPTANCE.md](docs/V1_ACCEPTANCE.md).
 
