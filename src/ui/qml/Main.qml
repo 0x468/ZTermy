@@ -10,6 +10,7 @@ Rectangle {
 
     readonly property int titleBarHeight: 42
     readonly property int captionButtonWidth: 46
+    readonly property int titleNavigationWidth: Math.min(790, Math.max(310, width - (captionButtonWidth * 3) - 96))
     readonly property color backgroundColor: Theme.windowBackground
     readonly property color panelColor: Theme.panelBackground
     readonly property color raisedColor: Theme.raisedBackground
@@ -24,7 +25,9 @@ Rectangle {
     color: backgroundColor
 
     function reportTitleBarMetrics() {
-        windowChrome.setTitleBarMetrics(titleBarHeight, width - (captionButtonWidth * 3), width - (captionButtonWidth * 2), captionButtonWidth);
+        windowChrome.setTitleBarMetrics(titleBarHeight, titleNavigation.width + 8,
+                                        width - (captionButtonWidth * 3),
+                                        width - (captionButtonWidth * 2), captionButtonWidth);
     }
 
     function openTerminalSearch() {
@@ -82,7 +85,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         height: root.titleBarHeight
-        color: "#E60F1722"
+        color: Theme.chromeBackground
 
         Rectangle {
             anchors.bottom: parent.bottom
@@ -91,59 +94,193 @@ Rectangle {
             color: root.borderColor
         }
 
-        RowLayout {
+        Row {
+            id: titleNavigation
+
             anchors.left: parent.left
-            anchors.leftMargin: 14
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: 9
+            anchors.top: parent.top
+            width: childrenRect.width
+            height: parent.height
+            spacing: 0
+            onWidthChanged: root.reportTitleBarMetrics()
 
             Rectangle {
-                Layout.preferredWidth: 20
-                Layout.preferredHeight: 20
-                radius: 5
-                color: root.accentColor
+                width: 44
+                height: titleNavigation.height
+                color: "transparent"
+
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 22
+                    height: 22
+                    radius: 6
+                    color: root.accentColor
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: ">_"
+                        color: Theme.accentText
+                        font.family: Theme.terminalFont
+                        font.pixelSize: Theme.textCompact
+                        font.weight: Font.Bold
+                    }
+                }
+            }
+
+            Rectangle {
+                id: hostsTitleTab
+
+                width: 94
+                height: titleNavigation.height
+                color: root.currentPage === "hosts" ? Theme.controlHover : "transparent"
+
+                Row {
+                    anchors.centerIn: parent
+                    spacing: 8
+
+                    Text {
+                        text: "□"
+                        color: root.currentPage === "hosts" ? root.textColor : root.mutedColor
+                        font.family: Theme.uiFont
+                        font.pixelSize: 14
+                    }
+
+                    Text {
+                        text: "Hosts"
+                        color: root.currentPage === "hosts" ? root.textColor : root.mutedColor
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textBody
+                        font.weight: root.currentPage === "hosts" ? Font.DemiBold : Font.Normal
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.currentPage = "hosts"
+                    Accessible.role: Accessible.Button
+                    Accessible.name: "Hosts"
+                }
+            }
+
+            ListView {
+                id: titleTerminalTabs
+
+                width: Math.min(Math.max(contentWidth, 126), Math.max(140, root.titleNavigationWidth - 174))
+                height: titleNavigation.height
+                orientation: ListView.Horizontal
+                spacing: 2
+                clip: true
+                model: root.controller.terminalTabs
+
+                delegate: Rectangle {
+                    id: titleTerminalTab
+
+                    required property var modelData
+
+                    width: Math.min(190, Math.max(126, titleTabText.implicitWidth + 54))
+                    height: titleTerminalTabs.height
+                    color: root.currentPage === "terminal"
+                           && root.controller.activeTerminalTabId === modelData.id
+                           ? Theme.controlHover : "transparent"
+
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.leftMargin: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 6
+                        height: 6
+                        radius: 3
+                        color: titleTerminalTab.modelData.running ? root.accentColor : Theme.textSubtle
+                    }
+
+                    Text {
+                        id: titleTabText
+
+                        anchors.left: parent.left
+                        anchors.leftMargin: 24
+                        anchors.right: titleTabClose.left
+                        anchors.rightMargin: 3
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: titleTerminalTab.modelData.title
+                        color: root.textColor
+                        elide: Text.ElideRight
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
+                    }
+
+                    MouseArea {
+                        anchors.left: parent.left
+                        anchors.right: titleTabClose.left
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            root.controller.activateTerminalTab(titleTerminalTab.modelData.id);
+                            root.currentPage = "terminal";
+                            terminalViewport.forceActiveFocus();
+                        }
+                        Accessible.role: Accessible.Button
+                        Accessible.name: "Activate " + titleTerminalTab.modelData.title
+                    }
+
+                    Rectangle {
+                        id: titleTabClose
+
+                        anchors.right: parent.right
+                        anchors.rightMargin: 4
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 24
+                        height: 24
+                        radius: 5
+                        color: titleTabCloseMouse.containsMouse ? Theme.borderStrong : "transparent"
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "×"
+                            color: root.mutedColor
+                            font.pixelSize: 15
+                        }
+
+                        MouseArea {
+                            id: titleTabCloseMouse
+
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.controller.closeTerminalTab(titleTerminalTab.modelData.id)
+                            Accessible.role: Accessible.Button
+                            Accessible.name: "Close " + titleTerminalTab.modelData.title
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                width: 36
+                height: titleNavigation.height
+                color: titleNewTabMouse.containsMouse ? Theme.controlHover : "transparent"
 
                 Text {
                     anchors.centerIn: parent
-                    text: ">_"
-                    color: "#052E16"
-                    font.family: "Cascadia Mono"
-                    font.pixelSize: 9
-                    font.weight: Font.Bold
-                }
-            }
-
-            Text {
-                text: "ztermy"
-                color: root.textColor
-                font.family: "Segoe UI Variable"
-                font.pixelSize: 13
-                font.weight: Font.DemiBold
-            }
-
-            Rectangle {
-                Layout.leftMargin: 12
-                Layout.preferredWidth: 1
-                Layout.preferredHeight: 16
-                color: root.borderColor
-            }
-
-            RowLayout {
-                Layout.leftMargin: 4
-                spacing: 7
-
-                Rectangle {
-                    Layout.preferredWidth: 7
-                    Layout.preferredHeight: 7
-                    radius: 4
-                    color: root.accentColor
+                    text: "+"
+                    color: root.textColor
+                    font.pixelSize: 18
                 }
 
-                Text {
-                    text: root.controller.sshActive ? "SSH terminal" : "Local terminal"
-                    color: root.mutedColor
-                    font.family: "Segoe UI Variable"
-                    font.pixelSize: 12
+                MouseArea {
+                    id: titleNewTabMouse
+
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        root.controller.startLocalTerminal();
+                        root.currentPage = "terminal";
+                        terminalViewport.forceActiveFocus();
+                    }
+                    Accessible.role: Accessible.Button
+                    Accessible.name: "New local terminal"
                 }
             }
         }
@@ -185,12 +322,13 @@ Rectangle {
         anchors.top: titleBar.bottom
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.bottom: statusBar.top
+        anchors.bottom: parent.bottom
         spacing: 0
 
         Rectangle {
             Layout.fillHeight: true
-            Layout.preferredWidth: 220
+            Layout.preferredWidth: visible ? 210 : 0
+            visible: root.currentPage === "hosts"
             color: root.panelColor
 
             ColumnLayout {
@@ -199,9 +337,9 @@ Rectangle {
                 spacing: 10
 
                 Text {
-                    text: "WORKSPACE"
-                    color: "#64748B"
-                    font.family: "Segoe UI Variable"
+                    text: "ZTERMY"
+                    color: Theme.textSubtle
+                    font.family: Theme.uiFont
                     font.pixelSize: 10
                     font.letterSpacing: 1.2
                     font.weight: Font.DemiBold
@@ -211,7 +349,7 @@ Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 38
                     radius: 7
-                    color: root.currentPage === "terminal" ? root.raisedColor : "transparent"
+                    color: root.raisedColor
 
                     Row {
                         anchors.left: parent.left
@@ -227,46 +365,10 @@ Rectangle {
                         }
 
                         Text {
-                            text: "Terminal"
-                            color: root.textColor
-                            font.family: "Segoe UI Variable"
-                            font.pixelSize: 13
-                        }
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.currentPage = "terminal"
-                        Accessible.role: Accessible.Button
-                        Accessible.name: "Terminal"
-                    }
-                }
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 38
-                    radius: 7
-                    color: root.currentPage === "hosts" ? root.raisedColor : "transparent"
-
-                    Row {
-                        anchors.left: parent.left
-                        anchors.leftMargin: 12
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: 10
-
-                        Rectangle {
-                            width: 3
-                            height: 16
-                            radius: 2
-                            color: root.currentPage === "hosts" ? root.accentColor : "transparent"
-                        }
-
-                        Text {
                             text: "Hosts"
-                            color: root.currentPage === "hosts" ? root.textColor : root.mutedColor
-                            font.family: "Segoe UI Variable"
-                            font.pixelSize: 13
+                            color: root.textColor
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.textBody
                         }
                     }
 
@@ -283,8 +385,8 @@ Rectangle {
                     Layout.leftMargin: 15
                     text: "Settings"
                     color: root.mutedColor
-                    font.family: "Segoe UI Variable"
-                    font.pixelSize: 13
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.textBody
                 }
 
                 Item {
@@ -295,7 +397,7 @@ Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 58
                     radius: 8
-                    color: "#141E2B"
+                    color: Theme.elevatedBackground
                     border.color: root.borderColor
 
                     Column {
@@ -307,14 +409,14 @@ Rectangle {
                         Text {
                             text: "Local machine"
                             color: root.textColor
-                            font.family: "Segoe UI Variable"
+                            font.family: Theme.uiFont
                             font.pixelSize: 12
                         }
 
                         Text {
                             text: "Windows 11 · ready"
                             color: root.mutedColor
-                            font.family: "Segoe UI Variable"
+                            font.family: Theme.uiFont
                             font.pixelSize: 10
                         }
                     }
@@ -340,155 +442,61 @@ Rectangle {
             Rectangle {
                 id: terminalPanel
                 anchors.fill: parent
-                color: "#E60A0E14"
+                color: Theme.contentBackground
                 visible: root.currentPage === "terminal"
 
                 ColumnLayout {
                     anchors.fill: parent
-                    anchors.margins: 14
-                    spacing: 8
+                    spacing: 0
 
                     Rectangle {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 36
-                        radius: 8
-                        color: "#D9141E2B"
-                        border.color: root.borderColor
+                        Layout.preferredHeight: 27
+                        color: Theme.workspaceBackground
 
-                        ListView {
-                            id: terminalTabList
-
-                            anchors.left: parent.left
-                            anchors.right: newTabButton.left
-                            anchors.top: parent.top
+                        Rectangle {
                             anchors.bottom: parent.bottom
-                            anchors.leftMargin: 6
-                            anchors.rightMargin: 6
-                            orientation: ListView.Horizontal
-                            spacing: 4
-                            clip: true
-                            model: root.controller.terminalTabs
+                            width: parent.width
+                            height: 1
+                            color: root.borderColor
+                        }
 
-                            delegate: Rectangle {
-                                id: terminalTab
+                        Row {
+                            anchors.left: parent.left
+                            anchors.leftMargin: 10
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 7
 
-                                required property var modelData
+                            Rectangle {
+                                width: 6
+                                height: 6
+                                radius: 3
+                                color: root.controller.sshActive ? root.accentColor : Theme.textSubtle
+                            }
 
-                                width: Math.min(210, Math.max(126, tabTitle.implicitWidth + 52))
-                                height: terminalTabList.height - 8
-                                y: 4
-                                radius: 6
-                                color: root.controller.activeTerminalTabId === modelData.id ? root.raisedColor : "transparent"
-
-                                Rectangle {
-                                    anchors.left: parent.left
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    width: 6
-                                    height: 6
-                                    radius: 3
-                                    color: terminalTab.modelData.running ? root.accentColor : "#64748B"
-                                }
-
-                                Text {
-                                    id: tabTitle
-
-                                    anchors.left: parent.left
-                                    anchors.leftMargin: 13
-                                    anchors.right: closeTabButton.left
-                                    anchors.rightMargin: 4
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: terminalTab.modelData.title
-                                    color: root.textColor
-                                    elide: Text.ElideRight
-                                    font.family: "Segoe UI Variable"
-                                    font.pixelSize: 11
-                                }
-
-                                MouseArea {
-                                    anchors.left: parent.left
-                                    anchors.right: closeTabButton.left
-                                    anchors.top: parent.top
-                                    anchors.bottom: parent.bottom
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        root.controller.activateTerminalTab(terminalTab.modelData.id);
-                                        terminalViewport.forceActiveFocus();
-                                    }
-                                    Accessible.role: Accessible.Button
-                                    Accessible.name: "Activate " + terminalTab.modelData.title
-                                }
-
-                                Rectangle {
-                                    id: closeTabButton
-
-                                    anchors.right: parent.right
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    width: 24
-                                    height: 24
-                                    radius: 5
-                                    color: closeTabMouse.containsMouse ? "#334155" : "transparent"
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: "×"
-                                        color: root.mutedColor
-                                        font.pixelSize: 15
-                                    }
-
-                                    MouseArea {
-                                        id: closeTabMouse
-
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: root.controller.closeTerminalTab(terminalTab.modelData.id)
-                                        Accessible.role: Accessible.Button
-                                        Accessible.name: "Close " + terminalTab.modelData.title
-                                    }
-                                }
+                            Text {
+                                text: terminalViewport.statusText
+                                color: root.mutedColor
+                                font.family: Theme.terminalFont
+                                font.pixelSize: Theme.textCompact
                             }
                         }
 
-                        Rectangle {
-                            id: newTabButton
-
+                        Text {
                             anchors.right: parent.right
-                            anchors.rightMargin: 5
+                            anchors.rightMargin: 12
                             anchors.verticalCenter: parent.verticalCenter
-                            width: 28
-                            height: 26
-                            radius: 6
-                            color: newTabMouse.containsMouse ? root.raisedColor : "transparent"
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: "+"
-                                color: root.textColor
-                                font.pixelSize: 18
-                            }
-
-                            MouseArea {
-                                id: newTabMouse
-
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    root.controller.startLocalTerminal();
-                                    terminalViewport.forceActiveFocus();
-                                }
-                                Accessible.role: Accessible.Button
-                                Accessible.name: "New local terminal"
-                            }
+                            text: "UTF-8   Ctrl+F  Find"
+                            color: Theme.textSubtle
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.textCompact
                         }
                     }
 
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        radius: 9
-                        color: "#D90B1017"
-                        border.color: root.borderColor
+                        color: Theme.workspaceBackground
 
                         TerminalView {
                             id: terminalViewport
@@ -508,7 +516,7 @@ Rectangle {
                             width: 420
                             height: 42
                             radius: 8
-                            color: "#F21E293B"
+                            color: Theme.floatingBackground
                             border.color: root.borderColor
                             visible: root.terminalSearchVisible
                             z: 10
@@ -533,7 +541,7 @@ Rectangle {
 
                                     background: Rectangle {
                                         radius: 5
-                                        color: "#111827"
+                                        color: Theme.fieldBackground
                                         border.color: searchField.activeFocus ? root.accentColor : root.borderColor
                                     }
 
@@ -630,53 +638,6 @@ Rectangle {
                 accentColor: root.accentColor
                 onConnectionStarted: root.currentPage = "terminal"
             }
-        }
-    }
-
-    Rectangle {
-        id: statusBar
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        height: 27
-        color: "#E60F1722"
-
-        Rectangle {
-            anchors.top: parent.top
-            width: parent.width
-            height: 1
-            color: root.borderColor
-        }
-
-        Row {
-            anchors.left: parent.left
-            anchors.leftMargin: 14
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: 7
-
-            Rectangle {
-                width: 6
-                height: 6
-                radius: 3
-                color: root.accentColor
-            }
-
-            Text {
-                text: terminalViewport.statusText
-                color: root.mutedColor
-                font.family: "Segoe UI Variable"
-                font.pixelSize: 10
-            }
-        }
-
-        Text {
-            anchors.right: parent.right
-            anchors.rightMargin: 14
-            anchors.verticalCenter: parent.verticalCenter
-        text: "UTF-8   C++23   Qt 6.8"
-        color: Theme.textSubtle
-        font.family: Theme.terminalFont
-        font.pixelSize: Theme.textCompact
         }
     }
 

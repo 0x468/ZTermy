@@ -5,12 +5,16 @@ import QtQuick
 QtObject {
     readonly property color windowBackground: "#F20B0F14"
     readonly property color panelBackground: "#E6111824"
+    readonly property color chromeBackground: "#E60F1722"
+    readonly property color contentBackground: "#E60A0E14"
     readonly property color workspaceBackground: "#0B1017"
     readonly property color raisedBackground: "#1E293B"
     readonly property color elevatedBackground: "#141E2B"
     readonly property color controlBackground: "#172033"
     readonly property color controlPressed: "#263244"
     readonly property color controlHover: "#1F2A3A"
+    readonly property color fieldBackground: "#111827"
+    readonly property color floatingBackground: "#F21E293B"
 
     readonly property color border: "#263244"
     readonly property color borderStrong: "#334155"

@@ -25,7 +25,8 @@ public:
     Q_INVOKABLE void minimizeWindow();
     Q_INVOKABLE void toggleMaximize();
     Q_INVOKABLE void closeWindow();
-    Q_INVOKABLE void setTitleBarMetrics(qreal titleHeight, qreal controlsLeft, qreal maximizeLeft, qreal maximizeWidth);
+    Q_INVOKABLE void setTitleBarMetrics(qreal titleHeight, qreal captionLeft, qreal controlsLeft, qreal maximizeLeft,
+                                        qreal maximizeWidth);
 
 signals:
     void maximizedChanged();
@@ -50,6 +51,7 @@ private:
     void setMaximizeButtonPressed(bool pressed);
 
     qreal m_titleHeight = 42.0;
+    qreal m_captionLeft = 0.0;
     qreal m_controlsLeft = 0.0;
     qreal m_maximizeLeft = 0.0;
     qreal m_maximizeWidth = 46.0;

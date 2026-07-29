@@ -27,6 +27,7 @@ Use [testing/WINDOW_SHELL.md](testing/WINDOW_SHELL.md) and
 [testing/TERMINAL_SESSION.md](testing/TERMINAL_SESSION.md), and
 [testing/HOST_VAULT.md](testing/HOST_VAULT.md), and
 [testing/TERMINAL_TABS_SEARCH.md](testing/TERMINAL_TABS_SEARCH.md), and
+[testing/UI_SHELL.md](testing/UI_SHELL.md), and
 [testing/DISTRIBUTION.md](testing/DISTRIBUTION.md) for the repeatable runtime
 procedures and expected results.
 

@@ -124,15 +124,17 @@ void NativeWindow::closeWindow()
     close();
 }
 
-void NativeWindow::setTitleBarMetrics(const qreal titleHeight, const qreal controlsLeft, const qreal maximizeLeft,
-                                      const qreal maximizeWidth)
+void NativeWindow::setTitleBarMetrics(const qreal titleHeight, const qreal captionLeft, const qreal controlsLeft,
+                                      const qreal maximizeLeft, const qreal maximizeWidth)
 {
     m_titleHeight = titleHeight;
+    m_captionLeft = captionLeft;
     m_controlsLeft = controlsLeft;
     m_maximizeLeft = maximizeLeft;
     m_maximizeWidth = maximizeWidth;
     qCDebug(windowLog) << "title bar metrics"
-                       << "height=" << m_titleHeight << "controlsLeft=" << m_controlsLeft
+                       << "height=" << m_titleHeight << "captionLeft=" << m_captionLeft
+                       << "controlsLeft=" << m_controlsLeft
                        << "maximizeLeft=" << m_maximizeLeft << "maximizeWidth=" << m_maximizeWidth
                        << "dpr=" << devicePixelRatio();
 }
@@ -374,9 +376,9 @@ LRESULT NativeWindow::nativeHitTest(const HWND windowHandle, const LPARAM lParam
         .resizeBorder = resizeBorder,
         .caption =
             {
-                .x = 0,
+                .x = qRound(m_captionLeft * scale),
                 .y = 0,
-                .width = qRound(m_controlsLeft * scale),
+                .width = qRound(std::max(m_controlsLeft - m_captionLeft, 0.0) * scale),
                 .height = qRound(m_titleHeight * scale),
             },
         .maximizeButton =

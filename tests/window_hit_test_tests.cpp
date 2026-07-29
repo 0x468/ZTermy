@@ -41,11 +41,12 @@ void WindowHitTestTests::classifiesCaptionControlsAndClient()
 
     const ztermy::windowing::HitTestMetrics metrics{
         .resizeBorder = 8,
-        .caption = {.x = 0, .y = 0, .width = 862, .height = 42},
+        .caption = {.x = 320, .y = 0, .width = 542, .height = 42},
         .maximizeButton = {.x = 908, .y = 0, .width = 46, .height = 42},
     };
     constexpr ztermy::windowing::Size size{.width = 1000, .height = 700};
 
+    QCOMPARE(classifyHitTest({180, 24}, size, metrics, false), Client);
     QCOMPARE(classifyHitTest({400, 24}, size, metrics, false), Caption);
     QCOMPARE(classifyHitTest({930, 24}, size, metrics, false), MaximizeButton);
     QCOMPARE(classifyHitTest({885, 24}, size, metrics, false), Client);
