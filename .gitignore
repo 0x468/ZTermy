@@ -26,6 +26,7 @@ qmlcache/
 # IDE and editor state
 /.cache/
 /.clangd/
+/.codegraph/
 /.idea/
 /.vs/
 /.vscode/*
@@ -55,4 +56,3 @@ Desktop.ini
 .env.*
 !.env.example
 secrets/
-
