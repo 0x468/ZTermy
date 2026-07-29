@@ -24,6 +24,8 @@ constexpr DWORD kDwmSystemBackdropType = 38;
 constexpr int kDwmWindowCornerRound = 2;
 constexpr int kDwmSystemBackdropMainWindow = 2;
 constexpr auto kNativeWindowProperty = L"ztermy.NativeWindow";
+constexpr UINT kNcUahDrawCaption = 0x00AE;
+constexpr UINT kNcUahDrawFrame = 0x00AF;
 
 [[nodiscard]] LRESULT toNativeHitArea(const ztermy::windowing::HitArea area) noexcept
 {
@@ -371,6 +373,13 @@ bool NativeWindow::handleWindowProcedureMessage(const HWND windowHandle, const U
 {
     switch (message)
     {
+        case kNcUahDrawCaption:
+        case kNcUahDrawFrame:
+            // These undocumented theme messages can make DefWindowProc draw
+            // legacy non-client chrome over a custom frame during transitions.
+            *result = 0;
+            return true;
+
         case WM_NCHITTEST:
             *result = nativeHitTest(windowHandle, lParam);
             return true;
@@ -464,8 +473,7 @@ void NativeWindow::uninstallWindowProcedure()
     if (m_originalWindowProcedure != nullptr && IsWindow(m_windowHandle) != FALSE)
     {
         // NOLINTNEXTLINE(performance-no-int-to-ptr)
-        const auto currentProcedure = reinterpret_cast<WNDPROC>(
-            GetWindowLongPtrW(m_windowHandle, GWLP_WNDPROC));
+        const auto currentProcedure = reinterpret_cast<WNDPROC>(GetWindowLongPtrW(m_windowHandle, GWLP_WNDPROC));
         if (currentProcedure == reinterpret_cast<WNDPROC>(&NativeWindow::windowProcedure))
         {
             SetWindowLongPtrW(m_windowHandle, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(m_originalWindowProcedure));

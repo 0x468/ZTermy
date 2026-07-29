@@ -81,7 +81,10 @@ behavior required by custom-title-bar Snap Layout integration.
 Qt consumes some non-client input before `QWindow::nativeEvent()`. The Windows
 adapter therefore installs a narrowly scoped window-procedure bridge: maximize
 hit testing and hover reach `DefWindowProcW` before Qt, while unrelated messages
-continue through Qt's original procedure.
+continue through Qt's original procedure. The bridge also consumes the legacy
+non-client theme drawing messages used by `DefWindowProcW`; allowing those
+messages through can briefly paint system chrome over the custom title bar
+during maximize and restore transitions.
 
 Hit-test classification is kept in a Qt-independent helper so resize, caption,
 client, and maximize-button regions can be unit tested without creating a

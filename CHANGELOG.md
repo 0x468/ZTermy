@@ -28,3 +28,5 @@ The project has not published a release.
   the native hover gesture used by Snap Layouts
 - Match the proven native window style used by the Rust prototype: retain the
   system menu, thick frame, and maximize capability without a hidden caption
+- Suppress legacy non-client theme painting that can flash over the custom
+  title bar during maximize and restore transitions
