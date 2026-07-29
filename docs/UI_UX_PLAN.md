@@ -13,6 +13,9 @@ Visual work is part of V1, not a post-V1 reskin. The functional shell built
 during the terminal and SSH milestones is the prototype that the convergence
 pass will refine.
 
+The accepted V1 tokens, component-state contract, accessibility rules, and
+performance boundary are defined in [UI_DESIGN_SYSTEM.md](UI_DESIGN_SYSTEM.md).
+
 ## Direction
 
 - Professional, compact, dark-first desktop tooling.
