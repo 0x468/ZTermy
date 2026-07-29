@@ -30,8 +30,6 @@ qmlcache/
 /.idea/
 /.vs/
 /.vscode/*
-!/.vscode/extensions.json
-!/.vscode/settings.json
 *.user
 *.suo
 
