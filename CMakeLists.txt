@@ -93,6 +93,14 @@ add_library(ztermy_ssh_transport STATIC
     src/infrastructure/ssh/Libssh2Runtime.h
 )
 
+add_library(ztermy_ssh_domain STATIC
+    src/domain/ssh/SshConnectionState.cpp
+    src/domain/ssh/SshConnectionState.h
+)
+
+target_compile_features(ztermy_ssh_domain PUBLIC cxx_std_23)
+target_include_directories(ztermy_ssh_domain PUBLIC src)
+
 target_compile_features(ztermy_ssh_transport PUBLIC cxx_std_23)
 target_include_directories(ztermy_ssh_transport PUBLIC src)
 target_link_libraries(ztermy_ssh_transport PRIVATE libssh2::libssh2_static)
@@ -223,6 +231,13 @@ if(MSVC)
         /Zc:__cplusplus
     )
 
+    target_compile_options(ztermy_ssh_domain PRIVATE
+        /permissive-
+        /utf-8
+        /W4
+        /Zc:__cplusplus
+    )
+
     target_compile_options(ztermy_terminal_session PRIVATE
         /permissive-
         /utf-8
@@ -310,6 +325,27 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME ssh-runtime COMMAND ztermy_ssh_runtime_tests)
+
+    qt_add_executable(ztermy_ssh_connection_state_tests
+        tests/ssh_connection_state_tests.cpp
+    )
+
+    target_compile_features(ztermy_ssh_connection_state_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ssh_connection_state_tests PRIVATE
+        ztermy_ssh_domain
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ssh_connection_state_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ssh-connection-state COMMAND ztermy_ssh_connection_state_tests)
 
     qt_add_executable(ztermy_terminal_engine_tests
         tests/terminal_engine_tests.cpp
