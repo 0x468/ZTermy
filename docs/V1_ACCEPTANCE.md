@@ -40,6 +40,11 @@ Only runtime evidence can mark a platform or UI item complete.
   Dynamic Debug measured P95 `100 us`, P99 `250 us`, and maximum `298 us`;
   static Release measured P95 `250 us`, P99 `500 us`, and maximum `490 us`.
   Both are below the 16 ms V1 queue-latency target.
+- The opt-in local large-output gate processed 20,000 PowerShell lines in
+  `1992 ms` in both builds. Dynamic Debug delivered 157 progressive snapshots
+  while a 10 ms Qt heartbeat fired 178 times; static Release delivered 244
+  snapshots and 186 heartbeats. Both sessions stopped in under 1 ms without
+  starving the Qt event loop.
 - Automated SSH coverage preserves distinct failure state and user-visible
   status contracts for name resolution, refusal, timeout, transport, host-key,
   authentication, channel, remote-close, cancellation, and protocol failures.

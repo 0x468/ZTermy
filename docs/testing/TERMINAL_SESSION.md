@@ -113,7 +113,23 @@ Expected:
 
 ## Sustained output
 
-Run:
+Run the opt-in ConPTY and Qt event-loop gate first:
+
+```powershell
+$env:ZTERMY_RUN_LOCAL_OUTPUT_GATE = "1"
+ctest --test-dir build/msvc-dynamic-debug `
+  -R "^local-terminal-session$" --output-on-failure
+Remove-Item Env:ZTERMY_RUN_LOCAL_OUTPUT_GATE
+```
+
+The gate starts a real PowerShell session, produces 20,000 lines, waits for a
+unique completion marker in the terminal snapshot, and runs a 10 ms Qt
+heartbeat concurrently. It requires at least five heartbeat ticks and five
+progressive snapshots, then requires session shutdown within two seconds. This
+proves the ConPTY, parser, snapshot-coalescing, and GUI-thread event-loop path;
+it does not replace visual GPU-rendering checks.
+
+For the interactive renderer check, run:
 
 ```powershell
 1..5000 | ForEach-Object { "line $_" }

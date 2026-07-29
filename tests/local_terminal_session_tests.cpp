@@ -4,6 +4,7 @@
 #include <QElapsedTimer>
 #include <QString>
 #include <QTest>
+#include <QTimer>
 
 #include <cstdint>
 #include <exception>
@@ -35,6 +36,7 @@ class LocalTerminalSessionTests final : public QObject
 private slots:
     void runsPowerShellAndStopsPromptly();
     void measuresInteractiveInputQueueLatency();
+    void processesLargeOutputWithoutStarvingEventLoop();
 };
 
 void LocalTerminalSessionTests::runsPowerShellAndStopsPromptly()
@@ -115,6 +117,67 @@ void LocalTerminalSessionTests::measuresInteractiveInputQueueLatency()
                           << "p99Us=" << latency.p99UpperBoundMicroseconds << "maxUs=" << latency.maxMicroseconds;
 
         session.stop();
+    }
+    catch (const std::exception &exception)
+    {
+        QFAIL(exception.what());
+    }
+}
+
+void LocalTerminalSessionTests::processesLargeOutputWithoutStarvingEventLoop()
+{
+    if (qEnvironmentVariableIntValue("ZTERMY_RUN_LOCAL_OUTPUT_GATE") != 1)
+    {
+        QSKIP("Set ZTERMY_RUN_LOCAL_OUTPUT_GATE=1 to run the local large-output gate");
+    }
+
+    try
+    {
+        ztermy::terminal::LocalTerminalSession session;
+        ztermy::terminal::TerminalSnapshotPtr latestSnapshot;
+        std::uint64_t deliveredSnapshots = 0;
+        connect(&session, &ztermy::terminal::LocalTerminalSession::snapshotReady, this,
+                [&latestSnapshot, &deliveredSnapshots](ztermy::terminal::TerminalSnapshotPtr snapshot) {
+                    latestSnapshot = std::move(snapshot);
+                    ++deliveredSnapshots;
+                });
+
+        const std::error_code startError = session.start({.columns = 100, .rows = 30});
+        if (startError)
+        {
+            QFAIL(startError.message().c_str());
+        }
+        QTRY_VERIFY_WITH_TIMEOUT(latestSnapshot && latestSnapshot->cursor.visible, 5000);
+
+        std::uint64_t eventLoopTicks = 0;
+        QTimer heartbeat;
+        heartbeat.setInterval(10);
+        connect(&heartbeat, &QTimer::timeout, this, [&eventLoopTicks] {
+            ++eventLoopTicks;
+        });
+        heartbeat.start();
+
+        QElapsedTimer elapsed;
+        elapsed.start();
+        session.queueInput(QByteArrayLiteral(
+            "1..20000 | ForEach-Object { \"ztermy output line $_\" }; Write-Output ZTERMY_OUTPUT_GATE_DONE\r"));
+        QTRY_VERIFY_WITH_TIMEOUT(
+            latestSnapshot && snapshotText(*latestSnapshot).find(U"ZTERMY_OUTPUT_GATE_DONE") != std::u32string::npos,
+            20s);
+        const qint64 completionMilliseconds = elapsed.elapsed();
+        heartbeat.stop();
+
+        QVERIFY2(eventLoopTicks >= 5, "The Qt event loop was starved during large terminal output");
+        QVERIFY2(deliveredSnapshots >= 5, "Large terminal output did not deliver progressive snapshots");
+
+        elapsed.restart();
+        session.stop();
+        const qint64 stopMilliseconds = elapsed.elapsed();
+        QVERIFY2(stopMilliseconds < 2000, "Stopping after large terminal output took too long");
+
+        qInfo().noquote() << "Local large-output gate:"
+                          << "completionMs=" << completionMilliseconds << "eventLoopTicks=" << eventLoopTicks
+                          << "deliveredSnapshots=" << deliveredSnapshots << "stopMs=" << stopMilliseconds;
     }
     catch (const std::exception &exception)
     {
