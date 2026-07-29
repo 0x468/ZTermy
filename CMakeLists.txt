@@ -100,6 +100,8 @@ add_library(ztermy_ssh_transport STATIC
 add_library(ztermy_ssh_domain STATIC
     src/domain/ssh/SshConnectionState.cpp
     src/domain/ssh/SshConnectionState.h
+    src/domain/ssh/SshHostKey.cpp
+    src/domain/ssh/SshHostKey.h
 )
 
 target_compile_features(ztermy_ssh_domain PUBLIC cxx_std_23)
@@ -107,9 +109,12 @@ target_include_directories(ztermy_ssh_domain PUBLIC src)
 
 target_compile_features(ztermy_ssh_transport PUBLIC cxx_std_23)
 target_include_directories(ztermy_ssh_transport PUBLIC src)
-target_link_libraries(ztermy_ssh_transport PRIVATE
-    libssh2::libssh2_static
-    ws2_32
+target_link_libraries(ztermy_ssh_transport
+    PUBLIC
+        ztermy_ssh_domain
+    PRIVATE
+        libssh2::libssh2_static
+        ws2_32
 )
 
 add_library(ztermy_terminal_engine STATIC
@@ -354,6 +359,27 @@ if(BUILD_TESTING)
 
     add_test(NAME ssh-connection-state COMMAND ztermy_ssh_connection_state_tests)
 
+    qt_add_executable(ztermy_ssh_host_key_tests
+        tests/ssh_host_key_tests.cpp
+    )
+
+    target_compile_features(ztermy_ssh_host_key_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ssh_host_key_tests PRIVATE
+        ztermy_ssh_domain
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ssh_host_key_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ssh-host-key COMMAND ztermy_ssh_host_key_tests)
+
     qt_add_executable(ztermy_windows_tcp_socket_tests
         tests/windows_tcp_socket_tests.cpp
     )
@@ -397,6 +423,27 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME ssh-handshake COMMAND ztermy_ssh_handshake_tests)
+
+    qt_add_executable(ztermy_ssh_real_host_tests
+        tests/ssh_real_host_tests.cpp
+    )
+
+    target_compile_features(ztermy_ssh_real_host_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ssh_real_host_tests PRIVATE
+        ztermy_ssh_transport
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ssh_real_host_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ssh-real-host COMMAND ztermy_ssh_real_host_tests)
 
     qt_add_executable(ztermy_terminal_engine_tests
         tests/terminal_engine_tests.cpp

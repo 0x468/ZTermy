@@ -2,6 +2,7 @@
 
 #include <libssh2.h>
 
+#include <algorithm>
 #include <chrono>
 #include <new>
 #include <utility>
@@ -40,6 +41,29 @@ namespace
         return ztermy::ssh::SocketIoInterest::Write;
     }
     return ztermy::ssh::SocketIoInterest::ReadWrite;
+}
+
+[[nodiscard]] ztermy::ssh::HostKeyAlgorithm mapHostKeyAlgorithm(const int type) noexcept
+{
+    using ztermy::ssh::HostKeyAlgorithm;
+
+    switch (type)
+    {
+        case LIBSSH2_HOSTKEY_TYPE_RSA:
+            return HostKeyAlgorithm::Rsa;
+        case LIBSSH2_HOSTKEY_TYPE_ECDSA_256:
+            return HostKeyAlgorithm::EcdsaP256;
+        case LIBSSH2_HOSTKEY_TYPE_ECDSA_384:
+            return HostKeyAlgorithm::EcdsaP384;
+        case LIBSSH2_HOSTKEY_TYPE_ECDSA_521:
+            return HostKeyAlgorithm::EcdsaP521;
+        case LIBSSH2_HOSTKEY_TYPE_ED25519:
+            return HostKeyAlgorithm::Ed25519;
+        case LIBSSH2_HOSTKEY_TYPE_DSS:
+        case LIBSSH2_HOSTKEY_TYPE_UNKNOWN:
+        default:
+            return HostKeyAlgorithm::Unknown;
+    }
 }
 
 } // namespace
@@ -146,6 +170,44 @@ std::expected<void, SshTransportError> Libssh2Session::handshake(WindowsTcpSocke
 bool Libssh2Session::handshakeComplete() const noexcept
 {
     return m_handshakeComplete;
+}
+
+std::expected<ObservedHostKey, SshTransportError> Libssh2Session::hostKey() const noexcept
+{
+    if (m_session == nullptr || !m_handshakeComplete)
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
+    }
+
+    auto *session = static_cast<LIBSSH2_SESSION *>(m_session);
+    std::size_t encodedKeyLength = 0;
+    int keyType = LIBSSH2_HOSTKEY_TYPE_UNKNOWN;
+    const char *encodedKey = libssh2_session_hostkey(session, &encodedKeyLength, &keyType);
+    const char *sha256 = libssh2_hostkey_hash(session, LIBSSH2_HOSTKEY_HASH_SHA256);
+    const HostKeyAlgorithm algorithm = mapHostKeyAlgorithm(keyType);
+    if (encodedKey == nullptr || encodedKeyLength == 0 || sha256 == nullptr || algorithm == HostKeyAlgorithm::Unknown)
+    {
+        return std::unexpected(SshTransportError{
+            .kind = SshTransportErrorKind::ProtocolError,
+            .libssh2Code = libssh2_session_last_errno(session),
+        });
+    }
+
+    try
+    {
+        ObservedHostKey result{
+            .algorithm = algorithm,
+            .encodedKey =
+                std::vector<std::uint8_t>(reinterpret_cast<const std::uint8_t *>(encodedKey),
+                                          reinterpret_cast<const std::uint8_t *>(encodedKey) + encodedKeyLength),
+        };
+        std::copy_n(reinterpret_cast<const std::uint8_t *>(sha256), result.sha256.size(), result.sha256.begin());
+        return result;
+    }
+    catch (const std::bad_alloc &)
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InitializationFailed});
+    }
 }
 
 } // namespace ztermy::ssh

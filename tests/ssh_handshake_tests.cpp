@@ -53,6 +53,7 @@ private slots:
     void honorsPreRequestedCancellation();
     void cancelsBlockedHandshake();
     void rejectsInvalidSocket();
+    void rejectsHostKeyBeforeHandshake();
 };
 
 void SshHandshakeTests::createsNonBlockingSession()
@@ -144,6 +145,19 @@ void SshHandshakeTests::rejectsInvalidSocket()
     auto result = (*session)->handshake(socket, 2s);
     QVERIFY(!result);
     QCOMPARE(result.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidState);
+}
+
+void SshHandshakeTests::rejectsHostKeyBeforeHandshake()
+{
+    auto session = ztermy::ssh::Libssh2Session::create();
+    if (!session)
+    {
+        QFAIL("libssh2 session creation failed");
+    }
+
+    auto hostKey = (*session)->hostKey();
+    QVERIFY(!hostKey);
+    QCOMPARE(hostKey.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidState);
 }
 
 QTEST_GUILESS_MAIN(SshHandshakeTests)

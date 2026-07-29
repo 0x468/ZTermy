@@ -1,5 +1,6 @@
 #pragma once
 
+#include "domain/ssh/SshHostKey.h"
 #include "infrastructure/ssh/Libssh2Runtime.h"
 #include "infrastructure/ssh/WindowsTcpSocket.h"
 
@@ -48,6 +49,7 @@ public:
                                                                    const std::stop_token &stopToken = {}) noexcept;
 
     [[nodiscard]] bool handshakeComplete() const noexcept;
+    [[nodiscard]] std::expected<ObservedHostKey, SshTransportError> hostKey() const noexcept;
 
 private:
     Libssh2Session(std::unique_ptr<Libssh2Runtime> runtime, void *session) noexcept;
