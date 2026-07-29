@@ -125,3 +125,15 @@ Passphrase-protected keys must be exercised through the interactive credential
 UI so the passphrase never appears in an environment variable, command line,
 test report, or log. The test refuses authentication if the observed host
 fingerprint differs from the independently supplied expected fingerprint.
+
+## Terminal channel gate
+
+After exact host-key verification and authentication, the transport can open
+one `xterm-256color` session channel, request a PTY, start the remote shell,
+resize it, transfer byte streams, and close it deterministically. All channel
+operations use the same bounded and cancellable non-blocking socket wait as the
+handshake and authentication stages.
+
+The gated real-host suite opens an 80 by 24 PTY, resizes it to 100 by 30, and
+closes the shell without sending or logging terminal input. It uses the same
+four non-secret variables as the private-key authentication gate.

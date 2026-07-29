@@ -67,11 +67,32 @@ public:
                                    const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] bool authenticated() const noexcept;
 
+    [[nodiscard]] std::expected<void, SshTransportError> openTerminal(WindowsTcpSocket &socket, std::uint32_t columns,
+                                                                      std::uint32_t rows, std::string_view terminalType,
+                                                                      std::chrono::milliseconds timeout,
+                                                                      const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] std::expected<std::size_t, SshTransportError>
+    readTerminal(WindowsTcpSocket &socket, std::span<char> output, std::chrono::milliseconds timeout,
+                 const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] std::expected<void, SshTransportError> writeTerminal(WindowsTcpSocket &socket,
+                                                                       std::span<const char> input,
+                                                                       std::chrono::milliseconds timeout,
+                                                                       const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] std::expected<void, SshTransportError> resizeTerminal(WindowsTcpSocket &socket, std::uint32_t columns,
+                                                                        std::uint32_t rows,
+                                                                        std::chrono::milliseconds timeout,
+                                                                        const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] std::expected<void, SshTransportError> closeTerminal(WindowsTcpSocket &socket,
+                                                                       std::chrono::milliseconds timeout,
+                                                                       const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] bool terminalOpen() const noexcept;
+
 private:
     Libssh2Session(std::unique_ptr<Libssh2Runtime> runtime, void *session) noexcept;
 
     std::unique_ptr<Libssh2Runtime> m_runtime;
     void *m_session = nullptr;
+    void *m_terminalChannel = nullptr;
     bool m_handshakeComplete = false;
     bool m_hostKeyVerified = false;
     bool m_authenticated = false;

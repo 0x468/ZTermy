@@ -126,6 +126,32 @@ waitForSessionIo(ztermy::ssh::WindowsTcpSocket &socket, LIBSSH2_SESSION *session
     }
 }
 
+[[nodiscard]] ztermy::ssh::SshTransportError mapChannelError(const int error) noexcept
+{
+    using ztermy::ssh::SshTransportError;
+    using ztermy::ssh::SshTransportErrorKind;
+
+    switch (error)
+    {
+        case LIBSSH2_ERROR_ALLOC:
+            return SshTransportError{.kind = SshTransportErrorKind::InitializationFailed, .libssh2Code = error};
+        case LIBSSH2_ERROR_CHANNEL_CLOSED:
+        case LIBSSH2_ERROR_CHANNEL_EOF_SENT:
+        case LIBSSH2_ERROR_SOCKET_DISCONNECT:
+        case LIBSSH2_ERROR_SOCKET_RECV:
+        case LIBSSH2_ERROR_SOCKET_SEND:
+            return SshTransportError{.kind = SshTransportErrorKind::ConnectionLost, .libssh2Code = error};
+        default:
+            return SshTransportError{.kind = SshTransportErrorKind::ProtocolError, .libssh2Code = error};
+    }
+}
+
+[[nodiscard]] bool validTerminalDimensions(const std::uint32_t columns, const std::uint32_t rows) noexcept
+{
+    constexpr auto maximum = static_cast<std::uint32_t>((std::numeric_limits<int>::max)());
+    return columns > 0 && rows > 0 && columns <= maximum && rows <= maximum;
+}
+
 class SensitiveString final
 {
 public:
@@ -213,6 +239,10 @@ Libssh2Session::Libssh2Session(std::unique_ptr<Libssh2Runtime> runtime, void *se
 
 Libssh2Session::~Libssh2Session()
 {
+    if (m_terminalChannel != nullptr)
+    {
+        libssh2_channel_free(static_cast<LIBSSH2_CHANNEL *>(m_terminalChannel));
+    }
     if (m_session != nullptr)
     {
         libssh2_session_free(static_cast<LIBSSH2_SESSION *>(m_session));
@@ -427,6 +457,292 @@ Libssh2Session::authenticateWithPrivateKeyFile(WindowsTcpSocket &socket, const s
 bool Libssh2Session::authenticated() const noexcept
 {
     return m_authenticated;
+}
+
+std::expected<void, SshTransportError>
+Libssh2Session::openTerminal(WindowsTcpSocket &socket, const std::uint32_t columns, const std::uint32_t rows,
+                             const std::string_view terminalType, const std::chrono::milliseconds timeout,
+                             const std::stop_token &stopToken) noexcept
+{
+    if (!validTerminalDimensions(columns, rows) || terminalType.empty()
+        || terminalType.find('\0') != std::string_view::npos
+        || terminalType.size() > static_cast<std::size_t>((std::numeric_limits<unsigned int>::max)()))
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
+    }
+    if (m_session == nullptr || !socket.valid() || !m_authenticated || m_terminalChannel != nullptr)
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
+    }
+    if (timeout <= std::chrono::milliseconds::zero())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::TimedOut});
+    }
+    if (stopToken.stop_requested())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::Cancelled});
+    }
+
+    auto *session = static_cast<LIBSSH2_SESSION *>(m_session);
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    LIBSSH2_CHANNEL *channel = nullptr;
+    while (channel == nullptr)
+    {
+        channel = libssh2_channel_open_session(session);
+        if (channel != nullptr)
+        {
+            break;
+        }
+        const int error = libssh2_session_last_errno(session);
+        if (error != LIBSSH2_ERROR_EAGAIN)
+        {
+            return std::unexpected(mapChannelError(error));
+        }
+        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        if (!ready)
+        {
+            return std::unexpected(ready.error());
+        }
+    }
+
+    const auto releaseChannel = [&channel]() noexcept {
+        libssh2_channel_free(channel);
+        channel = nullptr;
+    };
+
+    while (true)
+    {
+        const int result =
+            libssh2_channel_request_pty_ex(channel, terminalType.data(), static_cast<unsigned int>(terminalType.size()),
+                                           nullptr, 0, static_cast<int>(columns), static_cast<int>(rows), 0, 0);
+        if (result == 0)
+        {
+            break;
+        }
+        if (result != LIBSSH2_ERROR_EAGAIN)
+        {
+            const SshTransportError error = mapChannelError(result);
+            releaseChannel();
+            return std::unexpected(error);
+        }
+        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        if (!ready)
+        {
+            const SshTransportError error = ready.error();
+            releaseChannel();
+            return std::unexpected(error);
+        }
+    }
+
+    while (true)
+    {
+        const int result = libssh2_channel_shell(channel);
+        if (result == 0)
+        {
+            m_terminalChannel = channel;
+            return {};
+        }
+        if (result != LIBSSH2_ERROR_EAGAIN)
+        {
+            const SshTransportError error = mapChannelError(result);
+            releaseChannel();
+            return std::unexpected(error);
+        }
+        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        if (!ready)
+        {
+            const SshTransportError error = ready.error();
+            releaseChannel();
+            return std::unexpected(error);
+        }
+    }
+}
+
+std::expected<std::size_t, SshTransportError> Libssh2Session::readTerminal(WindowsTcpSocket &socket,
+                                                                           const std::span<char> output,
+                                                                           const std::chrono::milliseconds timeout,
+                                                                           const std::stop_token &stopToken) noexcept
+{
+    if (output.empty())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
+    }
+    if (m_session == nullptr || m_terminalChannel == nullptr || !socket.valid())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
+    }
+    if (timeout <= std::chrono::milliseconds::zero())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::TimedOut});
+    }
+    if (stopToken.stop_requested())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::Cancelled});
+    }
+
+    auto *session = static_cast<LIBSSH2_SESSION *>(m_session);
+    auto *channel = static_cast<LIBSSH2_CHANNEL *>(m_terminalChannel);
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (true)
+    {
+        const auto result = libssh2_channel_read(channel, output.data(), output.size());
+        if (result >= 0)
+        {
+            return static_cast<std::size_t>(result);
+        }
+        if (result != LIBSSH2_ERROR_EAGAIN)
+        {
+            return std::unexpected(mapChannelError(static_cast<int>(result)));
+        }
+        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        if (!ready)
+        {
+            return std::unexpected(ready.error());
+        }
+    }
+}
+
+std::expected<void, SshTransportError> Libssh2Session::writeTerminal(WindowsTcpSocket &socket,
+                                                                     const std::span<const char> input,
+                                                                     const std::chrono::milliseconds timeout,
+                                                                     const std::stop_token &stopToken) noexcept
+{
+    if (input.empty())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
+    }
+    if (m_session == nullptr || m_terminalChannel == nullptr || !socket.valid())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
+    }
+    if (timeout <= std::chrono::milliseconds::zero())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::TimedOut});
+    }
+    if (stopToken.stop_requested())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::Cancelled});
+    }
+
+    auto *session = static_cast<LIBSSH2_SESSION *>(m_session);
+    auto *channel = static_cast<LIBSSH2_CHANNEL *>(m_terminalChannel);
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    std::size_t written = 0;
+    while (written < input.size())
+    {
+        const auto result = libssh2_channel_write(channel, input.data() + written, input.size() - written);
+        if (result > 0)
+        {
+            written += static_cast<std::size_t>(result);
+            continue;
+        }
+        if (result != LIBSSH2_ERROR_EAGAIN)
+        {
+            return std::unexpected(mapChannelError(static_cast<int>(result)));
+        }
+        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        if (!ready)
+        {
+            return std::unexpected(ready.error());
+        }
+    }
+    return {};
+}
+
+std::expected<void, SshTransportError>
+Libssh2Session::resizeTerminal(WindowsTcpSocket &socket, const std::uint32_t columns, const std::uint32_t rows,
+                               const std::chrono::milliseconds timeout, const std::stop_token &stopToken) noexcept
+{
+    if (!validTerminalDimensions(columns, rows))
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
+    }
+    if (m_session == nullptr || m_terminalChannel == nullptr || !socket.valid())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
+    }
+    if (timeout <= std::chrono::milliseconds::zero())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::TimedOut});
+    }
+    if (stopToken.stop_requested())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::Cancelled});
+    }
+
+    auto *session = static_cast<LIBSSH2_SESSION *>(m_session);
+    auto *channel = static_cast<LIBSSH2_CHANNEL *>(m_terminalChannel);
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (true)
+    {
+        const int result = libssh2_channel_request_pty_size(channel, static_cast<int>(columns), static_cast<int>(rows));
+        if (result == 0)
+        {
+            return {};
+        }
+        if (result != LIBSSH2_ERROR_EAGAIN)
+        {
+            return std::unexpected(mapChannelError(result));
+        }
+        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        if (!ready)
+        {
+            return std::unexpected(ready.error());
+        }
+    }
+}
+
+std::expected<void, SshTransportError> Libssh2Session::closeTerminal(WindowsTcpSocket &socket,
+                                                                     const std::chrono::milliseconds timeout,
+                                                                     const std::stop_token &stopToken) noexcept
+{
+    if (m_session == nullptr || m_terminalChannel == nullptr || !socket.valid())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
+    }
+    if (timeout <= std::chrono::milliseconds::zero())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::TimedOut});
+    }
+    if (stopToken.stop_requested())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::Cancelled});
+    }
+
+    auto *session = static_cast<LIBSSH2_SESSION *>(m_session);
+    auto *channel = static_cast<LIBSSH2_CHANNEL *>(m_terminalChannel);
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+
+    while (true)
+    {
+        const int result = libssh2_channel_close(channel);
+        if (result == 0)
+        {
+            break;
+        }
+        if (result != LIBSSH2_ERROR_EAGAIN)
+        {
+            return std::unexpected(mapChannelError(result));
+        }
+        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        if (!ready)
+        {
+            return std::unexpected(ready.error());
+        }
+    }
+
+    const int freeResult = libssh2_channel_free(channel);
+    if (freeResult != 0)
+    {
+        return std::unexpected(mapChannelError(freeResult));
+    }
+    m_terminalChannel = nullptr;
+    return {};
+}
+
+bool Libssh2Session::terminalOpen() const noexcept
+{
+    return m_terminalChannel != nullptr;
 }
 
 } // namespace ztermy::ssh

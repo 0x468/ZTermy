@@ -59,6 +59,7 @@ private slots:
     void rejectsPasswordAuthenticationBeforeHandshake();
     void rejectsInvalidPrivateKeyCredentials();
     void rejectsPrivateKeyAuthenticationBeforeHandshake();
+    void rejectsTerminalOperationsBeforeAuthentication();
 };
 
 void SshHandshakeTests::createsNonBlockingSession()
@@ -244,6 +245,47 @@ void SshHandshakeTests::rejectsPrivateKeyAuthenticationBeforeHandshake()
     QVERIFY(!result);
     QCOMPARE(result.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidState);
     QVERIFY(!(*session)->authenticated());
+}
+
+void SshHandshakeTests::rejectsTerminalOperationsBeforeAuthentication()
+{
+    ztermy::ssh::WindowsTcpSocket socket;
+    auto session = ztermy::ssh::Libssh2Session::create();
+    if (!session)
+    {
+        QFAIL("libssh2 session creation failed");
+    }
+
+    auto invalidDimensions = (*session)->openTerminal(socket, 0, 24, "xterm-256color", 2s);
+    QVERIFY(!invalidDimensions);
+    QCOMPARE(invalidDimensions.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidArgument);
+
+    auto invalidTerminalType = (*session)->openTerminal(socket, 80, 24, {}, 2s);
+    QVERIFY(!invalidTerminalType);
+    QCOMPARE(invalidTerminalType.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidArgument);
+
+    auto invalidState = (*session)->openTerminal(socket, 80, 24, "xterm-256color", 2s);
+    QVERIFY(!invalidState);
+    QCOMPARE(invalidState.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidState);
+
+    std::array<char, 16> output{};
+    auto read = (*session)->readTerminal(socket, output, 2s);
+    QVERIFY(!read);
+    QCOMPARE(read.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidState);
+
+    constexpr std::array input{'x'};
+    auto write = (*session)->writeTerminal(socket, input, 2s);
+    QVERIFY(!write);
+    QCOMPARE(write.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidState);
+
+    auto resize = (*session)->resizeTerminal(socket, 80, 24, 2s);
+    QVERIFY(!resize);
+    QCOMPARE(resize.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidState);
+
+    auto close = (*session)->closeTerminal(socket, 2s);
+    QVERIFY(!close);
+    QCOMPARE(close.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidState);
+    QVERIFY(!(*session)->terminalOpen());
 }
 
 QTEST_GUILESS_MAIN(SshHandshakeTests)
