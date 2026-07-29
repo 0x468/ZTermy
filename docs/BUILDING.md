@@ -35,7 +35,10 @@ $env:ZTERMY_QT_STATIC_ROOT = "D:\qt-self-built\qt-6.8.3-static"
 
 Use an x64 Visual Studio Developer PowerShell before configuring with Ninja.
 The compiler, Windows SDK, linker, and library paths must all come from the same
-activated VS installation.
+activated VS installation. The root CMake project also corrects a known
+Simplified Chinese `/showIncludes` prefix encoding mismatch when CMake detects
+that exact condition. Without a matching dependency prefix, Ninja can miss
+header-only changes and leave stale object files.
 
 ## Intended preset workflow
 

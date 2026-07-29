@@ -7,6 +7,19 @@ project(
     LANGUAGES C CXX
 )
 
+# Some localized MSVC installations emit /showIncludes text as UTF-8 while
+# CMake's compiler probe decodes the prefix using the active Windows code page.
+# The resulting mojibake prevents Ninja from recording header dependencies.
+# Correct only the known corrupted Simplified Chinese prefix so other locales
+# keep the value detected by CMake.
+if(MSVC
+   AND CMAKE_GENERATOR MATCHES "^Ninja"
+   AND CMAKE_CL_SHOWINCLUDES_PREFIX MATCHES "^娉")
+    set(CMAKE_CL_SHOWINCLUDES_PREFIX "注意: 包含文件:  ")
+    set(CMAKE_C_CL_SHOWINCLUDES_PREFIX "${CMAKE_CL_SHOWINCLUDES_PREFIX}")
+    set(CMAKE_CXX_CL_SHOWINCLUDES_PREFIX "${CMAKE_CL_SHOWINCLUDES_PREFIX}")
+endif()
+
 include(CTest)
 include(FetchContent)
 
