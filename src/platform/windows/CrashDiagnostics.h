@@ -5,7 +5,7 @@
 namespace ztermy::diagnostics
 {
 
-void initialize();
+void initialize(const QString &directory = {});
 [[nodiscard]] QString crashDirectoryPath();
 
 } // namespace ztermy::diagnostics

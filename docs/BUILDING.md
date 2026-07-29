@@ -61,11 +61,23 @@ Static packaging:
 cmake --preset msvc-static-release
 cmake --build --preset msvc-static-release
 ctest --test-dir build/msvc-static-release --output-on-failure
+cmake --build --preset msvc-static-release --target ztermy_portable_package
 ```
 
 The dynamic Qt presets use the DLL MSVC runtime. The static Qt preset uses the
 static MSVC runtime because the local static Qt build was compiled that way.
 Dependencies must use a matching runtime.
+
+CMake verifies that the dynamic presets resolve a shared `Qt6::Core` and the
+static preset resolves a static `Qt6::Core`. Configuration fails instead of
+producing a mislabeled package when a Qt root is missing or a stale cache points
+at the wrong installation. Use `--fresh` when switching an existing build
+directory between Qt installations.
+
+The static portable archive is written below
+`build/msvc-static-release/package/portable`. It contains `portable.flag`, so
+all runtime data remains below the extracted directory. See
+[testing/DISTRIBUTION.md](testing/DISTRIBUTION.md) for the runtime checks.
 
 ## libghostty-vt
 

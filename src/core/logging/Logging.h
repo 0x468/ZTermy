@@ -5,7 +5,7 @@
 namespace ztermy::logging
 {
 
-void initialize();
+void initialize(const QString &logsDirectory = {});
 [[nodiscard]] QString logFilePath();
 
 } // namespace ztermy::logging

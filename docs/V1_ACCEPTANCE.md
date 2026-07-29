@@ -8,6 +8,8 @@ Only runtime evidence can mark a platform or UI item complete.
 
 - MSVC + Ninja dynamic Debug build succeeds.
 - MSVC + Ninja static Qt Release build succeeds.
+- The static Release executable has no Qt or OpenSSL DLL dependency and the
+  versioned portable ZIP target succeeds.
 - Native window creation and QML loading succeed on Windows 11.
 - Automated hit-test coverage passes for caption, maximize button, client
   area, all resize edges/corners, and maximized-state behavior.
@@ -24,8 +26,9 @@ manually exercised across the required Windows 11 and mixed-DPI scenarios.
 Use [testing/WINDOW_SHELL.md](testing/WINDOW_SHELL.md) and
 [testing/TERMINAL_SESSION.md](testing/TERMINAL_SESSION.md), and
 [testing/HOST_VAULT.md](testing/HOST_VAULT.md), and
-[testing/TERMINAL_TABS_SEARCH.md](testing/TERMINAL_TABS_SEARCH.md) for the
-repeatable runtime procedures and expected results.
+[testing/TERMINAL_TABS_SEARCH.md](testing/TERMINAL_TABS_SEARCH.md), and
+[testing/DISTRIBUTION.md](testing/DISTRIBUTION.md) for the repeatable runtime
+procedures and expected results.
 
 ## Window shell
 
@@ -62,6 +65,6 @@ repeatable runtime procedures and expected results.
 
 - [ ] Dynamic developer build runs from a clean deployment directory
 - [ ] Static release build starts without Qt DLLs
-- [ ] Portable data remains inside the portable directory
+- [x] Portable data remains inside the portable directory
 - [ ] Installed data survives upgrade and uninstall
 - [ ] A clean Windows 11 machine runs the release without developer tools

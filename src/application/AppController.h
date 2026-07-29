@@ -40,7 +40,8 @@ class AppController final : public QObject
 
 public:
     explicit AppController(QObject *parent = nullptr);
-    explicit AppController(QString profileStorePath, QObject *parent = nullptr);
+    explicit AppController(const QString &profileStorePath, QObject *parent = nullptr);
+    AppController(QString profileStorePath, QString knownHostsPath, QObject *parent = nullptr);
     ~AppController() override;
 
     AppController(const AppController &) = delete;
@@ -136,6 +137,7 @@ private:
 
     ui::TerminalItem *m_terminal = nullptr;
     ssh::SshProfileStore m_profileStore;
+    QString m_knownHostsPath;
     std::vector<ssh::SshProfile> m_profiles;
     std::vector<std::unique_ptr<TerminalTab>> m_tabs;
     QString m_activeTabId;

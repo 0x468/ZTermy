@@ -84,7 +84,7 @@ void writeMessage(const QtMsgType type, const QMessageLogContext &context, const
 namespace ztermy::logging
 {
 
-void initialize()
+void initialize(const QString &logsDirectory)
 {
 #ifdef ZTERMY_DEBUG_BUILD
     QLoggingCategory::setFilterRules(QStringLiteral("ztermy.*.debug=true\n"
@@ -94,12 +94,14 @@ void initialize()
                                                     "ztermy.*.info=true"));
 #endif
 
-    const QString dataDirectory = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
-    const QString logsDirectory = dataDirectory + QStringLiteral("/logs");
-    QDir().mkpath(logsDirectory);
+    const QString resolvedLogsDirectory =
+        logsDirectory.isEmpty()
+            ? QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) + QStringLiteral("/logs")
+            : logsDirectory;
+    QDir().mkpath(resolvedLogsDirectory);
 
     LogState *state = logState();
-    state->filePath = logsDirectory + QStringLiteral("/ztermy.log");
+    state->filePath = QDir(resolvedLogsDirectory).filePath(QStringLiteral("ztermy.log"));
     state->file.setFileName(state->filePath);
 
     if (QFileInfo(state->filePath).size() > kMaximumLogSize)

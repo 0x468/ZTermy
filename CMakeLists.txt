@@ -84,7 +84,29 @@ ztermy_add_libssh2()
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Quick QuickControls2)
 
+get_target_property(ZTERMY_QT_CORE_TARGET_TYPE Qt6::Core TYPE)
+if(ZTERMY_STATIC_BUILD AND NOT ZTERMY_QT_CORE_TARGET_TYPE STREQUAL "STATIC_LIBRARY")
+    message(FATAL_ERROR
+        "ZTERMY_STATIC_BUILD requires a static Qt package, but Qt6::Core is "
+        "${ZTERMY_QT_CORE_TARGET_TYPE}. Set ZTERMY_QT_STATIC_ROOT before configuring."
+    )
+elseif(NOT ZTERMY_STATIC_BUILD AND NOT ZTERMY_QT_CORE_TARGET_TYPE STREQUAL "SHARED_LIBRARY")
+    message(FATAL_ERROR
+        "The dynamic developer presets require a shared Qt package, but Qt6::Core is "
+        "${ZTERMY_QT_CORE_TARGET_TYPE}. Set ZTERMY_QT_DYNAMIC_ROOT before configuring."
+    )
+endif()
+
 qt_standard_project_setup(REQUIRES 6.8)
+
+add_library(ztermy_core_config STATIC
+    src/core/config/ApplicationPaths.cpp
+    src/core/config/ApplicationPaths.h
+)
+
+target_compile_features(ztermy_core_config PUBLIC cxx_std_23)
+target_include_directories(ztermy_core_config PUBLIC src)
+target_link_libraries(ztermy_core_config PUBLIC Qt6::Core)
 
 add_library(ztermy_terminal_transport STATIC
     src/infrastructure/terminal/ConPtyProcess.cpp
@@ -267,6 +289,7 @@ if(ZTERMY_STATIC_BUILD)
 endif()
 
 target_link_libraries(ztermy PRIVATE
+    ztermy_core_config
     ztermy_ssh_persistence
     ztermy_ssh_session
     ztermy_terminal_session
@@ -280,7 +303,37 @@ target_link_libraries(ztermy PRIVATE
     dwmapi
 )
 
+install(TARGETS ztermy RUNTIME DESTINATION .)
+
+if(ZTERMY_STATIC_BUILD)
+    set(ZTERMY_PORTABLE_PACKAGE_ROOT "${CMAKE_CURRENT_BINARY_DIR}/package/portable")
+    file(MAKE_DIRECTORY "${ZTERMY_PORTABLE_PACKAGE_ROOT}")
+    add_custom_target(ztermy_portable_package
+        COMMAND "${CMAKE_COMMAND}" -E rm -rf "ztermy-${PROJECT_VERSION}-windows-x64"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "ztermy-${PROJECT_VERSION}-windows-x64"
+        COMMAND "${CMAKE_COMMAND}" -E copy "$<TARGET_FILE:ztermy>"
+                "ztermy-${PROJECT_VERSION}-windows-x64/ztermy.exe"
+        COMMAND "${CMAKE_COMMAND}" -E touch
+                "ztermy-${PROJECT_VERSION}-windows-x64/portable.flag"
+        COMMAND "${CMAKE_COMMAND}" -E tar cf
+                "ztermy-${PROJECT_VERSION}-windows-x64-portable.zip"
+                --format=zip
+                "ztermy-${PROJECT_VERSION}-windows-x64"
+        WORKING_DIRECTORY "${ZTERMY_PORTABLE_PACKAGE_ROOT}"
+        DEPENDS ztermy
+        COMMENT "Creating the self-contained ztermy portable package"
+        VERBATIM
+    )
+endif()
+
 if(MSVC)
+    target_compile_options(ztermy_core_config PRIVATE
+        /permissive-
+        /utf-8
+        /W4
+        /Zc:__cplusplus
+    )
+
     target_compile_options(ztermy_terminal_transport PRIVATE
         /permissive-
         /utf-8
@@ -347,6 +400,27 @@ endif()
 
 if(BUILD_TESTING)
     find_package(Qt6 6.8 REQUIRED COMPONENTS Network Test)
+
+    qt_add_executable(ztermy_application_paths_tests
+        tests/application_paths_tests.cpp
+    )
+
+    target_compile_features(ztermy_application_paths_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_application_paths_tests PRIVATE
+        ztermy_core_config
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_application_paths_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME application-paths COMMAND ztermy_application_paths_tests)
 
     qt_add_executable(ztermy_window_hit_test_tests
         tests/window_hit_test_tests.cpp

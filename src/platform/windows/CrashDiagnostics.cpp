@@ -84,24 +84,26 @@ int crtReportHook(const int reportType, char *, int *)
 namespace ztermy::diagnostics
 {
 
-void initialize()
+void initialize(const QString &directory)
 {
-    const QString directory =
-        QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) + QStringLiteral("/crashes");
-    if (!QDir().mkpath(directory))
+    const QString resolvedDirectory =
+        directory.isEmpty()
+            ? QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) + QStringLiteral("/crashes")
+            : directory;
+    if (!QDir().mkpath(resolvedDirectory))
     {
-        qCWarning(crashDiagnosticsLog) << "Unable to create crash dump directory" << directory;
+        qCWarning(crashDiagnosticsLog) << "Unable to create crash dump directory" << resolvedDirectory;
         return;
     }
 
-    const std::wstring nativeDirectory = QDir::toNativeSeparators(directory).toStdWString();
+    const std::wstring nativeDirectory = QDir::toNativeSeparators(resolvedDirectory).toStdWString();
     wcsncpy_s(dumpDirectory.data(), dumpDirectory.size(), nativeDirectory.c_str(), _TRUNCATE);
     SetUnhandledExceptionFilter(&unhandledExceptionFilter);
 #if defined(_DEBUG)
     _CrtSetReportHook2(_CRT_RPTHOOK_INSTALL, &crtReportHook);
 #endif
     qCInfo(crashDiagnosticsLog) << "Crash diagnostics enabled"
-                                << "directory=" << directory;
+                                << "directory=" << resolvedDirectory;
 }
 
 QString crashDirectoryPath()

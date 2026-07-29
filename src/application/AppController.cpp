@@ -3,6 +3,7 @@
 #include "ui/terminal/TerminalItem.h"
 
 #include <QDir>
+#include <QFileInfo>
 #include <QLoggingCategory>
 #include <QStandardPaths>
 #include <QUuid>
@@ -22,6 +23,11 @@ namespace
     return QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath(fileName);
 }
 
+[[nodiscard]] QString siblingKnownHostsFile(const QString &profileStorePath)
+{
+    return QFileInfo(profileStorePath).dir().filePath(QStringLiteral("known_hosts.json"));
+}
+
 [[nodiscard]] std::string utf8String(const QString &value)
 {
     const QByteArray bytes = value.toUtf8();
@@ -39,12 +45,18 @@ namespace ztermy
 {
 
 AppController::AppController(QObject *parent)
-    : AppController(applicationDataFile(QStringLiteral("profiles.json")), parent)
+    : AppController(applicationDataFile(QStringLiteral("profiles.json")),
+                    applicationDataFile(QStringLiteral("known_hosts.json")), parent)
 {
 }
 
-AppController::AppController(QString profileStorePath, QObject *parent)
-    : QObject(parent), m_profileStore(std::move(profileStorePath))
+AppController::AppController(const QString &profileStorePath, QObject *parent)
+    : AppController(profileStorePath, siblingKnownHostsFile(profileStorePath), parent)
+{
+}
+
+AppController::AppController(QString profileStorePath, QString knownHostsPath, QObject *parent)
+    : QObject(parent), m_profileStore(std::move(profileStorePath)), m_knownHostsPath(std::move(knownHostsPath))
 {
     loadHostProfiles();
 }
@@ -371,7 +383,7 @@ bool AppController::connectPrivateKey(const QString &host, const int port, const
         .authentication = ssh::SshAuthenticationMethod::PrivateKey,
         .privateKeyPath = privateKeyPath.trimmed(),
         .secret = security::SensitiveByteArray(passphrase.toUtf8()),
-        .knownHostsPath = applicationDataFile(QStringLiteral("known_hosts.json")),
+        .knownHostsPath = m_knownHostsPath,
     };
     return startSshConnection(std::move(request));
 }
@@ -395,7 +407,7 @@ bool AppController::connectPassword(const QString &host, const int port, const Q
         .authentication = ssh::SshAuthenticationMethod::Password,
         .privateKeyPath = {},
         .secret = security::SensitiveByteArray(password.toUtf8()),
-        .knownHostsPath = applicationDataFile(QStringLiteral("known_hosts.json")),
+        .knownHostsPath = m_knownHostsPath,
     };
     return startSshConnection(std::move(request));
 }
