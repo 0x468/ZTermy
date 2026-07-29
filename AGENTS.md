@@ -1,0 +1,39 @@
+# Repository guidance
+
+## Product boundary
+
+- ztermy is a Windows 11-first native SSH terminal.
+- Netcatty and other SSH tools are product references only.
+- Do not copy third-party source code, images, icons, themes, or branding unless
+  an explicit compatible dependency decision is recorded.
+- Do not add a license file until the owner selects a project license.
+
+## Architecture
+
+- Keep domain logic independent from Qt UI types where practical.
+- QML owns presentation and lightweight interaction glue.
+- C++ owns application state, platform integration, I/O, security boundaries,
+  persistence, and terminal state.
+- External I/O must not block the GUI or Qt Quick render thread.
+- A terminal viewport is one custom item; never model terminal cells as QML
+  object trees.
+- Windows-native behavior belongs behind a platform abstraction.
+
+## Build and code quality
+
+- Use C++23, MSVC, CMake, and Ninja.
+- Prefer target-scoped CMake properties and imported targets.
+- Treat the compilation database as the source of truth for clangd.
+- All commits must follow the Conventional Commits specification.
+- Add tests with behavior changes.
+- Never log passwords, passphrases, private key content, terminal input, or
+  unredacted secret-bearing command lines.
+- Record significant technical choices under `docs/adr/`.
+
+## Verification
+
+- Configure and build through CMake presets.
+- Run formatting, static analysis, unit tests, and focused runtime checks before
+  declaring work complete.
+- UI and platform behavior require runtime evidence; unit tests alone are not
+  sufficient for Snap Layouts, IME, DPI, transparency, or terminal latency.

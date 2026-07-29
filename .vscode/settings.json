@@ -1,0 +1,13 @@
+{
+  "C_Cpp.intelliSenseEngine": "disabled",
+  "cmake.useCMakePresets": "always",
+  "cmake.generator": "Ninja",
+  "clangd.arguments": [
+    "--background-index",
+    "--clang-tidy",
+    "--completion-style=detailed"
+  ],
+  "files.eol": "\n",
+  "files.encoding": "utf8"
+}
+

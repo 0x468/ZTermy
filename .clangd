@@ -1,0 +1,19 @@
+CompileFlags:
+  CompilationDatabase: build/msvc-dynamic-debug
+
+Diagnostics:
+  ClangTidy:
+    Add: []
+    Remove: []
+  UnusedIncludes: None
+
+Index:
+  Background: Build
+
+InlayHints:
+  Enabled: true
+  ParameterNames: true
+  DeducedTypes: true
+
+Hover:
+  ShowAKA: true

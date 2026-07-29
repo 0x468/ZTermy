@@ -1,0 +1,58 @@
+# Build outputs
+/build/
+/out/
+/dist/
+/install/
+/Testing/
+
+# CMake generated files
+CMakeUserPresets.json
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+CTestTestfile.cmake
+*.ninja
+.ninja_deps
+.ninja_log
+
+# Qt generated files
+*_autogen/
+*.qmlc
+*.jsc
+*.qrc.depends
+qmlcache/
+
+# IDE and editor state
+/.cache/
+/.clangd/
+/.idea/
+/.vs/
+/.vscode/*
+!/.vscode/extensions.json
+!/.vscode/settings.json
+*.user
+*.suo
+
+# Runtime and local data
+*.log
+*.dmp
+*.tmp
+*.bak
+/data/
+/logs/
+/portable-data/
+
+# Windows artifacts
+Thumbs.db
+Desktop.ini
+*.pdb
+*.ilk
+*.exp
+
+# Local secrets and environment overrides
+.env
+.env.*
+!.env.example
+secrets/
+

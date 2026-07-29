@@ -1,0 +1,83 @@
+{
+  "version": 8,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 28,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_CXX_STANDARD": "23",
+        "CMAKE_CXX_STANDARD_REQUIRED": "ON",
+        "CMAKE_CXX_EXTENSIONS": "OFF",
+        "BUILD_TESTING": "ON"
+      }
+    },
+    {
+      "name": "msvc-dynamic-debug",
+      "displayName": "MSVC + dynamic Qt (Debug)",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_PREFIX_PATH": "$env{ZTERMY_QT_DYNAMIC_ROOT}",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDebugDLL",
+        "ZTERMY_STATIC_BUILD": "OFF"
+      }
+    },
+    {
+      "name": "msvc-dynamic-relwithdebinfo",
+      "displayName": "MSVC + dynamic Qt (RelWithDebInfo)",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_PREFIX_PATH": "$env{ZTERMY_QT_DYNAMIC_ROOT}",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDLL",
+        "ZTERMY_STATIC_BUILD": "OFF"
+      }
+    },
+    {
+      "name": "msvc-static-release",
+      "displayName": "MSVC + static Qt (Release)",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_PREFIX_PATH": "$env{ZTERMY_QT_STATIC_ROOT}",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded",
+        "ZTERMY_STATIC_BUILD": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "msvc-dynamic-debug",
+      "configurePreset": "msvc-dynamic-debug",
+      "jobs": 0
+    },
+    {
+      "name": "msvc-dynamic-relwithdebinfo",
+      "configurePreset": "msvc-dynamic-relwithdebinfo",
+      "jobs": 0
+    },
+    {
+      "name": "msvc-static-release",
+      "configurePreset": "msvc-static-release",
+      "jobs": 0
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "msvc-dynamic-debug",
+      "configurePreset": "msvc-dynamic-debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}
+
