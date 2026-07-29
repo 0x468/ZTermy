@@ -56,6 +56,7 @@ Static packaging:
 ```powershell
 cmake --preset msvc-static-release
 cmake --build --preset msvc-static-release
+ctest --test-dir build/msvc-static-release --output-on-failure
 ```
 
 The dynamic Qt presets use the DLL MSVC runtime. The static Qt preset uses the
@@ -74,3 +75,12 @@ Configure that preset before relying on code diagnostics. Compiler and include
 flags come from the compilation database rather than being duplicated in
 `.clangd`.
 
+## Current verification
+
+The native window-shell milestone has been configured and built successfully
+with both local Qt 6.8.3 installations:
+
+- dynamic Debug: MSVC DLL runtime (`/MDd`)
+- static Release: MSVC static runtime (`/MT`)
+
+The `window-hit-test` suite passes in both configurations.

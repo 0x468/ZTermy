@@ -4,6 +4,17 @@ Status: draft
 
 Only runtime evidence can mark a platform or UI item complete.
 
+## Current milestone evidence
+
+- MSVC + Ninja dynamic Debug build succeeds.
+- MSVC + Ninja static Qt Release build succeeds.
+- Native window creation and QML loading succeed on Windows 11.
+- Automated hit-test coverage passes for caption, maximize button, client
+  area, all resize edges/corners, and maximized-state behavior.
+
+The checkboxes below remain open until the corresponding behavior has been
+manually exercised across the required Windows 11 and mixed-DPI scenarios.
+
 ## Window shell
 
 - [ ] Custom title bar preserves minimize, maximize, restore, and close
@@ -42,4 +53,3 @@ Only runtime evidence can mark a platform or UI item complete.
 - [ ] Portable data remains inside the portable directory
 - [ ] Installed data survives upgrade and uninstall
 - [ ] A clean Windows 11 machine runs the release without developer tools
-

@@ -60,7 +60,8 @@ until a measured public-scene-graph implementation proves insufficient.
 
 ## Windows window chrome
 
-`WindowChromeController` owns Windows-native non-client behavior:
+`NativeWindow`, a thin `QQuickView` subclass, owns Windows-native non-client
+behavior:
 
 - `WM_NCCALCSIZE` client-area extension
 - `WM_NCHITTEST` caption, resize edges, and `HTMAXBUTTON`
@@ -73,9 +74,12 @@ code supplies system semantics. Standard resizable/caption styles are retained
 where needed so Windows continues to provide shadows, snapping, and native
 window management.
 
+Hit-test classification is kept in a Qt-independent helper so resize, caption,
+client, and maximize-button regions can be unit tested without creating a
+native window.
+
 ## Persistence and secrets
 
 Non-secret configuration has an explicit schema version and migration policy.
 Passwords and passphrases are not serialized. Persistent secrets use a Windows
 credential facility selected in a later ADR.
-
