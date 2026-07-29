@@ -29,6 +29,11 @@ Only runtime evidence can mark a platform or UI item complete.
 - A Debug runtime session displayed a real PowerShell prompt through ConPTY,
   `libghostty-vt`, an immutable cell snapshot, and the custom terminal item
   without a scene-graph crash.
+- Automated terminal-engine coverage verifies true color, primary/alternate
+  screen restoration, erase and cursor visibility/style, resize, wide CJK
+  cells, combining graphemes, and emoji cell widths. Terminal-item coverage
+  verifies wide IME carets, suffix displacement, single commit delivery, and
+  composition behavior across resize and shutdown.
 - Automated end-to-end coverage verifies PowerShell startup, queued input,
   parsed sentinel output, and session shutdown.
 - Automated SSH coverage preserves distinct failure state and user-visible

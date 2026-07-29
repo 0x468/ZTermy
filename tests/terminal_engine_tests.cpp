@@ -21,6 +21,9 @@ private slots:
     void preservesContentAcrossResize();
     void exposesImmutableStyledCells();
     void exposesWideCellAndCursorWidth();
+    void preservesPrimaryScreenAcrossAlternateScreen();
+    void handlesEraseAndCursorVisibility();
+    void exposesCombiningAndEmojiGraphemes();
     void reportsAndResetsRenderDamage();
     void selectsAndFormatsViewportText();
     void scrollsThroughHistory();
@@ -129,6 +132,109 @@ void TerminalEngineTests::exposesWideCellAndCursorWidth()
     QCOMPARE(snapshot->cell(1, 0).displayWidth, std::uint8_t{0});
     QCOMPARE(snapshot->cursor.column, 0);
     QCOMPARE(snapshot->cursor.width, std::uint8_t{2});
+}
+
+void TerminalEngineTests::preservesPrimaryScreenAcrossAlternateScreen()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 16, .rows = 3});
+    if (!result)
+    {
+        QFAIL(result.error().message().c_str());
+    }
+    auto &engine = **result;
+
+    constexpr std::string_view primary = "primary";
+    constexpr std::string_view enterAlternate = "\x1b[?1049h\x1b[H";
+    constexpr std::string_view alternate = "alternate";
+    constexpr std::string_view leaveAlternate = "\x1b[?1049l";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(primary))));
+    QVERIFY(!engine.feed(std::as_bytes(std::span(enterAlternate))));
+    QVERIFY(!engine.feed(std::as_bytes(std::span(alternate))));
+
+    auto text = engine.plainText();
+    if (!text)
+    {
+        QFAIL(text.error().message().c_str());
+    }
+    QCOMPARE(*text, "alternate");
+
+    QVERIFY(!engine.feed(std::as_bytes(std::span(leaveAlternate))));
+    text = engine.plainText();
+    if (!text)
+    {
+        QFAIL(text.error().message().c_str());
+    }
+    QCOMPARE(*text, "primary");
+}
+
+void TerminalEngineTests::handlesEraseAndCursorVisibility()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 16, .rows = 3});
+    if (!result)
+    {
+        QFAIL(result.error().message().c_str());
+    }
+    auto &engine = **result;
+
+    constexpr std::string_view content = "first\r\nsecond";
+    constexpr std::string_view hideCursor = "\x1b[?25l";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(content))));
+    QVERIFY(!engine.feed(std::as_bytes(std::span(hideCursor))));
+
+    auto snapshot = engine.snapshot();
+    if (!snapshot)
+    {
+        QFAIL(snapshot.error().message().c_str());
+    }
+    QVERIFY(!snapshot->cursor.visible);
+
+    constexpr std::string_view clearAndShowCursor = "\x1b[2J\x1b[H\x1b[?25h\x1b[6 q";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(clearAndShowCursor))));
+    snapshot = engine.snapshot();
+    if (!snapshot)
+    {
+        QFAIL(snapshot.error().message().c_str());
+    }
+    QVERIFY(snapshot->cursor.visible);
+    QCOMPARE(snapshot->cursor.column, std::uint16_t{0});
+    QCOMPARE(snapshot->cursor.row, std::uint16_t{0});
+    QCOMPARE(snapshot->cursor.style, ztermy::terminal::TerminalCursorStyle::bar);
+    QVERIFY(!snapshot->cursor.blinking);
+
+    const auto text = engine.plainText();
+    if (!text)
+    {
+        QFAIL(text.error().message().c_str());
+    }
+    QCOMPARE(*text, "");
+}
+
+void TerminalEngineTests::exposesCombiningAndEmojiGraphemes()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 16, .rows = 2});
+    if (!result)
+    {
+        QFAIL(result.error().message().c_str());
+    }
+    auto &engine = **result;
+
+    const std::u8string content = u8"e\u0301中🙂";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(content))));
+
+    const auto snapshot = engine.snapshot();
+    if (!snapshot)
+    {
+        QFAIL(snapshot.error().message().c_str());
+    }
+    QCOMPARE(snapshot->cell(0, 0).grapheme, std::u32string(U"e\u0301"));
+    QCOMPARE(snapshot->cell(0, 0).displayWidth, std::uint8_t{1});
+    QCOMPARE(snapshot->cell(1, 0).grapheme, std::u32string(U"中"));
+    QCOMPARE(snapshot->cell(1, 0).displayWidth, std::uint8_t{2});
+    QCOMPARE(snapshot->cell(2, 0).displayWidth, std::uint8_t{0});
+    QCOMPARE(snapshot->cell(3, 0).grapheme, std::u32string(U"🙂"));
+    QCOMPARE(snapshot->cell(3, 0).displayWidth, std::uint8_t{2});
+    QCOMPARE(snapshot->cell(4, 0).displayWidth, std::uint8_t{0});
+    QCOMPARE(snapshot->cursor.column, std::uint16_t{5});
 }
 
 void TerminalEngineTests::reportsAndResetsRenderDamage()

@@ -8,9 +8,12 @@ cmake --build --preset msvc-dynamic-debug
 .\build\msvc-dynamic-debug\ztermy.exe
 ```
 
-The automated tests cover ConPTY transport, VT parsing, snapshot extraction,
-queued shell input, and shutdown. The checks below cover behavior that requires
-an interactive GUI, Windows input services, or visual judgment.
+The automated tests cover ConPTY transport, split VT parsing, true-color cell
+styles, primary/alternate-screen restoration, erase and cursor modes, resize,
+wide CJK cells, combining graphemes, emoji cells, snapshot extraction, queued
+shell input, IME preedit layout, and shutdown. The checks below cover behavior
+that still requires an interactive GUI, Windows input services, font fallback,
+or visual judgment.
 
 ## Basic session
 
