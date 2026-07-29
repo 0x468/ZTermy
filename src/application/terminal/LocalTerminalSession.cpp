@@ -32,6 +32,11 @@ diagnostics::LatencySummary LocalTerminalSession::inputQueueLatencySummary() con
     return m_inputQueueLatency.summary();
 }
 
+diagnostics::LatencySummary LocalTerminalSession::takeInputQueueLatencySummary() noexcept
+{
+    return m_inputQueueLatencyWindow.takeSummary();
+}
+
 std::error_code LocalTerminalSession::start(const TerminalGeometry geometry)
 {
     stop();
@@ -384,7 +389,9 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
 
         if (const auto *input = std::get_if<InputCommand>(&command))
         {
-            m_inputQueueLatency.record(std::chrono::steady_clock::now() - input->enqueuedAt);
+            const auto latency = std::chrono::steady_clock::now() - input->enqueuedAt;
+            m_inputQueueLatency.record(latency);
+            m_inputQueueLatencyWindow.record(latency);
             std::error_code selectionError;
             {
                 std::scoped_lock lock(m_engineMutex);
@@ -639,6 +646,7 @@ void LocalTerminalSession::resetMetrics() noexcept
     m_snapshotBuildNanoseconds.store(0, std::memory_order_relaxed);
     m_maxSnapshotBuildNanoseconds.store(0, std::memory_order_relaxed);
     m_inputQueueLatency.reset();
+    m_inputQueueLatencyWindow.reset();
 }
 
 void LocalTerminalSession::logMetrics() const

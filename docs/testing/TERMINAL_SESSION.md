@@ -187,6 +187,47 @@ This metric covers only the time from the GUI session enqueue to the local
 worker dequeue. It does not include PowerShell processing or terminal
 rendering.
 
+## Thirty-minute interaction soak
+
+Run the complete opt-in gate against the static Release candidate from an x64
+Visual Studio developer shell. Do not run another CPU-, disk-, or terminal-
+intensive test in parallel because that would invalidate the latency evidence:
+
+```powershell
+$env:ZTERMY_RUN_LOCAL_SOAK_GATE = "1"
+$env:ZTERMY_LOCAL_SOAK_SECONDS = "1800"
+$env:QTEST_FUNCTION_TIMEOUT = "3600000"
+ctest --test-dir build/msvc-static-release `
+  -R "^local-terminal-session$" -V --output-on-failure
+Remove-Item Env:ZTERMY_RUN_LOCAL_SOAK_GATE
+Remove-Item Env:ZTERMY_LOCAL_SOAK_SECONDS
+Remove-Item Env:QTEST_FUNCTION_TIMEOUT
+```
+
+The gate runs a real PowerShell process through ConPTY for 30 minutes. Every
+20 ms it performs an edit that leaves the command line unchanged. It also
+alternates terminal geometry and exercises scroll, selection, and search.
+Input latency is drained into independent 60-second windows, so late
+degradation cannot be hidden by fast samples collected early in the run.
+
+Expected:
+
+- At least 30 latency windows are reported.
+- Every window contains at least 1,200 input samples and has P95 no greater
+  than `16000 us`.
+- The average P95 of the final third is no more than twice the initial third,
+  with a `1000 us` noise floor.
+- The 10 ms Qt heartbeat and terminal snapshots continue throughout the run.
+- Stopping takes less than two seconds.
+- The process handle count after stopping is no more than four above the
+  post-start baseline.
+- No assertion, runtime dialog, worker failure, or growing interaction delay
+  appears.
+
+For development only, set `ZTERMY_LOCAL_SOAK_SECONDS` to a value from 10 to
+3,600. Durations below 1,800 seconds validate the mechanics but do not satisfy
+the V1 acceptance item.
+
 ## Crash diagnostics
 
 Normal application logs are written under:

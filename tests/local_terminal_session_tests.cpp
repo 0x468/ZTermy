@@ -6,10 +6,15 @@
 #include <QTest>
 #include <QTimer>
 
+#include <Windows.h>
+
+#include <algorithm>
 #include <cstdint>
 #include <exception>
+#include <numeric>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace
 {
@@ -37,6 +42,7 @@ private slots:
     void runsPowerShellAndStopsPromptly();
     void measuresInteractiveInputQueueLatency();
     void processesLargeOutputWithoutStarvingEventLoop();
+    void survivesSustainedInteractionWithoutLatencyGrowth();
 };
 
 void LocalTerminalSessionTests::runsPowerShellAndStopsPromptly()
@@ -178,6 +184,152 @@ void LocalTerminalSessionTests::processesLargeOutputWithoutStarvingEventLoop()
         qInfo().noquote() << "Local large-output gate:"
                           << "completionMs=" << completionMilliseconds << "eventLoopTicks=" << eventLoopTicks
                           << "deliveredSnapshots=" << deliveredSnapshots << "stopMs=" << stopMilliseconds;
+    }
+    catch (const std::exception &exception)
+    {
+        QFAIL(exception.what());
+    }
+}
+
+void LocalTerminalSessionTests::survivesSustainedInteractionWithoutLatencyGrowth()
+{
+    if (qEnvironmentVariableIntValue("ZTERMY_RUN_LOCAL_SOAK_GATE") != 1)
+    {
+        QSKIP("Set ZTERMY_RUN_LOCAL_SOAK_GATE=1 to run the sustained local interaction gate");
+    }
+
+    bool durationIsValid = false;
+    const int configuredDuration = qEnvironmentVariableIntValue("ZTERMY_LOCAL_SOAK_SECONDS", &durationIsValid);
+    const int durationSeconds = durationIsValid ? configuredDuration : 1'800;
+    QVERIFY2(durationSeconds >= 10 && durationSeconds <= 3'600,
+             "ZTERMY_LOCAL_SOAK_SECONDS must be between 10 and 3600");
+    const int windowSeconds = (std::max)(1, (std::min)(60, durationSeconds / 6));
+
+    try
+    {
+        ztermy::terminal::LocalTerminalSession session;
+        ztermy::terminal::TerminalSnapshotPtr latestSnapshot;
+        std::uint64_t deliveredSnapshots = 0;
+        connect(&session, &ztermy::terminal::LocalTerminalSession::snapshotReady, this,
+                [&latestSnapshot, &deliveredSnapshots](ztermy::terminal::TerminalSnapshotPtr snapshot) {
+                    latestSnapshot = std::move(snapshot);
+                    ++deliveredSnapshots;
+                });
+
+        const std::error_code startError = session.start({.columns = 100, .rows = 30});
+        if (startError)
+        {
+            QFAIL(startError.message().c_str());
+        }
+        QTRY_VERIFY_WITH_TIMEOUT(latestSnapshot && latestSnapshot->cursor.visible, 5000);
+
+        DWORD baselineHandles = 0;
+        QVERIFY(GetProcessHandleCount(GetCurrentProcess(), &baselineHandles));
+
+        std::uint64_t eventLoopTicks = 0;
+        QTimer heartbeat;
+        heartbeat.setInterval(10);
+        connect(&heartbeat, &QTimer::timeout, this, [&eventLoopTicks] {
+            ++eventLoopTicks;
+        });
+        heartbeat.start();
+
+        std::vector<ztermy::diagnostics::LatencySummary> windows;
+        QElapsedTimer elapsed;
+        elapsed.start();
+        qint64 nextWindowMilliseconds = static_cast<qint64>(windowSeconds) * 1'000;
+        std::uint64_t interaction = 0;
+        while (elapsed.elapsed() < static_cast<qint64>(durationSeconds) * 1'000)
+        {
+            session.queueInput(QByteArrayLiteral("x\b"));
+            ++interaction;
+
+            if ((interaction % 50U) == 0U)
+            {
+                const bool compact = ((interaction / 50U) % 2U) == 0U;
+                session.requestResize(compact ? 80 : 120, compact ? 24 : 36, 9, 18);
+            }
+            if ((interaction % 100U) == 0U)
+            {
+                session.requestScroll(3);
+                session.requestScroll(-3);
+                session.requestSelection(0, 0, 8, 0, false);
+                session.clearSelection();
+                session.search(QStringLiteral("ztermy"), false, false);
+                session.clearSearch();
+            }
+
+            QTest::qWait(20);
+            if (elapsed.elapsed() >= nextWindowMilliseconds)
+            {
+                windows.push_back(session.takeInputQueueLatencySummary());
+                const auto &window = windows.back();
+                QVERIFY2(std::cmp_greater_equal(window.count, static_cast<std::uint64_t>(windowSeconds * 20)),
+                         qPrintable(QStringLiteral("Soak window %1 contained only %2 latency samples")
+                                        .arg(windows.size())
+                                        .arg(window.count)));
+                QVERIFY2(window.p95UpperBoundMicroseconds <= 16'000U,
+                         qPrintable(QStringLiteral("Soak window %1 input queue P95 was %2 us")
+                                        .arg(windows.size())
+                                        .arg(window.p95UpperBoundMicroseconds)));
+                qInfo().noquote() << "Local interaction soak window:"
+                                  << "index=" << windows.size() << "elapsedMs=" << elapsed.elapsed()
+                                  << "samples=" << window.count << "p50Us=" << window.p50UpperBoundMicroseconds
+                                  << "p95Us=" << window.p95UpperBoundMicroseconds
+                                  << "p99Us=" << window.p99UpperBoundMicroseconds;
+                nextWindowMilliseconds += static_cast<qint64>(windowSeconds) * 1'000;
+            }
+        }
+
+        const auto trailingWindow = session.takeInputQueueLatencySummary();
+        if (trailingWindow.count > 0U)
+        {
+            windows.push_back(trailingWindow);
+        }
+        heartbeat.stop();
+
+        QVERIFY2(windows.size() >= 6U, "The soak gate did not produce enough latency windows");
+        const std::size_t third = windows.size() / 3U;
+        const auto averageP95 = [&windows](const std::size_t begin, const std::size_t end) {
+            const std::uint64_t total =
+                std::accumulate(windows.begin() + static_cast<std::ptrdiff_t>(begin),
+                                windows.begin() + static_cast<std::ptrdiff_t>(end), std::uint64_t{0},
+                                [](const std::uint64_t sum, const ztermy::diagnostics::LatencySummary &window) {
+                                    return sum + window.p95UpperBoundMicroseconds;
+                                });
+            return total / static_cast<std::uint64_t>(end - begin);
+        };
+        const std::uint64_t initialP95Average = averageP95(0, third);
+        const std::uint64_t finalP95Average = averageP95(windows.size() - third, windows.size());
+        const std::uint64_t permittedFinalP95 = (std::max)(std::uint64_t{1'000}, initialP95Average * std::uint64_t{2});
+        QVERIFY2(finalP95Average <= permittedFinalP95,
+                 qPrintable(QStringLiteral("Input latency grew from an initial P95 average of %1 us "
+                                           "to a final average of %2 us")
+                                .arg(initialP95Average)
+                                .arg(finalP95Average)));
+        QVERIFY2(std::cmp_greater_equal(eventLoopTicks, static_cast<std::uint64_t>(durationSeconds * 20)),
+                 "The Qt event loop heartbeat was starved during sustained interaction");
+        QVERIFY2(std::cmp_greater_equal(deliveredSnapshots, static_cast<std::uint64_t>(durationSeconds * 2)),
+                 "Sustained interaction did not deliver progressive terminal snapshots");
+
+        QElapsedTimer stopTimer;
+        stopTimer.start();
+        session.stop();
+        const qint64 stopMilliseconds = stopTimer.elapsed();
+        QVERIFY2(stopMilliseconds < 2'000, "Stopping after sustained interaction took too long");
+
+        DWORD finalHandles = 0;
+        QVERIFY(GetProcessHandleCount(GetCurrentProcess(), &finalHandles));
+        QVERIFY2(
+            finalHandles <= baselineHandles + 4U,
+            qPrintable(QStringLiteral("Process handles grew from %1 to %2").arg(baselineHandles).arg(finalHandles)));
+
+        qInfo().noquote() << "Local interaction soak gate:"
+                          << "durationSeconds=" << durationSeconds << "windows=" << windows.size()
+                          << "interactions=" << interaction << "eventLoopTicks=" << eventLoopTicks
+                          << "deliveredSnapshots=" << deliveredSnapshots << "initialP95AverageUs=" << initialP95Average
+                          << "finalP95AverageUs=" << finalP95Average << "baselineHandles=" << baselineHandles
+                          << "finalHandles=" << finalHandles << "stopMs=" << stopMilliseconds;
     }
     catch (const std::exception &exception)
     {

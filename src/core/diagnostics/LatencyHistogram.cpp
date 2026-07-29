@@ -67,6 +67,25 @@ LatencySummary LatencyHistogram::summary() const noexcept
     };
 }
 
+LatencySummary LatencyHistogram::takeSummary() noexcept
+{
+    std::array<std::uint64_t, bucketUpperBoundsMicroseconds.size()> buckets{};
+    std::uint64_t count = 0;
+    for (std::size_t index = 0; index < buckets.size(); ++index)
+    {
+        buckets[index] = m_buckets[index].exchange(0U, std::memory_order_relaxed);
+        count += buckets[index];
+    }
+
+    return LatencySummary{
+        .count = count,
+        .p50UpperBoundMicroseconds = percentileUpperBound(buckets, count, 50U),
+        .p95UpperBoundMicroseconds = percentileUpperBound(buckets, count, 95U),
+        .p99UpperBoundMicroseconds = percentileUpperBound(buckets, count, 99U),
+        .maxMicroseconds = m_maxMicroseconds.exchange(0U, std::memory_order_relaxed),
+    };
+}
+
 std::uint64_t
 LatencyHistogram::percentileUpperBound(const std::array<std::uint64_t, bucketUpperBoundsMicroseconds.size()> &buckets,
                                        const std::uint64_t count, const std::uint64_t percentile) noexcept

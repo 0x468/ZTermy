@@ -54,6 +54,13 @@ Only runtime evidence can mark a platform or UI item complete.
   while a 10 ms Qt heartbeat fired 178 times; static Release delivered 244
   snapshots and 186 heartbeats. Both sessions stopped in under 1 ms without
   starving the Qt event loop.
+- The static Release sustained-interaction gate ran a real PowerShell/ConPTY
+  session for `1800 s` across 30 independent one-minute latency windows and
+  85,563 edit interactions. Every window contained 2,850-2,854 samples and
+  measured P95 `100 us`; the initial-third and final-third averages were both
+  `100 us`. The Qt heartbeat fired 171,598 times, 131,751 progressive
+  snapshots were delivered, the process handle count fell from 171 to 168
+  after shutdown, and stopping took under 1 ms.
 - Automated SSH coverage preserves distinct failure state and user-visible
   status contracts for name resolution, refusal, timeout, transport, host-key,
   authentication, channel, remote-close, cancellation, and protocol failures.
@@ -116,7 +123,7 @@ procedures and expected results.
 - [ ] ANSI colors, alternate screen, cursor, clear, and resize are correct
 - [ ] CJK, wide characters, combining marks, emoji, and IME are correct
 - [ ] Selection, copy, paste, search, and scrollback are stable
-- [ ] Thirty minutes of interaction shows no growing latency
+- [x] Thirty minutes of interaction shows no growing latency
 
 ## SSH security and reliability
 

@@ -918,6 +918,10 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME local-terminal-session COMMAND ztermy_local_terminal_session_tests)
+    set_tests_properties(local-terminal-session PROPERTIES
+        TIMEOUT 3900
+        ENVIRONMENT "QTEST_FUNCTION_TIMEOUT=3600000"
+    )
 
     qt_add_executable(ztermy_app_controller_tests
         tests/app_controller_tests.cpp

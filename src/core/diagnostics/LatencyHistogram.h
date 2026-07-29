@@ -26,6 +26,9 @@ public:
     void record(std::chrono::steady_clock::duration latency) noexcept;
     void reset() noexcept;
     [[nodiscard]] LatencySummary summary() const noexcept;
+    // Atomically drains bucket counts so concurrent records belong to exactly one window.
+    // The maximum is sampled independently and can straddle a concurrent window boundary.
+    [[nodiscard]] LatencySummary takeSummary() noexcept;
 
 private:
     static constexpr std::array<std::uint64_t, 16> bucketUpperBoundsMicroseconds{

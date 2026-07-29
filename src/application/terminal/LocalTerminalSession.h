@@ -73,6 +73,7 @@ public:
     [[nodiscard]] std::error_code start(TerminalGeometry geometry) override;
     void stop() noexcept override;
     [[nodiscard]] diagnostics::LatencySummary inputQueueLatencySummary() const noexcept;
+    [[nodiscard]] diagnostics::LatencySummary takeInputQueueLatencySummary() noexcept;
 
 public slots:
     void queueInput(const QByteArray &bytes) override;
@@ -158,6 +159,7 @@ private:
     std::atomic_uint64_t m_snapshotBuildNanoseconds = 0;
     std::atomic_uint64_t m_maxSnapshotBuildNanoseconds = 0;
     diagnostics::LatencyHistogram m_inputQueueLatency;
+    diagnostics::LatencyHistogram m_inputQueueLatencyWindow;
 };
 
 } // namespace ztermy::terminal
