@@ -564,51 +564,11 @@ Rectangle {
                             text: "Authentication"
                             color: pane.textColor
                         }
-                        ComboBox {
+                        AppComboBox {
                             id: authenticationBox
                             Layout.fillWidth: true
                             model: ["Private key", "Password"]
-                            Accessible.name: "SSH authentication method"
-                            delegate: ItemDelegate {
-                                id: authenticationDelegate
-
-                                required property int index
-                                required property var modelData
-
-                                width: authenticationBox.width
-                                text: modelData
-                                highlighted: authenticationBox.highlightedIndex === index
-
-                                contentItem: Text {
-                                    text: authenticationDelegate.text
-                                    color: pane.textColor
-                                    verticalAlignment: Text.AlignVCenter
-                                    font.family: Theme.uiFont
-                                    font.pixelSize: 13
-                                }
-
-                                background: Rectangle {
-                                    color: authenticationDelegate.highlighted ? Theme.selectedHover : Theme.controlBackground
-                                }
-                            }
-                            popup: Popup {
-                                y: authenticationBox.height - 1
-                                width: authenticationBox.width
-                                implicitHeight: contentItem.implicitHeight + 2
-                                padding: 1
-
-                                contentItem: ListView {
-                                    clip: true
-                                    implicitHeight: contentHeight
-                                    model: authenticationBox.popup.visible ? authenticationBox.delegateModel : null
-                                    currentIndex: authenticationBox.highlightedIndex
-                                }
-
-                                background: Rectangle {
-                                    color: Theme.floatingBackground
-                                    border.color: pane.borderColor
-                                }
-                            }
+                            accessibleName: "SSH authentication method"
                             onCurrentIndexChanged: {
                                 credentialField.text = "";
                                 if (currentIndex === 1) {
@@ -635,12 +595,12 @@ Rectangle {
                             visible: !pane.compactLayout && authenticationBox.currentIndex === 0
                             implicitHeight: passphraseRequiredBox.implicitHeight
                         }
-                        CheckBox {
+                        AppCheckBox {
                             id: passphraseRequiredBox
                             Layout.fillWidth: true
                             visible: authenticationBox.currentIndex === 0
                             text: "This private key requires a passphrase"
-                            Accessible.name: "Private key requires a passphrase"
+                            accessibleName: "Private key requires a passphrase"
                             onCheckedChanged: credentialField.text = ""
                         }
 

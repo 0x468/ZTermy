@@ -25,9 +25,13 @@ performance boundary are defined in [UI_DESIGN_SYSTEM.md](UI_DESIGN_SYSTEM.md).
   Release. It exercises the minimum `500x360` window and the regular
   `1120x800` window. Hosts and Settings switch between compact single-column
   and regular two-column layouts with positive bounded content widths.
-- The gate captures ztermy-owned Hosts and Settings screenshots for both
-  breakpoints. Dark-theme review confirmed readable native control labels,
-  stable page insets, and no clipped top-level actions.
+- Shared combo-box, spin-box, slider, switch, and check-box wrappers preserve
+  Qt interaction semantics while using the same field, border, focus, icon,
+  motion, and disabled-state tokens as buttons and text fields.
+- The gate captures ztermy-owned Hosts and Settings screenshots for Dark and
+  Light themes at both breakpoints. Review confirmed readable control labels,
+  stable page insets, visible title-bar commands after live theme changes, and
+  no clipped top-level actions.
 
 ## Direction
 

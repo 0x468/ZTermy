@@ -116,6 +116,12 @@ Space activate button-like controls once and ignore key auto-repeat.
   shared mouse, keyboard, focus, disabled, and reduced-motion behavior.
 - `AppTextField`: standard and compact editable fields that retain Qt input,
   selection, validator, IME, and secret-echo behavior.
+- `AppComboBox`, `AppSpinBox`, and `AppSlider`: shared choice and numeric
+  controls that preserve Qt keyboard/editing semantics while normalizing
+  geometry, focus, popup, hover, and theme roles.
+- `AppSwitch` and `AppCheckBox`: shared boolean controls with stable track or
+  indicator geometry, explicit labels, visible focus, and semantic enabled,
+  checked, hover, and disabled states.
 - `StatusMessage`: information, success, and alert presentation with semantic
   color and accessibility roles.
 - `ConfirmationDialog`: bounded modal confirmation with semantic primary or

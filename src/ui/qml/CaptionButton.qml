@@ -8,26 +8,27 @@ Item {
     property bool externallyHovered: false
     property bool externallyPressed: false
     property string accessibleName: ""
-    signal activated()
+    signal activated
 
     activeFocusOnTab: true
     Accessible.role: Accessible.Button
     Accessible.name: accessibleName
     Accessible.onPressAction: activated()
+    onActiveFocusChanged: icon.requestPaint()
 
     Rectangle {
         anchors.fill: parent
         color: {
             if (control.kind === "close" && (mouseArea.containsMouse || control.activeFocus)) {
-                return Theme.closeHover
+                return Theme.closeHover;
             }
             if (control.externallyPressed || mouseArea.pressed) {
-                return Theme.controlPressed
+                return Theme.controlPressed;
             }
             if (control.externallyHovered || mouseArea.containsMouse || control.activeFocus) {
-                return Theme.controlHover
+                return Theme.controlHover;
             }
-            return "transparent"
+            return "transparent";
         }
 
         Behavior on color {
@@ -54,37 +55,44 @@ Item {
         height: 14
 
         onPaint: {
-            const context = getContext("2d")
-            context.reset()
-            context.strokeStyle = Theme.text
-            context.lineWidth = 1
-            context.lineCap = "square"
+            const context = getContext("2d");
+            context.reset();
+            context.strokeStyle = control.kind === "close" && (mouseArea.containsMouse || control.activeFocus) ? Theme.dangerSurfaceText : Theme.text;
+            context.lineWidth = 1;
+            context.lineCap = "square";
 
             if (control.kind === "minimize") {
-                context.moveTo(2, 7.5)
-                context.lineTo(12, 7.5)
+                context.moveTo(2, 7.5);
+                context.lineTo(12, 7.5);
             } else if (control.kind === "maximize") {
                 if (control.chrome.maximized) {
-                    context.strokeRect(4.5, 2.5, 7, 7)
-                    context.moveTo(2.5, 5)
-                    context.lineTo(2.5, 11.5)
-                    context.lineTo(9, 11.5)
+                    context.strokeRect(4.5, 2.5, 7, 7);
+                    context.moveTo(2.5, 5);
+                    context.lineTo(2.5, 11.5);
+                    context.lineTo(9, 11.5);
                 } else {
-                    context.strokeRect(2.5, 2.5, 9, 9)
+                    context.strokeRect(2.5, 2.5, 9, 9);
                 }
             } else {
-                context.moveTo(3, 3)
-                context.lineTo(11, 11)
-                context.moveTo(11, 3)
-                context.lineTo(3, 11)
+                context.moveTo(3, 3);
+                context.lineTo(11, 11);
+                context.moveTo(11, 3);
+                context.lineTo(3, 11);
             }
-            context.stroke()
+            context.stroke();
         }
 
         Connections {
             target: control.chrome
             function onMaximizedChanged() {
-                icon.requestPaint()
+                icon.requestPaint();
+            }
+        }
+
+        Connections {
+            target: Theme
+            function onTextChanged() {
+                icon.requestPaint();
             }
         }
     }
@@ -94,6 +102,7 @@ Item {
         anchors.fill: parent
         enabled: control.kind !== "maximize"
         hoverEnabled: true
+        onContainsMouseChanged: icon.requestPaint()
         onClicked: control.activated()
     }
 

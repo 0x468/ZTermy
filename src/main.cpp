@@ -56,7 +56,7 @@ void processWindowEventsFor(const std::chrono::milliseconds duration)
 }
 
 [[nodiscard]] bool verifyUiLayoutBreakpoint(ztermy::NativeWindow &window, const QSize size, const bool compact,
-                                            const QString &outputDirectory)
+                                            const QString &themeName, const QString &outputDirectory)
 {
     window.resize(size);
     processWindowEventsFor(std::chrono::milliseconds{250});
@@ -73,14 +73,15 @@ void processWindowEventsFor(const std::chrono::milliseconds duration)
     auto *hostContent = rootObject->findChild<QObject *>(QStringLiteral("hostContentColumn"));
     auto *hostEditorGrid = rootObject->findChild<QObject *>(QStringLiteral("hostEditorGrid"));
     const QString breakpointName = compact ? QStringLiteral("compact") : QStringLiteral("regular");
-    const bool hostCaptured = captureLayout(window, outputDirectory, breakpointName + QStringLiteral("-hosts"));
+    const QString capturePrefix = themeName + QStringLiteral("-") + breakpointName;
+    const bool hostCaptured = captureLayout(window, outputDirectory, capturePrefix + QStringLiteral("-hosts"));
 
     rootObject->setProperty("currentPage", QStringLiteral("settings"));
     processWindowEventsFor(std::chrono::milliseconds{100});
     auto *settingsPane = rootObject->findChild<QObject *>(QStringLiteral("settingsPane"));
     auto *appearanceGrid = rootObject->findChild<QObject *>(QStringLiteral("settingsAppearanceGrid"));
     auto *terminalGrid = rootObject->findChild<QObject *>(QStringLiteral("settingsTerminalGrid"));
-    const bool settingsCaptured = captureLayout(window, outputDirectory, breakpointName + QStringLiteral("-settings"));
+    const bool settingsCaptured = captureLayout(window, outputDirectory, capturePrefix + QStringLiteral("-settings"));
 
     if (hostPane == nullptr || hostContent == nullptr || hostEditorGrid == nullptr || settingsPane == nullptr
         || appearanceGrid == nullptr || terminalGrid == nullptr)
@@ -105,19 +106,39 @@ void processWindowEventsFor(const std::chrono::milliseconds duration)
                                && terminalGrid->property("columns").toInt() == (compact ? 1 : 2);
 
     qCInfo(applicationLog) << "UI layout breakpoint check"
-                           << "size=" << size << "compact=" << compact << "hostPaneWidth=" << hostPaneWidth
-                           << "hostContentWidth=" << hostContentWidth << "hostMatches=" << hostMatches
-                           << "settingsMatch=" << settingsMatch;
+                           << "theme=" << themeName << "size=" << size << "compact=" << compact
+                           << "hostPaneWidth=" << hostPaneWidth << "hostContentWidth=" << hostContentWidth
+                           << "hostMatches=" << hostMatches << "settingsMatch=" << settingsMatch;
     return hostMatches && settingsMatch && hostCaptured && settingsCaptured;
 }
 
-[[nodiscard]] bool runUiLayoutRuntimeSmoke(ztermy::NativeWindow &window, const QString &outputDirectory)
+[[nodiscard]] bool applyUiLayoutSmokeTheme(ztermy::AppController &controller, const QString &theme)
+{
+    return controller.saveApplicationSettings(theme, 1.0, QStringLiteral("none"), QStringLiteral("Cascadia Mono"), 14,
+                                              QStringLiteral("terminal"), true, false, true);
+}
+
+[[nodiscard]] bool runUiLayoutRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller,
+                                           const QString &outputDirectory)
 {
     window.show();
     processWindowEventsFor(std::chrono::milliseconds{250});
-    const bool compactPassed = verifyUiLayoutBreakpoint(window, QSize{500, 360}, true, outputDirectory);
-    const bool regularPassed = verifyUiLayoutBreakpoint(window, QSize{1120, 800}, false, outputDirectory);
-    return compactPassed && regularPassed;
+    const bool darkCompactPassed =
+        verifyUiLayoutBreakpoint(window, QSize{500, 360}, true, QStringLiteral("dark"), outputDirectory);
+    const bool darkRegularPassed =
+        verifyUiLayoutBreakpoint(window, QSize{1120, 800}, false, QStringLiteral("dark"), outputDirectory);
+    if (!darkCompactPassed || !darkRegularPassed || !applyUiLayoutSmokeTheme(controller, QStringLiteral("light")))
+    {
+        return false;
+    }
+
+    processWindowEventsFor(std::chrono::milliseconds{250});
+    const bool lightCompactPassed =
+        verifyUiLayoutBreakpoint(window, QSize{500, 360}, true, QStringLiteral("light"), outputDirectory);
+    const bool lightRegularPassed =
+        verifyUiLayoutBreakpoint(window, QSize{1120, 800}, false, QStringLiteral("light"), outputDirectory);
+    const bool restoredDark = applyUiLayoutSmokeTheme(controller, QStringLiteral("dark"));
+    return lightCompactPassed && lightRegularPassed && restoredDark;
 }
 
 } // namespace
@@ -157,10 +178,11 @@ int main(int argc, char *argv[])
     ztermy::AppController appController(paths->profilesFile, paths->knownHostsFile, paths->settingsFile);
     const bool uiLayoutSmoke = QCoreApplication::arguments().contains(QStringLiteral("--ui-layout-smoke"));
     if (uiLayoutSmoke
-        && !appController.saveHostProfile(QStringLiteral("ui-layout-smoke-profile"), QStringLiteral("Layout test host"),
-                                          QStringLiteral("192.0.2.10"), 22, QStringLiteral("developer"),
-                                          QStringLiteral("private-key"), QStringLiteral("C:/test/id_ed25519"), false,
-                                          QStringLiteral("Test fixtures")))
+        && (!applyUiLayoutSmokeTheme(appController, QStringLiteral("dark"))
+            || !appController.saveHostProfile(
+                QStringLiteral("ui-layout-smoke-profile"), QStringLiteral("Layout test host"),
+                QStringLiteral("192.0.2.10"), 22, QStringLiteral("developer"), QStringLiteral("private-key"),
+                QStringLiteral("C:/test/id_ed25519"), false, QStringLiteral("Test fixtures"))))
     {
         qCCritical(applicationLog) << "Could not prepare the responsive UI layout fixture";
         return EXIT_FAILURE;
@@ -206,7 +228,7 @@ int main(int argc, char *argv[])
 
     if (uiLayoutSmoke)
     {
-        const bool passed = runUiLayoutRuntimeSmoke(window, paths->dataDirectory);
+        const bool passed = runUiLayoutRuntimeSmoke(window, appController, paths->dataDirectory);
         appController.shutdown();
         window.releaseResources();
         if (!passed)

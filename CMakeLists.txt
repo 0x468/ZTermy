@@ -270,8 +270,28 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS AppTextField.qml
 )
 set_source_files_properties(
+    src/ui/qml/AppCheckBox.qml
+    PROPERTIES QT_RESOURCE_ALIAS AppCheckBox.qml
+)
+set_source_files_properties(
+    src/ui/qml/AppComboBox.qml
+    PROPERTIES QT_RESOURCE_ALIAS AppComboBox.qml
+)
+set_source_files_properties(
     src/ui/qml/AppIcon.qml
     PROPERTIES QT_RESOURCE_ALIAS AppIcon.qml
+)
+set_source_files_properties(
+    src/ui/qml/AppSlider.qml
+    PROPERTIES QT_RESOURCE_ALIAS AppSlider.qml
+)
+set_source_files_properties(
+    src/ui/qml/AppSpinBox.qml
+    PROPERTIES QT_RESOURCE_ALIAS AppSpinBox.qml
+)
+set_source_files_properties(
+    src/ui/qml/AppSwitch.qml
+    PROPERTIES QT_RESOURCE_ALIAS AppSwitch.qml
 )
 set_source_files_properties(
     src/ui/qml/CaptionButton.qml
@@ -335,7 +355,12 @@ qt_add_qml_module(ztermy
         QtQuick
     QML_FILES
         src/ui/qml/ActionButton.qml
+        src/ui/qml/AppCheckBox.qml
+        src/ui/qml/AppComboBox.qml
         src/ui/qml/AppIcon.qml
+        src/ui/qml/AppSlider.qml
+        src/ui/qml/AppSpinBox.qml
+        src/ui/qml/AppSwitch.qml
         src/ui/qml/AppTextField.qml
         src/ui/qml/CaptionButton.qml
         src/ui/qml/ConfirmationDialog.qml

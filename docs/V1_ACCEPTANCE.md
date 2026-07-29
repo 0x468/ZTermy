@@ -24,9 +24,9 @@ Only runtime evidence can mark a platform or UI item complete.
 - Native window creation and QML loading succeed on Windows 11.
 - The real-window responsive-layout gate passes at `500x360` and `1120x800`
   in dynamic Debug and static Release. Hosts and Settings switch between one-
-  and two-column layouts, host content remains within its page, and four
-  captured Dark-theme views were reviewed for top-level clipping and
-  native-control text contrast.
+  and two-column layouts, host content remains within its page, and eight
+  captured Dark/Light views were reviewed for top-level clipping, shared
+  control contrast, and caption-icon repainting after live theme changes.
 - Automated hit-test coverage passes for caption, maximize button, client
   area, all resize edges/corners, and maximized-state behavior.
 - The real-window maximized-work-area gate passes in dynamic Debug and static

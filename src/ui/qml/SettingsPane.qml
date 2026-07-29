@@ -129,11 +129,11 @@ Rectangle {
                         text: "Theme"
                         color: Theme.text
                     }
-                    ComboBox {
+                    AppComboBox {
                         id: themeBox
                         Layout.fillWidth: true
                         model: ["System", "Dark", "Light"]
-                        Accessible.name: "Application theme"
+                        accessibleName: "Application theme"
                     }
 
                     Label {
@@ -143,13 +143,13 @@ Rectangle {
                     RowLayout {
                         Layout.fillWidth: true
 
-                        Slider {
+                        AppSlider {
                             id: opacitySlider
                             Layout.fillWidth: true
                             from: 0.5
                             to: 1.0
                             stepSize: 0.05
-                            Accessible.name: "Application window opacity"
+                            accessibleName: "Application window opacity"
                         }
 
                         Text {
@@ -166,11 +166,11 @@ Rectangle {
                         text: "Windows backdrop"
                         color: Theme.text
                     }
-                    ComboBox {
+                    AppComboBox {
                         id: backdropBox
                         Layout.fillWidth: true
                         model: ["None", "Mica", "Acrylic"]
-                        Accessible.name: "Windows backdrop material"
+                        accessibleName: "Windows backdrop material"
                     }
 
                     Item {
@@ -237,57 +237,57 @@ Rectangle {
                         text: "Font size"
                         color: Theme.text
                     }
-                    SpinBox {
+                    AppSpinBox {
                         id: fontSizeBox
                         Layout.fillWidth: true
                         from: 8
                         to: 32
                         editable: true
-                        Accessible.name: "Terminal font size"
+                        accessibleName: "Terminal font size"
                     }
 
                     Label {
                         text: "Cursor"
                         color: Theme.text
                     }
-                    ComboBox {
+                    AppComboBox {
                         id: cursorBox
                         Layout.fillWidth: true
                         model: ["Terminal controlled", "Block", "Bar", "Underline"]
-                        Accessible.name: "Terminal cursor style"
+                        accessibleName: "Terminal cursor style"
                     }
 
                     Item {
                         visible: !pane.compactLayout
                         implicitHeight: cursorBlinkSwitch.implicitHeight
                     }
-                    Switch {
+                    AppSwitch {
                         id: cursorBlinkSwitch
                         Layout.fillWidth: true
                         text: "Blink cursor"
-                        Accessible.name: "Blink terminal cursor"
+                        accessibleName: "Blink terminal cursor"
                     }
 
                     Item {
                         visible: !pane.compactLayout
                         implicitHeight: copyOnSelectSwitch.implicitHeight
                     }
-                    Switch {
+                    AppSwitch {
                         id: copyOnSelectSwitch
                         Layout.fillWidth: true
                         text: "Copy selected terminal text automatically"
-                        Accessible.name: "Copy terminal selection automatically"
+                        accessibleName: "Copy terminal selection automatically"
                     }
 
                     Item {
                         visible: !pane.compactLayout
                         implicitHeight: multilinePasteSwitch.implicitHeight
                     }
-                    Switch {
+                    AppSwitch {
                         id: multilinePasteSwitch
                         Layout.fillWidth: true
                         text: "Confirm before pasting multiple lines"
-                        Accessible.name: "Confirm multiline terminal paste"
+                        accessibleName: "Confirm multiline terminal paste"
                     }
                 }
             }

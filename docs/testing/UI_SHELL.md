@@ -14,9 +14,9 @@ cmake --build --preset msvc-dynamic-debug --target ztermy_ui_layout_runtime_smok
 ```
 
 The gate opens an isolated ztermy window at `500x360` and `1120x800`, visits
-Hosts and Settings, verifies each responsive breakpoint and form column count,
-checks that host content has a positive width bounded by its page, and saves
-four screenshots below:
+Hosts and Settings in Dark and Light themes, verifies each responsive
+breakpoint and form column count, checks that host content has a positive width
+bounded by its page, and saves eight theme-prefixed screenshots below:
 
 ```text
 build/msvc-dynamic-debug/test-data/ui-layout-smoke/
@@ -47,6 +47,29 @@ Expected:
   themes.
 - No horizontal scrollbar, overlapping control, negative-width surface, or
   layout jump appears while crossing the breakpoint.
+
+## Shared choice and boolean controls
+
+1. In Settings, open every Theme, Backdrop, and Cursor dropdown with the mouse,
+   Enter, Space, and `Alt+Down`; move with arrow keys and dismiss with Escape.
+2. Change Window opacity with mouse drag, arrow keys, Page Up, and Page Down.
+3. Edit Font size directly, then use its minus and plus actions.
+4. Toggle all three switches with mouse and Space.
+5. In a private-key host editor, toggle the passphrase checkbox.
+6. Repeat in Dark and Light themes, including disabled states where available.
+
+Expected:
+
+- Every control uses the same 34 px geometry, semantic surface hierarchy, and
+  visible focus treatment without moving neighboring content.
+- Dropdowns open below their field, keep the highlighted option readable, and
+  close with Escape without changing the current choice.
+- Slider, spin box, switches, and checkbox respond once per keyboard action and
+  expose their value or checked state accessibly.
+- Checked state uses both geometry and color; disabled controls remain
+  distinguishable and cannot be activated.
+- Switching themes repaints every control and all three caption icons
+  immediately; no white icon remains on a light title bar.
 
 ## Terminal workspace
 
