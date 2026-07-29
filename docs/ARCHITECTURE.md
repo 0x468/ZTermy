@@ -78,6 +78,14 @@ Hit-test classification is kept in a Qt-independent helper so resize, caption,
 client, and maximize-button regions can be unit tested without creating a
 native window.
 
+## Logging
+
+Qt logging categories provide subsystem-specific diagnostics. Debug builds
+enable Debug-and-higher messages for `ztermy.*`; non-Debug builds suppress
+Debug messages while retaining Info-and-higher application events. Logs rotate
+at 4 MiB and live outside the repository under the user's local application
+data directory.
+
 ## Persistence and secrets
 
 Non-secret configuration has an explicit schema version and migration policy.

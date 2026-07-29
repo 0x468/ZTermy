@@ -17,6 +17,8 @@ qt_standard_project_setup(REQUIRES 6.8)
 
 qt_add_executable(ztermy WIN32
     src/main.cpp
+    src/core/logging/Logging.cpp
+    src/core/logging/Logging.h
     src/platform/windows/NativeWindow.cpp
     src/platform/windows/NativeWindow.h
     src/platform/windows/WindowHitTest.cpp
@@ -48,6 +50,7 @@ target_compile_definitions(ztermy PRIVATE
     UNICODE
     WIN32_LEAN_AND_MEAN
     _UNICODE
+    $<$<CONFIG:Debug>:ZTERMY_DEBUG_BUILD=1>
 )
 
 if(ZTERMY_STATIC_BUILD)

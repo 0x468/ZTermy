@@ -15,8 +15,10 @@ The project has not published a release.
   corners, and system backdrop integration
 - Unit tests for window hit-test classification
 - Dynamic and static Qt CMake build targets
+- Categorized rotating file logs with Debug-build diagnostics
 
 ### Fixed
 
-- Forward custom maximize-button non-client mouse messages to Windows so
-  maximize/restore clicks and the Windows 11 Snap Layouts flyout work
+- Preserve native maximize capability when the window is created, execute
+  maximize/restore from custom non-client button messages, and expose the
+  custom caption-button bounds to Windows

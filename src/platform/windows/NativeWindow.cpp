@@ -3,6 +3,7 @@
 #include "platform/windows/WindowHitTest.h"
 
 #include <QEvent>
+#include <QLoggingCategory>
 #include <QQmlContext>
 #include <QScreen>
 
@@ -14,6 +15,8 @@
 
 namespace
 {
+
+Q_LOGGING_CATEGORY(windowLog, "ztermy.window")
 
 constexpr DWORD kDwmUseImmersiveDarkMode = 20;
 constexpr DWORD kDwmWindowCornerPreference = 33;
@@ -60,6 +63,8 @@ namespace ztermy
 
 NativeWindow::NativeWindow(QWindow *parent) : QQuickView(parent)
 {
+    setFlags(Qt::Window | Qt::WindowTitleHint | Qt::WindowSystemMenuHint | Qt::WindowMinMaxButtonsHint
+             | Qt::WindowCloseButtonHint);
     setTitle(QStringLiteral("ztermy"));
     setResizeMode(QQuickView::SizeRootObjectToView);
     setMinimumSize(QSize(500, 360));
@@ -118,6 +123,10 @@ void NativeWindow::setTitleBarMetrics(const qreal titleHeight, const qreal contr
     m_controlsLeft = controlsLeft;
     m_maximizeLeft = maximizeLeft;
     m_maximizeWidth = maximizeWidth;
+    qCDebug(windowLog) << "title bar metrics"
+                       << "height=" << m_titleHeight << "controlsLeft=" << m_controlsLeft
+                       << "maximizeLeft=" << m_maximizeLeft << "maximizeWidth=" << m_maximizeWidth
+                       << "dpr=" << devicePixelRatio();
 }
 
 bool NativeWindow::event(QEvent *event)
@@ -190,6 +199,14 @@ bool NativeWindow::nativeEvent(const QByteArray &eventType, void *message, qintp
                                                          {.width = clientRect.right, .height = clientRect.bottom},
                                                          metrics, maximized());
 
+            if (area == windowing::HitArea::MaximizeButton)
+            {
+                qCDebug(windowLog) << "WM_NCHITTEST -> HTMAXBUTTON"
+                                   << "clientPoint=" << clientPoint.x << clientPoint.y
+                                   << "buttonRect=" << metrics.maximizeButton.x << metrics.maximizeButton.y
+                                   << metrics.maximizeButton.width << metrics.maximizeButton.height;
+            }
+
             *result = toNativeHitArea(area);
             return true;
         }
@@ -208,10 +225,6 @@ bool NativeWindow::nativeEvent(const QByteArray &eventType, void *message, qintp
                     .dwHoverTime = HOVER_DEFAULT,
                 };
                 TrackMouseEvent(&tracking);
-
-                *result =
-                    DefWindowProcW(windowHandle, nativeMessage->message, nativeMessage->wParam, nativeMessage->lParam);
-                return true;
             }
             break;
         }
@@ -219,30 +232,88 @@ bool NativeWindow::nativeEvent(const QByteArray &eventType, void *message, qintp
         case WM_NCMOUSELEAVE:
             setMaximizeButtonHovered(false);
             setMaximizeButtonPressed(false);
-            *result =
-                DefWindowProcW(windowHandle, nativeMessage->message, nativeMessage->wParam, nativeMessage->lParam);
-            return true;
+            qCDebug(windowLog) << "WM_NCMOUSELEAVE";
+            break;
 
         case WM_NCLBUTTONDOWN:
             if (nativeMessage->wParam == HTMAXBUTTON)
             {
                 setMaximizeButtonPressed(true);
-                *result =
-                    DefWindowProcW(windowHandle, nativeMessage->message, nativeMessage->wParam, nativeMessage->lParam);
-                setMaximizeButtonPressed(false);
+                qCInfo(windowLog) << "WM_NCLBUTTONDOWN HTMAXBUTTON";
+                *result = 0;
                 return true;
             }
             break;
 
         case WM_NCLBUTTONUP:
-            setMaximizeButtonPressed(false);
             if (nativeMessage->wParam == HTMAXBUTTON)
             {
-                *result =
-                    DefWindowProcW(windowHandle, nativeMessage->message, nativeMessage->wParam, nativeMessage->lParam);
+                const bool wasPressed = m_maximizeButtonPressed;
+                setMaximizeButtonPressed(false);
+                qCInfo(windowLog) << "WM_NCLBUTTONUP HTMAXBUTTON"
+                                  << "pressed=" << wasPressed << "maximized=" << maximized();
+                if (wasPressed)
+                {
+                    PostMessageW(windowHandle, WM_SYSCOMMAND, maximized() ? SC_RESTORE : SC_MAXIMIZE, 0);
+                }
+                *result = 0;
                 return true;
             }
+            setMaximizeButtonPressed(false);
             break;
+
+        case WM_GETTITLEBARINFOEX:
+        {
+            auto *titleBarInfo =
+                reinterpret_cast<TITLEBARINFOEX *>(nativeMessage->lParam); // NOLINT(performance-no-int-to-ptr)
+            if (titleBarInfo == nullptr || titleBarInfo->cbSize < sizeof(TITLEBARINFOEX))
+            {
+                break;
+            }
+
+            RECT clientRect{};
+            GetClientRect(windowHandle, &clientRect);
+            const qreal scale = devicePixelRatio();
+            const int titleHeight = qRound(m_titleHeight * scale);
+            const int minimizeLeft = qRound(m_controlsLeft * scale);
+            const int maximizeLeft = qRound(m_maximizeLeft * scale);
+            const int buttonWidth = qRound(m_maximizeWidth * scale);
+
+            POINT windowOrigin{.x = 0, .y = 0};
+            ClientToScreen(windowHandle, &windowOrigin);
+
+            const auto screenRect = [&windowOrigin](const int left, const int top, const int right, const int bottom) {
+                return RECT{
+                    .left = windowOrigin.x + left,
+                    .top = windowOrigin.y + top,
+                    .right = windowOrigin.x + right,
+                    .bottom = windowOrigin.y + bottom,
+                };
+            };
+
+            titleBarInfo->rcTitleBar = screenRect(0, 0, clientRect.right - clientRect.left, titleHeight);
+            titleBarInfo->rgstate[0] = STATE_SYSTEM_FOCUSABLE;
+            titleBarInfo->rgstate[1] = STATE_SYSTEM_INVISIBLE;
+            titleBarInfo->rgstate[2] = STATE_SYSTEM_FOCUSABLE;
+            titleBarInfo->rgstate[3] = STATE_SYSTEM_FOCUSABLE;
+            titleBarInfo->rgstate[4] = STATE_SYSTEM_INVISIBLE;
+            titleBarInfo->rgstate[5] = STATE_SYSTEM_FOCUSABLE;
+            titleBarInfo->rgrect[0] = titleBarInfo->rcTitleBar;
+            titleBarInfo->rgrect[1] = {};
+            titleBarInfo->rgrect[2] = screenRect(minimizeLeft, 0, maximizeLeft, titleHeight);
+            titleBarInfo->rgrect[3] = screenRect(maximizeLeft, 0, maximizeLeft + buttonWidth, titleHeight);
+            titleBarInfo->rgrect[4] = {};
+            titleBarInfo->rgrect[5] =
+                screenRect(maximizeLeft + buttonWidth, 0, maximizeLeft + (buttonWidth * 2), titleHeight);
+
+            qCInfo(windowLog) << "WM_GETTITLEBARINFOEX"
+                              << "titleRect=" << titleBarInfo->rcTitleBar.left << titleBarInfo->rcTitleBar.top
+                              << titleBarInfo->rcTitleBar.right << titleBarInfo->rcTitleBar.bottom
+                              << "maximizeRect=" << titleBarInfo->rgrect[3].left << titleBarInfo->rgrect[3].top
+                              << titleBarInfo->rgrect[3].right << titleBarInfo->rgrect[3].bottom;
+            *result = 0;
+            return true;
+        }
 
         case WM_GETMINMAXINFO:
         {
@@ -279,6 +350,8 @@ void NativeWindow::configureNativeWindow()
     LONG_PTR style = GetWindowLongPtrW(windowHandle, GWL_STYLE);
     style |= WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU;
     SetWindowLongPtrW(windowHandle, GWL_STYLE, style);
+    qCInfo(windowLog) << "configure native window"
+                      << "hwnd=" << windowHandle << "qtFlags=" << flags() << "style=" << Qt::hex << style;
 
     SetWindowPos(windowHandle, nullptr, 0, 0, 0, 0,
                  SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
@@ -312,6 +385,7 @@ void NativeWindow::setMaximizeButtonHovered(const bool hovered)
         return;
     }
     m_maximizeButtonHovered = hovered;
+    qCDebug(windowLog) << "maximize hover=" << hovered;
     emit maximizeButtonHoveredChanged();
 }
 

@@ -30,7 +30,8 @@ Repeat the DPI checks on every available monitor.
 
 1. Restore the window if it is maximized.
 2. Keep the pointer stationary over the maximize button for about one second.
-   Expected: the native Windows 11 Snap Layouts flyout appears.
+   Expected: the native Windows 11 Snap Layouts flyout appears below the
+   maximize button without covering the custom title bar.
 3. Select a zone.
    Expected: ztermy snaps to that zone and Snap Assist offers other windows.
 4. Press `Win+Z`.
@@ -62,3 +63,15 @@ flyout.
 Report each section as pass or fail. For a failure, include the exact step,
 monitor resolution and scaling, Windows build, and a screenshot or short
 recording when practical.
+
+## Diagnostic log
+
+Debug builds write categorized Debug-and-higher logs to:
+
+```text
+%LOCALAPPDATA%\ztermy\ztermy\logs\ztermy.log
+```
+
+For maximize-button failures, close ztermy, delete or rename the existing log,
+start ztermy, hover the maximize button, click it once, press `Win+Z`, and then
+close the app. Attach the resulting log and note the test order.

@@ -1,3 +1,4 @@
+#include "core/logging/Logging.h"
 #include "platform/windows/NativeWindow.h"
 
 #include <QGuiApplication>
@@ -9,8 +10,11 @@ int main(int argc, char *argv[])
 {
     QGuiApplication application(argc, argv);
     QGuiApplication::setApplicationDisplayName(QStringLiteral("ztermy"));
+    QGuiApplication::setApplicationName(QStringLiteral("ztermy"));
+    QGuiApplication::setApplicationVersion(QStringLiteral("0.1.0"));
     QGuiApplication::setOrganizationName(QStringLiteral("ztermy"));
 
+    ztermy::logging::initialize();
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
     ztermy::NativeWindow window;
