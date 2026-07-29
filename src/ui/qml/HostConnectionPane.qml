@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -11,6 +13,7 @@ Rectangle {
     property color textColor: "#F8FAFC"
     property color mutedColor: "#94A3B8"
     property color accentColor: "#22C55E"
+    required property var controller
     property string editingProfileId: ""
     property string pendingDeleteId: ""
     property string pendingDeleteName: ""
@@ -18,6 +21,14 @@ Rectangle {
     property string pendingConnectName: ""
     property string pendingConnectAuthentication: ""
     property bool statusIsError: false
+    readonly property var filteredGroups: buildFilteredGroups(controller.hostProfiles, searchField.text)
+    readonly property int filteredProfileCount: {
+        let count = 0;
+        for (const group of filteredGroups) {
+            count += group.profiles.length;
+        }
+        return count;
+    }
 
     signal connectionStarted
 
@@ -36,6 +47,37 @@ Rectangle {
 
     function authenticationToken() {
         return authenticationBox.currentIndex === 0 ? "private-key" : "password";
+    }
+
+    function buildFilteredGroups(profiles, searchText) {
+        const query = searchText.trim().toLocaleLowerCase();
+        const groups = {};
+        for (const profile of profiles) {
+            const groupName = profile.group.trim().length > 0 ? profile.group.trim() : "Ungrouped";
+            const searchable = [
+                profile.name,
+                groupName,
+                profile.username,
+                profile.host,
+                String(profile.port),
+                profile.authentication
+            ].join(" ").toLocaleLowerCase();
+            if (query.length > 0 && searchable.indexOf(query) < 0) {
+                continue;
+            }
+            if (!groups[groupName]) {
+                groups[groupName] = [];
+            }
+            groups[groupName].push(profile);
+        }
+
+        const result = [];
+        const groupNames = Object.keys(groups).sort((left, right) => left.localeCompare(right));
+        for (const groupName of groupNames) {
+            groups[groupName].sort((left, right) => left.name.localeCompare(right.name));
+            result.push({ name: groupName, profiles: groups[groupName] });
+        }
+        return result;
     }
 
     function validate(requireName, requireCredential) {
@@ -64,11 +106,12 @@ Rectangle {
     function clearEditor() {
         editingProfileId = "";
         nameField.text = "";
+        groupField.text = "";
         hostField.text = "";
         portField.text = "22";
         usernameField.text = "";
         authenticationBox.currentIndex = 0;
-        keyPathField.text = appController.defaultPrivateKeyPath;
+        keyPathField.text = controller.defaultPrivateKeyPath;
         passphraseRequiredBox.checked = false;
         credentialField.text = "";
     }
@@ -76,6 +119,7 @@ Rectangle {
     function editProfile(profile) {
         editingProfileId = profile.id;
         nameField.text = profile.name;
+        groupField.text = profile.group;
         hostField.text = profile.host;
         portField.text = String(profile.port);
         usernameField.text = profile.username;
@@ -92,7 +136,7 @@ Rectangle {
         if (!validate(true, false)) {
             return;
         }
-        if (appController.saveHostProfile(editingProfileId, nameField.text, hostField.text, portNumber(), usernameField.text, authenticationToken(), keyPathField.text, passphraseRequiredBox.checked)) {
+        if (controller.saveHostProfile(editingProfileId, nameField.text, hostField.text, portNumber(), usernameField.text, authenticationToken(), keyPathField.text, passphraseRequiredBox.checked, groupField.text)) {
             clearEditor();
             showStatus("Profile saved. Passwords and key passphrases are never stored.", false);
         } else {
@@ -107,7 +151,7 @@ Rectangle {
         }
         const secret = credentialField.text;
         credentialField.text = "";
-        const started = authenticationToken() === "private-key" ? appController.connectPrivateKey(hostField.text, portNumber(), usernameField.text, keyPathField.text, secret) : appController.connectPassword(hostField.text, portNumber(), usernameField.text, secret);
+        const started = authenticationToken() === "private-key" ? controller.connectPrivateKey(hostField.text, portNumber(), usernameField.text, keyPathField.text, secret) : controller.connectPassword(hostField.text, portNumber(), usernameField.text, secret);
         if (started) {
             connectionStarted();
         } else {
@@ -125,7 +169,7 @@ Rectangle {
             savedCredentialField.forceActiveFocus();
             return;
         }
-        if (appController.connectHostProfile(profile.id, "")) {
+        if (controller.connectHostProfile(profile.id, "")) {
             connectionStarted();
         } else {
             showStatus("The saved profile could not be connected.", true);
@@ -139,7 +183,7 @@ Rectangle {
         const profileId = pendingConnectId;
         const secret = savedCredentialField.text;
         savedCredentialField.text = "";
-        if (appController.connectHostProfile(profileId, secret)) {
+        if (controller.connectHostProfile(profileId, secret)) {
             credentialDialog.close();
             connectionStarted();
         } else {
@@ -197,17 +241,28 @@ Rectangle {
                 }
 
                 Text {
-                    text: appController.hostProfiles.length + (appController.hostProfiles.length === 1 ? " profile" : " profiles")
+                    text: pane.filteredProfileCount + (pane.filteredProfileCount === 1 ? " profile" : " profiles")
                     color: pane.mutedColor
                     font.family: "Segoe UI Variable"
                     font.pixelSize: 12
                 }
             }
 
+            TextField {
+                id: searchField
+
+                Layout.fillWidth: true
+                placeholderText: "Search by name, group, host, username, port, or authentication"
+                Accessible.name: "Search saved SSH hosts"
+                selectByMouse: true
+                leftPadding: 14
+                rightPadding: 14
+            }
+
             Rectangle {
                 Layout.fillWidth: true
                 implicitHeight: 72
-                visible: appController.hostProfiles.length === 0
+                visible: pane.controller.hostProfiles.length === 0
                 radius: 9
                 color: pane.raisedColor
                 border.color: pane.borderColor
@@ -221,89 +276,141 @@ Rectangle {
                 }
             }
 
-            Repeater {
-                model: appController.hostProfiles
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: 72
+                visible: pane.controller.hostProfiles.length > 0 && pane.filteredProfileCount === 0
+                radius: 9
+                color: pane.raisedColor
+                border.color: pane.borderColor
 
-                delegate: Rectangle {
-                    id: profileCard
+                Text {
+                    anchors.centerIn: parent
+                    text: "No saved hosts match this search."
+                    color: pane.mutedColor
+                    font.family: "Segoe UI Variable"
+                    font.pixelSize: 12
+                }
+            }
+
+            Repeater {
+                model: pane.filteredGroups
+
+                delegate: ColumnLayout {
+                    id: profileGroup
 
                     required property var modelData
 
                     Layout.fillWidth: true
-                    implicitHeight: profileRow.implicitHeight + 24
-                    radius: 9
-                    color: pane.raisedColor
-                    border.color: pane.borderColor
+                    spacing: 8
 
-                    RowLayout {
-                        id: profileRow
+                    Text {
+                        Layout.fillWidth: true
+                        text: profileGroup.modelData.name
+                        color: pane.mutedColor
+                        font.family: "Segoe UI Variable"
+                        font.pixelSize: 11
+                        font.weight: Font.DemiBold
+                        font.letterSpacing: 0.6
+                    }
 
-                        anchors.fill: parent
-                        anchors.margins: 12
-                        spacing: 10
+                    Repeater {
+                        model: profileGroup.modelData.profiles
 
-                        Rectangle {
-                            Layout.preferredWidth: 34
-                            Layout.preferredHeight: 34
-                            radius: 8
-                            color: "#173A2B"
+                        delegate: Rectangle {
+                            id: profileCard
 
-                            Text {
-                                anchors.centerIn: parent
-                                text: ">"
-                                color: pane.accentColor
-                                font.family: "Cascadia Mono"
-                                font.pixelSize: 16
-                                font.weight: Font.Bold
-                            }
-                        }
+                            required property var modelData
 
-                        ColumnLayout {
                             Layout.fillWidth: true
-                            spacing: 2
+                            implicitHeight: profileRow.implicitHeight + 24
+                            radius: 9
+                            color: pane.raisedColor
+                            border.color: pane.borderColor
 
-                            Text {
-                                Layout.fillWidth: true
-                                text: profileCard.modelData.name
-                                color: pane.textColor
-                                elide: Text.ElideRight
-                                font.family: "Segoe UI Variable"
-                                font.pixelSize: 13
-                                font.weight: Font.DemiBold
-                            }
+                            RowLayout {
+                                id: profileRow
 
-                            Text {
-                                Layout.fillWidth: true
-                                text: profileCard.modelData.username + "@" + profileCard.modelData.host + ":" + profileCard.modelData.port
-                                color: pane.mutedColor
-                                elide: Text.ElideMiddle
-                                font.family: "Cascadia Mono"
-                                font.pixelSize: 11
-                            }
-                        }
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                spacing: 8
 
-                        Button {
-                            text: "Connect"
-                            Accessible.name: "Connect to " + profileCard.modelData.name
-                            palette.button: pane.accentColor
-                            palette.buttonText: "#07130B"
-                            font.weight: Font.DemiBold
-                            onClicked: pane.connectSaved(profileCard.modelData)
-                        }
+                                Rectangle {
+                                    Layout.preferredWidth: 34
+                                    Layout.preferredHeight: 34
+                                    radius: 8
+                                    color: "#173A2B"
 
-                        Button {
-                            text: "Edit"
-                            Accessible.name: "Edit " + profileCard.modelData.name
-                            onClicked: pane.editProfile(profileCard.modelData)
-                        }
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: ">"
+                                        color: pane.accentColor
+                                        font.family: "Cascadia Mono"
+                                        font.pixelSize: 16
+                                        font.weight: Font.Bold
+                                    }
+                                }
 
-                        Button {
-                            text: "Delete"
-                            Accessible.name: "Delete " + profileCard.modelData.name
-                            onClicked: {
-                                pane.pendingDeleteId = profileCard.modelData.id;
-                                pane.pendingDeleteName = profileCard.modelData.name;
-                                deleteDialog.open();
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: profileCard.modelData.name
+                                        color: pane.textColor
+                                        elide: Text.ElideRight
+                                        font.family: "Segoe UI Variable"
+                                        font.pixelSize: 13
+                                        font.weight: Font.DemiBold
+                                    }
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: profileCard.modelData.username + "@" + profileCard.modelData.host + ":" + profileCard.modelData.port
+                                        color: pane.mutedColor
+                                        elide: Text.ElideMiddle
+                                        font.family: "Cascadia Mono"
+                                        font.pixelSize: 11
+                                    }
+                                }
+
+                                Button {
+                                    text: "Connect"
+                                    Accessible.name: "Connect to " + profileCard.modelData.name
+                                    palette.button: pane.accentColor
+                                    palette.buttonText: "#07130B"
+                                    font.weight: Font.DemiBold
+                                    onClicked: pane.connectSaved(profileCard.modelData)
+                                }
+
+                                Button {
+                                    text: "Edit"
+                                    Accessible.name: "Edit " + profileCard.modelData.name
+                                    onClicked: pane.editProfile(profileCard.modelData)
+                                }
+
+                                Button {
+                                    text: "Copy"
+                                    Accessible.name: "Copy " + profileCard.modelData.name
+                                    onClicked: {
+                                        if (pane.controller.duplicateHostProfile(profileCard.modelData.id)) {
+                                            pane.showStatus("Profile copied. Credentials were not copied because they are never stored.", false);
+                                        } else {
+                                            pane.showStatus("The profile could not be copied.", true);
+                                        }
+                                    }
+                                }
+
+                                Button {
+                                    text: "Delete"
+                                    Accessible.name: "Delete " + profileCard.modelData.name
+                                    onClicked: {
+                                        pane.pendingDeleteId = profileCard.modelData.id;
+                                        pane.pendingDeleteName = profileCard.modelData.name;
+                                        deleteDialog.open();
+                                    }
+                                }
                             }
                         }
                     }
@@ -367,6 +474,18 @@ Rectangle {
                         }
 
                         Label {
+                            text: "Group"
+                            color: pane.textColor
+                        }
+                        TextField {
+                            id: groupField
+                            Layout.fillWidth: true
+                            placeholderText: "Personal, Work, Lab…"
+                            Accessible.name: "SSH profile group"
+                            selectByMouse: true
+                        }
+
+                        Label {
                             text: "Host"
                             color: pane.textColor
                         }
@@ -417,6 +536,8 @@ Rectangle {
                             model: ["Private key", "Password"]
                             Accessible.name: "SSH authentication method"
                             delegate: ItemDelegate {
+                                id: authenticationDelegate
+
                                 required property int index
                                 required property var modelData
 
@@ -425,7 +546,7 @@ Rectangle {
                                 highlighted: authenticationBox.highlightedIndex === index
 
                                 contentItem: Text {
-                                    text: parent.text
+                                    text: authenticationDelegate.text
                                     color: pane.textColor
                                     verticalAlignment: Text.AlignVCenter
                                     font.family: "Segoe UI Variable"
@@ -433,7 +554,7 @@ Rectangle {
                                 }
 
                                 background: Rectangle {
-                                    color: parent.highlighted ? "#1F513A" : "#172033"
+                                    color: authenticationDelegate.highlighted ? "#1F513A" : "#172033"
                                 }
                             }
                             popup: Popup {
@@ -471,7 +592,7 @@ Rectangle {
                             id: keyPathField
                             Layout.fillWidth: true
                             visible: authenticationBox.currentIndex === 0
-                            text: appController.defaultPrivateKeyPath
+                            text: pane.controller.defaultPrivateKeyPath
                             Accessible.name: "Private-key file path"
                             selectByMouse: true
                         }
@@ -679,7 +800,7 @@ Rectangle {
                     palette.button: "#991B1B"
                     palette.buttonText: "#FFFFFF"
                     onClicked: {
-                        if (appController.deleteHostProfile(pane.pendingDeleteId)) {
+                        if (pane.controller.deleteHostProfile(pane.pendingDeleteId)) {
                             pane.showStatus("Profile deleted.", false);
                         } else {
                             pane.showStatus("The profile could not be deleted.", true);

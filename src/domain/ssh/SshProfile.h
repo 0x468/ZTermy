@@ -16,6 +16,7 @@ struct SshProfile
 {
     std::string id;
     std::string name;
+    std::string group;
     std::string host;
     std::uint16_t port = 22;
     std::string username;

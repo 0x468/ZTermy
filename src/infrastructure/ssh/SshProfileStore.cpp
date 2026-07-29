@@ -56,14 +56,16 @@ constexpr qint64 currentSchemaVersion = 1;
     const QJsonObject object = value.toObject();
     const QJsonValue idValue = object.value(QStringLiteral("id"));
     const QJsonValue nameValue = object.value(QStringLiteral("name"));
+    const QJsonValue groupValue = object.value(QStringLiteral("group"));
     const QJsonValue hostValue = object.value(QStringLiteral("host"));
     const QJsonValue portValue = object.value(QStringLiteral("port"));
     const QJsonValue usernameValue = object.value(QStringLiteral("username"));
     const QJsonValue authenticationValue = object.value(QStringLiteral("authentication"));
     const QJsonValue privateKeyPathValue = object.value(QStringLiteral("privateKeyPath"));
     const QJsonValue passphraseRequiredValue = object.value(QStringLiteral("privateKeyPassphraseRequired"));
-    if (!idValue.isString() || !nameValue.isString() || !hostValue.isString() || !portValue.isDouble()
-        || !usernameValue.isString() || !authenticationValue.isString() || !privateKeyPathValue.isString()
+    if (!idValue.isString() || !nameValue.isString() || (!groupValue.isUndefined() && !groupValue.isString())
+        || !hostValue.isString() || !portValue.isDouble() || !usernameValue.isString()
+        || !authenticationValue.isString() || !privateKeyPathValue.isString()
         || (!passphraseRequiredValue.isUndefined() && !passphraseRequiredValue.isBool()))
     {
         return std::nullopt;
@@ -85,6 +87,7 @@ constexpr qint64 currentSchemaVersion = 1;
     ztermy::ssh::SshProfile profile{
         .id = idValue.toString().toStdString(),
         .name = nameValue.toString().toStdString(),
+        .group = groupValue.toString().toStdString(),
         .host = hostValue.toString().toStdString(),
         .port = static_cast<std::uint16_t>(port),
         .username = usernameValue.toString().toStdString(),
@@ -100,6 +103,7 @@ constexpr qint64 currentSchemaVersion = 1;
     return {
         {QStringLiteral("id"), QString::fromStdString(profile.id)},
         {QStringLiteral("name"), QString::fromStdString(profile.name)},
+        {QStringLiteral("group"), QString::fromStdString(profile.group)},
         {QStringLiteral("host"), QString::fromStdString(profile.host)},
         {QStringLiteral("port"), profile.port},
         {QStringLiteral("username"), QString::fromStdString(profile.username)},

@@ -16,6 +16,7 @@ namespace
     return {
         .id = std::move(id),
         .name = "Lab server",
+        .group = "Development",
         .host = "server.example.test",
         .port = 2222,
         .username = "developer",
@@ -66,6 +67,7 @@ void SshProfileStoreTests::savesAndLoadsNonSecretProfiles()
     ztermy::ssh::SshProfile passwordProfile{
         .id = "profile-2",
         .name = "Password host",
+        .group = "Production",
         .host = "password.example.test",
         .port = 22,
         .username = "operator",
@@ -86,6 +88,7 @@ void SshProfileStoreTests::savesAndLoadsNonSecretProfiles()
     QVERIFY(!persisted.contains("\"password\":"));
     QVERIFY(!persisted.contains("\"passphrase\":"));
     QVERIFY(persisted.contains("privateKeyPassphraseRequired"));
+    QVERIFY(persisted.contains("\"group\": \"Development\""));
     QVERIFY(!persisted.contains("privateKeyContent"));
 }
 
@@ -104,6 +107,7 @@ void SshProfileStoreTests::loadsProfilesWrittenBeforePassphraseMetadata()
     QVERIFY(profiles);
     QCOMPARE(profiles->size(), std::size_t{1});
     QVERIFY(!profiles->front().privateKeyPassphraseRequired);
+    QVERIFY(profiles->front().group.empty());
 }
 
 void SshProfileStoreTests::createsMissingParentDirectory()
@@ -131,6 +135,13 @@ void SshProfileStoreTests::rejectsInvalidProfilesAndDuplicateIds()
     auto invalidResult = store.save(invalidProfiles);
     QVERIFY(!invalidResult);
     QCOMPARE(invalidResult.error(), ztermy::ssh::SshProfileStoreError::InvalidFormat);
+
+    auto oversizedGroup = privateKeyProfile();
+    oversizedGroup.group.assign(129, 'x');
+    const std::array oversizedGroupProfiles{oversizedGroup};
+    auto oversizedGroupResult = store.save(oversizedGroupProfiles);
+    QVERIFY(!oversizedGroupResult);
+    QCOMPARE(oversizedGroupResult.error(), ztermy::ssh::SshProfileStoreError::InvalidFormat);
 
     const auto profile = privateKeyProfile();
     const std::array duplicateProfiles{profile, profile};

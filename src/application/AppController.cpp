@@ -181,6 +181,7 @@ QVariantList AppController::hostProfiles() const
         result.append(QVariantMap{
             {QStringLiteral("id"), utf8QString(profile.id)},
             {QStringLiteral("name"), utf8QString(profile.name)},
+            {QStringLiteral("group"), utf8QString(profile.group)},
             {QStringLiteral("host"), utf8QString(profile.host)},
             {QStringLiteral("port"), profile.port},
             {QStringLiteral("username"), utf8QString(profile.username)},
@@ -300,9 +301,11 @@ bool AppController::startSshConnection(ssh::SshConnectionRequest request)
 
 bool AppController::saveHostProfile(const QString &id, const QString &name, const QString &host, const int port,
                                     const QString &username, const QString &authentication,
-                                    const QString &privateKeyPath, const bool privateKeyPassphraseRequired)
+                                    const QString &privateKeyPath, const bool privateKeyPassphraseRequired,
+                                    const QString &group)
 {
     const QString normalizedName = name.trimmed();
+    const QString normalizedGroup = group.trimmed();
     const QString normalizedHost = host.trimmed();
     const QString normalizedUsername = username.trimmed();
     const QString normalizedPrivateKeyPath = privateKeyPath.trimmed();
@@ -319,6 +322,7 @@ bool AppController::saveHostProfile(const QString &id, const QString &name, cons
     const ssh::SshProfile profile{
         .id = utf8String(profileId),
         .name = utf8String(normalizedName),
+        .group = utf8String(normalizedGroup),
         .host = utf8String(normalizedHost),
         .port = port > 0 && port <= 65535 ? static_cast<std::uint16_t>(port) : std::uint16_t{0},
         .username = utf8String(normalizedUsername),
@@ -348,6 +352,41 @@ bool AppController::saveHostProfile(const QString &id, const QString &name, cons
     if (!m_profileStore.save(updated))
     {
         qCWarning(appControllerLog) << "Unable to persist SSH profiles";
+        return false;
+    }
+    m_profiles = std::move(updated);
+    emit hostProfilesChanged();
+    return true;
+}
+
+bool AppController::duplicateHostProfile(const QString &id)
+{
+    const auto source = std::ranges::find(m_profiles, utf8String(id.trimmed()), &ssh::SshProfile::id);
+    if (source == m_profiles.end())
+    {
+        return false;
+    }
+
+    const QString baseName = utf8QString(source->name) + QStringLiteral(" copy");
+    QString copyName = baseName;
+    for (int suffix = 2;
+         std::ranges::any_of(m_profiles,
+                             [&copyName](const ssh::SshProfile &profile) {
+                                 return utf8QString(profile.name).compare(copyName, Qt::CaseInsensitive) == 0;
+                             });
+         ++suffix)
+    {
+        copyName = QStringLiteral("%1 %2").arg(baseName).arg(suffix);
+    }
+
+    ssh::SshProfile copy = *source;
+    copy.id = utf8String(QUuid::createUuid().toString(QUuid::WithoutBraces));
+    copy.name = utf8String(copyName);
+    std::vector<ssh::SshProfile> updated = m_profiles;
+    updated.push_back(std::move(copy));
+    if (!m_profileStore.save(updated))
+    {
+        qCWarning(appControllerLog) << "Unable to persist duplicated SSH profile";
         return false;
     }
     m_profiles = std::move(updated);

@@ -5,6 +5,7 @@ namespace
 
 constexpr std::size_t maximumIdLength = 128;
 constexpr std::size_t maximumNameLength = 256;
+constexpr std::size_t maximumGroupLength = 128;
 constexpr std::size_t maximumHostLength = 1024;
 constexpr std::size_t maximumUsernameLength = 256;
 constexpr std::size_t maximumPrivateKeyPathLength = 32767;
@@ -22,8 +23,8 @@ namespace ztermy::ssh
 bool validSshProfile(const SshProfile &profile) noexcept
 {
     if (!nonEmptyWithin(profile.id, maximumIdLength) || !nonEmptyWithin(profile.name, maximumNameLength)
-        || !nonEmptyWithin(profile.host, maximumHostLength) || !nonEmptyWithin(profile.username, maximumUsernameLength)
-        || profile.port == 0)
+        || profile.group.size() > maximumGroupLength || !nonEmptyWithin(profile.host, maximumHostLength)
+        || !nonEmptyWithin(profile.username, maximumUsernameLength) || profile.port == 0)
     {
         return false;
     }

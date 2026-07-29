@@ -320,6 +320,7 @@ Rectangle {
             HostConnectionPane {
                 anchors.fill: parent
                 visible: root.currentPage === "hosts"
+                controller: appController
                 backgroundColor: "#E60A0E14"
                 raisedColor: root.raisedColor
                 borderColor: root.borderColor

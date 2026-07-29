@@ -54,7 +54,9 @@ public:
     Q_INVOKABLE bool connectPassword(const QString &host, int port, const QString &username, const QString &password);
     Q_INVOKABLE bool saveHostProfile(const QString &id, const QString &name, const QString &host, int port,
                                      const QString &username, const QString &authentication,
-                                     const QString &privateKeyPath, bool privateKeyPassphraseRequired);
+                                     const QString &privateKeyPath, bool privateKeyPassphraseRequired,
+                                     const QString &group);
+    Q_INVOKABLE bool duplicateHostProfile(const QString &id);
     Q_INVOKABLE bool deleteHostProfile(const QString &id);
     Q_INVOKABLE bool connectHostProfile(const QString &id, const QString &secret);
     Q_INVOKABLE void acceptHostKey(bool remember);
