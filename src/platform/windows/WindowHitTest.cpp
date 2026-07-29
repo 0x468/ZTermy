@@ -1,6 +1,7 @@
 #include "platform/windows/WindowHitTest.h"
 
 #include <algorithm>
+#include <cstdint>
 
 namespace ztermy::windowing
 {
@@ -18,6 +19,15 @@ Rect constrainMaximizedClientRect(const Rect proposedClientRect, const Rect work
     }
 
     return {.x = left, .y = top, .width = right - left, .height = bottom - top};
+}
+
+Size scaleLogicalSizeForDpi(const Size logicalSize, const unsigned int dpi) noexcept
+{
+    constexpr std::int64_t defaultDpi = 96;
+    const auto scale = [dpi](const int value) {
+        return static_cast<int>(((static_cast<std::int64_t>(value) * dpi) + (defaultDpi / 2)) / defaultDpi);
+    };
+    return {.width = scale(logicalSize.width), .height = scale(logicalSize.height)};
 }
 
 HitArea classifyHitTest(const Point point, const Size windowSize, const HitTestMetrics &metrics,

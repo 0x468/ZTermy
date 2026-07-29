@@ -1,5 +1,6 @@
 #include "application/terminal/LocalTerminalSession.h"
 #include "core/logging/Logging.h"
+#include "platform/windows/CrashDiagnostics.h"
 #include "platform/windows/NativeWindow.h"
 #include "ui/terminal/TerminalItem.h"
 
@@ -21,6 +22,7 @@ int main(int argc, char *argv[])
     QGuiApplication::setOrganizationName(QStringLiteral("ztermy"));
 
     ztermy::logging::initialize();
+    ztermy::diagnostics::initialize();
     QQuickStyle::setStyle(QStringLiteral("Basic"));
     qRegisterMetaType<ztermy::terminal::TerminalSnapshotPtr>();
     qmlRegisterType<ztermy::ui::TerminalItem>("Ztermy.Terminal", 1, 0, "TerminalView");
@@ -69,5 +71,13 @@ int main(int argc, char *argv[])
     terminalItem->requestCurrentSize();
 
     window.show();
-    return application.exec();
+    const int exitCode = application.exec();
+
+    qCInfo(applicationLog) << "Application event loop stopped; beginning orderly shutdown";
+    terminalSession.stop();
+    QObject::disconnect(&terminalSession, nullptr, terminalItem, nullptr);
+    terminalItem->setSnapshot({});
+    window.releaseResources();
+    qCInfo(applicationLog) << "Terminal and scene graph resources released";
+    return exitCode;
 }

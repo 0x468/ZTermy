@@ -303,11 +303,19 @@ bool NativeWindow::nativeEvent(const QByteArray &eventType, void *message, qintp
         {
             const HMONITOR monitor = MonitorFromWindow(windowHandle, MONITOR_DEFAULTTONEAREST);
             MONITORINFO monitorInfo{.cbSize = sizeof(MONITORINFO)};
+            auto *minMaxInfo =
+                reinterpret_cast<MINMAXINFO *>(nativeMessage->lParam); // NOLINT(performance-no-int-to-ptr)
+            const UINT windowDpi =
+                std::max<UINT>(GetDpiForWindow(windowHandle), static_cast<UINT>(USER_DEFAULT_SCREEN_DPI));
+            const windowing::Size minimumTrackSize = windowing::scaleLogicalSizeForDpi(
+                {.width = minimumSize().width(), .height = minimumSize().height()}, windowDpi);
+            minMaxInfo->ptMinTrackSize.x =
+                std::max<LONG>(minMaxInfo->ptMinTrackSize.x, static_cast<LONG>(minimumTrackSize.width));
+            minMaxInfo->ptMinTrackSize.y =
+                std::max<LONG>(minMaxInfo->ptMinTrackSize.y, static_cast<LONG>(minimumTrackSize.height));
 
             if (GetMonitorInfoW(monitor, &monitorInfo) != FALSE)
             {
-                auto *minMaxInfo =
-                    reinterpret_cast<MINMAXINFO *>(nativeMessage->lParam); // NOLINT(performance-no-int-to-ptr)
                 const RECT &workArea = monitorInfo.rcWork;
                 const RECT &monitorArea = monitorInfo.rcMonitor;
 

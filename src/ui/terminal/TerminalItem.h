@@ -13,6 +13,7 @@ class QInputMethodEvent;
 class QKeyEvent;
 class QMouseEvent;
 class QWheelEvent;
+class QFocusEvent;
 
 namespace ztermy::ui
 {
@@ -49,6 +50,7 @@ protected:
     void keyPressEvent(QKeyEvent *event) override;
     void inputMethodEvent(QInputMethodEvent *event) override;
     QVariant inputMethodQuery(Qt::InputMethodQuery query) const override;
+    void focusOutEvent(QFocusEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
@@ -57,6 +59,9 @@ protected:
 private:
     void reportTerminalSize();
     [[nodiscard]] std::optional<ztermy::terminal::TerminalPoint> terminalPoint(const QPointF &position) const;
+    [[nodiscard]] QRectF inputCursorRectangle() const;
+    void clearPreedit();
+    void notifyInputMethod() const;
     [[nodiscard]] qreal cellWidth() const;
     [[nodiscard]] qreal cellHeight() const;
 
@@ -67,6 +72,9 @@ private:
     quint16 m_reportedColumns = 0;
     quint16 m_reportedRows = 0;
     ztermy::terminal::TerminalPoint m_selectionAnchor;
+    QString m_preeditText;
+    qsizetype m_preeditCursorPosition = 0;
+    bool m_preeditCursorVisible = true;
     bool m_selecting = false;
     bool m_selectionMoved = false;
     int m_wheelRemainder = 0;

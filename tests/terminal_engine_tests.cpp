@@ -19,6 +19,7 @@ private slots:
     void parsesSplitVtSequences();
     void preservesContentAcrossResize();
     void exposesImmutableStyledCells();
+    void exposesWideCellAndCursorWidth();
     void selectsAndFormatsViewportText();
     void scrollsThroughHistory();
     void encodesPasteForTerminalMode();
@@ -101,6 +102,30 @@ void TerminalEngineTests::exposesImmutableStyledCells()
     QVERIFY(snapshot->cursor.visible);
     QCOMPARE(snapshot->cursor.column, 1);
     QCOMPARE(snapshot->cursor.row, 0);
+}
+
+void TerminalEngineTests::exposesWideCellAndCursorWidth()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 12, .rows = 2});
+    if (!result)
+    {
+        QFAIL(result.error().message().c_str());
+    }
+    auto &engine = **result;
+
+    const std::u8string content = u8"中\x1b[D";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(content))));
+
+    const auto snapshot = engine.snapshot();
+    if (!snapshot)
+    {
+        QFAIL(snapshot.error().message().c_str());
+    }
+    QCOMPARE(snapshot->cell(0, 0).grapheme, std::u32string(U"中"));
+    QCOMPARE(snapshot->cell(0, 0).displayWidth, std::uint8_t{2});
+    QCOMPARE(snapshot->cell(1, 0).displayWidth, std::uint8_t{0});
+    QCOMPARE(snapshot->cursor.column, 0);
+    QCOMPARE(snapshot->cursor.width, std::uint8_t{2});
 }
 
 void TerminalEngineTests::selectsAndFormatsViewportText()

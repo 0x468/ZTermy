@@ -488,6 +488,14 @@ std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot
         ghostty_render_state_get(m_impl->renderState, GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_X,
                                  &result.cursor.column);
         ghostty_render_state_get(m_impl->renderState, GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_Y, &result.cursor.row);
+        bool cursorWideTail = false;
+        ghostty_render_state_get(m_impl->renderState, GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_WIDE_TAIL,
+                                 &cursorWideTail);
+        if (cursorWideTail && result.cursor.column > 0)
+        {
+            --result.cursor.column;
+            result.cursor.width = 2;
+        }
     }
 
     GhosttyRenderStateCursorVisualStyle cursorStyle = GHOSTTY_RENDER_STATE_CURSOR_VISUAL_STYLE_BLOCK;
@@ -541,6 +549,34 @@ std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot
             TerminalCell cell;
             cell.foreground = result.defaultForeground;
             cell.background = result.defaultBackground;
+
+            GhosttyCell rawCell{};
+            if (const GhosttyResult rawResult = ghostty_render_state_row_cells_get(
+                    m_impl->rowCells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_RAW, &rawCell);
+                rawResult != GHOSTTY_SUCCESS)
+            {
+                return std::unexpected(ghosttyError(rawResult));
+            }
+            GhosttyCellWide wide = GHOSTTY_CELL_WIDE_NARROW;
+            if (const GhosttyResult wideResult = ghostty_cell_get(rawCell, GHOSTTY_CELL_DATA_WIDE, &wide);
+                wideResult != GHOSTTY_SUCCESS)
+            {
+                return std::unexpected(ghosttyError(wideResult));
+            }
+            switch (wide)
+            {
+                case GHOSTTY_CELL_WIDE_WIDE:
+                    cell.displayWidth = 2;
+                    break;
+                case GHOSTTY_CELL_WIDE_SPACER_TAIL:
+                case GHOSTTY_CELL_WIDE_SPACER_HEAD:
+                    cell.displayWidth = 0;
+                    break;
+                case GHOSTTY_CELL_WIDE_NARROW:
+                default:
+                    cell.displayWidth = 1;
+                    break;
+            }
 
             GhosttyColorRgb foreground{};
             if (ghostty_render_state_row_cells_get(m_impl->rowCells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_FG_COLOR,
@@ -604,6 +640,11 @@ std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot
     const std::size_t expectedCells = static_cast<std::size_t>(result.columns) * result.rows;
     result.cells.resize(expectedCells,
                         TerminalCell{.foreground = result.defaultForeground, .background = result.defaultBackground});
+    if (result.cursor.width == 1 && result.cursor.column < result.columns && result.cursor.row < result.rows)
+    {
+        result.cursor.width =
+            std::max<std::uint8_t>(1, result.cell(result.cursor.column, result.cursor.row).displayWidth);
+    }
     return result;
 }
 

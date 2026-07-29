@@ -11,6 +11,7 @@ private slots:
     void classifiesCaptionControlsAndClient();
     void disablesResizeAreasWhenMaximized();
     void constrainsMaximizedClientToWorkArea();
+    void scalesMinimumTrackSizeForDpi();
 };
 
 void WindowHitTestTests::classifiesResizeEdges()
@@ -93,6 +94,19 @@ void WindowHitTestTests::constrainsMaximizedClientToWorkArea()
     QCOMPARE(constrainMaximizedClientRect(workArea, workArea).y, workArea.y);
     QCOMPARE(constrainMaximizedClientRect(workArea, workArea).width, workArea.width);
     QCOMPARE(constrainMaximizedClientRect(workArea, workArea).height, workArea.height);
+}
+
+void WindowHitTestTests::scalesMinimumTrackSizeForDpi()
+{
+    constexpr ztermy::windowing::Size logical{.width = 500, .height = 360};
+
+    const auto at100Percent = scaleLogicalSizeForDpi(logical, 96);
+    QCOMPARE(at100Percent.width, 500);
+    QCOMPARE(at100Percent.height, 360);
+
+    const auto at150Percent = scaleLogicalSizeForDpi(logical, 144);
+    QCOMPARE(at150Percent.width, 750);
+    QCOMPARE(at150Percent.height, 540);
 }
 
 QTEST_GUILESS_MAIN(WindowHitTestTests)

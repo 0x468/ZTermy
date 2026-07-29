@@ -46,18 +46,30 @@ Expected:
 
 1. Enter ASCII, Chinese text through the Windows IME, a wide CJK character, a
    combining-mark sample, and emoji.
-2. Move the cursor and edit the command before submitting it.
+2. Commit Chinese text, then move the terminal cursor across both its leading
+   and trailing cells.
+3. Type `hello`, move the cursor between `e` and the first `l`, and compose
+   `nihao` without committing it immediately.
+4. Move the IME composition caret across both Latin and Chinese preedit text.
+5. Commit the composition, then edit and submit the command.
 
 Expected:
 
 - IME commit text reaches PowerShell exactly once.
 - Wide and combining characters occupy sensible cells without corrupting
   adjacent text.
-- Cursor movement agrees with the displayed cell positions.
+- The solid cursor covers a complete CJK glyph rather than half of it.
+- While composing in the middle of `hello`, the `llo` suffix moves right as
+  the preedit grows instead of being overwritten.
+- A composition caret over Chinese text is two cells wide; a caret over Latin
+  text is one cell wide.
+- Cursor movement agrees with the displayed cell positions before and after
+  committing the composition.
 
-Record the Windows display scale and IME used when reporting a failure. IME
-candidate-window placement and search are not complete in the current
-milestone.
+During composition, the preedit text should be visible at the terminal cursor
+and the IME candidate window should follow the composition caret. Record the
+Windows display scale and IME used when reporting a failure. Terminal search is
+not complete in the current milestone.
 
 ## Scrollback
 
@@ -112,3 +124,23 @@ Expected:
 The current renderer uploads a full-frame texture per delivered snapshot. This
 test establishes a correctness baseline; frame-time and latency targets remain
 open until the batched glyph renderer is implemented.
+
+## Crash diagnostics
+
+Normal application logs are written under:
+
+```text
+%LOCALAPPDATA%\ztermy\ztermy\logs
+```
+
+Windows unhandled exceptions and MSVC Debug CRT assertions additionally create
+a timestamped `.dmp` file under:
+
+```text
+%LOCALAPPDATA%\ztermy\ztermy\crashes
+```
+
+When reporting an intermittent crash, preserve the newest log and dump and note
+the last visible action. Dumps can contain fragments of process memory,
+including terminal content, so keep them local and do not publish them without
+reviewing the disclosure risk.

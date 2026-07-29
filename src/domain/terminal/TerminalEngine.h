@@ -44,6 +44,7 @@ struct TerminalCell
     bool overline = false;
     bool invisible = false;
     bool selected = false;
+    std::uint8_t displayWidth = 1;
 };
 
 struct TerminalPoint
@@ -80,6 +81,7 @@ struct TerminalCursor
 {
     std::uint16_t column = 0;
     std::uint16_t row = 0;
+    std::uint8_t width = 1;
     TerminalCursorStyle style = TerminalCursorStyle::block;
     TerminalColor color;
     bool visible = false;

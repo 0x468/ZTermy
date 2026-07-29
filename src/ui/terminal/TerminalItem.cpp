@@ -1,10 +1,14 @@
 #include "ui/terminal/TerminalItem.h"
 
+#include "ui/terminal/TerminalTextLayout.h"
+
 #include <QClipboard>
 #include <QColor>
+#include <QFocusEvent>
 #include <QFontMetricsF>
 #include <QGuiApplication>
 #include <QImage>
+#include <QInputMethod>
 #include <QInputMethodEvent>
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -128,6 +132,7 @@ void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
     m_snapshot = std::move(snapshot);
     ++m_revision;
     update();
+    notifyInputMethod();
 }
 
 void TerminalItem::setStatusText(const QString &status)
@@ -193,13 +198,24 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         const qreal cellWidthValue = cellWidth();
         const qreal cellHeightValue = cellHeight();
         const QFontMetricsF metrics(m_font);
+        const std::vector<PreeditCluster> preeditClusters = layoutPreeditText(m_preeditText, m_font, cellWidthValue);
+        const int insertedColumns = preeditColumnCount(preeditClusters);
+        const int snapshotColumns = static_cast<int>(m_snapshot->columns);
 
         for (quint16 row = 0; row < m_snapshot->rows; ++row)
         {
             for (quint16 column = 0; column < m_snapshot->columns; ++column)
             {
                 const terminal::TerminalCell &cell = m_snapshot->cell(column, row);
-                const QRectF cellRect{horizontalPadding + (column * cellWidthValue),
+                const int displayColumn =
+                    !preeditClusters.empty() && row == m_snapshot->cursor.row
+                        ? shiftedTerminalColumn(column, m_snapshot->cursor.column, insertedColumns)
+                        : column;
+                if (displayColumn >= snapshotColumns)
+                {
+                    continue;
+                }
+                const QRectF cellRect{horizontalPadding + (displayColumn * cellWidthValue),
                                       verticalPadding + (row * cellHeightValue), cellWidthValue, cellHeightValue};
                 if (cell.selected)
                 {
@@ -221,6 +237,14 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                 {
                     continue;
                 }
+                const int displayColumn =
+                    !preeditClusters.empty() && row == m_snapshot->cursor.row
+                        ? shiftedTerminalColumn(column, m_snapshot->cursor.column, insertedColumns)
+                        : column;
+                if (displayColumn >= snapshotColumns)
+                {
+                    continue;
+                }
 
                 QFont cellFont = m_font;
                 cellFont.setBold(cell.bold);
@@ -233,18 +257,47 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 
                 const QString grapheme =
                     QString::fromUcs4(cell.grapheme.data(), static_cast<qsizetype>(cell.grapheme.size()));
-                const QPointF baseline{horizontalPadding + (column * cellWidthValue),
+                const QPointF baseline{horizontalPadding + (displayColumn * cellWidthValue),
                                        verticalPadding + (row * cellHeightValue) + metrics.ascent()};
                 painter.drawText(baseline, grapheme);
             }
         }
 
-        if (m_snapshot->cursor.visible && m_snapshot->cursor.column < m_snapshot->columns
+        if (!preeditClusters.empty() && m_snapshot->cursor.column < m_snapshot->columns
             && m_snapshot->cursor.row < m_snapshot->rows)
         {
+            const qreal compositionLeft = horizontalPadding + (m_snapshot->cursor.column * cellWidthValue);
+            const qreal compositionTop = verticalPadding + (m_snapshot->cursor.row * cellHeightValue);
+            QFont compositionFont = m_font;
+            compositionFont.setUnderline(true);
+            painter.setFont(compositionFont);
+            const PreeditCursorCell cursorCell = preeditCursorCell(preeditClusters, m_preeditCursorPosition);
+            for (const PreeditCluster &cluster : preeditClusters)
+            {
+                const QRectF clusterRect{
+                    compositionLeft + (cluster.column * cellWidthValue),
+                    compositionTop,
+                    cluster.width * cellWidthValue,
+                    cellHeightValue,
+                };
+                const bool cursorCluster = m_preeditCursorVisible && cluster.column == cursorCell.column;
+                painter.fillRect(clusterRect, cursorCluster ? QColor(255, 255, 255) : QColor(42, 91, 145, 180));
+                painter.setPen(cursorCluster ? QColor(11, 16, 23) : QColor(255, 255, 255));
+                painter.drawText(QPointF(clusterRect.left(), compositionTop + metrics.ascent()), cluster.text);
+            }
+            if (m_preeditCursorVisible && cursorCell.column == insertedColumns)
+            {
+                painter.fillRect(QRectF(compositionLeft + (cursorCell.column * cellWidthValue), compositionTop,
+                                        cursorCell.width * cellWidthValue, cellHeightValue),
+                                 QColor(255, 255, 255));
+            }
+        }
+        else if (m_snapshot->cursor.visible && m_snapshot->cursor.column < m_snapshot->columns
+                 && m_snapshot->cursor.row < m_snapshot->rows)
+        {
             const QRectF cursorCell{horizontalPadding + (m_snapshot->cursor.column * cellWidthValue),
-                                    verticalPadding + (m_snapshot->cursor.row * cellHeightValue), cellWidthValue,
-                                    cellHeightValue};
+                                    verticalPadding + (m_snapshot->cursor.row * cellHeightValue),
+                                    m_snapshot->cursor.width * cellWidthValue, cellHeightValue};
             painter.setPen(QPen(color(m_snapshot->cursor.color), 1.0));
             switch (m_snapshot->cursor.style)
             {
@@ -282,6 +335,7 @@ void TerminalItem::geometryChange(const QRectF &newGeometry, const QRectF &oldGe
     QQuickItem::geometryChange(newGeometry, oldGeometry);
     reportTerminalSize();
     update();
+    notifyInputMethod();
 }
 
 void TerminalItem::keyPressEvent(QKeyEvent *event)
@@ -318,10 +372,27 @@ void TerminalItem::keyPressEvent(QKeyEvent *event)
 
 void TerminalItem::inputMethodEvent(QInputMethodEvent *event)
 {
+    m_preeditText = event->preeditString();
+    m_preeditCursorPosition = m_preeditText.size();
+    m_preeditCursorVisible = true;
+    for (const QInputMethodEvent::Attribute &attribute : event->attributes())
+    {
+        if (attribute.type == QInputMethodEvent::Cursor)
+        {
+            m_preeditCursorPosition = std::clamp<qsizetype>(attribute.start, qsizetype{0}, m_preeditText.size());
+            m_preeditCursorVisible = attribute.length != 0;
+            break;
+        }
+    }
+
     if (!event->commitString().isEmpty())
     {
         emit inputGenerated(event->commitString().toUtf8());
     }
+
+    ++m_revision;
+    update();
+    notifyInputMethod();
     event->accept();
 }
 
@@ -331,12 +402,25 @@ QVariant TerminalItem::inputMethodQuery(const Qt::InputMethodQuery query) const
     {
         return true;
     }
-    if (query == Qt::ImCursorRectangle && m_snapshot)
+    if (query == Qt::ImCursorRectangle)
     {
-        return QRectF(horizontalPadding + (m_snapshot->cursor.column * cellWidth()),
-                      verticalPadding + (m_snapshot->cursor.row * cellHeight()), cellWidth(), cellHeight());
+        return inputCursorRectangle();
+    }
+    if (query == Qt::ImSurroundingText || query == Qt::ImCurrentSelection)
+    {
+        return QString{};
+    }
+    if (query == Qt::ImCursorPosition || query == Qt::ImAnchorPosition || query == Qt::ImAbsolutePosition)
+    {
+        return 0;
     }
     return QQuickItem::inputMethodQuery(query);
+}
+
+void TerminalItem::focusOutEvent(QFocusEvent *event)
+{
+    clearPreedit();
+    QQuickItem::focusOutEvent(event);
 }
 
 void TerminalItem::mousePressEvent(QMouseEvent *event)
@@ -434,6 +518,48 @@ std::optional<terminal::TerminalPoint> TerminalItem::terminalPoint(const QPointF
     return terminal::TerminalPoint{
         .column = static_cast<quint16>(std::clamp(columnValue, 0.0, static_cast<qreal>(m_snapshot->columns - 1))),
         .row = static_cast<quint16>(std::clamp(rowValue, 0.0, static_cast<qreal>(m_snapshot->rows - 1)))};
+}
+
+QRectF TerminalItem::inputCursorRectangle() const
+{
+    qreal cursorX = horizontalPadding;
+    qreal cursorY = verticalPadding;
+    if (m_snapshot)
+    {
+        cursorX += m_snapshot->cursor.column * cellWidth();
+        cursorY += m_snapshot->cursor.row * cellHeight();
+    }
+    if (!m_preeditText.isEmpty())
+    {
+        const std::vector<PreeditCluster> clusters = layoutPreeditText(m_preeditText, m_font, cellWidth());
+        const PreeditCursorCell cursorCell = preeditCursorCell(clusters, m_preeditCursorPosition);
+        cursorX += cursorCell.column * cellWidth();
+        return {cursorX, cursorY, cursorCell.width * cellWidth(), cellHeight()};
+    }
+    const qreal cursorWidth = m_snapshot ? m_snapshot->cursor.width * cellWidth() : cellWidth();
+    return {cursorX, cursorY, cursorWidth, cellHeight()};
+}
+
+void TerminalItem::clearPreedit()
+{
+    if (m_preeditText.isEmpty())
+    {
+        return;
+    }
+    m_preeditText.clear();
+    m_preeditCursorPosition = 0;
+    m_preeditCursorVisible = true;
+    ++m_revision;
+    update();
+}
+
+void TerminalItem::notifyInputMethod() const
+{
+    if (hasActiveFocus() && QGuiApplication::inputMethod() != nullptr)
+    {
+        QGuiApplication::inputMethod()->update(Qt::ImCursorRectangle | Qt::ImSurroundingText | Qt::ImCursorPosition
+                                               | Qt::ImAnchorPosition);
+    }
 }
 
 qreal TerminalItem::cellWidth() const

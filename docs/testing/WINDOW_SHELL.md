@@ -50,7 +50,11 @@ flyout.
    appears.
 2. Drag each edge and corner.
    Expected: resizing remains smooth and stops at 500 by 360 effective pixels.
-3. Maximize the window and repeat the edge check.
+3. Resize repeatedly from the minimum size back to a large size at least ten
+   times, including while terminal output and IME composition are visible.
+   Expected: the terminal grid remains coherent and the process does not crash,
+   assert, or collapse to a title-bar-only window.
+4. Maximize the window and repeat the edge check.
    Expected: resize cursors are not offered while maximized.
 
 ## DPI and monitor behavior

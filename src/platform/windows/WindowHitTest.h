@@ -36,6 +36,7 @@ struct HitTestMetrics
 };
 
 [[nodiscard]] Rect constrainMaximizedClientRect(Rect proposedClientRect, Rect workArea) noexcept;
+[[nodiscard]] Size scaleLogicalSizeForDpi(Size logicalSize, unsigned int dpi) noexcept;
 
 enum class HitArea
 {

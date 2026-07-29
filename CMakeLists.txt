@@ -83,13 +83,15 @@ target_link_libraries(ztermy_terminal_session
 add_library(ztermy_terminal_ui STATIC
     src/ui/terminal/TerminalItem.cpp
     src/ui/terminal/TerminalItem.h
+    src/ui/terminal/TerminalTextLayout.cpp
+    src/ui/terminal/TerminalTextLayout.h
 )
 
 target_compile_features(ztermy_terminal_ui PUBLIC cxx_std_23)
 target_include_directories(ztermy_terminal_ui PUBLIC src)
 target_link_libraries(ztermy_terminal_ui
-    PUBLIC ztermy_terminal_engine
-    PRIVATE
+    PUBLIC
+        ztermy_terminal_engine
         Qt6::Core
         Qt6::Gui
         Qt6::Quick
@@ -99,6 +101,8 @@ qt_add_executable(ztermy WIN32
     src/main.cpp
     src/core/logging/Logging.cpp
     src/core/logging/Logging.h
+    src/platform/windows/CrashDiagnostics.cpp
+    src/platform/windows/CrashDiagnostics.h
     src/platform/windows/NativeWindow.cpp
     src/platform/windows/NativeWindow.h
     src/platform/windows/WindowHitTest.cpp
@@ -146,6 +150,7 @@ target_link_libraries(ztermy PRIVATE
     Qt6::Gui
     Qt6::Quick
     Qt6::QuickControls2
+    dbghelp
     dwmapi
 )
 
@@ -272,4 +277,25 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME local-terminal-session COMMAND ztermy_local_terminal_session_tests)
+
+    qt_add_executable(ztermy_terminal_item_tests
+        tests/terminal_item_tests.cpp
+    )
+
+    target_compile_features(ztermy_terminal_item_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_terminal_item_tests PRIVATE
+        ztermy_terminal_ui
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_terminal_item_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME terminal-item COMMAND ztermy_terminal_item_tests)
 endif()
