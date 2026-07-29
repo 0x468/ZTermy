@@ -489,8 +489,7 @@ void NativeWindow::configureNativeWindow()
 {
     const auto windowHandle = reinterpret_cast<HWND>(winId()); // NOLINT(performance-no-int-to-ptr)
     LONG_PTR style = GetWindowLongPtrW(windowHandle, GWL_STYLE);
-    style |= WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU;
-    style &= ~WS_CAPTION;
+    style |= WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU;
     SetWindowLongPtrW(windowHandle, GWL_STYLE, style);
     qCInfo(windowLog) << "configure native window"
                       << "hwnd=" << windowHandle << "qtFlags=" << flags() << "style=" << Qt::hex << style;

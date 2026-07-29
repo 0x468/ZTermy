@@ -70,9 +70,11 @@ behavior:
 - system move and resize operations
 
 The QML title bar supplies visuals and reports interactive rectangles. Native
-code supplies system semantics. The resizable frame, system menu, and
-minimize/maximize capabilities are retained, while `WS_CAPTION` is removed so
-Windows does not position shell UI against an invisible native title bar.
+code supplies system semantics. The complete resizable overlapped-window style,
+including `WS_CAPTION`, is retained so DWM and the Windows shell recognize the
+window correctly during transitions. `WM_NCCALCSIZE` extends the client area
+over that standard frame, so the native caption is never visible in the settled
+window.
 
 The executable embeds a Windows 10/11 compatibility manifest. Besides declaring
 Per-Monitor V2 DPI awareness, this opts the process into the modern Windows
