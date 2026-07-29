@@ -27,6 +27,11 @@ LocalTerminalSession::~LocalTerminalSession()
     stop();
 }
 
+diagnostics::LatencySummary LocalTerminalSession::inputQueueLatencySummary() const noexcept
+{
+    return m_inputQueueLatency.summary();
+}
+
 std::error_code LocalTerminalSession::start(const TerminalGeometry geometry)
 {
     stop();

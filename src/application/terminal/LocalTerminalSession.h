@@ -72,6 +72,7 @@ public:
 
     [[nodiscard]] std::error_code start(TerminalGeometry geometry) override;
     void stop() noexcept override;
+    [[nodiscard]] diagnostics::LatencySummary inputQueueLatencySummary() const noexcept;
 
 public slots:
     void queueInput(const QByteArray &bytes) override;

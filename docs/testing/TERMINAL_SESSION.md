@@ -136,6 +136,22 @@ batched renderer work.
 
 ## Input queue latency
 
+Run the opt-in local runtime gate from an x64 Visual Studio developer shell:
+
+```powershell
+$env:ZTERMY_RUN_LOCAL_LATENCY_GATE = "1"
+ctest --test-dir build/msvc-dynamic-debug `
+  -R "^local-terminal-session$" --output-on-failure
+Remove-Item Env:ZTERMY_RUN_LOCAL_LATENCY_GATE
+```
+
+The gate starts a real PowerShell ConPTY session and enqueues 120 single-byte
+input events at 5 ms intervals. It waits until the worker has dequeued every
+sample, then requires `inputQueueP95Us` to be no greater than `16000`. The
+synthetic input is not printed by the test or included in session metrics.
+
+For an interactive cross-check:
+
 1. Start a fresh local terminal tab in the dynamic Debug build.
 2. Type and edit enough commands to enqueue at least 100 individual key-input
    events. Include cursor movement and text inserted in the middle of a line.
