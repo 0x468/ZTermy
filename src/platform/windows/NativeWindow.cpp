@@ -18,6 +18,7 @@ namespace
 
 Q_LOGGING_CATEGORY(windowLog, "ztermy.window")
 
+constexpr DWORD kDwmTransitionsForceDisabled = 3;
 constexpr DWORD kDwmUseImmersiveDarkMode = 20;
 constexpr DWORD kDwmWindowCornerPreference = 33;
 constexpr DWORD kDwmSystemBackdropType = 38;
@@ -489,7 +490,8 @@ void NativeWindow::configureNativeWindow()
 {
     const auto windowHandle = reinterpret_cast<HWND>(winId()); // NOLINT(performance-no-int-to-ptr)
     LONG_PTR style = GetWindowLongPtrW(windowHandle, GWL_STYLE);
-    style |= WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU;
+    style |= WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU;
+    style &= ~WS_CAPTION;
     SetWindowLongPtrW(windowHandle, GWL_STYLE, style);
     qCInfo(windowLog) << "configure native window"
                       << "hwnd=" << windowHandle << "qtFlags=" << flags() << "style=" << Qt::hex << style;
@@ -504,6 +506,7 @@ void NativeWindow::configureNativeWindow()
 void NativeWindow::applyBackdrop()
 {
     const auto windowHandle = reinterpret_cast<HWND>(winId()); // NOLINT(performance-no-int-to-ptr)
+    const BOOL disableTransitions = TRUE;
     const BOOL darkMode = TRUE;
     const int cornerPreference = kDwmWindowCornerRound;
     const int backdropType = kDwmSystemBackdropMainWindow;
@@ -514,6 +517,7 @@ void NativeWindow::applyBackdrop()
         .cyBottomHeight = 1,
     };
 
+    DwmSetWindowAttribute(windowHandle, kDwmTransitionsForceDisabled, &disableTransitions, sizeof(disableTransitions));
     DwmSetWindowAttribute(windowHandle, kDwmUseImmersiveDarkMode, &darkMode, sizeof(darkMode));
     DwmSetWindowAttribute(windowHandle, kDwmWindowCornerPreference, &cornerPreference, sizeof(cornerPreference));
     DwmSetWindowAttribute(windowHandle, kDwmSystemBackdropType, &backdropType, sizeof(backdropType));

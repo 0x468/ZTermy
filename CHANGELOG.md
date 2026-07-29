@@ -26,7 +26,9 @@ The project has not published a release.
   Windows enables modern custom-title-bar and Snap Layout behavior
 - Intercept maximize-button non-client messages before Qt so Windows receives
   the native hover gesture used by Snap Layouts
-- Retain the complete native overlapped-window style for modern DWM
-  transitions while `WM_NCCALCSIZE` keeps the standard frame invisible
+- Retain the system menu, resizable frame, and maximize capability without
+  `WS_CAPTION` so custom `HTMAXBUTTON` hover activates Snap Layouts
+- Disable this window's DWM transitions to prevent Windows from animating a
+  legacy system frame over the custom title bar
 - Suppress legacy non-client theme painting that can flash over the custom
   title bar during maximize and restore transitions
