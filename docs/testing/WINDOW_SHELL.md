@@ -11,6 +11,26 @@ build/msvc-dynamic-debug/ztermy.exe
 Perform the checks on Windows 11 with the system Snap windows setting enabled.
 Repeat the DPI checks on every available monitor.
 
+## Automated maximized-work-area gate
+
+Build and run the opt-in runtime gate from a Visual Studio developer shell:
+
+```text
+cmake --build --preset msvc-dynamic-debug --target ztermy_window_runtime_smoke
+```
+
+The target briefly shows the real ztermy window, maximizes it, compares the
+Win32 client rectangle in screen coordinates with `MONITORINFO::rcWork`,
+restores it, and exits. It fails when either the maximized state or the exact
+work-area bounds do not match. The result is also written below:
+
+```text
+build/msvc-dynamic-debug/test-data/window-runtime-smoke/logs/ztermy.log
+```
+
+This gate proves the current monitor path. It does not replace the mixed-DPI
+and per-monitor manual checks below.
+
 ## Caption commands
 
 1. Click minimize.

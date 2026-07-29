@@ -24,6 +24,10 @@ Only runtime evidence can mark a platform or UI item complete.
 - Native window creation and QML loading succeed on Windows 11.
 - Automated hit-test coverage passes for caption, maximize button, client
   area, all resize edges/corners, and maximized-state behavior.
+- The real-window maximized-work-area gate passes in dynamic Debug and static
+  Release on the primary display: the client screen rectangle and Win32
+  monitor work area both measured `(0, 0)-(2560, 1392)`, followed by a
+  successful restore.
 - Custom caption commands, maximize-button Snap Layout hover, and Win+Z were
   manually verified on the primary Windows 11 development machine.
 - A Debug runtime session displayed a real PowerShell prompt through ConPTY,
@@ -85,7 +89,7 @@ procedures and expected results.
 - [x] Win+Z and snap keyboard shortcuts work
 - [ ] All edges and corners resize with native cursors
 - [x] Double-clicking draggable title space toggles maximize/restore
-- [ ] Maximized window respects the monitor work area
+- [x] Maximized window respects the monitor work area
 - [ ] Moving between mixed-DPI monitors preserves geometry and sharp rendering
 - [ ] Dark/light DWM integration is correct
 - [ ] Opacity and backdrop settings fail safely when unsupported

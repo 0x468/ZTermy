@@ -388,6 +388,15 @@ target_link_libraries(ztermy PRIVATE
     dwmapi
 )
 
+add_custom_target(ztermy_window_runtime_smoke
+    COMMAND "$<TARGET_FILE:ztermy>"
+            --window-runtime-smoke
+            --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/window-runtime-smoke"
+    DEPENDS ztermy
+    COMMENT "Checking the real maximized client area against the Windows monitor work area"
+    VERBATIM
+)
+
 if(ZTERMY_STATIC_BUILD)
     install(TARGETS ztermy RUNTIME DESTINATION . COMPONENT Runtime)
 else()

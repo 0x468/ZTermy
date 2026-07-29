@@ -28,6 +28,7 @@ public:
     [[nodiscard]] bool maximizeButtonPressed() const noexcept;
     [[nodiscard]] bool systemDarkMode() const noexcept;
     [[nodiscard]] bool animationsEnabled() const noexcept;
+    [[nodiscard]] bool maximizedClientMatchesWorkArea() const noexcept;
 
     Q_INVOKABLE void minimizeWindow();
     Q_INVOKABLE void toggleMaximize();

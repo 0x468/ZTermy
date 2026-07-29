@@ -130,6 +130,38 @@ bool NativeWindow::animationsEnabled() const noexcept
     return m_animationPreference.enabled();
 }
 
+bool NativeWindow::maximizedClientMatchesWorkArea() const noexcept
+{
+    if (m_windowHandle == nullptr || IsZoomed(m_windowHandle) == FALSE)
+    {
+        return false;
+    }
+
+    RECT clientRect{};
+    const HMONITOR monitor = MonitorFromWindow(m_windowHandle, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO monitorInfo{.cbSize = sizeof(MONITORINFO)};
+    if (GetClientRect(m_windowHandle, &clientRect) == FALSE || GetMonitorInfoW(monitor, &monitorInfo) == FALSE)
+    {
+        return false;
+    }
+
+    POINT topLeft{.x = clientRect.left, .y = clientRect.top};
+    POINT bottomRight{.x = clientRect.right, .y = clientRect.bottom};
+    if (ClientToScreen(m_windowHandle, &topLeft) == FALSE || ClientToScreen(m_windowHandle, &bottomRight) == FALSE)
+    {
+        return false;
+    }
+
+    const RECT &workArea = monitorInfo.rcWork;
+    const bool matches = topLeft.x == workArea.left && topLeft.y == workArea.top && bottomRight.x == workArea.right
+                         && bottomRight.y == workArea.bottom;
+    qCInfo(windowLog) << "maximized work-area check"
+                      << "client=" << topLeft.x << topLeft.y << bottomRight.x << bottomRight.y
+                      << "workArea=" << workArea.left << workArea.top << workArea.right << workArea.bottom
+                      << "matches=" << matches;
+    return matches;
+}
+
 void NativeWindow::minimizeWindow()
 {
     showMinimized();

@@ -6,18 +6,46 @@
 #include "ui/terminal/TerminalItem.h"
 
 #include <QDir>
+#include <QEventLoop>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QLoggingCategory>
 #include <QMetaType>
 #include <QQuickStyle>
 #include <QStandardPaths>
+#include <QTimer>
 #include <QVariant>
 #include <QVariantMap>
 
+#include <chrono>
 #include <cstdlib>
 
 Q_LOGGING_CATEGORY(applicationLog, "ztermy.application")
+
+namespace
+{
+
+void processWindowEventsFor(const std::chrono::milliseconds duration)
+{
+    QEventLoop eventLoop;
+    QTimer::singleShot(duration, &eventLoop, &QEventLoop::quit);
+    eventLoop.exec();
+}
+
+[[nodiscard]] bool runWindowRuntimeSmoke(ztermy::NativeWindow &window)
+{
+    window.show();
+    processWindowEventsFor(std::chrono::milliseconds{250});
+    window.showMaximized();
+    processWindowEventsFor(std::chrono::milliseconds{500});
+
+    const bool workAreaMatches = window.maximized() && window.maximizedClientMatchesWorkArea();
+    window.showNormal();
+    processWindowEventsFor(std::chrono::milliseconds{250});
+    return workAreaMatches && !window.maximized();
+}
+
+} // namespace
 
 int main(int argc, char *argv[])
 {
@@ -74,6 +102,19 @@ int main(int argc, char *argv[])
         appController.shutdown();
         window.releaseResources();
         qCInfo(applicationLog) << "QML and native-window smoke test completed";
+        return EXIT_SUCCESS;
+    }
+    if (QCoreApplication::arguments().contains(QStringLiteral("--window-runtime-smoke")))
+    {
+        const bool passed = runWindowRuntimeSmoke(window);
+        appController.shutdown();
+        window.releaseResources();
+        if (!passed)
+        {
+            qCCritical(applicationLog) << "Maximized work-area runtime smoke test failed";
+            return EXIT_FAILURE;
+        }
+        qCInfo(applicationLog) << "Maximized work-area runtime smoke test completed";
         return EXIT_SUCCESS;
     }
 
