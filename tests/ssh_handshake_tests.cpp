@@ -54,6 +54,8 @@ private slots:
     void cancelsBlockedHandshake();
     void rejectsInvalidSocket();
     void rejectsHostKeyBeforeHandshake();
+    void rejectsInvalidPasswordCredentials();
+    void rejectsPasswordAuthenticationBeforeHandshake();
 };
 
 void SshHandshakeTests::createsNonBlockingSession()
@@ -158,6 +160,41 @@ void SshHandshakeTests::rejectsHostKeyBeforeHandshake()
     auto hostKey = (*session)->hostKey();
     QVERIFY(!hostKey);
     QCOMPARE(hostKey.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidState);
+}
+
+void SshHandshakeTests::rejectsInvalidPasswordCredentials()
+{
+    ztermy::ssh::WindowsTcpSocket socket;
+    auto session = ztermy::ssh::Libssh2Session::create();
+    if (!session)
+    {
+        QFAIL("libssh2 session creation failed");
+    }
+
+    auto emptyUsername = (*session)->authenticateWithPassword(socket, {}, "password", 2s);
+    QVERIFY(!emptyUsername);
+    QCOMPARE(emptyUsername.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidArgument);
+
+    auto emptyPassword = (*session)->authenticateWithPassword(socket, "user", {}, 2s);
+    QVERIFY(!emptyPassword);
+    QCOMPARE(emptyPassword.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidArgument);
+}
+
+void SshHandshakeTests::rejectsPasswordAuthenticationBeforeHandshake()
+{
+    SilentPeer peer = connectSilentPeer();
+    QVERIFY(peer.socket.valid());
+
+    auto session = ztermy::ssh::Libssh2Session::create();
+    if (!session)
+    {
+        QFAIL("libssh2 session creation failed");
+    }
+
+    auto result = (*session)->authenticateWithPassword(peer.socket, "user", "password", 2s);
+    QVERIFY(!result);
+    QCOMPARE(result.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidState);
+    QVERIFY(!(*session)->authenticated());
 }
 
 QTEST_GUILESS_MAIN(SshHandshakeTests)

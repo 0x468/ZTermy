@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 using namespace std::chrono_literals;
 
@@ -63,7 +64,28 @@ void SshRealHostTests::observesUnknownHostBeforeAuthentication()
     }
 
     const ztermy::ssh::SshEndpoint endpoint{.host = host, .port = port};
-    QCOMPARE(ztermy::ssh::evaluateHostKeyTrust(endpoint, *hostKey, {}), ztermy::ssh::HostKeyTrust::Unknown);
+    auto unknownTrust = (*session)->verifyHostKey(endpoint, {});
+    QVERIFY(unknownTrust);
+    QCOMPARE(*unknownTrust, ztermy::ssh::HostKeyTrust::Unknown);
+
+    auto blockedAuthentication = (*session)->authenticateWithPassword(*socket, "unused", "unused", 1s);
+    QVERIFY(!blockedAuthentication);
+    QCOMPARE(blockedAuthentication.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidState);
+
+    const std::vector knownHosts{ztermy::ssh::KnownHostEntry{
+        .endpoint = endpoint,
+        .algorithm = hostKey->algorithm,
+        .encodedKey = hostKey->encodedKey,
+    }};
+    auto trusted = (*session)->verifyHostKey(endpoint, knownHosts);
+    QVERIFY(trusted);
+    QCOMPARE(*trusted, ztermy::ssh::HostKeyTrust::Trusted);
+
+    auto zeroTimeout = (*session)->authenticateWithPassword(*socket, "unused", "unused", 0ms);
+    QVERIFY(!zeroTimeout);
+    QCOMPARE(zeroTimeout.error().kind, ztermy::ssh::SshTransportErrorKind::TimedOut);
+    QVERIFY(!(*session)->authenticated());
+
     qInfo().noquote() << "Observed host key:"
                       << QString::fromUtf8(ztermy::ssh::hostKeyAlgorithmName(hostKey->algorithm))
                       << QString::fromStdString(ztermy::ssh::sha256Fingerprint(*hostKey));

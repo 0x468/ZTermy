@@ -20,7 +20,9 @@ does not speak SSH. It verifies:
 - handshake timeout without busy waiting;
 - cancellation before and during a blocked handshake;
 - invalid socket rejection; and
-- session cleanup after incomplete handshakes.
+- session cleanup after incomplete handshakes;
+- invalid password credential rejection; and
+- rejection of authentication before handshake and host-key trust.
 
 The `ssh-host-key` test verifies:
 
@@ -44,7 +46,10 @@ committed.
 `ssh-real-host` is skipped unless `ZTERMY_TEST_SSH_HOST` is set. When enabled,
 it connects and performs the SSH handshake, extracts the public host key, and
 prints only its algorithm and SHA-256 fingerprint. It does not send a username,
-password, passphrase, or keyboard-interactive response.
+password, passphrase, or keyboard-interactive response. It also verifies that
+authentication is blocked while the host is unknown, then opens the
+authentication gate only after an exact in-memory trust match. A zero timeout
+prevents that gate test from sending its synthetic credentials.
 
 ```powershell
 $env:ZTERMY_TEST_SSH_HOST = "server.example.test"
@@ -71,3 +76,17 @@ stored key, blocking a changed key, authentication failure, remote close, and
 repeated connect/disconnect cycles. Passwords, passphrases, private key
 contents, keyboard-interactive responses, and terminal input must never appear
 in the test output or application log.
+
+## Password authentication gate
+
+The transport exposes bounded, cancellable password authentication only after:
+
+1. the TCP socket is connected;
+2. the SSH handshake is complete; and
+3. the observed host key exactly matches a trusted host-and-port record.
+
+Passwords are non-owning call-time views. Callers must keep the backing memory
+alive for the call, must not log it, and should overwrite and release their
+credential buffer as soon as the authentication attempt finishes. Real password
+authentication remains a human runtime gate and is not enabled through CTest
+environment variables or command-line arguments.
