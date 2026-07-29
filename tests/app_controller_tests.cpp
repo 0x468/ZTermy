@@ -5,6 +5,57 @@
 #include <QTest>
 #include <QVariantMap>
 
+namespace
+{
+
+struct FakeLocalSessionState final
+{
+    int starts = 0;
+    int stops = 0;
+};
+
+class FakeLocalTerminalSession final : public ztermy::terminal::LocalTerminalSessionBackend
+{
+public:
+    explicit FakeLocalTerminalSession(std::shared_ptr<FakeLocalSessionState> state) : m_state(std::move(state)) {}
+
+    [[nodiscard]] std::error_code start(const ztermy::terminal::TerminalGeometry) override
+    {
+        ++m_state->starts;
+        m_running = true;
+        emit statusChanged(QStringLiteral("Fake local terminal connected"));
+        emit runningChanged(true);
+        return {};
+    }
+
+    void stop() noexcept override
+    {
+        if (!m_running)
+        {
+            return;
+        }
+        m_running = false;
+        ++m_state->stops;
+        emit runningChanged(false);
+    }
+
+    void queueInput(const QByteArray &) override {}
+    void queuePaste(const QByteArray &) override {}
+    void requestResize(quint16, quint16, quint32, quint32) override {}
+    void requestScroll(int) override {}
+    void requestSelection(quint16, quint16, quint16, quint16, bool) override {}
+    void clearSelection() override {}
+    void copySelection() override {}
+    void search(const QString &, bool, bool) override {}
+    void clearSearch() override {}
+
+private:
+    std::shared_ptr<FakeLocalSessionState> m_state;
+    bool m_running = false;
+};
+
+} // namespace
+
 class AppControllerTests final : public QObject
 {
     Q_OBJECT
@@ -123,7 +174,11 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
 {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
-    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")));
+    const auto sessionState = std::make_shared<FakeLocalSessionState>();
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
+                                     directory.filePath(QStringLiteral("known_hosts.json")), [sessionState] {
+                                         return std::make_unique<FakeLocalTerminalSession>(sessionState);
+                                     });
     QSignalSpy tabsChanged(&controller, &ztermy::AppController::terminalTabsChanged);
     QSignalSpy activeChanged(&controller, &ztermy::AppController::activeTerminalTabChanged);
 
@@ -152,6 +207,8 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
     QVERIFY(controller.terminalTabs().isEmpty());
     QVERIFY(controller.activeTerminalTabId().isEmpty());
     QVERIFY(!controller.closeTerminalTab(second));
+    QCOMPARE(sessionState->starts, 2);
+    QCOMPARE(sessionState->stops, 2);
     QVERIFY(tabsChanged.count() >= 4);
     QVERIFY(activeChanged.count() >= 4);
 }

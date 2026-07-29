@@ -23,7 +23,41 @@ namespace ztermy::terminal
 class ConPtyProcess;
 class GhosttyTerminalEngine;
 
-class LocalTerminalSession final : public QObject
+class LocalTerminalSessionBackend : public QObject
+{
+    Q_OBJECT
+
+public:
+    using QObject::QObject;
+    ~LocalTerminalSessionBackend() override = default;
+
+    LocalTerminalSessionBackend(const LocalTerminalSessionBackend &) = delete;
+    LocalTerminalSessionBackend &operator=(const LocalTerminalSessionBackend &) = delete;
+
+    [[nodiscard]] virtual std::error_code start(TerminalGeometry geometry) = 0;
+    virtual void stop() noexcept = 0;
+
+public slots:
+    virtual void queueInput(const QByteArray &bytes) = 0;
+    virtual void queuePaste(const QByteArray &bytes) = 0;
+    virtual void requestResize(quint16 columns, quint16 rows, quint32 cellWidthPixels, quint32 cellHeightPixels) = 0;
+    virtual void requestScroll(int rows) = 0;
+    virtual void requestSelection(quint16 startColumn, quint16 startRow, quint16 endColumn, quint16 endRow,
+                                  bool rectangular) = 0;
+    virtual void clearSelection() = 0;
+    virtual void copySelection() = 0;
+    virtual void search(const QString &query, bool backwards, bool caseSensitive) = 0;
+    virtual void clearSearch() = 0;
+
+signals:
+    void snapshotReady(ztermy::terminal::TerminalSnapshotPtr snapshot);
+    void clipboardTextReady(const QString &text);
+    void statusChanged(const QString &status);
+    void runningChanged(bool running);
+    void searchResultReady(const QString &query, quint32 current, quint32 total, bool wrapped);
+};
+
+class LocalTerminalSession final : public LocalTerminalSessionBackend
 {
     Q_OBJECT
 
@@ -34,26 +68,20 @@ public:
     LocalTerminalSession(const LocalTerminalSession &) = delete;
     LocalTerminalSession &operator=(const LocalTerminalSession &) = delete;
 
-    [[nodiscard]] std::error_code start(TerminalGeometry geometry);
-    void stop() noexcept;
+    [[nodiscard]] std::error_code start(TerminalGeometry geometry) override;
+    void stop() noexcept override;
 
 public slots:
-    void queueInput(const QByteArray &bytes);
-    void queuePaste(const QByteArray &bytes);
-    void requestResize(quint16 columns, quint16 rows, quint32 cellWidthPixels, quint32 cellHeightPixels);
-    void requestScroll(int rows);
-    void requestSelection(quint16 startColumn, quint16 startRow, quint16 endColumn, quint16 endRow, bool rectangular);
-    void clearSelection();
-    void copySelection();
-    void search(const QString &query, bool backwards, bool caseSensitive);
-    void clearSearch();
-
-signals:
-    void snapshotReady(ztermy::terminal::TerminalSnapshotPtr snapshot);
-    void clipboardTextReady(const QString &text);
-    void statusChanged(const QString &status);
-    void runningChanged(bool running);
-    void searchResultReady(const QString &query, quint32 current, quint32 total, bool wrapped);
+    void queueInput(const QByteArray &bytes) override;
+    void queuePaste(const QByteArray &bytes) override;
+    void requestResize(quint16 columns, quint16 rows, quint32 cellWidthPixels, quint32 cellHeightPixels) override;
+    void requestScroll(int rows) override;
+    void requestSelection(quint16 startColumn, quint16 startRow, quint16 endColumn, quint16 endRow,
+                          bool rectangular) override;
+    void clearSelection() override;
+    void copySelection() override;
+    void search(const QString &query, bool backwards, bool caseSensitive) override;
+    void clearSearch() override;
 
 private slots:
     void deliverLatestSnapshot();

@@ -10,6 +10,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -39,9 +40,13 @@ class AppController final : public QObject
     Q_PROPERTY(bool terminalSearchCaseSensitive READ terminalSearchCaseSensitive NOTIFY terminalSearchChanged)
 
 public:
+    using LocalTerminalSessionFactory = std::function<std::unique_ptr<terminal::LocalTerminalSessionBackend>()>;
+
     explicit AppController(QObject *parent = nullptr);
     explicit AppController(const QString &profileStorePath, QObject *parent = nullptr);
     AppController(QString profileStorePath, QString knownHostsPath, QObject *parent = nullptr);
+    AppController(QString profileStorePath, QString knownHostsPath, LocalTerminalSessionFactory localSessionFactory,
+                  QObject *parent = nullptr);
     ~AppController() override;
 
     AppController(const AppController &) = delete;
@@ -104,7 +109,7 @@ private:
         QString status;
         TerminalTabKind kind = TerminalTabKind::Local;
         terminal::TerminalSnapshotPtr snapshot;
-        std::unique_ptr<terminal::LocalTerminalSession> local;
+        std::unique_ptr<terminal::LocalTerminalSessionBackend> local;
         std::unique_ptr<ssh::SshTerminalSession> ssh;
         QString searchQuery;
         std::uint32_t searchCurrent = 0;
@@ -136,6 +141,7 @@ private:
     static constexpr std::size_t maximumTerminalTabs = 32;
 
     ui::TerminalItem *m_terminal = nullptr;
+    LocalTerminalSessionFactory m_localSessionFactory;
     ssh::SshProfileStore m_profileStore;
     QString m_knownHostsPath;
     std::vector<ssh::SshProfile> m_profiles;

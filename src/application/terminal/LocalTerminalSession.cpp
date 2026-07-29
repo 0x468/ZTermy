@@ -20,7 +20,7 @@ Q_LOGGING_CATEGORY(terminalSessionLog, "ztermy.terminal.session")
 namespace ztermy::terminal
 {
 
-LocalTerminalSession::LocalTerminalSession(QObject *parent) : QObject(parent) {}
+LocalTerminalSession::LocalTerminalSession(QObject *parent) : LocalTerminalSessionBackend(parent) {}
 
 LocalTerminalSession::~LocalTerminalSession()
 {

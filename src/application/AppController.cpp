@@ -56,8 +56,29 @@ AppController::AppController(const QString &profileStorePath, QObject *parent)
 }
 
 AppController::AppController(QString profileStorePath, QString knownHostsPath, QObject *parent)
-    : QObject(parent), m_profileStore(std::move(profileStorePath)), m_knownHostsPath(std::move(knownHostsPath))
+    : AppController(
+          std::move(profileStorePath), std::move(knownHostsPath),
+          [] {
+              return std::make_unique<terminal::LocalTerminalSession>();
+          },
+          parent)
 {
+}
+
+AppController::AppController(QString profileStorePath, QString knownHostsPath,
+                             LocalTerminalSessionFactory localSessionFactory, QObject *parent)
+    : QObject(parent),
+      m_localSessionFactory(std::move(localSessionFactory)),
+      m_profileStore(std::move(profileStorePath)),
+      m_knownHostsPath(std::move(knownHostsPath))
+{
+    if (!m_localSessionFactory)
+    {
+        m_localSessionFactory = [] {
+            return std::make_unique<terminal::LocalTerminalSession>();
+        };
+    }
+    Q_ASSERT(m_localSessionFactory);
     loadHostProfiles();
 }
 
@@ -223,7 +244,11 @@ QString AppController::startLocalTerminal()
     tab->title = QStringLiteral("PowerShell %1").arg(m_nextLocalTabNumber++);
     tab->status = QStringLiteral("Starting local terminal...");
     tab->kind = TerminalTabKind::Local;
-    tab->local = std::make_unique<terminal::LocalTerminalSession>();
+    tab->local = m_localSessionFactory();
+    if (!tab->local)
+    {
+        return {};
+    }
     QString tabId = tab->id;
     connectLocalTabSignals(*tab);
     m_tabs.push_back(std::move(tab));
@@ -620,7 +645,7 @@ void AppController::rejectHostKey()
 void AppController::connectLocalTabSignals(TerminalTab &tab)
 {
     const QString tabId = tab.id;
-    QObject::connect(tab.local.get(), &terminal::LocalTerminalSession::snapshotReady, this,
+    QObject::connect(tab.local.get(), &terminal::LocalTerminalSessionBackend::snapshotReady, this,
                      [this, tabId](const terminal::TerminalSnapshotPtr &snapshot) {
                          TerminalTab *updated = findTab(tabId);
                          if (updated == nullptr)
@@ -633,7 +658,7 @@ void AppController::connectLocalTabSignals(TerminalTab &tab)
                              m_terminal->setSnapshot(snapshot);
                          }
                      });
-    QObject::connect(tab.local.get(), &terminal::LocalTerminalSession::statusChanged, this,
+    QObject::connect(tab.local.get(), &terminal::LocalTerminalSessionBackend::statusChanged, this,
                      [this, tabId](const QString &status) {
                          TerminalTab *updated = findTab(tabId);
                          if (updated == nullptr)
@@ -647,14 +672,14 @@ void AppController::connectLocalTabSignals(TerminalTab &tab)
                          }
                          emit terminalTabsChanged();
                      });
-    QObject::connect(tab.local.get(), &terminal::LocalTerminalSession::clipboardTextReady, this,
+    QObject::connect(tab.local.get(), &terminal::LocalTerminalSessionBackend::clipboardTextReady, this,
                      [this, tabId](const QString &text) {
                          if (m_terminal != nullptr && m_activeTabId == tabId)
                          {
                              m_terminal->setClipboardText(text);
                          }
                      });
-    QObject::connect(tab.local.get(), &terminal::LocalTerminalSession::runningChanged, this,
+    QObject::connect(tab.local.get(), &terminal::LocalTerminalSessionBackend::runningChanged, this,
                      [this, tabId](const bool running) {
                          if (TerminalTab *updated = findTab(tabId))
                          {
@@ -662,7 +687,7 @@ void AppController::connectLocalTabSignals(TerminalTab &tab)
                              emit terminalTabsChanged();
                          }
                      });
-    QObject::connect(tab.local.get(), &terminal::LocalTerminalSession::searchResultReady, this,
+    QObject::connect(tab.local.get(), &terminal::LocalTerminalSessionBackend::searchResultReady, this,
                      [this, tabId](const QString &query, const quint32 current, const quint32 total, const bool) {
                          TerminalTab *updated = findTab(tabId);
                          if (updated == nullptr || (!query.isEmpty() && query != updated->searchQuery))
