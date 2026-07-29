@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -42,6 +43,8 @@ struct KnownHostEntry final
     SshEndpoint endpoint;
     HostKeyAlgorithm algorithm = HostKeyAlgorithm::Unknown;
     std::vector<std::uint8_t> encodedKey;
+
+    [[nodiscard]] friend bool operator==(const KnownHostEntry &, const KnownHostEntry &) = default;
 };
 
 enum class HostKeyTrust : std::uint8_t
@@ -54,6 +57,8 @@ enum class HostKeyTrust : std::uint8_t
 
 [[nodiscard]] std::string sha256Fingerprint(const ObservedHostKey &hostKey);
 [[nodiscard]] std::string_view hostKeyAlgorithmName(HostKeyAlgorithm algorithm) noexcept;
+[[nodiscard]] std::string_view hostKeyAlgorithmToken(HostKeyAlgorithm algorithm) noexcept;
+[[nodiscard]] std::optional<HostKeyAlgorithm> parseHostKeyAlgorithm(std::string_view token) noexcept;
 [[nodiscard]] HostKeyTrust evaluateHostKeyTrust(const SshEndpoint &endpoint, const ObservedHostKey &observed,
                                                 std::span<const KnownHostEntry> knownHosts) noexcept;
 

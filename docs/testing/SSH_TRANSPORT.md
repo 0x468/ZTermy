@@ -32,10 +32,20 @@ The `ssh-host-key` test verifies:
 - malformed records; and
 - OpenSSH-style SHA-256 fingerprint formatting.
 
+The `known-hosts-store` test verifies:
+
+- a missing store is treated as empty;
+- accepted public host keys survive an atomic save/load round trip;
+- parent directories are created;
+- a changed key remains blocked after reload;
+- malformed JSON and unsupported schema versions are rejected;
+- duplicate endpoint-and-algorithm records are rejected; and
+- fractional ports and invalid base64 keys are rejected.
+
 Run the focused tests through the configured Debug preset:
 
 ```powershell
-ctest --test-dir build/msvc-dynamic-debug -R "windows-tcp-socket|ssh-handshake|ssh-host-key" --output-on-failure
+ctest --test-dir build/msvc-dynamic-debug -R "windows-tcp-socket|ssh-handshake|ssh-host-key|known-hosts-store" --output-on-failure
 ```
 
 The full Debug and static Release test suites must also pass before changes are

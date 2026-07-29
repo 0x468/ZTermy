@@ -104,8 +104,20 @@ add_library(ztermy_ssh_domain STATIC
     src/domain/ssh/SshHostKey.h
 )
 
+add_library(ztermy_ssh_persistence STATIC
+    src/infrastructure/ssh/KnownHostsStore.cpp
+    src/infrastructure/ssh/KnownHostsStore.h
+)
+
 target_compile_features(ztermy_ssh_domain PUBLIC cxx_std_23)
 target_include_directories(ztermy_ssh_domain PUBLIC src)
+
+target_compile_features(ztermy_ssh_persistence PUBLIC cxx_std_23)
+target_include_directories(ztermy_ssh_persistence PUBLIC src)
+target_link_libraries(ztermy_ssh_persistence
+    PUBLIC ztermy_ssh_domain
+    PRIVATE Qt6::Core
+)
 
 target_compile_features(ztermy_ssh_transport PUBLIC cxx_std_23)
 target_include_directories(ztermy_ssh_transport PUBLIC src)
@@ -250,6 +262,13 @@ if(MSVC)
         /Zc:__cplusplus
     )
 
+    target_compile_options(ztermy_ssh_persistence PRIVATE
+        /permissive-
+        /utf-8
+        /W4
+        /Zc:__cplusplus
+    )
+
     target_compile_options(ztermy_terminal_session PRIVATE
         /permissive-
         /utf-8
@@ -379,6 +398,27 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME ssh-host-key COMMAND ztermy_ssh_host_key_tests)
+
+    qt_add_executable(ztermy_known_hosts_store_tests
+        tests/known_hosts_store_tests.cpp
+    )
+
+    target_compile_features(ztermy_known_hosts_store_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_known_hosts_store_tests PRIVATE
+        ztermy_ssh_persistence
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_known_hosts_store_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME known-hosts-store COMMAND ztermy_known_hosts_store_tests)
 
     qt_add_executable(ztermy_windows_tcp_socket_tests
         tests/windows_tcp_socket_tests.cpp

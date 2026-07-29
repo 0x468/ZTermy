@@ -50,6 +50,7 @@ private slots:
     void rejectsMalformedInput();
     void formatsOpenSshStyleSha256Fingerprint();
     void namesSupportedAlgorithms();
+    void roundTripsStableAlgorithmTokens();
 };
 
 void SshHostKeyTests::matchesExactHostPortAndKey()
@@ -113,6 +114,23 @@ void SshHostKeyTests::namesSupportedAlgorithms()
     QCOMPARE(ztermy::ssh::hostKeyAlgorithmName(HostKeyAlgorithm::EcdsaP256), std::string_view("ECDSA P-256"));
     QCOMPARE(ztermy::ssh::hostKeyAlgorithmName(HostKeyAlgorithm::Ed25519), std::string_view("ED25519"));
     QCOMPARE(ztermy::ssh::hostKeyAlgorithmName(HostKeyAlgorithm::Unknown), std::string_view("Unknown"));
+}
+
+void SshHostKeyTests::roundTripsStableAlgorithmTokens()
+{
+    constexpr std::array algorithms{
+        HostKeyAlgorithm::Rsa,       HostKeyAlgorithm::EcdsaP256, HostKeyAlgorithm::EcdsaP384,
+        HostKeyAlgorithm::EcdsaP521, HostKeyAlgorithm::Ed25519,
+    };
+    for (const HostKeyAlgorithm algorithm : algorithms)
+    {
+        const std::string_view token = ztermy::ssh::hostKeyAlgorithmToken(algorithm);
+        QVERIFY(!token.empty());
+        QCOMPARE(ztermy::ssh::parseHostKeyAlgorithm(token), std::optional{algorithm});
+    }
+
+    QVERIFY(ztermy::ssh::hostKeyAlgorithmToken(HostKeyAlgorithm::Unknown).empty());
+    QVERIFY(!ztermy::ssh::parseHostKeyAlgorithm("ssh-dss"));
 }
 
 QTEST_GUILESS_MAIN(SshHostKeyTests)

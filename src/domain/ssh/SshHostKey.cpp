@@ -93,6 +93,51 @@ std::string_view hostKeyAlgorithmName(const HostKeyAlgorithm algorithm) noexcept
     return "Unknown";
 }
 
+std::string_view hostKeyAlgorithmToken(const HostKeyAlgorithm algorithm) noexcept
+{
+    switch (algorithm)
+    {
+        case HostKeyAlgorithm::Rsa:
+            return "ssh-rsa";
+        case HostKeyAlgorithm::EcdsaP256:
+            return "ecdsa-sha2-nistp256";
+        case HostKeyAlgorithm::EcdsaP384:
+            return "ecdsa-sha2-nistp384";
+        case HostKeyAlgorithm::EcdsaP521:
+            return "ecdsa-sha2-nistp521";
+        case HostKeyAlgorithm::Ed25519:
+            return "ssh-ed25519";
+        case HostKeyAlgorithm::Unknown:
+            return {};
+    }
+    return {};
+}
+
+std::optional<HostKeyAlgorithm> parseHostKeyAlgorithm(const std::string_view token) noexcept
+{
+    if (token == "ssh-rsa")
+    {
+        return HostKeyAlgorithm::Rsa;
+    }
+    if (token == "ecdsa-sha2-nistp256")
+    {
+        return HostKeyAlgorithm::EcdsaP256;
+    }
+    if (token == "ecdsa-sha2-nistp384")
+    {
+        return HostKeyAlgorithm::EcdsaP384;
+    }
+    if (token == "ecdsa-sha2-nistp521")
+    {
+        return HostKeyAlgorithm::EcdsaP521;
+    }
+    if (token == "ssh-ed25519")
+    {
+        return HostKeyAlgorithm::Ed25519;
+    }
+    return std::nullopt;
+}
+
 HostKeyTrust evaluateHostKeyTrust(const SshEndpoint &endpoint, const ObservedHostKey &observed,
                                   const std::span<const KnownHostEntry> knownHosts) noexcept
 {
