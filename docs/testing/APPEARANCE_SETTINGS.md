@@ -18,6 +18,8 @@ Expected:
 - Discard restores the currently saved values.
 - Apply updates the application without opening a second window.
 - Restart restores every applied value from `settings.json`.
+- Window appearance and Terminal cards share the same inset, heading,
+  background, border, and corner radius without clipping their controls.
 - The Settings page remains scrollable and usable at the minimum window size.
 
 ## Theme, opacity, and Windows backdrop
@@ -38,6 +40,43 @@ Expected:
 - Unsupported DWM attributes degrade to a normal background without a crash.
 - Snap Layouts, native resizing, maximized work-area sizing, and custom
   caption buttons remain functional.
+
+## Host Vault theme states
+
+1. Save at least one private-key profile and one password profile.
+2. In Dark theme, hover a host card, open the authentication selector, show a
+   successful status, and open the delete confirmation.
+3. Repeat the same states in Light theme.
+4. Use Tab to move focus through the card actions and dialog buttons in both
+   themes.
+
+Expected:
+
+- Cards, authentication menus, selected rows, success text, destructive
+  borders, and destructive buttons use the active theme instead of retaining
+  dark-only colors.
+- Primary and destructive button text remains readable.
+- Keyboard focus remains visible over hovered, selected, primary, and
+  destructive states.
+- Changing theme causes no card movement, clipped text, or modal layout shift.
+
+## Windows animation preference
+
+1. Open Windows **Settings > Accessibility > Visual effects** while ztermy is
+   running.
+2. Turn **Animation effects** off.
+3. Move the pointer repeatedly across the minimize and close caption buttons.
+4. Turn **Animation effects** on and repeat without restarting ztermy.
+
+Expected:
+
+- With animation effects off, nonessential caption color transitions are
+  immediate and controls remain fully functional.
+- With animation effects on, the same transition is subtle and no longer than
+  120 milliseconds.
+- The preference takes effect while ztermy is running.
+- Snap Layout hover, maximize/restore, focus indicators, terminal cursor
+  behavior, and terminal rendering are unchanged.
 
 ## Terminal typography and cursor
 

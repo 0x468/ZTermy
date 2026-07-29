@@ -68,6 +68,26 @@ Expected:
 - Search navigation never selects or scrolls a background session.
 - Closing a searched tab leaves the surviving tab's search state intact.
 
+## Keyboard tab workflow
+
+1. Keep the terminal viewport focused.
+2. Press Ctrl+Shift+T twice.
+3. Press Ctrl+Tab repeatedly, then Ctrl+Shift+Tab repeatedly.
+4. Press Ctrl+Shift+W on the active tab.
+5. Press Tab until focus reaches the title-bar terminal tabs, their close
+   buttons, and the new-tab button. Activate each kind of control with Space
+   and Enter.
+
+Expected:
+
+- Ctrl+Shift+T creates one independent local terminal per key press.
+- Ctrl+Tab and Ctrl+Shift+Tab wrap through the tabs in opposite directions.
+- Ctrl+Shift+W closes only the active tab and selects a surviving neighbor.
+- Every title-bar action has a visible focus outline and an accessible name.
+- Space and Enter match the corresponding mouse action.
+- Activating or switching a terminal returns keyboard focus to its viewport.
+- Terminal input never receives the bytes for a handled application shortcut.
+
 ## Limits and current behavior
 
 - At most 32 terminal tabs may be open at once.

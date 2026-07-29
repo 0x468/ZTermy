@@ -27,6 +27,13 @@ such as editable text fields, combo boxes, sliders, and spin boxes. Project
 wrappers normalize their palette, metrics, validation presentation, and
 accessibility instead of recreating their input behavior.
 
+The root QML object declares controller and native-window dependencies as
+required properties populated through `QQuickView::setInitialProperties`.
+Reusable components receive their dependencies explicitly rather than reading
+unqualified context properties. This keeps QML tooling aware of component
+boundaries and prevents a component from silently depending on application
+globals.
+
 Native title-bar behavior stays behind `NativeWindow`; visual component
 refactoring must not replace or emulate Win32 hit testing. Terminal rendering
 remains one custom item and is explicitly outside the application-component

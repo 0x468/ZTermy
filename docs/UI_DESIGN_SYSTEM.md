@@ -110,24 +110,31 @@ Space activate button-like controls once and ignore key auto-repeat.
 ### Existing foundations
 
 - `Theme`: all semantic visual tokens.
+- `AppIcon`: ztermy-owned, stroke-based vector icons that stay independent
+  from platform font glyphs, emoji, and third-party icon assets.
+- `ActionButton`: default, primary, and destructive application actions with
+  shared mouse, keyboard, focus, disabled, and reduced-motion behavior.
+- `AppTextField`: standard and compact editable fields that retain Qt input,
+  selection, validator, IME, and secret-echo behavior.
+- `StatusMessage`: information, success, and alert presentation with semantic
+  color and accessibility roles.
+- `ConfirmationDialog`: bounded modal confirmation with semantic primary or
+  destructive action, safe initial focus, Escape rejection, and focus
+  restoration.
+- `SectionCard`: shared elevated grouping with consistent heading,
+  description, inset, border, radius, and semantic theme colors.
+- `StatePanel`: shared empty, loading, disconnected, and recoverable-error
+  presentation with semantic status, wrapped guidance, optional actions, and
+  accessible announcements.
+- `SideNavigationItem`: compact sidebar navigation with selected, hover,
+  keyboard-focus, and accessible-button states.
+- `TerminalTabAction`: bounded title-bar terminal action with session status,
+  activation, close, keyboard focus, and accessible names.
 - `CaptionButton`: native-title-bar commands while preserving Win32 hit
   testing and Snap Layouts.
 - `KeyboardAction`: mouse, keyboard, focus, accessibility, and pointer
   behavior for self-drawn actions.
 - `HostKeyPrompt`: modal host-identity security boundary.
-
-### V1 convergence components
-
-The convergence pass should extract these reusable primitives before
-duplicating another page-specific implementation:
-
-- action button: default, primary, and destructive variants;
-- text and secret field with label, validation, and error announcement;
-- section card with title and optional description;
-- inline status message for information, success, warning, and error;
-- confirmation dialog with initial focus and safe Escape behavior;
-- compact navigation item and tab action;
-- empty, loading, disconnected, and recoverable-error state.
 
 Controls from Qt Quick Controls remain valid where their native interaction
 model is useful. A wrapper should normalize palette, focus, metrics, and
@@ -161,8 +168,9 @@ and all dialogs require a keyboard-only acceptance pass.
 - When Windows disables client-area animation, nonessential application
   transitions must become immediate.
 
-Respecting the Windows animation preference is a remaining V1 implementation
-item; adding a separate application-only toggle is not a substitute.
+The native window observes the Windows client-area animation preference and
+updates QML motion tokens while the application is running. A separate
+application-only toggle is not a substitute for this system preference.
 
 ## Layout behavior
 
@@ -197,4 +205,3 @@ For each primary screen, verify:
   states as applicable;
 - no clipped required text or layout movement during interaction;
 - no regression to Snap Layouts, IME placement, terminal latency, or resize.
-

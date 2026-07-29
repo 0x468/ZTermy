@@ -9,10 +9,11 @@
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QLoggingCategory>
-#include <QQmlContext>
+#include <QMetaType>
 #include <QQuickStyle>
 #include <QStandardPaths>
-#include <QtQml/qqml.h>
+#include <QVariant>
+#include <QVariantMap>
 
 #include <cstdlib>
 
@@ -49,12 +50,12 @@ int main(int argc, char *argv[])
                       << "dataDirectory=" << paths->dataDirectory;
     QQuickStyle::setStyle(QStringLiteral("Basic"));
     qRegisterMetaType<ztermy::terminal::TerminalSnapshotPtr>();
-    qmlRegisterType<ztermy::ui::TerminalItem>("Ztermy.Terminal", 1, 0, "TerminalView");
 
     ztermy::AppController appController(paths->profilesFile, paths->knownHostsFile, paths->settingsFile);
     ztermy::NativeWindow window;
-    window.rootContext()->setContextProperty(QStringLiteral("appController"), &appController);
-    if (!window.load())
+    QVariantMap initialProperties;
+    initialProperties.insert(QStringLiteral("controller"), QVariant::fromValue(static_cast<QObject *>(&appController)));
+    if (!window.load(initialProperties))
     {
         return EXIT_FAILURE;
     }

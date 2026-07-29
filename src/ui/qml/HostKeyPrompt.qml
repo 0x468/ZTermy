@@ -1,17 +1,17 @@
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 
 Item {
     id: overlay
 
+    required property var controller
     property color panelColor: Theme.elevatedBackground
     property color borderColor: Theme.borderStrong
     property color textColor: Theme.text
     property color mutedColor: Theme.textSoft
     property color accentColor: Theme.accent
 
-    visible: appController.hostKeyPromptVisible
+    visible: controller.hostKeyPromptVisible
     enabled: visible
 
     Rectangle {
@@ -29,7 +29,7 @@ Item {
         anchors.centerIn: parent
         radius: Theme.radiusPanel
         color: overlay.panelColor
-        border.color: appController.hostKeyChangedWarning ? Theme.danger : overlay.borderColor
+        border.color: overlay.controller.hostKeyChangedWarning ? Theme.danger : overlay.borderColor
 
         ColumnLayout {
             id: promptLayout
@@ -39,7 +39,7 @@ Item {
 
             Text {
                 Layout.fillWidth: true
-                text: appController.hostKeyChangedWarning ? "Host identity changed" : "Verify host identity"
+                text: overlay.controller.hostKeyChangedWarning ? "Host identity changed" : "Verify host identity"
                 color: overlay.textColor
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.textTitle
@@ -48,7 +48,7 @@ Item {
 
             Text {
                 Layout.fillWidth: true
-                text: appController.hostKeyChangedWarning ? "The saved host key does not match. The connection was blocked. Verify the server outside ztermy before changing trust." : "This host is not trusted yet. Compare the fingerprint with a value obtained from the server administrator."
+                text: overlay.controller.hostKeyChangedWarning ? "The saved host key does not match. The connection was blocked. Verify the server outside ztermy before changing trust." : "This host is not trusted yet. Compare the fingerprint with a value obtained from the server administrator."
                 color: overlay.mutedColor
                 wrapMode: Text.WordWrap
                 font.family: Theme.uiFont
@@ -69,20 +69,20 @@ Item {
                     spacing: 7
 
                     Text {
-                        text: appController.hostKeyAlgorithm
+                        text: overlay.controller.hostKeyAlgorithm
                         color: overlay.mutedColor
-                        font.family: "Segoe UI Variable"
+                        font.family: Theme.uiFont
                         font.pixelSize: 11
                     }
 
                     TextEdit {
                         Layout.fillWidth: true
-                        text: appController.hostKeyFingerprint
+                        text: overlay.controller.hostKeyFingerprint
                         color: overlay.textColor
                         readOnly: true
                         selectByMouse: true
                         wrapMode: TextEdit.WrapAnywhere
-                        font.family: "Cascadia Mono"
+                        font.family: Theme.terminalFont
                         font.pixelSize: 12
                         Accessible.name: "Observed SSH host fingerprint"
                     }
@@ -97,25 +97,25 @@ Item {
                     Layout.fillWidth: true
                 }
 
-                Button {
-                    text: appController.hostKeyChangedWarning ? "Close" : "Reject"
+                ActionButton {
+                    text: overlay.controller.hostKeyChangedWarning ? "Close" : "Reject"
                     Accessible.name: text
-                    onClicked: appController.rejectHostKey()
+                    onClicked: overlay.controller.rejectHostKey()
                 }
 
-                Button {
-                    visible: !appController.hostKeyChangedWarning
+                ActionButton {
+                    visible: !overlay.controller.hostKeyChangedWarning
                     text: "Trust once"
                     Accessible.name: "Trust this host once"
-                    onClicked: appController.acceptHostKey(false)
+                    onClicked: overlay.controller.acceptHostKey(false)
                 }
 
-                Button {
-                    visible: !appController.hostKeyChangedWarning
+                ActionButton {
+                    visible: !overlay.controller.hostKeyChangedWarning
                     text: "Trust and remember"
                     Accessible.name: "Trust and remember this host"
-                    highlighted: true
-                    onClicked: appController.acceptHostKey(true)
+                    variant: "primary"
+                    onClicked: overlay.controller.acceptHostKey(true)
                 }
             }
         }

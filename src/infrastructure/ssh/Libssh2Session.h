@@ -73,7 +73,7 @@ public:
                                                                       const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] std::expected<std::size_t, SshTransportError>
     readTerminal(WindowsTcpSocket &socket, std::span<char> output, std::chrono::milliseconds timeout,
-                 const std::stop_token &stopToken = {}) noexcept;
+                 const std::stop_token &stopToken = {}, std::uintptr_t interruptEvent = 0) noexcept;
     [[nodiscard]] std::expected<void, SshTransportError> writeTerminal(WindowsTcpSocket &socket,
                                                                        std::span<const char> input,
                                                                        std::chrono::milliseconds timeout,

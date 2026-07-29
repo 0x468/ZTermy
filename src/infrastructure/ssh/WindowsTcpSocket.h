@@ -35,6 +35,26 @@ struct TcpConnectError final
     [[nodiscard]] friend bool operator==(const TcpConnectError &, const TcpConnectError &) = default;
 };
 
+class WindowsWaitEvent final
+{
+public:
+    WindowsWaitEvent() noexcept;
+    ~WindowsWaitEvent();
+
+    WindowsWaitEvent(const WindowsWaitEvent &) = delete;
+    WindowsWaitEvent &operator=(const WindowsWaitEvent &) = delete;
+    WindowsWaitEvent(WindowsWaitEvent &&) = delete;
+    WindowsWaitEvent &operator=(WindowsWaitEvent &&) = delete;
+
+    [[nodiscard]] bool valid() const noexcept;
+    [[nodiscard]] std::uintptr_t nativeHandle() const noexcept;
+    [[nodiscard]] bool signal() noexcept;
+    [[nodiscard]] bool reset() noexcept;
+
+private:
+    std::uintptr_t m_event = 0;
+};
+
 class WindowsTcpSocket final
 {
 public:
@@ -53,9 +73,10 @@ public:
 
     [[nodiscard]] bool valid() const noexcept;
     [[nodiscard]] std::uintptr_t nativeHandle() const noexcept;
-    [[nodiscard]] std::expected<void, TcpConnectError>
-    waitUntilReady(SocketIoInterest interest, std::chrono::steady_clock::time_point deadline,
-                   const std::stop_token &stopToken = {}) const noexcept;
+    [[nodiscard]] std::expected<void, TcpConnectError> waitUntilReady(SocketIoInterest interest,
+                                                                      std::chrono::steady_clock::time_point deadline,
+                                                                      const std::stop_token &stopToken = {},
+                                                                      std::uintptr_t interruptEvent = 0) const noexcept;
 
     void close() noexcept;
 

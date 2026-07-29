@@ -8,10 +8,12 @@ Status: toolchain baseline
 - Visual Studio 2022 with Desktop development with C++
 - MSVC x64 toolset
 - Windows 11 SDK
-- CMake 3.28 or newer
+- CMake 3.28 or newer for development builds
+- CMake 4.3 or newer for the per-user MSI
 - Ninja
 - Qt 6.8.3 for MSVC 2022
 - Zig 0.16.0
+- .NET SDK and WiX Toolset 4.0.4 for MSI packaging
 - LLVM clangd, clang-format, and clang-tidy
 
 ## Local Qt installations
@@ -62,6 +64,10 @@ cmake --preset msvc-static-release
 cmake --build --preset msvc-static-release
 ctest --test-dir build/msvc-static-release --output-on-failure
 cmake --build --preset msvc-static-release --target ztermy_portable_package
+
+dotnet tool install --tool-path build/tools/wix wix --version 4.0.4
+$env:WIX = "$PWD/build/tools/wix"
+cmake --build --preset msvc-static-release --target ztermy_installer
 ```
 
 The dynamic Qt presets use the DLL MSVC runtime. The static Qt preset uses the
@@ -78,6 +84,12 @@ The static portable archive is written below
 `build/msvc-static-release/package/portable`. It contains `portable.flag`, so
 all runtime data remains below the extracted directory. See
 [testing/DISTRIBUTION.md](testing/DISTRIBUTION.md) for the runtime checks.
+
+The per-user MSI is written directly below `build/msvc-static-release`. CPack
+uses the workspace-local WiX executable selected through `WIX`; WiX does not
+need to be installed globally. The MSI contains only the static `ztermy.exe`
+runtime component and deliberately excludes `portable.flag`, dependency
+headers, libraries, and debug artifacts.
 
 ## libghostty-vt
 

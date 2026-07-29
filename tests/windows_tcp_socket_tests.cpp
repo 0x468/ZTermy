@@ -5,6 +5,7 @@
 #include <QTest>
 
 #include <chrono>
+#include <future>
 #include <stop_token>
 #include <utility>
 
@@ -20,6 +21,7 @@ private slots:
     void honorsPreRequestedCancellation();
     void rejectsInvalidEndpoint();
     void moveTransfersSocketOwnership();
+    void interruptEventWakesPendingRead();
 };
 
 void WindowsTcpSocketTests::connectsToLoopbackListener()
@@ -90,6 +92,32 @@ void WindowsTcpSocketTests::moveTransfersSocketOwnership()
 
     moved.close();
     QVERIFY(!moved.valid());
+}
+
+void WindowsTcpSocketTests::interruptEventWakesPendingRead()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+
+    auto socket = ztermy::ssh::WindowsTcpSocket::connect("127.0.0.1", server.serverPort(), 2s);
+    QVERIFY(socket);
+    QVERIFY(server.waitForNewConnection(1000));
+
+    ztermy::ssh::WindowsWaitEvent interrupt;
+    QVERIFY(interrupt.valid());
+    const auto started = std::chrono::steady_clock::now();
+    auto pending = std::async(std::launch::async, [&] {
+        return socket->waitUntilReady(ztermy::ssh::SocketIoInterest::Read, std::chrono::steady_clock::now() + 5s, {},
+                                      interrupt.nativeHandle());
+    });
+
+    QTest::qWait(50);
+    QVERIFY(interrupt.signal());
+    QCOMPARE(pending.wait_for(500ms), std::future_status::ready);
+    const auto result = pending.get();
+    QVERIFY(!result);
+    QCOMPARE(result.error().kind, ztermy::ssh::TcpConnectErrorKind::Cancelled);
+    QVERIFY(std::chrono::steady_clock::now() - started < 500ms);
 }
 
 QTEST_GUILESS_MAIN(WindowsTcpSocketTests)

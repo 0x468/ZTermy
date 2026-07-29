@@ -5,9 +5,9 @@
 #include <QEvent>
 #include <QGuiApplication>
 #include <QLoggingCategory>
-#include <QQmlContext>
 #include <QScreen>
 #include <QStyleHints>
+#include <QVariant>
 
 #include <Windows.h>
 #include <dwmapi.h>
@@ -70,6 +70,8 @@ namespace ztermy
 
 NativeWindow::NativeWindow(QWindow *parent) : QQuickView(parent)
 {
+    (void)m_animationPreference.update(windowing::queryClientAreaAnimationsEnabled());
+
     setFlags(Qt::Window | Qt::WindowTitleHint | Qt::WindowSystemMenuHint | Qt::WindowMinMaxButtonsHint
              | Qt::WindowCloseButtonHint);
     setTitle(QStringLiteral("ztermy"));
@@ -88,9 +90,10 @@ NativeWindow::~NativeWindow()
     uninstallWindowProcedure();
 }
 
-bool NativeWindow::load()
+bool NativeWindow::load(QVariantMap initialProperties)
 {
-    rootContext()->setContextProperty(QStringLiteral("windowChrome"), this);
+    initialProperties.insert(QStringLiteral("windowChrome"), QVariant::fromValue(static_cast<QObject *>(this)));
+    setInitialProperties(initialProperties);
     setSource(QUrl(QStringLiteral("qrc:/qt/qml/Ztermy/Main.qml")));
 
     if (status() == QQuickView::Error)
@@ -120,6 +123,11 @@ bool NativeWindow::maximizeButtonPressed() const noexcept
 bool NativeWindow::systemDarkMode() const noexcept
 {
     return QGuiApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark;
+}
+
+bool NativeWindow::animationsEnabled() const noexcept
+{
+    return m_animationPreference.enabled();
 }
 
 void NativeWindow::minimizeWindow()
@@ -274,6 +282,10 @@ bool NativeWindow::nativeEvent(const QByteArray &eventType, void *message, qintp
                 return true;
             }
             setMaximizeButtonPressed(false);
+            break;
+
+        case WM_SETTINGCHANGE:
+            refreshAnimationsEnabled();
             break;
 
         case WM_GETTITLEBARINFOEX:
@@ -606,6 +618,16 @@ bool NativeWindow::applyBackdrop()
         qCWarning(windowLog) << "Some requested DWM appearance attributes are unavailable";
     }
     return applied;
+}
+
+void NativeWindow::refreshAnimationsEnabled()
+{
+    if (m_animationPreference.update(windowing::queryClientAreaAnimationsEnabled()))
+    {
+        qCInfo(windowLog) << "Windows client-area animation preference changed"
+                          << "enabled=" << m_animationPreference.enabled();
+        emit animationsEnabledChanged();
+    }
 }
 
 void NativeWindow::setMaximizeButtonHovered(const bool hovered)

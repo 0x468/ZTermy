@@ -149,7 +149,8 @@ void LocalTerminalSession::queueInput(const QByteArray &bytes)
     {
         return;
     }
-    queueByteCommand(InputCommand{.bytes = bytes}, static_cast<std::size_t>(bytes.size()));
+    queueByteCommand(InputCommand{.bytes = bytes, .enqueuedAt = std::chrono::steady_clock::now()},
+                     static_cast<std::size_t>(bytes.size()));
 }
 
 void LocalTerminalSession::queuePaste(const QByteArray &bytes)
@@ -378,6 +379,7 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
 
         if (const auto *input = std::get_if<InputCommand>(&command))
         {
+            m_inputQueueLatency.record(std::chrono::steady_clock::now() - input->enqueuedAt);
             std::error_code selectionError;
             {
                 std::scoped_lock lock(m_engineMutex);
@@ -631,6 +633,7 @@ void LocalTerminalSession::resetMetrics() noexcept
     m_cleanSnapshots.store(0, std::memory_order_relaxed);
     m_snapshotBuildNanoseconds.store(0, std::memory_order_relaxed);
     m_maxSnapshotBuildNanoseconds.store(0, std::memory_order_relaxed);
+    m_inputQueueLatency.reset();
 }
 
 void LocalTerminalSession::logMetrics() const
@@ -642,6 +645,7 @@ void LocalTerminalSession::logMetrics() const
         produced == 0
             ? 0.0
             : static_cast<double>(totalBuildNanoseconds) / static_cast<double>(produced) / nanosecondsPerMillisecond;
+    const diagnostics::LatencySummary inputQueueLatency = m_inputQueueLatency.summary();
     qCInfo(terminalSessionLog) << "Terminal session metrics"
                                << "readBytes=" << m_readBytes.load(std::memory_order_relaxed)
                                << "snapshotsProduced=" << produced
@@ -652,7 +656,12 @@ void LocalTerminalSession::logMetrics() const
                                << "clean=" << m_cleanSnapshots.load(std::memory_order_relaxed)
                                << "snapshotBuildAverageMs=" << averageBuildMilliseconds << "snapshotBuildMaxMs="
                                << (static_cast<double>(m_maxSnapshotBuildNanoseconds.load(std::memory_order_relaxed))
-                                   / nanosecondsPerMillisecond);
+                                   / nanosecondsPerMillisecond)
+                               << "inputQueueSamples=" << inputQueueLatency.count
+                               << "inputQueueP50Us=" << inputQueueLatency.p50UpperBoundMicroseconds
+                               << "inputQueueP95Us=" << inputQueueLatency.p95UpperBoundMicroseconds
+                               << "inputQueueP99Us=" << inputQueueLatency.p99UpperBoundMicroseconds
+                               << "inputQueueMaxUs=" << inputQueueLatency.maxMicroseconds;
 }
 
 } // namespace ztermy::terminal

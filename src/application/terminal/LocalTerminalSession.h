@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/diagnostics/LatencyHistogram.h"
 #include "domain/terminal/TerminalEngine.h"
 
 #include <QByteArray>
@@ -7,6 +8,7 @@
 #include <QString>
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <cstddef>
 #include <deque>
@@ -90,6 +92,7 @@ private:
     struct InputCommand
     {
         QByteArray bytes;
+        std::chrono::steady_clock::time_point enqueuedAt;
     };
     struct PasteCommand
     {
@@ -153,6 +156,7 @@ private:
     std::atomic_uint64_t m_cleanSnapshots = 0;
     std::atomic_uint64_t m_snapshotBuildNanoseconds = 0;
     std::atomic_uint64_t m_maxSnapshotBuildNanoseconds = 0;
+    diagnostics::LatencyHistogram m_inputQueueLatency;
 };
 
 } // namespace ztermy::terminal

@@ -243,12 +243,12 @@ Rectangle {
                     }
                 }
 
-                Button {
+                ActionButton {
+                    id: newHostButton
+
                     text: "+  New host"
                     Accessible.name: "Create a new SSH host profile"
-                    palette.button: pane.accentColor
-                    palette.buttonText: Theme.accentText
-                    font.weight: Font.DemiBold
+                    variant: "primary"
                     onClicked: pane.beginNewProfile()
                 }
             }
@@ -258,15 +258,12 @@ Rectangle {
                 Layout.topMargin: 8
                 spacing: 10
 
-                TextField {
+                AppTextField {
                     id: searchField
 
                     Layout.fillWidth: true
                     placeholderText: "Search hosts, groups, users, or addresses"
-                    Accessible.name: "Search saved SSH hosts"
-                    selectByMouse: true
-                    leftPadding: 14
-                    rightPadding: 14
+                    accessibleName: "Search saved SSH hosts"
                 }
 
                 Text {
@@ -277,52 +274,20 @@ Rectangle {
                 }
             }
 
-            Rectangle {
+            StatePanel {
                 Layout.fillWidth: true
-                implicitHeight: 92
                 visible: pane.controller.hostProfiles.length === 0
-                radius: Theme.radiusPanel
-                color: pane.raisedColor
-                border.color: pane.borderColor
-
-                Column {
-                    anchors.centerIn: parent
-                    spacing: 5
-
-                    Text {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        text: "No saved hosts yet"
-                        color: pane.textColor
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.textBody
-                        font.weight: Font.DemiBold
-                    }
-
-                    Text {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        text: "Add a host below to make future connections one click away."
-                        color: pane.mutedColor
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.textLabel
-                    }
-                }
+                heading: "No saved hosts yet"
+                description: "Add a host below to make future connections one click away."
+                centered: true
             }
 
-            Rectangle {
+            StatePanel {
                 Layout.fillWidth: true
-                implicitHeight: 72
                 visible: pane.controller.hostProfiles.length > 0 && pane.filteredProfileCount === 0
-                radius: Theme.radiusPanel
-                color: pane.raisedColor
-                border.color: pane.borderColor
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "No saved hosts match this search."
-                    color: pane.mutedColor
-                    font.family: "Segoe UI Variable"
-                    font.pixelSize: 12
-                }
+                heading: "No matching hosts"
+                description: "Try another host name, group, user, or address."
+                centered: true
             }
 
             Repeater {
@@ -340,7 +305,7 @@ Rectangle {
                         Layout.fillWidth: true
                         text: profileGroup.modelData.name
                         color: pane.mutedColor
-                        font.family: "Segoe UI Variable"
+                        font.family: Theme.uiFont
                         font.pixelSize: 11
                         font.weight: Font.DemiBold
                         font.letterSpacing: 0.6
@@ -375,28 +340,28 @@ Rectangle {
                                     Layout.preferredWidth: 34
                                     Layout.preferredHeight: 34
                                     radius: 8
-                                    color: "#173A2B"
+                                    color: Theme.selectedBackground
 
                                     Text {
                                         anchors.centerIn: parent
                                         text: ">"
                                         color: pane.accentColor
-                                        font.family: "Cascadia Mono"
+                                        font.family: Theme.terminalFont
                                         font.pixelSize: 16
                                         font.weight: Font.Bold
                                     }
                                 }
 
-                                    ColumnLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 2
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
 
                                     Text {
                                         Layout.fillWidth: true
                                         text: profileCard.modelData.name
                                         color: pane.textColor
                                         elide: Text.ElideRight
-                                        font.family: "Segoe UI Variable"
+                                        font.family: Theme.uiFont
                                         font.pixelSize: 13
                                         font.weight: Font.DemiBold
                                     }
@@ -406,10 +371,10 @@ Rectangle {
                                         text: profileCard.modelData.username + "@" + profileCard.modelData.host + ":" + profileCard.modelData.port
                                         color: pane.mutedColor
                                         elide: Text.ElideMiddle
-                                        font.family: "Cascadia Mono"
-                                            font.pixelSize: 11
-                                        }
+                                        font.family: Theme.terminalFont
+                                        font.pixelSize: 11
                                     }
+                                }
 
                                 Rectangle {
                                     Layout.preferredWidth: authenticationLabel.implicitWidth + 16
@@ -428,22 +393,20 @@ Rectangle {
                                     }
                                 }
 
-                                Button {
+                                ActionButton {
                                     text: "Connect"
                                     Accessible.name: "Connect to " + profileCard.modelData.name
-                                    palette.button: pane.accentColor
-                                    palette.buttonText: "#07130B"
-                                    font.weight: Font.DemiBold
+                                    variant: "primary"
                                     onClicked: pane.connectSaved(profileCard.modelData)
                                 }
 
-                                Button {
+                                ActionButton {
                                     text: "Edit"
                                     Accessible.name: "Edit " + profileCard.modelData.name
                                     onClicked: pane.editProfile(profileCard.modelData)
                                 }
 
-                                Button {
+                                ActionButton {
                                     text: "Copy"
                                     Accessible.name: "Copy " + profileCard.modelData.name
                                     onClicked: {
@@ -455,13 +418,15 @@ Rectangle {
                                     }
                                 }
 
-                                Button {
+                                ActionButton {
+                                    id: deleteProfileButton
+
                                     text: "Delete"
                                     Accessible.name: "Delete " + profileCard.modelData.name
                                     onClicked: {
                                         pane.pendingDeleteId = profileCard.modelData.id;
                                         pane.pendingDeleteName = profileCard.modelData.name;
-                                        deleteDialog.open();
+                                        deleteDialog.openFrom(deleteProfileButton);
                                     }
                                 }
                             }
@@ -492,7 +457,7 @@ Rectangle {
                         Text {
                             text: pane.editingProfileId.length > 0 ? "Edit profile" : "New connection"
                             color: pane.textColor
-                            font.family: "Segoe UI Variable"
+                            font.family: Theme.uiFont
                             font.pixelSize: 16
                             font.weight: Font.DemiBold
                         }
@@ -504,7 +469,7 @@ Rectangle {
                         Text {
                             text: authenticationBox.currentIndex === 0 ? "Private-key authentication" : "Password authentication"
                             color: pane.mutedColor
-                            font.family: "Segoe UI Variable"
+                            font.family: Theme.uiFont
                             font.pixelSize: 11
                         }
                     }
@@ -519,7 +484,7 @@ Rectangle {
                             text: "Profile name"
                             color: pane.textColor
                         }
-                        TextField {
+                        AppTextField {
                             id: nameField
                             Layout.fillWidth: true
                             placeholderText: "Home server"
@@ -531,7 +496,7 @@ Rectangle {
                             text: "Group"
                             color: pane.textColor
                         }
-                        TextField {
+                        AppTextField {
                             id: groupField
                             Layout.fillWidth: true
                             placeholderText: "Personal, Work, Lab…"
@@ -543,7 +508,7 @@ Rectangle {
                             text: "Host"
                             color: pane.textColor
                         }
-                        TextField {
+                        AppTextField {
                             id: hostField
                             Layout.fillWidth: true
                             placeholderText: "server.example.com or 192.0.2.10"
@@ -555,7 +520,7 @@ Rectangle {
                             text: "Port"
                             color: pane.textColor
                         }
-                        TextField {
+                        AppTextField {
                             id: portField
                             Layout.fillWidth: true
                             text: "22"
@@ -572,7 +537,7 @@ Rectangle {
                             text: "Username"
                             color: pane.textColor
                         }
-                        TextField {
+                        AppTextField {
                             id: usernameField
                             Layout.fillWidth: true
                             placeholderText: "username"
@@ -603,12 +568,12 @@ Rectangle {
                                     text: authenticationDelegate.text
                                     color: pane.textColor
                                     verticalAlignment: Text.AlignVCenter
-                                    font.family: "Segoe UI Variable"
+                                    font.family: Theme.uiFont
                                     font.pixelSize: 13
                                 }
 
                                 background: Rectangle {
-                                    color: authenticationDelegate.highlighted ? "#1F513A" : "#172033"
+                                    color: authenticationDelegate.highlighted ? Theme.selectedHover : Theme.controlBackground
                                 }
                             }
                             popup: Popup {
@@ -625,7 +590,7 @@ Rectangle {
                                 }
 
                                 background: Rectangle {
-                                    color: "#172033"
+                                    color: Theme.floatingBackground
                                     border.color: pane.borderColor
                                 }
                             }
@@ -642,7 +607,7 @@ Rectangle {
                             color: pane.textColor
                             visible: authenticationBox.currentIndex === 0
                         }
-                        TextField {
+                        AppTextField {
                             id: keyPathField
                             Layout.fillWidth: true
                             visible: authenticationBox.currentIndex === 0
@@ -669,7 +634,7 @@ Rectangle {
                             color: pane.textColor
                             visible: authenticationBox.currentIndex === 1 || passphraseRequiredBox.checked
                         }
-                        TextField {
+                        AppTextField {
                             id: credentialField
                             Layout.fillWidth: true
                             visible: authenticationBox.currentIndex === 1 || passphraseRequiredBox.checked
@@ -680,21 +645,17 @@ Rectangle {
                         }
                     }
 
-                    Text {
+                    StatusMessage {
                         id: statusText
 
                         Layout.fillWidth: true
-                        visible: text.length > 0
-                        color: pane.statusIsError ? "#FCA5A5" : "#86EFAC"
-                        font.family: "Segoe UI Variable"
-                        font.pixelSize: 12
-                        wrapMode: Text.WordWrap
+                        kind: pane.statusIsError ? "error" : "success"
                     }
 
                     RowLayout {
                         Layout.fillWidth: true
 
-                        Button {
+                        ActionButton {
                             text: "Cancel"
                             Accessible.name: "Close host profile editor"
                             onClicked: {
@@ -708,18 +669,16 @@ Rectangle {
                             Layout.fillWidth: true
                         }
 
-                        Button {
+                        ActionButton {
                             text: "Save profile"
                             Accessible.name: "Save SSH profile"
                             onClicked: pane.saveProfile()
                         }
 
-                        Button {
+                        ActionButton {
                             text: "Connect"
                             Accessible.name: "Connect to SSH host"
-                            palette.button: pane.accentColor
-                            palette.buttonText: "#07130B"
-                            font.weight: Font.DemiBold
+                            variant: "primary"
                             onClicked: pane.connectCurrent()
                         }
                     }
@@ -754,7 +713,7 @@ Rectangle {
             Text {
                 text: pane.pendingConnectAuthentication === "password" ? "Enter SSH password" : "Enter key passphrase"
                 color: pane.textColor
-                font.family: "Segoe UI Variable"
+                font.family: Theme.uiFont
                 font.pixelSize: 18
                 font.weight: Font.DemiBold
             }
@@ -764,11 +723,11 @@ Rectangle {
                 text: "Authenticate to \"" + pane.pendingConnectName + "\". This credential is kept only for this connection attempt."
                 color: pane.mutedColor
                 wrapMode: Text.WordWrap
-                font.family: "Segoe UI Variable"
+                font.family: Theme.uiFont
                 font.pixelSize: 12
             }
 
-            TextField {
+            AppTextField {
                 id: savedCredentialField
                 Layout.fillWidth: true
                 placeholderText: pane.pendingConnectAuthentication === "password" ? "SSH password" : "Private-key passphrase"
@@ -785,86 +744,42 @@ Rectangle {
                     Layout.fillWidth: true
                 }
 
-                Button {
+                ActionButton {
                     text: "Cancel"
                     onClicked: credentialDialog.close()
                 }
 
-                Button {
+                ActionButton {
                     id: connectSavedButton
                     text: "Connect"
                     enabled: savedCredentialField.text.length > 0
-                    palette.button: pane.accentColor
-                    palette.buttonText: "#07130B"
-                    font.weight: Font.DemiBold
+                    variant: "primary"
                     onClicked: pane.connectPendingSaved()
                 }
             }
         }
     }
 
-    Dialog {
+    ConfirmationDialog {
         id: deleteDialog
 
-        anchors.centerIn: parent
-        modal: true
-        closePolicy: Popup.CloseOnEscape
-        padding: 20
-
-        background: Rectangle {
-            radius: 10
-            color: pane.raisedColor
-            border.color: "#7F1D1D"
+        heading: "Delete saved host?"
+        description: "Remove \"" + pane.pendingDeleteName + "\" from this device? This does not change the remote server or trusted host keys."
+        acceptText: "Delete"
+        destructive: true
+        onAccepted: {
+            if (pane.controller.deleteHostProfile(pane.pendingDeleteId)) {
+                pane.showStatus("Profile deleted.", false);
+            } else {
+                pane.showStatus("The profile could not be deleted.", true);
+            }
+            focusRestoreItem = newHostButton;
+            pane.pendingDeleteId = "";
+            pane.pendingDeleteName = "";
         }
-
-        contentItem: ColumnLayout {
-            spacing: 14
-
-            Text {
-                text: "Delete saved host?"
-                color: pane.textColor
-                font.family: "Segoe UI Variable"
-                font.pixelSize: 18
-                font.weight: Font.DemiBold
-            }
-
-            Text {
-                Layout.preferredWidth: 360
-                text: "Remove \"" + pane.pendingDeleteName + "\" from this device? This does not change the remote server or trusted host keys."
-                color: pane.mutedColor
-                wrapMode: Text.WordWrap
-                font.family: "Segoe UI Variable"
-                font.pixelSize: 12
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-
-                Item {
-                    Layout.fillWidth: true
-                }
-
-                Button {
-                    text: "Cancel"
-                    onClicked: deleteDialog.close()
-                }
-
-                Button {
-                    text: "Delete"
-                    palette.button: "#991B1B"
-                    palette.buttonText: "#FFFFFF"
-                    onClicked: {
-                        if (pane.controller.deleteHostProfile(pane.pendingDeleteId)) {
-                            pane.showStatus("Profile deleted.", false);
-                        } else {
-                            pane.showStatus("The profile could not be deleted.", true);
-                        }
-                        pane.pendingDeleteId = "";
-                        pane.pendingDeleteName = "";
-                        deleteDialog.close();
-                    }
-                }
-            }
+        onRejected: {
+            pane.pendingDeleteId = "";
+            pane.pendingDeleteName = "";
         }
     }
 }

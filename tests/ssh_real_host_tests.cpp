@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 using namespace std::chrono_literals;
@@ -80,6 +81,22 @@ void SshRealHostTests::observesUnknownHostBeforeAuthentication()
     QCOMPARE(*unknownTrust, ztermy::ssh::HostKeyTrust::Unknown);
 
     auto blockedAuthentication = (*session)->authenticateWithPassword(*socket, "unused", "unused", 1s);
+    QVERIFY(!blockedAuthentication);
+    QCOMPARE(blockedAuthentication.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidState);
+
+    auto changedEncodedKey = hostKey->encodedKey;
+    QVERIFY(!changedEncodedKey.empty());
+    changedEncodedKey.front() ^= std::uint8_t{1};
+    const std::vector changedKnownHosts{ztermy::ssh::KnownHostEntry{
+        .endpoint = endpoint,
+        .algorithm = hostKey->algorithm,
+        .encodedKey = std::move(changedEncodedKey),
+    }};
+    auto changedTrust = (*session)->verifyHostKey(endpoint, changedKnownHosts);
+    QVERIFY(changedTrust);
+    QCOMPARE(*changedTrust, ztermy::ssh::HostKeyTrust::Changed);
+
+    blockedAuthentication = (*session)->authenticateWithPassword(*socket, "unused", "unused", 1s);
     QVERIFY(!blockedAuthentication);
     QCOMPARE(blockedAuthentication.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidState);
 

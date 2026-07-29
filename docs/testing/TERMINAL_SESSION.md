@@ -68,8 +68,9 @@ Expected:
 
 During composition, the preedit text should be visible at the terminal cursor
 and the IME candidate window should follow the composition caret. Record the
-Windows display scale and IME used when reporting a failure. Terminal search is
-not complete in the current milestone.
+Windows display scale and IME used when reporting a failure. Terminal search
+is covered separately by
+[TERMINAL_TABS_SEARCH.md](TERMINAL_TABS_SEARCH.md).
 
 ## Scrollback
 
@@ -129,6 +130,27 @@ Expected:
 The current renderer uploads a full-frame texture per delivered snapshot. This
 test and the accompanying metrics establish the baseline for damage-aware and
 batched renderer work.
+
+## Input queue latency
+
+1. Start a fresh local terminal tab in the dynamic Debug build.
+2. Type and edit enough commands to enqueue at least 100 individual key-input
+   events. Include cursor movement and text inserted in the middle of a line.
+3. Close that terminal tab normally.
+4. Open the newest Debug log and find its final `Terminal session metrics`
+   entry.
+
+Expected:
+
+- `inputQueueSamples` is at least 100.
+- `inputQueueP95Us` is no greater than `16000`.
+- P50, P95, P99, and maximum values are numeric and non-negative.
+- The log contains no typed command text, terminal input, clipboard content,
+  password, passphrase, or private-key content.
+
+This metric covers only the time from the GUI session enqueue to the local
+worker dequeue. It does not include PowerShell processing or terminal
+rendering.
 
 ## Crash diagnostics
 

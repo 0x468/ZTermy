@@ -7,6 +7,7 @@
 #include <QQuickItem>
 #include <QString>
 #include <QTimer>
+#include <QtQmlIntegration/qqmlintegration.h>
 
 #include <cstdint>
 
@@ -22,6 +23,7 @@ namespace ztermy::ui
 class TerminalItem : public QQuickItem
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(TerminalView)
     Q_PROPERTY(QString statusText READ statusText NOTIFY statusTextChanged)
     Q_PROPERTY(QString fontFamily READ fontFamily WRITE setFontFamily NOTIFY fontChanged)
     Q_PROPERTY(int fontPixelSize READ fontPixelSize WRITE setFontPixelSize NOTIFY fontChanged)

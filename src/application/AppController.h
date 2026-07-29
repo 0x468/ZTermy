@@ -136,6 +136,8 @@ private:
         QString title;
         QString status;
         TerminalTabKind kind = TerminalTabKind::Local;
+        ssh::SshConnectionPhase sshPhase = ssh::SshConnectionPhase::Disconnected;
+        std::optional<ssh::SshFailureKind> sshFailure;
         terminal::TerminalSnapshotPtr snapshot;
         std::unique_ptr<terminal::LocalTerminalSessionBackend> local;
         std::unique_ptr<ssh::SshTerminalSession> ssh;

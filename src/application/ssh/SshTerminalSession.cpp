@@ -6,6 +6,7 @@
 #include "infrastructure/ssh/Libssh2Session.h"
 #include "infrastructure/ssh/WindowsTcpSocket.h"
 
+#include <QLoggingCategory>
 #include <QMetaObject>
 
 #include <array>
@@ -16,6 +17,8 @@
 #include <vector>
 
 using namespace std::chrono_literals;
+
+Q_LOGGING_CATEGORY(sshSessionLog, "ztermy.ssh.session")
 
 namespace
 {
@@ -156,9 +159,15 @@ void completeClose(ztermy::ssh::SshConnectionState &state)
 namespace ztermy::ssh
 {
 
+QString sshFailureStatus(const SshFailureKind failure)
+{
+    return failureStatus(failure);
+}
+
 SshTerminalSession::SshTerminalSession(QObject *parent) : QObject(parent)
 {
     qRegisterMetaType<SshConnectionPhase>();
+    qRegisterMetaType<SshFailureKind>();
 }
 
 SshTerminalSession::~SshTerminalSession()
@@ -173,6 +182,10 @@ std::error_code SshTerminalSession::start(SshConnectionRequest request, const te
     {
         return std::make_error_code(std::errc::invalid_argument);
     }
+    if (!m_commandWakeEvent.valid())
+    {
+        return std::make_error_code(std::errc::not_enough_memory);
+    }
 
     auto engine = terminal::GhosttyTerminalEngine::create(geometry);
     if (!engine)
@@ -181,6 +194,12 @@ std::error_code SshTerminalSession::start(SshConnectionRequest request, const te
     }
 
     m_engine = std::move(*engine);
+    resetMetrics();
+    if (!m_commandWakeEvent.reset())
+    {
+        m_engine.reset();
+        return std::make_error_code(std::errc::io_error);
+    }
     {
         std::scoped_lock lock(m_hostKeyMutex);
         m_hostKeyDecision = HostKeyDecision::Pending;
@@ -205,6 +224,7 @@ std::error_code SshTerminalSession::start(SshConnectionRequest request, const te
 void SshTerminalSession::stop() noexcept
 {
     m_worker.request_stop();
+    (void)m_commandWakeEvent.signal();
     m_hostKeyAvailable.notify_all();
     if (m_worker.joinable())
     {
@@ -261,7 +281,8 @@ void SshTerminalSession::queueInput(const QByteArray &bytes)
     {
         return;
     }
-    queueByteCommand(InputCommand{bytes}, static_cast<std::size_t>(bytes.size()));
+    queueByteCommand(InputCommand{.bytes = bytes, .enqueuedAt = std::chrono::steady_clock::now()},
+                     static_cast<std::size_t>(bytes.size()));
 }
 
 void SshTerminalSession::queuePaste(const QByteArray &bytes)
@@ -283,6 +304,7 @@ void SshTerminalSession::queueByteCommand(Command command, const std::size_t byt
     }
     m_queuedInputBytes += byteCount;
     m_commands.emplace_back(std::move(command));
+    signalCommandWake();
 }
 
 void SshTerminalSession::requestResize(const quint16 columns, const quint16 rows, const quint32 cellWidthPixels,
@@ -301,6 +323,7 @@ void SshTerminalSession::requestResize(const quint16 columns, const quint16 rows
 
     std::scoped_lock lock(m_commandMutex);
     m_commands.emplace_back(geometry);
+    signalCommandWake();
 }
 
 void SshTerminalSession::requestScroll(const int rows)
@@ -316,10 +339,12 @@ void SshTerminalSession::requestScroll(const int rows)
         if (auto *pending = std::get_if<ScrollCommand>(&m_commands.back()))
         {
             pending->rows += rows;
+            signalCommandWake();
             return;
         }
     }
     m_commands.emplace_back(ScrollCommand{.rows = rows});
+    signalCommandWake();
 }
 
 void SshTerminalSession::requestSelection(const quint16 startColumn, const quint16 startRow, const quint16 endColumn,
@@ -342,9 +367,11 @@ void SshTerminalSession::requestSelection(const quint16 startColumn, const quint
     if (!m_commands.empty() && std::holds_alternative<SelectionCommand>(m_commands.back()))
     {
         m_commands.back() = command;
+        signalCommandWake();
         return;
     }
     m_commands.emplace_back(command);
+    signalCommandWake();
 }
 
 void SshTerminalSession::clearSelection()
@@ -355,6 +382,7 @@ void SshTerminalSession::clearSelection()
     }
     std::scoped_lock lock(m_commandMutex);
     m_commands.emplace_back(SelectionCommand{});
+    signalCommandWake();
 }
 
 void SshTerminalSession::copySelection()
@@ -365,6 +393,7 @@ void SshTerminalSession::copySelection()
     }
     std::scoped_lock lock(m_commandMutex);
     m_commands.emplace_back(CopyCommand{});
+    signalCommandWake();
 }
 
 void SshTerminalSession::search(const QString &query, const bool backwards, const bool caseSensitive)
@@ -380,6 +409,7 @@ void SshTerminalSession::search(const QString &query, const bool backwards, cons
             backwards ? terminal::TerminalSearchDirection::backward : terminal::TerminalSearchDirection::forward,
         .caseSensitive = caseSensitive,
     });
+    signalCommandWake();
 }
 
 void SshTerminalSession::clearSearch()
@@ -390,12 +420,19 @@ void SshTerminalSession::clearSearch()
     }
     std::scoped_lock lock(m_commandMutex);
     m_commands.emplace_back(ClearSearchCommand{});
+    signalCommandWake();
 }
 
 void SshTerminalSession::run(SshConnectionRequest &request, const terminal::TerminalGeometry geometry,
                              const std::stop_token &stopToken)
 {
     SshConnectionState state;
+    const auto finishFailure = [this, &state](const SshFailureKind failure, const QString &status = QString{}) {
+        failState(state, failure);
+        emit failureOccurred(failure);
+        finishWorker(status.isEmpty() ? sshFailureStatus(failure) : status, state.phase());
+    };
+
     startState(state);
     advanceState(state, SshConnectionPhase::Connecting);
     postPhase(state.phase());
@@ -407,16 +444,14 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     if (!socket)
     {
         const SshFailureKind failure = mapTcpFailure(socket.error().kind);
-        failState(state, failure);
-        finishWorker(failureStatus(failure), state.phase());
+        finishFailure(failure);
         return;
     }
 
     auto session = Libssh2Session::create();
     if (!session)
     {
-        failState(state, SshFailureKind::ProtocolError);
-        finishWorker(failureStatus(SshFailureKind::ProtocolError), state.phase());
+        finishFailure(SshFailureKind::ProtocolError);
         return;
     }
 
@@ -427,8 +462,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     if (!handshake)
     {
         const SshFailureKind failure = mapTransportFailure(handshake.error());
-        failState(state, failure);
-        finishWorker(failureStatus(failure), state.phase());
+        finishFailure(failure);
         return;
     }
 
@@ -440,8 +474,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     auto knownHosts = knownHostsStore.load();
     if (!hostKey || !knownHosts)
     {
-        failState(state, SshFailureKind::HostKeyInvalid);
-        finishWorker(failureStatus(SshFailureKind::HostKeyInvalid), state.phase());
+        finishFailure(SshFailureKind::HostKeyInvalid);
         return;
     }
 
@@ -449,8 +482,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     auto trust = (*session)->verifyHostKey(endpoint, *knownHosts);
     if (!trust)
     {
-        failState(state, SshFailureKind::HostKeyInvalid);
-        finishWorker(failureStatus(SshFailureKind::HostKeyInvalid), state.phase());
+        finishFailure(SshFailureKind::HostKeyInvalid);
         return;
     }
 
@@ -459,8 +491,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     if (*trust == HostKeyTrust::Changed)
     {
         emit hostKeyChanged(algorithm, fingerprint);
-        failState(state, SshFailureKind::HostKeyChanged);
-        finishWorker(failureStatus(SshFailureKind::HostKeyChanged), state.phase());
+        finishFailure(SshFailureKind::HostKeyChanged);
         return;
     }
 
@@ -494,8 +525,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
         {
             const SshFailureKind failure =
                 stopToken.stop_requested() ? SshFailureKind::Cancelled : SshFailureKind::HostKeyInvalid;
-            failState(state, failure);
-            finishWorker(failureStatus(failure), state.phase());
+            finishFailure(failure);
             return;
         }
 
@@ -506,15 +536,13 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
         });
         if (decision == HostKeyDecision::AcceptAndRemember && !knownHostsStore.save(*knownHosts))
         {
-            failState(state, SshFailureKind::HostKeyInvalid);
-            finishWorker(QStringLiteral("SSH host key could not be saved"), state.phase());
+            finishFailure(SshFailureKind::HostKeyInvalid, QStringLiteral("SSH host key could not be saved"));
             return;
         }
         trust = (*session)->verifyHostKey(endpoint, *knownHosts);
         if (!trust || *trust != HostKeyTrust::Trusted)
         {
-            failState(state, SshFailureKind::HostKeyInvalid);
-            finishWorker(failureStatus(SshFailureKind::HostKeyInvalid), state.phase());
+            finishFailure(SshFailureKind::HostKeyInvalid);
             return;
         }
     }
@@ -543,8 +571,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     if (!authentication)
     {
         const SshFailureKind failure = mapTransportFailure(authentication.error());
-        failState(state, failure);
-        finishWorker(failureStatus(failure), state.phase());
+        finishFailure(failure);
         return;
     }
 
@@ -555,8 +582,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     if (!open)
     {
         const SshFailureKind failure = mapTransportFailure(open.error(), true);
-        failState(state, failure);
-        finishWorker(failureStatus(failure), state.phase());
+        finishFailure(failure);
         return;
     }
 
@@ -575,12 +601,18 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
             std::scoped_lock lock(m_commandMutex);
             commands.swap(m_commands);
             m_queuedInputBytes = 0;
+            if (!m_commandWakeEvent.reset())
+            {
+                finishFailure(SshFailureKind::ProtocolError, QStringLiteral("SSH command wake event failed"));
+                return;
+            }
         }
 
         for (const Command &command : commands)
         {
             if (const auto *input = std::get_if<InputCommand>(&command))
             {
+                m_inputQueueLatency.record(std::chrono::steady_clock::now() - input->enqueuedAt);
                 const std::error_code selectionError = m_engine->setSelection(std::nullopt);
                 m_engine->scrollToBottom();
                 if (selectionError)
@@ -595,8 +627,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                 if (!written)
                 {
                     const SshFailureKind failure = mapTransportFailure(written.error());
-                    failState(state, failure);
-                    finishWorker(failureStatus(failure), state.phase());
+                    finishFailure(failure);
                     return;
                 }
                 continue;
@@ -627,8 +658,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                 if (!written)
                 {
                     const SshFailureKind failure = mapTransportFailure(written.error());
-                    failState(state, failure);
-                    finishWorker(failureStatus(failure), state.phase());
+                    finishFailure(failure);
                     return;
                 }
                 continue;
@@ -704,20 +734,18 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
             if (!resized)
             {
                 const SshFailureKind failure = mapTransportFailure(resized.error());
-                failState(state, failure);
-                finishWorker(failureStatus(failure), state.phase());
+                finishFailure(failure);
                 return;
             }
             if (const std::error_code error = m_engine->resize(requested))
             {
-                failState(state, SshFailureKind::ProtocolError);
-                finishWorker(QStringLiteral("SSH terminal state resize failed"), state.phase());
+                finishFailure(SshFailureKind::ProtocolError, QStringLiteral("SSH terminal state resize failed"));
                 return;
             }
             publishSnapshot();
         }
 
-        auto read = (*session)->readTerminal(*socket, readBuffer, 25ms, stopToken);
+        auto read = (*session)->readTerminal(*socket, readBuffer, 25ms, stopToken, m_commandWakeEvent.nativeHandle());
         if (!read)
         {
             if (read.error().kind == SshTransportErrorKind::TimedOut)
@@ -728,23 +756,24 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
             {
                 break;
             }
+            if (read.error().kind == SshTransportErrorKind::Cancelled)
+            {
+                continue;
+            }
             const SshFailureKind failure = mapTransportFailure(read.error());
-            failState(state, failure);
-            finishWorker(failureStatus(failure), state.phase());
+            finishFailure(failure);
             return;
         }
         if (*read == 0)
         {
-            failState(state, SshFailureKind::RemoteClosed);
-            finishWorker(failureStatus(SshFailureKind::RemoteClosed), state.phase());
+            finishFailure(SshFailureKind::RemoteClosed);
             return;
         }
 
         const auto bytes = std::as_bytes(std::span(readBuffer).first(*read));
         if (const std::error_code error = m_engine->feed(bytes))
         {
-            failState(state, SshFailureKind::ProtocolError);
-            finishWorker(QStringLiteral("SSH terminal parser failed"), state.phase());
+            finishFailure(SshFailureKind::ProtocolError, QStringLiteral("SSH terminal parser failed"));
             return;
         }
         publishSnapshot();
@@ -818,12 +847,37 @@ void SshTerminalSession::postPhase(const SshConnectionPhase phase)
 
 void SshTerminalSession::finishWorker(const QString &status, const SshConnectionPhase phase)
 {
+    logMetrics();
     if (m_running.exchange(false))
     {
         emit runningChanged(false);
     }
     postPhase(phase);
     postStatus(status);
+}
+
+void SshTerminalSession::signalCommandWake() noexcept
+{
+    if (!m_commandWakeEvent.signal())
+    {
+        qCWarning(sshSessionLog) << "SSH command wake event could not be signaled";
+    }
+}
+
+void SshTerminalSession::resetMetrics() noexcept
+{
+    m_inputQueueLatency.reset();
+}
+
+void SshTerminalSession::logMetrics() const
+{
+    const diagnostics::LatencySummary inputQueueLatency = m_inputQueueLatency.summary();
+    qCInfo(sshSessionLog) << "SSH session metrics"
+                          << "inputQueueSamples=" << inputQueueLatency.count
+                          << "inputQueueP50Us=" << inputQueueLatency.p50UpperBoundMicroseconds
+                          << "inputQueueP95Us=" << inputQueueLatency.p95UpperBoundMicroseconds
+                          << "inputQueueP99Us=" << inputQueueLatency.p99UpperBoundMicroseconds
+                          << "inputQueueMaxUs=" << inputQueueLatency.maxMicroseconds;
 }
 
 } // namespace ztermy::ssh

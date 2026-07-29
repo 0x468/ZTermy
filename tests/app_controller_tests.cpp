@@ -234,6 +234,9 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
     QCOMPARE(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("kind")).toString(),
              QStringLiteral("local"));
     QVERIFY(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("running")).toBool());
+    QVERIFY(!controller.terminalTabs().constFirst().toMap().value(QStringLiteral("connecting")).toBool());
+    QVERIFY(!controller.terminalTabs().constFirst().toMap().value(QStringLiteral("failed")).toBool());
+    QVERIFY(!controller.terminalTabs().constFirst().toMap().value(QStringLiteral("remoteClosed")).toBool());
 
     const QString second = controller.startLocalTerminal();
     QVERIFY(!second.isEmpty());

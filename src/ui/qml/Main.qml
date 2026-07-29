@@ -3,11 +3,12 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import Ztermy.Terminal 1.0
 
 Rectangle {
     id: root
 
+    required property var controller
+    required property var windowChrome
     readonly property int titleBarHeight: 42
     readonly property int captionButtonWidth: 46
     readonly property int titleNavigationWidth: Math.min(790, Math.max(310, width - (captionButtonWidth * 3) - 96))
@@ -18,7 +19,6 @@ Rectangle {
     readonly property color textColor: Theme.text
     readonly property color mutedColor: Theme.textMuted
     readonly property color accentColor: Theme.accent
-    readonly property var controller: appController
     property string currentPage: "terminal"
     property bool terminalSearchVisible: false
     property int pendingPasteLineCount: 0
@@ -32,15 +32,20 @@ Rectangle {
     }
     readonly property bool activeSshFailure: activeTerminalTab !== null
                                                      && activeTerminalTab.kind === "ssh"
-                                                     && !activeTerminalTab.running
-                                                     && activeTerminalTab.status.length > 0
+                                                     && activeTerminalTab.failed
+    readonly property bool activeSshConnecting: activeTerminalTab !== null
+                                                        && activeTerminalTab.kind === "ssh"
+                                                        && activeTerminalTab.connecting
+    readonly property bool activeSshDisconnected: activeTerminalTab !== null
+                                                          && activeTerminalTab.kind === "ssh"
+                                                          && activeTerminalTab.remoteClosed
 
     color: backgroundColor
 
     function reportTitleBarMetrics() {
-        windowChrome.setTitleBarMetrics(titleBarHeight, titleNavigation.width + 8,
-                                        width - (captionButtonWidth * 3),
-                                        width - (captionButtonWidth * 2), captionButtonWidth);
+        root.windowChrome.setTitleBarMetrics(titleBarHeight, titleNavigation.width + 8,
+                                             width - (captionButtonWidth * 3),
+                                             width - (captionButtonWidth * 2), captionButtonWidth);
     }
 
     function openTerminalSearch() {
@@ -60,7 +65,38 @@ Rectangle {
     }
 
     function applyWindowAppearance() {
-        windowChrome.applyAppearance(controller.windowOpacity, controller.backdropPreference, Theme.dark);
+        root.windowChrome.applyAppearance(controller.windowOpacity, controller.backdropPreference, Theme.dark);
+    }
+
+    function startLocalTerminalTab() {
+        controller.startLocalTerminal();
+        currentPage = "terminal";
+        terminalViewport.forceActiveFocus();
+    }
+
+    function closeActiveTerminalTab() {
+        if (controller.activeTerminalTabId.length === 0) {
+            return;
+        }
+        controller.closeTerminalTab(controller.activeTerminalTabId);
+    }
+
+    function activateRelativeTerminalTab(offset) {
+        const tabs = controller.terminalTabs;
+        if (tabs.length < 2) {
+            return;
+        }
+        let currentIndex = 0;
+        for (let index = 0; index < tabs.length; ++index) {
+            if (tabs[index].id === controller.activeTerminalTabId) {
+                currentIndex = index;
+                break;
+            }
+        }
+        const nextIndex = (currentIndex + offset + tabs.length) % tabs.length;
+        controller.activateTerminalTab(tabs[nextIndex].id);
+        currentPage = "terminal";
+        terminalViewport.forceActiveFocus();
     }
 
     Binding {
@@ -72,7 +108,13 @@ Rectangle {
     Binding {
         target: Theme
         property: "systemDark"
-        value: windowChrome.systemDarkMode
+        value: root.windowChrome.systemDarkMode
+    }
+
+    Binding {
+        target: Theme
+        property: "animationsEnabled"
+        value: root.windowChrome.animationsEnabled
     }
 
     Component.onCompleted: {
@@ -97,6 +139,28 @@ Rectangle {
         onActivated: root.openTerminalSearch()
     }
 
+    Shortcut {
+        sequence: "Ctrl+Shift+T"
+        autoRepeat: false
+        onActivated: root.startLocalTerminalTab()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Shift+W"
+        autoRepeat: false
+        onActivated: root.closeActiveTerminalTab()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Tab"
+        onActivated: root.activateRelativeTerminalTab(1)
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Shift+Tab"
+        onActivated: root.activateRelativeTerminalTab(-1)
+    }
+
     Connections {
         target: root.controller
 
@@ -113,10 +177,16 @@ Rectangle {
         function onApplicationSettingsChanged() {
             Qt.callLater(root.applyWindowAppearance);
         }
+
+        function onTerminalTabsChanged() {
+            if (root.currentPage === "terminal" && root.controller.terminalTabs.length === 0) {
+                Qt.callLater(emptyTerminalPrimaryAction.forceActiveFocus);
+            }
+        }
     }
 
     Connections {
-        target: windowChrome
+        target: root.windowChrome
 
         function onSystemDarkModeChanged() {
             Qt.callLater(root.applyWindowAppearance);
@@ -176,17 +246,20 @@ Rectangle {
 
                 width: 94
                 height: titleNavigation.height
-                color: root.currentPage === "hosts" ? Theme.controlHover : "transparent"
+                color: root.currentPage === "hosts" || hostsTitleAction.hovered || hostsTitleAction.activeFocus
+                       ? Theme.controlHover : "transparent"
+                border.color: hostsTitleAction.activeFocus ? Theme.focus : "transparent"
+                border.width: hostsTitleAction.activeFocus ? 1 : 0
 
                 Row {
                     anchors.centerIn: parent
                     spacing: 8
 
-                    Text {
-                        text: "□"
+                    AppIcon {
+                        width: 16
+                        height: 16
+                        name: "hosts"
                         color: root.currentPage === "hosts" ? root.textColor : root.mutedColor
-                        font.family: Theme.uiFont
-                        font.pixelSize: 14
                     }
 
                     Text {
@@ -198,12 +271,13 @@ Rectangle {
                     }
                 }
 
-                MouseArea {
+                KeyboardAction {
+                    id: hostsTitleAction
+
                     anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.currentPage = "hosts"
-                    Accessible.role: Accessible.Button
-                    Accessible.name: "Hosts"
+                    anchors.margins: 2
+                    accessibleName: "Hosts"
+                    onActivated: root.currentPage = "hosts"
                 }
             }
 
@@ -217,114 +291,49 @@ Rectangle {
                 clip: true
                 model: root.controller.terminalTabs
 
-                delegate: Rectangle {
+                delegate: TerminalTabAction {
                     id: titleTerminalTab
 
                     required property var modelData
 
-                    width: Math.min(190, Math.max(126, titleTabText.implicitWidth + 54))
+                    title: modelData.title
+                    selected: root.currentPage === "terminal"
+                              && root.controller.activeTerminalTabId === modelData.id
+                    running: modelData.running
+                    width: implicitWidth
                     height: titleTerminalTabs.height
-                    color: root.currentPage === "terminal"
-                           && root.controller.activeTerminalTabId === modelData.id
-                           ? Theme.controlHover : "transparent"
-
-                    Rectangle {
-                        anchors.left: parent.left
-                        anchors.leftMargin: 10
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 6
-                        height: 6
-                        radius: 3
-                        color: titleTerminalTab.modelData.running ? root.accentColor : Theme.textSubtle
+                    onActivated: {
+                        root.controller.activateTerminalTab(modelData.id);
+                        root.currentPage = "terminal";
+                        terminalViewport.forceActiveFocus();
                     }
-
-                    Text {
-                        id: titleTabText
-
-                        anchors.left: parent.left
-                        anchors.leftMargin: 24
-                        anchors.right: titleTabClose.left
-                        anchors.rightMargin: 3
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: titleTerminalTab.modelData.title
-                        color: root.textColor
-                        elide: Text.ElideRight
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.textLabel
-                    }
-
-                    MouseArea {
-                        anchors.left: parent.left
-                        anchors.right: titleTabClose.left
-                        anchors.top: parent.top
-                        anchors.bottom: parent.bottom
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            root.controller.activateTerminalTab(titleTerminalTab.modelData.id);
-                            root.currentPage = "terminal";
-                            terminalViewport.forceActiveFocus();
-                        }
-                        Accessible.role: Accessible.Button
-                        Accessible.name: "Activate " + titleTerminalTab.modelData.title
-                    }
-
-                    Rectangle {
-                        id: titleTabClose
-
-                        anchors.right: parent.right
-                        anchors.rightMargin: 4
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 24
-                        height: 24
-                        radius: 5
-                        color: titleTabCloseMouse.containsMouse ? Theme.borderStrong : "transparent"
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "×"
-                            color: root.mutedColor
-                            font.pixelSize: 15
-                        }
-
-                        MouseArea {
-                            id: titleTabCloseMouse
-
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.controller.closeTerminalTab(titleTerminalTab.modelData.id)
-                            Accessible.role: Accessible.Button
-                            Accessible.name: "Close " + titleTerminalTab.modelData.title
-                        }
-                    }
+                    onCloseRequested: root.controller.closeTerminalTab(modelData.id)
                 }
             }
 
             Rectangle {
                 width: 36
                 height: titleNavigation.height
-                color: titleNewTabMouse.containsMouse ? Theme.controlHover : "transparent"
+                color: titleNewTabAction.hovered || titleNewTabAction.activeFocus
+                       ? Theme.controlHover : "transparent"
+                border.color: titleNewTabAction.activeFocus ? Theme.focus : "transparent"
+                border.width: titleNewTabAction.activeFocus ? 1 : 0
 
-                Text {
+                AppIcon {
                     anchors.centerIn: parent
-                    text: "+"
+                    width: 16
+                    height: 16
+                    name: "plus"
                     color: root.textColor
-                    font.pixelSize: 18
                 }
 
-                MouseArea {
-                    id: titleNewTabMouse
+                KeyboardAction {
+                    id: titleNewTabAction
 
                     anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        root.controller.startLocalTerminal();
-                        root.currentPage = "terminal";
-                        terminalViewport.forceActiveFocus();
-                    }
-                    Accessible.role: Accessible.Button
-                    Accessible.name: "New local terminal"
+                    anchors.margins: 2
+                    accessibleName: "New local terminal"
+                    onActivated: root.startLocalTerminalTab()
                 }
             }
         }
@@ -338,26 +347,29 @@ Rectangle {
                 width: root.captionButtonWidth
                 height: titleBar.height
                 kind: "minimize"
+                chrome: root.windowChrome
                 accessibleName: "Minimize"
-                onActivated: windowChrome.minimizeWindow()
+                onActivated: root.windowChrome.minimizeWindow()
             }
 
             CaptionButton {
                 width: root.captionButtonWidth
                 height: titleBar.height
                 kind: "maximize"
-                accessibleName: windowChrome.maximized ? "Restore" : "Maximize"
-                externallyHovered: windowChrome.maximizeButtonHovered
-                externallyPressed: windowChrome.maximizeButtonPressed
-                onActivated: windowChrome.toggleMaximize()
+                chrome: root.windowChrome
+                accessibleName: root.windowChrome.maximized ? "Restore" : "Maximize"
+                externallyHovered: root.windowChrome.maximizeButtonHovered
+                externallyPressed: root.windowChrome.maximizeButtonPressed
+                onActivated: root.windowChrome.toggleMaximize()
             }
 
             CaptionButton {
                 width: root.captionButtonWidth
                 height: titleBar.height
                 kind: "close"
+                chrome: root.windowChrome
                 accessibleName: "Close"
-                onActivated: windowChrome.closeWindow()
+                onActivated: root.windowChrome.closeWindow()
             }
         }
     }
@@ -389,76 +401,20 @@ Rectangle {
                     font.weight: Font.DemiBold
                 }
 
-                Rectangle {
+                SideNavigationItem {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 38
-                    radius: 7
-                    color: root.currentPage === "hosts" ? root.raisedColor : "transparent"
-
-                    Row {
-                        anchors.left: parent.left
-                        anchors.leftMargin: 12
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: 10
-
-                        Rectangle {
-                            width: 3
-                            height: 16
-                            radius: 2
-                            color: root.currentPage === "hosts" ? root.accentColor : "transparent"
-                        }
-
-                        Text {
-                            text: "Hosts"
-                            color: root.currentPage === "hosts" ? root.textColor : root.mutedColor
-                            font.family: Theme.uiFont
-                            font.pixelSize: Theme.textBody
-                        }
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.currentPage = "hosts"
-                        Accessible.role: Accessible.Button
-                        Accessible.name: "Hosts"
-                    }
+                    text: "Hosts"
+                    selected: root.currentPage === "hosts"
+                    onActivated: root.currentPage = "hosts"
                 }
 
-                Rectangle {
+                SideNavigationItem {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 38
-                    radius: 7
-                    color: root.currentPage === "settings" ? root.raisedColor : "transparent"
-
-                    Row {
-                        anchors.left: parent.left
-                        anchors.leftMargin: 12
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: 10
-
-                        Rectangle {
-                            width: 3
-                            height: 16
-                            radius: 2
-                            color: root.currentPage === "settings" ? root.accentColor : "transparent"
-                        }
-
-                        Text {
-                            text: "Settings"
-                            color: root.currentPage === "settings" ? root.textColor : root.mutedColor
-                            font.family: Theme.uiFont
-                            font.pixelSize: Theme.textBody
-                        }
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.currentPage = "settings"
-                        Accessible.role: Accessible.Button
-                        Accessible.name: "Settings"
-                    }
+                    text: "Settings"
+                    selected: root.currentPage === "settings"
+                    onActivated: root.currentPage = "settings"
                 }
 
                 Item {
@@ -466,11 +422,13 @@ Rectangle {
                 }
 
                 Rectangle {
+                    id: localMachineActionTile
+
                     Layout.fillWidth: true
                     Layout.preferredHeight: 58
                     radius: 8
-                    color: Theme.elevatedBackground
-                    border.color: root.borderColor
+                    color: localMachineAction.hovered ? Theme.controlHover : Theme.elevatedBackground
+                    border.color: localMachineAction.activeFocus ? Theme.focus : root.borderColor
 
                     Column {
                         anchors.left: parent.left
@@ -493,15 +451,13 @@ Rectangle {
                         }
                     }
 
-                    MouseArea {
+                    KeyboardAction {
+                        id: localMachineAction
+
                         anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            root.controller.startLocalTerminal();
-                            root.currentPage = "terminal";
-                        }
-                        Accessible.role: Accessible.Button
-                        Accessible.name: "Open local terminal"
+                        anchors.margins: 2
+                        accessibleName: "Open local terminal"
+                        onActivated: root.startLocalTerminalTab()
                     }
                 }
             }
@@ -585,7 +541,7 @@ Rectangle {
                             Component.onCompleted: forceActiveFocus()
                             onMultilinePasteConfirmationRequested: lineCount => {
                                 root.pendingPasteLineCount = lineCount;
-                                multilinePasteDialog.open();
+                                multilinePasteDialog.openFrom(terminalViewport);
                             }
                         }
 
@@ -609,23 +565,14 @@ Rectangle {
                                 anchors.rightMargin: 6
                                 spacing: 4
 
-                                TextField {
+                                AppTextField {
                                     id: searchField
 
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 30
-                                    color: root.textColor
+                                    compact: true
                                     placeholderText: "Find in terminal"
-                                    placeholderTextColor: root.mutedColor
-                                    selectByMouse: true
-                                    font.family: "Segoe UI Variable"
-                                    font.pixelSize: 12
-
-                                    background: Rectangle {
-                                        radius: 5
-                                        color: Theme.fieldBackground
-                                        border.color: searchField.activeFocus ? root.accentColor : root.borderColor
-                                    }
+                                    accessibleName: "Terminal search query"
 
                                     onTextEdited: searchDelay.restart()
                                     Keys.onPressed: event => {
@@ -639,7 +586,6 @@ Rectangle {
                                             event.accepted = true;
                                         }
                                     }
-                                    Accessible.name: "Terminal search query"
                                 }
 
                                 Text {
@@ -649,7 +595,7 @@ Rectangle {
                                           ? root.controller.terminalSearchCurrent + "/" + root.controller.terminalSearchTotal
                                           : "0/0"
                                     color: root.mutedColor
-                                    font.family: "Cascadia Mono"
+                                    font.family: Theme.terminalFont
                                     font.pixelSize: 10
                                 }
 
@@ -671,7 +617,10 @@ Rectangle {
                                 ToolButton {
                                     Layout.preferredWidth: 30
                                     Layout.preferredHeight: 30
-                                    text: "↑"
+                                    contentItem: AppIcon {
+                                        name: "chevron-up"
+                                        color: root.textColor
+                                    }
                                     onClicked: root.controller.searchTerminal(searchField.text, true,
                                                                               caseSensitiveButton.checked)
                                     Accessible.name: "Previous match"
@@ -680,7 +629,10 @@ Rectangle {
                                 ToolButton {
                                     Layout.preferredWidth: 30
                                     Layout.preferredHeight: 30
-                                    text: "↓"
+                                    contentItem: AppIcon {
+                                        name: "chevron-down"
+                                        color: root.textColor
+                                    }
                                     onClicked: root.controller.searchTerminal(searchField.text, false,
                                                                               caseSensitiveButton.checked)
                                     Accessible.name: "Next match"
@@ -689,82 +641,119 @@ Rectangle {
                                 ToolButton {
                                     Layout.preferredWidth: 30
                                     Layout.preferredHeight: 30
-                                    text: "×"
+                                    contentItem: AppIcon {
+                                        name: "close"
+                                        color: root.textColor
+                                    }
                                     onClicked: root.closeTerminalSearch()
                                     Accessible.name: "Close terminal search"
                                 }
                             }
                         }
 
-                        Rectangle {
+                        StatePanel {
+                            id: emptyTerminalState
+
+                            objectName: "emptyTerminalState"
+                            anchors.centerIn: parent
+                            width: Math.min(440, parent.width - 48)
+                            visible: root.activeTerminalTab === null
+                            z: 9
+                            kind: "empty"
+                            centered: true
+                            heading: "No terminal sessions"
+                            description: "Open a local PowerShell session or choose an SSH host from the Hosts workspace."
+
+                            ActionButton {
+                                id: emptyTerminalPrimaryAction
+
+                                text: "New terminal"
+                                accessibleName: "Open a new local terminal"
+                                variant: "primary"
+                                onClicked: root.startLocalTerminalTab()
+                            }
+
+                            ActionButton {
+                                text: "Browse hosts"
+                                accessibleName: "Browse saved SSH hosts"
+                                onClicked: root.currentPage = "hosts"
+                            }
+                        }
+
+                        StatePanel {
                             anchors.centerIn: parent
                             width: Math.min(520, parent.width - 48)
-                            implicitHeight: sshFailureLayout.implicitHeight + 36
+                            visible: root.activeSshConnecting
+                            z: 9
+                            kind: "loading"
+                            heading: "Connecting to SSH host"
+                            description: root.activeTerminalTab ? root.activeTerminalTab.status : ""
+                            detail: "Connection setup runs outside the interface thread. You can close this tab to cancel."
+
+                            ActionButton {
+                                text: "Cancel connection"
+                                Accessible.name: "Cancel SSH connection and close tab"
+                                onClicked: {
+                                    if (root.activeTerminalTab) {
+                                        root.controller.closeTerminalTab(root.activeTerminalTab.id);
+                                    }
+                                }
+                            }
+                        }
+
+                        StatePanel {
+                            anchors.centerIn: parent
+                            width: Math.min(520, parent.width - 48)
+                            visible: root.activeSshDisconnected
+                            z: 9
+                            kind: "disconnected"
+                            heading: "SSH session ended"
+                            description: root.activeTerminalTab ? root.activeTerminalTab.status : ""
+                            detail: "The remote host closed the terminal connection. Credentials are not retained for automatic reconnection."
+
+                            ActionButton {
+                                text: "Close tab"
+                                accessibleName: "Close ended SSH terminal tab"
+                                onClicked: {
+                                    if (root.activeTerminalTab) {
+                                        root.controller.closeTerminalTab(root.activeTerminalTab.id);
+                                    }
+                                }
+                            }
+
+                            ActionButton {
+                                text: "Review host"
+                                accessibleName: "Return to SSH host profiles"
+                                variant: "primary"
+                                onClicked: root.currentPage = "hosts"
+                            }
+                        }
+
+                        StatePanel {
+                            anchors.centerIn: parent
+                            width: Math.min(520, parent.width - 48)
                             visible: root.activeSshFailure
                             z: 9
-                            radius: Theme.radiusPanel
-                            color: Theme.floatingBackground
-                            border.color: Theme.danger
+                            kind: "error"
+                            heading: "SSH session unavailable"
+                            description: root.activeTerminalTab ? root.activeTerminalTab.status : ""
+                            detail: "Review the host and authentication settings before starting a new connection. Credentials are not retained for retry."
 
-                            ColumnLayout {
-                                id: sshFailureLayout
-
-                                anchors.fill: parent
-                                anchors.margins: 18
-                                spacing: 10
-
-                                Text {
-                                    text: "SSH session unavailable"
-                                    color: Theme.text
-                                    font.family: Theme.uiFont
-                                    font.pixelSize: 17
-                                    font.weight: Font.DemiBold
-                                }
-
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: root.activeTerminalTab ? root.activeTerminalTab.status : ""
-                                    color: Theme.textSoft
-                                    wrapMode: Text.WordWrap
-                                    font.family: Theme.uiFont
-                                    font.pixelSize: Theme.textBody
-                                }
-
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: "Review the host and authentication settings before starting a new connection. Credentials are not retained for retry."
-                                    color: Theme.textMuted
-                                    wrapMode: Text.WordWrap
-                                    font.family: Theme.uiFont
-                                    font.pixelSize: Theme.textLabel
-                                }
-
-                                RowLayout {
-                                    Layout.fillWidth: true
-
-                                    Item {
-                                        Layout.fillWidth: true
-                                    }
-
-                                    Button {
-                                        text: "Close tab"
-                                        Accessible.name: "Close failed SSH terminal tab"
-                                        onClicked: {
-                                            if (root.activeTerminalTab) {
-                                                root.controller.closeTerminalTab(root.activeTerminalTab.id);
-                                            }
-                                        }
-                                    }
-
-                                    Button {
-                                        text: "Review host"
-                                        Accessible.name: "Return to SSH host profiles"
-                                        palette.button: Theme.accent
-                                        palette.buttonText: Theme.accentText
-                                        font.weight: Font.DemiBold
-                                        onClicked: root.currentPage = "hosts"
+                            ActionButton {
+                                text: "Close tab"
+                                Accessible.name: "Close failed SSH terminal tab"
+                                onClicked: {
+                                    if (root.activeTerminalTab) {
+                                        root.controller.closeTerminalTab(root.activeTerminalTab.id);
                                     }
                                 }
+                            }
+
+                            ActionButton {
+                                text: "Review host"
+                                Accessible.name: "Return to SSH host profiles"
+                                variant: "primary"
+                                onClicked: root.currentPage = "hosts"
                             }
                         }
 
@@ -801,76 +790,26 @@ Rectangle {
         }
     }
 
-    Dialog {
+    ConfirmationDialog {
         id: multilinePasteDialog
 
-        anchors.centerIn: parent
-        modal: true
-        closePolicy: Popup.CloseOnEscape
-        padding: 20
-        onClosed: {
-            if (result !== Dialog.Accepted) {
-                terminalViewport.resolveMultilinePaste(false);
-            }
+        heading: "Paste multiple lines?"
+        description: "The clipboard contains " + root.pendingPasteLineCount + " lines. Pasting may execute commands immediately in the active terminal."
+        acceptText: "Paste"
+        onAccepted: {
+            terminalViewport.resolveMultilinePaste(true);
             root.pendingPasteLineCount = 0;
-            terminalViewport.forceActiveFocus();
         }
-
-        background: Rectangle {
-            radius: Theme.radiusPanel
-            color: Theme.elevatedBackground
-            border.color: Theme.borderStrong
-        }
-
-        contentItem: ColumnLayout {
-            spacing: 14
-
-            Text {
-                text: "Paste multiple lines?"
-                color: Theme.text
-                font.family: Theme.uiFont
-                font.pixelSize: 18
-                font.weight: Font.DemiBold
-            }
-
-            Text {
-                Layout.preferredWidth: 380
-                text: "The clipboard contains " + root.pendingPasteLineCount + " lines. Pasting may execute commands immediately in the active terminal."
-                color: Theme.textMuted
-                wrapMode: Text.WordWrap
-                font.family: Theme.uiFont
-                font.pixelSize: Theme.textBody
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-
-                Item {
-                    Layout.fillWidth: true
-                }
-
-                Button {
-                    text: "Cancel"
-                    onClicked: multilinePasteDialog.reject()
-                }
-
-                Button {
-                    text: "Paste"
-                    palette.button: Theme.accent
-                    palette.buttonText: Theme.accentText
-                    font.weight: Font.DemiBold
-                    onClicked: {
-                        terminalViewport.resolveMultilinePaste(true);
-                        multilinePasteDialog.accept();
-                    }
-                }
-            }
+        onRejected: {
+            terminalViewport.resolveMultilinePaste(false);
+            root.pendingPasteLineCount = 0;
         }
     }
 
     HostKeyPrompt {
         anchors.fill: parent
         z: 100
+        controller: root.controller
         panelColor: root.raisedColor
         borderColor: root.borderColor
         textColor: root.textColor

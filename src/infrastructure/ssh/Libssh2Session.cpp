@@ -49,13 +49,14 @@ namespace
 
 [[nodiscard]] std::expected<void, ztermy::ssh::SshTransportError>
 waitForSessionIo(ztermy::ssh::WindowsTcpSocket &socket, LIBSSH2_SESSION *session,
-                 const std::chrono::steady_clock::time_point deadline, const std::stop_token &stopToken) noexcept
+                 const std::chrono::steady_clock::time_point deadline, const std::stop_token &stopToken,
+                 const std::uintptr_t interruptEvent = 0) noexcept
 {
     using ztermy::ssh::SshTransportError;
     using ztermy::ssh::SshTransportErrorKind;
     using ztermy::ssh::TcpConnectErrorKind;
 
-    auto ready = socket.waitUntilReady(blockedInterest(session), deadline, stopToken);
+    auto ready = socket.waitUntilReady(blockedInterest(session), deadline, stopToken, interruptEvent);
     if (ready)
     {
         return {};
@@ -561,7 +562,8 @@ Libssh2Session::openTerminal(WindowsTcpSocket &socket, const std::uint32_t colum
 std::expected<std::size_t, SshTransportError> Libssh2Session::readTerminal(WindowsTcpSocket &socket,
                                                                            const std::span<char> output,
                                                                            const std::chrono::milliseconds timeout,
-                                                                           const std::stop_token &stopToken) noexcept
+                                                                           const std::stop_token &stopToken,
+                                                                           const std::uintptr_t interruptEvent) noexcept
 {
     if (output.empty())
     {
@@ -594,7 +596,7 @@ std::expected<std::size_t, SshTransportError> Libssh2Session::readTerminal(Windo
         {
             return std::unexpected(mapChannelError(static_cast<int>(result)));
         }
-        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        auto ready = waitForSessionIo(socket, session, deadline, stopToken, interruptEvent);
         if (!ready)
         {
             return std::unexpected(ready.error());

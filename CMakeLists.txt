@@ -106,6 +106,14 @@ add_library(ztermy_core_config STATIC
     src/core/config/ApplicationSettings.h
 )
 
+add_library(ztermy_core_diagnostics STATIC
+    src/core/diagnostics/LatencyHistogram.cpp
+    src/core/diagnostics/LatencyHistogram.h
+)
+
+target_compile_features(ztermy_core_diagnostics PUBLIC cxx_std_23)
+target_include_directories(ztermy_core_diagnostics PUBLIC src)
+
 target_compile_features(ztermy_core_config PUBLIC cxx_std_23)
 target_include_directories(ztermy_core_config PUBLIC src)
 target_link_libraries(ztermy_core_config PUBLIC Qt6::Core)
@@ -198,7 +206,9 @@ target_compile_definitions(ztermy_terminal_session PRIVATE
     _UNICODE
 )
 target_link_libraries(ztermy_terminal_session
-    PUBLIC ztermy_terminal_engine
+    PUBLIC
+        ztermy_core_diagnostics
+        ztermy_terminal_engine
     PRIVATE
         ztermy_terminal_transport
         Qt6::Core
@@ -208,6 +218,7 @@ target_compile_features(ztermy_ssh_session PUBLIC cxx_std_23)
 target_include_directories(ztermy_ssh_session PUBLIC src)
 target_link_libraries(ztermy_ssh_session
     PUBLIC
+        ztermy_core_diagnostics
         ztermy_ssh_domain
         ztermy_terminal_engine
         Qt6::Core
@@ -245,20 +256,58 @@ qt_add_executable(ztermy WIN32
     src/platform/windows/NativeWindow.h
     src/platform/windows/WindowHitTest.cpp
     src/platform/windows/WindowHitTest.h
+    src/platform/windows/WindowsUiSettings.cpp
+    src/platform/windows/WindowsUiSettings.h
     resources/windows/ztermy.manifest
 )
 
 set_source_files_properties(
+    src/ui/qml/ActionButton.qml
+    PROPERTIES QT_RESOURCE_ALIAS ActionButton.qml
+)
+set_source_files_properties(
+    src/ui/qml/AppTextField.qml
+    PROPERTIES QT_RESOURCE_ALIAS AppTextField.qml
+)
+set_source_files_properties(
+    src/ui/qml/AppIcon.qml
+    PROPERTIES QT_RESOURCE_ALIAS AppIcon.qml
+)
+set_source_files_properties(
     src/ui/qml/CaptionButton.qml
     PROPERTIES QT_RESOURCE_ALIAS CaptionButton.qml
+)
+set_source_files_properties(
+    src/ui/qml/ConfirmationDialog.qml
+    PROPERTIES QT_RESOURCE_ALIAS ConfirmationDialog.qml
 )
 set_source_files_properties(
     src/ui/qml/Main.qml
     PROPERTIES QT_RESOURCE_ALIAS Main.qml
 )
 set_source_files_properties(
+    src/ui/qml/KeyboardAction.qml
+    PROPERTIES QT_RESOURCE_ALIAS KeyboardAction.qml
+)
+set_source_files_properties(
     src/ui/qml/SettingsPane.qml
     PROPERTIES QT_RESOURCE_ALIAS SettingsPane.qml
+)
+set_source_files_properties(
+    src/ui/qml/SectionCard.qml
+    PROPERTIES QT_RESOURCE_ALIAS SectionCard.qml
+)
+set_source_files_properties(
+    src/ui/qml/SideNavigationItem.qml
+    PROPERTIES QT_RESOURCE_ALIAS SideNavigationItem.qml
+)
+set_source_files_properties(
+    src/ui/qml/StatusMessage.qml
+    PROPERTIES QT_RESOURCE_ALIAS StatusMessage.qml
+)
+set_source_files_properties(
+    src/ui/qml/StatePanel.qml
+    PROPERTIES QT_RESOURCE_ALIAS StatePanel.qml
 )
 set_source_files_properties(
     src/ui/qml/HostConnectionPane.qml
@@ -274,21 +323,43 @@ set_source_files_properties(
         QT_QML_SINGLETON_TYPE TRUE
         QT_RESOURCE_ALIAS Theme.qml
 )
+set_source_files_properties(
+    src/ui/qml/TerminalTabAction.qml
+    PROPERTIES QT_RESOURCE_ALIAS TerminalTabAction.qml
+)
 
 qt_add_qml_module(ztermy
     URI Ztermy
     VERSION 1.0
+    DEPENDENCIES
+        QtQuick
     QML_FILES
+        src/ui/qml/ActionButton.qml
+        src/ui/qml/AppIcon.qml
+        src/ui/qml/AppTextField.qml
         src/ui/qml/CaptionButton.qml
+        src/ui/qml/ConfirmationDialog.qml
         src/ui/qml/HostConnectionPane.qml
         src/ui/qml/HostKeyPrompt.qml
+        src/ui/qml/KeyboardAction.qml
         src/ui/qml/Main.qml
+        src/ui/qml/SectionCard.qml
         src/ui/qml/SettingsPane.qml
+        src/ui/qml/SideNavigationItem.qml
+        src/ui/qml/StatePanel.qml
+        src/ui/qml/StatusMessage.qml
+        src/ui/qml/TerminalTabAction.qml
         src/ui/qml/Theme.qml
 )
 
+qt_generate_foreign_qml_types(ztermy_terminal_ui ztermy)
+
 target_compile_features(ztermy PRIVATE cxx_std_23)
-target_include_directories(ztermy PRIVATE src)
+target_include_directories(ztermy PRIVATE
+    "${CMAKE_CURRENT_BINARY_DIR}"
+    src
+    src/ui/terminal
+)
 
 target_compile_definitions(ztermy PRIVATE
     NOMINMAX
@@ -317,7 +388,7 @@ target_link_libraries(ztermy PRIVATE
     dwmapi
 )
 
-install(TARGETS ztermy RUNTIME DESTINATION .)
+install(TARGETS ztermy RUNTIME DESTINATION . COMPONENT Runtime)
 
 if(ZTERMY_STATIC_BUILD)
     set(ZTERMY_PORTABLE_PACKAGE_ROOT "${CMAKE_CURRENT_BINARY_DIR}/package/portable")
@@ -341,6 +412,13 @@ if(ZTERMY_STATIC_BUILD)
 endif()
 
 if(MSVC)
+    target_compile_options(ztermy_core_diagnostics PRIVATE
+        /permissive-
+        /utf-8
+        /W4
+        /Zc:__cplusplus
+    )
+
     target_compile_options(ztermy_core_config PRIVATE
         /permissive-
         /utf-8
@@ -457,15 +535,38 @@ if(BUILD_TESTING)
 
     add_test(NAME application-settings COMMAND ztermy_application_settings_tests)
 
+    qt_add_executable(ztermy_latency_histogram_tests
+        tests/latency_histogram_tests.cpp
+    )
+
+    target_compile_features(ztermy_latency_histogram_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_latency_histogram_tests PRIVATE
+        ztermy_core_diagnostics
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_latency_histogram_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME latency-histogram COMMAND ztermy_latency_histogram_tests)
+
     qt_add_executable(ztermy_window_hit_test_tests
         tests/window_hit_test_tests.cpp
         src/platform/windows/WindowHitTest.cpp
         src/platform/windows/WindowHitTest.h
+        src/platform/windows/WindowsUiSettings.cpp
+        src/platform/windows/WindowsUiSettings.h
     )
 
     target_compile_features(ztermy_window_hit_test_tests PRIVATE cxx_std_23)
     target_include_directories(ztermy_window_hit_test_tests PRIVATE src)
-    target_link_libraries(ztermy_window_hit_test_tests PRIVATE Qt6::Test)
+    target_link_libraries(ztermy_window_hit_test_tests PRIVATE Qt6::Test user32)
 
     if(MSVC)
         target_compile_options(ztermy_window_hit_test_tests PRIVATE
@@ -792,5 +893,49 @@ if(BUILD_TESTING)
         COMMAND ztermy
             --smoke-test
             --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/qml-native-window-smoke"
+    )
+endif()
+
+if(ZTERMY_STATIC_BUILD)
+    if(CMAKE_VERSION VERSION_LESS 4.3)
+        message(FATAL_ERROR
+            "The per-user WiX installer requires CMake 4.3 or newer. "
+            "Use a current CMake release for the msvc-static-release preset."
+        )
+    endif()
+
+    set(CPACK_GENERATOR "WIX")
+    set(CPACK_WIX_VERSION "4")
+    set(CPACK_PACKAGE_NAME "ztermy")
+    set(CPACK_PACKAGE_VENDOR "ztermy")
+    set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "A native Windows 11 SSH terminal")
+    set(CPACK_PACKAGE_INSTALL_DIRECTORY "ztermy")
+    set(CPACK_PACKAGE_FILE_NAME "ztermy-${PROJECT_VERSION}-windows-x64")
+    set(CPACK_PACKAGE_EXECUTABLES "ztermy" "ztermy")
+    set(CPACK_INSTALL_CMAKE_PROJECTS
+        "${CMAKE_BINARY_DIR};${PROJECT_NAME};Runtime;/"
+    )
+    set(CPACK_WIX_UPGRADE_GUID "5E502533-5081-4401-9549-C5403DFD123A")
+    set(CPACK_WIX_ARCHITECTURE "x64")
+    set(CPACK_WIX_INSTALL_SCOPE "perUser")
+    set(CPACK_WIX_PROGRAM_MENU_FOLDER ".")
+    set(CPACK_WIX_TEMPLATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/CPackWixNoLicense.template.in"
+    )
+    set(CPACK_WIX_SKIP_WIX_UI_EXTENSION TRUE)
+    set(CPACK_WIX_ROOT_FEATURE_TITLE "ztermy")
+    set(CPACK_WIX_ROOT_FEATURE_DESCRIPTION "Native SSH terminal application")
+    set(CPACK_WIX_PROPERTY_ARPCOMMENTS "Windows 11 native SSH terminal")
+
+    include(CPack)
+
+    add_custom_target(ztermy_installer
+        COMMAND "${CMAKE_CPACK_COMMAND}"
+                --config "${CMAKE_BINARY_DIR}/CPackConfig.cmake"
+                -G WIX
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+        DEPENDS ztermy
+        COMMENT "Creating the per-user ztermy MSI installer"
+        VERBATIM
     )
 endif()

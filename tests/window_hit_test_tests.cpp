@@ -1,4 +1,5 @@
 #include "platform/windows/WindowHitTest.h"
+#include "platform/windows/WindowsUiSettings.h"
 
 #include <QTest>
 
@@ -12,6 +13,7 @@ private slots:
     void disablesResizeAreasWhenMaximized();
     void constrainsMaximizedClientToWorkArea();
     void scalesMinimumTrackSizeForDpi();
+    void tracksClientAreaAnimationPreference();
 };
 
 void WindowHitTestTests::classifiesResizeEdges()
@@ -108,6 +110,24 @@ void WindowHitTestTests::scalesMinimumTrackSizeForDpi()
     const auto at150Percent = scaleLogicalSizeForDpi(logical, 144);
     QCOMPARE(at150Percent.width, 750);
     QCOMPARE(at150Percent.height, 540);
+}
+
+void WindowHitTestTests::tracksClientAreaAnimationPreference()
+{
+    ztermy::windowing::ClientAreaAnimationPreference preference;
+    QVERIFY(preference.enabled());
+
+    QVERIFY(!preference.update(std::nullopt));
+    QVERIFY(preference.enabled());
+
+    QVERIFY(preference.update(false));
+    QVERIFY(!preference.enabled());
+    QVERIFY(!preference.update(false));
+    QVERIFY(!preference.update(std::nullopt));
+    QVERIFY(!preference.enabled());
+
+    QVERIFY(preference.update(true));
+    QVERIFY(preference.enabled());
 }
 
 QTEST_GUILESS_MAIN(WindowHitTestTests)

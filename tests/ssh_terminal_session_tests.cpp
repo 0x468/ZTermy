@@ -1,15 +1,78 @@
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <Windows.h>
+
 #include "application/ssh/SshTerminalSession.h"
 
 #include <QFileInfo>
+#include <QGlobalStatic>
+#include <QMutex>
+#include <QSet>
 #include <QSignalSpy>
+#include <QStringList>
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <algorithm>
+#include <array>
 #include <chrono>
 #include <type_traits>
 #include <utility>
 
 using namespace std::chrono_literals;
+
+namespace
+{
+
+Q_GLOBAL_STATIC(QMutex, capturedMessageMutex)
+Q_GLOBAL_STATIC(QStringList, capturedMessages)
+QtMessageHandler previousMessageHandler = nullptr;
+
+void captureMessage(const QtMsgType type, const QMessageLogContext &context, const QString &message)
+{
+    {
+        const QMutexLocker locker(capturedMessageMutex());
+        capturedMessages->append(message);
+    }
+    if (previousMessageHandler != nullptr)
+    {
+        previousMessageHandler(type, context, message);
+    }
+}
+
+class ScopedMessageCapture final
+{
+public:
+    ScopedMessageCapture()
+    {
+        {
+            const QMutexLocker locker(capturedMessageMutex());
+            capturedMessages->clear();
+        }
+        previousMessageHandler = qInstallMessageHandler(&captureMessage);
+    }
+
+    ~ScopedMessageCapture()
+    {
+        qInstallMessageHandler(previousMessageHandler);
+        previousMessageHandler = nullptr;
+    }
+
+    ScopedMessageCapture(const ScopedMessageCapture &) = delete;
+    ScopedMessageCapture &operator=(const ScopedMessageCapture &) = delete;
+
+    [[nodiscard]] QStringList messages() const
+    {
+        const QMutexLocker locker(capturedMessageMutex());
+        return *capturedMessages;
+    }
+};
+
+} // namespace
 
 class SshTerminalSessionTests final : public QObject
 {
@@ -17,9 +80,12 @@ class SshTerminalSessionTests final : public QObject
 
 private slots:
     void rejectsInvalidStartupConfiguration();
+    void presentsDistinctFailureStatuses();
     void sensitiveCredentialsAreMoveOnlyAndClearable();
+    void doesNotExposeCredentialsInStatusOrLogs();
     void ignoresTerminalInteractionWhileDisconnected();
     void connectsAfterExplicitHostKeyConfirmation();
+    void survivesRepeatedConnectDisconnectCycles();
 };
 
 void SshTerminalSessionTests::rejectsInvalidStartupConfiguration()
@@ -51,6 +117,43 @@ void SshTerminalSessionTests::rejectsInvalidStartupConfiguration()
              std::make_error_code(std::errc::invalid_argument));
 }
 
+void SshTerminalSessionTests::presentsDistinctFailureStatuses()
+{
+    using ztermy::ssh::SshFailureKind;
+
+    constexpr std::array failures = {
+        SshFailureKind::NameResolutionFailed,
+        SshFailureKind::ConnectionRefused,
+        SshFailureKind::TimedOut,
+        SshFailureKind::TransportError,
+        SshFailureKind::HostKeyChanged,
+        SshFailureKind::HostKeyInvalid,
+        SshFailureKind::AuthenticationRejected,
+        SshFailureKind::AuthenticationUnavailable,
+        SshFailureKind::ChannelOpenFailed,
+        SshFailureKind::RemoteClosed,
+        SshFailureKind::Cancelled,
+        SshFailureKind::ProtocolError,
+    };
+
+    QSet<QString> statuses;
+    for (const SshFailureKind failure : failures)
+    {
+        const QString status = ztermy::ssh::sshFailureStatus(failure);
+        QVERIFY2(!status.isEmpty(), "Every SSH failure must have a user-visible status");
+        QVERIFY2(!statuses.contains(status), "SSH failure statuses must remain distinct");
+        statuses.insert(status);
+    }
+
+    QCOMPARE(ztermy::ssh::sshFailureStatus(SshFailureKind::ConnectionRefused),
+             QStringLiteral("SSH connection was refused"));
+    QCOMPARE(ztermy::ssh::sshFailureStatus(SshFailureKind::TimedOut), QStringLiteral("SSH operation timed out"));
+    QCOMPARE(ztermy::ssh::sshFailureStatus(SshFailureKind::AuthenticationRejected),
+             QStringLiteral("SSH authentication was rejected"));
+    QCOMPARE(ztermy::ssh::sshFailureStatus(SshFailureKind::RemoteClosed),
+             QStringLiteral("SSH remote host closed the connection"));
+}
+
 void SshTerminalSessionTests::sensitiveCredentialsAreMoveOnlyAndClearable()
 {
     static_assert(!std::is_copy_constructible_v<ztermy::security::SensitiveByteArray>);
@@ -63,6 +166,79 @@ void SshTerminalSessionTests::sensitiveCredentialsAreMoveOnlyAndClearable()
     QVERIFY(moved.view() == std::string_view("temporary-secret"));
     moved.clear();
     QVERIFY(moved.empty());
+}
+
+void SshTerminalSessionTests::doesNotExposeCredentialsInStatusOrLogs()
+{
+    constexpr auto passwordSentinel = "ztermy-password-sentinel-7d9f8c2a";
+    constexpr auto passphraseSentinel = "ztermy-passphrase-sentinel-41e6b3d0";
+    const std::array sentinelTexts = {
+        QString::fromLatin1(passwordSentinel),
+        QString::fromLatin1(passphraseSentinel),
+    };
+
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+
+    QStringList messages;
+    QList<QList<QVariant>> statuses;
+    {
+        ScopedMessageCapture capture;
+        ztermy::ssh::SshTerminalSession session;
+        QSignalSpy statusSpy(&session, &ztermy::ssh::SshTerminalSession::statusChanged);
+        QSignalSpy phaseSpy(&session, &ztermy::ssh::SshTerminalSession::phaseChanged);
+        const auto runFailedRequest = [&](ztermy::ssh::SshConnectionRequest request) {
+            statusSpy.clear();
+            phaseSpy.clear();
+            QVERIFY(!session.start(std::move(request), {.columns = 80, .rows = 24}));
+            QTRY_VERIFY_WITH_TIMEOUT(std::ranges::any_of(phaseSpy,
+                                                         [](const QList<QVariant> &arguments) {
+                                                             return !arguments.isEmpty()
+                                                                    && qvariant_cast<ztermy::ssh::SshConnectionPhase>(
+                                                                           arguments.constFirst())
+                                                                           == ztermy::ssh::SshConnectionPhase::Failed;
+                                                         }),
+                                     12s);
+            session.stop();
+            for (const QList<QVariant> &arguments : statusSpy)
+            {
+                statuses.append(arguments);
+            }
+        };
+
+        runFailedRequest({
+            .host = QStringLiteral("127.0.0.1"),
+            .port = 1,
+            .username = QStringLiteral("sentinel-user"),
+            .authentication = ztermy::ssh::SshAuthenticationMethod::Password,
+            .secret = ztermy::security::SensitiveByteArray(QByteArray(passwordSentinel)),
+            .knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json")),
+        });
+
+        runFailedRequest({
+            .host = QStringLiteral("127.0.0.1"),
+            .port = 1,
+            .username = QStringLiteral("sentinel-user"),
+            .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
+            .privateKeyPath = QStringLiteral("sentinel-key-path"),
+            .secret = ztermy::security::SensitiveByteArray(QByteArray(passphraseSentinel)),
+            .knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json")),
+        });
+
+        messages = capture.messages();
+    }
+
+    for (const QString &sentinelText : sentinelTexts)
+    {
+        for (const QList<QVariant> &arguments : statuses)
+        {
+            QVERIFY(!arguments.constFirst().toString().contains(sentinelText));
+        }
+        for (const QString &message : messages)
+        {
+            QVERIFY(!message.contains(sentinelText));
+        }
+    }
 }
 
 void SshTerminalSessionTests::ignoresTerminalInteractionWhileDisconnected()
@@ -181,6 +357,98 @@ void SshTerminalSessionTests::connectsAfterExplicitHostKeyConfirmation()
     QCOMPARE(confirmationSpy.count(), 0);
     QTRY_VERIFY_WITH_TIMEOUT(snapshotSpy.count() > 0, 5s);
     session.stop();
+}
+
+void SshTerminalSessionTests::survivesRepeatedConnectDisconnectCycles()
+{
+    if (qgetenv("ZTERMY_TEST_SSH_STRESS") != QByteArrayLiteral("1"))
+    {
+        QSKIP("Set ZTERMY_TEST_SSH_STRESS=1 to run the 20-cycle real-host gate");
+    }
+
+    const QByteArray host = qgetenv("ZTERMY_TEST_SSH_HOST");
+    const QByteArray username = qgetenv("ZTERMY_TEST_SSH_USERNAME");
+    const QByteArray privateKey = qgetenv("ZTERMY_TEST_SSH_PRIVATE_KEY");
+    const QByteArray expectedFingerprint = qgetenv("ZTERMY_TEST_SSH_EXPECTED_FINGERPRINT");
+    if (host.isEmpty() || username.isEmpty() || privateKey.isEmpty() || expectedFingerprint.isEmpty())
+    {
+        QSKIP("Set the real-host private-key gate variables to run the SSH lifecycle stress test");
+    }
+
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+
+    ztermy::ssh::SshTerminalSession session;
+    QSignalSpy confirmationSpy(&session, &ztermy::ssh::SshTerminalSession::hostKeyConfirmationRequired);
+    QSignalSpy runningSpy(&session, &ztermy::ssh::SshTerminalSession::runningChanged);
+    QSignalSpy phaseSpy(&session, &ztermy::ssh::SshTerminalSession::phaseChanged);
+
+    const QString knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json"));
+    const auto request = [&] {
+        return ztermy::ssh::SshConnectionRequest{
+            .host = QString::fromUtf8(host),
+            .port = 22,
+            .username = QString::fromUtf8(username),
+            .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
+            .privateKeyPath = QString::fromUtf8(privateKey),
+            .knownHostsPath = knownHostsPath,
+        };
+    };
+    const auto observedRunningState = [](const QSignalSpy &spy, const bool expected) {
+        return std::ranges::any_of(spy, [expected](const QList<QVariant> &arguments) {
+            return !arguments.isEmpty() && arguments.constFirst().toBool() == expected;
+        });
+    };
+    const auto observedPhase = [](const QSignalSpy &spy, const ztermy::ssh::SshConnectionPhase expected) {
+        return std::ranges::any_of(spy, [expected](const QList<QVariant> &arguments) {
+            return !arguments.isEmpty()
+                   && qvariant_cast<ztermy::ssh::SshConnectionPhase>(arguments.constFirst()) == expected;
+        });
+    };
+
+    QVERIFY(!session.start(request(), {.columns = 80, .rows = 24}));
+    QTRY_COMPARE_WITH_TIMEOUT(confirmationSpy.count(), 1, 10s);
+    QCOMPARE(confirmationSpy.constFirst().at(1).toString(), QString::fromLatin1(expectedFingerprint));
+    session.confirmHostKey(true);
+    QTRY_VERIFY_WITH_TIMEOUT(observedRunningState(runningSpy, true), 15s);
+    session.stop();
+    QTRY_VERIFY_WITH_TIMEOUT(observedRunningState(runningSpy, false), 5s);
+    QTRY_VERIFY_WITH_TIMEOUT(observedPhase(phaseSpy, ztermy::ssh::SshConnectionPhase::Disconnected), 5s);
+
+    DWORD baselineHandleCount = 0;
+    QVERIFY(GetProcessHandleCount(GetCurrentProcess(), &baselineHandleCount));
+    DWORD maximumHandleCount = baselineHandleCount;
+
+    for (int cycle = 0; cycle < 20; ++cycle)
+    {
+        confirmationSpy.clear();
+        runningSpy.clear();
+        phaseSpy.clear();
+
+        QVERIFY2(!session.start(request(), {.columns = 80, .rows = 24}),
+                 qPrintable(QStringLiteral("SSH cycle %1 failed to start").arg(cycle + 1)));
+        QTRY_VERIFY_WITH_TIMEOUT(observedRunningState(runningSpy, true), 15s);
+        QCOMPARE(confirmationSpy.count(), 0);
+
+        session.stop();
+        QTRY_VERIFY_WITH_TIMEOUT(observedRunningState(runningSpy, false), 5s);
+        QTRY_VERIFY_WITH_TIMEOUT(observedPhase(phaseSpy, ztermy::ssh::SshConnectionPhase::Disconnected), 5s);
+
+        DWORD currentHandleCount = 0;
+        QVERIFY(GetProcessHandleCount(GetCurrentProcess(), &currentHandleCount));
+        maximumHandleCount = std::max(maximumHandleCount, currentHandleCount);
+    }
+
+    DWORD finalHandleCount = 0;
+    QVERIFY(GetProcessHandleCount(GetCurrentProcess(), &finalHandleCount));
+    qInfo().noquote() << "SSH lifecycle handle counts"
+                      << "baseline=" << baselineHandleCount << "final=" << finalHandleCount
+                      << "peak=" << maximumHandleCount;
+    QVERIFY2(finalHandleCount <= baselineHandleCount + 4,
+             qPrintable(QStringLiteral("Process handles grew from %1 to %2 (peak %3)")
+                            .arg(baselineHandleCount)
+                            .arg(finalHandleCount)
+                            .arg(maximumHandleCount)));
 }
 
 QTEST_GUILESS_MAIN(SshTerminalSessionTests)

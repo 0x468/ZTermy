@@ -108,30 +108,17 @@ Rectangle {
                 font.pixelSize: Theme.textBody
             }
 
-            Rectangle {
+            SectionCard {
                 Layout.fillWidth: true
-                implicitHeight: appearanceLayout.implicitHeight + 36
-                radius: Theme.radiusPanel
-                color: Theme.elevatedBackground
-                border.color: Theme.border
+                heading: "Window appearance"
 
                 GridLayout {
                     id: appearanceLayout
 
-                    anchors.fill: parent
-                    anchors.margins: 18
+                    Layout.fillWidth: true
                     columns: 2
                     columnSpacing: 18
                     rowSpacing: 12
-
-                    Text {
-                        Layout.columnSpan: 2
-                        text: "Window appearance"
-                        color: Theme.text
-                        font.family: Theme.uiFont
-                        font.pixelSize: 16
-                        font.weight: Font.DemiBold
-                    }
 
                     Label {
                         text: "Theme"
@@ -215,36 +202,23 @@ Rectangle {
                 }
             }
 
-            Rectangle {
+            SectionCard {
                 Layout.fillWidth: true
-                implicitHeight: terminalLayout.implicitHeight + 36
-                radius: Theme.radiusPanel
-                color: Theme.elevatedBackground
-                border.color: Theme.border
+                heading: "Terminal"
 
                 GridLayout {
                     id: terminalLayout
 
-                    anchors.fill: parent
-                    anchors.margins: 18
+                    Layout.fillWidth: true
                     columns: 2
                     columnSpacing: 18
                     rowSpacing: 12
-
-                    Text {
-                        Layout.columnSpan: 2
-                        text: "Terminal"
-                        color: Theme.text
-                        font.family: Theme.uiFont
-                        font.pixelSize: 16
-                        font.weight: Font.DemiBold
-                    }
 
                     Label {
                         text: "Font family"
                         color: Theme.text
                     }
-                    TextField {
+                    AppTextField {
                         id: fontFamilyField
                         Layout.fillWidth: true
                         placeholderText: "Cascadia Mono"
@@ -309,20 +283,16 @@ Rectangle {
                 }
             }
 
-            Text {
+            StatusMessage {
                 Layout.fillWidth: true
-                visible: pane.statusMessage.length > 0
                 text: pane.statusMessage
-                color: pane.statusIsError ? Theme.danger : Theme.accent
-                wrapMode: Text.WordWrap
-                font.family: Theme.uiFont
-                font.pixelSize: Theme.textLabel
+                kind: pane.statusIsError ? "error" : "success"
             }
 
             RowLayout {
                 Layout.fillWidth: true
 
-                Button {
+                ActionButton {
                     text: "Reset defaults"
                     Accessible.name: "Reset all application settings"
                     onClicked: {
@@ -337,7 +307,7 @@ Rectangle {
                     Layout.fillWidth: true
                 }
 
-                Button {
+                ActionButton {
                     text: "Discard changes"
                     Accessible.name: "Discard unsaved setting changes"
                     onClicked: {
@@ -347,12 +317,10 @@ Rectangle {
                     }
                 }
 
-                Button {
+                ActionButton {
                     text: "Apply"
                     Accessible.name: "Apply application settings"
-                    palette.button: Theme.accent
-                    palette.buttonText: Theme.accentText
-                    font.weight: Font.DemiBold
+                    variant: "primary"
                     onClicked: pane.applyDraft()
                 }
             }

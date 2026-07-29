@@ -1,15 +1,18 @@
 #pragma once
 
+#include "core/diagnostics/LatencyHistogram.h"
 #include "core/security/SensitiveByteArray.h"
 #include "domain/ssh/SshConnectionState.h"
 #include "domain/ssh/SshProfile.h"
 #include "domain/terminal/TerminalEngine.h"
+#include "infrastructure/ssh/WindowsTcpSocket.h"
 
 #include <QByteArray>
 #include <QObject>
 #include <QString>
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
@@ -37,6 +40,8 @@ struct SshConnectionRequest final
     security::SensitiveByteArray secret;
     QString knownHostsPath;
 };
+
+[[nodiscard]] QString sshFailureStatus(SshFailureKind failure);
 
 class SshTerminalSession final : public QObject
 {
@@ -71,6 +76,7 @@ signals:
     void statusChanged(const QString &status);
     void runningChanged(bool running);
     void phaseChanged(ztermy::ssh::SshConnectionPhase phase);
+    void failureOccurred(ztermy::ssh::SshFailureKind failure);
     void hostKeyConfirmationRequired(const QString &algorithm, const QString &fingerprint);
     void hostKeyChanged(const QString &algorithm, const QString &fingerprint);
     void searchResultReady(const QString &query, quint32 current, quint32 total, bool wrapped);
@@ -82,6 +88,7 @@ private:
     struct InputCommand final
     {
         QByteArray bytes;
+        std::chrono::steady_clock::time_point enqueuedAt;
     };
     struct PasteCommand final
     {
@@ -125,6 +132,9 @@ private:
     void postStatus(const QString &status);
     void postPhase(SshConnectionPhase phase);
     void finishWorker(const QString &status, SshConnectionPhase phase);
+    void signalCommandWake() noexcept;
+    void resetMetrics() noexcept;
+    void logMetrics() const;
 
     static constexpr std::size_t maximumQueuedInputBytes = 1024U * 1024U;
 
@@ -134,6 +144,7 @@ private:
     std::mutex m_commandMutex;
     std::deque<Command> m_commands;
     std::size_t m_queuedInputBytes = 0;
+    WindowsWaitEvent m_commandWakeEvent;
 
     std::mutex m_hostKeyMutex;
     std::condition_variable_any m_hostKeyAvailable;
@@ -144,6 +155,7 @@ private:
     terminal::TerminalSnapshotPtr m_pendingSnapshot;
     std::atomic_bool m_snapshotDeliveryScheduled = false;
     std::atomic_bool m_running = false;
+    diagnostics::LatencyHistogram m_inputQueueLatency;
 };
 
 } // namespace ztermy::ssh

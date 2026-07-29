@@ -216,6 +216,17 @@ QVariantList AppController::terminalTabs() const
              tab->kind == TerminalTabKind::Local ? QStringLiteral("local") : QStringLiteral("ssh")},
             {QStringLiteral("status"), tab->status},
             {QStringLiteral("running"), tab->running},
+            {QStringLiteral("connecting"), tab->kind == TerminalTabKind::Ssh
+                                               && tab->sshPhase != ssh::SshConnectionPhase::Disconnected
+                                               && tab->sshPhase != ssh::SshConnectionPhase::Connected
+                                               && tab->sshPhase != ssh::SshConnectionPhase::Closing
+                                               && tab->sshPhase != ssh::SshConnectionPhase::Failed},
+            {QStringLiteral("failed"), tab->kind == TerminalTabKind::Ssh
+                                           && tab->sshPhase == ssh::SshConnectionPhase::Failed
+                                           && tab->sshFailure != ssh::SshFailureKind::RemoteClosed},
+            {QStringLiteral("remoteClosed"), tab->kind == TerminalTabKind::Ssh
+                                                 && tab->sshPhase == ssh::SshConnectionPhase::Failed
+                                                 && tab->sshFailure == ssh::SshFailureKind::RemoteClosed},
         });
     }
     return result;
@@ -520,6 +531,7 @@ bool AppController::startSshConnection(ssh::SshConnectionRequest request)
     tab->title = QStringLiteral("%1@%2").arg(request.username, request.host);
     tab->status = QStringLiteral("Starting SSH connection...");
     tab->kind = TerminalTabKind::Ssh;
+    tab->sshPhase = ssh::SshConnectionPhase::Resolving;
     tab->ssh = std::make_unique<ssh::SshTerminalSession>();
     const QString tabId = tab->id;
     connectSshTabSignals(*tab);
@@ -846,6 +858,22 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
             emit terminalTabsChanged();
         }
     });
+    QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::phaseChanged, this,
+                     [this, tabId](const ssh::SshConnectionPhase phase) {
+                         if (TerminalTab *updated = findTab(tabId))
+                         {
+                             updated->sshPhase = phase;
+                             emit terminalTabsChanged();
+                         }
+                     });
+    QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::failureOccurred, this,
+                     [this, tabId](const ssh::SshFailureKind failure) {
+                         if (TerminalTab *updated = findTab(tabId))
+                         {
+                             updated->sshFailure = failure;
+                             emit terminalTabsChanged();
+                         }
+                     });
     QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::searchResultReady, this,
                      [this, tabId](const QString &query, const quint32 current, const quint32 total, const bool) {
                          TerminalTab *updated = findTab(tabId);

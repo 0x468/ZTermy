@@ -53,6 +53,9 @@ The initial screen inventory is:
 - settings navigation and appearance controls;
 - search, empty, loading, and offline/closed-session states.
 
+The terminal closed-session state uses the shared `StatePanel` with direct
+recovery actions for a new local terminal or the saved-host workspace.
+
 ## Implementation stages
 
 ### 1. Design-system foundation

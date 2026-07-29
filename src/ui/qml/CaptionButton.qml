@@ -4,6 +4,7 @@ Item {
     id: control
 
     required property string kind
+    required property var chrome
     property bool externallyHovered: false
     property bool externallyPressed: false
     property string accessibleName: ""
@@ -63,7 +64,7 @@ Item {
                 context.moveTo(2, 7.5)
                 context.lineTo(12, 7.5)
             } else if (control.kind === "maximize") {
-                if (windowChrome.maximized) {
+                if (control.chrome.maximized) {
                     context.strokeRect(4.5, 2.5, 7, 7)
                     context.moveTo(2.5, 5)
                     context.lineTo(2.5, 11.5)
@@ -81,7 +82,7 @@ Item {
         }
 
         Connections {
-            target: windowChrome
+            target: control.chrome
             function onMaximizedChanged() {
                 icon.requestPaint()
             }

@@ -16,6 +16,8 @@ Expected:
 
 - Search is the primary control and the visible profile count stays aligned.
 - The empty state explains the next action without obscuring the editor.
+- Empty and no-match states share the same card geometry, wrap their guidance,
+  and expose a meaningful accessible description.
 - Saving or cancelling collapses the editor; **New host** and **Edit** expand
   it with focus in the profile-name field.
 - Host cards show endpoint and authentication type without exposing secrets.

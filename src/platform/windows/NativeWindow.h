@@ -1,6 +1,9 @@
 #pragma once
 
+#include "platform/windows/WindowsUiSettings.h"
+
 #include <QQuickView>
+#include <QVariantMap>
 #include <qt_windows.h>
 
 namespace ztermy
@@ -13,16 +16,18 @@ class NativeWindow final : public QQuickView
     Q_PROPERTY(bool maximizeButtonHovered READ maximizeButtonHovered NOTIFY maximizeButtonHoveredChanged)
     Q_PROPERTY(bool maximizeButtonPressed READ maximizeButtonPressed NOTIFY maximizeButtonPressedChanged)
     Q_PROPERTY(bool systemDarkMode READ systemDarkMode NOTIFY systemDarkModeChanged)
+    Q_PROPERTY(bool animationsEnabled READ animationsEnabled NOTIFY animationsEnabledChanged)
 
 public:
     explicit NativeWindow(QWindow *parent = nullptr);
     ~NativeWindow() override;
 
-    [[nodiscard]] bool load();
+    [[nodiscard]] bool load(QVariantMap initialProperties = {});
     [[nodiscard]] bool maximized() const noexcept;
     [[nodiscard]] bool maximizeButtonHovered() const noexcept;
     [[nodiscard]] bool maximizeButtonPressed() const noexcept;
     [[nodiscard]] bool systemDarkMode() const noexcept;
+    [[nodiscard]] bool animationsEnabled() const noexcept;
 
     Q_INVOKABLE void minimizeWindow();
     Q_INVOKABLE void toggleMaximize();
@@ -36,6 +41,7 @@ signals:
     void maximizeButtonHoveredChanged();
     void maximizeButtonPressedChanged();
     void systemDarkModeChanged();
+    void animationsEnabledChanged();
 
 protected:
     bool event(QEvent *event) override;
@@ -51,6 +57,7 @@ private:
     void uninstallWindowProcedure();
     void configureNativeWindow();
     [[nodiscard]] bool applyBackdrop();
+    void refreshAnimationsEnabled();
     void setMaximizeButtonHovered(bool hovered);
     void setMaximizeButtonPressed(bool pressed);
 
@@ -64,6 +71,7 @@ private:
     qreal m_applicationOpacity = 1.0;
     QString m_backdropPreference = QStringLiteral("none");
     bool m_darkMode = true;
+    windowing::ClientAreaAnimationPreference m_animationPreference;
     HWND m_windowHandle = nullptr;
     WNDPROC m_originalWindowProcedure = nullptr;
 };

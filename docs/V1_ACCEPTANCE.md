@@ -10,6 +10,13 @@ Only runtime evidence can mark a platform or UI item complete.
 - MSVC + Ninja static Qt Release build succeeds.
 - The static Release executable has no Qt or OpenSSL DLL dependency and the
   versioned portable ZIP target succeeds.
+- The extracted portable candidate starts through the native/QML smoke path,
+  selects `storageMode=portable`, and creates logs and crash diagnostics only
+  below its sibling `data` directory.
+- The per-user MSI target succeeds. WiX ICE validation completes with only the
+  three reviewed ICE61, ICE69, and ICE91 warnings, and decompilation confirms
+  a single `ztermy.exe` payload under `LocalAppDataFolder` plus the Start menu
+  shortcut.
 - Native window creation and QML loading succeed on Windows 11.
 - Automated hit-test coverage passes for caption, maximize button, client
   area, all resize edges/corners, and maximized-state behavior.
@@ -20,9 +27,25 @@ Only runtime evidence can mark a platform or UI item complete.
   without a scene-graph crash.
 - Automated end-to-end coverage verifies PowerShell startup, queued input,
   parsed sentinel output, and session shutdown.
+- Automated SSH coverage preserves distinct failure state and user-visible
+  status contracts for name resolution, refusal, timeout, transport, host-key,
+  authentication, channel, remote-close, cancellation, and protocol failures.
+- Runtime credential-hygiene coverage sends unique password and passphrase
+  sentinels into failing SSH worker requests and verifies that neither emitted
+  statuses nor captured Qt logs contain them. Profile persistence coverage
+  verifies that password, passphrase, and private-key content fields are absent
+  from saved configuration.
+- The opt-in real-host lifecycle gate completed an initial verified-host
+  warm-up followed by 20 private-key authenticated connect/disconnect cycles
+  against the Windows 11 development host, with every worker reaching
+  `Disconnected` and no linear process-handle growth.
+- The no-credential real-host gate observed an unknown public host key before
+  authentication, kept authentication closed for a temporary same-endpoint
+  changed-key record, and opened it only for the exact observed key. The
+  temporary record was not persisted.
 
-The checkboxes below remain open until the corresponding behavior has been
-manually exercised across the required Windows 11 and mixed-DPI scenarios.
+Platform and UI checkboxes remain open until the corresponding behavior has
+been manually exercised across the required Windows 11 and mixed-DPI scenarios.
 Use [testing/WINDOW_SHELL.md](testing/WINDOW_SHELL.md) and
 [testing/TERMINAL_SESSION.md](testing/TERMINAL_SESSION.md), and
 [testing/HOST_VAULT.md](testing/HOST_VAULT.md), and
@@ -56,17 +79,18 @@ procedures and expected results.
 
 ## SSH security and reliability
 
-- [ ] Password and key authentication pass on real hosts
-- [ ] Unknown host keys require confirmation
-- [ ] Changed host keys block the connection
+- [ ] Password authentication passes on a real host
+- [x] Private-key authentication passes on a real host
+- [x] Unknown host keys require confirmation before authentication
+- [x] Changed host keys block the connection before authentication
 - [ ] Authentication failure, timeout, refusal, and remote close are distinct
-- [ ] Twenty connect/disconnect cycles leave no workers or handles behind
-- [ ] Logs and configuration contain no credentials
+- [x] Twenty connect/disconnect cycles leave no workers or handles behind
+- [x] Logs and configuration contain no credentials
 
 ## Distribution
 
 - [ ] Dynamic developer build runs from a clean deployment directory
-- [ ] Static release build starts without Qt DLLs
+- [x] Static release build starts without Qt DLLs
 - [x] Portable data remains inside the portable directory
 - [ ] Installed data survives upgrade and uninstall
 - [ ] A clean Windows 11 machine runs the release without developer tools
