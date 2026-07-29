@@ -62,7 +62,7 @@ NativeWindow::NativeWindow(QWindow *parent) : QQuickView(parent)
 {
     setTitle(QStringLiteral("ztermy"));
     setResizeMode(QQuickView::SizeRootObjectToView);
-    setMinimumSize(QSize(760, 500));
+    setMinimumSize(QSize(500, 360));
     resize(1180, 760);
     setColor(Qt::transparent);
 }
@@ -208,6 +208,10 @@ bool NativeWindow::nativeEvent(const QByteArray &eventType, void *message, qintp
                     .dwHoverTime = HOVER_DEFAULT,
                 };
                 TrackMouseEvent(&tracking);
+
+                *result =
+                    DefWindowProcW(windowHandle, nativeMessage->message, nativeMessage->wParam, nativeMessage->lParam);
+                return true;
             }
             break;
         }
@@ -215,17 +219,29 @@ bool NativeWindow::nativeEvent(const QByteArray &eventType, void *message, qintp
         case WM_NCMOUSELEAVE:
             setMaximizeButtonHovered(false);
             setMaximizeButtonPressed(false);
-            break;
+            *result =
+                DefWindowProcW(windowHandle, nativeMessage->message, nativeMessage->wParam, nativeMessage->lParam);
+            return true;
 
         case WM_NCLBUTTONDOWN:
             if (nativeMessage->wParam == HTMAXBUTTON)
             {
                 setMaximizeButtonPressed(true);
+                *result =
+                    DefWindowProcW(windowHandle, nativeMessage->message, nativeMessage->wParam, nativeMessage->lParam);
+                setMaximizeButtonPressed(false);
+                return true;
             }
             break;
 
         case WM_NCLBUTTONUP:
             setMaximizeButtonPressed(false);
+            if (nativeMessage->wParam == HTMAXBUTTON)
+            {
+                *result =
+                    DefWindowProcW(windowHandle, nativeMessage->message, nativeMessage->wParam, nativeMessage->lParam);
+                return true;
+            }
             break;
 
         case WM_GETMINMAXINFO:

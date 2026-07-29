@@ -14,6 +14,8 @@ Only runtime evidence can mark a platform or UI item complete.
 
 The checkboxes below remain open until the corresponding behavior has been
 manually exercised across the required Windows 11 and mixed-DPI scenarios.
+Use [testing/WINDOW_SHELL.md](testing/WINDOW_SHELL.md) for the repeatable
+window-shell procedure and expected results.
 
 ## Window shell
 
