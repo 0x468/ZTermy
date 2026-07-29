@@ -379,13 +379,6 @@ bool NativeWindow::handleWindowProcedureMessage(const HWND windowHandle, const U
             if (wParam == HTMAXBUTTON)
             {
                 setMaximizeButtonHovered(true);
-                TRACKMOUSEEVENT tracking{
-                    .cbSize = sizeof(TRACKMOUSEEVENT),
-                    .dwFlags = TME_LEAVE | TME_NONCLIENT,
-                    .hwndTrack = windowHandle,
-                    .dwHoverTime = HOVER_DEFAULT,
-                };
-                TrackMouseEvent(&tracking);
                 *result = DefWindowProcW(windowHandle, message, wParam, lParam);
                 return true;
             }
@@ -488,7 +481,8 @@ void NativeWindow::configureNativeWindow()
 {
     const auto windowHandle = reinterpret_cast<HWND>(winId()); // NOLINT(performance-no-int-to-ptr)
     LONG_PTR style = GetWindowLongPtrW(windowHandle, GWL_STYLE);
-    style |= WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU;
+    style |= WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU;
+    style &= ~WS_CAPTION;
     SetWindowLongPtrW(windowHandle, GWL_STYLE, style);
     qCInfo(windowLog) << "configure native window"
                       << "hwnd=" << windowHandle << "qtFlags=" << flags() << "style=" << Qt::hex << style;

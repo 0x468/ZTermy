@@ -26,3 +26,5 @@ The project has not published a release.
   Windows enables modern custom-title-bar and Snap Layout behavior
 - Intercept maximize-button non-client messages before Qt so Windows receives
   the native hover gesture used by Snap Layouts
+- Match the proven native window style used by the Rust prototype: retain the
+  system menu, thick frame, and maximize capability without a hidden caption
