@@ -35,6 +35,8 @@ struct HitTestMetrics
     Rect maximizeButton;
 };
 
+[[nodiscard]] Rect constrainMaximizedClientRect(Rect proposedClientRect, Rect workArea) noexcept;
+
 enum class HitArea
 {
     Client,

@@ -17,7 +17,8 @@ Repeat the DPI checks on every available monitor.
    Expected: the window minimizes to the taskbar and restores from the taskbar.
 2. Click maximize.
    Expected: the window fills the current monitor work area without covering
-   the taskbar; the glyph changes to Restore.
+   the taskbar; all four content edges and the complete bottom status bar
+   remain visible; the glyph changes to Restore.
 3. Click restore.
    Expected: the previous window geometry returns and the glyph changes to
    Maximize.
@@ -58,7 +59,8 @@ flyout.
    Expected: text remains sharp, the pointer stays attached to the title bar,
    and the window does not jump or change physical size unexpectedly.
 2. Maximize and restore once on each monitor.
-   Expected: each monitor's work area and previous geometry are respected.
+   Expected: each monitor's work area and previous geometry are respected,
+   including monitors whose taskbar is on a different edge.
 
 Report each section as pass or fail. For a failure, include the exact step,
 monitor resolution and scaling, Windows build, and a screenshot or short

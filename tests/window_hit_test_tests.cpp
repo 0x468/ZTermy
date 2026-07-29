@@ -10,6 +10,7 @@ private slots:
     void classifiesResizeEdges();
     void classifiesCaptionControlsAndClient();
     void disablesResizeAreasWhenMaximized();
+    void constrainsMaximizedClientToWorkArea();
 };
 
 void WindowHitTestTests::classifiesResizeEdges()
@@ -64,6 +65,34 @@ void WindowHitTestTests::disablesResizeAreasWhenMaximized()
     QCOMPARE(classifyHitTest({1, 200}, size, metrics, true), Client);
     QCOMPARE(classifyHitTest({400, 1}, size, metrics, true), Caption);
     QCOMPARE(classifyHitTest({930, 1}, size, metrics, true), MaximizeButton);
+}
+
+void WindowHitTestTests::constrainsMaximizedClientToWorkArea()
+{
+    using ztermy::windowing::Rect;
+
+    constexpr Rect oversized{.x = -8, .y = -8, .width = 1936, .height = 1056};
+    constexpr Rect workArea{.x = 0, .y = 0, .width = 1920, .height = 1040};
+    const Rect constrained = constrainMaximizedClientRect(oversized, workArea);
+
+    QCOMPARE(constrained.x, 0);
+    QCOMPARE(constrained.y, 0);
+    QCOMPARE(constrained.width, 1920);
+    QCOMPARE(constrained.height, 1040);
+
+    constexpr Rect secondaryMonitorWorkArea{.x = -1920, .y = 40, .width = 1920, .height = 1040};
+    constexpr Rect secondaryOversized{.x = -1928, .y = 32, .width = 1936, .height = 1056};
+    const Rect secondaryConstrained = constrainMaximizedClientRect(secondaryOversized, secondaryMonitorWorkArea);
+
+    QCOMPARE(secondaryConstrained.x, -1920);
+    QCOMPARE(secondaryConstrained.y, 40);
+    QCOMPARE(secondaryConstrained.width, 1920);
+    QCOMPARE(secondaryConstrained.height, 1040);
+
+    QCOMPARE(constrainMaximizedClientRect(workArea, workArea).x, workArea.x);
+    QCOMPARE(constrainMaximizedClientRect(workArea, workArea).y, workArea.y);
+    QCOMPARE(constrainMaximizedClientRect(workArea, workArea).width, workArea.width);
+    QCOMPARE(constrainMaximizedClientRect(workArea, workArea).height, workArea.height);
 }
 
 QTEST_GUILESS_MAIN(WindowHitTestTests)

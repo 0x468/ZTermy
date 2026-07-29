@@ -159,6 +159,33 @@ bool NativeWindow::nativeEvent(const QByteArray &eventType, void *message, qintp
         case WM_NCCALCSIZE:
             if (nativeMessage->wParam != FALSE)
             {
+                auto *parameters =
+                    reinterpret_cast<NCCALCSIZE_PARAMS *>(nativeMessage->lParam); // NOLINT(performance-no-int-to-ptr)
+                if (parameters != nullptr && IsZoomed(windowHandle) != FALSE)
+                {
+                    const HMONITOR monitor = MonitorFromWindow(windowHandle, MONITOR_DEFAULTTONEAREST);
+                    MONITORINFO monitorInfo{.cbSize = sizeof(MONITORINFO)};
+                    if (GetMonitorInfoW(monitor, &monitorInfo) != FALSE)
+                    {
+                        const RECT proposed = parameters->rgrc[0];
+                        const RECT workArea = monitorInfo.rcWork;
+                        const windowing::Rect constrained =
+                            windowing::constrainMaximizedClientRect({.x = proposed.left,
+                                                                     .y = proposed.top,
+                                                                     .width = proposed.right - proposed.left,
+                                                                     .height = proposed.bottom - proposed.top},
+                                                                    {.x = workArea.left,
+                                                                     .y = workArea.top,
+                                                                     .width = workArea.right - workArea.left,
+                                                                     .height = workArea.bottom - workArea.top});
+                        parameters->rgrc[0] = {
+                            .left = constrained.x,
+                            .top = constrained.y,
+                            .right = constrained.x + constrained.width,
+                            .bottom = constrained.y + constrained.height,
+                        };
+                    }
+                }
                 *result = 0;
                 return true;
             }
