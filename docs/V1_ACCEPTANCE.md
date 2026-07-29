@@ -17,6 +17,10 @@ Only runtime evidence can mark a platform or UI item complete.
   three reviewed ICE61, ICE69, and ICE91 warnings, and decompilation confirms
   a single `ztermy.exe` payload under `LocalAppDataFolder` plus the Start menu
   shortcut.
+- The dynamic RelWithDebInfo deployment target installs its Qt, QML, compiler,
+  and OpenSSL runtime dependencies into a clean directory. Its native/QML
+  smoke path passes with `PATH` restricted to Windows system directories and
+  writes diagnostics only below the supplied deployment smoke-data directory.
 - Native window creation and QML loading succeed on Windows 11.
 - Automated hit-test coverage passes for caption, maximize button, client
   area, all resize edges/corners, and maximized-state behavior.
@@ -89,7 +93,7 @@ procedures and expected results.
 
 ## Distribution
 
-- [ ] Dynamic developer build runs from a clean deployment directory
+- [x] Dynamic developer build runs from a clean deployment directory
 - [x] Static release build starts without Qt DLLs
 - [x] Portable data remains inside the portable directory
 - [ ] Installed data survives upgrade and uninstall

@@ -1,5 +1,36 @@
 # Distribution manual verification
 
+## Build and smoke-test the dynamic developer deployment
+
+Start an x64 Visual Studio developer shell and use the dynamic RelWithDebInfo
+preset:
+
+```powershell
+cmake --preset msvc-dynamic-relwithdebinfo
+cmake --build --preset msvc-dynamic-relwithdebinfo `
+  --target ztermy_dynamic_deploy_smoke
+```
+
+The clean deployment is recreated below:
+
+```text
+build/msvc-dynamic-relwithdebinfo/package/dynamic
+```
+
+The smoke target installs the executable, resolves its Qt runtime and QML
+dependencies through Qt's CMake deployment API, then starts the deployed
+executable with `PATH` restricted to Windows system directories. It does not
+use the build directory or the Qt installation as a runtime dependency.
+
+Expected:
+
+- `bin/ztermy.exe`, the required Qt and OpenSSL DLLs, `bin/qt.conf`, and
+  platform/QML plugins are present below the clean deployment directory.
+- The native/QML smoke path exits successfully without a missing-DLL or
+  missing-plugin dialog.
+- Smoke-test data is written only below the deployment's `smoke-data`
+  directory.
+
 ## Build the static portable archive
 
 Start an x64 Visual Studio developer shell and set the static Qt root:

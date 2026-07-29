@@ -388,7 +388,50 @@ target_link_libraries(ztermy PRIVATE
     dwmapi
 )
 
-install(TARGETS ztermy RUNTIME DESTINATION . COMPONENT Runtime)
+if(ZTERMY_STATIC_BUILD)
+    install(TARGETS ztermy RUNTIME DESTINATION . COMPONENT Runtime)
+else()
+    install(TARGETS ztermy RUNTIME DESTINATION bin COMPONENT Runtime)
+    install(
+        FILES ${RUNTIME_DEPENDENCIES}
+        DESTINATION bin
+        COMPONENT Runtime
+    )
+
+    set(ZTERMY_DYNAMIC_DEPLOY_ROOT
+        "${CMAKE_CURRENT_BINARY_DIR}/package/dynamic"
+    )
+    qt_generate_deploy_qml_app_script(
+        TARGET ztermy
+        OUTPUT_SCRIPT ZTERMY_DYNAMIC_DEPLOY_SCRIPT
+        NO_TRANSLATIONS
+    )
+    install(
+        SCRIPT "${ZTERMY_DYNAMIC_DEPLOY_SCRIPT}"
+        COMPONENT Runtime
+    )
+
+    add_custom_target(ztermy_dynamic_deploy
+        COMMAND "${CMAKE_COMMAND}" -E rm -rf "${ZTERMY_DYNAMIC_DEPLOY_ROOT}"
+        COMMAND "${CMAKE_COMMAND}"
+                --install "${CMAKE_CURRENT_BINARY_DIR}"
+                --prefix "${ZTERMY_DYNAMIC_DEPLOY_ROOT}"
+                --component Runtime
+        DEPENDS ztermy
+        COMMENT "Creating an isolated dynamic Qt developer deployment"
+        VERBATIM
+    )
+
+    add_custom_target(ztermy_dynamic_deploy_smoke
+        COMMAND "${CMAKE_COMMAND}"
+                "-DZTERMY_DEPLOYED_EXECUTABLE=${ZTERMY_DYNAMIC_DEPLOY_ROOT}/bin/ztermy.exe"
+                "-DZTERMY_DEPLOYED_DATA_DIR=${ZTERMY_DYNAMIC_DEPLOY_ROOT}/smoke-data"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunDynamicDeploymentSmoke.cmake"
+        DEPENDS ztermy_dynamic_deploy
+        COMMENT "Starting ztermy from the isolated dynamic Qt deployment"
+        VERBATIM
+    )
+endif()
 
 if(ZTERMY_STATIC_BUILD)
     set(ZTERMY_PORTABLE_PACKAGE_ROOT "${CMAKE_CURRENT_BINARY_DIR}/package/portable")
