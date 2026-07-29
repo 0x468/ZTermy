@@ -1,6 +1,6 @@
 # ADR 0002: Validate the terminal engine before product implementation
 
-Status: proposed
+Status: accepted for spike
 
 ## Context
 
@@ -18,10 +18,17 @@ Time-box a technical spike that:
 4. Supports input, resize, selection, CJK, IME, and alternate screen.
 5. Measures input latency and sustained large-output frame time.
 
-The first candidate is reuse of compatible modular components from Contour.
-An independent minimal engine is the comparison case. No dependency is adopted
-until its API, license, build footprint, Unicode behavior, and rendering
-integration are documented.
+The first candidate is `libghostty-vt` through its C ABI. Contour's
+`vtbackend` remains the C++ comparison case, and Windows Terminal's core is a
+behavioral reference. An independent terminal engine is no longer a primary
+candidate because the previous Rust prototype demonstrated the maintenance
+cost of owning parser, screen, scrollback, Unicode, and input behavior
+together.
+
+No dependency is adopted until its API stability, license, build footprint,
+Windows/MSVC integration, Unicode behavior, and renderer handoff have been
+measured. The ConPTY transport is implemented behind a terminal-session
+boundary so this choice does not block local process integration.
 
 ## Decision criteria
 
@@ -31,4 +38,3 @@ integration are documented.
 - Dirty-row and scrollback performance
 - Unicode and IME behavior
 - Maintainability and license compatibility
-

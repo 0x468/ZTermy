@@ -14,6 +14,12 @@ The project has not published a release.
 - Native resize edges, work-area maximize constraints, DWM dark mode, rounded
   corners, and system backdrop integration
 - Unit tests for window hit-test classification
+- Engine-independent Windows ConPTY process transport with UTF-8 pipe I/O,
+  resize, process waiting, and deterministic cleanup
+- ConPTY integration tests covering invalid terminal sizes and bidirectional
+  `cmd.exe` communication
+- Terminal-engine research and a spike decision record comparing
+  `libghostty-vt`, Contour, Windows Terminal, and libvterm
 - Dynamic and static Qt CMake build targets
 - Categorized rotating file logs with Debug-build diagnostics
 

@@ -15,6 +15,20 @@ find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Quick QuickControls2)
 
 qt_standard_project_setup(REQUIRES 6.8)
 
+add_library(ztermy_terminal_transport STATIC
+    src/infrastructure/terminal/ConPtyProcess.cpp
+    src/infrastructure/terminal/ConPtyProcess.h
+)
+
+target_compile_features(ztermy_terminal_transport PUBLIC cxx_std_23)
+target_include_directories(ztermy_terminal_transport PUBLIC src)
+target_compile_definitions(ztermy_terminal_transport PRIVATE
+    NOMINMAX
+    UNICODE
+    WIN32_LEAN_AND_MEAN
+    _UNICODE
+)
+
 qt_add_executable(ztermy WIN32
     src/main.cpp
     src/core/logging/Logging.cpp
@@ -59,6 +73,7 @@ if(ZTERMY_STATIC_BUILD)
 endif()
 
 target_link_libraries(ztermy PRIVATE
+    ztermy_terminal_transport
     Qt6::Core
     Qt6::Gui
     Qt6::Quick
@@ -67,6 +82,13 @@ target_link_libraries(ztermy PRIVATE
 )
 
 if(MSVC)
+    target_compile_options(ztermy_terminal_transport PRIVATE
+        /permissive-
+        /utf-8
+        /W4
+        /Zc:__cplusplus
+    )
+
     target_compile_options(ztermy PRIVATE
         /permissive-
         /utf-8
@@ -98,4 +120,25 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME window-hit-test COMMAND ztermy_window_hit_test_tests)
+
+    qt_add_executable(ztermy_conpty_process_tests
+        tests/conpty_process_tests.cpp
+    )
+
+    target_compile_features(ztermy_conpty_process_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_conpty_process_tests PRIVATE
+        ztermy_terminal_transport
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_conpty_process_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME conpty-process COMMAND ztermy_conpty_process_tests)
 endif()

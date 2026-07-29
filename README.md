@@ -24,9 +24,9 @@ Other platforms are out of scope until the Windows version is stable.
 
 ## Project status
 
-The first Qt Quick shell, Windows non-client integration, and window hit-test
-unit tests are implemented. The next milestone is the terminal-engine spike.
-See
+The Qt Quick shell, Windows non-client integration, and the first
+engine-independent ConPTY process transport are implemented. The active
+milestone is the terminal-engine spike and terminal-session integration. See
 [docs/V1_SCOPE.md](docs/V1_SCOPE.md) and
 [docs/V1_ACCEPTANCE.md](docs/V1_ACCEPTANCE.md).
 

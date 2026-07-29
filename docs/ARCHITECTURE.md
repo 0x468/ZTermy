@@ -70,15 +70,11 @@ behavior:
 - system move and resize operations
 
 The QML title bar supplies visuals and reports interactive rectangles. Native
-code supplies system semantics. The resizable frame, system menu, and
-minimize/maximize capabilities are retained, while `WS_CAPTION` is removed so
-Windows routes the custom `HTMAXBUTTON` hover through the Snap Layout path.
-`WM_NCCALCSIZE` extends the client area over the remaining native frame.
-
-On Windows 11, DWM can synthesize a legacy caption while animating this
-captionless style between normal and maximized states. Transitions are disabled
-for the ztermy window to prevent that system artifact; native state changes,
-Snap Layouts, dragging, and edge resizing remain available.
+code supplies system semantics. The resizable frame, caption metadata, and
+minimize/maximize capabilities are retained so DWM continues to provide modern
+window transitions and Snap Layout integration. `WS_SYSMENU` is removed to
+prevent native caption buttons from being painted over the custom chrome.
+`WM_NCCALCSIZE` extends the client area over the retained native frame.
 
 The executable embeds a Windows 10/11 compatibility manifest. Besides declaring
 Per-Monitor V2 DPI awareness, this opts the process into the modern Windows
