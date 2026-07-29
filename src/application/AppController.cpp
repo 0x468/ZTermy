@@ -81,6 +81,12 @@ AppController::AppController(QString profileStorePath, QObject *parent)
             m_terminal->setStatusText(status);
         }
     });
+    QObject::connect(&m_sshSession, &ssh::SshTerminalSession::clipboardTextReady, this, [this](const QString &text) {
+        if (m_terminal != nullptr && m_activeSession == ActiveSession::Ssh)
+        {
+            m_terminal->setClipboardText(text);
+        }
+    });
     QObject::connect(&m_sshSession, &ssh::SshTerminalSession::runningChanged, this, [this](const bool running) {
         if (m_activeSession == ActiveSession::Ssh || running)
         {
@@ -419,14 +425,10 @@ void AppController::connectTerminalSignals()
     QObject::connect(m_terminal, &ui::TerminalItem::inputGenerated, this, &AppController::queueInput);
     QObject::connect(m_terminal, &ui::TerminalItem::pasteRequested, this, &AppController::queuePaste);
     QObject::connect(m_terminal, &ui::TerminalItem::sizeRequested, this, &AppController::requestResize);
-    QObject::connect(m_terminal, &ui::TerminalItem::scrollRequested, &m_localSession,
-                     &terminal::LocalTerminalSession::requestScroll);
-    QObject::connect(m_terminal, &ui::TerminalItem::selectionRequested, &m_localSession,
-                     &terminal::LocalTerminalSession::requestSelection);
-    QObject::connect(m_terminal, &ui::TerminalItem::clearSelectionRequested, &m_localSession,
-                     &terminal::LocalTerminalSession::clearSelection);
-    QObject::connect(m_terminal, &ui::TerminalItem::copyRequested, &m_localSession,
-                     &terminal::LocalTerminalSession::copySelection);
+    QObject::connect(m_terminal, &ui::TerminalItem::scrollRequested, this, &AppController::requestScroll);
+    QObject::connect(m_terminal, &ui::TerminalItem::selectionRequested, this, &AppController::requestSelection);
+    QObject::connect(m_terminal, &ui::TerminalItem::clearSelectionRequested, this, &AppController::clearSelection);
+    QObject::connect(m_terminal, &ui::TerminalItem::copyRequested, this, &AppController::copySelection);
 }
 
 void AppController::queueInput(const QByteArray &bytes)
@@ -445,11 +447,60 @@ void AppController::queuePaste(const QByteArray &bytes)
 {
     if (m_activeSession == ActiveSession::Ssh)
     {
-        m_sshSession.queueInput(bytes);
+        m_sshSession.queuePaste(bytes);
     }
     else if (m_activeSession == ActiveSession::Local)
     {
         m_localSession.queuePaste(bytes);
+    }
+}
+
+void AppController::requestScroll(const int rows)
+{
+    if (m_activeSession == ActiveSession::Ssh)
+    {
+        m_sshSession.requestScroll(rows);
+    }
+    else if (m_activeSession == ActiveSession::Local)
+    {
+        m_localSession.requestScroll(rows);
+    }
+}
+
+void AppController::requestSelection(const quint16 startColumn, const quint16 startRow, const quint16 endColumn,
+                                     const quint16 endRow, const bool rectangular)
+{
+    if (m_activeSession == ActiveSession::Ssh)
+    {
+        m_sshSession.requestSelection(startColumn, startRow, endColumn, endRow, rectangular);
+    }
+    else if (m_activeSession == ActiveSession::Local)
+    {
+        m_localSession.requestSelection(startColumn, startRow, endColumn, endRow, rectangular);
+    }
+}
+
+void AppController::clearSelection()
+{
+    if (m_activeSession == ActiveSession::Ssh)
+    {
+        m_sshSession.clearSelection();
+    }
+    else if (m_activeSession == ActiveSession::Local)
+    {
+        m_localSession.clearSelection();
+    }
+}
+
+void AppController::copySelection()
+{
+    if (m_activeSession == ActiveSession::Ssh)
+    {
+        m_sshSession.copySelection();
+    }
+    else if (m_activeSession == ActiveSession::Local)
+    {
+        m_localSession.copySelection();
     }
 }
 

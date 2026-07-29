@@ -77,6 +77,10 @@ private:
     void queueInput(const QByteArray &bytes);
     void queuePaste(const QByteArray &bytes);
     void requestResize(quint16 columns, quint16 rows, quint32 cellWidthPixels, quint32 cellHeightPixels);
+    void requestScroll(int rows);
+    void requestSelection(quint16 startColumn, quint16 startRow, quint16 endColumn, quint16 endRow, bool rectangular);
+    void clearSelection();
+    void copySelection();
     void setHostKeyPrompt(QString algorithm, QString fingerprint, bool changed);
     void clearHostKeyPrompt();
     void loadHostProfiles();

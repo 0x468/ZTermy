@@ -18,6 +18,7 @@ class SshTerminalSessionTests final : public QObject
 private slots:
     void rejectsInvalidStartupConfiguration();
     void sensitiveCredentialsAreMoveOnlyAndClearable();
+    void ignoresTerminalInteractionWhileDisconnected();
     void connectsAfterExplicitHostKeyConfirmation();
 };
 
@@ -62,6 +63,23 @@ void SshTerminalSessionTests::sensitiveCredentialsAreMoveOnlyAndClearable()
     QVERIFY(moved.view() == std::string_view("temporary-secret"));
     moved.clear();
     QVERIFY(moved.empty());
+}
+
+void SshTerminalSessionTests::ignoresTerminalInteractionWhileDisconnected()
+{
+    ztermy::ssh::SshTerminalSession session;
+    QSignalSpy snapshotSpy(&session, &ztermy::ssh::SshTerminalSession::snapshotReady);
+    QSignalSpy clipboardSpy(&session, &ztermy::ssh::SshTerminalSession::clipboardTextReady);
+
+    session.queueInput(QByteArrayLiteral("input"));
+    session.queuePaste(QByteArrayLiteral("paste"));
+    session.requestScroll(-3);
+    session.requestSelection(0, 0, 4, 0, false);
+    session.clearSelection();
+    session.copySelection();
+
+    QCOMPARE(snapshotSpy.count(), 0);
+    QCOMPARE(clipboardSpy.count(), 0);
 }
 
 void SshTerminalSessionTests::connectsAfterExplicitHostKeyConfirmation()
@@ -116,6 +134,29 @@ void SshTerminalSessionTests::connectsAfterExplicitHostKeyConfirmation()
         15s);
     QTRY_VERIFY_WITH_TIMEOUT(snapshotSpy.count() > 0, 5s);
 
+    snapshotSpy.clear();
+    session.requestSelection(0, 0, 5, 0, false);
+    QTRY_VERIFY_WITH_TIMEOUT(snapshotSpy.count() > 0, 5s);
+    const auto selectedSnapshot =
+        qvariant_cast<ztermy::terminal::TerminalSnapshotPtr>(snapshotSpy.constLast().constFirst());
+    QVERIFY(selectedSnapshot);
+    for (std::uint16_t column = 0; column <= 5; ++column)
+    {
+        QVERIFY(selectedSnapshot->cell(column, 0).selected);
+    }
+
+    session.copySelection();
+    session.clearSelection();
+    QTRY_VERIFY_WITH_TIMEOUT(snapshotSpy.count() > 1, 5s);
+    const auto clearedSnapshot =
+        qvariant_cast<ztermy::terminal::TerminalSnapshotPtr>(snapshotSpy.constLast().constFirst());
+    QVERIFY(clearedSnapshot);
+    for (std::uint16_t column = 0; column <= 5; ++column)
+    {
+        QVERIFY(!clearedSnapshot->cell(column, 0).selected);
+    }
+
+    session.requestScroll(-1);
     session.requestResize(100, 30, 8, 16);
     session.stop();
 
