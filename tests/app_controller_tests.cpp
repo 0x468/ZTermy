@@ -64,6 +64,7 @@ private slots:
     void savesUpdatesReloadsAndDeletesProfiles();
     void rejectsInvalidProfiles();
     void rejectsIncompleteConnections();
+    void persistsApplicationSettings();
     void managesMultipleLocalTerminalTabs();
 };
 
@@ -168,6 +169,50 @@ void AppControllerTests::rejectsIncompleteConnections()
         !controller.connectPrivateKey(QStringLiteral("host"), 22, QStringLiteral("user"), QStringLiteral("   "), {}));
     QVERIFY(!controller.connectPassword(QStringLiteral("host"), 22, QStringLiteral("user"), {}));
     QVERIFY(!controller.connectHostProfile(QStringLiteral("missing"), QStringLiteral("unused")));
+}
+
+void AppControllerTests::persistsApplicationSettings()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString profilesPath = directory.filePath(QStringLiteral("profiles.json"));
+    const QString knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json"));
+    const QString settingsPath = directory.filePath(QStringLiteral("settings.json"));
+
+    ztermy::AppController controller(profilesPath, knownHostsPath, settingsPath);
+    QSignalSpy settingsChanged(&controller, &ztermy::AppController::applicationSettingsChanged);
+    QCOMPARE(controller.themePreference(), QStringLiteral("dark"));
+    QCOMPARE(controller.windowOpacity(), 1.0);
+
+    QVERIFY(controller.saveApplicationSettings(QStringLiteral("light"), 0.8, QStringLiteral("mica"),
+                                               QStringLiteral("Cascadia Code"), 18, QStringLiteral("bar"), false, true,
+                                               false));
+    QCOMPARE(settingsChanged.count(), 1);
+    QCOMPARE(controller.themePreference(), QStringLiteral("light"));
+    QCOMPARE(controller.windowOpacity(), 0.8);
+    QCOMPARE(controller.backdropPreference(), QStringLiteral("mica"));
+    QCOMPARE(controller.terminalFontFamily(), QStringLiteral("Cascadia Code"));
+    QCOMPARE(controller.terminalFontSize(), 18);
+    QCOMPARE(controller.cursorPreference(), QStringLiteral("bar"));
+    QVERIFY(!controller.cursorBlink());
+    QVERIFY(controller.copyOnSelect());
+    QVERIFY(!controller.confirmMultilinePaste());
+
+    QVERIFY(!controller.saveApplicationSettings(QStringLiteral("unknown"), 0.8, QStringLiteral("mica"),
+                                                QStringLiteral("Cascadia Code"), 18, QStringLiteral("bar"), false, true,
+                                                false));
+    QCOMPARE(settingsChanged.count(), 1);
+
+    ztermy::AppController reloaded(profilesPath, knownHostsPath, settingsPath);
+    QCOMPARE(reloaded.themePreference(), QStringLiteral("light"));
+    QCOMPARE(reloaded.windowOpacity(), 0.8);
+    QCOMPARE(reloaded.terminalFontFamily(), QStringLiteral("Cascadia Code"));
+    QVERIFY(reloaded.copyOnSelect());
+
+    QVERIFY(reloaded.resetApplicationSettings());
+    QCOMPARE(reloaded.themePreference(), QStringLiteral("dark"));
+    QCOMPARE(reloaded.windowOpacity(), 1.0);
+    QCOMPARE(reloaded.terminalFontFamily(), QStringLiteral("Cascadia Mono"));
 }
 
 void AppControllerTests::managesMultipleLocalTerminalTabs()

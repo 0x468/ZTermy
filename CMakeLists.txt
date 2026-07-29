@@ -102,6 +102,8 @@ qt_standard_project_setup(REQUIRES 6.8)
 add_library(ztermy_core_config STATIC
     src/core/config/ApplicationPaths.cpp
     src/core/config/ApplicationPaths.h
+    src/core/config/ApplicationSettings.cpp
+    src/core/config/ApplicationSettings.h
 )
 
 target_compile_features(ztermy_core_config PUBLIC cxx_std_23)
@@ -429,6 +431,27 @@ if(BUILD_TESTING)
 
     add_test(NAME application-paths COMMAND ztermy_application_paths_tests)
 
+    qt_add_executable(ztermy_application_settings_tests
+        tests/application_settings_tests.cpp
+    )
+
+    target_compile_features(ztermy_application_settings_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_application_settings_tests PRIVATE
+        ztermy_core_config
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_application_settings_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME application-settings COMMAND ztermy_application_settings_tests)
+
     qt_add_executable(ztermy_window_hit_test_tests
         tests/window_hit_test_tests.cpp
         src/platform/windows/WindowHitTest.cpp
@@ -719,6 +742,7 @@ if(BUILD_TESTING)
         _UNICODE
     )
     target_link_libraries(ztermy_app_controller_tests PRIVATE
+        ztermy_core_config
         ztermy_ssh_persistence
         ztermy_ssh_session
         ztermy_terminal_session

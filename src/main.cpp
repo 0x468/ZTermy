@@ -51,7 +51,7 @@ int main(int argc, char *argv[])
     qRegisterMetaType<ztermy::terminal::TerminalSnapshotPtr>();
     qmlRegisterType<ztermy::ui::TerminalItem>("Ztermy.Terminal", 1, 0, "TerminalView");
 
-    ztermy::AppController appController(paths->profilesFile, paths->knownHostsFile);
+    ztermy::AppController appController(paths->profilesFile, paths->knownHostsFile, paths->settingsFile);
     ztermy::NativeWindow window;
     window.rootContext()->setContextProperty(QStringLiteral("appController"), &appController);
     if (!window.load())

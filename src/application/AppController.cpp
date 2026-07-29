@@ -28,6 +28,11 @@ namespace
     return QFileInfo(profileStorePath).dir().filePath(QStringLiteral("known_hosts.json"));
 }
 
+[[nodiscard]] QString siblingSettingsFile(const QString &profileStorePath)
+{
+    return QFileInfo(profileStorePath).dir().filePath(QStringLiteral("settings.json"));
+}
+
 [[nodiscard]] std::string utf8String(const QString &value)
 {
     const QByteArray bytes = value.toUtf8();
@@ -46,18 +51,25 @@ namespace ztermy
 
 AppController::AppController(QObject *parent)
     : AppController(applicationDataFile(QStringLiteral("profiles.json")),
-                    applicationDataFile(QStringLiteral("known_hosts.json")), parent)
+                    applicationDataFile(QStringLiteral("known_hosts.json")),
+                    applicationDataFile(QStringLiteral("settings.json")), parent)
 {
 }
 
 AppController::AppController(const QString &profileStorePath, QObject *parent)
-    : AppController(profileStorePath, siblingKnownHostsFile(profileStorePath), parent)
+    : AppController(profileStorePath, siblingKnownHostsFile(profileStorePath), siblingSettingsFile(profileStorePath),
+                    parent)
 {
 }
 
 AppController::AppController(QString profileStorePath, QString knownHostsPath, QObject *parent)
+    : AppController(std::move(profileStorePath), std::move(knownHostsPath), QString{}, parent)
+{
+}
+
+AppController::AppController(QString profileStorePath, QString knownHostsPath, QString settingsPath, QObject *parent)
     : AppController(
-          std::move(profileStorePath), std::move(knownHostsPath),
+          std::move(profileStorePath), std::move(knownHostsPath), std::move(settingsPath),
           [] {
               return std::make_unique<terminal::LocalTerminalSession>();
           },
@@ -67,9 +79,18 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
 
 AppController::AppController(QString profileStorePath, QString knownHostsPath,
                              LocalTerminalSessionFactory localSessionFactory, QObject *parent)
+    : AppController(std::move(profileStorePath), std::move(knownHostsPath), QString{}, std::move(localSessionFactory),
+                    parent)
+{
+}
+
+AppController::AppController(QString profileStorePath, QString knownHostsPath, QString settingsPath,
+                             LocalTerminalSessionFactory localSessionFactory, QObject *parent)
     : QObject(parent),
       m_localSessionFactory(std::move(localSessionFactory)),
       m_profileStore(std::move(profileStorePath)),
+      m_settingsStore(settingsPath.isEmpty() ? siblingSettingsFile(m_profileStore.filePath())
+                                             : std::move(settingsPath)),
       m_knownHostsPath(std::move(knownHostsPath))
 {
     if (!m_localSessionFactory)
@@ -80,6 +101,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath,
     }
     Q_ASSERT(m_localSessionFactory);
     loadHostProfiles();
+    loadApplicationSettings();
 }
 
 AppController::~AppController()
@@ -226,6 +248,51 @@ bool AppController::terminalSearchCaseSensitive() const noexcept
 {
     const TerminalTab *tab = activeTab();
     return tab != nullptr && tab->searchCaseSensitive;
+}
+
+QString AppController::themePreference() const
+{
+    return config::themePreferenceToken(m_settings.theme);
+}
+
+qreal AppController::windowOpacity() const noexcept
+{
+    return m_settings.windowOpacity;
+}
+
+QString AppController::backdropPreference() const
+{
+    return config::backdropPreferenceToken(m_settings.backdrop);
+}
+
+QString AppController::terminalFontFamily() const
+{
+    return m_settings.terminalFontFamily;
+}
+
+int AppController::terminalFontSize() const noexcept
+{
+    return m_settings.terminalFontSize;
+}
+
+QString AppController::cursorPreference() const
+{
+    return config::cursorPreferenceToken(m_settings.cursor);
+}
+
+bool AppController::cursorBlink() const noexcept
+{
+    return m_settings.cursorBlink;
+}
+
+bool AppController::copyOnSelect() const noexcept
+{
+    return m_settings.copyOnSelect;
+}
+
+bool AppController::confirmMultilinePaste() const noexcept
+{
+    return m_settings.confirmMultilinePaste;
 }
 
 QString AppController::startLocalTerminal()
@@ -614,6 +681,37 @@ bool AppController::connectHostProfile(const QString &id, const QString &secret)
                              utf8QString(profile->privateKeyPath), secret);
 }
 
+bool AppController::saveApplicationSettings(const QString &theme, const qreal opacity, const QString &backdrop,
+                                            const QString &fontFamily, const int fontSize, const QString &cursor,
+                                            const bool cursorShouldBlink, const bool shouldCopyOnSelect,
+                                            const bool shouldConfirmMultilinePaste)
+{
+    const auto parsedTheme = config::parseThemePreference(theme);
+    const auto parsedBackdrop = config::parseBackdropPreference(backdrop);
+    const auto parsedCursor = config::parseCursorPreference(cursor);
+    if (!parsedTheme || !parsedBackdrop || !parsedCursor)
+    {
+        return false;
+    }
+
+    return persistApplicationSettings({
+        .theme = *parsedTheme,
+        .windowOpacity = opacity,
+        .backdrop = *parsedBackdrop,
+        .terminalFontFamily = fontFamily,
+        .terminalFontSize = fontSize,
+        .cursor = *parsedCursor,
+        .cursorBlink = cursorShouldBlink,
+        .copyOnSelect = shouldCopyOnSelect,
+        .confirmMultilinePaste = shouldConfirmMultilinePaste,
+    });
+}
+
+bool AppController::resetApplicationSettings()
+{
+    return persistApplicationSettings(config::ApplicationSettings{});
+}
+
 void AppController::acceptHostKey(const bool remember)
 {
     if (!m_hostKeyPromptVisible || m_hostKeyChangedWarning)
@@ -966,6 +1064,33 @@ void AppController::loadHostProfiles()
         return;
     }
     m_profiles = std::move(*profiles);
+}
+
+void AppController::loadApplicationSettings()
+{
+    auto settings = m_settingsStore.load();
+    if (!settings)
+    {
+        qCWarning(appControllerLog) << "Unable to load application settings; using defaults";
+        return;
+    }
+    m_settings = std::move(*settings);
+}
+
+bool AppController::persistApplicationSettings(const config::ApplicationSettings &settings)
+{
+    if (!m_settingsStore.save(settings))
+    {
+        qCWarning(appControllerLog) << "Unable to persist application settings";
+        return false;
+    }
+    if (m_settings == settings)
+    {
+        return true;
+    }
+    m_settings = settings;
+    emit applicationSettingsChanged();
+    return true;
 }
 
 } // namespace ztermy

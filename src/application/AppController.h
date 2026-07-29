@@ -2,6 +2,7 @@
 
 #include "application/ssh/SshTerminalSession.h"
 #include "application/terminal/LocalTerminalSession.h"
+#include "core/config/ApplicationSettings.h"
 #include "infrastructure/ssh/SshProfileStore.h"
 
 #include <QObject>
@@ -38,6 +39,15 @@ class AppController final : public QObject
     Q_PROPERTY(int terminalSearchCurrent READ terminalSearchCurrent NOTIFY terminalSearchChanged)
     Q_PROPERTY(int terminalSearchTotal READ terminalSearchTotal NOTIFY terminalSearchChanged)
     Q_PROPERTY(bool terminalSearchCaseSensitive READ terminalSearchCaseSensitive NOTIFY terminalSearchChanged)
+    Q_PROPERTY(QString themePreference READ themePreference NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(qreal windowOpacity READ windowOpacity NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(QString backdropPreference READ backdropPreference NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(QString terminalFontFamily READ terminalFontFamily NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(int terminalFontSize READ terminalFontSize NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(QString cursorPreference READ cursorPreference NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(bool cursorBlink READ cursorBlink NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(bool copyOnSelect READ copyOnSelect NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(bool confirmMultilinePaste READ confirmMultilinePaste NOTIFY applicationSettingsChanged)
 
 public:
     using LocalTerminalSessionFactory = std::function<std::unique_ptr<terminal::LocalTerminalSessionBackend>()>;
@@ -45,8 +55,11 @@ public:
     explicit AppController(QObject *parent = nullptr);
     explicit AppController(const QString &profileStorePath, QObject *parent = nullptr);
     AppController(QString profileStorePath, QString knownHostsPath, QObject *parent = nullptr);
+    AppController(QString profileStorePath, QString knownHostsPath, QString settingsPath, QObject *parent = nullptr);
     AppController(QString profileStorePath, QString knownHostsPath, LocalTerminalSessionFactory localSessionFactory,
                   QObject *parent = nullptr);
+    AppController(QString profileStorePath, QString knownHostsPath, QString settingsPath,
+                  LocalTerminalSessionFactory localSessionFactory, QObject *parent = nullptr);
     ~AppController() override;
 
     AppController(const AppController &) = delete;
@@ -68,6 +81,15 @@ public:
     [[nodiscard]] int terminalSearchCurrent() const noexcept;
     [[nodiscard]] int terminalSearchTotal() const noexcept;
     [[nodiscard]] bool terminalSearchCaseSensitive() const noexcept;
+    [[nodiscard]] QString themePreference() const;
+    [[nodiscard]] qreal windowOpacity() const noexcept;
+    [[nodiscard]] QString backdropPreference() const;
+    [[nodiscard]] QString terminalFontFamily() const;
+    [[nodiscard]] int terminalFontSize() const noexcept;
+    [[nodiscard]] QString cursorPreference() const;
+    [[nodiscard]] bool cursorBlink() const noexcept;
+    [[nodiscard]] bool copyOnSelect() const noexcept;
+    [[nodiscard]] bool confirmMultilinePaste() const noexcept;
 
     Q_INVOKABLE QString startLocalTerminal();
     Q_INVOKABLE bool activateTerminalTab(const QString &id);
@@ -84,6 +106,11 @@ public:
     Q_INVOKABLE bool duplicateHostProfile(const QString &id);
     Q_INVOKABLE bool deleteHostProfile(const QString &id);
     Q_INVOKABLE bool connectHostProfile(const QString &id, const QString &secret);
+    Q_INVOKABLE bool saveApplicationSettings(const QString &theme, qreal opacity, const QString &backdrop,
+                                             const QString &fontFamily, int fontSize, const QString &cursor,
+                                             bool cursorShouldBlink, bool shouldCopyOnSelect,
+                                             bool shouldConfirmMultilinePaste);
+    Q_INVOKABLE bool resetApplicationSettings();
     Q_INVOKABLE void acceptHostKey(bool remember);
     Q_INVOKABLE void rejectHostKey();
 
@@ -94,6 +121,7 @@ signals:
     void terminalTabsChanged();
     void activeTerminalTabChanged();
     void terminalSearchChanged();
+    void applicationSettingsChanged();
 
 private:
     enum class TerminalTabKind : std::uint8_t
@@ -131,6 +159,8 @@ private:
     void setHostKeyPrompt(QString algorithm, QString fingerprint, bool changed);
     void clearHostKeyPrompt();
     void loadHostProfiles();
+    void loadApplicationSettings();
+    [[nodiscard]] bool persistApplicationSettings(const config::ApplicationSettings &settings);
     [[nodiscard]] bool startSshConnection(ssh::SshConnectionRequest request);
     [[nodiscard]] TerminalTab *activeTab();
     [[nodiscard]] const TerminalTab *activeTab() const;
@@ -143,6 +173,8 @@ private:
     ui::TerminalItem *m_terminal = nullptr;
     LocalTerminalSessionFactory m_localSessionFactory;
     ssh::SshProfileStore m_profileStore;
+    config::ApplicationSettingsStore m_settingsStore;
+    config::ApplicationSettings m_settings;
     QString m_knownHostsPath;
     std::vector<ssh::SshProfile> m_profiles;
     std::vector<std::unique_ptr<TerminalTab>> m_tabs;
