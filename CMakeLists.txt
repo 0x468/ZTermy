@@ -23,6 +23,7 @@ qt_add_executable(ztermy WIN32
     src/platform/windows/NativeWindow.h
     src/platform/windows/WindowHitTest.cpp
     src/platform/windows/WindowHitTest.h
+    resources/windows/ztermy.manifest
 )
 
 set_source_files_properties(

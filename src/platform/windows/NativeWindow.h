@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QQuickView>
+#include <qt_windows.h>
 
 namespace ztermy
 {
@@ -14,6 +15,7 @@ class NativeWindow final : public QQuickView
 
 public:
     explicit NativeWindow(QWindow *parent = nullptr);
+    ~NativeWindow() override;
 
     [[nodiscard]] bool load();
     [[nodiscard]] bool maximized() const noexcept;
@@ -35,6 +37,13 @@ protected:
     bool nativeEvent(const QByteArray &eventType, void *message, qintptr *result) override;
 
 private:
+    static LRESULT CALLBACK windowProcedure(HWND windowHandle, UINT message, WPARAM wParam, LPARAM lParam);
+
+    [[nodiscard]] LRESULT nativeHitTest(HWND windowHandle, LPARAM lParam) const;
+    [[nodiscard]] bool handleWindowProcedureMessage(HWND windowHandle, UINT message, WPARAM wParam, LPARAM lParam,
+                                                    LRESULT *result);
+    void installWindowProcedure(HWND windowHandle);
+    void uninstallWindowProcedure();
     void configureNativeWindow();
     void applyBackdrop();
     void setMaximizeButtonHovered(bool hovered);
@@ -46,6 +55,8 @@ private:
     qreal m_maximizeWidth = 46.0;
     bool m_maximizeButtonHovered = false;
     bool m_maximizeButtonPressed = false;
+    HWND m_windowHandle = nullptr;
+    WNDPROC m_originalWindowProcedure = nullptr;
 };
 
 } // namespace ztermy

@@ -22,3 +22,7 @@ The project has not published a release.
 - Preserve native maximize capability when the window is created, execute
   maximize/restore from custom non-client button messages, and expose the
   custom caption-button bounds to Windows
+- Embed an explicit Windows 10/11 compatibility and Per-Monitor V2 manifest so
+  Windows enables modern custom-title-bar and Snap Layout behavior
+- Intercept maximize-button non-client messages before Qt so Windows receives
+  the native hover gesture used by Snap Layouts

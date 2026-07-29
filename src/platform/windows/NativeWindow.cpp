@@ -23,6 +23,7 @@ constexpr DWORD kDwmWindowCornerPreference = 33;
 constexpr DWORD kDwmSystemBackdropType = 38;
 constexpr int kDwmWindowCornerRound = 2;
 constexpr int kDwmSystemBackdropMainWindow = 2;
+constexpr auto kNativeWindowProperty = L"ztermy.NativeWindow";
 
 [[nodiscard]] LRESULT toNativeHitArea(const ztermy::windowing::HitArea area) noexcept
 {
@@ -70,6 +71,11 @@ NativeWindow::NativeWindow(QWindow *parent) : QQuickView(parent)
     setMinimumSize(QSize(500, 360));
     resize(1180, 760);
     setColor(Qt::transparent);
+}
+
+NativeWindow::~NativeWindow()
+{
+    uninstallWindowProcedure();
 }
 
 bool NativeWindow::load()
@@ -157,59 +163,8 @@ bool NativeWindow::nativeEvent(const QByteArray &eventType, void *message, qintp
             break;
 
         case WM_NCHITTEST:
-        {
-            LRESULT dwmResult = 0;
-            DwmDefWindowProc(windowHandle, nativeMessage->message, nativeMessage->wParam, nativeMessage->lParam,
-                             &dwmResult);
-
-            POINT clientPoint{
-                .x = GET_X_LPARAM(nativeMessage->lParam),
-                .y = GET_Y_LPARAM(nativeMessage->lParam),
-            };
-            ScreenToClient(windowHandle, &clientPoint);
-
-            RECT clientRect{};
-            GetClientRect(windowHandle, &clientRect);
-
-            const UINT dpi = GetDpiForWindow(windowHandle);
-            const int frame = GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi);
-            const int padding = GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
-            const int resizeBorder = std::max(frame + padding, 1);
-            const qreal scale = devicePixelRatio();
-
-            const windowing::HitTestMetrics metrics{
-                .resizeBorder = resizeBorder,
-                .caption =
-                    {
-                        .x = 0,
-                        .y = 0,
-                        .width = qRound(m_controlsLeft * scale),
-                        .height = qRound(m_titleHeight * scale),
-                    },
-                .maximizeButton =
-                    {
-                        .x = qRound(m_maximizeLeft * scale),
-                        .y = 0,
-                        .width = qRound(m_maximizeWidth * scale),
-                        .height = qRound(m_titleHeight * scale),
-                    },
-            };
-
-            const auto area = windowing::classifyHitTest({.x = clientPoint.x, .y = clientPoint.y},
-                                                         {.width = clientRect.right, .height = clientRect.bottom},
-                                                         metrics, maximized());
-
-            if (area == windowing::HitArea::MaximizeButton)
-            {
-                qCDebug(windowLog) << "WM_NCHITTEST -> HTMAXBUTTON"
-                                   << "clientPoint=" << clientPoint.x << clientPoint.y
-                                   << "buttonRect=" << metrics.maximizeButton.x << metrics.maximizeButton.y
-                                   << metrics.maximizeButton.width << metrics.maximizeButton.height;
-            }
-
-            *result = toNativeHitArea(area);
+            *result = nativeHitTest(windowHandle, nativeMessage->lParam);
             return true;
-        }
 
         case WM_NCMOUSEMOVE:
         {
@@ -344,6 +299,191 @@ bool NativeWindow::nativeEvent(const QByteArray &eventType, void *message, qintp
     return QQuickView::nativeEvent(eventType, message, result);
 }
 
+LRESULT CALLBACK NativeWindow::windowProcedure(const HWND windowHandle, const UINT message, const WPARAM wParam,
+                                               const LPARAM lParam)
+{
+    auto *window = static_cast<NativeWindow *>(GetPropW(windowHandle, kNativeWindowProperty));
+    if (window == nullptr || window->m_originalWindowProcedure == nullptr)
+    {
+        return DefWindowProcW(windowHandle, message, wParam, lParam);
+    }
+
+    LRESULT result = 0;
+    if (window->handleWindowProcedureMessage(windowHandle, message, wParam, lParam, &result))
+    {
+        return result;
+    }
+    return CallWindowProcW(window->m_originalWindowProcedure, windowHandle, message, wParam, lParam);
+}
+
+LRESULT NativeWindow::nativeHitTest(const HWND windowHandle, const LPARAM lParam) const
+{
+    POINT clientPoint{
+        .x = GET_X_LPARAM(lParam),
+        .y = GET_Y_LPARAM(lParam),
+    };
+    ScreenToClient(windowHandle, &clientPoint);
+
+    RECT clientRect{};
+    GetClientRect(windowHandle, &clientRect);
+
+    const UINT dpi = GetDpiForWindow(windowHandle);
+    const int frame = GetSystemMetricsForDpi(SM_CXSIZEFRAME, dpi);
+    const int padding = GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+    const int resizeBorder = std::max(frame + padding, 1);
+    const qreal scale = devicePixelRatio();
+
+    const windowing::HitTestMetrics metrics{
+        .resizeBorder = resizeBorder,
+        .caption =
+            {
+                .x = 0,
+                .y = 0,
+                .width = qRound(m_controlsLeft * scale),
+                .height = qRound(m_titleHeight * scale),
+            },
+        .maximizeButton =
+            {
+                .x = qRound(m_maximizeLeft * scale),
+                .y = 0,
+                .width = qRound(m_maximizeWidth * scale),
+                .height = qRound(m_titleHeight * scale),
+            },
+    };
+
+    const auto area =
+        windowing::classifyHitTest({.x = clientPoint.x, .y = clientPoint.y},
+                                   {.width = clientRect.right, .height = clientRect.bottom}, metrics, maximized());
+
+    if (area == windowing::HitArea::MaximizeButton)
+    {
+        qCDebug(windowLog) << "WM_NCHITTEST -> HTMAXBUTTON"
+                           << "clientPoint=" << clientPoint.x << clientPoint.y
+                           << "buttonRect=" << metrics.maximizeButton.x << metrics.maximizeButton.y
+                           << metrics.maximizeButton.width << metrics.maximizeButton.height;
+    }
+
+    return toNativeHitArea(area);
+}
+
+bool NativeWindow::handleWindowProcedureMessage(const HWND windowHandle, const UINT message, const WPARAM wParam,
+                                                const LPARAM lParam, LRESULT *result)
+{
+    switch (message)
+    {
+        case WM_NCHITTEST:
+            *result = nativeHitTest(windowHandle, lParam);
+            return true;
+
+        case WM_NCMOUSEMOVE:
+            if (wParam == HTMAXBUTTON)
+            {
+                setMaximizeButtonHovered(true);
+                TRACKMOUSEEVENT tracking{
+                    .cbSize = sizeof(TRACKMOUSEEVENT),
+                    .dwFlags = TME_LEAVE | TME_NONCLIENT,
+                    .hwndTrack = windowHandle,
+                    .dwHoverTime = HOVER_DEFAULT,
+                };
+                TrackMouseEvent(&tracking);
+                *result = DefWindowProcW(windowHandle, message, wParam, lParam);
+                return true;
+            }
+            setMaximizeButtonHovered(false);
+            break;
+
+        case WM_NCMOUSELEAVE:
+            setMaximizeButtonHovered(false);
+            setMaximizeButtonPressed(false);
+            break;
+
+        case WM_NCLBUTTONDOWN:
+            if (wParam == HTMAXBUTTON)
+            {
+                setMaximizeButtonPressed(true);
+                qCInfo(windowLog) << "hooked WM_NCLBUTTONDOWN HTMAXBUTTON";
+                *result = 0;
+                return true;
+            }
+            break;
+
+        case WM_NCLBUTTONUP:
+            if (wParam == HTMAXBUTTON)
+            {
+                const bool wasPressed = m_maximizeButtonPressed;
+                setMaximizeButtonPressed(false);
+                qCInfo(windowLog) << "hooked WM_NCLBUTTONUP HTMAXBUTTON"
+                                  << "pressed=" << wasPressed << "maximized=" << maximized();
+                if (wasPressed)
+                {
+                    PostMessageW(windowHandle, WM_SYSCOMMAND, maximized() ? SC_RESTORE : SC_MAXIMIZE, 0);
+                }
+                *result = 0;
+                return true;
+            }
+            setMaximizeButtonPressed(false);
+            break;
+
+        default:
+            break;
+    }
+    return false;
+}
+
+void NativeWindow::installWindowProcedure(const HWND windowHandle)
+{
+    if (m_windowHandle != nullptr)
+    {
+        return;
+    }
+
+    if (SetPropW(windowHandle, kNativeWindowProperty, this) == FALSE)
+    {
+        qCCritical(windowLog) << "failed to associate native window property"
+                              << "error=" << GetLastError();
+        return;
+    }
+
+    SetLastError(ERROR_SUCCESS);
+    const auto procedure = reinterpret_cast<WNDPROC>( // NOLINT(performance-no-int-to-ptr)
+        SetWindowLongPtrW(windowHandle, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&NativeWindow::windowProcedure)));
+    if (procedure == nullptr && GetLastError() != ERROR_SUCCESS)
+    {
+        qCCritical(windowLog) << "failed to install native window procedure"
+                              << "error=" << GetLastError();
+        RemovePropW(windowHandle, kNativeWindowProperty);
+        return;
+    }
+
+    m_windowHandle = windowHandle;
+    m_originalWindowProcedure = procedure;
+    qCInfo(windowLog) << "installed native window procedure"
+                      << "hwnd=" << windowHandle;
+}
+
+void NativeWindow::uninstallWindowProcedure()
+{
+    if (m_windowHandle == nullptr)
+    {
+        return;
+    }
+
+    if (m_originalWindowProcedure != nullptr && IsWindow(m_windowHandle) != FALSE)
+    {
+        // NOLINTNEXTLINE(performance-no-int-to-ptr)
+        const auto currentProcedure = reinterpret_cast<WNDPROC>(
+            GetWindowLongPtrW(m_windowHandle, GWLP_WNDPROC));
+        if (currentProcedure == reinterpret_cast<WNDPROC>(&NativeWindow::windowProcedure))
+        {
+            SetWindowLongPtrW(m_windowHandle, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(m_originalWindowProcedure));
+        }
+        RemovePropW(m_windowHandle, kNativeWindowProperty);
+    }
+
+    m_windowHandle = nullptr;
+    m_originalWindowProcedure = nullptr;
+}
+
 void NativeWindow::configureNativeWindow()
 {
     const auto windowHandle = reinterpret_cast<HWND>(winId()); // NOLINT(performance-no-int-to-ptr)
@@ -353,6 +493,7 @@ void NativeWindow::configureNativeWindow()
     qCInfo(windowLog) << "configure native window"
                       << "hwnd=" << windowHandle << "qtFlags=" << flags() << "style=" << Qt::hex << style;
 
+    installWindowProcedure(windowHandle);
     SetWindowPos(windowHandle, nullptr, 0, 0, 0, 0,
                  SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
 

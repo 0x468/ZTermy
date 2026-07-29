@@ -74,6 +74,15 @@ code supplies system semantics. Standard resizable/caption styles are retained
 where needed so Windows continues to provide shadows, snapping, and native
 window management.
 
+The executable embeds a Windows 10/11 compatibility manifest. Besides declaring
+Per-Monitor V2 DPI awareness, this opts the process into the modern Windows
+behavior required by custom-title-bar Snap Layout integration.
+
+Qt consumes some non-client input before `QWindow::nativeEvent()`. The Windows
+adapter therefore installs a narrowly scoped window-procedure bridge: maximize
+hit testing and hover reach `DefWindowProcW` before Qt, while unrelated messages
+continue through Qt's original procedure.
+
 Hit-test classification is kept in a Qt-independent helper so resize, caption,
 client, and maximize-button regions can be unit tested without creating a
 native window.
