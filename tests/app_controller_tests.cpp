@@ -13,6 +13,7 @@ private slots:
     void savesUpdatesReloadsAndDeletesProfiles();
     void rejectsInvalidProfiles();
     void rejectsIncompleteConnections();
+    void managesMultipleLocalTerminalTabs();
 };
 
 void AppControllerTests::savesUpdatesReloadsAndDeletesProfiles()
@@ -116,6 +117,43 @@ void AppControllerTests::rejectsIncompleteConnections()
         !controller.connectPrivateKey(QStringLiteral("host"), 22, QStringLiteral("user"), QStringLiteral("   "), {}));
     QVERIFY(!controller.connectPassword(QStringLiteral("host"), 22, QStringLiteral("user"), {}));
     QVERIFY(!controller.connectHostProfile(QStringLiteral("missing"), QStringLiteral("unused")));
+}
+
+void AppControllerTests::managesMultipleLocalTerminalTabs()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")));
+    QSignalSpy tabsChanged(&controller, &ztermy::AppController::terminalTabsChanged);
+    QSignalSpy activeChanged(&controller, &ztermy::AppController::activeTerminalTabChanged);
+
+    const QString first = controller.startLocalTerminal();
+    QVERIFY(!first.isEmpty());
+    QCOMPARE(controller.terminalTabs().size(), 1);
+    QCOMPARE(controller.activeTerminalTabId(), first);
+    QCOMPARE(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("kind")).toString(),
+             QStringLiteral("local"));
+    QVERIFY(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("running")).toBool());
+
+    const QString second = controller.startLocalTerminal();
+    QVERIFY(!second.isEmpty());
+    QVERIFY(second != first);
+    QCOMPARE(controller.terminalTabs().size(), 2);
+    QCOMPARE(controller.activeTerminalTabId(), second);
+
+    QVERIFY(controller.activateTerminalTab(first));
+    QCOMPARE(controller.activeTerminalTabId(), first);
+    QVERIFY(!controller.activateTerminalTab(QStringLiteral("missing")));
+
+    QVERIFY(controller.closeTerminalTab(first));
+    QCOMPARE(controller.terminalTabs().size(), 1);
+    QCOMPARE(controller.activeTerminalTabId(), second);
+    QVERIFY(controller.closeTerminalTab(second));
+    QVERIFY(controller.terminalTabs().isEmpty());
+    QVERIFY(controller.activeTerminalTabId().isEmpty());
+    QVERIFY(!controller.closeTerminalTab(second));
+    QVERIFY(tabsChanged.count() >= 4);
+    QVERIFY(activeChanged.count() >= 4);
 }
 
 QTEST_GUILESS_MAIN(AppControllerTests)

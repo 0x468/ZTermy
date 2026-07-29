@@ -24,6 +24,7 @@ private slots:
     void reportsAndResetsRenderDamage();
     void selectsAndFormatsViewportText();
     void scrollsThroughHistory();
+    void searchesAcrossScrollbackAndWrappedLines();
     void encodesPasteForTerminalMode();
 };
 
@@ -236,6 +237,54 @@ void TerminalEngineTests::scrollsThroughHistory()
     const auto restored = engine.snapshot();
     QVERIFY(restored);
     QCOMPARE(restored->scrollbar.offset, bottomOffset);
+}
+
+void TerminalEngineTests::searchesAcrossScrollbackAndWrappedLines()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 8, .rows = 3});
+    if (!result)
+    {
+        QFAIL(result.error().message().c_str());
+    }
+    auto &engine = **result;
+
+    const std::u8string content = u8"Alpha one\r\nprefix alpha suffix\r\n中间\r\nlast ALPHA";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(content))));
+
+    auto search = engine.search("alpha", ztermy::terminal::TerminalSearchDirection::forward, false);
+    if (!search)
+    {
+        QFAIL(search.error().message().c_str());
+    }
+    QCOMPARE(search->current, std::uint32_t{1});
+    QCOMPARE(search->total, std::uint32_t{3});
+    QVERIFY(!search->wrapped);
+
+    auto selected = engine.selectedText();
+    QVERIFY(selected);
+    QVERIFY(selected->has_value());
+    QCOMPARE(**selected, "Alpha");
+
+    search = engine.search("alpha", ztermy::terminal::TerminalSearchDirection::forward, false);
+    QVERIFY(search);
+    QCOMPARE(search->current, std::uint32_t{2});
+    QCOMPARE(search->total, std::uint32_t{3});
+
+    search = engine.search("alpha", ztermy::terminal::TerminalSearchDirection::backward, false);
+    QVERIFY(search);
+    QCOMPARE(search->current, std::uint32_t{1});
+
+    const std::u8string_view unicodeQuery = u8"中间";
+    search = engine.search(std::string_view(reinterpret_cast<const char *>(unicodeQuery.data()), unicodeQuery.size()),
+                           ztermy::terminal::TerminalSearchDirection::forward, true);
+    QVERIFY(search);
+    QCOMPARE(search->current, std::uint32_t{1});
+    QCOMPARE(search->total, std::uint32_t{1});
+
+    QVERIFY(!engine.clearSearch());
+    selected = engine.selectedText();
+    QVERIFY(selected);
+    QVERIFY(!selected->has_value());
 }
 
 void TerminalEngineTests::encodesPasteForTerminalMode()

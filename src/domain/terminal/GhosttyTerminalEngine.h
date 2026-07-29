@@ -22,6 +22,9 @@ public:
     [[nodiscard]] std::expected<std::optional<std::string>, std::error_code> selectedText() const override;
     void scrollViewport(int rows) override;
     void scrollToBottom() override;
+    [[nodiscard]] std::expected<TerminalSearchResult, std::error_code>
+    search(std::string_view query, TerminalSearchDirection direction, bool caseSensitive) override;
+    [[nodiscard]] std::error_code clearSearch() override;
     [[nodiscard]] std::expected<std::vector<std::byte>, std::error_code>
     encodePaste(std::span<const std::byte> bytes) const override;
     [[nodiscard]] std::expected<std::string, std::error_code> plainText() const override;

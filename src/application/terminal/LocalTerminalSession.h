@@ -45,12 +45,15 @@ public slots:
     void requestSelection(quint16 startColumn, quint16 startRow, quint16 endColumn, quint16 endRow, bool rectangular);
     void clearSelection();
     void copySelection();
+    void search(const QString &query, bool backwards, bool caseSensitive);
+    void clearSearch();
 
 signals:
     void snapshotReady(ztermy::terminal::TerminalSnapshotPtr snapshot);
     void clipboardTextReady(const QString &text);
     void statusChanged(const QString &status);
     void runningChanged(bool running);
+    void searchResultReady(const QString &query, quint32 current, quint32 total, bool wrapped);
 
 private slots:
     void deliverLatestSnapshot();
@@ -75,9 +78,18 @@ private:
     struct CopyCommand
     {
     };
+    struct SearchCommand
+    {
+        QByteArray query;
+        TerminalSearchDirection direction = TerminalSearchDirection::forward;
+        bool caseSensitive = false;
+    };
+    struct ClearSearchCommand
+    {
+    };
 
-    using Command =
-        std::variant<InputCommand, PasteCommand, TerminalGeometry, ScrollCommand, SelectionCommand, CopyCommand>;
+    using Command = std::variant<InputCommand, PasteCommand, TerminalGeometry, ScrollCommand, SelectionCommand,
+                                 CopyCommand, SearchCommand, ClearSearchCommand>;
 
     void queueByteCommand(Command command, std::size_t byteCount);
     void readLoop(const std::stop_token &stopToken);

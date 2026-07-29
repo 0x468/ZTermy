@@ -367,6 +367,31 @@ void SshTerminalSession::copySelection()
     m_commands.emplace_back(CopyCommand{});
 }
 
+void SshTerminalSession::search(const QString &query, const bool backwards, const bool caseSensitive)
+{
+    if (!m_running.load())
+    {
+        return;
+    }
+    std::scoped_lock lock(m_commandMutex);
+    m_commands.emplace_back(SearchCommand{
+        .query = query.toUtf8(),
+        .direction =
+            backwards ? terminal::TerminalSearchDirection::backward : terminal::TerminalSearchDirection::forward,
+        .caseSensitive = caseSensitive,
+    });
+}
+
+void SshTerminalSession::clearSearch()
+{
+    if (!m_running.load())
+    {
+        return;
+    }
+    std::scoped_lock lock(m_commandMutex);
+    m_commands.emplace_back(ClearSearchCommand{});
+}
+
 void SshTerminalSession::run(SshConnectionRequest &request, const terminal::TerminalGeometry geometry,
                              const std::stop_token &stopToken)
 {
@@ -641,6 +666,36 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                     emit clipboardTextReady(
                         QString::fromUtf8((*selectedText)->data(), static_cast<qsizetype>((*selectedText)->size())));
                 }
+                continue;
+            }
+
+            if (const auto *search = std::get_if<SearchCommand>(&command))
+            {
+                auto result = m_engine->search(
+                    std::string_view(search->query.constData(), static_cast<std::size_t>(search->query.size())),
+                    search->direction, search->caseSensitive);
+                if (!result)
+                {
+                    postStatus(QStringLiteral("SSH terminal search failed: %1")
+                                   .arg(QString::fromStdString(result.error().message())));
+                    continue;
+                }
+                emit searchResultReady(QString::fromUtf8(search->query), result->current, result->total,
+                                       result->wrapped);
+                publishSnapshot();
+                continue;
+            }
+
+            if (std::holds_alternative<ClearSearchCommand>(command))
+            {
+                if (const std::error_code error = m_engine->clearSearch())
+                {
+                    postStatus(QStringLiteral("SSH terminal search clear failed: %1")
+                                   .arg(QString::fromStdString(error.message())));
+                    continue;
+                }
+                emit searchResultReady({}, 0, 0, false);
+                publishSnapshot();
                 continue;
             }
 

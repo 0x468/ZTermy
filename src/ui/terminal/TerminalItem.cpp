@@ -183,6 +183,10 @@ void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
 {
     if (!snapshot)
     {
+        m_snapshot.reset();
+        ++m_revision;
+        update();
+        notifyInputMethod();
         return;
     }
     m_snapshot = std::move(snapshot);

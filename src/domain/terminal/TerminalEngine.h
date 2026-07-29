@@ -7,6 +7,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <vector>
 
@@ -67,6 +68,19 @@ struct TerminalScrollbar
     std::uint64_t total = 0;
     std::uint64_t offset = 0;
     std::uint64_t visible = 0;
+};
+
+enum class TerminalSearchDirection : std::uint8_t
+{
+    forward,
+    backward,
+};
+
+struct TerminalSearchResult
+{
+    std::uint32_t current = 0;
+    std::uint32_t total = 0;
+    bool wrapped = false;
 };
 
 enum class TerminalCursorStyle : std::uint8_t
@@ -132,6 +146,9 @@ public:
     [[nodiscard]] virtual std::expected<std::optional<std::string>, std::error_code> selectedText() const = 0;
     virtual void scrollViewport(int rows) = 0;
     virtual void scrollToBottom() = 0;
+    [[nodiscard]] virtual std::expected<TerminalSearchResult, std::error_code>
+    search(std::string_view query, TerminalSearchDirection direction, bool caseSensitive) = 0;
+    [[nodiscard]] virtual std::error_code clearSearch() = 0;
     [[nodiscard]] virtual std::expected<std::vector<std::byte>, std::error_code>
     encodePaste(std::span<const std::byte> bytes) const = 0;
 

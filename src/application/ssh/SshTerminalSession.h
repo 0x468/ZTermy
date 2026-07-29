@@ -62,6 +62,8 @@ public slots:
     void requestSelection(quint16 startColumn, quint16 startRow, quint16 endColumn, quint16 endRow, bool rectangular);
     void clearSelection();
     void copySelection();
+    void search(const QString &query, bool backwards, bool caseSensitive);
+    void clearSearch();
 
 signals:
     void snapshotReady(ztermy::terminal::TerminalSnapshotPtr snapshot);
@@ -71,6 +73,7 @@ signals:
     void phaseChanged(ztermy::ssh::SshConnectionPhase phase);
     void hostKeyConfirmationRequired(const QString &algorithm, const QString &fingerprint);
     void hostKeyChanged(const QString &algorithm, const QString &fingerprint);
+    void searchResultReady(const QString &query, quint32 current, quint32 total, bool wrapped);
 
 private slots:
     void deliverLatestSnapshot();
@@ -95,6 +98,15 @@ private:
     struct CopyCommand final
     {
     };
+    struct SearchCommand final
+    {
+        QByteArray query;
+        terminal::TerminalSearchDirection direction = terminal::TerminalSearchDirection::forward;
+        bool caseSensitive = false;
+    };
+    struct ClearSearchCommand final
+    {
+    };
 
     enum class HostKeyDecision : std::uint8_t
     {
@@ -105,7 +117,7 @@ private:
     };
 
     using Command = std::variant<InputCommand, PasteCommand, terminal::TerminalGeometry, ScrollCommand,
-                                 SelectionCommand, CopyCommand>;
+                                 SelectionCommand, CopyCommand, SearchCommand, ClearSearchCommand>;
 
     void queueByteCommand(Command command, std::size_t byteCount);
     void run(SshConnectionRequest &request, terminal::TerminalGeometry geometry, const std::stop_token &stopToken);

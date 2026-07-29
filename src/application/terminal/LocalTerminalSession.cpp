@@ -281,6 +281,36 @@ void LocalTerminalSession::copySelection()
     m_commandAvailable.notify_one();
 }
 
+void LocalTerminalSession::search(const QString &query, const bool backwards, const bool caseSensitive)
+{
+    if (!m_running.load())
+    {
+        return;
+    }
+    {
+        std::scoped_lock lock(m_commandMutex);
+        m_commands.emplace_back(SearchCommand{
+            .query = query.toUtf8(),
+            .direction = backwards ? TerminalSearchDirection::backward : TerminalSearchDirection::forward,
+            .caseSensitive = caseSensitive,
+        });
+    }
+    m_commandAvailable.notify_one();
+}
+
+void LocalTerminalSession::clearSearch()
+{
+    if (!m_running.load())
+    {
+        return;
+    }
+    {
+        std::scoped_lock lock(m_commandMutex);
+        m_commands.emplace_back(ClearSearchCommand{});
+    }
+    m_commandAvailable.notify_one();
+}
+
 void LocalTerminalSession::readLoop(const std::stop_token &stopToken)
 {
     std::array<std::byte, std::size_t{64} * 1024U> buffer{};
@@ -449,6 +479,44 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
                 emit clipboardTextReady(
                     QString::fromUtf8((*selectedText)->data(), static_cast<qsizetype>((*selectedText)->size())));
             }
+            continue;
+        }
+
+        if (const auto *search = std::get_if<SearchCommand>(&command))
+        {
+            std::expected<TerminalSearchResult, std::error_code> result;
+            {
+                std::scoped_lock lock(m_engineMutex);
+                result = m_engine->search(
+                    std::string_view(search->query.constData(), static_cast<std::size_t>(search->query.size())),
+                    search->direction, search->caseSensitive);
+            }
+            if (!result)
+            {
+                postStatus(
+                    QStringLiteral("Terminal search failed: %1").arg(QString::fromStdString(result.error().message())));
+                continue;
+            }
+            emit searchResultReady(QString::fromUtf8(search->query), result->current, result->total, result->wrapped);
+            publishSnapshot();
+            continue;
+        }
+
+        if (std::holds_alternative<ClearSearchCommand>(command))
+        {
+            std::error_code error;
+            {
+                std::scoped_lock lock(m_engineMutex);
+                error = m_engine->clearSearch();
+            }
+            if (error)
+            {
+                postStatus(
+                    QStringLiteral("Terminal search clear failed: %1").arg(QString::fromStdString(error.message())));
+                continue;
+            }
+            emit searchResultReady({}, 0, 0, false);
+            publishSnapshot();
             continue;
         }
 

@@ -46,65 +46,6 @@ AppController::AppController(QObject *parent)
 AppController::AppController(QString profileStorePath, QObject *parent)
     : QObject(parent), m_profileStore(std::move(profileStorePath))
 {
-    QObject::connect(&m_localSession, &terminal::LocalTerminalSession::snapshotReady, this,
-                     [this](const terminal::TerminalSnapshotPtr &snapshot) {
-                         if (m_terminal != nullptr && m_activeSession == ActiveSession::Local)
-                         {
-                             m_terminal->setSnapshot(snapshot);
-                         }
-                     });
-    QObject::connect(&m_localSession, &terminal::LocalTerminalSession::statusChanged, this,
-                     [this](const QString &status) {
-                         if (m_terminal != nullptr && m_activeSession == ActiveSession::Local)
-                         {
-                             m_terminal->setStatusText(status);
-                         }
-                     });
-    QObject::connect(&m_localSession, &terminal::LocalTerminalSession::clipboardTextReady, this,
-                     [this](const QString &text) {
-                         if (m_terminal != nullptr && m_activeSession == ActiveSession::Local)
-                         {
-                             m_terminal->setClipboardText(text);
-                         }
-                     });
-
-    QObject::connect(&m_sshSession, &ssh::SshTerminalSession::snapshotReady, this,
-                     [this](const terminal::TerminalSnapshotPtr &snapshot) {
-                         if (m_terminal != nullptr && m_activeSession == ActiveSession::Ssh)
-                         {
-                             m_terminal->setSnapshot(snapshot);
-                         }
-                     });
-    QObject::connect(&m_sshSession, &ssh::SshTerminalSession::statusChanged, this, [this](const QString &status) {
-        if (m_terminal != nullptr && m_activeSession == ActiveSession::Ssh)
-        {
-            m_terminal->setStatusText(status);
-        }
-    });
-    QObject::connect(&m_sshSession, &ssh::SshTerminalSession::clipboardTextReady, this, [this](const QString &text) {
-        if (m_terminal != nullptr && m_activeSession == ActiveSession::Ssh)
-        {
-            m_terminal->setClipboardText(text);
-        }
-    });
-    QObject::connect(&m_sshSession, &ssh::SshTerminalSession::runningChanged, this, [this](const bool running) {
-        if (m_activeSession == ActiveSession::Ssh || running)
-        {
-            emit sshActiveChanged();
-        }
-    });
-    QObject::connect(&m_sshSession, &ssh::SshTerminalSession::hostKeyConfirmationRequired, this,
-                     [this](const QString &algorithm, const QString &fingerprint) {
-                         setHostKeyPrompt(algorithm, fingerprint, false);
-                     });
-    QObject::connect(&m_sshSession, &ssh::SshTerminalSession::hostKeyChanged, this,
-                     [this](const QString &algorithm, const QString &fingerprint) {
-                         setHostKeyPrompt(algorithm, fingerprint, true);
-                         if (m_terminal != nullptr)
-                         {
-                             m_terminal->setStatusText(QStringLiteral("SSH host key changed; connection blocked"));
-                         }
-                     });
     loadHostProfiles();
 }
 
@@ -125,14 +66,25 @@ void AppController::attachTerminal(ui::TerminalItem *terminal)
     }
     m_terminal = terminal;
     connectTerminalSignals();
+    showActiveTab();
 }
 
 void AppController::shutdown() noexcept
 {
     clearHostKeyPrompt();
-    m_sshSession.stop();
-    m_localSession.stop();
-    m_activeSession = ActiveSession::None;
+    for (const auto &tab : m_tabs)
+    {
+        if (tab->local)
+        {
+            tab->local->stop();
+        }
+        if (tab->ssh)
+        {
+            tab->ssh->stop();
+        }
+    }
+    m_tabs.clear();
+    m_activeTabId.clear();
     if (m_terminal != nullptr)
     {
         QObject::disconnect(m_terminal, nullptr, this, nullptr);
@@ -143,7 +95,8 @@ void AppController::shutdown() noexcept
 
 bool AppController::sshActive() const noexcept
 {
-    return m_activeSession == ActiveSession::Ssh;
+    const TerminalTab *tab = activeTab();
+    return tab != nullptr && tab->kind == TerminalTabKind::Ssh;
 }
 
 bool AppController::hostKeyPromptVisible() const noexcept
@@ -195,29 +148,207 @@ QVariantList AppController::hostProfiles() const
     return result;
 }
 
-void AppController::startLocalTerminal()
+QVariantList AppController::terminalTabs() const
 {
-    clearHostKeyPrompt();
-    m_sshSession.stop();
-    m_localSession.stop();
-    m_activeSession = ActiveSession::Local;
-    emit sshActiveChanged();
-
-    if (m_terminal != nullptr)
+    QVariantList result;
+    result.reserve(static_cast<qsizetype>(m_tabs.size()));
+    for (const auto &tab : m_tabs)
     {
-        m_terminal->setSnapshot({});
-        m_terminal->setStatusText(QStringLiteral("Starting local terminal..."));
+        result.append(QVariantMap{
+            {QStringLiteral("id"), tab->id},
+            {QStringLiteral("title"), tab->title},
+            {QStringLiteral("kind"),
+             tab->kind == TerminalTabKind::Local ? QStringLiteral("local") : QStringLiteral("ssh")},
+            {QStringLiteral("status"), tab->status},
+            {QStringLiteral("running"), tab->running},
+        });
     }
-    const std::error_code error = m_localSession.start({.columns = 100, .rows = 30});
-    if (error && m_terminal != nullptr)
+    return result;
+}
+
+QString AppController::activeTerminalTabId() const
+{
+    return m_activeTabId;
+}
+
+QString AppController::terminalSearchQuery() const
+{
+    const TerminalTab *tab = activeTab();
+    return tab == nullptr ? QString{} : tab->searchQuery;
+}
+
+int AppController::terminalSearchCurrent() const noexcept
+{
+    const TerminalTab *tab = activeTab();
+    return tab == nullptr ? 0 : static_cast<int>(tab->searchCurrent);
+}
+
+int AppController::terminalSearchTotal() const noexcept
+{
+    const TerminalTab *tab = activeTab();
+    return tab == nullptr ? 0 : static_cast<int>(tab->searchTotal);
+}
+
+bool AppController::terminalSearchCaseSensitive() const noexcept
+{
+    const TerminalTab *tab = activeTab();
+    return tab != nullptr && tab->searchCaseSensitive;
+}
+
+QString AppController::startLocalTerminal()
+{
+    if (m_tabs.size() >= maximumTerminalTabs)
     {
-        m_terminal->setStatusText(
-            QStringLiteral("Unable to start local terminal: %1").arg(QString::fromStdString(error.message())));
+        if (m_terminal != nullptr)
+        {
+            m_terminal->setStatusText(QStringLiteral("The maximum of 32 terminal tabs is already open"));
+        }
+        return {};
+    }
+
+    auto tab = std::make_unique<TerminalTab>();
+    tab->id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    tab->title = QStringLiteral("PowerShell %1").arg(m_nextLocalTabNumber++);
+    tab->status = QStringLiteral("Starting local terminal...");
+    tab->kind = TerminalTabKind::Local;
+    tab->local = std::make_unique<terminal::LocalTerminalSession>();
+    QString tabId = tab->id;
+    connectLocalTabSignals(*tab);
+    m_tabs.push_back(std::move(tab));
+    emit terminalTabsChanged();
+    activateTerminalTab(tabId);
+
+    TerminalTab *created = findTab(tabId);
+    if (created == nullptr || !created->local)
+    {
+        return {};
+    }
+    const std::error_code error = created->local->start({.columns = 100, .rows = 30});
+    if (error)
+    {
+        created->status =
+            QStringLiteral("Unable to start local terminal: %1").arg(QString::fromStdString(error.message()));
+        showActiveTab();
+        emit terminalTabsChanged();
     }
     if (m_terminal != nullptr)
     {
         m_terminal->requestCurrentSize();
     }
+    return tabId;
+}
+
+bool AppController::activateTerminalTab(const QString &id)
+{
+    if (findTab(id) == nullptr)
+    {
+        return false;
+    }
+    if (m_activeTabId == id)
+    {
+        showActiveTab();
+        return true;
+    }
+    m_activeTabId = id;
+    emit activeTerminalTabChanged();
+    emit sshActiveChanged();
+    emit terminalSearchChanged();
+    showActiveTab();
+    return true;
+}
+
+bool AppController::closeTerminalTab(const QString &id)
+{
+    const auto position = std::ranges::find(m_tabs, id, [](const std::unique_ptr<TerminalTab> &tab) {
+        return tab->id;
+    });
+    if (position == m_tabs.end())
+    {
+        return false;
+    }
+
+    const bool closingActive = (*position)->id == m_activeTabId;
+    const std::size_t index = static_cast<std::size_t>(std::distance(m_tabs.begin(), position));
+    if ((*position)->id == m_hostKeyTabId)
+    {
+        clearHostKeyPrompt();
+    }
+    if ((*position)->local)
+    {
+        (*position)->local->stop();
+    }
+    if ((*position)->ssh)
+    {
+        (*position)->ssh->stop();
+    }
+    m_tabs.erase(position);
+    emit terminalTabsChanged();
+
+    if (closingActive)
+    {
+        if (m_tabs.empty())
+        {
+            m_activeTabId.clear();
+            emit activeTerminalTabChanged();
+            emit sshActiveChanged();
+            emit terminalSearchChanged();
+            showActiveTab();
+        }
+        else
+        {
+            const std::size_t nextIndex = std::min(index, m_tabs.size() - 1U);
+            m_activeTabId.clear();
+            activateTerminalTab(m_tabs[nextIndex]->id);
+        }
+    }
+    return true;
+}
+
+void AppController::searchTerminal(const QString &query, const bool backwards, const bool caseSensitive)
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr)
+    {
+        return;
+    }
+    if (query.isEmpty())
+    {
+        clearTerminalSearch();
+        return;
+    }
+
+    tab->searchQuery = query;
+    tab->searchCaseSensitive = caseSensitive;
+    if (tab->ssh)
+    {
+        tab->ssh->search(query, backwards, caseSensitive);
+    }
+    else if (tab->local)
+    {
+        tab->local->search(query, backwards, caseSensitive);
+    }
+    emit terminalSearchChanged();
+}
+
+void AppController::clearTerminalSearch()
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr)
+    {
+        return;
+    }
+    tab->searchQuery.clear();
+    tab->searchCurrent = 0;
+    tab->searchTotal = 0;
+    if (tab->ssh)
+    {
+        tab->ssh->clearSearch();
+    }
+    else if (tab->local)
+    {
+        tab->local->clearSearch();
+    }
+    emit terminalSearchChanged();
 }
 
 bool AppController::connectPrivateKey(const QString &host, const int port, const QString &username,
@@ -271,25 +402,36 @@ bool AppController::connectPassword(const QString &host, const int port, const Q
 
 bool AppController::startSshConnection(ssh::SshConnectionRequest request)
 {
-    clearHostKeyPrompt();
-    m_localSession.stop();
-    m_sshSession.stop();
-    m_activeSession = ActiveSession::Ssh;
-    emit sshActiveChanged();
-
-    if (m_terminal != nullptr)
-    {
-        m_terminal->setSnapshot({});
-        m_terminal->setStatusText(QStringLiteral("Starting SSH connection..."));
-    }
-
-    const std::error_code error = m_sshSession.start(std::move(request), {.columns = 100, .rows = 30});
-    if (error)
+    if (m_tabs.size() >= maximumTerminalTabs)
     {
         if (m_terminal != nullptr)
         {
-            m_terminal->setStatusText(QStringLiteral("Unable to start SSH connection"));
+            m_terminal->setStatusText(QStringLiteral("The maximum of 32 terminal tabs is already open"));
         }
+        return false;
+    }
+
+    auto tab = std::make_unique<TerminalTab>();
+    tab->id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    tab->title = QStringLiteral("%1@%2").arg(request.username, request.host);
+    tab->status = QStringLiteral("Starting SSH connection...");
+    tab->kind = TerminalTabKind::Ssh;
+    tab->ssh = std::make_unique<ssh::SshTerminalSession>();
+    const QString tabId = tab->id;
+    connectSshTabSignals(*tab);
+    m_tabs.push_back(std::move(tab));
+    emit terminalTabsChanged();
+    activateTerminalTab(tabId);
+
+    TerminalTab *created = findTab(tabId);
+    if (created == nullptr || !created->ssh)
+    {
+        return false;
+    }
+    const std::error_code error = created->ssh->start(std::move(request), {.columns = 100, .rows = 30});
+    if (error)
+    {
+        closeTerminalTab(tabId);
         return false;
     }
     if (m_terminal != nullptr)
@@ -441,8 +583,12 @@ void AppController::acceptHostKey(const bool remember)
     {
         return;
     }
+    TerminalTab *tab = findTab(m_hostKeyTabId);
     clearHostKeyPrompt();
-    m_sshSession.confirmHostKey(remember);
+    if (tab != nullptr && tab->ssh)
+    {
+        tab->ssh->confirmHostKey(remember);
+    }
 }
 
 void AppController::rejectHostKey()
@@ -451,8 +597,151 @@ void AppController::rejectHostKey()
     {
         return;
     }
+    TerminalTab *tab = findTab(m_hostKeyTabId);
     clearHostKeyPrompt();
-    m_sshSession.rejectHostKey();
+    if (tab != nullptr && tab->ssh)
+    {
+        tab->ssh->rejectHostKey();
+    }
+}
+
+void AppController::connectLocalTabSignals(TerminalTab &tab)
+{
+    const QString tabId = tab.id;
+    QObject::connect(tab.local.get(), &terminal::LocalTerminalSession::snapshotReady, this,
+                     [this, tabId](const terminal::TerminalSnapshotPtr &snapshot) {
+                         TerminalTab *updated = findTab(tabId);
+                         if (updated == nullptr)
+                         {
+                             return;
+                         }
+                         updated->snapshot = snapshot;
+                         if (m_terminal != nullptr && m_activeTabId == tabId)
+                         {
+                             m_terminal->setSnapshot(snapshot);
+                         }
+                     });
+    QObject::connect(tab.local.get(), &terminal::LocalTerminalSession::statusChanged, this,
+                     [this, tabId](const QString &status) {
+                         TerminalTab *updated = findTab(tabId);
+                         if (updated == nullptr)
+                         {
+                             return;
+                         }
+                         updated->status = status;
+                         if (m_terminal != nullptr && m_activeTabId == tabId)
+                         {
+                             m_terminal->setStatusText(status);
+                         }
+                         emit terminalTabsChanged();
+                     });
+    QObject::connect(tab.local.get(), &terminal::LocalTerminalSession::clipboardTextReady, this,
+                     [this, tabId](const QString &text) {
+                         if (m_terminal != nullptr && m_activeTabId == tabId)
+                         {
+                             m_terminal->setClipboardText(text);
+                         }
+                     });
+    QObject::connect(tab.local.get(), &terminal::LocalTerminalSession::runningChanged, this,
+                     [this, tabId](const bool running) {
+                         if (TerminalTab *updated = findTab(tabId))
+                         {
+                             updated->running = running;
+                             emit terminalTabsChanged();
+                         }
+                     });
+    QObject::connect(tab.local.get(), &terminal::LocalTerminalSession::searchResultReady, this,
+                     [this, tabId](const QString &query, const quint32 current, const quint32 total, const bool) {
+                         TerminalTab *updated = findTab(tabId);
+                         if (updated == nullptr || (!query.isEmpty() && query != updated->searchQuery))
+                         {
+                             return;
+                         }
+                         updated->searchQuery = query;
+                         updated->searchCurrent = current;
+                         updated->searchTotal = total;
+                         if (m_activeTabId == tabId)
+                         {
+                             emit terminalSearchChanged();
+                         }
+                     });
+}
+
+void AppController::connectSshTabSignals(TerminalTab &tab)
+{
+    const QString tabId = tab.id;
+    QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::snapshotReady, this,
+                     [this, tabId](const terminal::TerminalSnapshotPtr &snapshot) {
+                         TerminalTab *updated = findTab(tabId);
+                         if (updated == nullptr)
+                         {
+                             return;
+                         }
+                         updated->snapshot = snapshot;
+                         if (m_terminal != nullptr && m_activeTabId == tabId)
+                         {
+                             m_terminal->setSnapshot(snapshot);
+                         }
+                     });
+    QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::statusChanged, this,
+                     [this, tabId](const QString &status) {
+                         TerminalTab *updated = findTab(tabId);
+                         if (updated == nullptr)
+                         {
+                             return;
+                         }
+                         updated->status = status;
+                         if (m_terminal != nullptr && m_activeTabId == tabId)
+                         {
+                             m_terminal->setStatusText(status);
+                         }
+                         emit terminalTabsChanged();
+                     });
+    QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::clipboardTextReady, this,
+                     [this, tabId](const QString &text) {
+                         if (m_terminal != nullptr && m_activeTabId == tabId)
+                         {
+                             m_terminal->setClipboardText(text);
+                         }
+                     });
+    QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::runningChanged, this, [this, tabId](const bool running) {
+        if (TerminalTab *updated = findTab(tabId))
+        {
+            updated->running = running;
+            emit terminalTabsChanged();
+        }
+    });
+    QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::searchResultReady, this,
+                     [this, tabId](const QString &query, const quint32 current, const quint32 total, const bool) {
+                         TerminalTab *updated = findTab(tabId);
+                         if (updated == nullptr || (!query.isEmpty() && query != updated->searchQuery))
+                         {
+                             return;
+                         }
+                         updated->searchQuery = query;
+                         updated->searchCurrent = current;
+                         updated->searchTotal = total;
+                         if (m_activeTabId == tabId)
+                         {
+                             emit terminalSearchChanged();
+                         }
+                     });
+    QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::hostKeyConfirmationRequired, this,
+                     [this, tabId](const QString &algorithm, const QString &fingerprint) {
+                         m_hostKeyTabId = tabId;
+                         activateTerminalTab(tabId);
+                         setHostKeyPrompt(algorithm, fingerprint, false);
+                     });
+    QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::hostKeyChanged, this,
+                     [this, tabId](const QString &algorithm, const QString &fingerprint) {
+                         m_hostKeyTabId = tabId;
+                         activateTerminalTab(tabId);
+                         setHostKeyPrompt(algorithm, fingerprint, true);
+                         if (m_terminal != nullptr)
+                         {
+                             m_terminal->setStatusText(QStringLiteral("SSH host key changed; connection blocked"));
+                         }
+                     });
 }
 
 void AppController::connectTerminalSignals()
@@ -472,88 +761,139 @@ void AppController::connectTerminalSignals()
 
 void AppController::queueInput(const QByteArray &bytes)
 {
-    if (m_activeSession == ActiveSession::Ssh)
+    TerminalTab *tab = activeTab();
+    if (tab != nullptr && tab->ssh)
     {
-        m_sshSession.queueInput(bytes);
+        tab->ssh->queueInput(bytes);
     }
-    else if (m_activeSession == ActiveSession::Local)
+    else if (tab != nullptr && tab->local)
     {
-        m_localSession.queueInput(bytes);
+        tab->local->queueInput(bytes);
     }
 }
 
 void AppController::queuePaste(const QByteArray &bytes)
 {
-    if (m_activeSession == ActiveSession::Ssh)
+    TerminalTab *tab = activeTab();
+    if (tab != nullptr && tab->ssh)
     {
-        m_sshSession.queuePaste(bytes);
+        tab->ssh->queuePaste(bytes);
     }
-    else if (m_activeSession == ActiveSession::Local)
+    else if (tab != nullptr && tab->local)
     {
-        m_localSession.queuePaste(bytes);
+        tab->local->queuePaste(bytes);
     }
 }
 
 void AppController::requestScroll(const int rows)
 {
-    if (m_activeSession == ActiveSession::Ssh)
+    TerminalTab *tab = activeTab();
+    if (tab != nullptr && tab->ssh)
     {
-        m_sshSession.requestScroll(rows);
+        tab->ssh->requestScroll(rows);
     }
-    else if (m_activeSession == ActiveSession::Local)
+    else if (tab != nullptr && tab->local)
     {
-        m_localSession.requestScroll(rows);
+        tab->local->requestScroll(rows);
     }
 }
 
 void AppController::requestSelection(const quint16 startColumn, const quint16 startRow, const quint16 endColumn,
                                      const quint16 endRow, const bool rectangular)
 {
-    if (m_activeSession == ActiveSession::Ssh)
+    TerminalTab *tab = activeTab();
+    if (tab != nullptr && tab->ssh)
     {
-        m_sshSession.requestSelection(startColumn, startRow, endColumn, endRow, rectangular);
+        tab->ssh->requestSelection(startColumn, startRow, endColumn, endRow, rectangular);
     }
-    else if (m_activeSession == ActiveSession::Local)
+    else if (tab != nullptr && tab->local)
     {
-        m_localSession.requestSelection(startColumn, startRow, endColumn, endRow, rectangular);
+        tab->local->requestSelection(startColumn, startRow, endColumn, endRow, rectangular);
     }
 }
 
 void AppController::clearSelection()
 {
-    if (m_activeSession == ActiveSession::Ssh)
+    TerminalTab *tab = activeTab();
+    if (tab != nullptr && tab->ssh)
     {
-        m_sshSession.clearSelection();
+        tab->ssh->clearSelection();
     }
-    else if (m_activeSession == ActiveSession::Local)
+    else if (tab != nullptr && tab->local)
     {
-        m_localSession.clearSelection();
+        tab->local->clearSelection();
     }
 }
 
 void AppController::copySelection()
 {
-    if (m_activeSession == ActiveSession::Ssh)
+    TerminalTab *tab = activeTab();
+    if (tab != nullptr && tab->ssh)
     {
-        m_sshSession.copySelection();
+        tab->ssh->copySelection();
     }
-    else if (m_activeSession == ActiveSession::Local)
+    else if (tab != nullptr && tab->local)
     {
-        m_localSession.copySelection();
+        tab->local->copySelection();
     }
 }
 
 void AppController::requestResize(const quint16 columns, const quint16 rows, const quint32 cellWidthPixels,
                                   const quint32 cellHeightPixels)
 {
-    if (m_activeSession == ActiveSession::Ssh)
+    TerminalTab *tab = activeTab();
+    if (tab != nullptr && tab->ssh)
     {
-        m_sshSession.requestResize(columns, rows, cellWidthPixels, cellHeightPixels);
+        tab->ssh->requestResize(columns, rows, cellWidthPixels, cellHeightPixels);
     }
-    else if (m_activeSession == ActiveSession::Local)
+    else if (tab != nullptr && tab->local)
     {
-        m_localSession.requestResize(columns, rows, cellWidthPixels, cellHeightPixels);
+        tab->local->requestResize(columns, rows, cellWidthPixels, cellHeightPixels);
     }
+}
+
+AppController::TerminalTab *AppController::activeTab()
+{
+    return findTab(m_activeTabId);
+}
+
+const AppController::TerminalTab *AppController::activeTab() const
+{
+    return findTab(m_activeTabId);
+}
+
+AppController::TerminalTab *AppController::findTab(const QString &id)
+{
+    const auto tab = std::ranges::find(m_tabs, id, [](const std::unique_ptr<TerminalTab> &candidate) {
+        return candidate->id;
+    });
+    return tab == m_tabs.end() ? nullptr : tab->get();
+}
+
+const AppController::TerminalTab *AppController::findTab(const QString &id) const
+{
+    const auto tab = std::ranges::find(m_tabs, id, [](const std::unique_ptr<TerminalTab> &candidate) {
+        return candidate->id;
+    });
+    return tab == m_tabs.end() ? nullptr : tab->get();
+}
+
+void AppController::showActiveTab()
+{
+    if (m_terminal == nullptr)
+    {
+        return;
+    }
+    const TerminalTab *tab = activeTab();
+    if (tab == nullptr)
+    {
+        m_terminal->setSnapshot({});
+        m_terminal->setStatusText(QStringLiteral("No terminal session"));
+        return;
+    }
+    m_terminal->setSnapshot(tab->snapshot);
+    m_terminal->setStatusText(tab->status);
+    m_terminal->requestCurrentSize();
 }
 
 void AppController::setHostKeyPrompt(QString algorithm, QString fingerprint, const bool changed)
@@ -567,12 +907,14 @@ void AppController::setHostKeyPrompt(QString algorithm, QString fingerprint, con
 
 void AppController::clearHostKeyPrompt()
 {
-    if (!m_hostKeyPromptVisible && m_hostKeyAlgorithm.isEmpty() && m_hostKeyFingerprint.isEmpty())
+    if (!m_hostKeyPromptVisible && m_hostKeyTabId.isEmpty() && m_hostKeyAlgorithm.isEmpty()
+        && m_hostKeyFingerprint.isEmpty())
     {
         return;
     }
     m_hostKeyPromptVisible = false;
     m_hostKeyChangedWarning = false;
+    m_hostKeyTabId.clear();
     m_hostKeyAlgorithm.clear();
     m_hostKeyFingerprint.clear();
     emit hostKeyPromptChanged();

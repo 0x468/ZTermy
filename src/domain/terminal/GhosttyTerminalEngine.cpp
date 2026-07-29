@@ -2,7 +2,12 @@
 
 #include <ghostty/vt.h>
 
+#include <algorithm>
+#include <array>
+#include <cctype>
 #include <cstring>
+#include <limits>
+#include <string_view>
 #include <utility>
 
 namespace
@@ -188,6 +193,40 @@ private:
     return {.red = color.r, .green = color.g, .blue = color.b};
 }
 
+void appendUtf8(std::string &destination, const std::uint32_t codepoint)
+{
+    if (codepoint <= 0x7FU)
+    {
+        destination.push_back(static_cast<char>(codepoint));
+    }
+    else if (codepoint <= 0x7FFU)
+    {
+        destination.push_back(static_cast<char>(0xC0U | (codepoint >> 6U)));
+        destination.push_back(static_cast<char>(0x80U | (codepoint & 0x3FU)));
+    }
+    else if (codepoint <= 0xFFFFU)
+    {
+        destination.push_back(static_cast<char>(0xE0U | (codepoint >> 12U)));
+        destination.push_back(static_cast<char>(0x80U | ((codepoint >> 6U) & 0x3FU)));
+        destination.push_back(static_cast<char>(0x80U | (codepoint & 0x3FU)));
+    }
+    else
+    {
+        destination.push_back(static_cast<char>(0xF0U | (codepoint >> 18U)));
+        destination.push_back(static_cast<char>(0x80U | ((codepoint >> 12U) & 0x3FU)));
+        destination.push_back(static_cast<char>(0x80U | ((codepoint >> 6U) & 0x3FU)));
+        destination.push_back(static_cast<char>(0x80U | (codepoint & 0x3FU)));
+    }
+}
+
+[[nodiscard]] std::string asciiFold(std::string value)
+{
+    std::ranges::transform(value, value.begin(), [](const unsigned char byte) {
+        return byte < 0x80U ? static_cast<char>(std::tolower(byte)) : static_cast<char>(byte);
+    });
+    return value;
+}
+
 } // namespace
 
 namespace ztermy::terminal
@@ -229,6 +268,8 @@ struct GhosttyTerminalEngine::Impl
     GhosttyRenderState renderState = nullptr;
     GhosttyRenderStateRowIterator rowIterator = nullptr;
     GhosttyRenderStateRowCells rowCells = nullptr;
+    std::string lastSearchQuery;
+    bool lastSearchCaseSensitive = false;
 };
 
 std::expected<std::unique_ptr<GhosttyTerminalEngine>, std::error_code>
@@ -313,6 +354,7 @@ std::error_code GhosttyTerminalEngine::resize(const TerminalGeometry geometry)
 
 std::error_code GhosttyTerminalEngine::setSelection(const std::optional<TerminalSelection> selection)
 {
+    m_impl->lastSearchQuery.clear();
     if (!selection)
     {
         const GhosttyResult result = ghostty_terminal_set(m_impl->terminal, GHOSTTY_TERMINAL_OPT_SELECTION, nullptr);
@@ -403,6 +445,257 @@ void GhosttyTerminalEngine::scrollToBottom()
     GhosttyTerminalScrollViewport behavior{};
     behavior.tag = GHOSTTY_SCROLL_VIEWPORT_BOTTOM;
     ghostty_terminal_scroll_viewport(m_impl->terminal, behavior);
+}
+
+std::expected<TerminalSearchResult, std::error_code>
+GhosttyTerminalEngine::search(const std::string_view query, const TerminalSearchDirection direction,
+                              const bool caseSensitive)
+{
+    if (query.empty())
+    {
+        if (const std::error_code error = clearSearch())
+        {
+            return std::unexpected(error);
+        }
+        return TerminalSearchResult{};
+    }
+
+    struct SearchCell
+    {
+        GhosttyGridRef ref{};
+        std::uint32_t screenRow = 0;
+        std::uint16_t column = 0;
+    };
+    struct Match
+    {
+        SearchCell start;
+        SearchCell end;
+    };
+
+    std::uint16_t columns = 0;
+    std::size_t totalRows = 0;
+    const std::array dataKeys = {GHOSTTY_TERMINAL_DATA_COLS, GHOSTTY_TERMINAL_DATA_TOTAL_ROWS};
+    std::array<void *, 2> dataValues = {&columns, &totalRows};
+    if (const GhosttyResult result =
+            ghostty_terminal_get_multi(m_impl->terminal, dataKeys.size(), dataKeys.data(), dataValues.data(), nullptr);
+        result != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(result));
+    }
+    if (columns == 0 || totalRows == 0 || totalRows > std::numeric_limits<std::uint32_t>::max())
+    {
+        return TerminalSearchResult{};
+    }
+
+    const std::string needle = caseSensitive ? std::string(query) : asciiFold(std::string(query));
+    std::vector<Match> matches;
+    std::string logicalLine;
+    std::vector<SearchCell> byteCells;
+
+    const auto collectMatches = [&]() {
+        const std::string haystack = caseSensitive ? logicalLine : asciiFold(logicalLine);
+        std::size_t offset = 0;
+        while ((offset = haystack.find(needle, offset)) != std::string::npos)
+        {
+            const std::size_t endOffset = offset + needle.size() - 1U;
+            if (endOffset < byteCells.size())
+            {
+                matches.push_back({.start = byteCells[offset], .end = byteCells[endOffset]});
+            }
+            offset += std::max<std::size_t>(needle.size(), 1U);
+        }
+        logicalLine.clear();
+        byteCells.clear();
+    };
+
+    for (std::uint32_t row = 0; row < static_cast<std::uint32_t>(totalRows); ++row)
+    {
+        bool wrapped = false;
+        for (std::uint16_t column = 0; column < columns; ++column)
+        {
+            GhosttyPoint point{};
+            point.tag = GHOSTTY_POINT_TAG_SCREEN;
+            point.value.coordinate = {.x = column, .y = row};
+
+            GhosttyGridRef ref{};
+            if (const GhosttyResult refResult = ghostty_terminal_grid_ref(m_impl->terminal, point, &ref);
+                refResult != GHOSTTY_SUCCESS)
+            {
+                return std::unexpected(ghosttyError(refResult));
+            }
+
+            if (column == 0)
+            {
+                GhosttyRow ghosttyRow{};
+                if (const GhosttyResult rowResult = ghostty_grid_ref_row(&ref, &ghosttyRow);
+                    rowResult != GHOSTTY_SUCCESS)
+                {
+                    return std::unexpected(ghosttyError(rowResult));
+                }
+                if (const GhosttyResult wrapResult = ghostty_row_get(ghosttyRow, GHOSTTY_ROW_DATA_WRAP, &wrapped);
+                    wrapResult != GHOSTTY_SUCCESS)
+                {
+                    return std::unexpected(ghosttyError(wrapResult));
+                }
+            }
+
+            GhosttyCell cell{};
+            if (const GhosttyResult cellResult = ghostty_grid_ref_cell(&ref, &cell); cellResult != GHOSTTY_SUCCESS)
+            {
+                return std::unexpected(ghosttyError(cellResult));
+            }
+            GhosttyCellWide wide = GHOSTTY_CELL_WIDE_NARROW;
+            if (const GhosttyResult wideResult = ghostty_cell_get(cell, GHOSTTY_CELL_DATA_WIDE, &wide);
+                wideResult != GHOSTTY_SUCCESS)
+            {
+                return std::unexpected(ghosttyError(wideResult));
+            }
+            if (wide == GHOSTTY_CELL_WIDE_SPACER_TAIL || wide == GHOSTTY_CELL_WIDE_SPACER_HEAD)
+            {
+                continue;
+            }
+
+            std::size_t graphemeLength = 0;
+            const GhosttyResult lengthResult = ghostty_grid_ref_graphemes(&ref, nullptr, 0, &graphemeLength);
+            if (lengthResult != GHOSTTY_OUT_OF_SPACE && lengthResult != GHOSTTY_SUCCESS)
+            {
+                return std::unexpected(ghosttyError(lengthResult));
+            }
+
+            std::string cellText;
+            if (graphemeLength == 0)
+            {
+                cellText = " ";
+            }
+            else
+            {
+                std::vector<std::uint32_t> codepoints(graphemeLength);
+                std::size_t written = 0;
+                if (const GhosttyResult graphemeResult =
+                        ghostty_grid_ref_graphemes(&ref, codepoints.data(), codepoints.size(), &written);
+                    graphemeResult != GHOSTTY_SUCCESS)
+                {
+                    return std::unexpected(ghosttyError(graphemeResult));
+                }
+                for (std::size_t index = 0; index < written; ++index)
+                {
+                    appendUtf8(cellText, codepoints[index]);
+                }
+            }
+
+            logicalLine.append(cellText);
+            byteCells.insert(byteCells.end(), cellText.size(),
+                             SearchCell{.ref = ref, .screenRow = row, .column = column});
+        }
+        if (!wrapped)
+        {
+            collectMatches();
+        }
+    }
+    if (!logicalLine.empty())
+    {
+        collectMatches();
+    }
+
+    if (matches.empty())
+    {
+        if (const std::error_code error = clearSearch())
+        {
+            return std::unexpected(error);
+        }
+        m_impl->lastSearchQuery = query;
+        m_impl->lastSearchCaseSensitive = caseSensitive;
+        return TerminalSearchResult{};
+    }
+
+    const bool continuing = m_impl->lastSearchQuery == query && m_impl->lastSearchCaseSensitive == caseSensitive;
+    std::optional<GhosttyPointCoordinate> activeStart;
+    if (continuing)
+    {
+        GhosttySelection selection{};
+        selection.size = sizeof(selection);
+        if (ghostty_terminal_get(m_impl->terminal, GHOSTTY_TERMINAL_DATA_SELECTION, &selection) == GHOSTTY_SUCCESS)
+        {
+            GhosttyPointCoordinate point{};
+            if (ghostty_terminal_point_from_grid_ref(m_impl->terminal, &selection.start, GHOSTTY_POINT_TAG_SCREEN,
+                                                     &point)
+                == GHOSTTY_SUCCESS)
+            {
+                activeStart = point;
+            }
+        }
+    }
+
+    std::size_t selectedIndex = direction == TerminalSearchDirection::forward ? 0 : matches.size() - 1U;
+    bool wrapped = false;
+    if (activeStart)
+    {
+        const auto sameStart = [&activeStart](const Match &match) {
+            return match.start.screenRow == activeStart->y && match.start.column == activeStart->x;
+        };
+        const auto current = std::ranges::find_if(matches, sameStart);
+        if (current != matches.end())
+        {
+            const std::size_t currentIndex = static_cast<std::size_t>(std::distance(matches.begin(), current));
+            if (direction == TerminalSearchDirection::forward)
+            {
+                selectedIndex = currentIndex + 1U;
+                if (selectedIndex == matches.size())
+                {
+                    selectedIndex = 0;
+                    wrapped = true;
+                }
+            }
+            else if (currentIndex == 0)
+            {
+                selectedIndex = matches.size() - 1U;
+                wrapped = true;
+            }
+            else
+            {
+                selectedIndex = currentIndex - 1U;
+            }
+        }
+    }
+
+    GhosttySelection selection{};
+    selection.size = sizeof(selection);
+    selection.start = matches[selectedIndex].start.ref;
+    selection.end = matches[selectedIndex].end.ref;
+    if (const GhosttyResult selectionResult =
+            ghostty_terminal_set(m_impl->terminal, GHOSTTY_TERMINAL_OPT_SELECTION, &selection);
+        selectionResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(selectionResult));
+    }
+
+    GhosttyTerminalScrollbar scrollbar{};
+    if (const GhosttyResult scrollbarResult =
+            ghostty_terminal_get(m_impl->terminal, GHOSTTY_TERMINAL_DATA_SCROLLBAR, &scrollbar);
+        scrollbarResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(scrollbarResult));
+    }
+    const std::uint64_t maximumOffset = scrollbar.total > scrollbar.len ? scrollbar.total - scrollbar.len : 0;
+    GhosttyTerminalScrollViewport behavior{};
+    behavior.tag = GHOSTTY_SCROLL_VIEWPORT_ROW;
+    behavior.value.row =
+        static_cast<std::size_t>(std::min<std::uint64_t>(matches[selectedIndex].start.screenRow, maximumOffset));
+    ghostty_terminal_scroll_viewport(m_impl->terminal, behavior);
+
+    m_impl->lastSearchQuery = query;
+    m_impl->lastSearchCaseSensitive = caseSensitive;
+    return TerminalSearchResult{.current = static_cast<std::uint32_t>(selectedIndex + 1U),
+                                .total = static_cast<std::uint32_t>(
+                                    std::min<std::size_t>(matches.size(), std::numeric_limits<std::uint32_t>::max())),
+                                .wrapped = wrapped};
+}
+
+std::error_code GhosttyTerminalEngine::clearSearch()
+{
+    m_impl->lastSearchQuery.clear();
+    const GhosttyResult result = ghostty_terminal_set(m_impl->terminal, GHOSTTY_TERMINAL_OPT_SELECTION, nullptr);
+    return result == GHOSTTY_SUCCESS ? std::error_code{} : ghosttyError(result);
 }
 
 std::expected<std::vector<std::byte>, std::error_code>
