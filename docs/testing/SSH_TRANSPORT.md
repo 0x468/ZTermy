@@ -137,3 +137,20 @@ handshake and authentication stages.
 The gated real-host suite opens an 80 by 24 PTY, resizes it to 100 by 30, and
 closes the shell without sending or logging terminal input. It uses the same
 four non-secret variables as the private-key authentication gate.
+
+## Application session gate
+
+`ztermy_ssh_terminal_session_tests` verifies invalid profile rejection without
+network access. With the four private-key gate variables set, it also exercises
+the complete worker-thread flow against the real server:
+
+1. connect and negotiate without blocking the Qt test thread;
+2. stop at the unknown-host boundary and expose the observed fingerprint;
+3. compare that fingerprint with the independently supplied expected value;
+4. verify that a premature confirmation had no effect, then explicitly accept
+   and remember the observed key;
+5. authenticate, open the remote shell, and publish a terminal snapshot;
+6. queue a resize and stop the worker cleanly;
+7. reconnect from the persisted trust record without another confirmation.
+
+The test never sends terminal input and uses a temporary known-host store.

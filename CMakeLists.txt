@@ -156,6 +156,11 @@ add_library(ztermy_terminal_session STATIC
     src/application/terminal/LocalTerminalSession.h
 )
 
+add_library(ztermy_ssh_session STATIC
+    src/application/ssh/SshTerminalSession.cpp
+    src/application/ssh/SshTerminalSession.h
+)
+
 target_compile_features(ztermy_terminal_session PUBLIC cxx_std_23)
 target_include_directories(ztermy_terminal_session PUBLIC src)
 target_compile_definitions(ztermy_terminal_session PRIVATE
@@ -169,6 +174,18 @@ target_link_libraries(ztermy_terminal_session
     PRIVATE
         ztermy_terminal_transport
         Qt6::Core
+)
+
+target_compile_features(ztermy_ssh_session PUBLIC cxx_std_23)
+target_include_directories(ztermy_ssh_session PUBLIC src)
+target_link_libraries(ztermy_ssh_session
+    PUBLIC
+        ztermy_ssh_domain
+        ztermy_terminal_engine
+        Qt6::Core
+    PRIVATE
+        ztermy_ssh_persistence
+        ztermy_ssh_transport
 )
 
 add_library(ztermy_terminal_ui STATIC
@@ -282,6 +299,13 @@ if(MSVC)
     )
 
     target_compile_options(ztermy_terminal_session PRIVATE
+        /permissive-
+        /utf-8
+        /W4
+        /Zc:__cplusplus
+    )
+
+    target_compile_options(ztermy_ssh_session PRIVATE
         /permissive-
         /utf-8
         /W4
@@ -496,6 +520,27 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME ssh-real-host COMMAND ztermy_ssh_real_host_tests)
+
+    qt_add_executable(ztermy_ssh_terminal_session_tests
+        tests/ssh_terminal_session_tests.cpp
+    )
+
+    target_compile_features(ztermy_ssh_terminal_session_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ssh_terminal_session_tests PRIVATE
+        ztermy_ssh_session
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ssh_terminal_session_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ssh-terminal-session COMMAND ztermy_ssh_terminal_session_tests)
 
     qt_add_executable(ztermy_terminal_engine_tests
         tests/terminal_engine_tests.cpp
