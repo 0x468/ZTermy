@@ -120,10 +120,15 @@ Expected:
 - The title bar and window remain responsive.
 - Output continues without parser or session error status.
 - Closing during output returns promptly without a runtime assertion.
+- On close, the Debug log contains `Terminal session metrics` with snapshot
+  production, delivery, coalescing, damage, and snapshot-build timing.
+- After at least 120 repainted frames, the Debug log contains `renderer timing`
+  with CPU paint and texture-creation P95 values. If fewer frames were
+  repainted, run the sustained-output command again before closing.
 
 The current renderer uploads a full-frame texture per delivered snapshot. This
-test establishes a correctness baseline; frame-time and latency targets remain
-open until the batched glyph renderer is implemented.
+test and the accompanying metrics establish the baseline for damage-aware and
+batched renderer work.
 
 ## Crash diagnostics
 

@@ -58,6 +58,7 @@ std::error_code LocalTerminalSession::start(const TerminalGeometry geometry)
 
     m_engine = std::move(*engineResult);
     m_process = std::move(process);
+    resetMetrics();
     m_running.store(true);
     emit runningChanged(true);
     emit statusChanged(QStringLiteral("Local PowerShell connected"));
@@ -135,6 +136,7 @@ void LocalTerminalSession::stop() noexcept
 
     if (m_running.exchange(false))
     {
+        logMetrics();
         emit runningChanged(false);
         emit statusChanged(QStringLiteral("Local terminal stopped"));
         qCInfo(terminalSessionLog) << "Local terminal session stopped";
@@ -298,6 +300,7 @@ void LocalTerminalSession::readLoop(const std::stop_token &stopToken)
         {
             break;
         }
+        m_readBytes.fetch_add(*readResult, std::memory_order_relaxed);
 
         {
             std::scoped_lock lock(m_engineMutex);
@@ -471,6 +474,7 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
 void LocalTerminalSession::publishSnapshot()
 {
     TerminalSnapshotPtr snapshot;
+    const auto buildStarted = std::chrono::steady_clock::now();
     {
         std::scoped_lock engineLock(m_engineMutex);
         auto snapshotResult = m_engine->snapshot();
@@ -482,8 +486,34 @@ void LocalTerminalSession::publishSnapshot()
         }
         snapshot = std::make_shared<const TerminalSnapshot>(std::move(*snapshotResult));
     }
+    const auto buildNanoseconds = static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - buildStarted).count());
+    m_snapshotBuildNanoseconds.fetch_add(buildNanoseconds, std::memory_order_relaxed);
+    std::uint64_t previousMaximum = m_maxSnapshotBuildNanoseconds.load(std::memory_order_relaxed);
+    while (previousMaximum < buildNanoseconds
+           && !m_maxSnapshotBuildNanoseconds.compare_exchange_weak(previousMaximum, buildNanoseconds,
+                                                                   std::memory_order_relaxed))
+    {
+    }
+    m_snapshotsProduced.fetch_add(1, std::memory_order_relaxed);
+    switch (snapshot->damage)
+    {
+        case TerminalDamageKind::none:
+            m_cleanSnapshots.fetch_add(1, std::memory_order_relaxed);
+            break;
+        case TerminalDamageKind::partial:
+            m_partialDamageSnapshots.fetch_add(1, std::memory_order_relaxed);
+            break;
+        case TerminalDamageKind::full:
+            m_fullDamageSnapshots.fetch_add(1, std::memory_order_relaxed);
+            break;
+    }
     {
         std::scoped_lock snapshotLock(m_snapshotMutex);
+        if (m_pendingSnapshot)
+        {
+            m_snapshotsCoalesced.fetch_add(1, std::memory_order_relaxed);
+        }
         m_pendingSnapshot = std::move(snapshot);
     }
 
@@ -503,6 +533,7 @@ void LocalTerminalSession::deliverLatestSnapshot()
     m_snapshotDeliveryScheduled.store(false);
     if (snapshot)
     {
+        m_snapshotsDelivered.fetch_add(1, std::memory_order_relaxed);
         emit snapshotReady(std::move(snapshot));
     }
 
@@ -519,6 +550,41 @@ void LocalTerminalSession::deliverLatestSnapshot()
 void LocalTerminalSession::postStatus(const QString &status)
 {
     emit statusChanged(status);
+}
+
+void LocalTerminalSession::resetMetrics() noexcept
+{
+    m_readBytes.store(0, std::memory_order_relaxed);
+    m_snapshotsProduced.store(0, std::memory_order_relaxed);
+    m_snapshotsDelivered.store(0, std::memory_order_relaxed);
+    m_snapshotsCoalesced.store(0, std::memory_order_relaxed);
+    m_fullDamageSnapshots.store(0, std::memory_order_relaxed);
+    m_partialDamageSnapshots.store(0, std::memory_order_relaxed);
+    m_cleanSnapshots.store(0, std::memory_order_relaxed);
+    m_snapshotBuildNanoseconds.store(0, std::memory_order_relaxed);
+    m_maxSnapshotBuildNanoseconds.store(0, std::memory_order_relaxed);
+}
+
+void LocalTerminalSession::logMetrics() const
+{
+    constexpr double nanosecondsPerMillisecond = 1'000'000.0;
+    const std::uint64_t produced = m_snapshotsProduced.load(std::memory_order_relaxed);
+    const std::uint64_t totalBuildNanoseconds = m_snapshotBuildNanoseconds.load(std::memory_order_relaxed);
+    const double averageBuildMilliseconds =
+        produced == 0
+            ? 0.0
+            : static_cast<double>(totalBuildNanoseconds) / static_cast<double>(produced) / nanosecondsPerMillisecond;
+    qCInfo(terminalSessionLog) << "Terminal session metrics"
+                               << "readBytes=" << m_readBytes.load(std::memory_order_relaxed)
+                               << "snapshotsProduced=" << produced
+                               << "snapshotsDelivered=" << m_snapshotsDelivered.load(std::memory_order_relaxed)
+                               << "snapshotsCoalesced=" << m_snapshotsCoalesced.load(std::memory_order_relaxed)
+                               << "fullDamage=" << m_fullDamageSnapshots.load(std::memory_order_relaxed)
+                               << "partialDamage=" << m_partialDamageSnapshots.load(std::memory_order_relaxed)
+                               << "clean=" << m_cleanSnapshots.load(std::memory_order_relaxed)
+                               << "snapshotBuildAverageMs=" << averageBuildMilliseconds << "snapshotBuildMaxMs="
+                               << (static_cast<double>(m_maxSnapshotBuildNanoseconds.load(std::memory_order_relaxed))
+                                   / nanosecondsPerMillisecond);
 }
 
 } // namespace ztermy::terminal

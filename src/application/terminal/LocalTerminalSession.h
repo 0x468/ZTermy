@@ -84,6 +84,8 @@ private:
     void writeLoop(const std::stop_token &stopToken);
     void publishSnapshot();
     void postStatus(const QString &status);
+    void resetMetrics() noexcept;
+    void logMetrics() const;
 
     static constexpr std::size_t maximumQueuedInputBytes = 1024U * 1024U;
 
@@ -102,6 +104,15 @@ private:
     TerminalSnapshotPtr m_pendingSnapshot;
     std::atomic_bool m_snapshotDeliveryScheduled = false;
     std::atomic_bool m_running = false;
+    std::atomic_uint64_t m_readBytes = 0;
+    std::atomic_uint64_t m_snapshotsProduced = 0;
+    std::atomic_uint64_t m_snapshotsDelivered = 0;
+    std::atomic_uint64_t m_snapshotsCoalesced = 0;
+    std::atomic_uint64_t m_fullDamageSnapshots = 0;
+    std::atomic_uint64_t m_partialDamageSnapshots = 0;
+    std::atomic_uint64_t m_cleanSnapshots = 0;
+    std::atomic_uint64_t m_snapshotBuildNanoseconds = 0;
+    std::atomic_uint64_t m_maxSnapshotBuildNanoseconds = 0;
 };
 
 } // namespace ztermy::terminal

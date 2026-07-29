@@ -4,6 +4,7 @@
 
 #include <QClipboard>
 #include <QColor>
+#include <QElapsedTimer>
 #include <QFocusEvent>
 #include <QFontMetricsF>
 #include <QGuiApplication>
@@ -11,6 +12,7 @@
 #include <QInputMethod>
 #include <QInputMethodEvent>
 #include <QKeyEvent>
+#include <QLoggingCategory>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QQuickWindow>
@@ -19,6 +21,7 @@
 #include <QWheelEvent>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 #include <utility>
@@ -26,14 +29,67 @@
 namespace
 {
 
+Q_LOGGING_CATEGORY(terminalRenderLog, "ztermy.terminal.render")
+
 constexpr qreal horizontalPadding = 16.0;
 constexpr qreal verticalPadding = 14.0;
 
 class TerminalTextureNode final : public QSGSimpleTextureNode
 {
 public:
+#if !defined(NDEBUG)
+    void recordTiming(const qint64 paintNanoseconds, const qint64 textureNanoseconds, const QSize &frameSize,
+                      const ztermy::terminal::TerminalDamageKind damage, const std::size_t damagedRowCount)
+    {
+        paintTimes[sampleCount] = paintNanoseconds;
+        textureTimes[sampleCount] = textureNanoseconds;
+        ++sampleCount;
+        damagedRows += damagedRowCount;
+        fullFrames += damage == ztermy::terminal::TerminalDamageKind::full ? 1U : 0U;
+        partialFrames += damage == ztermy::terminal::TerminalDamageKind::partial ? 1U : 0U;
+        cleanFrames += damage == ztermy::terminal::TerminalDamageKind::none ? 1U : 0U;
+        if (sampleCount != paintTimes.size())
+        {
+            return;
+        }
+
+        auto sortedPaintTimes = paintTimes;
+        auto sortedTextureTimes = textureTimes;
+        std::ranges::sort(sortedPaintTimes);
+        std::ranges::sort(sortedTextureTimes);
+        constexpr std::size_t percentile95Index = ((timingSampleCount * 95U) - 1U) / 100U;
+        constexpr double nanosecondsPerMillisecond = 1'000'000.0;
+        qCDebug(terminalRenderLog)
+            << "renderer timing"
+            << "samples=" << timingSampleCount << "pixels=" << frameSize
+            << "paintP95Ms=" << (static_cast<double>(sortedPaintTimes[percentile95Index]) / nanosecondsPerMillisecond)
+            << "textureCreateP95Ms="
+            << (static_cast<double>(sortedTextureTimes[percentile95Index]) / nanosecondsPerMillisecond)
+            << "fullFrames=" << fullFrames << "partialFrames=" << partialFrames << "cleanFrames=" << cleanFrames
+            << "damagedRows=" << damagedRows;
+
+        sampleCount = 0;
+        damagedRows = 0;
+        fullFrames = 0;
+        partialFrames = 0;
+        cleanFrames = 0;
+    }
+#endif
+
     std::uint64_t revision = 0;
     QSize pixelSize;
+
+private:
+#if !defined(NDEBUG)
+    static constexpr std::size_t timingSampleCount = 120;
+    std::array<qint64, timingSampleCount> paintTimes{};
+    std::array<qint64, timingSampleCount> textureTimes{};
+    std::size_t sampleCount = 0;
+    std::size_t damagedRows = 0;
+    std::size_t fullFrames = 0;
+    std::size_t partialFrames = 0;
+    std::size_t cleanFrames = 0;
+#endif
 };
 
 [[nodiscard]] QColor color(const ztermy::terminal::TerminalColor terminalColor)
@@ -180,6 +236,11 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         return node;
     }
 
+#if !defined(NDEBUG)
+    QElapsedTimer frameTimer;
+    frameTimer.start();
+#endif
+
     const terminal::TerminalColor fallbackForeground{.red = 248, .green = 250, .blue = 252};
     const terminal::TerminalColor fallbackBackground{.red = 11, .green = 16, .blue = 23};
     const QColor selectionBackground(42, 91, 145);
@@ -321,7 +382,16 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         }
     }
 
+#if !defined(NDEBUG)
+    const qint64 paintNanoseconds = frameTimer.nsecsElapsed();
+#endif
     QSGTexture *newTexture = window()->createTextureFromImage(image);
+#if !defined(NDEBUG)
+    const qint64 textureNanoseconds = frameTimer.nsecsElapsed() - paintNanoseconds;
+    node->recordTiming(paintNanoseconds, textureNanoseconds, pixelSize,
+                       m_snapshot ? m_snapshot->damage : terminal::TerminalDamageKind::full,
+                       m_snapshot ? m_snapshot->damagedRows.size() : std::size_t{0});
+#endif
     node->setTexture(newTexture);
     node->setRect(boundingRect());
     node->setFiltering(QSGTexture::Linear);
