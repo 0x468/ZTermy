@@ -4,6 +4,50 @@ This check covers the Netcatty-inspired information hierarchy implemented with
 ztermy-owned QML and Windows integration. Run it on Windows 11 after changing
 the title bar, navigation, terminal tabs, or theme metrics.
 
+## Automated responsive-layout gate
+
+Build and run the opt-in real-window gate from a Visual Studio developer
+shell:
+
+```text
+cmake --build --preset msvc-dynamic-debug --target ztermy_ui_layout_runtime_smoke
+```
+
+The gate opens an isolated ztermy window at `500x360` and `1120x800`, visits
+Hosts and Settings, verifies each responsive breakpoint and form column count,
+checks that host content has a positive width bounded by its page, and saves
+four screenshots below:
+
+```text
+build/msvc-dynamic-debug/test-data/ui-layout-smoke/
+```
+
+The automated gate proves structure and produces review evidence. It does not
+replace mouse, keyboard, text-clipping, or mixed-DPI inspection.
+
+## Narrow layout
+
+1. Resize the window to its minimum size.
+2. Open Hosts, scroll through the complete new-connection editor, and create a
+   temporary saved host if none exists.
+3. Inspect all saved-host actions, then open Settings and scroll from the
+   theme control through the bottom action row.
+4. Widen the window to approximately `1120x800` and repeat.
+
+Expected:
+
+- The navigation rail becomes narrower at the minimum width.
+- Hosts and Settings use one label/control column when narrow and two columns
+  when wide.
+- Saved-host Connect, Edit, Copy, and Delete actions remain available in a
+  two-column compact action area instead of clipping horizontally.
+- New host, form fields, switches, explanations, and bottom actions remain
+  readable and reachable by scrolling.
+- Native CheckBox and Switch labels have readable contrast in Dark and Light
+  themes.
+- No horizontal scrollbar, overlapping control, negative-width surface, or
+  layout jump appears while crossing the breakpoint.
+
 ## Terminal workspace
 
 1. Start the dynamic Debug build.

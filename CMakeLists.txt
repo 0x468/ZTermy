@@ -397,6 +397,15 @@ add_custom_target(ztermy_window_runtime_smoke
     VERBATIM
 )
 
+add_custom_target(ztermy_ui_layout_runtime_smoke
+    COMMAND "$<TARGET_FILE:ztermy>"
+            --ui-layout-smoke
+            --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/ui-layout-smoke"
+    DEPENDS ztermy
+    COMMENT "Checking compact and regular QML layout breakpoints in the real window"
+    VERBATIM
+)
+
 if(ZTERMY_STATIC_BUILD)
     install(TARGETS ztermy RUNTIME DESTINATION . COMPONENT Runtime)
 else()

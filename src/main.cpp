@@ -9,8 +9,10 @@
 #include <QEventLoop>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QImage>
 #include <QLoggingCategory>
 #include <QMetaType>
+#include <QQuickItem>
 #include <QQuickStyle>
 #include <QStandardPaths>
 #include <QTimer>
@@ -43,6 +45,79 @@ void processWindowEventsFor(const std::chrono::milliseconds duration)
     window.showNormal();
     processWindowEventsFor(std::chrono::milliseconds{250});
     return workAreaMatches && !window.maximized();
+}
+
+[[nodiscard]] bool captureLayout(ztermy::NativeWindow &window, const QString &outputDirectory, const QString &name)
+{
+    const QString path = QDir(outputDirectory).filePath(name + QStringLiteral(".png"));
+    const bool saved = window.grabWindow().save(path);
+    qCInfo(applicationLog) << "UI layout capture" << path << "saved=" << saved;
+    return saved;
+}
+
+[[nodiscard]] bool verifyUiLayoutBreakpoint(ztermy::NativeWindow &window, const QSize size, const bool compact,
+                                            const QString &outputDirectory)
+{
+    window.resize(size);
+    processWindowEventsFor(std::chrono::milliseconds{250});
+
+    QQuickItem *rootObject = window.rootObject();
+    if (rootObject == nullptr)
+    {
+        return false;
+    }
+
+    rootObject->setProperty("currentPage", QStringLiteral("hosts"));
+    processWindowEventsFor(std::chrono::milliseconds{100});
+    auto *hostPane = rootObject->findChild<QObject *>(QStringLiteral("hostConnectionPane"));
+    auto *hostContent = rootObject->findChild<QObject *>(QStringLiteral("hostContentColumn"));
+    auto *hostEditorGrid = rootObject->findChild<QObject *>(QStringLiteral("hostEditorGrid"));
+    const QString breakpointName = compact ? QStringLiteral("compact") : QStringLiteral("regular");
+    const bool hostCaptured = captureLayout(window, outputDirectory, breakpointName + QStringLiteral("-hosts"));
+
+    rootObject->setProperty("currentPage", QStringLiteral("settings"));
+    processWindowEventsFor(std::chrono::milliseconds{100});
+    auto *settingsPane = rootObject->findChild<QObject *>(QStringLiteral("settingsPane"));
+    auto *appearanceGrid = rootObject->findChild<QObject *>(QStringLiteral("settingsAppearanceGrid"));
+    auto *terminalGrid = rootObject->findChild<QObject *>(QStringLiteral("settingsTerminalGrid"));
+    const bool settingsCaptured = captureLayout(window, outputDirectory, breakpointName + QStringLiteral("-settings"));
+
+    if (hostPane == nullptr || hostContent == nullptr || hostEditorGrid == nullptr || settingsPane == nullptr
+        || appearanceGrid == nullptr || terminalGrid == nullptr)
+    {
+        qCWarning(applicationLog) << "UI layout smoke object lookup failed"
+                                  << "hostPane=" << (hostPane != nullptr) << "hostContent=" << (hostContent != nullptr)
+                                  << "hostEditorGrid=" << (hostEditorGrid != nullptr)
+                                  << "settingsPane=" << (settingsPane != nullptr)
+                                  << "appearanceGrid=" << (appearanceGrid != nullptr)
+                                  << "terminalGrid=" << (terminalGrid != nullptr);
+        return false;
+    }
+
+    const qreal hostPaneWidth = hostPane->property("width").toReal();
+    const qreal hostContentWidth = hostContent->property("width").toReal();
+    const bool hostMatches = hostPane->property("compactLayout").toBool() == compact
+                             && hostEditorGrid->property("columns").toInt() == (compact ? 1 : 2)
+                             && hostPane->property("profileActionColumns").toInt() == (compact ? 2 : 7)
+                             && hostContentWidth > 0.0 && hostContentWidth <= hostPaneWidth;
+    const bool settingsMatch = settingsPane->property("compactLayout").toBool() == compact
+                               && appearanceGrid->property("columns").toInt() == (compact ? 1 : 2)
+                               && terminalGrid->property("columns").toInt() == (compact ? 1 : 2);
+
+    qCInfo(applicationLog) << "UI layout breakpoint check"
+                           << "size=" << size << "compact=" << compact << "hostPaneWidth=" << hostPaneWidth
+                           << "hostContentWidth=" << hostContentWidth << "hostMatches=" << hostMatches
+                           << "settingsMatch=" << settingsMatch;
+    return hostMatches && settingsMatch && hostCaptured && settingsCaptured;
+}
+
+[[nodiscard]] bool runUiLayoutRuntimeSmoke(ztermy::NativeWindow &window, const QString &outputDirectory)
+{
+    window.show();
+    processWindowEventsFor(std::chrono::milliseconds{250});
+    const bool compactPassed = verifyUiLayoutBreakpoint(window, QSize{500, 360}, true, outputDirectory);
+    const bool regularPassed = verifyUiLayoutBreakpoint(window, QSize{1120, 800}, false, outputDirectory);
+    return compactPassed && regularPassed;
 }
 
 } // namespace
@@ -80,6 +155,17 @@ int main(int argc, char *argv[])
     qRegisterMetaType<ztermy::terminal::TerminalSnapshotPtr>();
 
     ztermy::AppController appController(paths->profilesFile, paths->knownHostsFile, paths->settingsFile);
+    const bool uiLayoutSmoke = QCoreApplication::arguments().contains(QStringLiteral("--ui-layout-smoke"));
+    if (uiLayoutSmoke
+        && !appController.saveHostProfile(QStringLiteral("ui-layout-smoke-profile"), QStringLiteral("Layout test host"),
+                                          QStringLiteral("192.0.2.10"), 22, QStringLiteral("developer"),
+                                          QStringLiteral("private-key"), QStringLiteral("C:/test/id_ed25519"), false,
+                                          QStringLiteral("Test fixtures")))
+    {
+        qCCritical(applicationLog) << "Could not prepare the responsive UI layout fixture";
+        return EXIT_FAILURE;
+    }
+
     ztermy::NativeWindow window;
     QVariantMap initialProperties;
     initialProperties.insert(QStringLiteral("controller"), QVariant::fromValue(static_cast<QObject *>(&appController)));
@@ -115,6 +201,20 @@ int main(int argc, char *argv[])
             return EXIT_FAILURE;
         }
         qCInfo(applicationLog) << "Maximized work-area runtime smoke test completed";
+        return EXIT_SUCCESS;
+    }
+
+    if (uiLayoutSmoke)
+    {
+        const bool passed = runUiLayoutRuntimeSmoke(window, paths->dataDirectory);
+        appController.shutdown();
+        window.releaseResources();
+        if (!passed)
+        {
+            qCCritical(applicationLog) << "Responsive UI layout runtime smoke test failed";
+            return EXIT_FAILURE;
+        }
+        qCInfo(applicationLog) << "Responsive UI layout runtime smoke test completed";
         return EXIT_SUCCESS;
     }
 

@@ -22,6 +22,11 @@ Only runtime evidence can mark a platform or UI item complete.
   smoke path passes with `PATH` restricted to Windows system directories and
   writes diagnostics only below the supplied deployment smoke-data directory.
 - Native window creation and QML loading succeed on Windows 11.
+- The real-window responsive-layout gate passes at `500x360` and `1120x800`
+  in dynamic Debug and static Release. Hosts and Settings switch between one-
+  and two-column layouts, host content remains within its page, and four
+  captured Dark-theme views were reviewed for top-level clipping and
+  native-control text contrast.
 - Automated hit-test coverage passes for caption, maximize button, client
   area, all resize edges/corners, and maximized-state behavior.
 - The real-window maximized-work-area gate passes in dynamic Debug and static
@@ -93,6 +98,15 @@ procedures and expected results.
 - [ ] Moving between mixed-DPI monitors preserves geometry and sharp rendering
 - [ ] Dark/light DWM integration is correct
 - [ ] Opacity and backdrop settings fail safely when unsupported
+
+## UI convergence
+
+- [x] Primary screens use the shared semantic theme and component foundations
+- [x] Hosts and Settings adapt structurally at minimum and regular widths
+- [ ] Narrow and regular workflows pass mouse and keyboard visual inspection
+- [ ] Dark, Light, and System themes pass contrast and component-state review
+- [ ] Primary screens pass the complete keyboard-only accessibility route
+- [ ] Normal, snapped, maximized, and mixed-DPI screenshots are accepted
 
 ## Terminal
 

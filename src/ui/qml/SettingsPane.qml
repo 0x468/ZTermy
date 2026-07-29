@@ -7,15 +7,19 @@ import QtQuick.Layouts
 Rectangle {
     id: pane
 
+    objectName: "settingsPane"
     required property var controller
     property bool loadingDraft: false
     property string statusMessage: ""
     property bool statusIsError: false
     readonly property bool draftDark: themeBox.currentIndex === 1 || (themeBox.currentIndex === 0 && Theme.systemDark)
+    readonly property bool compactLayout: width < Theme.narrowWindowWidth
+    readonly property int contentInset: compactLayout ? Theme.pageInsetCompact : Theme.pageInset
 
     color: Theme.workspaceBackground
     palette.base: Theme.raisedBackground
     palette.text: Theme.text
+    palette.windowText: Theme.text
     palette.placeholderText: Theme.textMuted
     palette.button: Theme.controlBackground
     palette.buttonText: Theme.text
@@ -86,10 +90,10 @@ Rectangle {
         ColumnLayout {
             id: contentColumn
 
-            x: Math.max(28, (scrollView.availableWidth - width) / 2)
-            y: 38
-            width: Math.min(920, scrollView.availableWidth - 56)
-            spacing: 16
+            x: Math.max(pane.contentInset, (scrollView.availableWidth - width) / 2)
+            y: pane.compactLayout ? 24 : 38
+            width: Math.max(0, Math.min(920, scrollView.availableWidth - (pane.contentInset * 2)))
+            spacing: Theme.spacingSection
 
             Text {
                 text: "Settings"
@@ -115,8 +119,9 @@ Rectangle {
                 GridLayout {
                     id: appearanceLayout
 
+                    objectName: "settingsAppearanceGrid"
                     Layout.fillWidth: true
-                    columns: 2
+                    columns: pane.compactLayout ? 1 : 2
                     columnSpacing: 18
                     rowSpacing: 12
 
@@ -169,7 +174,7 @@ Rectangle {
                     }
 
                     Item {
-                        Layout.columnSpan: 2
+                        Layout.columnSpan: appearanceLayout.columns
                         Layout.fillWidth: true
                         implicitHeight: 52
 
@@ -209,8 +214,9 @@ Rectangle {
                 GridLayout {
                     id: terminalLayout
 
+                    objectName: "settingsTerminalGrid"
                     Layout.fillWidth: true
-                    columns: 2
+                    columns: pane.compactLayout ? 1 : 2
                     columnSpacing: 18
                     rowSpacing: 12
 
@@ -252,6 +258,7 @@ Rectangle {
                     }
 
                     Item {
+                        visible: !pane.compactLayout
                         implicitHeight: cursorBlinkSwitch.implicitHeight
                     }
                     Switch {
@@ -262,6 +269,7 @@ Rectangle {
                     }
 
                     Item {
+                        visible: !pane.compactLayout
                         implicitHeight: copyOnSelectSwitch.implicitHeight
                     }
                     Switch {
@@ -272,6 +280,7 @@ Rectangle {
                     }
 
                     Item {
+                        visible: !pane.compactLayout
                         implicitHeight: multilinePasteSwitch.implicitHeight
                     }
                     Switch {
@@ -289,10 +298,14 @@ Rectangle {
                 kind: pane.statusIsError ? "error" : "success"
             }
 
-            RowLayout {
+            GridLayout {
                 Layout.fillWidth: true
+                columns: pane.compactLayout ? 1 : 4
+                columnSpacing: Theme.spacingControl
+                rowSpacing: Theme.spacingControl
 
                 ActionButton {
+                    Layout.fillWidth: pane.compactLayout
                     text: "Reset defaults"
                     Accessible.name: "Reset all application settings"
                     onClicked: {
@@ -305,9 +318,11 @@ Rectangle {
 
                 Item {
                     Layout.fillWidth: true
+                    visible: !pane.compactLayout
                 }
 
                 ActionButton {
+                    Layout.fillWidth: pane.compactLayout
                     text: "Discard changes"
                     Accessible.name: "Discard unsaved setting changes"
                     onClicked: {
@@ -318,6 +333,7 @@ Rectangle {
                 }
 
                 ActionButton {
+                    Layout.fillWidth: pane.compactLayout
                     text: "Apply"
                     Accessible.name: "Apply application settings"
                     variant: "primary"

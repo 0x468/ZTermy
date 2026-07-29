@@ -7,6 +7,7 @@ import QtQuick.Layouts
 Rectangle {
     id: pane
 
+    objectName: "hostConnectionPane"
     property color backgroundColor: Theme.workspaceBackground
     property color raisedColor: Theme.elevatedBackground
     property color borderColor: Theme.border
@@ -22,6 +23,9 @@ Rectangle {
     property string pendingConnectAuthentication: ""
     property bool statusIsError: false
     property bool editorExpanded: controller.hostProfiles.length === 0
+    readonly property bool compactLayout: width < Theme.narrowWindowWidth
+    readonly property int contentInset: compactLayout ? Theme.pageInsetCompact : Theme.pageInset
+    readonly property int profileActionColumns: compactLayout ? 2 : 7
     readonly property var filteredGroups: buildFilteredGroups(controller.hostProfiles, searchField.text)
     readonly property int filteredProfileCount: {
         let count = 0;
@@ -36,6 +40,7 @@ Rectangle {
     color: backgroundColor
     palette.base: Theme.raisedBackground
     palette.text: textColor
+    palette.windowText: textColor
     palette.placeholderText: mutedColor
     palette.button: Theme.controlBackground
     palette.buttonText: textColor
@@ -55,14 +60,7 @@ Rectangle {
         const groups = {};
         for (const profile of profiles) {
             const groupName = profile.group.trim().length > 0 ? profile.group.trim() : "Ungrouped";
-            const searchable = [
-                profile.name,
-                groupName,
-                profile.username,
-                profile.host,
-                String(profile.port),
-                profile.authentication
-            ].join(" ").toLocaleLowerCase();
+            const searchable = [profile.name, groupName, profile.username, profile.host, String(profile.port), profile.authentication].join(" ").toLocaleLowerCase();
             if (query.length > 0 && searchable.indexOf(query) < 0) {
                 continue;
             }
@@ -76,7 +74,10 @@ Rectangle {
         const groupNames = Object.keys(groups).sort((left, right) => left.localeCompare(right));
         for (const groupName of groupNames) {
             groups[groupName].sort((left, right) => left.name.localeCompare(right.name));
-            result.push({ name: groupName, profiles: groups[groupName] });
+            result.push({
+                name: groupName,
+                profiles: groups[groupName]
+            });
         }
         return result;
     }
@@ -212,18 +213,21 @@ Rectangle {
         ColumnLayout {
             id: contentColumn
 
-            x: Math.max(28, (scrollView.availableWidth - width) / 2)
-            y: 38
-            width: Math.min(1040, scrollView.availableWidth - 56)
-            spacing: 16
+            objectName: "hostContentColumn"
+            x: Math.max(pane.contentInset, (scrollView.availableWidth - width) / 2)
+            y: pane.compactLayout ? 24 : 38
+            width: Math.max(0, Math.min(1040, scrollView.availableWidth - (pane.contentInset * 2)))
+            spacing: Theme.spacingSection
 
-            RowLayout {
+            GridLayout {
                 Layout.fillWidth: true
-                spacing: 12
+                columns: pane.compactLayout ? 1 : 2
+                columnSpacing: Theme.spacingRelated
+                rowSpacing: Theme.spacingRelated
 
                 ColumnLayout {
                     Layout.fillWidth: true
-                    spacing: 4
+                    spacing: Theme.spacingDense
 
                     Text {
                         text: "Host Vault"
@@ -246,7 +250,10 @@ Rectangle {
                 ActionButton {
                     id: newHostButton
 
-                    text: "+  New host"
+                    Layout.fillWidth: pane.compactLayout
+                    Layout.alignment: pane.compactLayout ? Qt.AlignLeft : Qt.AlignRight
+                    text: "New host"
+                    iconName: "plus"
                     Accessible.name: "Create a new SSH host profile"
                     variant: "primary"
                     onClicked: pane.beginNewProfile()
@@ -329,12 +336,14 @@ Rectangle {
                                 id: cardHover
                             }
 
-                            RowLayout {
+                            GridLayout {
                                 id: profileRow
 
                                 anchors.fill: parent
                                 anchors.margins: 12
-                                spacing: 8
+                                columns: pane.profileActionColumns
+                                columnSpacing: Theme.spacingControl
+                                rowSpacing: Theme.spacingControl
 
                                 Rectangle {
                                     Layout.preferredWidth: 34
@@ -342,13 +351,12 @@ Rectangle {
                                     radius: 8
                                     color: Theme.selectedBackground
 
-                                    Text {
+                                    AppIcon {
                                         anchors.centerIn: parent
-                                        text: ">"
+                                        width: 18
+                                        height: 18
+                                        name: "terminal"
                                         color: pane.accentColor
-                                        font.family: Theme.terminalFont
-                                        font.pixelSize: 16
-                                        font.weight: Font.Bold
                                     }
                                 }
 
@@ -377,6 +385,8 @@ Rectangle {
                                 }
 
                                 Rectangle {
+                                    Layout.columnSpan: pane.compactLayout ? 2 : 1
+                                    Layout.alignment: pane.compactLayout ? Qt.AlignLeft : Qt.AlignVCenter
                                     Layout.preferredWidth: authenticationLabel.implicitWidth + 16
                                     Layout.preferredHeight: 24
                                     radius: 12
@@ -394,6 +404,7 @@ Rectangle {
                                 }
 
                                 ActionButton {
+                                    Layout.fillWidth: pane.compactLayout
                                     text: "Connect"
                                     Accessible.name: "Connect to " + profileCard.modelData.name
                                     variant: "primary"
@@ -401,12 +412,14 @@ Rectangle {
                                 }
 
                                 ActionButton {
+                                    Layout.fillWidth: pane.compactLayout
                                     text: "Edit"
                                     Accessible.name: "Edit " + profileCard.modelData.name
                                     onClicked: pane.editProfile(profileCard.modelData)
                                 }
 
                                 ActionButton {
+                                    Layout.fillWidth: pane.compactLayout
                                     text: "Copy"
                                     Accessible.name: "Copy " + profileCard.modelData.name
                                     onClicked: {
@@ -421,6 +434,7 @@ Rectangle {
                                 ActionButton {
                                     id: deleteProfileButton
 
+                                    Layout.fillWidth: pane.compactLayout
                                     text: "Delete"
                                     Accessible.name: "Delete " + profileCard.modelData.name
                                     onClicked: {
@@ -475,8 +489,9 @@ Rectangle {
                     }
 
                     GridLayout {
+                        objectName: "hostEditorGrid"
                         Layout.fillWidth: true
-                        columns: 2
+                        columns: pane.compactLayout ? 1 : 2
                         columnSpacing: 14
                         rowSpacing: 10
 
@@ -617,7 +632,7 @@ Rectangle {
                         }
 
                         Item {
-                            visible: authenticationBox.currentIndex === 0
+                            visible: !pane.compactLayout && authenticationBox.currentIndex === 0
                             implicitHeight: passphraseRequiredBox.implicitHeight
                         }
                         CheckBox {
@@ -652,10 +667,14 @@ Rectangle {
                         kind: pane.statusIsError ? "error" : "success"
                     }
 
-                    RowLayout {
+                    GridLayout {
                         Layout.fillWidth: true
+                        columns: pane.compactLayout ? 1 : 4
+                        columnSpacing: Theme.spacingControl
+                        rowSpacing: Theme.spacingControl
 
                         ActionButton {
+                            Layout.fillWidth: pane.compactLayout
                             text: "Cancel"
                             Accessible.name: "Close host profile editor"
                             onClicked: {
@@ -667,15 +686,18 @@ Rectangle {
 
                         Item {
                             Layout.fillWidth: true
+                            visible: !pane.compactLayout
                         }
 
                         ActionButton {
+                            Layout.fillWidth: pane.compactLayout
                             text: "Save profile"
                             Accessible.name: "Save SSH profile"
                             onClicked: pane.saveProfile()
                         }
 
                         ActionButton {
+                            Layout.fillWidth: pane.compactLayout
                             text: "Connect"
                             Accessible.name: "Connect to SSH host"
                             variant: "primary"

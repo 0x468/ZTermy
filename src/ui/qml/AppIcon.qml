@@ -21,6 +21,8 @@ Item {
             return "M 2.5 3.5 L 13.5 3.5 L 13.5 11.5 L 2.5 11.5 Z M 5 14 L 11 14 M 8 11.5 L 8 14";
         case "plus":
             return "M 8 3 L 8 13 M 3 8 L 13 8";
+        case "terminal":
+            return "M 2.5 3.5 L 13.5 3.5 L 13.5 12.5 L 2.5 12.5 Z M 4.5 6 L 7 8 L 4.5 10 M 8 10 L 11 10";
         default:
             return "";
         }

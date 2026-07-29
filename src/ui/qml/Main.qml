@@ -30,22 +30,14 @@ Rectangle {
         }
         return null;
     }
-    readonly property bool activeSshFailure: activeTerminalTab !== null
-                                                     && activeTerminalTab.kind === "ssh"
-                                                     && activeTerminalTab.failed
-    readonly property bool activeSshConnecting: activeTerminalTab !== null
-                                                        && activeTerminalTab.kind === "ssh"
-                                                        && activeTerminalTab.connecting
-    readonly property bool activeSshDisconnected: activeTerminalTab !== null
-                                                          && activeTerminalTab.kind === "ssh"
-                                                          && activeTerminalTab.remoteClosed
+    readonly property bool activeSshFailure: activeTerminalTab !== null && activeTerminalTab.kind === "ssh" && activeTerminalTab.failed
+    readonly property bool activeSshConnecting: activeTerminalTab !== null && activeTerminalTab.kind === "ssh" && activeTerminalTab.connecting
+    readonly property bool activeSshDisconnected: activeTerminalTab !== null && activeTerminalTab.kind === "ssh" && activeTerminalTab.remoteClosed
 
     color: backgroundColor
 
     function reportTitleBarMetrics() {
-        root.windowChrome.setTitleBarMetrics(titleBarHeight, titleNavigation.width + 8,
-                                             width - (captionButtonWidth * 3),
-                                             width - (captionButtonWidth * 2), captionButtonWidth);
+        root.windowChrome.setTitleBarMetrics(titleBarHeight, titleNavigation.width + 8, width - (captionButtonWidth * 3), width - (captionButtonWidth * 2), captionButtonWidth);
     }
 
     function openTerminalSearch() {
@@ -246,8 +238,7 @@ Rectangle {
 
                 width: 94
                 height: titleNavigation.height
-                color: root.currentPage === "hosts" || hostsTitleAction.hovered || hostsTitleAction.activeFocus
-                       ? Theme.controlHover : "transparent"
+                color: root.currentPage === "hosts" || hostsTitleAction.hovered || hostsTitleAction.activeFocus ? Theme.controlHover : "transparent"
                 border.color: hostsTitleAction.activeFocus ? Theme.focus : "transparent"
                 border.width: hostsTitleAction.activeFocus ? 1 : 0
 
@@ -297,8 +288,7 @@ Rectangle {
                     required property var modelData
 
                     title: modelData.title
-                    selected: root.currentPage === "terminal"
-                              && root.controller.activeTerminalTabId === modelData.id
+                    selected: root.currentPage === "terminal" && root.controller.activeTerminalTabId === modelData.id
                     running: modelData.running
                     width: implicitWidth
                     height: titleTerminalTabs.height
@@ -314,8 +304,7 @@ Rectangle {
             Rectangle {
                 width: 36
                 height: titleNavigation.height
-                color: titleNewTabAction.hovered || titleNewTabAction.activeFocus
-                       ? Theme.controlHover : "transparent"
+                color: titleNewTabAction.hovered || titleNewTabAction.activeFocus ? Theme.controlHover : "transparent"
                 border.color: titleNewTabAction.activeFocus ? Theme.focus : "transparent"
                 border.width: titleNewTabAction.activeFocus ? 1 : 0
 
@@ -383,7 +372,7 @@ Rectangle {
 
         Rectangle {
             Layout.fillHeight: true
-            Layout.preferredWidth: visible ? 210 : 0
+            Layout.preferredWidth: visible ? (root.width < Theme.narrowWindowWidth ? Theme.navigationWidthCompact : Theme.navigationWidth) : 0
             visible: root.currentPage === "hosts" || root.currentPage === "settings"
             color: root.panelColor
 
@@ -581,8 +570,7 @@ Rectangle {
                                             event.accepted = true;
                                         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                                             searchDelay.stop();
-                                            root.controller.searchTerminal(text, (event.modifiers & Qt.ShiftModifier) !== 0,
-                                                                           caseSensitiveButton.checked);
+                                            root.controller.searchTerminal(text, (event.modifiers & Qt.ShiftModifier) !== 0, caseSensitiveButton.checked);
                                             event.accepted = true;
                                         }
                                     }
@@ -591,9 +579,7 @@ Rectangle {
                                 Text {
                                     Layout.preferredWidth: 46
                                     horizontalAlignment: Text.AlignHCenter
-                                    text: root.controller.terminalSearchTotal > 0
-                                          ? root.controller.terminalSearchCurrent + "/" + root.controller.terminalSearchTotal
-                                          : "0/0"
+                                    text: root.controller.terminalSearchTotal > 0 ? root.controller.terminalSearchCurrent + "/" + root.controller.terminalSearchTotal : "0/0"
                                     color: root.mutedColor
                                     font.family: Theme.terminalFont
                                     font.pixelSize: 10
@@ -621,8 +607,7 @@ Rectangle {
                                         name: "chevron-up"
                                         color: root.textColor
                                     }
-                                    onClicked: root.controller.searchTerminal(searchField.text, true,
-                                                                              caseSensitiveButton.checked)
+                                    onClicked: root.controller.searchTerminal(searchField.text, true, caseSensitiveButton.checked)
                                     Accessible.name: "Previous match"
                                 }
 
@@ -633,8 +618,7 @@ Rectangle {
                                         name: "chevron-down"
                                         color: root.textColor
                                     }
-                                    onClicked: root.controller.searchTerminal(searchField.text, false,
-                                                                              caseSensitiveButton.checked)
+                                    onClicked: root.controller.searchTerminal(searchField.text, false, caseSensitiveButton.checked)
                                     Accessible.name: "Next match"
                                 }
 
@@ -762,8 +746,7 @@ Rectangle {
 
                             interval: 250
                             repeat: false
-                            onTriggered: root.controller.searchTerminal(searchField.text, false,
-                                                                        caseSensitiveButton.checked)
+                            onTriggered: root.controller.searchTerminal(searchField.text, false, caseSensitiveButton.checked)
                         }
                     }
                 }

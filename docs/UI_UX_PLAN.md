@@ -1,6 +1,6 @@
 # V1 UI/UX convergence plan
 
-Status: planned
+Status: in progress
 
 ## Goal
 
@@ -15,6 +15,19 @@ pass will refine.
 
 The accepted V1 tokens, component-state contract, accessibility rules, and
 performance boundary are defined in [UI_DESIGN_SYSTEM.md](UI_DESIGN_SYSTEM.md).
+
+## Current convergence evidence
+
+- The shell, terminal tabs, host vault, settings, prompts, fields, status
+  messages, and recovery states use the shared semantic theme and component
+  foundations.
+- The real-window responsive-layout gate passes in dynamic Debug and static
+  Release. It exercises the minimum `500x360` window and the regular
+  `1120x800` window. Hosts and Settings switch between compact single-column
+  and regular two-column layouts with positive bounded content widths.
+- The gate captures ztermy-owned Hosts and Settings screenshots for both
+  breakpoints. Dark-theme review confirmed readable native control labels,
+  stable page insets, and no clipped top-level actions.
 
 ## Direction
 

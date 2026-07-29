@@ -59,4 +59,15 @@ QtObject {
     readonly property int radiusControl: 8
     readonly property int radiusPanel: 12
     readonly property int motionFast: animationsEnabled ? 120 : 0
+
+    readonly property int spacingDense: 4
+    readonly property int spacingControl: 8
+    readonly property int spacingRelated: 12
+    readonly property int spacingSection: 16
+    readonly property int cardInset: 20
+    readonly property int pageInset: 28
+    readonly property int pageInsetCompact: 16
+    readonly property int navigationWidth: 210
+    readonly property int navigationWidthCompact: 164
+    readonly property int narrowWindowWidth: 760
 }
