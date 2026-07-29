@@ -25,6 +25,28 @@ an independent visual identity after the main workflows are stable.
 8. Stable configuration, logging, diagnostics, portable packaging, and
    installer behavior
 
+## Delivery sequence
+
+V1 is developed in overlapping stages rather than treating visual design as
+an afterthought:
+
+1. Establish the native window, terminal renderer, SSH boundaries, and test
+   infrastructure.
+2. Complete the primary local-terminal, remote-terminal, host-vault, tab, and
+   search workflows with functional UI.
+3. Converge those workflows on the Netcatty-inspired information hierarchy
+   and the ztermy design system, using independent QML, icons, copy, and
+   assets.
+4. Refine native Windows behavior, accessibility, DPI handling, interaction
+   feedback, empty/error/loading states, and performance.
+5. Finish settings, installer behavior, distribution checks, and the complete
+   Windows 11 V1 acceptance pass.
+
+Stages 2 and 3 deliberately overlap: new workflows should use shared visual
+tokens and components, while the dedicated convergence pass corrects
+cross-screen hierarchy and consistency before release packaging is considered
+finished. See [UI_UX_PLAN.md](UI_UX_PLAN.md).
+
 ## Native window requirements
 
 - Fully custom visual title bar
@@ -63,4 +85,3 @@ Not allowed:
 - Copy source, stylesheets, icons, screenshots, themes, text, or branding.
 - Depend on undocumented internal behavior as a compatibility contract.
 - Claim pixel-perfect compatibility or affiliation.
-
