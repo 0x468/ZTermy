@@ -21,6 +21,7 @@ Rectangle {
     property string pendingConnectName: ""
     property string pendingConnectAuthentication: ""
     property bool statusIsError: false
+    property bool editorExpanded: controller.hostProfiles.length === 0
     readonly property var filteredGroups: buildFilteredGroups(controller.hostProfiles, searchField.text)
     readonly property int filteredProfileCount: {
         let count = 0;
@@ -116,7 +117,15 @@ Rectangle {
         credentialField.text = "";
     }
 
+    function beginNewProfile() {
+        clearEditor();
+        editorExpanded = true;
+        showStatus("Create a reusable SSH profile or connect without saving.", false);
+        nameField.forceActiveFocus();
+    }
+
     function editProfile(profile) {
+        editorExpanded = true;
         editingProfileId = profile.id;
         nameField.text = profile.name;
         groupField.text = profile.group;
@@ -138,6 +147,7 @@ Rectangle {
         }
         if (controller.saveHostProfile(editingProfileId, nameField.text, hostField.text, portNumber(), usernameField.text, authenticationToken(), keyPathField.text, passphraseRequiredBox.checked, groupField.text)) {
             clearEditor();
+            editorExpanded = false;
             showStatus("Profile saved. Passwords and key passphrases are never stored.", false);
         } else {
             showStatus("The profile could not be saved.", true);
@@ -204,75 +214,97 @@ Rectangle {
 
             x: Math.max(28, (scrollView.availableWidth - width) / 2)
             y: 38
-            width: Math.min(720, scrollView.availableWidth - 56)
-            spacing: 18
+            width: Math.min(1040, scrollView.availableWidth - 56)
+            spacing: 16
 
-            Text {
-                text: "SSH hosts"
-                color: pane.textColor
-                font.family: "Segoe UI Variable"
-                font.pixelSize: 24
-                font.weight: Font.DemiBold
-            }
-
-            Text {
+            RowLayout {
                 Layout.fillWidth: true
-                text: "Save connection details for quick access. ztermy stores only non-secret profile fields; passwords and private-key passphrases stay in memory for the active attempt."
-                color: pane.mutedColor
-                wrapMode: Text.WordWrap
-                font.family: "Segoe UI Variable"
-                font.pixelSize: 13
+                spacing: 12
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 4
+
+                    Text {
+                        text: "Host Vault"
+                        color: pane.textColor
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textTitle
+                        font.weight: Font.DemiBold
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: "Keep connection details organized without storing passwords or private-key passphrases."
+                        color: pane.mutedColor
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textBody
+                    }
+                }
+
+                Button {
+                    text: "+  New host"
+                    Accessible.name: "Create a new SSH host profile"
+                    palette.button: pane.accentColor
+                    palette.buttonText: Theme.accentText
+                    font.weight: Font.DemiBold
+                    onClicked: pane.beginNewProfile()
+                }
             }
 
             RowLayout {
                 Layout.fillWidth: true
-                Layout.topMargin: 6
+                Layout.topMargin: 8
+                spacing: 10
 
-                Text {
-                    text: "Saved hosts"
-                    color: pane.textColor
-                    font.family: "Segoe UI Variable"
-                    font.pixelSize: 16
-                    font.weight: Font.DemiBold
-                }
+                TextField {
+                    id: searchField
 
-                Item {
                     Layout.fillWidth: true
+                    placeholderText: "Search hosts, groups, users, or addresses"
+                    Accessible.name: "Search saved SSH hosts"
+                    selectByMouse: true
+                    leftPadding: 14
+                    rightPadding: 14
                 }
 
                 Text {
                     text: pane.filteredProfileCount + (pane.filteredProfileCount === 1 ? " profile" : " profiles")
                     color: pane.mutedColor
-                    font.family: "Segoe UI Variable"
-                    font.pixelSize: 12
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.textLabel
                 }
-            }
-
-            TextField {
-                id: searchField
-
-                Layout.fillWidth: true
-                placeholderText: "Search by name, group, host, username, port, or authentication"
-                Accessible.name: "Search saved SSH hosts"
-                selectByMouse: true
-                leftPadding: 14
-                rightPadding: 14
             }
 
             Rectangle {
                 Layout.fillWidth: true
-                implicitHeight: 72
+                implicitHeight: 92
                 visible: pane.controller.hostProfiles.length === 0
-                radius: 9
+                radius: Theme.radiusPanel
                 color: pane.raisedColor
                 border.color: pane.borderColor
 
-                Text {
+                Column {
                     anchors.centerIn: parent
-                    text: "No saved hosts yet. Complete the form below and choose Save profile."
-                    color: pane.mutedColor
-                    font.family: "Segoe UI Variable"
-                    font.pixelSize: 12
+                    spacing: 5
+
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: "No saved hosts yet"
+                        color: pane.textColor
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textBody
+                        font.weight: Font.DemiBold
+                    }
+
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: "Add a host below to make future connections one click away."
+                        color: pane.mutedColor
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
+                    }
                 }
             }
 
@@ -280,7 +312,7 @@ Rectangle {
                 Layout.fillWidth: true
                 implicitHeight: 72
                 visible: pane.controller.hostProfiles.length > 0 && pane.filteredProfileCount === 0
-                radius: 9
+                radius: Theme.radiusPanel
                 color: pane.raisedColor
                 border.color: pane.borderColor
 
@@ -324,9 +356,13 @@ Rectangle {
 
                             Layout.fillWidth: true
                             implicitHeight: profileRow.implicitHeight + 24
-                            radius: 9
-                            color: pane.raisedColor
-                            border.color: pane.borderColor
+                            radius: Theme.radiusControl
+                            color: cardHover.hovered ? Theme.controlHover : pane.raisedColor
+                            border.color: cardHover.hovered ? Theme.borderStrong : pane.borderColor
+
+                            HoverHandler {
+                                id: cardHover
+                            }
 
                             RowLayout {
                                 id: profileRow
@@ -351,9 +387,9 @@ Rectangle {
                                     }
                                 }
 
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 2
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 2
 
                                     Text {
                                         Layout.fillWidth: true
@@ -371,7 +407,24 @@ Rectangle {
                                         color: pane.mutedColor
                                         elide: Text.ElideMiddle
                                         font.family: "Cascadia Mono"
-                                        font.pixelSize: 11
+                                            font.pixelSize: 11
+                                        }
+                                    }
+
+                                Rectangle {
+                                    Layout.preferredWidth: authenticationLabel.implicitWidth + 16
+                                    Layout.preferredHeight: 24
+                                    radius: 12
+                                    color: Theme.controlBackground
+                                    border.color: Theme.border
+
+                                    Text {
+                                        id: authenticationLabel
+                                        anchors.centerIn: parent
+                                        text: profileCard.modelData.authentication === "password" ? "Password" : "Key"
+                                        color: Theme.textSoft
+                                        font.family: Theme.uiFont
+                                        font.pixelSize: Theme.textLabel
                                     }
                                 }
 
@@ -421,7 +474,8 @@ Rectangle {
                 Layout.fillWidth: true
                 Layout.topMargin: 10
                 implicitHeight: editorColumn.implicitHeight + 40
-                radius: 10
+                visible: pane.editorExpanded
+                radius: Theme.radiusPanel
                 color: pane.raisedColor
                 border.color: pane.borderColor
 
@@ -641,12 +695,12 @@ Rectangle {
                         Layout.fillWidth: true
 
                         Button {
-                            visible: pane.editingProfileId.length > 0
-                            text: "Cancel editing"
-                            Accessible.name: "Cancel profile editing"
+                            text: "Cancel"
+                            Accessible.name: "Close host profile editor"
                             onClicked: {
                                 pane.clearEditor();
-                                pane.showStatus("Editing cancelled.", false);
+                                pane.editorExpanded = false;
+                                pane.showStatus("Profile editor closed.", false);
                             }
                         }
 

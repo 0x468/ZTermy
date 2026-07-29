@@ -1,12 +1,32 @@
 # Host Vault manual verification
 
-Run the dynamic Debug build on Windows 11 and open **Hosts** from the sidebar.
+Run the dynamic Debug build on Windows 11 and open **Hosts** from the custom
+title bar.
 Use non-sensitive test endpoints and never place a real password or passphrase
 in the profile name, group, host, username, or key-path fields.
 
+## Layout and editor
+
+1. With no profiles saved, verify the empty state and expanded profile editor.
+2. Save the first profile and select **New host**.
+3. Cancel the new profile, then edit an existing profile.
+4. Resize the window from its minimum size through maximized.
+
+Expected:
+
+- Search is the primary control and the visible profile count stays aligned.
+- The empty state explains the next action without obscuring the editor.
+- Saving or cancelling collapses the editor; **New host** and **Edit** expand
+  it with focus in the profile-name field.
+- Host cards show endpoint and authentication type without exposing secrets.
+- Hovering a card changes only its color and border; surrounding content does
+  not move.
+- Controls remain reachable and the page scrolls instead of clipping at small
+  window sizes.
+
 ## Create and group
 
-1. Save two private-key profiles in different groups.
+1. Select **New host** and save two private-key profiles in different groups.
 2. Save a password profile in one of the same groups.
 3. Leave the group empty on a fourth profile.
 
@@ -28,7 +48,7 @@ Expected:
 
 - Matching is case-insensitive across every listed field.
 - Only matching cards remain and the visible counter updates.
-- A no-results message appears without hiding the editor.
+- A no-results message appears without changing editor state.
 - Clearing the query restores every group and profile.
 
 ## Edit and copy
