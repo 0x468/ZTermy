@@ -3,14 +3,47 @@
 #include "ui/terminal/TerminalItem.h"
 
 #include <QDir>
+#include <QLoggingCategory>
 #include <QStandardPaths>
+#include <QUuid>
+#include <QVariantMap>
 
+#include <algorithm>
 #include <system_error>
+
+Q_LOGGING_CATEGORY(appControllerLog, "ztermy.application.controller")
+
+namespace
+{
+
+[[nodiscard]] QString applicationDataFile(const QString &fileName)
+{
+    return QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath(fileName);
+}
+
+[[nodiscard]] std::string utf8String(const QString &value)
+{
+    const QByteArray bytes = value.toUtf8();
+    return {bytes.constData(), static_cast<std::size_t>(bytes.size())};
+}
+
+[[nodiscard]] QString utf8QString(const std::string &value)
+{
+    return QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size()));
+}
+
+} // namespace
 
 namespace ztermy
 {
 
-AppController::AppController(QObject *parent) : QObject(parent)
+AppController::AppController(QObject *parent)
+    : AppController(applicationDataFile(QStringLiteral("profiles.json")), parent)
+{
+}
+
+AppController::AppController(QString profileStorePath, QObject *parent)
+    : QObject(parent), m_profileStore(std::move(profileStorePath))
 {
     QObject::connect(&m_localSession, &terminal::LocalTerminalSession::snapshotReady, this,
                      [this](const terminal::TerminalSnapshotPtr &snapshot) {
@@ -65,6 +98,7 @@ AppController::AppController(QObject *parent) : QObject(parent)
                              m_terminal->setStatusText(QStringLiteral("SSH host key changed; connection blocked"));
                          }
                      });
+    loadHostProfiles();
 }
 
 AppController::~AppController()
@@ -131,6 +165,27 @@ QString AppController::defaultPrivateKeyPath() const
                                         .filePath(QStringLiteral(".ssh/id_ed25519")));
 }
 
+QVariantList AppController::hostProfiles() const
+{
+    QVariantList result;
+    result.reserve(static_cast<qsizetype>(m_profiles.size()));
+    for (const ssh::SshProfile &profile : m_profiles)
+    {
+        result.append(QVariantMap{
+            {QStringLiteral("id"), utf8QString(profile.id)},
+            {QStringLiteral("name"), utf8QString(profile.name)},
+            {QStringLiteral("host"), utf8QString(profile.host)},
+            {QStringLiteral("port"), profile.port},
+            {QStringLiteral("username"), utf8QString(profile.username)},
+            {QStringLiteral("authentication"), profile.authentication == ssh::SshAuthenticationMethod::PrivateKey
+                                                   ? QStringLiteral("private-key")
+                                                   : QStringLiteral("password")},
+            {QStringLiteral("privateKeyPath"), utf8QString(profile.privateKeyPath)},
+        });
+    }
+    return result;
+}
+
 void AppController::startLocalTerminal()
 {
     clearHostKeyPrompt();
@@ -180,13 +235,12 @@ bool AppController::connectPrivateKey(const QString &host, const int port, const
         m_terminal->setStatusText(QStringLiteral("Starting SSH connection..."));
     }
 
-    const QString dataDirectory = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
     const ssh::SshPrivateKeyProfile profile{
         .host = host.trimmed(),
         .port = static_cast<std::uint16_t>(port),
         .username = username,
         .privateKeyPath = privateKeyPath,
-        .knownHostsPath = QDir(dataDirectory).filePath(QStringLiteral("known_hosts.json")),
+        .knownHostsPath = applicationDataFile(QStringLiteral("known_hosts.json")),
     };
     const std::error_code error = m_sshSession.start(profile, {.columns = 100, .rows = 30});
     if (error)
@@ -202,6 +256,83 @@ bool AppController::connectPrivateKey(const QString &host, const int port, const
         m_terminal->requestCurrentSize();
     }
     return true;
+}
+
+bool AppController::savePrivateKeyProfile(const QString &id, const QString &name, const QString &host, const int port,
+                                          const QString &username, const QString &privateKeyPath)
+{
+    const QString normalizedName = name.trimmed();
+    const QString normalizedHost = host.trimmed();
+    const QString normalizedUsername = username.trimmed();
+    const QString normalizedPrivateKeyPath = privateKeyPath.trimmed();
+    const QString profileId = id.isEmpty() ? QUuid::createUuid().toString(QUuid::WithoutBraces) : id.trimmed();
+
+    const ssh::SshProfile profile{
+        .id = utf8String(profileId),
+        .name = utf8String(normalizedName),
+        .host = utf8String(normalizedHost),
+        .port = port > 0 && port <= 65535 ? static_cast<std::uint16_t>(port) : std::uint16_t{0},
+        .username = utf8String(normalizedUsername),
+        .authentication = ssh::SshAuthenticationMethod::PrivateKey,
+        .privateKeyPath = utf8String(normalizedPrivateKeyPath),
+    };
+    if (!ssh::validSshProfile(profile))
+    {
+        return false;
+    }
+
+    std::vector<ssh::SshProfile> updated = m_profiles;
+    const auto existing = std::ranges::find(updated, profile.id, &ssh::SshProfile::id);
+    if (existing == updated.end())
+    {
+        updated.push_back(profile);
+    }
+    else
+    {
+        *existing = profile;
+    }
+
+    if (!m_profileStore.save(updated))
+    {
+        qCWarning(appControllerLog) << "Unable to persist SSH profiles";
+        return false;
+    }
+    m_profiles = std::move(updated);
+    emit hostProfilesChanged();
+    return true;
+}
+
+bool AppController::deleteHostProfile(const QString &id)
+{
+    const std::string profileId = utf8String(id);
+    std::vector<ssh::SshProfile> updated = m_profiles;
+    const auto profile = std::ranges::find(updated, profileId, &ssh::SshProfile::id);
+    if (profile == updated.end())
+    {
+        return false;
+    }
+    updated.erase(profile);
+
+    if (!m_profileStore.save(updated))
+    {
+        qCWarning(appControllerLog) << "Unable to persist SSH profiles after deletion";
+        return false;
+    }
+    m_profiles = std::move(updated);
+    emit hostProfilesChanged();
+    return true;
+}
+
+bool AppController::connectHostProfile(const QString &id)
+{
+    const std::string profileId = utf8String(id);
+    const auto profile = std::ranges::find(m_profiles, profileId, &ssh::SshProfile::id);
+    if (profile == m_profiles.end() || profile->authentication != ssh::SshAuthenticationMethod::PrivateKey)
+    {
+        return false;
+    }
+    return connectPrivateKey(utf8QString(profile->host), profile->port, utf8QString(profile->username),
+                             utf8QString(profile->privateKeyPath));
 }
 
 void AppController::acceptHostKey(const bool remember)
@@ -300,6 +431,17 @@ void AppController::clearHostKeyPrompt()
     m_hostKeyAlgorithm.clear();
     m_hostKeyFingerprint.clear();
     emit hostKeyPromptChanged();
+}
+
+void AppController::loadHostProfiles()
+{
+    auto profiles = m_profileStore.load();
+    if (!profiles)
+    {
+        qCWarning(appControllerLog) << "Unable to load SSH profiles; starting with an empty profile list";
+        return;
+    }
+    m_profiles = std::move(*profiles);
 }
 
 } // namespace ztermy

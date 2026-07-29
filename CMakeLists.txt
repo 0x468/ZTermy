@@ -114,11 +114,15 @@ add_library(ztermy_ssh_domain STATIC
     src/domain/ssh/SshConnectionState.h
     src/domain/ssh/SshHostKey.cpp
     src/domain/ssh/SshHostKey.h
+    src/domain/ssh/SshProfile.cpp
+    src/domain/ssh/SshProfile.h
 )
 
 add_library(ztermy_ssh_persistence STATIC
     src/infrastructure/ssh/KnownHostsStore.cpp
     src/infrastructure/ssh/KnownHostsStore.h
+    src/infrastructure/ssh/SshProfileStore.cpp
+    src/infrastructure/ssh/SshProfileStore.h
 )
 
 target_compile_features(ztermy_ssh_domain PUBLIC cxx_std_23)
@@ -263,6 +267,7 @@ if(ZTERMY_STATIC_BUILD)
 endif()
 
 target_link_libraries(ztermy PRIVATE
+    ztermy_ssh_persistence
     ztermy_ssh_session
     ztermy_terminal_session
     ztermy_terminal_transport
@@ -469,6 +474,27 @@ if(BUILD_TESTING)
 
     add_test(NAME known-hosts-store COMMAND ztermy_known_hosts_store_tests)
 
+    qt_add_executable(ztermy_ssh_profile_store_tests
+        tests/ssh_profile_store_tests.cpp
+    )
+
+    target_compile_features(ztermy_ssh_profile_store_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ssh_profile_store_tests PRIVATE
+        ztermy_ssh_persistence
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ssh_profile_store_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ssh-profile-store COMMAND ztermy_ssh_profile_store_tests)
+
     qt_add_executable(ztermy_windows_tcp_socket_tests
         tests/windows_tcp_socket_tests.cpp
     )
@@ -596,6 +622,39 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME local-terminal-session COMMAND ztermy_local_terminal_session_tests)
+
+    qt_add_executable(ztermy_app_controller_tests
+        tests/app_controller_tests.cpp
+        src/application/AppController.cpp
+        src/application/AppController.h
+    )
+
+    target_compile_features(ztermy_app_controller_tests PRIVATE cxx_std_23)
+    target_include_directories(ztermy_app_controller_tests PRIVATE src)
+    target_compile_definitions(ztermy_app_controller_tests PRIVATE
+        NOMINMAX
+        UNICODE
+        WIN32_LEAN_AND_MEAN
+        _UNICODE
+    )
+    target_link_libraries(ztermy_app_controller_tests PRIVATE
+        ztermy_ssh_persistence
+        ztermy_ssh_session
+        ztermy_terminal_session
+        ztermy_terminal_ui
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_app_controller_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME app-controller COMMAND ztermy_app_controller_tests)
 
     qt_add_executable(ztermy_terminal_item_tests
         tests/terminal_item_tests.cpp
