@@ -43,6 +43,11 @@ Only runtime evidence can mark a platform or UI item complete.
 - Automated SSH coverage preserves distinct failure state and user-visible
   status contracts for name resolution, refusal, timeout, transport, host-key,
   authentication, channel, remote-close, cancellation, and protocol failures.
+- The opt-in real-host SSH input gate processed 120 events at 5 ms intervals.
+  Dynamic Debug measured P95 `250 us`, P99 `250 us`, and maximum `182 us`;
+  static Release measured P95 `100 us`, P99 `250 us`, and maximum `126 us`.
+  Both runs used the interruptible command wake path and remained below the
+  16 ms V1 application-side queue-latency target.
 - Runtime credential-hygiene coverage sends unique password and passphrase
   sentinels into failing SSH worker requests and verifies that neither emitted
   statuses nor captured Qt logs contain them. Profile persistence coverage
@@ -83,7 +88,7 @@ procedures and expected results.
 ## Terminal
 
 - [x] Local input dispatch P95 is below 16 ms
-- [ ] SSH input adds no application-side batching delay
+- [x] SSH input adds no application-side batching delay
 - [ ] Large output does not freeze the window
 - [ ] ANSI colors, alternate screen, cursor, clear, and resize are correct
 - [ ] CJK, wide characters, combining marks, emoji, and IME are correct

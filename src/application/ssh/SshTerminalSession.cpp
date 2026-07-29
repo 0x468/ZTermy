@@ -175,6 +175,11 @@ SshTerminalSession::~SshTerminalSession()
     stop();
 }
 
+diagnostics::LatencySummary SshTerminalSession::inputQueueLatencySummary() const noexcept
+{
+    return m_inputQueueLatency.summary();
+}
+
 std::error_code SshTerminalSession::start(SshConnectionRequest request, const terminal::TerminalGeometry geometry)
 {
     stop();

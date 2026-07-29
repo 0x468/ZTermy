@@ -85,6 +85,7 @@ private slots:
     void doesNotExposeCredentialsInStatusOrLogs();
     void ignoresTerminalInteractionWhileDisconnected();
     void connectsAfterExplicitHostKeyConfirmation();
+    void measuresInteractiveInputQueueLatency();
     void survivesRepeatedConnectDisconnectCycles();
 };
 
@@ -357,6 +358,71 @@ void SshTerminalSessionTests::connectsAfterExplicitHostKeyConfirmation()
     QCOMPARE(confirmationSpy.count(), 0);
     QTRY_VERIFY_WITH_TIMEOUT(snapshotSpy.count() > 0, 5s);
     session.stop();
+}
+
+void SshTerminalSessionTests::measuresInteractiveInputQueueLatency()
+{
+    if (qgetenv("ZTERMY_TEST_SSH_LATENCY") != QByteArrayLiteral("1"))
+    {
+        QSKIP("Set ZTERMY_TEST_SSH_LATENCY=1 to run the SSH input latency gate");
+    }
+
+    const QByteArray host = qgetenv("ZTERMY_TEST_SSH_HOST");
+    const QByteArray username = qgetenv("ZTERMY_TEST_SSH_USERNAME");
+    const QByteArray privateKey = qgetenv("ZTERMY_TEST_SSH_PRIVATE_KEY");
+    const QByteArray expectedFingerprint = qgetenv("ZTERMY_TEST_SSH_EXPECTED_FINGERPRINT");
+    if (host.isEmpty() || username.isEmpty() || privateKey.isEmpty() || expectedFingerprint.isEmpty())
+    {
+        QSKIP("Set the real-host private-key gate variables to run the SSH input latency gate");
+    }
+
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+
+    ztermy::ssh::SshTerminalSession session;
+    QSignalSpy confirmationSpy(&session, &ztermy::ssh::SshTerminalSession::hostKeyConfirmationRequired);
+    QSignalSpy runningSpy(&session, &ztermy::ssh::SshTerminalSession::runningChanged);
+    const auto observedRunningState = [&runningSpy](const bool expected) {
+        return std::ranges::any_of(runningSpy, [expected](const QList<QVariant> &arguments) {
+            return !arguments.isEmpty() && arguments.constFirst().toBool() == expected;
+        });
+    };
+
+    ztermy::ssh::SshConnectionRequest request{
+        .host = QString::fromUtf8(host),
+        .port = 22,
+        .username = QString::fromUtf8(username),
+        .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
+        .privateKeyPath = QString::fromUtf8(privateKey),
+        .knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json")),
+    };
+    QVERIFY(!session.start(std::move(request), {.columns = 80, .rows = 24}));
+    QTRY_COMPARE_WITH_TIMEOUT(confirmationSpy.count(), 1, 10s);
+    QCOMPARE(confirmationSpy.constFirst().at(1).toString(), QString::fromLatin1(expectedFingerprint));
+    session.confirmHostKey(true);
+    QTRY_VERIFY_WITH_TIMEOUT(observedRunningState(true), 15s);
+
+    constexpr std::uint64_t sampleCount = 120;
+    constexpr int simulatedKeyIntervalMilliseconds = 5;
+    for (std::uint64_t sample = 0; sample < sampleCount; ++sample)
+    {
+        session.queueInput(QByteArrayLiteral(" "));
+        QTest::qWait(simulatedKeyIntervalMilliseconds);
+    }
+
+    QTRY_VERIFY_WITH_TIMEOUT(session.inputQueueLatencySummary().count >= sampleCount, 5s);
+    const ztermy::diagnostics::LatencySummary latency = session.inputQueueLatencySummary();
+    QVERIFY2(latency.p95UpperBoundMicroseconds <= 16'000,
+             qPrintable(QStringLiteral("SSH input queue P95 was %1 us across %2 samples")
+                            .arg(latency.p95UpperBoundMicroseconds)
+                            .arg(latency.count)));
+    qInfo().noquote() << "SSH input latency gate:"
+                      << "samples=" << latency.count << "p50Us=" << latency.p50UpperBoundMicroseconds
+                      << "p95Us=" << latency.p95UpperBoundMicroseconds << "p99Us=" << latency.p99UpperBoundMicroseconds
+                      << "maxUs=" << latency.maxMicroseconds;
+
+    session.stop();
+    QTRY_VERIFY_WITH_TIMEOUT(observedRunningState(false), 5s);
 }
 
 void SshTerminalSessionTests::survivesRepeatedConnectDisconnectCycles()

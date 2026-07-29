@@ -168,9 +168,29 @@ The default, network-independent coverage also:
 
 ## Interactive input latency gate
 
-Use a saved test profile or an interactively supplied credential. Do not put a
-password, passphrase, or terminal command in a command-line argument,
-environment variable, test report, or log.
+The opt-in real-host test accepts only host identity, an independently verified
+fingerprint, and a private-key file path. Never put a password, passphrase,
+private-key content, or terminal command in an environment variable, test
+report, or log.
+
+```powershell
+$env:ZTERMY_TEST_SSH_LATENCY = "1"
+$env:ZTERMY_TEST_SSH_HOST = "server.example.test"
+$env:ZTERMY_TEST_SSH_USERNAME = "test-user"
+$env:ZTERMY_TEST_SSH_PRIVATE_KEY = "$HOME\.ssh\id_ed25519"
+$env:ZTERMY_TEST_SSH_EXPECTED_FINGERPRINT = "SHA256:verified-value"
+ctest --test-dir build/msvc-dynamic-debug `
+  -R "^ssh-terminal-session$" --output-on-failure
+Remove-Item Env:ZTERMY_TEST_SSH_LATENCY
+```
+
+The gate connects through the real SSH worker and enqueues 120 single-byte
+events at 5 ms intervals. It waits until all samples have been dequeued and
+requires `inputQueueP95Us` to be no greater than `16000`. This measures the
+application wake and scheduling path without depending on remote echo time.
+
+For an interactive cross-check, use a saved test profile or an interactively
+supplied credential:
 
 1. Start the dynamic Debug build and connect to a low-latency test SSH host.
 2. Type and edit enough commands to enqueue at least 100 individual key-input

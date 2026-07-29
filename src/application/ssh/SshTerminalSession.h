@@ -56,6 +56,7 @@ public:
 
     [[nodiscard]] std::error_code start(SshConnectionRequest request, terminal::TerminalGeometry geometry);
     void stop() noexcept;
+    [[nodiscard]] diagnostics::LatencySummary inputQueueLatencySummary() const noexcept;
 
 public slots:
     void confirmHostKey(bool remember);
