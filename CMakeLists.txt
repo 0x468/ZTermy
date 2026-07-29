@@ -45,6 +45,31 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(ghostty)
 
+FetchContent_Declare(
+    libssh2
+    URL https://github.com/libssh2/libssh2/releases/download/libssh2-1.11.1/libssh2-1.11.1.tar.gz
+    URL_HASH SHA256=d9ec76cbe34db98eec3539fe2c899d26b0c837cb3eb466a56b0f109cabf658f7
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    SYSTEM
+    EXCLUDE_FROM_ALL
+)
+
+function(ztermy_add_libssh2)
+    set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+    set(CMAKE_POLICY_DEFAULT_CMP0126 NEW)
+    set(CMAKE_EXPORT_NO_PACKAGE_REGISTRY ON)
+    set(BUILD_TESTING OFF)
+    set(BUILD_EXAMPLES OFF)
+    set(BUILD_STATIC_LIBS ON)
+    set(BUILD_SHARED_LIBS OFF)
+    set(CRYPTO_BACKEND WinCNG)
+    set(ENABLE_ECDSA_WINCNG ON)
+    set(ENABLE_DEBUG_LOGGING OFF)
+    FetchContent_MakeAvailable(libssh2)
+endfunction()
+
+ztermy_add_libssh2()
+
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Quick QuickControls2)
 
 qt_standard_project_setup(REQUIRES 6.8)
@@ -62,6 +87,15 @@ target_compile_definitions(ztermy_terminal_transport PRIVATE
     WIN32_LEAN_AND_MEAN
     _UNICODE
 )
+
+add_library(ztermy_ssh_transport STATIC
+    src/infrastructure/ssh/Libssh2Runtime.cpp
+    src/infrastructure/ssh/Libssh2Runtime.h
+)
+
+target_compile_features(ztermy_ssh_transport PUBLIC cxx_std_23)
+target_include_directories(ztermy_ssh_transport PUBLIC src)
+target_link_libraries(ztermy_ssh_transport PRIVATE libssh2::libssh2_static)
 
 add_library(ztermy_terminal_engine STATIC
     src/domain/terminal/GhosttyTerminalEngine.cpp
@@ -182,6 +216,13 @@ if(MSVC)
         /Zc:__cplusplus
     )
 
+    target_compile_options(ztermy_ssh_transport PRIVATE
+        /permissive-
+        /utf-8
+        /W4
+        /Zc:__cplusplus
+    )
+
     target_compile_options(ztermy_terminal_session PRIVATE
         /permissive-
         /utf-8
@@ -248,6 +289,27 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME conpty-process COMMAND ztermy_conpty_process_tests)
+
+    qt_add_executable(ztermy_ssh_runtime_tests
+        tests/ssh_runtime_tests.cpp
+    )
+
+    target_compile_features(ztermy_ssh_runtime_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ssh_runtime_tests PRIVATE
+        ztermy_ssh_transport
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ssh_runtime_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ssh-runtime COMMAND ztermy_ssh_runtime_tests)
 
     qt_add_executable(ztermy_terminal_engine_tests
         tests/terminal_engine_tests.cpp

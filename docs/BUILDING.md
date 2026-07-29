@@ -93,6 +93,20 @@ built with `ReleaseFast` in application Debug builds because its Zig Debug
 configuration is prohibitively slow. Release presets receive the equivalent
 optimization flag from Ghostty's CMake wrapper.
 
+## libssh2
+
+The SSH transport builds the official libssh2 1.11.1 release archive as a
+static library. CMake verifies its SHA-256 before extraction. The initial
+Windows integration uses WinCNG with Windows 10+ ECDSA support enabled, so the
+developer and static release builds do not require a separate OpenSSL runtime.
+libssh2 examples, upstream tests, shared libraries, and debug protocol logging
+are disabled; ztermy tests exercise the adapter boundary.
+
+The WinCNG choice remains subject to the real-host key-algorithm matrix in
+[ADR 0003](adr/0003-libssh2-transport.md). If it cannot cover the modern key
+types required for V1, the pinned libssh2 integration will move to a pinned
+OpenSSL 3 backend before release.
+
 ## clangd
 
 The default clangd compilation database is:
