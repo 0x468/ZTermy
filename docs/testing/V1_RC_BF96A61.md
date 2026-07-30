@@ -130,6 +130,17 @@ host-machine lifecycle, and decompilation confirms it contains no executable
 custom action. Installer latency may be revisited with a verbose MSI timing
 log if it reproduces on a normal clean Windows installation.
 
+The owner then completed the exact portable candidate's full terminal route.
+ANSI foreground and explicit backgrounds, cursor movement, clear, Helix
+alternate-screen restore, and repeated resize remained correct. Combining
+marks, two-cell CJK, emoji, and middle-of-line Chinese IME composition retained
+cell boundaries, shifted the suffix while uncommitted, and committed exactly
+once. Linear, reverse, rectangular, and wide-character selection copied exact
+text; multiline paste cancel/confirm, case-sensitive search, next/previous
+wrapping, history anchoring, absolute scrollbar navigation, and return to the
+live prompt all behaved as documented. No crash, assertion, stale frame,
+duplicate input, half-cell selection, or forced scroll jump occurred.
+
 ## Artifact integrity
 
 | Artifact | Bytes | Independently calculated SHA-256 |
@@ -162,9 +173,9 @@ regression evidence but do not sign off this immutable candidate.
 | Complete keyboard-only accessibility route | NOT RUN | Automated accessibility and Tab-order gate passed; full manual route remains. |
 | Normal/snapped/maximized/mixed-DPI screenshots | NOT RUN | Automated normal and synthetic-DPI captures exist; required physical matrix is incomplete. |
 | Windows artifact identity and icon clarity | PASS | Exact portable/MSI candidate showed the expected versioned ztermy identity and clear icon in Explorer and Windows shell surfaces. |
-| ANSI/alternate screen/cursor/clear/resize | NOT RUN | Exact portable candidate passed ANSI background, Helix alternate-screen, resize, and cursor-restoration checks; explicit clear/cursor-movement route remains. |
-| CJK/wide/combining/emoji/IME | NOT RUN | Exact portable candidate passed CJK and middle-of-line IME checks; combining-mark and emoji route remains. |
-| Selection/copy/paste/search/scrollback | NOT RUN | Exact portable candidate passed the primary interaction route; reverse/rectangular selection and wrapped-search route remains. |
+| ANSI/alternate screen/cursor/clear/resize | PASS | Exact portable candidate passed ANSI foreground/background, cursor movement, clear, Helix alternate-screen restore, and repeated resize. |
+| CJK/wide/combining/emoji/IME | PASS | Exact portable candidate preserved combining, wide CJK, emoji, and uncommitted/committed Chinese IME behavior. |
+| Selection/copy/paste/search/scrollback | PASS | Exact portable candidate passed linear/reverse/rectangular selection, keyboard paste, wrapped search, history anchoring, and scrollbar navigation. |
 | Real-host password authentication | PASS | Static QtTest gate: 3 passed, 0 failed, hidden input, authenticated shell, 2877 ms. |
 | Installed data survives upgrade and uninstall | PASS | Exact MSI completed per-user install, identical-MSI upgrade, persistence checks, and uninstall cleanup while retaining user data. |
 | Clean Windows 11 release without developer tools | PASS | Exact hashes, portable mode, MSI install/launch, storage isolation, and shutdown passed in fresh Sandbox; first MSI preparation was slow but completed. |
