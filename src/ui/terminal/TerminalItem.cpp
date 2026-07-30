@@ -561,7 +561,7 @@ void TerminalItem::keyPressEvent(QKeyEvent *event)
     }
     if (control && shift && event->key() == Qt::Key_V)
     {
-        const QByteArray bytes = QGuiApplication::clipboard()->text(QClipboard::Clipboard).toUtf8();
+        const QByteArray bytes = readClipboardText().toUtf8();
         if (!bytes.isEmpty())
         {
             const qsizetype lineBreaks = bytes.count('\n') > 0 ? bytes.count('\n') : bytes.count('\r');
@@ -589,6 +589,11 @@ void TerminalItem::keyPressEvent(QKeyEvent *event)
 
     emit inputGenerated(bytes);
     event->accept();
+}
+
+QString TerminalItem::readClipboardText() const
+{
+    return QGuiApplication::clipboard()->text(QClipboard::Clipboard);
 }
 
 void TerminalItem::inputMethodEvent(QInputMethodEvent *event)

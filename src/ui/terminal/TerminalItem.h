@@ -83,6 +83,7 @@ protected:
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
+    [[nodiscard]] virtual QString readClipboardText() const;
 
 private:
     void reportTerminalSize();

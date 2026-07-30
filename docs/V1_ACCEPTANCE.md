@@ -48,7 +48,10 @@ Only runtime evidence can mark a platform or UI item complete.
   screen restoration, erase and cursor visibility/style, resize, wide CJK
   cells, combining graphemes, and emoji cell widths. Terminal-item coverage
   verifies wide IME carets, suffix displacement, single commit delivery, and
-  composition behavior across resize and shutdown.
+  composition behavior across resize and shutdown. It also verifies exclusive
+  copy/paste shortcut routing, multiline confirmation, normal text input,
+  linear and rectangular drag selection, click-to-clear, copy-on-select, and
+  accumulated high-resolution wheel scrolling.
 - Automated end-to-end coverage verifies PowerShell startup, queued input,
   parsed sentinel output, and session shutdown.
 - The opt-in local ConPTY input gate processed 120 events at 5 ms intervals.

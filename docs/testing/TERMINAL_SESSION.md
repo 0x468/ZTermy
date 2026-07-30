@@ -111,6 +111,15 @@ Expected:
 - Multiline paste is encoded according to the terminal's bracketed-paste mode;
   ztermy never logs clipboard contents.
 
+The `terminal-item` test covers the UI input boundary independently of a shell:
+Ctrl+Shift+C is routed only to copy, single-line Ctrl+Shift+V is delivered
+exactly once, multiline paste still requires confirmation, normal text remains
+terminal input, drag coordinates map to terminal cells, Alt preserves
+rectangular selection, copy-on-select fires only after a drag, a click only
+clears selection, and partial wheel deltas accumulate into whole scroll steps.
+The test substitutes an in-memory clipboard reader, so automated runs neither
+overwrite nor log the user's real clipboard.
+
 ## Sustained output
 
 Run the opt-in ConPTY and Qt event-loop gate first:
