@@ -198,6 +198,84 @@ struct ResizeHitRuntimeCase
     return normalStatePassed && maximizedStatePassed && restored;
 }
 
+[[nodiscard]] bool runWindowDpiRuntimeSmoke(ztermy::NativeWindow &window, const QString &outputDirectory)
+{
+    bool expectedDprValid = false;
+    const qreal expectedDpr = qEnvironmentVariable("ZTERMY_TEST_EXPECTED_DPR").toDouble(&expectedDprValid);
+    if (!expectedDprValid || expectedDpr < 1.0 || expectedDpr > 4.0)
+    {
+        qCWarning(applicationLog) << "Window DPI smoke requires ZTERMY_TEST_EXPECTED_DPR between 1 and 4";
+        return false;
+    }
+
+    constexpr QSize logicalSize{800, 600};
+    window.resize(logicalSize);
+    window.show();
+    window.requestActivate();
+    processWindowEventsFor(std::chrono::milliseconds{350});
+
+    QQuickItem *rootObject = window.rootObject();
+    auto *maximizeButton =
+        rootObject == nullptr ? nullptr : rootObject->findChild<QQuickItem *>(QStringLiteral("maximizeCaptionButton"));
+    const HWND windowHandle = reinterpret_cast<HWND>(window.winId()); // NOLINT(performance-no-int-to-ptr)
+    RECT clientRect{};
+    if (windowHandle == nullptr || maximizeButton == nullptr || GetClientRect(windowHandle, &clientRect) == FALSE)
+    {
+        qCWarning(applicationLog) << "Window DPI smoke could not inspect the native window"
+                                  << "windowHandle=" << windowHandle << "rootObject=" << (rootObject != nullptr)
+                                  << "maximizeButton=" << (maximizeButton != nullptr);
+        return false;
+    }
+
+    const qreal actualDpr = window.devicePixelRatio();
+    const int clientWidth = clientRect.right - clientRect.left;
+    const int clientHeight = clientRect.bottom - clientRect.top;
+    const int expectedClientWidth = qRound(window.width() * actualDpr);
+    const int expectedClientHeight = qRound(window.height() * actualDpr);
+    const QImage capture = window.grabWindow();
+    const QString capturePath =
+        QDir(outputDirectory)
+            .filePath(QStringLiteral("dpi-%1.png").arg(qRound(expectedDpr * 100.0), 3, 10, QLatin1Char('0')));
+    const bool captureSaved = !capture.isNull() && capture.save(capturePath);
+
+    const QPointF maximizeCenter =
+        maximizeButton->mapToScene(QPointF{maximizeButton->width() / 2.0, maximizeButton->height() / 2.0});
+    POINT maximizeClientPoint{
+        .x = qRound(maximizeCenter.x() * actualDpr),
+        .y = qRound(maximizeCenter.y() * actualDpr),
+    };
+    const bool maximizePointMapped = ClientToScreen(windowHandle, &maximizeClientPoint) != FALSE;
+    const LRESULT maximizeHit = maximizePointMapped ? SendMessageW(windowHandle, WM_NCHITTEST, 0,
+                                                                   MAKELPARAM(static_cast<WORD>(maximizeClientPoint.x),
+                                                                              static_cast<WORD>(maximizeClientPoint.y)))
+                                                    : HTNOWHERE;
+
+    constexpr qreal dprTolerance = 0.01;
+    constexpr int pixelTolerance = 1;
+    const bool dprMatches =
+        qAbs(actualDpr - expectedDpr) <= dprTolerance && qAbs(capture.devicePixelRatio() - expectedDpr) <= dprTolerance;
+    const bool logicalSizeMatches = qAbs(window.width() - logicalSize.width()) <= pixelTolerance
+                                    && qAbs(window.height() - logicalSize.height()) <= pixelTolerance
+                                    && qAbs(rootObject->width() - window.width()) <= dprTolerance
+                                    && qAbs(rootObject->height() - window.height()) <= dprTolerance;
+    const bool clientPixelsMatch = qAbs(clientWidth - expectedClientWidth) <= pixelTolerance
+                                   && qAbs(clientHeight - expectedClientHeight) <= pixelTolerance;
+    const bool capturePixelsMatch = qAbs(capture.width() - clientWidth) <= pixelTolerance
+                                    && qAbs(capture.height() - clientHeight) <= pixelTolerance;
+    const bool maximizeHitMatches = maximizePointMapped && maximizeHit == HTMAXBUTTON;
+
+    qCInfo(applicationLog) << "Window DPI runtime check"
+                           << "expectedDpr=" << expectedDpr << "actualDpr=" << actualDpr
+                           << "captureDpr=" << capture.devicePixelRatio() << "logicalSize=" << window.size()
+                           << "clientPixels=" << QSize{clientWidth, clientHeight} << "capturePixels=" << capture.size()
+                           << "dprMatches=" << dprMatches << "logicalSizeMatches=" << logicalSizeMatches
+                           << "clientPixelsMatch=" << clientPixelsMatch << "capturePixelsMatch=" << capturePixelsMatch
+                           << "maximizeHit=" << maximizeHit << "maximizeHitMatches=" << maximizeHitMatches
+                           << "captureSaved=" << captureSaved << "capturePath=" << capturePath;
+    return dprMatches && logicalSizeMatches && clientPixelsMatch && capturePixelsMatch && maximizeHitMatches
+           && captureSaved;
+}
+
 [[nodiscard]] bool queryDwmIntAttribute(const HWND windowHandle, const DWORD attribute, int *value)
 {
     return value != nullptr && SUCCEEDED(DwmGetWindowAttribute(windowHandle, attribute, value, sizeof(*value)));
@@ -870,6 +948,7 @@ int main(int argc, char *argv[])
     const bool windowAppearanceSmoke =
         QCoreApplication::arguments().contains(QStringLiteral("--window-appearance-smoke"));
     const bool windowResizeSmoke = QCoreApplication::arguments().contains(QStringLiteral("--window-resize-smoke"));
+    const bool windowDpiSmoke = QCoreApplication::arguments().contains(QStringLiteral("--window-dpi-smoke"));
     if ((uiLayoutSmoke || uiKeyboardSmoke) && !applyUiLayoutSmokeTheme(appController, QStringLiteral("dark")))
     {
         qCCritical(applicationLog) << "Could not prepare the UI runtime smoke settings";
@@ -946,6 +1025,19 @@ int main(int argc, char *argv[])
             return EXIT_FAILURE;
         }
         qCInfo(applicationLog) << "Window resize runtime smoke test completed";
+        return EXIT_SUCCESS;
+    }
+    if (windowDpiSmoke)
+    {
+        const bool passed = runWindowDpiRuntimeSmoke(window, paths->dataDirectory);
+        appController.shutdown();
+        window.releaseResources();
+        if (!passed)
+        {
+            qCCritical(applicationLog) << "Window DPI runtime smoke test failed";
+            return EXIT_FAILURE;
+        }
+        qCInfo(applicationLog) << "Window DPI runtime smoke test completed";
         return EXIT_SUCCESS;
     }
 

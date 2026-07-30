@@ -32,6 +32,10 @@ performance boundary are defined in [UI_DESIGN_SYSTEM.md](UI_DESIGN_SYSTEM.md).
   Light themes at both breakpoints. Review confirmed readable control labels,
   stable page insets, visible title-bar commands after live theme changes, and
   no clipped top-level actions.
+- A separate real-window DPI matrix passes in dynamic Debug and static Release
+  at 100%, 125%, 150%, and 200%. It preserves logical geometry while native
+  client and captured pixels scale exactly, retains native maximize-button hit
+  testing, and records one independently scaled screenshot per run.
 
 ## Direction
 

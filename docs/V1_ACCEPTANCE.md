@@ -44,6 +44,12 @@ Only runtime evidence can mark a platform or UI item complete.
   select the matching horizontal, vertical, or diagonal system cursor.
   Maximized checks at the new client bounds expose no resize hit, followed by
   a successful restore.
+- The real-window DPI matrix passes in dynamic Debug and static Release at
+  100%, 125%, 150%, and 200%. An `800x600` logical client produced exact
+  `800x600`, `1000x750`, `1200x900`, and `1600x1200` native and captured pixel
+  sizes respectively. Every capture retained its matching device-pixel ratio,
+  and the custom maximize button returned native `HTMAXBUTTON` at every scale.
+  Four Debug captures were reviewed for stable logical layout and clipping.
 - Custom caption commands, maximize-button Snap Layout hover, and Win+Z were
   manually verified on the primary Windows 11 development machine.
 - A Debug runtime session displayed a real PowerShell prompt through ConPTY,

@@ -444,6 +444,18 @@ add_custom_target(ztermy_window_resize_runtime_smoke
     VERBATIM
 )
 
+add_custom_target(ztermy_window_dpi_runtime_smoke
+    COMMAND "${CMAKE_COMMAND}" -E rm -rf
+            "${CMAKE_CURRENT_BINARY_DIR}/test-data/window-dpi-smoke"
+    COMMAND "${CMAKE_COMMAND}"
+            "-DZTERMY_DPI_SMOKE_EXECUTABLE=$<TARGET_FILE:ztermy>"
+            "-DZTERMY_DPI_SMOKE_DATA_ROOT=${CMAKE_CURRENT_BINARY_DIR}/test-data/window-dpi-smoke"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunWindowDpiSmoke.cmake"
+    DEPENDS ztermy
+    COMMENT "Checking logical geometry, physical pixels, and native caption hit testing at 100%-200% scale"
+    VERBATIM
+)
+
 add_custom_target(ztermy_ui_layout_runtime_smoke
     COMMAND "$<TARGET_FILE:ztermy>"
             --ui-layout-smoke

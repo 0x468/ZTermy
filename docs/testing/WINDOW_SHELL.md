@@ -31,6 +31,32 @@ build/msvc-dynamic-debug/test-data/window-runtime-smoke/logs/ztermy.log
 This gate proves the current monitor path. It does not replace the mixed-DPI
 and per-monitor manual checks below.
 
+## Automated DPI scale matrix
+
+Run the real-window scale matrix in both build shapes:
+
+```text
+cmake --build --preset msvc-dynamic-debug --target ztermy_window_dpi_runtime_smoke
+cmake --build --preset msvc-static-release --target ztermy_window_dpi_runtime_smoke
+```
+
+Each target launches four isolated ztermy processes at 100%, 125%, 150%, and
+200% scale. Every process keeps an `800x600` logical client and requires:
+
+- the exact requested window and capture device-pixel ratio;
+- native client and captured pixel sizes of `800x600`, `1000x750`,
+  `1200x900`, or `1600x1200`;
+- the QML root to remain aligned with the logical window;
+- the visible custom maximize button to return native `HTMAXBUTTON`; and
+- a successfully written full-window capture.
+
+Dynamic Debug evidence is written below
+`build/msvc-dynamic-debug/test-data/window-dpi-smoke`, with the corresponding
+static evidence below `build/msvc-static-release/test-data/window-dpi-smoke`.
+This proves independent rendering and native-coordinate conversion at all four
+scales. It cannot prove the live per-monitor transition, so the physical
+mixed-DPI procedure remains mandatory.
+
 ## Automated native-resize gate
 
 Run the real-HWND resize gate in both build shapes:
@@ -97,12 +123,27 @@ flyout.
 
 ## DPI and monitor behavior
 
-1. Drag the window slowly between monitors with different scaling.
+1. In Windows display settings, confirm that two physical monitors use
+   different scaling values, such as 100% and 150% or 200%.
+2. Restore ztermy to a medium window and drag it slowly across the monitor
+   boundary in both directions. Pause with approximately half the window on
+   each monitor.
    Expected: text remains sharp, the pointer stays attached to the title bar,
-   and the window does not jump or change physical size unexpectedly.
-2. Maximize and restore once on each monitor.
+   controls retain their logical proportions, and the window does not jump,
+   show an old-size frame, or become detached from the pointer when Windows
+   changes its DPI.
+3. On each monitor, check the title-bar buttons, terminal cursor, one CJK line,
+   and the Hosts and Settings pages.
+   Expected: text and icons repaint sharply; hit targets remain aligned with
+   their visuals; no edge, status text, field, or dialog is clipped.
+4. Maximize and restore once on each monitor.
    Expected: each monitor's work area and previous geometry are respected,
    including monitors whose taskbar is on a different edge.
+5. Snap the window to a zone on each monitor, restore it, then move it back to
+   the first monitor.
+   Expected: Snap Layouts remains anchored to the custom maximize button and
+   the original monitor geometry restores without cumulative growth or
+   shrinking.
 
 Report each section as pass or fail. For a failure, include the exact step,
 monitor resolution and scaling, Windows build, and a screenshot or short
