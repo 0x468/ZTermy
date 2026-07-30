@@ -42,6 +42,25 @@ From lowest to highest:
 `controlBackground`, `controlHover`, and `controlPressed` are interaction
 surfaces. They must not be substituted with page-specific blues or greens.
 
+The Windows backdrop is one native layer behind these semantic surfaces.
+Acrylic and Transparent background opacity applies exactly to chrome, panels,
+content, and workspaces: 0% is transparent and 100% is opaque. Cards retain a
+readable tint at 0%, controls and fields retain a stronger tint, and popups
+remain the strongest surface. Light glass uses a higher minimum tint than dark
+glass. Mica and Mica Alt use fixed surface strengths and do not expose an
+opacity control.
+
+Draft window appearance is previewed live on the whole native window. A QML
+child cannot reveal the Windows backdrop through already painted ancestors,
+so material previews must not imitate Acrylic or Mica inside an isolated
+opaque card. Apply persists the draft; Discard or leaving Settings restores
+the saved appearance.
+
+Window appearance and terminal appearance are global. SSH profiles do not own
+themes, backdrop modes, background images, or opacity. Terminal default
+backgrounds, explicit ANSI cell backgrounds, and future background images
+remain renderer-owned layers rather than application-control colors.
+
 ### Content and status
 
 - `text`: primary labels and values.

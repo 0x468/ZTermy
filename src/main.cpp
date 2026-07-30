@@ -382,14 +382,20 @@ struct ResizeHitRuntimeCase
         QQuickItem *rootObject = window.rootObject();
         return rootObject == nullptr ? -1 : rootObject->property(propertyName).value<QColor>().alpha();
     };
-    const bool darkAcrylicSaved = saveAppearance(QStringLiteral("dark"), 1.0, QStringLiteral("acrylic"));
+    const bool darkAcrylicSaved = saveAppearance(QStringLiteral("dark"), 0.55, QStringLiteral("acrylic"));
     processWindowEventsFor(std::chrono::milliseconds{150});
     const bool darkAcrylic = verifyWindowAppearance(window, QStringLiteral("acrylic"), true, acrylicBackdrop);
     const int acrylicRootAlpha = surfaceAlpha("backgroundColor");
     const int acrylicContentAlpha = surfaceAlpha("contentColor");
     const int acrylicChromeAlpha = surfaceAlpha("chromeColor");
-    const bool acrylicSurfaceContract =
-        acrylicRootAlpha == 0 && acrylicContentAlpha > 0 && acrylicContentAlpha < 255 && acrylicChromeAlpha > 0;
+    const int acrylicElevatedAlpha = surfaceAlpha("elevatedColor");
+    const int acrylicControlAlpha = surfaceAlpha("controlColor");
+    const int acrylicFieldAlpha = surfaceAlpha("fieldColor");
+    const bool acrylicSurfaceContract = acrylicRootAlpha == 0 && acrylicContentAlpha > 0 && acrylicContentAlpha < 255
+                                        && acrylicChromeAlpha == acrylicContentAlpha
+                                        && acrylicElevatedAlpha > acrylicContentAlpha
+                                        && acrylicControlAlpha > acrylicElevatedAlpha
+                                        && acrylicFieldAlpha > acrylicControlAlpha && acrylicFieldAlpha < 255;
     const bool invalidBackdropRejected =
         !window.applyAppearance(QStringLiteral("invalid"), false) && qAbs(window.opacity() - 1.0) < 0.001;
     const bool invalidBackdropOpacityRejected =
@@ -399,8 +405,34 @@ struct ResizeHitRuntimeCase
     processWindowEventsFor(std::chrono::milliseconds{150});
     const bool transparent = verifyWindowAppearance(window, QStringLiteral("transparent"), true, transparentBackdrop);
     const int transparentContentAlpha = surfaceAlpha("contentColor");
-    const bool transparentSurfaceContract =
-        surfaceAlpha("backgroundColor") == 0 && transparentContentAlpha > 0 && transparentContentAlpha < 255;
+    const bool transparentSurfaceContract = surfaceAlpha("backgroundColor") == 0 && transparentContentAlpha > 0
+                                            && transparentContentAlpha < 255
+                                            && surfaceAlpha("chromeColor") == transparentContentAlpha
+                                            && surfaceAlpha("panelColor") == transparentContentAlpha
+                                            && surfaceAlpha("workspaceColor") == transparentContentAlpha;
+
+    const bool transparentOpaqueSaved = saveAppearance(QStringLiteral("dark"), 1.0, QStringLiteral("transparent"));
+    processWindowEventsFor(std::chrono::milliseconds{150});
+    const bool transparentOpaque =
+        verifyWindowAppearance(window, QStringLiteral("transparent"), true, transparentBackdrop);
+    const bool transparentOpaqueSurfaceContract =
+        surfaceAlpha("backgroundColor") == 0 && surfaceAlpha("contentColor") == 255
+        && surfaceAlpha("chromeColor") == 255 && surfaceAlpha("panelColor") == 255
+        && surfaceAlpha("workspaceColor") == 255 && surfaceAlpha("elevatedColor") == 255
+        && surfaceAlpha("controlColor") == 255 && surfaceAlpha("fieldColor") == 255;
+
+    const bool transparentClearSaved = saveAppearance(QStringLiteral("dark"), 0.0, QStringLiteral("transparent"));
+    processWindowEventsFor(std::chrono::milliseconds{150});
+    const bool transparentClear =
+        verifyWindowAppearance(window, QStringLiteral("transparent"), true, transparentBackdrop);
+    const int transparentClearElevatedAlpha = surfaceAlpha("elevatedColor");
+    const int transparentClearControlAlpha = surfaceAlpha("controlColor");
+    const int transparentClearFieldAlpha = surfaceAlpha("fieldColor");
+    const bool transparentClearSurfaceContract =
+        surfaceAlpha("backgroundColor") == 0 && surfaceAlpha("contentColor") == 0 && surfaceAlpha("chromeColor") == 0
+        && surfaceAlpha("panelColor") == 0 && surfaceAlpha("workspaceColor") == 0 && transparentClearElevatedAlpha > 0
+        && transparentClearControlAlpha > transparentClearElevatedAlpha
+        && transparentClearFieldAlpha > transparentClearControlAlpha && transparentClearFieldAlpha < 255;
 
     const bool lightMicaSaved = saveAppearance(QStringLiteral("light"), 0.1, QStringLiteral("mica"));
     processWindowEventsFor(std::chrono::milliseconds{150});
@@ -418,8 +450,8 @@ struct ResizeHitRuntimeCase
     const int micaAltChromeAlpha = surfaceAlpha("chromeColor");
     const bool micaAltSurfaceContract = surfaceAlpha("backgroundColor") == 0 && micaAltContentAlpha > micaContentAlpha
                                         && micaAltChromeAlpha > micaChromeAlpha;
-    const bool adjustableSurfacesDistinct =
-        acrylicContentAlpha != transparentContentAlpha && acrylicChromeAlpha < micaChromeAlpha;
+    const bool adjustableSurfacesConsistent =
+        acrylicContentAlpha == transparentContentAlpha && acrylicChromeAlpha == transparentContentAlpha;
 
     const bool restoredSaved = saveAppearance(QStringLiteral("dark"), 1.0, QStringLiteral("acrylic"));
     processWindowEventsFor(std::chrono::milliseconds{150});
@@ -432,24 +464,38 @@ struct ResizeHitRuntimeCase
                            << "darkAcrylicSaved=" << darkAcrylicSaved << "darkAcrylic=" << darkAcrylic
                            << "acrylicRootAlpha=" << acrylicRootAlpha << "acrylicContentAlpha=" << acrylicContentAlpha
                            << "acrylicChromeAlpha=" << acrylicChromeAlpha
+                           << "acrylicElevatedAlpha=" << acrylicElevatedAlpha
+                           << "acrylicControlAlpha=" << acrylicControlAlpha << "acrylicFieldAlpha=" << acrylicFieldAlpha
                            << "acrylicSurfaceContract=" << acrylicSurfaceContract
                            << "invalidBackdropRejected=" << invalidBackdropRejected
                            << "invalidBackdropOpacityRejected=" << invalidBackdropOpacityRejected
                            << "transparentSaved=" << transparentSaved << "transparent=" << transparent
                            << "transparentContentAlpha=" << transparentContentAlpha
-                           << "transparentSurfaceContract=" << transparentSurfaceContract << "lightMica=" << lightMica
-                           << "lightMicaSaved=" << lightMicaSaved << "micaRootAlpha=" << micaRootAlpha
-                           << "micaContentAlpha=" << micaContentAlpha << "micaChromeAlpha=" << micaChromeAlpha
-                           << "micaSurfaceContract=" << micaSurfaceContract << "darkMicaAltSaved=" << darkMicaAltSaved
-                           << "darkMicaAlt=" << darkMicaAlt << "micaAltContentAlpha=" << micaAltContentAlpha
+                           << "transparentSurfaceContract=" << transparentSurfaceContract
+                           << "transparentOpaqueSaved=" << transparentOpaqueSaved
+                           << "transparentOpaque=" << transparentOpaque
+                           << "transparentOpaqueSurfaceContract=" << transparentOpaqueSurfaceContract
+                           << "transparentClearSaved=" << transparentClearSaved
+                           << "transparentClear=" << transparentClear
+                           << "transparentClearElevatedAlpha=" << transparentClearElevatedAlpha
+                           << "transparentClearControlAlpha=" << transparentClearControlAlpha
+                           << "transparentClearFieldAlpha=" << transparentClearFieldAlpha
+                           << "transparentClearSurfaceContract=" << transparentClearSurfaceContract
+                           << "lightMica=" << lightMica << "lightMicaSaved=" << lightMicaSaved
+                           << "micaRootAlpha=" << micaRootAlpha << "micaContentAlpha=" << micaContentAlpha
+                           << "micaChromeAlpha=" << micaChromeAlpha << "micaSurfaceContract=" << micaSurfaceContract
+                           << "darkMicaAltSaved=" << darkMicaAltSaved << "darkMicaAlt=" << darkMicaAlt
+                           << "micaAltContentAlpha=" << micaAltContentAlpha
                            << "micaAltChromeAlpha=" << micaAltChromeAlpha
                            << "micaAltSurfaceContract=" << micaAltSurfaceContract
-                           << "adjustableSurfacesDistinct=" << adjustableSurfacesDistinct
+                           << "adjustableSurfacesConsistent=" << adjustableSurfacesConsistent
                            << "restoredSaved=" << restoredSaved << "restored=" << restored;
     return translucentSurfaceCapable && darkAcrylicSaved && darkAcrylic && acrylicSurfaceContract
            && invalidBackdropRejected && invalidBackdropOpacityRejected && transparentSaved && transparent
-           && transparentSurfaceContract && lightMicaSaved && lightMica && micaSurfaceContract && darkMicaAltSaved
-           && darkMicaAlt && micaAltSurfaceContract && adjustableSurfacesDistinct && restoredSaved && restored;
+           && transparentSurfaceContract && transparentOpaqueSaved && transparentOpaque
+           && transparentOpaqueSurfaceContract && transparentClearSaved && transparentClear
+           && transparentClearSurfaceContract && lightMicaSaved && lightMica && micaSurfaceContract && darkMicaAltSaved
+           && darkMicaAlt && micaAltSurfaceContract && adjustableSurfacesConsistent && restoredSaved && restored;
 }
 
 [[nodiscard]] bool captureLayout(ztermy::NativeWindow &window, const QString &outputDirectory, const QString &name)
@@ -767,9 +813,14 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
                                  && toggleWithSpace(copyOnSelect, QStringLiteral("settingsCopyOnSelect"))
                                  && toggleWithSpace(multilinePaste, QStringLiteral("settingsMultilinePaste"));
 
+    const bool livePreviewMatches =
+        rootObject->property("appearancePreviewActive").toBool()
+        && rootObject->property("previewThemePreference").toString() == QStringLiteral("light")
+        && rootObject->property("previewBackdropPreference").toString() == QStringLiteral("acrylic")
+        && qAbs(rootObject->property("previewBackdropOpacity").toReal() - 0.95) < 0.001;
     const bool draftMatches = popupOpened && popupClosed && theme->property("currentIndex").toInt() == 2
                               && qAbs(opacity->property("value").toReal() - 0.95) < 0.001
-                              && fontSize->property("value").toInt() == 15 && switchesChanged;
+                              && fontSize->property("value").toInt() == 15 && switchesChanged && livePreviewMatches;
     if (!draftMatches)
     {
         qCWarning(applicationLog) << "Settings keyboard edits did not produce the expected draft"
@@ -777,7 +828,8 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
                                   << "themeIndex=" << theme->property("currentIndex").toInt()
                                   << "opacity=" << opacity->property("value").toReal()
                                   << "fontSize=" << fontSize->property("value").toInt()
-                                  << "switchesChanged=" << switchesChanged;
+                                  << "switchesChanged=" << switchesChanged
+                                  << "livePreviewMatches=" << livePreviewMatches;
         return false;
     }
 
@@ -798,6 +850,11 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
 
     rootObject->setProperty("currentPage", QStringLiteral("hosts"));
     processWindowEventsFor(std::chrono::milliseconds{100});
+    if (rootObject->property("appearancePreviewActive").toBool())
+    {
+        qCWarning(applicationLog) << "Leaving Settings did not end the window appearance preview";
+        return false;
+    }
     QQuickItem *newHost = quickItem(rootObject, "hostNew");
     if (!verifyAccessibleButton(rootObject, "hostNew", "Create a new SSH host profile")
         || !focusItem(window, newHost, QStringLiteral("hostNew")))

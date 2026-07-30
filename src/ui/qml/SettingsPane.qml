@@ -17,6 +17,9 @@ Rectangle {
     readonly property bool compactLayout: width < Theme.narrowWindowWidth
     readonly property int contentInset: compactLayout ? Theme.pageInsetCompact : Theme.pageInset
 
+    signal appearancePreviewRequested(string theme, real opacity, string backdrop)
+    signal appearancePreviewEnded
+
     color: Theme.workspaceBackground
     palette.base: Theme.raisedBackground
     palette.text: Theme.text
@@ -51,6 +54,13 @@ Rectangle {
         return cursorBox.currentIndex === 1 ? "block" : cursorBox.currentIndex === 2 ? "bar" : cursorBox.currentIndex === 3 ? "underline" : "terminal";
     }
 
+    function previewDraft() {
+        if (!visible || loadingDraft) {
+            return;
+        }
+        appearancePreviewRequested(themeToken(), opacitySlider.value, backdropToken());
+    }
+
     function loadDraft() {
         loadingDraft = true;
         themeBox.currentIndex = themeIndex(controller.themePreference);
@@ -63,6 +73,7 @@ Rectangle {
         copyOnSelectSwitch.checked = controller.copyOnSelect;
         multilinePasteSwitch.checked = controller.confirmMultilinePaste;
         loadingDraft = false;
+        previewDraft();
     }
 
     function applyDraft() {
@@ -77,6 +88,8 @@ Rectangle {
     onVisibleChanged: {
         if (visible) {
             loadDraft();
+        } else {
+            appearancePreviewEnded();
         }
     }
     Component.onCompleted: loadDraft()
@@ -137,6 +150,7 @@ Rectangle {
                         Layout.fillWidth: true
                         model: ["System", "Dark", "Light"]
                         accessibleName: "Application theme"
+                        onCurrentIndexChanged: pane.previewDraft()
                     }
 
                     Label {
@@ -149,11 +163,12 @@ Rectangle {
                         Layout.fillWidth: true
                         model: ["Acrylic", "Transparent", "Mica", "Mica Alt"]
                         accessibleName: "Windows backdrop material"
+                        onCurrentIndexChanged: pane.previewDraft()
                     }
 
                     Label {
                         visible: pane.adjustableBackdrop
-                        text: "Backdrop opacity"
+                        text: "Background opacity"
                         color: Theme.text
                     }
                     RowLayout {
@@ -167,7 +182,8 @@ Rectangle {
                             from: 0.0
                             to: 1.0
                             stepSize: 0.05
-                            accessibleName: "Backdrop opacity"
+                            accessibleName: "Window background opacity"
+                            onValueChanged: pane.previewDraft()
                         }
 
                         Text {
@@ -189,22 +205,24 @@ Rectangle {
                             anchors.fill: parent
                             radius: Theme.radiusControl
                             color: {
-                                const alpha = backdropBox.currentIndex === 0 ? 0.72 * opacitySlider.value : backdropBox.currentIndex === 1 ? opacitySlider.value : backdropBox.currentIndex === 2 ? 0.82 : 0.88;
+                                const alpha = pane.adjustableBackdrop ? opacitySlider.value : backdropBox.currentIndex === 2 ? 0.82 : 0.88;
                                 return pane.draftDark ? Qt.rgba(0.067, 0.094, 0.153, alpha) : Qt.rgba(1.0, 1.0, 1.0, alpha);
                             }
                             border.color: pane.draftDark ? "#334155" : "#94A3B8"
 
-                            Row {
+                            RowLayout {
                                 anchors.centerIn: parent
                                 spacing: 8
 
                                 Rectangle {
-                                    width: 8
-                                    height: 8
+                                    Layout.alignment: Qt.AlignVCenter
+                                    Layout.preferredWidth: 8
+                                    Layout.preferredHeight: 8
                                     radius: 4
                                     color: pane.draftDark ? "#22C55E" : "#15803D"
                                 }
                                 Text {
+                                    Layout.alignment: Qt.AlignVCenter
                                     text: themeBox.currentText + " · " + backdropBox.currentText + (pane.adjustableBackdrop ? " · " + Math.round(opacitySlider.value * 100) + "%" : " · system controlled")
                                     color: pane.draftDark ? "#F8FAFC" : "#0F172A"
                                     font.family: Theme.uiFont

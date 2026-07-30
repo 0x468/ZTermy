@@ -18,6 +18,9 @@ Rectangle {
     readonly property color contentColor: Theme.contentBackground
     readonly property color workspaceColor: Theme.workspaceBackground
     readonly property color raisedColor: Theme.raisedBackground
+    readonly property color elevatedColor: Theme.elevatedBackground
+    readonly property color controlColor: Theme.controlBackground
+    readonly property color fieldColor: Theme.fieldBackground
     readonly property color borderColor: Theme.border
     readonly property color textColor: Theme.text
     readonly property color mutedColor: Theme.textMuted
@@ -25,6 +28,10 @@ Rectangle {
     property string currentPage: "terminal"
     property bool terminalSearchVisible: false
     property int pendingPasteLineCount: 0
+    property bool appearancePreviewActive: false
+    property string previewThemePreference: "dark"
+    property string previewBackdropPreference: "acrylic"
+    property real previewBackdropOpacity: 1.0
     readonly property var activeTerminalTab: {
         for (const tab of controller.terminalTabs) {
             if (tab.id === controller.activeTerminalTabId) {
@@ -63,6 +70,23 @@ Rectangle {
         root.windowChrome.applyAppearance(controller.backdropPreference, Theme.dark);
     }
 
+    function previewWindowAppearance(theme, opacity, backdrop) {
+        previewThemePreference = theme;
+        previewBackdropPreference = backdrop;
+        previewBackdropOpacity = opacity;
+        appearancePreviewActive = true;
+        const previewDark = theme === "dark" || (theme === "system" && root.windowChrome.systemDarkMode);
+        root.windowChrome.applyAppearance(backdrop, previewDark);
+    }
+
+    function endWindowAppearancePreview() {
+        if (!appearancePreviewActive) {
+            return;
+        }
+        appearancePreviewActive = false;
+        Qt.callLater(root.applyWindowAppearance);
+    }
+
     function startLocalTerminalTab() {
         controller.startLocalTerminal();
         currentPage = "terminal";
@@ -97,7 +121,7 @@ Rectangle {
     Binding {
         target: Theme
         property: "preference"
-        value: root.controller.themePreference
+        value: root.appearancePreviewActive ? root.previewThemePreference : root.controller.themePreference
     }
 
     Binding {
@@ -115,13 +139,13 @@ Rectangle {
     Binding {
         target: Theme
         property: "backdropPreference"
-        value: root.controller.backdropPreference
+        value: root.appearancePreviewActive ? root.previewBackdropPreference : root.controller.backdropPreference
     }
 
     Binding {
         target: Theme
         property: "backdropOpacity"
-        value: root.controller.backdropOpacity
+        value: root.appearancePreviewActive ? root.previewBackdropOpacity : root.controller.backdropOpacity
     }
 
     Component.onCompleted: {
@@ -130,6 +154,9 @@ Rectangle {
     }
     onWidthChanged: reportTitleBarMetrics()
     onCurrentPageChanged: {
+        if (currentPage !== "settings") {
+            endWindowAppearancePreview();
+        }
         if (currentPage === "terminal") {
             terminalViewport.forceActiveFocus();
             terminalViewport.requestCurrentSize();
@@ -191,7 +218,11 @@ Rectangle {
         target: root.windowChrome
 
         function onSystemDarkModeChanged() {
-            Qt.callLater(root.applyWindowAppearance);
+            if (root.appearancePreviewActive) {
+                Qt.callLater(() => root.previewWindowAppearance(root.previewThemePreference, root.previewBackdropOpacity, root.previewBackdropPreference));
+            } else {
+                Qt.callLater(root.applyWindowAppearance);
+            }
         }
     }
 
@@ -876,6 +907,10 @@ Rectangle {
                 anchors.fill: parent
                 visible: root.currentPage === "settings"
                 controller: root.controller
+                onAppearancePreviewEnded: root.endWindowAppearancePreview()
+                onAppearancePreviewRequested: (theme, opacity, backdrop) => {
+                    root.previewWindowAppearance(theme, opacity, backdrop);
+                }
             }
         }
     }

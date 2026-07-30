@@ -26,6 +26,9 @@ The V1 schema contains:
 - terminal-controlled or user-selected cursor style and blinking;
 - copy-on-select and multiline-paste confirmation behavior.
 
+Appearance is global. SSH profiles do not contain per-profile themes,
+backdrops, terminal backgrounds, or opacity.
+
 Input is strictly typed and range checked. Backdrop opacity is limited to
 `0.0`–`1.0`, terminal font size to `8`–`32` pixels, and the font-family name
 must be non-empty and bounded. Unknown enum tokens, missing fields, fractional

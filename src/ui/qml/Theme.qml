@@ -14,6 +14,7 @@ QtObject {
     readonly property bool acrylicBackdrop: backdropPreference === "acrylic"
     readonly property bool transparentBackdrop: backdropPreference === "transparent"
     readonly property bool backdropActive: micaBackdrop || micaAltBackdrop || acrylicBackdrop || transparentBackdrop
+    readonly property bool adjustableBackdrop: acrylicBackdrop || transparentBackdrop
     readonly property real normalizedBackdropOpacity: Math.max(0.0, Math.min(1.0, backdropOpacity))
 
     readonly property color windowBackground: backdropActive ? "transparent" : (dark ? "#FF0B0F14" : "#FFF8FAFC")
@@ -21,18 +22,29 @@ QtObject {
     readonly property color chromeBackground: withAlpha(dark ? "#0F1722" : "#E2E8F0", chromeAlpha)
     readonly property color contentBackground: withAlpha(dark ? "#0A0E14" : "#FFFFFF", contentAlpha)
     readonly property color workspaceBackground: withAlpha(dark ? "#0B1017" : "#FFFFFF", workspaceAlpha)
-    readonly property real panelAlpha: micaBackdrop ? 0.82 : micaAltBackdrop ? 0.88 : acrylicBackdrop ? 0.72 * normalizedBackdropOpacity : transparentBackdrop ? 0.92 * normalizedBackdropOpacity : 1.0
-    readonly property real chromeAlpha: micaBackdrop ? 0.60 : micaAltBackdrop ? 0.72 : acrylicBackdrop ? 0.48 * normalizedBackdropOpacity : transparentBackdrop ? 0.75 * normalizedBackdropOpacity : 1.0
-    readonly property real contentAlpha: micaBackdrop ? 0.82 : micaAltBackdrop ? 0.88 : acrylicBackdrop ? 0.72 * normalizedBackdropOpacity : transparentBackdrop ? normalizedBackdropOpacity : 1.0
-    readonly property real workspaceAlpha: micaBackdrop ? 0.88 : micaAltBackdrop ? 0.92 : acrylicBackdrop ? 0.78 * normalizedBackdropOpacity : transparentBackdrop ? normalizedBackdropOpacity : 1.0
-    readonly property color raisedBackground: dark ? "#1E293B" : "#E2E8F0"
-    readonly property color elevatedBackground: dark ? "#141E2B" : "#F1F5F9"
-    readonly property color controlBackground: dark ? "#172033" : "#E2E8F0"
-    readonly property color controlDisabled: dark ? "#131B29" : "#E8EDF3"
-    readonly property color controlPressed: dark ? "#263244" : "#CBD5E1"
-    readonly property color controlHover: dark ? "#1F2A3A" : "#DCE5EF"
-    readonly property color fieldBackground: dark ? "#111827" : "#FFFFFF"
-    readonly property color floatingBackground: dark ? "#F21E293B" : "#F2FFFFFF"
+    readonly property real panelAlpha: adjustableBackdrop ? normalizedBackdropOpacity : micaBackdrop ? 0.82 : micaAltBackdrop ? 0.88 : 1.0
+    readonly property real chromeAlpha: adjustableBackdrop ? normalizedBackdropOpacity : micaBackdrop ? 0.60 : micaAltBackdrop ? 0.72 : 1.0
+    readonly property real contentAlpha: adjustableBackdrop ? normalizedBackdropOpacity : micaBackdrop ? 0.82 : micaAltBackdrop ? 0.88 : 1.0
+    readonly property real workspaceAlpha: adjustableBackdrop ? normalizedBackdropOpacity : micaBackdrop ? 0.88 : micaAltBackdrop ? 0.92 : 1.0
+
+    // The native window supplies one material layer. QML surfaces add tint and
+    // hierarchy without creating independent blur regions. Adjustable
+    // backdrops reach true opaque at 100%, while cards and controls retain a
+    // readable tint at 0%.
+    readonly property real elevatedAlpha: adjustableBackdrop ? mixAlpha(dark ? 0.64 : 0.84, normalizedBackdropOpacity) : micaBackdrop ? 0.82 : micaAltBackdrop ? 0.88 : 1.0
+    readonly property real raisedAlpha: adjustableBackdrop ? mixAlpha(dark ? 0.70 : 0.88, normalizedBackdropOpacity) : micaBackdrop ? 0.86 : micaAltBackdrop ? 0.91 : 1.0
+    readonly property real controlAlpha: adjustableBackdrop ? mixAlpha(dark ? 0.78 : 0.92, normalizedBackdropOpacity) : micaBackdrop ? 0.90 : micaAltBackdrop ? 0.94 : 1.0
+    readonly property real fieldAlpha: adjustableBackdrop ? mixAlpha(dark ? 0.84 : 0.96, normalizedBackdropOpacity) : micaBackdrop ? 0.94 : micaAltBackdrop ? 0.97 : 1.0
+    readonly property real floatingAlpha: adjustableBackdrop ? mixAlpha(0.94, normalizedBackdropOpacity) : 0.96
+
+    readonly property color raisedBackground: withAlpha(dark ? "#1E293B" : "#E2E8F0", raisedAlpha)
+    readonly property color elevatedBackground: withAlpha(dark ? "#141E2B" : "#F1F5F9", elevatedAlpha)
+    readonly property color controlBackground: withAlpha(dark ? "#172033" : "#E2E8F0", controlAlpha)
+    readonly property color controlDisabled: withAlpha(dark ? "#131B29" : "#E8EDF3", controlAlpha)
+    readonly property color controlPressed: withAlpha(dark ? "#263244" : "#CBD5E1", controlAlpha)
+    readonly property color controlHover: withAlpha(dark ? "#1F2A3A" : "#DCE5EF", controlAlpha)
+    readonly property color fieldBackground: withAlpha(dark ? "#111827" : "#FFFFFF", fieldAlpha)
+    readonly property color floatingBackground: withAlpha(dark ? "#1E293B" : "#FFFFFF", floatingAlpha)
 
     readonly property color border: dark ? "#263244" : "#CBD5E1"
     readonly property color borderStrong: dark ? "#334155" : "#94A3B8"
@@ -74,6 +86,12 @@ QtObject {
 
     function withAlpha(baseColor: color, alpha: real): color {
         return Qt.rgba(baseColor.r, baseColor.g, baseColor.b, Math.max(0.0, Math.min(1.0, alpha)));
+    }
+
+    function mixAlpha(minimumAlpha: real, amount: real): real {
+        const clampedMinimum = Math.max(0.0, Math.min(1.0, minimumAlpha));
+        const clampedAmount = Math.max(0.0, Math.min(1.0, amount));
+        return clampedMinimum + ((1.0 - clampedMinimum) * clampedAmount);
     }
 
     readonly property int spacingDense: 4
