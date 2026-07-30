@@ -83,6 +83,9 @@ QtObject {
     readonly property int radiusControl: 8
     readonly property int radiusPanel: 12
     readonly property int motionFast: animationsEnabled ? 120 : 0
+    readonly property int motionMedium: animationsEnabled ? 180 : 0
+    readonly property int motionSlow: animationsEnabled ? 220 : 0
+    readonly property int motionDistanceSmall: animationsEnabled ? 8 : 0
 
     function withAlpha(baseColor: color, alpha: real): color {
         return Qt.rgba(baseColor.r, baseColor.g, baseColor.b, Math.max(0.0, Math.min(1.0, alpha)));
@@ -101,6 +104,7 @@ QtObject {
     readonly property int cardInset: 20
     readonly property int pageInset: 28
     readonly property int pageInsetCompact: 16
+    readonly property int titleBarHeight: 38
     readonly property int navigationWidth: 210
     readonly property int navigationWidthCompact: 164
     readonly property int narrowWindowWidth: 760

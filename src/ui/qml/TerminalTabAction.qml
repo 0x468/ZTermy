@@ -8,14 +8,44 @@ Rectangle {
     required property string title
     property bool selected: false
     property bool running: false
+    property real enterProgress: Theme.animationsEnabled ? 0.0 : 1.0
     signal activated
     signal closeRequested
 
-    implicitWidth: Math.min(190, Math.max(126, titleText.implicitWidth + 54))
-    implicitHeight: 42
-    color: control.selected || activateAction.hovered || activateAction.activeFocus ? Theme.controlHover : "transparent"
+    implicitWidth: Math.min(184, Math.max(112, titleText.implicitWidth + 54))
+    implicitHeight: Theme.titleBarHeight
+    opacity: enterProgress
+    color: control.selected ? Theme.controlBackground : (activateAction.hovered || activateAction.activeFocus ? Theme.controlHover : "transparent")
     border.color: activateAction.activeFocus ? Theme.focus : "transparent"
     border.width: activateAction.activeFocus ? 1 : 0
+    transform: Translate {
+        x: -Theme.motionDistanceSmall * (1.0 - control.enterProgress)
+    }
+
+    Component.onCompleted: {
+        if (Theme.animationsEnabled) {
+            enterAnimation.start();
+        } else {
+            enterProgress = 1.0;
+        }
+    }
+
+    NumberAnimation {
+        id: enterAnimation
+
+        target: control
+        property: "enterProgress"
+        from: 0.0
+        to: 1.0
+        duration: Theme.motionSlow
+        easing.type: Easing.OutCubic
+    }
+
+    Behavior on color {
+        ColorAnimation {
+            duration: Theme.motionFast
+        }
+    }
 
     Rectangle {
         anchors.left: parent.left
@@ -64,8 +94,21 @@ Rectangle {
         height: 24
         radius: 5
         color: closeAction.hovered || closeAction.activeFocus ? Theme.borderStrong : "transparent"
+        opacity: control.selected || activateAction.hovered || activateAction.activeFocus || closeAction.hovered || closeAction.activeFocus ? 1.0 : 0.45
         border.color: closeAction.activeFocus ? Theme.focus : "transparent"
         border.width: closeAction.activeFocus ? 1 : 0
+
+        Behavior on color {
+            ColorAnimation {
+                duration: Theme.motionFast
+            }
+        }
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: Theme.motionFast
+            }
+        }
 
         AppIcon {
             anchors.centerIn: parent

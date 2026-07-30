@@ -22,8 +22,8 @@ void WindowHitTestTests::classifiesResizeEdges()
 
     const ztermy::windowing::HitTestMetrics metrics{
         .resizeBorder = 8,
-        .caption = {.x = 0, .y = 0, .width = 862, .height = 42},
-        .maximizeButton = {.x = 908, .y = 0, .width = 46, .height = 42},
+        .caption = {.x = 0, .y = 0, .width = 862, .height = 38},
+        .maximizeButton = {.x = 908, .y = 0, .width = 46, .height = 38},
     };
     constexpr ztermy::windowing::Size size{.width = 1000, .height = 700};
 
@@ -43,8 +43,8 @@ void WindowHitTestTests::classifiesCaptionControlsAndClient()
 
     const ztermy::windowing::HitTestMetrics metrics{
         .resizeBorder = 8,
-        .caption = {.x = 320, .y = 0, .width = 542, .height = 42},
-        .maximizeButton = {.x = 908, .y = 0, .width = 46, .height = 42},
+        .caption = {.x = 320, .y = 0, .width = 542, .height = 38},
+        .maximizeButton = {.x = 908, .y = 0, .width = 46, .height = 38},
     };
     constexpr ztermy::windowing::Size size{.width = 1000, .height = 700};
 
@@ -61,8 +61,8 @@ void WindowHitTestTests::disablesResizeAreasWhenMaximized()
 
     const ztermy::windowing::HitTestMetrics metrics{
         .resizeBorder = 8,
-        .caption = {.x = 0, .y = 0, .width = 862, .height = 42},
-        .maximizeButton = {.x = 908, .y = 0, .width = 46, .height = 42},
+        .caption = {.x = 0, .y = 0, .width = 862, .height = 38},
+        .maximizeButton = {.x = 908, .y = 0, .width = 46, .height = 38},
     };
     constexpr ztermy::windowing::Size size{.width = 1000, .height = 700};
 

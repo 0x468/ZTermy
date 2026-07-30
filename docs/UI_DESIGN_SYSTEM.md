@@ -106,7 +106,8 @@ Use a four-pixel base rhythm.
 - Small radius: 4 px.
 - Control radius: 8 px.
 - Panel and dialog radius: 12 px.
-- Standard title bar: 42 px.
+- Standard visual title bar: 38 px, while native caption actions preserve
+  their established horizontal targets and Win32 hit-test behavior.
 
 Terminal cell geometry is independent from application density.
 
@@ -191,6 +192,9 @@ and all dialogs require a keyboard-only acceptance pass.
 ## Motion
 
 - Ordinary hover and color feedback uses at most 120 ms.
+- Compact content entry uses 180 ms; work-tab and coordinated theme
+  transitions use at most 220 ms.
+- Entry transitions may combine opacity with at most 8 px of spatial movement.
 - No scale-on-hover, parallax, scroll hijacking, glow, glitch, or continuous
   decorative animation.
 - Terminal rendering and cursor behavior are not driven by decorative QML

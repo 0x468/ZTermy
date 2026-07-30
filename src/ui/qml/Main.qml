@@ -9,7 +9,7 @@ Rectangle {
 
     required property var controller
     required property var windowChrome
-    readonly property int titleBarHeight: 42
+    readonly property int titleBarHeight: Theme.titleBarHeight
     readonly property int captionButtonWidth: 46
     readonly property int titleNavigationWidth: Math.min(790, Math.max(310, width - (captionButtonWidth * 3) - 96))
     readonly property color backgroundColor: Theme.windowBackground
@@ -279,9 +279,15 @@ Rectangle {
 
                 width: 94
                 height: titleNavigation.height
-                color: root.currentPage === "hosts" || hostsTitleAction.hovered || hostsTitleAction.activeFocus ? Theme.controlHover : "transparent"
+                color: root.currentPage === "hosts" ? Theme.controlBackground : (hostsTitleAction.hovered || hostsTitleAction.activeFocus ? Theme.controlHover : "transparent")
                 border.color: hostsTitleAction.activeFocus ? Theme.focus : "transparent"
                 border.width: hostsTitleAction.activeFocus ? 1 : 0
+
+                Behavior on color {
+                    ColorAnimation {
+                        duration: Theme.motionFast
+                    }
+                }
 
                 Row {
                     anchors.centerIn: parent
@@ -351,6 +357,12 @@ Rectangle {
                 color: titleNewTabAction.hovered || titleNewTabAction.activeFocus ? Theme.controlHover : "transparent"
                 border.color: titleNewTabAction.activeFocus ? Theme.focus : "transparent"
                 border.width: titleNewTabAction.activeFocus ? 1 : 0
+
+                Behavior on color {
+                    ColorAnimation {
+                        duration: Theme.motionFast
+                    }
+                }
 
                 AppIcon {
                     anchors.centerIn: parent

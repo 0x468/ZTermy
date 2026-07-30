@@ -62,7 +62,7 @@ private:
     void setMaximizeButtonHovered(bool hovered);
     void setMaximizeButtonPressed(bool pressed);
 
-    qreal m_titleHeight = 42.0;
+    qreal m_titleHeight = 38.0;
     qreal m_captionLeft = 0.0;
     qreal m_controlsLeft = 0.0;
     qreal m_maximizeLeft = 0.0;
