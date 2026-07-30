@@ -171,14 +171,14 @@ Rectangle {
         }
     }
 
-    function connectSaved(profile) {
+    function connectSaved(profile, sourceItem) {
         if (profile.authentication === "password" || profile.privateKeyPassphraseRequired) {
             pendingConnectId = profile.id;
             pendingConnectName = profile.name;
             pendingConnectAuthentication = profile.authentication;
+            credentialDialog.focusRestoreItem = sourceItem;
             savedCredentialField.text = "";
             credentialDialog.open();
-            savedCredentialField.forceActiveFocus();
             return;
         }
         if (controller.connectHostProfile(profile.id, "")) {
@@ -442,11 +442,14 @@ Rectangle {
                                         }
 
                                         ActionButton {
+                                            id: connectProfileButton
+
+                                            objectName: "savedHostConnectAction"
                                             Layout.preferredWidth: 104
                                             text: "Connect"
                                             accessibleName: "Connect to " + profileCard.modelData.name
                                             variant: "primary"
-                                            onClicked: pane.connectSaved(profileCard.modelData)
+                                            onClicked: pane.connectSaved(profileCard.modelData, connectProfileButton)
                                         }
 
                                         ActionButton {
@@ -743,25 +746,72 @@ Rectangle {
     Dialog {
         id: credentialDialog
 
+        property Item focusRestoreItem: null
+
         anchors.centerIn: parent
         modal: true
+        dim: true
+        focus: true
         closePolicy: Popup.CloseOnEscape
         padding: 20
+        onAboutToShow: Qt.callLater(savedCredentialField.forceActiveFocus)
         onClosed: {
+            const restoreItem = focusRestoreItem;
+            focusRestoreItem = null;
             savedCredentialField.text = "";
             pane.pendingConnectId = "";
             pane.pendingConnectName = "";
             pane.pendingConnectAuthentication = "";
+            if (restoreItem && restoreItem.visible && restoreItem.enabled) {
+                Qt.callLater(() => restoreItem.forceActiveFocus());
+            }
+        }
+
+        enter: Transition {
+            NumberAnimation {
+                property: "opacity"
+                from: 0
+                to: 1
+                duration: Theme.motionMedium
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        exit: Transition {
+            NumberAnimation {
+                property: "opacity"
+                from: 1
+                to: 0
+                duration: Theme.motionFast
+                easing.type: Easing.InCubic
+            }
+        }
+
+        Overlay.modal: Rectangle {
+            color: Theme.modalScrim
         }
 
         background: Rectangle {
-            radius: 10
+            radius: Theme.radiusPanel
             color: pane.raisedColor
-            border.color: pane.borderColor
+            border.color: Theme.borderStrong
+
+            transform: Translate {
+                y: credentialDialog.visible ? 0 : Theme.motionDistanceSmall
+
+                Behavior on y {
+                    NumberAnimation {
+                        duration: Theme.motionMedium
+                        easing.type: Easing.OutCubic
+                    }
+                }
+            }
         }
 
         contentItem: ColumnLayout {
             spacing: 14
+            Accessible.role: Accessible.Dialog
+            Accessible.name: pane.pendingConnectAuthentication === "password" ? "Enter SSH password" : "Enter key passphrase"
 
             Text {
                 text: pane.pendingConnectAuthentication === "password" ? "Enter SSH password" : "Enter key passphrase"
@@ -782,10 +832,12 @@ Rectangle {
 
             AppTextField {
                 id: savedCredentialField
+
+                objectName: "savedCredentialField"
                 Layout.fillWidth: true
                 placeholderText: pane.pendingConnectAuthentication === "password" ? "SSH password" : "Private-key passphrase"
                 echoMode: TextInput.Password
-                Accessible.name: placeholderText
+                accessibleName: placeholderText
                 selectByMouse: true
                 onAccepted: pane.connectPendingSaved()
             }
@@ -798,15 +850,24 @@ Rectangle {
                 }
 
                 ActionButton {
+                    id: savedCredentialCancel
+
+                    objectName: "savedCredentialCancel"
                     text: "Cancel"
+                    accessibleName: "Cancel saved host authentication"
+                    KeyNavigation.right: connectSavedButton
                     onClicked: credentialDialog.close()
                 }
 
                 ActionButton {
                     id: connectSavedButton
+
+                    objectName: "savedCredentialConnect"
                     text: "Connect"
+                    accessibleName: "Connect to saved SSH host"
                     enabled: savedCredentialField.text.length > 0
                     variant: "primary"
+                    KeyNavigation.left: savedCredentialCancel
                     onClicked: pane.connectPendingSaved()
                 }
             }

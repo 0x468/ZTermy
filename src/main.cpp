@@ -597,6 +597,27 @@ struct ResizeHitRuntimeCase
     return rootObject == nullptr ? nullptr : rootObject->findChild<QQuickItem *>(QString::fromLatin1(objectName));
 }
 
+[[nodiscard]] QQuickItem *visualQuickItem(QQuickItem *rootObject, const char *objectName)
+{
+    if (rootObject == nullptr)
+    {
+        return nullptr;
+    }
+    const QString expectedName = QString::fromLatin1(objectName);
+    std::vector<QQuickItem *> pending{rootObject};
+    for (std::size_t index = 0; index < pending.size(); ++index)
+    {
+        QQuickItem *candidate = pending[index];
+        if (candidate->objectName() == expectedName)
+        {
+            return candidate;
+        }
+        const QList<QQuickItem *> children = candidate->childItems();
+        pending.insert(pending.end(), children.cbegin(), children.cend());
+    }
+    return nullptr;
+}
+
 [[nodiscard]] QString namedFocusItem(const ztermy::NativeWindow &window)
 {
     for (QQuickItem *item = window.activeFocusItem(); item != nullptr; item = item->parentItem())
@@ -908,6 +929,54 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
     if (!checkboxChanged)
     {
         qCWarning(applicationLog) << "Space did not toggle the private-key passphrase checkbox";
+        return false;
+    }
+
+    const bool savedCredentialProfileCreated = controller.saveHostProfile(
+        QString{}, QStringLiteral("Keyboard smoke host"), QStringLiteral("example.invalid"), 22,
+        QStringLiteral("tester"), QStringLiteral("password"), QString{}, false, QStringLiteral("Tests"));
+    processWindowEventsFor(std::chrono::milliseconds{500});
+    const QVariantList savedCredentialProfiles = controller.hostProfiles();
+    QQuickItem *savedHostConnectAction = visualQuickItem(rootObject, "savedHostConnectAction");
+    const QString savedHostConnectAccessibleName =
+        savedHostConnectAction == nullptr ? QString{} : savedHostConnectAction->property("accessibleName").toString();
+    const bool savedHostConnectFocused =
+        savedHostConnectAction != nullptr
+        && focusItem(window, savedHostConnectAction, QStringLiteral("savedHostConnectAction"));
+    if (!savedCredentialProfileCreated || savedCredentialProfiles.size() != 1
+        || savedHostConnectAccessibleName != QStringLiteral("Connect to Keyboard smoke host")
+        || !savedHostConnectFocused)
+    {
+        qCWarning(applicationLog) << "Saved credential dialog smoke setup failed"
+                                  << "created=" << savedCredentialProfileCreated
+                                  << "profileCount=" << savedCredentialProfiles.size()
+                                  << "actionFound=" << (savedHostConnectAction != nullptr)
+                                  << "accessibleName=" << savedHostConnectAccessibleName
+                                  << "focused=" << savedHostConnectFocused << "filteredProfileCount="
+                                  << (hostPane == nullptr ? -1 : hostPane->property("filteredProfileCount").toInt())
+                                  << "searchText="
+                                  << (quickItem(rootObject, "hostSearch") == nullptr
+                                          ? QStringLiteral("<missing>")
+                                          : quickItem(rootObject, "hostSearch")->property("text").toString());
+        return false;
+    }
+    sendKey(window, Qt::Key_Return);
+    processWindowEventsFor(std::chrono::milliseconds{100});
+    const bool savedCredentialDialogOpened = namedFocusItem(window) == QStringLiteral("savedCredentialField");
+    sendKey(window, Qt::Key_Escape);
+    processWindowEventsFor(std::chrono::milliseconds{180});
+    const bool savedCredentialDialogKeyboard =
+        savedCredentialDialogOpened && namedFocusItem(window) == QStringLiteral("savedHostConnectAction");
+    const QString savedCredentialProfileId =
+        savedCredentialProfiles.constFirst().toMap().value(QStringLiteral("id")).toString();
+    const bool savedCredentialProfileDeleted = controller.deleteHostProfile(savedCredentialProfileId);
+    processWindowEventsFor(std::chrono::milliseconds{100});
+    if (!savedCredentialDialogKeyboard || !savedCredentialProfileDeleted)
+    {
+        qCWarning(applicationLog) << "Saved credential dialog keyboard route failed"
+                                  << "opened=" << savedCredentialDialogOpened
+                                  << "restoredFocus=" << namedFocusItem(window)
+                                  << "profileDeleted=" << savedCredentialProfileDeleted;
         return false;
     }
 
