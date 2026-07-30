@@ -267,4 +267,4 @@ Copy this table into the V1 test record and attach evidence paths:
 | Installed data survives upgrade and uninstall | NOT RUN | |
 | Clean Windows 11 release without developer tools | NOT RUN | |
 
-V1 manual acceptance is complete only when all twelve rows are `PASS`.
+V1 manual acceptance is complete only when all thirteen rows are `PASS`.
