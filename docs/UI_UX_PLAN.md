@@ -2,6 +2,10 @@
 
 Status: accepted for V1 0.1.0
 
+V1.1 continues with a deeper reference-led pass documented in
+[V1_1_SCOPE.md](V1_1_SCOPE.md) and
+[V1_1_UI_UX_AUDIT.md](V1_1_UI_UX_AUDIT.md).
+
 ## Goal
 
 V1 should initially feel familiar to a Netcatty user while remaining an
