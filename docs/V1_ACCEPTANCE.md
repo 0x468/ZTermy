@@ -39,6 +39,11 @@ Only runtime evidence can mark a platform or UI item complete.
   Release on the primary display: the client screen rectangle and Win32
   monitor work area both measured `(0, 0)-(2560, 1392)`, followed by a
   successful restore.
+- The real-HWND resize gate passes in dynamic Debug and static Release. All
+  four edges and four corners return the exact Win32 resize hit codes and
+  select the matching horizontal, vertical, or diagonal system cursor.
+  Maximized checks at the new client bounds expose no resize hit, followed by
+  a successful restore.
 - Custom caption commands, maximize-button Snap Layout hover, and Win+Z were
   manually verified on the primary Windows 11 development machine.
 - A Debug runtime session displayed a real PowerShell prompt through ConPTY,
@@ -123,7 +128,7 @@ procedures and expected results.
 - [x] Custom title bar preserves minimize, maximize, restore, and close
 - [x] Hovering maximize/restore shows Windows 11 Snap Layouts
 - [x] Win+Z and snap keyboard shortcuts work
-- [ ] All edges and corners resize with native cursors
+- [x] All edges and corners resize with native cursors
 - [x] Double-clicking draggable title space toggles maximize/restore
 - [x] Maximized window respects the monitor work area
 - [ ] Moving between mixed-DPI monitors preserves geometry and sharp rendering

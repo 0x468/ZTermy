@@ -433,6 +433,17 @@ add_custom_target(ztermy_window_appearance_runtime_smoke
     VERBATIM
 )
 
+add_custom_target(ztermy_window_resize_runtime_smoke
+    COMMAND "${CMAKE_COMMAND}" -E rm -rf
+            "${CMAKE_CURRENT_BINARY_DIR}/test-data/window-resize-smoke"
+    COMMAND "$<TARGET_FILE:ztermy>"
+            --window-resize-smoke
+            --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/window-resize-smoke"
+    DEPENDS ztermy
+    COMMENT "Checking native resize hit areas and system cursors"
+    VERBATIM
+)
+
 add_custom_target(ztermy_ui_layout_runtime_smoke
     COMMAND "$<TARGET_FILE:ztermy>"
             --ui-layout-smoke

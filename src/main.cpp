@@ -59,6 +59,145 @@ void processWindowEventsFor(const std::chrono::milliseconds duration)
     return workAreaMatches && !window.maximized();
 }
 
+struct ResizeHitRuntimeCase
+{
+    const char *name;
+    QPoint clientPoint;
+    LRESULT expectedHit;
+    LPCWSTR expectedCursor;
+};
+
+[[nodiscard]] LPARAM screenPointParameter(const HWND windowHandle, const QPoint clientPoint)
+{
+    POINT screenPoint{.x = clientPoint.x(), .y = clientPoint.y()};
+    if (ClientToScreen(windowHandle, &screenPoint) == FALSE)
+    {
+        return 0;
+    }
+    return MAKELPARAM(screenPoint.x, screenPoint.y);
+}
+
+[[nodiscard]] bool isResizeHit(const LRESULT hit) noexcept
+{
+    return hit == HTLEFT || hit == HTRIGHT || hit == HTTOP || hit == HTBOTTOM || hit == HTTOPLEFT || hit == HTTOPRIGHT
+           || hit == HTBOTTOMLEFT || hit == HTBOTTOMRIGHT;
+}
+
+[[nodiscard]] bool runWindowResizeRuntimeSmoke(ztermy::NativeWindow &window)
+{
+    window.resize(QSize{1120, 800});
+    window.show();
+    window.requestActivate();
+    processWindowEventsFor(std::chrono::milliseconds{250});
+
+    const auto windowHandle = reinterpret_cast<HWND>(window.winId()); // NOLINT(performance-no-int-to-ptr)
+    RECT clientRect{};
+    if (GetClientRect(windowHandle, &clientRect) == FALSE)
+    {
+        qCWarning(applicationLog) << "Window resize smoke could not read the client rectangle";
+        return false;
+    }
+    const int right = clientRect.right - 2;
+    const int bottom = clientRect.bottom - 2;
+    const int horizontalMiddle = clientRect.right / 2;
+    const int verticalMiddle = clientRect.bottom / 2;
+    const std::array<ResizeHitRuntimeCase, 8> cases{
+        ResizeHitRuntimeCase{.name = "left",
+                             .clientPoint = QPoint{1, verticalMiddle},
+                             .expectedHit = HTLEFT,
+                             .expectedCursor = IDC_SIZEWE},
+        ResizeHitRuntimeCase{.name = "right",
+                             .clientPoint = QPoint{right, verticalMiddle},
+                             .expectedHit = HTRIGHT,
+                             .expectedCursor = IDC_SIZEWE},
+        ResizeHitRuntimeCase{.name = "top",
+                             .clientPoint = QPoint{horizontalMiddle, 1},
+                             .expectedHit = HTTOP,
+                             .expectedCursor = IDC_SIZENS},
+        ResizeHitRuntimeCase{.name = "bottom",
+                             .clientPoint = QPoint{horizontalMiddle, bottom},
+                             .expectedHit = HTBOTTOM,
+                             .expectedCursor = IDC_SIZENS},
+        ResizeHitRuntimeCase{.name = "top-left",
+                             .clientPoint = QPoint{1, 1},
+                             .expectedHit = HTTOPLEFT,
+                             .expectedCursor = IDC_SIZENWSE},
+        ResizeHitRuntimeCase{.name = "top-right",
+                             .clientPoint = QPoint{right, 1},
+                             .expectedHit = HTTOPRIGHT,
+                             .expectedCursor = IDC_SIZENESW},
+        ResizeHitRuntimeCase{.name = "bottom-left",
+                             .clientPoint = QPoint{1, bottom},
+                             .expectedHit = HTBOTTOMLEFT,
+                             .expectedCursor = IDC_SIZENESW},
+        ResizeHitRuntimeCase{.name = "bottom-right",
+                             .clientPoint = QPoint{right, bottom},
+                             .expectedHit = HTBOTTOMRIGHT,
+                             .expectedCursor = IDC_SIZENWSE},
+    };
+
+    bool normalStatePassed = true;
+    for (const ResizeHitRuntimeCase &testCase : cases)
+    {
+        const LPARAM pointParameter = screenPointParameter(windowHandle, testCase.clientPoint);
+        const LRESULT actualHit = SendMessageW(windowHandle, WM_NCHITTEST, 0, pointParameter);
+        const HCURSOR arrowCursor = LoadCursorW(nullptr, IDC_ARROW);
+        const HCURSOR expectedCursor = LoadCursorW(nullptr, testCase.expectedCursor);
+        SetCursor(arrowCursor);
+        const LRESULT cursorHandled = SendMessageW(windowHandle, WM_SETCURSOR, reinterpret_cast<WPARAM>(windowHandle),
+                                                   MAKELPARAM(static_cast<WORD>(testCase.expectedHit), WM_MOUSEMOVE));
+        const HCURSOR actualCursor = GetCursor();
+        const bool hitMatches = actualHit == testCase.expectedHit;
+        const bool cursorMatches = cursorHandled != FALSE && actualCursor == expectedCursor;
+        qCInfo(applicationLog) << "Window resize runtime check"
+                               << "area=" << testCase.name << "actualHit=" << actualHit
+                               << "expectedHit=" << testCase.expectedHit << "hitMatches=" << hitMatches
+                               << "cursorHandled=" << cursorHandled << "cursorMatches=" << cursorMatches;
+        normalStatePassed = normalStatePassed && hitMatches && cursorMatches;
+    }
+
+    window.showMaximized();
+    processWindowEventsFor(std::chrono::milliseconds{250});
+    bool maximizedStatePassed = window.maximized();
+    RECT maximizedClientRect{};
+    if (GetClientRect(windowHandle, &maximizedClientRect) == FALSE)
+    {
+        return false;
+    }
+    const int maximizedRight = maximizedClientRect.right - 2;
+    const int maximizedBottom = maximizedClientRect.bottom - 2;
+    const int maximizedHorizontalMiddle = maximizedClientRect.right / 2;
+    const int maximizedVerticalMiddle = maximizedClientRect.bottom / 2;
+    const std::array<QPoint, 8> maximizedPoints{
+        QPoint{1, maximizedVerticalMiddle},
+        QPoint{maximizedRight, maximizedVerticalMiddle},
+        QPoint{maximizedHorizontalMiddle, 1},
+        QPoint{maximizedHorizontalMiddle, maximizedBottom},
+        QPoint{1, 1},
+        QPoint{maximizedRight, 1},
+        QPoint{1, maximizedBottom},
+        QPoint{maximizedRight, maximizedBottom},
+    };
+    for (std::size_t index = 0; index < cases.size(); ++index)
+    {
+        const ResizeHitRuntimeCase &testCase = cases[index];
+        const LPARAM pointParameter = screenPointParameter(windowHandle, maximizedPoints[index]);
+        const LRESULT actualHit = SendMessageW(windowHandle, WM_NCHITTEST, 0, pointParameter);
+        const bool resizeDisabled = !isResizeHit(actualHit);
+        qCInfo(applicationLog) << "Window maximized resize runtime check"
+                               << "area=" << testCase.name << "actualHit=" << actualHit
+                               << "resizeDisabled=" << resizeDisabled;
+        maximizedStatePassed = maximizedStatePassed && resizeDisabled;
+    }
+    window.showNormal();
+    processWindowEventsFor(std::chrono::milliseconds{250});
+    const bool restored = !window.maximized();
+    qCInfo(applicationLog) << "Window resize runtime summary"
+                           << "normalStatePassed=" << normalStatePassed
+                           << "maximizedStatePassed=" << maximizedStatePassed << "restored=" << restored;
+    return normalStatePassed && maximizedStatePassed && restored;
+}
+
 [[nodiscard]] bool queryDwmIntAttribute(const HWND windowHandle, const DWORD attribute, int *value)
 {
     return value != nullptr && SUCCEEDED(DwmGetWindowAttribute(windowHandle, attribute, value, sizeof(*value)));
@@ -730,6 +869,7 @@ int main(int argc, char *argv[])
     const bool terminalRenderSmoke = QCoreApplication::arguments().contains(QStringLiteral("--terminal-render-smoke"));
     const bool windowAppearanceSmoke =
         QCoreApplication::arguments().contains(QStringLiteral("--window-appearance-smoke"));
+    const bool windowResizeSmoke = QCoreApplication::arguments().contains(QStringLiteral("--window-resize-smoke"));
     if ((uiLayoutSmoke || uiKeyboardSmoke) && !applyUiLayoutSmokeTheme(appController, QStringLiteral("dark")))
     {
         qCCritical(applicationLog) << "Could not prepare the UI runtime smoke settings";
@@ -793,6 +933,19 @@ int main(int argc, char *argv[])
             return EXIT_FAILURE;
         }
         qCInfo(applicationLog) << "Window appearance runtime smoke test completed";
+        return EXIT_SUCCESS;
+    }
+    if (windowResizeSmoke)
+    {
+        const bool passed = runWindowResizeRuntimeSmoke(window);
+        appController.shutdown();
+        window.releaseResources();
+        if (!passed)
+        {
+            qCCritical(applicationLog) << "Window resize runtime smoke test failed";
+            return EXIT_FAILURE;
+        }
+        qCInfo(applicationLog) << "Window resize runtime smoke test completed";
         return EXIT_SUCCESS;
     }
 

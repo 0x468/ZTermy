@@ -31,6 +31,24 @@ build/msvc-dynamic-debug/test-data/window-runtime-smoke/logs/ztermy.log
 This gate proves the current monitor path. It does not replace the mixed-DPI
 and per-monitor manual checks below.
 
+## Automated native-resize gate
+
+Run the real-HWND resize gate in both build shapes:
+
+```text
+cmake --build --preset msvc-dynamic-debug --target ztermy_window_resize_runtime_smoke
+cmake --build --preset msvc-static-release --target ztermy_window_resize_runtime_smoke
+```
+
+The gate sends `WM_NCHITTEST` to the visible ztermy HWND at the four edges and
+four corners. It requires the exact `HTLEFT` through `HTBOTTOMRIGHT` results,
+then sends `WM_SETCURSOR` and compares `GetCursor()` with the Windows
+horizontal, vertical, and two diagonal system-resize cursors. After maximizing,
+it repeats all eight checks at the new client bounds and requires every resize
+hit to be disabled, then restores the window. This proves Win32 routing and
+cursor selection; manual dragging remains necessary for motion quality,
+minimum-size feel, and terminal/IME behavior during resize.
+
 ## Caption commands
 
 1. Click minimize.
