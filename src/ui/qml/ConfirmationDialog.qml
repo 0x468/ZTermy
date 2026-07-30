@@ -11,6 +11,8 @@ Dialog {
     property string description: ""
     property string acceptText: "Continue"
     property string rejectText: "Cancel"
+    property string acceptObjectName: ""
+    property string rejectObjectName: ""
     property bool destructive: false
     property bool acceptEnabled: true
     property Item focusRestoreItem: null
@@ -76,16 +78,24 @@ Dialog {
             ActionButton {
                 id: rejectButton
 
+                objectName: control.rejectObjectName
                 text: control.rejectText
                 accessibleName: control.rejectText
+                KeyNavigation.left: acceptButton
+                KeyNavigation.right: acceptButton
                 onClicked: control.reject()
             }
 
             ActionButton {
+                id: acceptButton
+
+                objectName: control.acceptObjectName
                 text: control.acceptText
                 accessibleName: control.acceptText
                 enabled: control.acceptEnabled
                 variant: control.destructive ? "destructive" : "primary"
+                KeyNavigation.left: rejectButton
+                KeyNavigation.right: rejectButton
                 onClicked: control.accept()
             }
         }

@@ -78,14 +78,16 @@ Only runtime evidence can mark a platform or UI item complete.
   `libghostty-vt`, an immutable cell snapshot, and the custom terminal item
   without a scene-graph crash.
 - Automated terminal-engine coverage verifies true color, primary/alternate
-  screen restoration, erase and cursor visibility/style, resize, wide CJK
-  cells, combining graphemes, and emoji cell widths. Terminal-item coverage
-  verifies wide IME carets, suffix displacement, single commit delivery, and
-  composition behavior across resize and shutdown. It also verifies exclusive
-  copy/paste shortcut routing, multiline confirmation, normal text input,
-  linear and rectangular drag selection, click-to-clear, copy-on-select, and
-  accumulated high-resolution wheel scrolling. A real Qt Quick window capture
-  verifies final pixels for styled and selected backgrounds, a two-cell block
+  screen and cursor restoration, erase and cursor visibility/style, resize,
+  wide CJK cells, atomic wide-cell selection, combining graphemes, and emoji
+  cell widths. Terminal-item coverage verifies IME suffix displacement, a
+  visible insertion caret, single commit delivery, and composition behavior
+  across resize and shutdown. It also verifies inverted block-cursor glyphs,
+  exclusive copy/paste shortcut routing, multiline confirmation, normal text
+  input, linear and rectangular drag selection, click-to-clear,
+  copy-on-select, accumulated high-resolution wheel scrolling, and absolute
+  scrollbar navigation. A real Qt Quick window capture verifies final pixels
+  for styled and full-width selected backgrounds, an inverted two-cell block
   cursor, and a CJK glyph extending into its trailing cell.
 - Automated end-to-end coverage verifies PowerShell startup, queued input,
   parsed sentinel output, and session shutdown.
@@ -100,16 +102,19 @@ Only runtime evidence can mark a platform or UI item complete.
   starving the Qt event loop.
 - The real-window renderer gate displayed all 20,000 PowerShell lines through
   Qt Quick, resized twice during output, and captured line 20000, the unique
-  completion marker, and the returned prompt. Dynamic Debug completed in
-  `2892 ms` with 148 heartbeat ticks, a `68 ms` maximum heartbeat gap, and 76
-  swapped frames. Static Release completed in `1840 ms` with 209 heartbeat
-  ticks, a `14 ms` maximum gap, and 243 swapped frames. Both rendered terminal
-  pixels and remained within the 250 ms responsiveness ceiling.
+  completion marker, the returned prompt, and a working history scrollbar.
+  Dynamic Debug completed in `2995 ms` with 157 heartbeat ticks, a `57 ms`
+  maximum heartbeat gap, and 83 swapped frames. Static Release completed in
+  `1825 ms` with 211 heartbeat ticks, a `15 ms` maximum gap, and 250 swapped
+  frames. Both rendered terminal pixels and remained within the 250 ms
+  responsiveness ceiling.
 - The real-window appearance gate passed in dynamic Debug and static Release.
   DWM readback matched immersive Dark and Light mode, rounded corners, and
   None/Mica/Acrylic backdrop values `1`/`2`/`3`; Qt readback matched opacity
-  `1.0`/`0.85`/`0.75`. Invalid opacity and backdrop values were rejected
-  without changing the established state, and the gate restored
+  `1.0`/`0.85`/`0.75`. QML surface readback additionally verified that None
+  remains opaque, Mica and Acrylic expose translucent application surfaces,
+  and returning to None restores opacity. Invalid opacity and backdrop values
+  were rejected without changing the established state, and the gate restored
   Dark/None/100%.
 - The static Release sustained-interaction gate ran a real PowerShell/ConPTY
   session for `1800 s` across 30 independent one-minute latency windows and
@@ -146,6 +151,9 @@ Only runtime evidence can mark a platform or UI item complete.
   authentication, kept authentication closed for a temporary same-endpoint
   changed-key record, and opened it only for the exact observed key. The
   temporary record was not persisted.
+- The real-host interactive password gate passed against the authorized
+  Windows 11 fixture in the static Release build. Input remained hidden and
+  QtTest reported `3 passed, 0 failed` without exposing the credential.
 
 Platform and UI checkboxes remain open until the corresponding behavior has
 been manually exercised across the required Windows 11 and mixed-DPI scenarios.
@@ -193,7 +201,7 @@ procedures and expected results.
 
 ## SSH security and reliability
 
-- [ ] Password authentication passes on a real host
+- [x] Password authentication passes on a real host
 - [x] Private-key authentication passes on a real host
 - [x] Unknown host keys require confirmation before authentication
 - [x] Changed host keys block the connection before authentication

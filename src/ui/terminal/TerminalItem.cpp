@@ -221,6 +221,32 @@ bool TerminalItem::confirmMultilinePaste() const noexcept
     return m_confirmMultilinePaste;
 }
 
+bool TerminalItem::scrollbarVisible() const noexcept
+{
+    return m_snapshot && m_snapshot->scrollbar.total > m_snapshot->scrollbar.visible;
+}
+
+qreal TerminalItem::scrollbarPosition() const noexcept
+{
+    if (!scrollbarVisible())
+    {
+        return 1.0;
+    }
+    const std::uint64_t maximumOffset = m_snapshot->scrollbar.total - m_snapshot->scrollbar.visible;
+    return maximumOffset == 0 ? 1.0
+                              : static_cast<qreal>(m_snapshot->scrollbar.offset) / static_cast<qreal>(maximumOffset);
+}
+
+qreal TerminalItem::scrollbarPageRatio() const noexcept
+{
+    if (!m_snapshot || m_snapshot->scrollbar.total == 0)
+    {
+        return 1.0;
+    }
+    return std::clamp(
+        static_cast<qreal>(m_snapshot->scrollbar.visible) / static_cast<qreal>(m_snapshot->scrollbar.total), 0.0, 1.0);
+}
+
 void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
 {
     if (!snapshot)
@@ -229,12 +255,14 @@ void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
         ++m_revision;
         update();
         notifyInputMethod();
+        emit scrollbarChanged();
         return;
     }
     m_snapshot = std::move(snapshot);
     ++m_revision;
     update();
     notifyInputMethod();
+    emit scrollbarChanged();
 }
 
 void TerminalItem::setStatusText(const QString &status)
@@ -354,6 +382,34 @@ void TerminalItem::resolveMultilinePaste(const bool accepted)
     }
 }
 
+void TerminalItem::scrollToFraction(const qreal fraction)
+{
+    if (!scrollbarVisible())
+    {
+        return;
+    }
+    const std::uint64_t maximumOffset = m_snapshot->scrollbar.total - m_snapshot->scrollbar.visible;
+    const qreal normalized = std::clamp(fraction, 0.0, 1.0);
+    const std::uint64_t targetOffset =
+        normalized <= 0.0   ? 0
+        : normalized >= 1.0 ? maximumOffset
+                            : static_cast<std::uint64_t>(std::llround(normalized * static_cast<qreal>(maximumOffset)));
+    const std::uint64_t currentOffset = m_snapshot->scrollbar.offset;
+    if (targetOffset == currentOffset)
+    {
+        return;
+    }
+    const auto maximumStep = static_cast<std::uint64_t>(std::numeric_limits<int>::max());
+    if (targetOffset > currentOffset)
+    {
+        emit scrollRequested(static_cast<int>(std::min(targetOffset - currentOffset, maximumStep)));
+    }
+    else
+    {
+        emit scrollRequested(-static_cast<int>(std::min(currentOffset - targetOffset, maximumStep)));
+    }
+}
+
 QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 {
     auto *node = static_cast<TerminalTextureNode *>(oldNode);
@@ -371,7 +427,7 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
     const qreal devicePixelRatio = window()->effectiveDevicePixelRatio();
     const QSize pixelSize{std::max(1, qRound(width() * devicePixelRatio)),
                           std::max(1, qRound(height() * devicePixelRatio))};
-    if (node->revision == m_revision && node->pixelSize == pixelSize)
+    if (node->revision == m_revision)
     {
         node->setRect(boundingRect());
         return node;
@@ -417,8 +473,12 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                 {
                     continue;
                 }
-                const QRectF cellRect{horizontalPadding + (displayColumn * cellWidthValue),
-                                      verticalPadding + (row * cellHeightValue), cellWidthValue, cellHeightValue};
+                const QRectF cellRect{
+                    horizontalPadding + (displayColumn * cellWidthValue),
+                    verticalPadding + (row * cellHeightValue),
+                    std::max<qreal>(1.0, cell.displayWidth) * cellWidthValue,
+                    cellHeightValue,
+                };
                 if (cell.selected)
                 {
                     painter.fillRect(cellRect, selectionBackground);
@@ -482,15 +542,14 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                     cluster.width * cellWidthValue,
                     cellHeightValue,
                 };
-                const bool cursorCluster = m_preeditCursorVisible && cluster.column == cursorCell.column;
-                painter.fillRect(clusterRect, cursorCluster ? QColor(255, 255, 255) : QColor(42, 91, 145, 180));
-                painter.setPen(cursorCluster ? QColor(11, 16, 23) : QColor(255, 255, 255));
+                painter.fillRect(clusterRect, QColor(42, 91, 145, 180));
+                painter.setPen(QColor(255, 255, 255));
                 painter.drawText(QPointF(clusterRect.left(), compositionTop + metrics.ascent()), cluster.text);
             }
-            if (m_preeditCursorVisible && cursorCell.column == insertedColumns)
+            if (m_preeditCursorVisible && (!m_cursorBlink || m_cursorBlinkPhase))
             {
-                painter.fillRect(QRectF(compositionLeft + (cursorCell.column * cellWidthValue), compositionTop,
-                                        cursorCell.width * cellWidthValue, cellHeightValue),
+                painter.fillRect(QRectF(compositionLeft + (cursorCell.column * cellWidthValue), compositionTop, 2.0,
+                                        cellHeightValue),
                                  QColor(255, 255, 255));
             }
         }
@@ -515,10 +574,26 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                     painter.drawRect(cursorCell.adjusted(0.5, 0.5, -0.5, -0.5));
                     break;
                 case terminal::TerminalCursorStyle::block:
-                    painter.fillRect(cursorCell, QColor(color(m_snapshot->cursor.color).red(),
-                                                        color(m_snapshot->cursor.color).green(),
-                                                        color(m_snapshot->cursor.color).blue(), 145));
+                {
+                    painter.fillRect(cursorCell, color(m_snapshot->cursor.color));
+                    const terminal::TerminalCell &cell =
+                        m_snapshot->cell(m_snapshot->cursor.column, m_snapshot->cursor.row);
+                    if (!cell.grapheme.empty() && !cell.invisible)
+                    {
+                        QFont cursorFont = m_font;
+                        cursorFont.setBold(cell.bold);
+                        cursorFont.setItalic(cell.italic);
+                        cursorFont.setUnderline(cell.underline);
+                        cursorFont.setStrikeOut(cell.strikethrough);
+                        cursorFont.setOverline(cell.overline);
+                        painter.setFont(cursorFont);
+                        painter.setPen(color(cell.background));
+                        painter.drawText(
+                            QPointF(cursorCell.left(), cursorCell.top() + metrics.ascent()),
+                            QString::fromUcs4(cell.grapheme.data(), static_cast<qsizetype>(cell.grapheme.size())));
+                    }
                     break;
+                }
             }
         }
     }
@@ -601,6 +676,7 @@ void TerminalItem::inputMethodEvent(QInputMethodEvent *event)
     m_preeditText = event->preeditString();
     m_preeditCursorPosition = m_preeditText.size();
     m_preeditCursorVisible = true;
+    m_cursorBlinkPhase = true;
     for (const QInputMethodEvent::Attribute &attribute : event->attributes())
     {
         if (attribute.type == QInputMethodEvent::Cursor)

@@ -39,14 +39,31 @@ Expected:
 
 1. Run `Get-ChildItem`.
 2. Run a program that uses the alternate screen, such as a locally installed
-   terminal editor.
+   terminal editor. For Helix, run `hx`, resize the window several times, then
+   exit with `:q`.
 3. Exit the program and return to PowerShell.
 
 Expected:
 
 - ANSI foreground/background colors and cursor position are plausible.
 - Alternate-screen content does not overwrite the restored PowerShell screen.
+- The restored cursor is on the final prompt row; typing does not modify a
+  visually stale row above the prompt.
 - Resize remains stable while the full-screen program is active.
+
+An optional installed-Helix diagnostic repeats the alternate-screen transition
+five times through ConPTY:
+
+```powershell
+$env:ZTERMY_RUN_HELIX_GATE = "1"
+.\build\msvc-dynamic-debug\ztermy_local_terminal_session_tests.exe `
+  restoresPromptAfterHelixAlternateScreen
+Remove-Item Env:ZTERMY_RUN_HELIX_GATE
+```
+
+The diagnostic skips if `hx` is unavailable or cannot enter the alternate
+screen in the current environment. A passing result protects the engine cursor
+invariant but does not replace the interactive rendering check above.
 
 ## Unicode and IME
 
@@ -67,8 +84,9 @@ Expected:
 - The solid cursor covers a complete CJK glyph rather than half of it.
 - While composing in the middle of `hello`, the `llo` suffix moves right as
   the preedit grows instead of being overwritten.
-- A composition caret over Chinese text is two cells wide; a caret over Latin
-  text is one cell wide.
+- The IME query rectangle follows the active Latin or two-cell CJK cluster so
+  the candidate window remains aligned, while the visible insertion caret is
+  a thin blinking line that never hides the suffix.
 - Cursor movement agrees with the displayed cell positions before and after
   committing the composition.
 
@@ -82,13 +100,17 @@ is covered separately by
 
 1. Run `1..100 | ForEach-Object { "history line $_" }`.
 2. Scroll upward with the mouse wheel until older lines are visible.
-3. Leave the viewport in history and run output from another process if one is
+3. Drag the terminal scrollbar to the top, click its track, and return it to
+   the bottom.
+4. Leave the viewport in history and run output from another process if one is
    already active.
-4. Scroll down to the prompt, then scroll up again and press a normal character.
+5. Scroll down to the prompt, then scroll up again and press a normal character.
 
 Expected:
 
 - Wheel-up reveals older output and wheel-down returns toward the prompt.
+- The scrollbar thumb size represents the visible share of history, tracks the
+  current viewport, and remains draggable without activating window resize.
 - The cursor is hidden while viewing history.
 - New output does not forcibly move a history viewport to the bottom.
 - Typing returns to the active prompt and clears any selection.

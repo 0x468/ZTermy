@@ -6,13 +6,14 @@ QtObject {
     property string preference: "dark"
     property bool systemDark: true
     property bool animationsEnabled: true
+    property bool backdropActive: false
     readonly property bool dark: preference === "dark" || (preference === "system" && systemDark)
 
-    readonly property color windowBackground: dark ? "#F20B0F14" : "#F2F8FAFC"
-    readonly property color panelBackground: dark ? "#E6111824" : "#F2F1F5F9"
-    readonly property color chromeBackground: dark ? "#E60F1722" : "#F2E2E8F0"
-    readonly property color contentBackground: dark ? "#E60A0E14" : "#F2FFFFFF"
-    readonly property color workspaceBackground: dark ? "#F20B1017" : "#F8FFFFFF"
+    readonly property color windowBackground: dark ? (backdropActive ? "#D90B0F14" : "#FF0B0F14") : (backdropActive ? "#D9F8FAFC" : "#FFF8FAFC")
+    readonly property color panelBackground: dark ? (backdropActive ? "#E6111824" : "#FF111824") : (backdropActive ? "#E6F1F5F9" : "#FFF1F5F9")
+    readonly property color chromeBackground: dark ? (backdropActive ? "#D90F1722" : "#FF0F1722") : (backdropActive ? "#D9E2E8F0" : "#FFE2E8F0")
+    readonly property color contentBackground: dark ? (backdropActive ? "#E60A0E14" : "#FF0A0E14") : (backdropActive ? "#E6FFFFFF" : "#FFFFFFFF")
+    readonly property color workspaceBackground: dark ? (backdropActive ? "#F20B1017" : "#FF0B1017") : (backdropActive ? "#F2FFFFFF" : "#FFFFFFFF")
     readonly property color raisedBackground: dark ? "#1E293B" : "#E2E8F0"
     readonly property color elevatedBackground: dark ? "#141E2B" : "#F1F5F9"
     readonly property color controlBackground: dark ? "#172033" : "#E2E8F0"

@@ -35,7 +35,7 @@ protected:
     [[nodiscard]] QString readClipboardText() const override { return clipboardTextFixture; }
 };
 
-[[nodiscard]] ztermy::terminal::TerminalSnapshotPtr snapshotAt(const quint16 column, const quint16 row)
+[[nodiscard]] std::shared_ptr<ztermy::terminal::TerminalSnapshot> snapshotAt(const quint16 column, const quint16 row)
 {
     auto snapshot = std::make_shared<ztermy::terminal::TerminalSnapshot>();
     snapshot->columns = 80;
@@ -64,6 +64,7 @@ private slots:
     void confirmsMultilinePaste();
     void selectsCellsAndCopiesOnMouseRelease();
     void accumulatesWheelDeltasIntoScrollRows();
+    void exposesScrollbarAndRequestsAbsoluteScroll();
     void rendersStyledWideCellsAndCursorPixels();
     void rendersImeAcrossResizeAndShutdown();
 };
@@ -293,6 +294,26 @@ void TerminalItemTests::accumulatesWheelDeltasIntoScrollRows()
     QCOMPARE(scrollSpy.at(1).at(0).toInt(), 6);
 }
 
+void TerminalItemTests::exposesScrollbarAndRequestsAbsoluteScroll()
+{
+    TestableTerminalItem item;
+    auto snapshot = snapshotAt(0, 0);
+    snapshot->scrollbar = {.total = 100, .offset = 40, .visible = 20};
+    QSignalSpy scrollbarSpy(&item, &ztermy::ui::TerminalItem::scrollbarChanged);
+    QSignalSpy scrollSpy(&item, &ztermy::ui::TerminalItem::scrollRequested);
+
+    item.setSnapshot(snapshot);
+
+    QVERIFY(item.scrollbarVisible());
+    QCOMPARE(item.scrollbarPosition(), 0.5);
+    QCOMPARE(item.scrollbarPageRatio(), 0.2);
+    QCOMPARE(scrollbarSpy.count(), 1);
+
+    item.scrollToFraction(0.75);
+    QCOMPARE(scrollSpy.count(), 1);
+    QCOMPARE(scrollSpy.constFirst().constFirst().toInt(), 20);
+}
+
 void TerminalItemTests::rendersStyledWideCellsAndCursorPixels()
 {
     QQuickWindow window;
@@ -310,6 +331,9 @@ void TerminalItemTests::rendersStyledWideCellsAndCursorPixels()
     }
     snapshot->cells[0].background = {.red = 180, .green = 20, .blue = 30};
     snapshot->cells[2].selected = true;
+    snapshot->cells[4].selected = true;
+    snapshot->cells[4].displayWidth = 2;
+    snapshot->cells[5].displayWidth = 0;
     snapshot->cells[8].grapheme = U"中";
     snapshot->cells[8].foreground = {.red = 240, .green = 40, .blue = 40};
     snapshot->cells[8].displayWidth = 2;
@@ -350,6 +374,9 @@ void TerminalItemTests::rendersStyledWideCellsAndCursorPixels()
     const QColor selectionBackground = pixelAtCellCenter(2, 0);
     QVERIFY(selectionBackground.blue() > selectionBackground.red());
     QVERIFY(selectionBackground.blue() > selectionBackground.green());
+    const QColor wideSelectionTail = pixelAtCellCenter(5, 0);
+    QVERIFY(wideSelectionTail.blue() > wideSelectionTail.red());
+    QVERIFY(wideSelectionTail.blue() > wideSelectionTail.green());
 
     const QColor cursorFirstCell = pixelAtCellCenter(0, 2);
     const QColor cursorSecondCell = pixelAtCellCenter(1, 2);

@@ -125,6 +125,11 @@ struct TerminalSnapshot
     {
         return cells.at((static_cast<std::size_t>(row) * columns) + column);
     }
+
+    [[nodiscard]] TerminalCell &cell(const std::uint16_t column, const std::uint16_t row)
+    {
+        return cells.at((static_cast<std::size_t>(row) * columns) + column);
+    }
 };
 
 using TerminalSnapshotPtr = std::shared_ptr<const TerminalSnapshot>;

@@ -32,6 +32,9 @@ class TerminalItem : public QQuickItem
     Q_PROPERTY(bool copyOnSelect READ copyOnSelect WRITE setCopyOnSelect NOTIFY copyOnSelectChanged)
     Q_PROPERTY(bool confirmMultilinePaste READ confirmMultilinePaste WRITE setConfirmMultilinePaste NOTIFY
                    confirmMultilinePasteChanged)
+    Q_PROPERTY(bool scrollbarVisible READ scrollbarVisible NOTIFY scrollbarChanged)
+    Q_PROPERTY(qreal scrollbarPosition READ scrollbarPosition NOTIFY scrollbarChanged)
+    Q_PROPERTY(qreal scrollbarPageRatio READ scrollbarPageRatio NOTIFY scrollbarChanged)
 
 public:
     explicit TerminalItem(QQuickItem *parent = nullptr);
@@ -43,6 +46,9 @@ public:
     [[nodiscard]] bool cursorBlink() const noexcept;
     [[nodiscard]] bool copyOnSelect() const noexcept;
     [[nodiscard]] bool confirmMultilinePaste() const noexcept;
+    [[nodiscard]] bool scrollbarVisible() const noexcept;
+    [[nodiscard]] qreal scrollbarPosition() const noexcept;
+    [[nodiscard]] qreal scrollbarPageRatio() const noexcept;
 
 public slots:
     void setSnapshot(ztermy::terminal::TerminalSnapshotPtr snapshot);
@@ -56,6 +62,7 @@ public slots:
     void setCopyOnSelect(bool enabled);
     void setConfirmMultilinePaste(bool enabled);
     Q_INVOKABLE void resolveMultilinePaste(bool accepted);
+    Q_INVOKABLE void scrollToFraction(qreal fraction);
 
 signals:
     void inputGenerated(const QByteArray &bytes);
@@ -70,6 +77,7 @@ signals:
     void cursorAppearanceChanged();
     void copyOnSelectChanged();
     void confirmMultilinePasteChanged();
+    void scrollbarChanged();
     void multilinePasteConfirmationRequested(int lineCount);
 
 protected:

@@ -976,6 +976,19 @@ std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot
     const std::size_t expectedCells = static_cast<std::size_t>(result.columns) * result.rows;
     result.cells.resize(expectedCells,
                         TerminalCell{.foreground = result.defaultForeground, .background = result.defaultBackground});
+    for (std::uint16_t rowIndex = 0; rowIndex < result.rows; ++rowIndex)
+    {
+        for (std::uint16_t columnIndex = 0; columnIndex + 1 < result.columns; ++columnIndex)
+        {
+            TerminalCell &head = result.cell(columnIndex, rowIndex);
+            TerminalCell &tail = result.cell(static_cast<std::uint16_t>(columnIndex + 1), rowIndex);
+            if (head.displayWidth == 2 && tail.displayWidth == 0 && (head.selected || tail.selected))
+            {
+                head.selected = true;
+                tail.selected = true;
+            }
+        }
+    }
     if (result.cursor.width == 1 && result.cursor.column < result.columns && result.cursor.row < result.rows)
     {
         result.cursor.width =

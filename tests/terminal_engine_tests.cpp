@@ -22,6 +22,7 @@ private slots:
     void exposesImmutableStyledCells();
     void exposesWideCellAndCursorWidth();
     void preservesPrimaryScreenAcrossAlternateScreen();
+    void normalizesWideCellSelection();
     void handlesEraseAndCursorVisibility();
     void exposesCombiningAndEmojiGraphemes();
     void reportsAndResetsRenderDamage();
@@ -148,6 +149,10 @@ void TerminalEngineTests::preservesPrimaryScreenAcrossAlternateScreen()
     constexpr std::string_view alternate = "alternate";
     constexpr std::string_view leaveAlternate = "\x1b[?1049l";
     QVERIFY(!engine.feed(std::as_bytes(std::span(primary))));
+    const auto primarySnapshot = engine.snapshot();
+    QVERIFY(primarySnapshot);
+    QCOMPARE(primarySnapshot->cursor.column, std::uint16_t{7});
+    QCOMPARE(primarySnapshot->cursor.row, std::uint16_t{0});
     QVERIFY(!engine.feed(std::as_bytes(std::span(enterAlternate))));
     QVERIFY(!engine.feed(std::as_bytes(std::span(alternate))));
 
@@ -165,6 +170,32 @@ void TerminalEngineTests::preservesPrimaryScreenAcrossAlternateScreen()
         QFAIL(text.error().message().c_str());
     }
     QCOMPARE(*text, "primary");
+    const auto restoredSnapshot = engine.snapshot();
+    QVERIFY(restoredSnapshot);
+    QCOMPARE(restoredSnapshot->cursor.column, primarySnapshot->cursor.column);
+    QCOMPARE(restoredSnapshot->cursor.row, primarySnapshot->cursor.row);
+}
+
+void TerminalEngineTests::normalizesWideCellSelection()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 8, .rows = 2});
+    if (!result)
+    {
+        QFAIL(result.error().message().c_str());
+    }
+    auto &engine = **result;
+
+    const std::u8string content = u8"中";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(content))));
+    QVERIFY(!engine.setSelection(
+        ztermy::terminal::TerminalSelection{.start = {.column = 1, .row = 0}, .end = {.column = 1, .row = 0}}));
+
+    const auto snapshot = engine.snapshot();
+    QVERIFY(snapshot);
+    QCOMPARE(snapshot->cell(0, 0).displayWidth, std::uint8_t{2});
+    QCOMPARE(snapshot->cell(1, 0).displayWidth, std::uint8_t{0});
+    QVERIFY(snapshot->cell(0, 0).selected);
+    QVERIFY(snapshot->cell(1, 0).selected);
 }
 
 void TerminalEngineTests::handlesEraseAndCursorVisibility()

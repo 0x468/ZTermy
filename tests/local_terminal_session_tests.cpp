@@ -40,6 +40,7 @@ class LocalTerminalSessionTests final : public QObject
 
 private slots:
     void runsPowerShellAndStopsPromptly();
+    void restoresPromptAfterHelixAlternateScreen();
     void measuresInteractiveInputQueueLatency();
     void processesLargeOutputWithoutStarvingEventLoop();
     void survivesSustainedInteractionWithoutLatencyGrowth();
@@ -73,6 +74,78 @@ void LocalTerminalSessionTests::runsPowerShellAndStopsPromptly()
         timer.start();
         session.stop();
         QVERIFY2(timer.elapsed() < 2000, "Stopping the local terminal session took too long");
+    }
+    catch (const std::exception &exception)
+    {
+        QFAIL(exception.what());
+    }
+}
+
+void LocalTerminalSessionTests::restoresPromptAfterHelixAlternateScreen()
+{
+    if (qEnvironmentVariableIntValue("ZTERMY_RUN_HELIX_GATE") != 1)
+    {
+        QSKIP("Set ZTERMY_RUN_HELIX_GATE=1 to run the installed Helix alternate-screen gate");
+    }
+
+    try
+    {
+        ztermy::terminal::LocalTerminalSession session;
+        ztermy::terminal::TerminalSnapshotPtr latestSnapshot;
+        connect(&session, &ztermy::terminal::LocalTerminalSession::snapshotReady, this,
+                [&latestSnapshot](ztermy::terminal::TerminalSnapshotPtr snapshot) {
+                    latestSnapshot = std::move(snapshot);
+                });
+
+        const std::error_code startError = session.start({.columns = 80, .rows = 24});
+        if (startError)
+        {
+            QFAIL(startError.message().c_str());
+        }
+        QTRY_VERIFY_WITH_TIMEOUT(latestSnapshot && latestSnapshot->cursor.visible, 5000);
+
+        const auto lastContentRow = [](const ztermy::terminal::TerminalSnapshot &snapshot) {
+            std::uint16_t result = 0;
+            for (std::uint16_t row = 0; row < snapshot.rows; ++row)
+            {
+                const bool hasContent = std::ranges::any_of(
+                    snapshot.cells.begin() + (static_cast<std::ptrdiff_t>(row) * snapshot.columns),
+                    snapshot.cells.begin() + (static_cast<std::ptrdiff_t>(row + 1) * snapshot.columns),
+                    [](const ztermy::terminal::TerminalCell &cell) {
+                        return !cell.grapheme.empty();
+                    });
+                if (hasContent)
+                {
+                    result = row;
+                }
+            }
+            return result;
+        };
+
+        for (int iteration = 0; iteration < 5; ++iteration)
+        {
+            session.queueInput(QByteArrayLiteral("hx\r"));
+            QElapsedTimer alternateTimer;
+            alternateTimer.start();
+            while (alternateTimer.elapsed() < 5000
+                   && (!latestSnapshot || snapshotText(*latestSnapshot).find(U"PS ") != std::u32string::npos))
+            {
+                QTest::qWait(20);
+            }
+            if (iteration == 0
+                && (!latestSnapshot || snapshotText(*latestSnapshot).find(U"PS ") != std::u32string::npos))
+            {
+                session.stop();
+                QSKIP("The installed hx command did not enter an alternate screen in this test environment");
+            }
+            QVERIFY(latestSnapshot && snapshotText(*latestSnapshot).find(U"PS ") == std::u32string::npos);
+            session.queueInput(QByteArrayLiteral(":q\r"));
+            QTRY_VERIFY_WITH_TIMEOUT(latestSnapshot && latestSnapshot->cursor.visible
+                                         && snapshotText(*latestSnapshot).find(U"PS ") != std::u32string::npos,
+                                     5000);
+            QCOMPARE(latestSnapshot->cursor.row, lastContentRow(*latestSnapshot));
+        }
+        session.stop();
     }
     catch (const std::exception &exception)
     {

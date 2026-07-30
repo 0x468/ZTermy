@@ -5,6 +5,7 @@ Item {
     id: overlay
 
     required property var controller
+    property Item focusRestoreItem: null
     property color panelColor: Theme.elevatedBackground
     property color borderColor: Theme.borderStrong
     property color textColor: Theme.text
@@ -13,6 +14,20 @@ Item {
 
     visible: controller.hostKeyPromptVisible
     enabled: visible
+    focus: visible
+
+    onVisibleChanged: {
+        if (visible) {
+            Qt.callLater(rejectButton.forceActiveFocus);
+        } else if (focusRestoreItem && focusRestoreItem.visible && focusRestoreItem.enabled) {
+            Qt.callLater(focusRestoreItem.forceActiveFocus);
+        }
+    }
+
+    Keys.onEscapePressed: event => {
+        overlay.controller.rejectHostKey();
+        event.accepted = true;
+    }
 
     Rectangle {
         anchors.fill: parent
@@ -98,23 +113,38 @@ Item {
                 }
 
                 ActionButton {
+                    id: rejectButton
+
+                    objectName: "hostKeyReject"
                     text: overlay.controller.hostKeyChangedWarning ? "Close" : "Reject"
                     Accessible.name: text
+                    KeyNavigation.left: rememberButton.visible ? rememberButton : rejectButton
+                    KeyNavigation.right: trustOnceButton.visible ? trustOnceButton : rejectButton
                     onClicked: overlay.controller.rejectHostKey()
                 }
 
                 ActionButton {
+                    id: trustOnceButton
+
+                    objectName: "hostKeyTrustOnce"
                     visible: !overlay.controller.hostKeyChangedWarning
                     text: "Trust once"
                     Accessible.name: "Trust this host once"
+                    KeyNavigation.left: rejectButton
+                    KeyNavigation.right: rememberButton
                     onClicked: overlay.controller.acceptHostKey(false)
                 }
 
                 ActionButton {
+                    id: rememberButton
+
+                    objectName: "hostKeyRemember"
                     visible: !overlay.controller.hostKeyChangedWarning
                     text: "Trust and remember"
                     Accessible.name: "Trust and remember this host"
                     variant: "primary"
+                    KeyNavigation.left: trustOnceButton
+                    KeyNavigation.right: rejectButton
                     onClicked: overlay.controller.acceptHostKey(true)
                 }
             }

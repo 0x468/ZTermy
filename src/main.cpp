@@ -359,7 +359,7 @@ struct ResizeHitRuntimeCase
     return opacityMatches && darkModeMatches && cornerPreferenceMatches && backdropMatches;
 }
 
-[[nodiscard]] bool runWindowAppearanceRuntimeSmoke(ztermy::NativeWindow &window)
+[[nodiscard]] bool runWindowAppearanceRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller)
 {
     window.resize(QSize{1120, 800});
     window.show();
@@ -368,21 +368,51 @@ struct ResizeHitRuntimeCase
     constexpr int noBackdrop = 1;
     constexpr int micaBackdrop = 2;
     constexpr int acrylicBackdrop = 3;
+    const auto saveAppearance = [&controller](const QString &theme, const qreal opacity, const QString &backdrop) {
+        return controller.saveApplicationSettings(theme, opacity, backdrop, controller.terminalFontFamily(),
+                                                  controller.terminalFontSize(), controller.cursorPreference(),
+                                                  controller.cursorBlink(), controller.copyOnSelect(),
+                                                  controller.confirmMultilinePaste());
+    };
+    const auto surfaceAlpha = [&window] {
+        QQuickItem *rootObject = window.rootObject();
+        return rootObject == nullptr ? -1 : rootObject->property("backgroundColor").value<QColor>().alpha();
+    };
+    const bool darkNoneSaved = saveAppearance(QStringLiteral("dark"), 1.0, QStringLiteral("none"));
+    processWindowEventsFor(std::chrono::milliseconds{150});
     const bool darkNone = verifyWindowAppearance(window, 1.0, QStringLiteral("none"), true, noBackdrop);
+    const bool noneSurfaceOpaque = surfaceAlpha() == 255;
     const qreal baselineOpacity = window.opacity();
     const bool invalidOpacityRejected = !window.applyAppearance(0.49, QStringLiteral("none"), false)
                                         && qAbs(window.opacity() - baselineOpacity) < 0.001;
     const bool invalidBackdropRejected = !window.applyAppearance(0.75, QStringLiteral("invalid"), false)
                                          && qAbs(window.opacity() - baselineOpacity) < 0.001;
+    const bool lightMicaSaved = saveAppearance(QStringLiteral("light"), 0.85, QStringLiteral("mica"));
+    processWindowEventsFor(std::chrono::milliseconds{150});
     const bool lightMica = verifyWindowAppearance(window, 0.85, QStringLiteral("mica"), false, micaBackdrop);
+    const bool micaSurfaceTranslucent = surfaceAlpha() > 0 && surfaceAlpha() < 255;
+    const bool darkAcrylicSaved = saveAppearance(QStringLiteral("dark"), 0.75, QStringLiteral("acrylic"));
+    processWindowEventsFor(std::chrono::milliseconds{150});
     const bool darkAcrylic = verifyWindowAppearance(window, 0.75, QStringLiteral("acrylic"), true, acrylicBackdrop);
+    const bool acrylicSurfaceTranslucent = surfaceAlpha() > 0 && surfaceAlpha() < 255;
+    const bool restoredSaved = saveAppearance(QStringLiteral("dark"), 1.0, QStringLiteral("none"));
+    processWindowEventsFor(std::chrono::milliseconds{150});
     const bool restored = verifyWindowAppearance(window, 1.0, QStringLiteral("none"), true, noBackdrop);
+    const bool restoredSurfaceOpaque = surfaceAlpha() == 255;
 
     qCInfo(applicationLog) << "Window appearance runtime summary"
-                           << "darkNone=" << darkNone << "invalidOpacityRejected=" << invalidOpacityRejected
+                           << "darkNoneSaved=" << darkNoneSaved << "darkNone=" << darkNone
+                           << "noneSurfaceOpaque=" << noneSurfaceOpaque
+                           << "invalidOpacityRejected=" << invalidOpacityRejected
                            << "invalidBackdropRejected=" << invalidBackdropRejected << "lightMica=" << lightMica
-                           << "darkAcrylic=" << darkAcrylic << "restored=" << restored;
-    return darkNone && invalidOpacityRejected && invalidBackdropRejected && lightMica && darkAcrylic && restored;
+                           << "lightMicaSaved=" << lightMicaSaved << "micaSurfaceTranslucent=" << micaSurfaceTranslucent
+                           << "darkAcrylicSaved=" << darkAcrylicSaved << "darkAcrylic=" << darkAcrylic
+                           << "acrylicSurfaceTranslucent=" << acrylicSurfaceTranslucent
+                           << "restoredSaved=" << restoredSaved << "restored=" << restored
+                           << "restoredSurfaceOpaque=" << restoredSurfaceOpaque;
+    return darkNoneSaved && darkNone && noneSurfaceOpaque && invalidOpacityRejected && invalidBackdropRejected
+           && lightMicaSaved && lightMica && micaSurfaceTranslucent && darkAcrylicSaved && darkAcrylic
+           && acrylicSurfaceTranslucent && restoredSaved && restored && restoredSurfaceOpaque;
 }
 
 [[nodiscard]] bool captureLayout(ztermy::NativeWindow &window, const QString &outputDirectory, const QString &name)
@@ -802,6 +832,44 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
         return false;
     }
 
+    sendKey(window, Qt::Key_F, Qt::ControlModifier);
+    const bool controlFindPreservedForTerminal = !rootObject->property("terminalSearchVisible").toBool()
+                                                 && namedFocusItem(window) == QStringLiteral("terminalViewport");
+    sendKey(window, Qt::Key_F, Qt::ControlModifier | Qt::ShiftModifier);
+    const bool terminalSearchOpened = rootObject->property("terminalSearchVisible").toBool()
+                                      && namedFocusItem(window) == QStringLiteral("terminalSearchQuery");
+    sendKey(window, Qt::Key_Escape);
+    const bool terminalSearchKeyboard = controlFindPreservedForTerminal && terminalSearchOpened
+                                        && !rootObject->property("terminalSearchVisible").toBool()
+                                        && namedFocusItem(window) == QStringLiteral("terminalViewport");
+    if (!terminalSearchKeyboard)
+    {
+        qCWarning(applicationLog) << "Terminal search shortcut routing failed"
+                                  << "ctrlFPreserved=" << controlFindPreservedForTerminal
+                                  << "ctrlShiftFOpened=" << terminalSearchOpened << "focus=" << namedFocusItem(window);
+        return false;
+    }
+
+    QQuickItem *terminalViewport = quickItem(rootObject, "terminalViewport");
+    const bool dialogOpened = terminalViewport != nullptr
+                              && QMetaObject::invokeMethod(terminalViewport, "multilinePasteConfirmationRequested",
+                                                           Qt::DirectConnection, Q_ARG(int, 2));
+    processWindowEventsFor(std::chrono::milliseconds{100});
+    const bool safeDialogFocus = dialogOpened && namedFocusItem(window) == QStringLiteral("multilinePasteReject");
+    sendKey(window, Qt::Key_Right);
+    const bool arrowMovedDialogFocus = namedFocusItem(window) == QStringLiteral("multilinePasteAccept");
+    sendKey(window, Qt::Key_Escape);
+    const bool dialogKeyboard =
+        safeDialogFocus && arrowMovedDialogFocus && namedFocusItem(window) == QStringLiteral("terminalViewport");
+    if (!dialogKeyboard)
+    {
+        qCWarning(applicationLog) << "Multiline-paste dialog keyboard route failed"
+                                  << "opened=" << dialogOpened << "safeFocus=" << safeDialogFocus
+                                  << "arrowMovedFocus=" << arrowMovedDialogFocus
+                                  << "restoredFocus=" << namedFocusItem(window);
+        return false;
+    }
+
     QQuickItem *hostsAction = quickItem(rootObject, "hostsTitleAction");
     if (!focusItem(window, hostsAction, QStringLiteral("hostsTitleAction")))
     {
@@ -810,12 +878,26 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
     sendKey(window, Qt::Key_Space);
     const bool navigationPreservedSession = rootObject->property("currentPage").toString() == QStringLiteral("hosts")
                                             && controller.terminalTabs().size() == initialTabCount + 1;
+    while (!controller.terminalTabs().isEmpty())
+    {
+        controller.closeTerminalTab(
+            controller.terminalTabs().constFirst().toMap().value(QStringLiteral("id")).toString());
+        processWindowEventsFor(std::chrono::milliseconds{50});
+    }
+    QQuickItem *tabStrip = quickItem(rootObject, "titleTerminalTabs");
+    QQuickItem *newTabContainer = quickItem(rootObject, "titleNewTabContainer");
+    QQuickItem *hostsContainer = hostsAction->parentItem();
+    const bool emptyTabLayout = tabStrip != nullptr && qFuzzyIsNull(tabStrip->width()) && newTabContainer != nullptr
+                                && hostsContainer != nullptr
+                                && qAbs(newTabContainer->x() - (hostsContainer->x() + hostsContainer->width())) < 0.5;
     qCInfo(applicationLog) << "UI keyboard route check"
                            << "settingsTabStops=" << 24 << "hostEditorTabStops=" << 22
                            << "popupKeyboard=" << (popupOpened && popupClosed) << "settingsApplied=" << settingsApplied
                            << "checkboxKeyboard=" << checkboxChanged << "oneTabCreated=" << oneTabCreated
-                           << "navigationPreservedSession=" << navigationPreservedSession;
-    return navigationPreservedSession;
+                           << "terminalSearchKeyboard=" << terminalSearchKeyboard << "dialogKeyboard=" << dialogKeyboard
+                           << "navigationPreservedSession=" << navigationPreservedSession
+                           << "emptyTabLayout=" << emptyTabLayout;
+    return navigationPreservedSession && emptyTabLayout;
 }
 
 [[nodiscard]] bool terminalRegionHasRenderedContent(const QImage &windowImage,
@@ -924,6 +1006,26 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
     }
     const qint64 completionMilliseconds = completionTimer.elapsed();
     processWindowEventsFor(std::chrono::milliseconds{250});
+    const bool scrollbarExposed = terminalItem.scrollbarVisible() && terminalItem.scrollbarPageRatio() < 1.0
+                                  && terminalItem.scrollbarPosition() > 0.9;
+    const auto waitForScrollbarPosition = [&](const auto predicate) {
+        QElapsedTimer timer;
+        timer.start();
+        while (timer.elapsed() < 2000 && !predicate(terminalItem.scrollbarPosition()))
+        {
+            processWindowEventsFor(std::chrono::milliseconds{20});
+        }
+        return predicate(terminalItem.scrollbarPosition());
+    };
+    terminalItem.scrollToFraction(0.0);
+    const bool scrollbarReachedHistory = waitForScrollbarPosition([](const qreal position) {
+        return position < 0.1;
+    });
+    terminalItem.scrollToFraction(1.0);
+    const bool scrollbarReturnedToBottom = waitForScrollbarPosition([](const qreal position) {
+        return position > 0.9;
+    });
+    const bool scrollbarPassed = scrollbarExposed && scrollbarReachedHistory && scrollbarReturnedToBottom;
     heartbeat.stop();
     QObject::disconnect(frameConnection);
 
@@ -942,8 +1044,10 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
                            << "heartbeatTicks=" << heartbeatTicks
                            << "maxHeartbeatGapMs=" << maximumHeartbeatGapMilliseconds << "frameSwaps=" << frameSwaps
                            << "resizeCompleted=" << resizeCompleted << "captureSaved=" << captureSaved
-                           << "terminalRendered=" << terminalRendered << "capture=" << capturePath;
-    return completed && responsive && progressiveFrames && resizeCompleted && captureSaved && terminalRendered;
+                           << "terminalRendered=" << terminalRendered << "scrollbarPassed=" << scrollbarPassed
+                           << "capture=" << capturePath;
+    return completed && responsive && progressiveFrames && resizeCompleted && captureSaved && terminalRendered
+           && scrollbarPassed;
 }
 
 } // namespace
@@ -1045,7 +1149,7 @@ int main(int argc, char *argv[])
     }
     if (windowAppearanceSmoke)
     {
-        const bool passed = runWindowAppearanceRuntimeSmoke(window);
+        const bool passed = runWindowAppearanceRuntimeSmoke(window, appController);
         appController.shutdown();
         window.releaseResources();
         if (!passed)

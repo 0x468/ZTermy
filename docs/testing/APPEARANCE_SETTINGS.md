@@ -37,10 +37,13 @@ The gate opens the real native window and uses `DwmGetWindowAttribute` to
 verify Dark and Light immersive-mode values, the Windows 11 rounded-corner
 preference, and the exact None, Mica, and Acrylic backdrop types. It also
 checks 100%, 85%, and 75% Qt window opacity, rejects values below the supported
-range and unknown backdrop tokens without changing the baseline, then restores
-the default Dark/None/100% state. A passing gate proves the requested native
-state reached DWM; the visual checks below remain necessary for readability,
-material appearance, and interaction review.
+range and unknown backdrop tokens without changing the baseline. The QML
+surface contract additionally requires an opaque surface for None, translucent
+surfaces for Mica and Acrylic, and an opaque surface again after restoring the
+default Dark/None/100% state. A passing gate proves the requested native state
+reached DWM and that the scene permits the material to be visible; the visual
+checks below remain necessary for readability, material appearance, and
+interaction review.
 
 1. Apply Dark and Light themes at 100% opacity.
 2. Apply System theme, then change the Windows app color mode and restart

@@ -34,7 +34,7 @@ Expected:
 
 1. Produce at least 100 numbered output lines, including several occurrences of
    a distinctive ASCII word and one Chinese phrase.
-2. Press Ctrl+F and enter the ASCII word using different letter case.
+2. Press Ctrl+Shift+F and enter the ASCII word using different letter case.
 3. Press Enter repeatedly, then Shift+Enter repeatedly.
 4. Toggle `Aa` and repeat the search with exact and mismatched case.
 5. Search for the Chinese phrase.
@@ -52,6 +52,8 @@ Expected:
 - Off-screen matches scroll into view.
 - Escape closes the search overlay, clears the search selection, and returns
   keyboard focus to the terminal.
+- Ctrl+F remains available to the terminal application and does not open the
+  ztermy search overlay.
 
 ## Per-tab search state
 

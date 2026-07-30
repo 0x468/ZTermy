@@ -331,7 +331,14 @@ void SshTerminalSession::requestResize(const quint16 columns, const quint16 rows
     }
 
     std::scoped_lock lock(m_commandMutex);
-    m_commands.emplace_back(geometry);
+    if (!m_commands.empty() && std::holds_alternative<terminal::TerminalGeometry>(m_commands.back()))
+    {
+        m_commands.back() = geometry;
+    }
+    else
+    {
+        m_commands.emplace_back(geometry);
+    }
     signalCommandWake();
 }
 

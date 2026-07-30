@@ -109,6 +109,12 @@ Rectangle {
         value: root.windowChrome.animationsEnabled
     }
 
+    Binding {
+        target: Theme
+        property: "backdropActive"
+        value: root.controller.backdropPreference !== "none"
+    }
+
     Component.onCompleted: {
         reportTitleBarMetrics();
         applyWindowAppearance();
@@ -123,11 +129,6 @@ Rectangle {
 
     Shortcut {
         sequence: "Ctrl+Shift+F"
-        onActivated: root.openTerminalSearch()
-    }
-
-    Shortcut {
-        sequence: StandardKey.Find
         onActivated: root.openTerminalSearch()
     }
 
@@ -276,7 +277,8 @@ Rectangle {
             ListView {
                 id: titleTerminalTabs
 
-                width: Math.min(Math.max(contentWidth, 126), Math.max(140, root.titleNavigationWidth - 174))
+                objectName: "titleTerminalTabs"
+                width: count === 0 ? 0 : Math.min(Math.max(contentWidth, 126), Math.max(140, root.titleNavigationWidth - 174))
                 height: titleNavigation.height
                 orientation: ListView.Horizontal
                 spacing: 2
@@ -303,6 +305,7 @@ Rectangle {
             }
 
             Rectangle {
+                objectName: "titleNewTabContainer"
                 width: 36
                 height: titleNavigation.height
                 color: titleNewTabAction.hovered || titleNewTabAction.activeFocus ? Theme.controlHover : "transparent"
@@ -511,7 +514,7 @@ Rectangle {
                             anchors.right: parent.right
                             anchors.rightMargin: 12
                             anchors.verticalCenter: parent.verticalCenter
-                            text: "UTF-8   Ctrl+F  Find"
+                            text: "UTF-8   Ctrl+Shift+F  Find"
                             color: Theme.textSubtle
                             font.family: Theme.uiFont
                             font.pixelSize: Theme.textCompact
@@ -542,6 +545,73 @@ Rectangle {
                             }
                         }
 
+                        Item {
+                            id: terminalScrollbar
+
+                            anchors.top: parent.top
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            anchors.topMargin: 8
+                            anchors.rightMargin: 9
+                            anchors.bottomMargin: 8
+                            width: 16
+                            visible: terminalViewport.scrollbarVisible && root.activeTerminalTab !== null
+                            enabled: visible
+                            z: 12
+
+                            Rectangle {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                width: 4
+                                height: parent.height
+                                radius: 2
+                                color: Theme.dark ? "#66334155" : "#6694A3B8"
+                            }
+
+                            Rectangle {
+                                id: terminalScrollbarThumb
+
+                                readonly property real travel: Math.max(0, terminalScrollbar.height - height)
+
+                                x: (terminalScrollbar.width - width) / 2
+                                y: travel * terminalViewport.scrollbarPosition
+                                width: terminalScrollbarMouse.containsMouse || terminalScrollbarMouse.pressed ? 8 : 6
+                                height: Math.min(terminalScrollbar.height, Math.max(28, terminalScrollbar.height * terminalViewport.scrollbarPageRatio))
+                                radius: width / 2
+                                color: terminalScrollbarMouse.pressed ? Theme.text : terminalScrollbarMouse.containsMouse ? Theme.textSoft : Theme.textMuted
+                            }
+
+                            MouseArea {
+                                id: terminalScrollbarMouse
+
+                                property real grabOffset: terminalScrollbarThumb.height / 2
+
+                                function applyPointer(pointerY) {
+                                    if (terminalScrollbarThumb.travel <= 0) {
+                                        return;
+                                    }
+                                    const thumbTop = Math.max(0, Math.min(terminalScrollbarThumb.travel, pointerY - grabOffset));
+                                    terminalViewport.scrollToFraction(thumbTop / terminalScrollbarThumb.travel);
+                                }
+
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onPressed: mouse => {
+                                    if (mouse.y >= terminalScrollbarThumb.y && mouse.y <= terminalScrollbarThumb.y + terminalScrollbarThumb.height) {
+                                        grabOffset = mouse.y - terminalScrollbarThumb.y;
+                                    } else {
+                                        grabOffset = terminalScrollbarThumb.height / 2;
+                                        applyPointer(mouse.y);
+                                    }
+                                }
+                                onPositionChanged: mouse => {
+                                    if (pressed) {
+                                        applyPointer(mouse.y);
+                                    }
+                                }
+                            }
+                        }
+
                         Rectangle {
                             id: searchPanel
 
@@ -565,6 +635,7 @@ Rectangle {
                                 AppTextField {
                                     id: searchField
 
+                                    objectName: "terminalSearchQuery"
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 30
                                     compact: true
@@ -601,11 +672,30 @@ Rectangle {
                                     checkable: true
                                     text: "Aa"
                                     checked: root.controller.terminalSearchCaseSensitive
+                                    hoverEnabled: true
                                     onClicked: {
                                         searchDelay.stop();
                                         root.controller.searchTerminal(searchField.text, false, checked);
                                     }
                                     Accessible.name: "Match case"
+                                    Accessible.checked: checked
+
+                                    contentItem: Text {
+                                        text: "Aa"
+                                        color: caseSensitiveButton.checked ? Theme.accentText : root.textColor
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
+                                        font.family: Theme.uiFont
+                                        font.pixelSize: Theme.textLabel
+                                        font.weight: caseSensitiveButton.checked ? Font.Bold : Font.Medium
+                                    }
+
+                                    background: Rectangle {
+                                        radius: Theme.radiusSmall
+                                        color: caseSensitiveButton.checked ? Theme.accent : caseSensitiveButton.down ? Theme.controlPressed : caseSensitiveButton.hovered ? Theme.controlHover : Theme.controlBackground
+                                        border.color: caseSensitiveButton.activeFocus ? Theme.focus : caseSensitiveButton.checked ? Theme.accentHover : root.borderColor
+                                        border.width: caseSensitiveButton.activeFocus ? 2 : 1
+                                    }
                                 }
 
                                 ToolButton {
@@ -787,6 +877,8 @@ Rectangle {
         heading: "Paste multiple lines?"
         description: "The clipboard contains " + root.pendingPasteLineCount + " lines. Pasting may execute commands immediately in the active terminal."
         acceptText: "Paste"
+        acceptObjectName: "multilinePasteAccept"
+        rejectObjectName: "multilinePasteReject"
         onAccepted: {
             terminalViewport.resolveMultilinePaste(true);
             root.pendingPasteLineCount = 0;
@@ -801,6 +893,7 @@ Rectangle {
         anchors.fill: parent
         z: 100
         controller: root.controller
+        focusRestoreItem: terminalViewport
         panelColor: root.raisedColor
         borderColor: root.borderColor
         textColor: root.textColor

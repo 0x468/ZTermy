@@ -207,6 +207,7 @@ Rectangle {
         id: scrollView
 
         anchors.fill: parent
+        anchors.rightMargin: 8
         contentWidth: availableWidth
         contentHeight: contentColumn.implicitHeight + 76
 
