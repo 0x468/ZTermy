@@ -336,6 +336,16 @@ QString AppController::backdropPreference() const
     return config::backdropPreferenceToken(m_settings.backdrop);
 }
 
+QString AppController::accentPreference() const
+{
+    return config::accentPreferenceToken(m_settings.accent);
+}
+
+QString AppController::customAccent() const
+{
+    return m_settings.customAccent;
+}
+
 QString AppController::terminalFontFamily() const
 {
     return m_settings.terminalFontFamily;
@@ -837,6 +847,7 @@ bool AppController::connectQuick(const QString &target, const QString &authentic
 }
 
 bool AppController::saveApplicationSettings(const QString &theme, const qreal backdropOpacity, const QString &backdrop,
+                                            const QString &accent, const QString &customAccent,
                                             const QString &fontFamily, const int fontSize,
                                             const qreal terminalBackgroundOpacity, const QString &cursor,
                                             const bool cursorShouldBlink, const bool shouldCopyOnSelect,
@@ -844,8 +855,9 @@ bool AppController::saveApplicationSettings(const QString &theme, const qreal ba
 {
     const auto parsedTheme = config::parseThemePreference(theme);
     const auto parsedBackdrop = config::parseBackdropPreference(backdrop);
+    const auto parsedAccent = config::parseAccentPreference(accent);
     const auto parsedCursor = config::parseCursorPreference(cursor);
-    if (!parsedTheme || !parsedBackdrop || !parsedCursor)
+    if (!parsedTheme || !parsedBackdrop || !parsedAccent || !parsedCursor)
     {
         return false;
     }
@@ -854,6 +866,8 @@ bool AppController::saveApplicationSettings(const QString &theme, const qreal ba
         .theme = *parsedTheme,
         .backdropOpacity = backdropOpacity,
         .backdrop = *parsedBackdrop,
+        .accent = *parsedAccent,
+        .customAccent = customAccent.trimmed().toUpper(),
         .terminalFontFamily = fontFamily,
         .terminalFontSize = fontSize,
         .terminalBackgroundOpacity = terminalBackgroundOpacity,

@@ -24,6 +24,13 @@ enum class BackdropPreference : std::uint8_t
     micaAlt,
 };
 
+enum class AccentPreference : std::uint8_t
+{
+    ztermy,
+    system,
+    custom,
+};
+
 enum class CursorPreference : std::uint8_t
 {
     terminal,
@@ -37,6 +44,8 @@ struct ApplicationSettings final
     ThemePreference theme = ThemePreference::dark;
     double backdropOpacity = 1.0;
     BackdropPreference backdrop = BackdropPreference::acrylic;
+    AccentPreference accent = AccentPreference::ztermy;
+    QString customAccent = QStringLiteral("#22C55E");
     QString terminalFontFamily = QStringLiteral("Cascadia Mono");
     int terminalFontSize = 14;
     double terminalBackgroundOpacity = 1.0;
@@ -71,9 +80,11 @@ private:
 
 [[nodiscard]] QString themePreferenceToken(ThemePreference preference);
 [[nodiscard]] QString backdropPreferenceToken(BackdropPreference preference);
+[[nodiscard]] QString accentPreferenceToken(AccentPreference preference);
 [[nodiscard]] QString cursorPreferenceToken(CursorPreference preference);
 [[nodiscard]] std::optional<ThemePreference> parseThemePreference(const QString &token);
 [[nodiscard]] std::optional<BackdropPreference> parseBackdropPreference(const QString &token);
+[[nodiscard]] std::optional<AccentPreference> parseAccentPreference(const QString &token);
 [[nodiscard]] std::optional<CursorPreference> parseCursorPreference(const QString &token);
 
 } // namespace ztermy::config

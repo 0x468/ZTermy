@@ -174,8 +174,8 @@ window lifecycle or unsupported categories. See
 - NetCatty uses its own branding and Mona Sans-based interface.
 - ztermy keeps Segoe UI Variable for a Windows-native identity and keeps its
   original icon system.
-- ztermy keeps green as the default accent. A later global Follow Windows or
-  Custom accent source may derive a contrast-safe palette.
+- ztermy keeps green as the default accent. Global Follow Windows and Custom
+  sources derive a contrast-safe interaction palette (ADR 0020).
 - Alignment targets font size, weight hierarchy, line height, and density, not
   the third-party font or logo.
 

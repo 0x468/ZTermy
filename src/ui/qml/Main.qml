@@ -36,6 +36,8 @@ Rectangle {
     property string previewThemePreference: "dark"
     property string previewBackdropPreference: "acrylic"
     property real previewBackdropOpacity: 1.0
+    property string previewAccentPreference: "ztermy"
+    property color previewCustomAccent: "#22C55E"
     readonly property var activeTerminalTab: {
         for (const tab of controller.terminalTabs) {
             if (tab.id === controller.activeTerminalTabId) {
@@ -92,10 +94,12 @@ Rectangle {
         root.windowChrome.applyAppearance(controller.backdropPreference, Theme.dark);
     }
 
-    function previewWindowAppearance(theme, opacity, backdrop) {
+    function previewWindowAppearance(theme, opacity, backdrop, accent, customAccent) {
         previewThemePreference = theme;
         previewBackdropPreference = backdrop;
         previewBackdropOpacity = opacity;
+        previewAccentPreference = accent;
+        previewCustomAccent = customAccent;
         appearancePreviewActive = true;
         const previewDark = theme === "dark" || (theme === "system" && root.windowChrome.systemDarkMode);
         root.windowChrome.applyAppearance(backdrop, previewDark);
@@ -168,6 +172,24 @@ Rectangle {
         target: Theme
         property: "backdropOpacity"
         value: root.appearancePreviewActive ? root.previewBackdropOpacity : root.controller.backdropOpacity
+    }
+
+    Binding {
+        target: Theme
+        property: "accentPreference"
+        value: root.appearancePreviewActive ? root.previewAccentPreference : root.controller.accentPreference
+    }
+
+    Binding {
+        target: Theme
+        property: "customAccent"
+        value: root.appearancePreviewActive ? root.previewCustomAccent : root.controller.customAccent
+    }
+
+    Binding {
+        target: Theme
+        property: "systemAccent"
+        value: root.windowChrome.systemAccentColor
     }
 
     Component.onCompleted: {
@@ -266,7 +288,7 @@ Rectangle {
 
         function onSystemDarkModeChanged() {
             if (root.appearancePreviewActive) {
-                Qt.callLater(() => root.previewWindowAppearance(root.previewThemePreference, root.previewBackdropOpacity, root.previewBackdropPreference));
+                Qt.callLater(() => root.previewWindowAppearance(root.previewThemePreference, root.previewBackdropOpacity, root.previewBackdropPreference, root.previewAccentPreference, root.previewCustomAccent));
             } else {
                 Qt.callLater(root.applyWindowAppearance);
             }
@@ -1146,8 +1168,8 @@ Rectangle {
                 visible: root.currentPage === "settings"
                 controller: root.controller
                 onAppearancePreviewEnded: root.endWindowAppearancePreview()
-                onAppearancePreviewRequested: (theme, opacity, backdrop) => {
-                    root.previewWindowAppearance(theme, opacity, backdrop);
+                onAppearancePreviewRequested: (theme, opacity, backdrop, accent, customAccent) => {
+                    root.previewWindowAppearance(theme, opacity, backdrop, accent, customAccent);
                 }
             }
         }

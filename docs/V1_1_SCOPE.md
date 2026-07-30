@@ -62,6 +62,8 @@ No serial runtime or dependency is added merely to match the reference UI.
   independently configurable.
 - ztermy green remains the default semantic accent. Reference colors and
   branding are not copied.
+- The global accent source may instead follow the live Windows accent or use
+  a validated custom `#RRGGBB` color. SSH profiles do not own accent settings.
 - The terminal owns the largest, quietest surface.
 - Primary actions are obvious; edit, copy, delete, and advanced operations are
   progressively disclosed.

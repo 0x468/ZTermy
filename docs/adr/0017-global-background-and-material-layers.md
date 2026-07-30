@@ -26,11 +26,9 @@ profiles do not own themes, backdrop modes, background images, or opacity.
 A future lightweight host color or icon may identify a connection, but it
 must not duplicate the global appearance model.
 
-V1 keeps the existing ztermy green semantic accent. A V1.1 appearance
-extension may add a global accent source with ztermy, Follow Windows, and
-Custom choices. A Windows or custom color must be transformed or rejected
-when it cannot preserve text, focus, selected, and destructive-state
-contrast; ztermy green remains the fallback.
+V1 keeps the existing ztermy green semantic accent. ADR 0020 extends V1.1
+with global ztermy, Follow Windows, and Custom accent sources while preserving
+contrast-safe derived roles.
 
 The visual stack has three independently owned layers:
 
@@ -84,8 +82,8 @@ opacity remain future global features.
   their content unreadable.
 - Mica behavior is not distorted by an unrelated opacity slider.
 - Terminal text and application controls are never faded by window opacity.
-- Windows accent synchronization remains a bounded global V1.1 feature rather
-  than an SSH-profile option.
+- Windows accent synchronization is a bounded global V1.1 feature rather than
+  an SSH-profile option (ADR 0020).
 - Terminal background transparency distinguishes default background cells
   from explicit ANSI backgrounds and must be tested with full-screen terminal
   programs.

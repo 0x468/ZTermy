@@ -75,6 +75,10 @@ namespace ztermy
 NativeWindow::NativeWindow(QWindow *parent) : QQuickView(parent)
 {
     (void)m_animationPreference.update(windowing::queryClientAreaAnimationsEnabled());
+    if (const auto accent = windowing::querySystemAccentColor())
+    {
+        updateSystemAccentColor(*accent);
+    }
 
     setFlags(Qt::Window | Qt::WindowTitleHint | Qt::WindowSystemMenuHint | Qt::WindowMinMaxButtonsHint
              | Qt::WindowCloseButtonHint);
@@ -127,6 +131,11 @@ bool NativeWindow::maximizeButtonPressed() const noexcept
 bool NativeWindow::systemDarkMode() const noexcept
 {
     return QGuiApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark;
+}
+
+QColor NativeWindow::systemAccentColor() const noexcept
+{
+    return m_systemAccentColor;
 }
 
 bool NativeWindow::animationsEnabled() const noexcept
@@ -320,6 +329,15 @@ bool NativeWindow::nativeEvent(const QByteArray &eventType, void *message, qintp
 
         case WM_SETTINGCHANGE:
             refreshAnimationsEnabled();
+            if (const auto accent = windowing::querySystemAccentColor())
+            {
+                updateSystemAccentColor(*accent);
+            }
+            break;
+
+        case WM_DWMCOLORIZATIONCOLORCHANGED:
+            updateSystemAccentColor(
+                windowing::decodeColorizationArgb(static_cast<std::uint32_t>(nativeMessage->wParam)));
             break;
 
         case WM_GETTITLEBARINFOEX:
@@ -677,6 +695,17 @@ void NativeWindow::refreshAnimationsEnabled()
                           << "enabled=" << m_animationPreference.enabled();
         emit animationsEnabledChanged();
     }
+}
+
+void NativeWindow::updateSystemAccentColor(const windowing::RgbColor color)
+{
+    const QColor updated(color.red, color.green, color.blue);
+    if (updated == m_systemAccentColor)
+    {
+        return;
+    }
+    m_systemAccentColor = updated;
+    emit systemAccentColorChanged();
 }
 
 void NativeWindow::setMaximizeButtonHovered(const bool hovered)

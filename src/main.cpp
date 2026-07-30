@@ -373,7 +373,8 @@ struct ResizeHitRuntimeCase
     constexpr int micaAltBackdrop = 4;
     const auto saveAppearance = [&controller](const QString &theme, const qreal backdropOpacity,
                                               const QString &backdrop) {
-        return controller.saveApplicationSettings(theme, backdropOpacity, backdrop, controller.terminalFontFamily(),
+        return controller.saveApplicationSettings(theme, backdropOpacity, backdrop, controller.accentPreference(),
+                                                  controller.customAccent(), controller.terminalFontFamily(),
                                                   controller.terminalFontSize(), controller.terminalBackgroundOpacity(),
                                                   controller.cursorPreference(), controller.cursorBlink(),
                                                   controller.copyOnSelect(), controller.confirmMultilinePaste());
@@ -578,8 +579,9 @@ struct ResizeHitRuntimeCase
 
 [[nodiscard]] bool applyUiLayoutSmokeTheme(ztermy::AppController &controller, const QString &theme)
 {
-    return controller.saveApplicationSettings(theme, 1.0, QStringLiteral("acrylic"), QStringLiteral("Cascadia Mono"),
-                                              14, 1.0, QStringLiteral("terminal"), true, false, true);
+    return controller.saveApplicationSettings(theme, 1.0, QStringLiteral("acrylic"), QStringLiteral("ztermy"),
+                                              QStringLiteral("#22C55E"), QStringLiteral("Cascadia Mono"), 14, 1.0,
+                                              QStringLiteral("terminal"), true, false, true);
 }
 
 [[nodiscard]] bool runUiLayoutRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller,
@@ -726,7 +728,8 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
         return false;
     }
     constexpr std::array appearanceOrder{
-        "settingsTheme", "settingsBackdrop", "settingsOpacity", "settingsReset", "settingsDiscard", "settingsApply",
+        "settingsTheme", "settingsAccent",  "settingsBackdrop", "settingsOpacity",
+        "settingsReset", "settingsDiscard", "settingsApply",
     };
     if (!verifyOrder(appearanceOrder))
     {
@@ -871,13 +874,14 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
     processWindowEventsFor(std::chrono::milliseconds{150});
 
     QQuickItem *theme = quickItem(rootObject, "settingsTheme");
+    QQuickItem *accent = quickItem(rootObject, "settingsAccent");
     QQuickItem *opacity = quickItem(rootObject, "settingsOpacity");
     QQuickItem *fontSize = quickItem(rootObject, "settingsFontSize");
     QQuickItem *cursorBlink = quickItem(rootObject, "settingsCursorBlink");
     QQuickItem *copyOnSelect = quickItem(rootObject, "settingsCopyOnSelect");
     QQuickItem *multilinePaste = quickItem(rootObject, "settingsMultilinePaste");
     QQuickItem *apply = quickItem(rootObject, "settingsApply");
-    if (theme == nullptr || opacity == nullptr || fontSize == nullptr || cursorBlink == nullptr
+    if (theme == nullptr || accent == nullptr || opacity == nullptr || fontSize == nullptr || cursorBlink == nullptr
         || copyOnSelect == nullptr || multilinePaste == nullptr || apply == nullptr)
     {
         qCWarning(applicationLog) << "Settings keyboard smoke object lookup failed";
@@ -902,6 +906,12 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
     sendKey(window, Qt::Key_Escape);
     const bool popupClosed = themePopup != nullptr && !themePopup->property("opened").toBool();
     processWindowEventsFor(std::chrono::milliseconds{160});
+    sendKey(window, Qt::Key_Down);
+
+    if (!focusItem(window, accent, QStringLiteral("settingsAccent")))
+    {
+        return false;
+    }
     sendKey(window, Qt::Key_Down);
 
     if (!opacity->isVisible() || !opacity->isEnabled())
@@ -954,8 +964,10 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
         rootObject->property("appearancePreviewActive").toBool()
         && rootObject->property("previewThemePreference").toString() == QStringLiteral("light")
         && rootObject->property("previewBackdropPreference").toString() == QStringLiteral("acrylic")
+        && rootObject->property("previewAccentPreference").toString() == QStringLiteral("system")
         && qAbs(rootObject->property("previewBackdropOpacity").toReal() - 0.95) < 0.001;
     const bool draftMatches = popupOpened && popupClosed && theme->property("currentIndex").toInt() == 2
+                              && accent->property("currentIndex").toInt() == 1
                               && qAbs(opacity->property("value").toReal() - 0.95) < 0.001
                               && fontSize->property("value").toInt() == 15 && switchesChanged && livePreviewMatches;
     if (!draftMatches)
@@ -963,6 +975,7 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
         qCWarning(applicationLog) << "Settings keyboard edits did not produce the expected draft"
                                   << "popupOpened=" << popupOpened << "popupClosed=" << popupClosed
                                   << "themeIndex=" << theme->property("currentIndex").toInt()
+                                  << "accentIndex=" << accent->property("currentIndex").toInt()
                                   << "opacity=" << opacity->property("value").toReal()
                                   << "fontSize=" << fontSize->property("value").toInt()
                                   << "switchesChanged=" << switchesChanged
@@ -976,10 +989,10 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
     }
 
     sendKey(window, Qt::Key_Return);
-    const bool settingsApplied = controller.themePreference() == QStringLiteral("light")
-                                 && qAbs(controller.backdropOpacity() - 0.95) < 0.001
-                                 && controller.terminalFontSize() == 15 && !controller.cursorBlink()
-                                 && controller.copyOnSelect() && !controller.confirmMultilinePaste();
+    const bool settingsApplied =
+        controller.themePreference() == QStringLiteral("light") && qAbs(controller.backdropOpacity() - 0.95) < 0.001
+        && controller.accentPreference() == QStringLiteral("system") && controller.terminalFontSize() == 15
+        && !controller.cursorBlink() && controller.copyOnSelect() && !controller.confirmMultilinePaste();
     if (!settingsApplied)
     {
         qCWarning(applicationLog) << "Enter did not apply the keyboard-edited settings";

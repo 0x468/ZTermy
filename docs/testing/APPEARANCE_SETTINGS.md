@@ -60,12 +60,20 @@ appearance, and interaction review.
 5. Maximize, restore, snap, and resize after each backdrop change.
 6. Apply System theme, then change the Windows app color mode and restart
    ztermy.
+7. Compare the ztermy, Follow Windows, and Custom accent sources. While
+   Follow Windows is active, change the Windows accent color without
+   restarting ztermy. For Custom, try a light color and a dark color.
 
 Expected:
 
 - Text, borders, fields, dialogs, title-bar controls, and focus indicators
   remain readable in both themes.
 - System follows the Windows app color mode.
+- ztermy preserves the default green palette. Follow Windows updates after a
+  Windows accent change, and Custom accepts exactly `#RRGGBB`. Accent text,
+  focus, hover, pressed, and selected states remain legible for both light and
+  dark accent colors. Success and destructive states keep their semantic
+  colors.
 - Acrylic continuously blurs and samples content behind the window. Changing
   backdrop opacity changes only its tinting surfaces and never removes the
   live blur by fading the final window.

@@ -24,6 +24,7 @@ private slots:
     void savesAndLoadsEveryPreference();
     void migratesLegacyWindowOpacityAndNoneBackdrop();
     void migratesMaterialSchemaWithOpaqueTerminalDefault();
+    void migratesTerminalAppearanceSchemaWithDefaultAccent();
     void rejectsMalformedUnsupportedAndIncompleteDocuments();
     void rejectsOutOfRangeValues();
     void createsMissingParentDirectory();
@@ -50,6 +51,8 @@ void ApplicationSettingsTests::savesAndLoadsEveryPreference()
         .theme = ztermy::config::ThemePreference::light,
         .backdropOpacity = 0.82,
         .backdrop = ztermy::config::BackdropPreference::micaAlt,
+        .accent = ztermy::config::AccentPreference::custom,
+        .customAccent = QStringLiteral("#3366CC"),
         .terminalFontFamily = QStringLiteral("Cascadia Code"),
         .terminalFontSize = 18,
         .terminalBackgroundOpacity = 0.45,
@@ -96,7 +99,7 @@ void ApplicationSettingsTests::migratesLegacyWindowOpacityAndNoneBackdrop()
     QFile saved(path);
     QVERIFY(saved.open(QIODevice::ReadOnly));
     const QByteArray persisted = saved.readAll();
-    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 3")));
+    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 4")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdropOpacity\": 0.75")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdrop\": \"transparent\"")));
     QVERIFY(!persisted.contains(QByteArrayLiteral("windowOpacity")));
@@ -128,6 +131,34 @@ void ApplicationSettingsTests::migratesMaterialSchemaWithOpaqueTerminalDefault()
     QCOMPARE(loaded->terminalFontSize, 16);
 }
 
+void ApplicationSettingsTests::migratesTerminalAppearanceSchemaWithDefaultAccent()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("settings.json"));
+    const ztermy::config::ApplicationSettingsStore store(path);
+
+    QVERIFY(writeFile(path, QByteArrayLiteral(R"({
+        "version": 3,
+        "theme": "dark",
+        "backdropOpacity": 0.65,
+        "backdrop": "acrylic",
+        "terminalFontFamily": "Cascadia Mono",
+        "terminalFontSize": 14,
+        "terminalBackgroundOpacity": 0.4,
+        "cursor": "terminal",
+        "cursorBlink": true,
+        "copyOnSelect": false,
+        "confirmMultilinePaste": true
+    })")));
+
+    const auto loaded = store.load();
+    QVERIFY(loaded);
+    QCOMPARE(loaded->accent, ztermy::config::AccentPreference::ztermy);
+    QCOMPARE(loaded->customAccent, QStringLiteral("#22C55E"));
+    QCOMPARE(loaded->terminalBackgroundOpacity, 0.4);
+}
+
 void ApplicationSettingsTests::rejectsMalformedUnsupportedAndIncompleteDocuments()
 {
     QTemporaryDir directory;
@@ -140,7 +171,7 @@ void ApplicationSettingsTests::rejectsMalformedUnsupportedAndIncompleteDocuments
     QVERIFY(!malformed);
     QCOMPARE(malformed.error(), ztermy::config::ApplicationSettingsStoreError::invalidFormat);
 
-    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":4})")));
+    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":5})")));
     const auto unsupported = store.load();
     QVERIFY(!unsupported);
     QCOMPARE(unsupported.error(), ztermy::config::ApplicationSettingsStoreError::unsupportedVersion);
@@ -174,6 +205,12 @@ void ApplicationSettingsTests::rejectsOutOfRangeValues()
     const auto terminalOpacityResult = store.save(invalidTerminalOpacity);
     QVERIFY(!terminalOpacityResult);
     QCOMPARE(terminalOpacityResult.error(), ztermy::config::ApplicationSettingsStoreError::invalidFormat);
+
+    auto invalidCustomAccent = ztermy::config::ApplicationSettings{};
+    invalidCustomAccent.customAccent = QStringLiteral("green");
+    const auto customAccentResult = store.save(invalidCustomAccent);
+    QVERIFY(!customAccentResult);
+    QCOMPARE(customAccentResult.error(), ztermy::config::ApplicationSettingsStoreError::invalidFormat);
 }
 
 void ApplicationSettingsTests::createsMissingParentDirectory()

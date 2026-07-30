@@ -8,6 +8,9 @@ QtObject {
     property bool animationsEnabled: true
     property string backdropPreference: "acrylic"
     property real backdropOpacity: 1.0
+    property string accentPreference: "ztermy"
+    property color systemAccent: "#0078D4"
+    property color customAccent: "#22C55E"
     readonly property bool dark: preference === "dark" || (preference === "system" && systemDark)
     readonly property bool micaBackdrop: backdropPreference === "mica"
     readonly property bool micaAltBackdrop: backdropPreference === "micaAlt"
@@ -53,13 +56,15 @@ QtObject {
     readonly property color textSoft: dark ? "#CBD5E1" : "#334155"
     readonly property color textSubtle: dark ? "#64748B" : "#64748B"
 
-    readonly property color accent: dark ? "#22C55E" : "#15803D"
-    readonly property color accentHover: dark ? "#4ADE80" : "#166534"
-    readonly property color accentPressed: dark ? "#16A34A" : "#14532D"
-    readonly property color accentText: dark ? "#07130B" : "#FFFFFF"
-    readonly property color focus: dark ? "#86EFAC" : "#16A34A"
-    readonly property color selectedBackground: dark ? "#173A2B" : "#DCFCE7"
-    readonly property color selectedHover: dark ? "#1F513A" : "#BBF7D0"
+    readonly property bool ztermyAccent: accentPreference === "ztermy"
+    readonly property color accentBase: accentPreference === "system" ? systemAccent : customAccent
+    readonly property color accent: ztermyAccent ? (dark ? "#22C55E" : "#15803D") : accentBase
+    readonly property color accentText: ztermyAccent ? (dark ? "#07130B" : "#FFFFFF") : contrastText(accentBase)
+    readonly property color accentHover: ztermyAccent ? (dark ? "#4ADE80" : "#166534") : mixColor(accentBase, accentText, 0.14)
+    readonly property color accentPressed: ztermyAccent ? (dark ? "#16A34A" : "#14532D") : mixColor(accentBase, "#000000", 0.18)
+    readonly property color focus: ztermyAccent ? (dark ? "#86EFAC" : "#16A34A") : mixColor(accentBase, accentText, 0.34)
+    readonly property color selectedBackground: ztermyAccent ? (dark ? "#173A2B" : "#DCFCE7") : mixColor(accentBase, dark ? "#0B1017" : "#FFFFFF", dark ? 0.72 : 0.84)
+    readonly property color selectedHover: ztermyAccent ? (dark ? "#1F513A" : "#BBF7D0") : mixColor(accentBase, dark ? "#0B1017" : "#FFFFFF", dark ? 0.58 : 0.72)
     readonly property color successText: dark ? "#86EFAC" : "#15803D"
     readonly property color danger: dark ? "#EF4444" : "#DC2626"
     readonly property color dangerText: dark ? "#FCA5A5" : "#B91C1C"
@@ -95,6 +100,23 @@ QtObject {
         const clampedMinimum = Math.max(0.0, Math.min(1.0, minimumAlpha));
         const clampedAmount = Math.max(0.0, Math.min(1.0, amount));
         return clampedMinimum + ((1.0 - clampedMinimum) * clampedAmount);
+    }
+
+    function mixColor(first: color, second: color, amount: real): color {
+        const clampedAmount = Math.max(0.0, Math.min(1.0, amount));
+        return Qt.rgba(first.r + ((second.r - first.r) * clampedAmount), first.g + ((second.g - first.g) * clampedAmount), first.b + ((second.b - first.b) * clampedAmount), first.a + ((second.a - first.a) * clampedAmount));
+    }
+
+    function linearColorChannel(channel: real): real {
+        return channel <= 0.04045 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4);
+    }
+
+    function relativeLuminance(value: color): real {
+        return (0.2126 * linearColorChannel(value.r)) + (0.7152 * linearColorChannel(value.g)) + (0.0722 * linearColorChannel(value.b));
+    }
+
+    function contrastText(background: color): color {
+        return relativeLuminance(background) > 0.179 ? "#000000" : "#FFFFFF";
     }
 
     readonly property int spacingDense: 4

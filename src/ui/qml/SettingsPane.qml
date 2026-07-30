@@ -16,10 +16,11 @@ Rectangle {
     property real contentReveal: 1.0
     readonly property bool draftDark: themeBox.currentIndex === 1 || (themeBox.currentIndex === 0 && Theme.systemDark)
     readonly property bool adjustableBackdrop: backdropBox.currentIndex === 0 || backdropBox.currentIndex === 1
+    readonly property bool customAccentSelected: accentBox.currentIndex === 2
     readonly property bool compactLayout: width < Theme.narrowWindowWidth
     readonly property int contentInset: compactLayout ? Theme.pageInsetCompact : Theme.pageInset
 
-    signal appearancePreviewRequested(string theme, real opacity, string backdrop)
+    signal appearancePreviewRequested(string theme, real opacity, string backdrop, string accent, string customAccent)
     signal appearancePreviewEnded
 
     component CategoryButton: Rectangle {
@@ -113,6 +114,10 @@ Rectangle {
         return token === "block" ? 1 : token === "bar" ? 2 : token === "underline" ? 3 : 0;
     }
 
+    function accentIndex(token) {
+        return token === "system" ? 1 : token === "custom" ? 2 : 0;
+    }
+
     function themeToken() {
         return themeBox.currentIndex === 0 ? "system" : themeBox.currentIndex === 2 ? "light" : "dark";
     }
@@ -125,11 +130,16 @@ Rectangle {
         return cursorBox.currentIndex === 1 ? "block" : cursorBox.currentIndex === 2 ? "bar" : cursorBox.currentIndex === 3 ? "underline" : "terminal";
     }
 
+    function accentToken() {
+        return accentBox.currentIndex === 1 ? "system" : accentBox.currentIndex === 2 ? "custom" : "ztermy";
+    }
+
     function previewDraft() {
         if (!visible || loadingDraft) {
             return;
         }
-        appearancePreviewRequested(themeToken(), opacitySlider.value, backdropToken());
+        const previewAccent = customAccentField.acceptableInput ? customAccentField.text : controller.customAccent;
+        appearancePreviewRequested(themeToken(), opacitySlider.value, backdropToken(), accentToken(), previewAccent);
     }
 
     function selectCategory(category) {
@@ -164,6 +174,8 @@ Rectangle {
         themeBox.currentIndex = themeIndex(controller.themePreference);
         opacitySlider.value = controller.backdropOpacity;
         backdropBox.currentIndex = backdropIndex(controller.backdropPreference);
+        accentBox.currentIndex = accentIndex(controller.accentPreference);
+        customAccentField.text = controller.customAccent;
         fontFamilyField.text = controller.terminalFontFamily;
         fontSizeBox.value = controller.terminalFontSize;
         terminalOpacitySlider.value = controller.terminalBackgroundOpacity;
@@ -176,7 +188,12 @@ Rectangle {
     }
 
     function applyDraft() {
-        const saved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), fontFamilyField.text, fontSizeBox.value, terminalOpacitySlider.value, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, multilinePasteSwitch.checked);
+        if (customAccentSelected && !customAccentField.acceptableInput) {
+            statusIsError = true;
+            statusMessage = "Custom accent must use the #RRGGBB format.";
+            return;
+        }
+        const saved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), accentToken(), customAccentField.text, fontFamilyField.text, fontSizeBox.value, terminalOpacitySlider.value, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, multilinePasteSwitch.checked);
         statusIsError = !saved;
         statusMessage = saved ? "Settings saved and applied." : "These settings could not be saved. Check the font and numeric ranges.";
         if (!saved) {
@@ -340,6 +357,39 @@ Rectangle {
                     }
 
                     Label {
+                        text: "Accent color"
+                        color: Theme.text
+                    }
+                    AppComboBox {
+                        id: accentBox
+                        objectName: "settingsAccent"
+                        Layout.fillWidth: true
+                        model: ["ztermy", "Follow Windows", "Custom"]
+                        accessibleName: "Application accent color source"
+                        onCurrentIndexChanged: pane.previewDraft()
+                    }
+
+                    Label {
+                        visible: pane.customAccentSelected
+                        text: "Custom accent"
+                        color: Theme.text
+                    }
+                    AppTextField {
+                        id: customAccentField
+                        objectName: "settingsCustomAccent"
+                        visible: pane.customAccentSelected
+                        Layout.fillWidth: true
+                        placeholderText: "#22C55E"
+                        selectByMouse: true
+                        maximumLength: 7
+                        validator: RegularExpressionValidator {
+                            regularExpression: /^#[0-9A-Fa-f]{6}$/
+                        }
+                        Accessible.name: "Custom application accent color"
+                        onTextChanged: pane.previewDraft()
+                    }
+
+                    Label {
                         text: "Windows backdrop"
                         color: Theme.text
                     }
@@ -405,11 +455,11 @@ Rectangle {
                                     Layout.preferredWidth: 8
                                     Layout.preferredHeight: 8
                                     radius: 4
-                                    color: pane.draftDark ? "#22C55E" : "#15803D"
+                                    color: Theme.accent
                                 }
                                 Text {
                                     Layout.alignment: Qt.AlignVCenter
-                                    text: themeBox.currentText + " · " + backdropBox.currentText + (pane.adjustableBackdrop ? " · " + Math.round(opacitySlider.value * 100) + "%" : " · system controlled")
+                                    text: themeBox.currentText + " · " + accentBox.currentText + " · " + backdropBox.currentText + (pane.adjustableBackdrop ? " · " + Math.round(opacitySlider.value * 100) + "%" : " · system controlled")
                                     color: pane.draftDark ? "#F8FAFC" : "#0F172A"
                                     font.family: Theme.uiFont
                                     font.pixelSize: Theme.textBody
@@ -582,11 +632,13 @@ Rectangle {
                 }
 
                 ActionButton {
+                    id: applyButton
                     objectName: "settingsApply"
                     Layout.fillWidth: pane.compactLayout
                     text: "Apply"
                     accessibleName: "Apply application settings"
                     variant: "primary"
+                    enabled: !pane.customAccentSelected || customAccentField.acceptableInput
                     onClicked: pane.applyDraft()
                 }
             }

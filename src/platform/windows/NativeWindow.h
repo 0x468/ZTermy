@@ -2,6 +2,7 @@
 
 #include "platform/windows/WindowsUiSettings.h"
 
+#include <QColor>
 #include <QQuickView>
 #include <QVariantMap>
 #include <qt_windows.h>
@@ -16,6 +17,7 @@ class NativeWindow final : public QQuickView
     Q_PROPERTY(bool maximizeButtonHovered READ maximizeButtonHovered NOTIFY maximizeButtonHoveredChanged)
     Q_PROPERTY(bool maximizeButtonPressed READ maximizeButtonPressed NOTIFY maximizeButtonPressedChanged)
     Q_PROPERTY(bool systemDarkMode READ systemDarkMode NOTIFY systemDarkModeChanged)
+    Q_PROPERTY(QColor systemAccentColor READ systemAccentColor NOTIFY systemAccentColorChanged)
     Q_PROPERTY(bool animationsEnabled READ animationsEnabled NOTIFY animationsEnabledChanged)
 
 public:
@@ -27,6 +29,7 @@ public:
     [[nodiscard]] bool maximizeButtonHovered() const noexcept;
     [[nodiscard]] bool maximizeButtonPressed() const noexcept;
     [[nodiscard]] bool systemDarkMode() const noexcept;
+    [[nodiscard]] QColor systemAccentColor() const noexcept;
     [[nodiscard]] bool animationsEnabled() const noexcept;
     [[nodiscard]] bool maximizedClientMatchesWorkArea() const noexcept;
 
@@ -42,6 +45,7 @@ signals:
     void maximizeButtonHoveredChanged();
     void maximizeButtonPressedChanged();
     void systemDarkModeChanged();
+    void systemAccentColorChanged();
     void animationsEnabledChanged();
 
 protected:
@@ -59,6 +63,7 @@ private:
     void configureNativeWindow();
     [[nodiscard]] bool applyBackdrop();
     void refreshAnimationsEnabled();
+    void updateSystemAccentColor(windowing::RgbColor color);
     void setMaximizeButtonHovered(bool hovered);
     void setMaximizeButtonPressed(bool pressed);
 
@@ -71,6 +76,7 @@ private:
     bool m_maximizeButtonPressed = false;
     QString m_backdropPreference = QStringLiteral("acrylic");
     bool m_darkMode = true;
+    QColor m_systemAccentColor = QColor(QStringLiteral("#0078D4"));
     windowing::ClientAreaAnimationPreference m_animationPreference;
     HWND m_windowHandle = nullptr;
     WNDPROC m_originalWindowProcedure = nullptr;

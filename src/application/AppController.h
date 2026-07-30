@@ -44,6 +44,8 @@ class AppController final : public QObject
     Q_PROPERTY(QString themePreference READ themePreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(qreal backdropOpacity READ backdropOpacity NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString backdropPreference READ backdropPreference NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(QString accentPreference READ accentPreference NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(QString customAccent READ customAccent NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString terminalFontFamily READ terminalFontFamily NOTIFY applicationSettingsChanged)
     Q_PROPERTY(int terminalFontSize READ terminalFontSize NOTIFY applicationSettingsChanged)
     Q_PROPERTY(qreal terminalBackgroundOpacity READ terminalBackgroundOpacity NOTIFY applicationSettingsChanged)
@@ -88,6 +90,8 @@ public:
     [[nodiscard]] QString themePreference() const;
     [[nodiscard]] qreal backdropOpacity() const noexcept;
     [[nodiscard]] QString backdropPreference() const;
+    [[nodiscard]] QString accentPreference() const;
+    [[nodiscard]] QString customAccent() const;
     [[nodiscard]] QString terminalFontFamily() const;
     [[nodiscard]] int terminalFontSize() const noexcept;
     [[nodiscard]] qreal terminalBackgroundOpacity() const noexcept;
@@ -116,6 +120,7 @@ public:
                                   bool privateKeyPassphraseRequired, const QString &secret, bool saveProfile,
                                   const QString &profileName, const QString &group);
     Q_INVOKABLE bool saveApplicationSettings(const QString &theme, qreal backdropOpacity, const QString &backdrop,
+                                             const QString &accent, const QString &customAccent,
                                              const QString &fontFamily, int fontSize, qreal terminalBackgroundOpacity,
                                              const QString &cursor, bool cursorShouldBlink, bool shouldCopyOnSelect,
                                              bool shouldConfirmMultilinePaste);

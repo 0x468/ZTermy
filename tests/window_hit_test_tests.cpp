@@ -14,6 +14,7 @@ private slots:
     void constrainsMaximizedClientToWorkArea();
     void scalesMinimumTrackSizeForDpi();
     void tracksClientAreaAnimationPreference();
+    void decodesWindowsColorizationArgb();
 };
 
 void WindowHitTestTests::classifiesResizeEdges()
@@ -128,6 +129,15 @@ void WindowHitTestTests::tracksClientAreaAnimationPreference()
 
     QVERIFY(preference.update(true));
     QVERIFY(preference.enabled());
+}
+
+void WindowHitTestTests::decodesWindowsColorizationArgb()
+{
+    constexpr auto color = ztermy::windowing::decodeColorizationArgb(0xCC1234ABU);
+
+    QCOMPARE(color.red, 0x12U);
+    QCOMPARE(color.green, 0x34U);
+    QCOMPARE(color.blue, 0xABU);
 }
 
 QTEST_GUILESS_MAIN(WindowHitTestTests)

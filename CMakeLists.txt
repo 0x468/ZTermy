@@ -763,7 +763,7 @@ if(BUILD_TESTING)
 
     target_compile_features(ztermy_window_hit_test_tests PRIVATE cxx_std_23)
     target_include_directories(ztermy_window_hit_test_tests PRIVATE src)
-    target_link_libraries(ztermy_window_hit_test_tests PRIVATE Qt6::Test user32)
+    target_link_libraries(ztermy_window_hit_test_tests PRIVATE Qt6::Test dwmapi user32)
 
     if(MSVC)
         target_compile_options(ztermy_window_hit_test_tests PRIVATE

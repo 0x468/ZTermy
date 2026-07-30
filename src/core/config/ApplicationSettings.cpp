@@ -7,6 +7,7 @@
 #include <QJsonObject>
 #include <QSaveFile>
 
+#include <algorithm>
 #include <optional>
 #include <utility>
 
@@ -16,8 +17,10 @@ namespace
 constexpr qint64 maximumSettingsFileSize = qint64{64} * 1024;
 constexpr qint64 legacySchemaVersion = 1;
 constexpr qint64 materialSchemaVersion = 2;
-constexpr qint64 currentSchemaVersion = 3;
+constexpr qint64 terminalAppearanceSchemaVersion = 3;
+constexpr qint64 currentSchemaVersion = 4;
 
+using ztermy::config::AccentPreference;
 using ztermy::config::ApplicationSettings;
 using ztermy::config::ApplicationSettingsStoreError;
 using ztermy::config::BackdropPreference;
@@ -68,6 +71,24 @@ template <>
 }
 
 template <>
+[[nodiscard]] std::optional<AccentPreference> parsePreference(const QString &token)
+{
+    if (token == QStringLiteral("ztermy"))
+    {
+        return AccentPreference::ztermy;
+    }
+    if (token == QStringLiteral("system"))
+    {
+        return AccentPreference::system;
+    }
+    if (token == QStringLiteral("custom"))
+    {
+        return AccentPreference::custom;
+    }
+    return std::nullopt;
+}
+
+template <>
 [[nodiscard]] std::optional<CursorPreference> parsePreference(const QString &token)
 {
     if (token == QStringLiteral("terminal"))
@@ -92,10 +113,17 @@ template <>
 [[nodiscard]] bool validSettings(const ApplicationSettings &settings)
 {
     const QString fontFamily = settings.terminalFontFamily.trimmed();
+    const QString customAccent = settings.customAccent.trimmed();
+    const bool validCustomAccent = customAccent.size() == 7 && customAccent.front() == QLatin1Char('#')
+                                   && std::ranges::all_of(customAccent.sliced(1), [](const QChar character) {
+                                          const ushort value = character.unicode();
+                                          return (value >= '0' && value <= '9') || (value >= 'A' && value <= 'F')
+                                                 || (value >= 'a' && value <= 'f');
+                                      });
     return settings.backdropOpacity >= 0.0 && settings.backdropOpacity <= 1.0
            && settings.terminalBackgroundOpacity >= 0.0 && settings.terminalBackgroundOpacity <= 1.0
            && !fontFamily.isEmpty() && fontFamily.size() <= 128 && settings.terminalFontSize >= 8
-           && settings.terminalFontSize <= 32;
+           && settings.terminalFontSize <= 32 && validCustomAccent;
 }
 
 [[nodiscard]] std::expected<ApplicationSettings, ApplicationSettingsStoreError> parseSettings(const QJsonObject &root)
@@ -106,7 +134,8 @@ template <>
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
     const qint64 version = versionValue.toInteger();
-    if (version != legacySchemaVersion && version != materialSchemaVersion && version != currentSchemaVersion)
+    if (version != legacySchemaVersion && version != materialSchemaVersion && version != terminalAppearanceSchemaVersion
+        && version != currentSchemaVersion)
     {
         return std::unexpected(ApplicationSettingsStoreError::unsupportedVersion);
     }
@@ -115,6 +144,8 @@ template <>
     const QJsonValue opacityValue = root.value(version == legacySchemaVersion ? QStringLiteral("windowOpacity")
                                                                               : QStringLiteral("backdropOpacity"));
     const QJsonValue backdropValue = root.value(QStringLiteral("backdrop"));
+    const QJsonValue accentValue = root.value(QStringLiteral("accent"));
+    const QJsonValue customAccentValue = root.value(QStringLiteral("customAccent"));
     const QJsonValue fontFamilyValue = root.value(QStringLiteral("terminalFontFamily"));
     const QJsonValue fontSizeValue = root.value(QStringLiteral("terminalFontSize"));
     const QJsonValue terminalBackgroundOpacityValue = root.value(QStringLiteral("terminalBackgroundOpacity"));
@@ -129,16 +160,22 @@ template <>
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
-    if (version == currentSchemaVersion && !terminalBackgroundOpacityValue.isDouble())
+    if (version >= terminalAppearanceSchemaVersion && !terminalBackgroundOpacityValue.isDouble())
+    {
+        return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
+    }
+    if (version == currentSchemaVersion && (!accentValue.isString() || !customAccentValue.isString()))
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
 
     const auto theme = parsePreference<ThemePreference>(themeValue.toString());
     const auto backdrop = parsePreference<BackdropPreference>(backdropValue.toString());
+    const auto accent = version == currentSchemaVersion ? parsePreference<AccentPreference>(accentValue.toString())
+                                                        : std::optional{AccentPreference::ztermy};
     const auto cursor = parsePreference<CursorPreference>(cursorValue.toString());
     const qint64 fontSize = fontSizeValue.toInteger(-1);
-    if (!theme || !backdrop || !cursor || fontSizeValue.toDouble() != static_cast<double>(fontSize))
+    if (!theme || !backdrop || !accent || !cursor || fontSizeValue.toDouble() != static_cast<double>(fontSize))
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
@@ -147,9 +184,12 @@ template <>
         .theme = *theme,
         .backdropOpacity = opacityValue.toDouble(),
         .backdrop = *backdrop,
+        .accent = *accent,
+        .customAccent = version == currentSchemaVersion ? customAccentValue.toString() : QStringLiteral("#22C55E"),
         .terminalFontFamily = fontFamilyValue.toString(),
         .terminalFontSize = static_cast<int>(fontSize),
-        .terminalBackgroundOpacity = version == currentSchemaVersion ? terminalBackgroundOpacityValue.toDouble() : 1.0,
+        .terminalBackgroundOpacity =
+            version >= terminalAppearanceSchemaVersion ? terminalBackgroundOpacityValue.toDouble() : 1.0,
         .cursor = *cursor,
         .cursorBlink = cursorBlinkValue.toBool(),
         .copyOnSelect = copyOnSelectValue.toBool(),
@@ -160,6 +200,7 @@ template <>
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
     settings.terminalFontFamily = settings.terminalFontFamily.trimmed();
+    settings.customAccent = settings.customAccent.trimmed().toUpper();
     return settings;
 }
 
@@ -225,6 +266,8 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
         {QStringLiteral("theme"), themePreferenceToken(settings.theme)},
         {QStringLiteral("backdropOpacity"), settings.backdropOpacity},
         {QStringLiteral("backdrop"), backdropPreferenceToken(settings.backdrop)},
+        {QStringLiteral("accent"), accentPreferenceToken(settings.accent)},
+        {QStringLiteral("customAccent"), settings.customAccent.trimmed().toUpper()},
         {QStringLiteral("terminalFontFamily"), settings.terminalFontFamily.trimmed()},
         {QStringLiteral("terminalFontSize"), settings.terminalFontSize},
         {QStringLiteral("terminalBackgroundOpacity"), settings.terminalBackgroundOpacity},
@@ -278,6 +321,20 @@ QString backdropPreferenceToken(const BackdropPreference preference)
     }
 }
 
+QString accentPreferenceToken(const AccentPreference preference)
+{
+    switch (preference)
+    {
+        case AccentPreference::system:
+            return QStringLiteral("system");
+        case AccentPreference::custom:
+            return QStringLiteral("custom");
+        case AccentPreference::ztermy:
+        default:
+            return QStringLiteral("ztermy");
+    }
+}
+
 QString cursorPreferenceToken(const CursorPreference preference)
 {
     switch (preference)
@@ -302,6 +359,11 @@ std::optional<ThemePreference> parseThemePreference(const QString &token)
 std::optional<BackdropPreference> parseBackdropPreference(const QString &token)
 {
     return parsePreference<BackdropPreference>(token);
+}
+
+std::optional<AccentPreference> parseAccentPreference(const QString &token)
+{
+    return parsePreference<AccentPreference>(token);
 }
 
 std::optional<CursorPreference> parseCursorPreference(const QString &token)
