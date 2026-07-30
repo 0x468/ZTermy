@@ -72,6 +72,12 @@ Only runtime evidence can mark a platform or UI item complete.
   swapped frames. Static Release completed in `1840 ms` with 209 heartbeat
   ticks, a `14 ms` maximum gap, and 243 swapped frames. Both rendered terminal
   pixels and remained within the 250 ms responsiveness ceiling.
+- The real-window appearance gate passed in dynamic Debug and static Release.
+  DWM readback matched immersive Dark and Light mode, rounded corners, and
+  None/Mica/Acrylic backdrop values `1`/`2`/`3`; Qt readback matched opacity
+  `1.0`/`0.85`/`0.75`. Invalid opacity and backdrop values were rejected
+  without changing the established state, and the gate restored
+  Dark/None/100%.
 - The static Release sustained-interaction gate ran a real PowerShell/ConPTY
   session for `1800 s` across 30 independent one-minute latency windows and
   85,563 edit interactions. Every window contained 2,850-2,854 samples and
@@ -121,7 +127,7 @@ procedures and expected results.
 - [x] Double-clicking draggable title space toggles maximize/restore
 - [x] Maximized window respects the monitor work area
 - [ ] Moving between mixed-DPI monitors preserves geometry and sharp rendering
-- [ ] Dark/light DWM integration is correct
+- [x] Dark/light DWM integration is correct
 - [ ] Opacity and backdrop settings fail safely when unsupported
 
 ## UI convergence

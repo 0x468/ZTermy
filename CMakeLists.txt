@@ -422,6 +422,17 @@ add_custom_target(ztermy_window_runtime_smoke
     VERBATIM
 )
 
+add_custom_target(ztermy_window_appearance_runtime_smoke
+    COMMAND "${CMAKE_COMMAND}" -E rm -rf
+            "${CMAKE_CURRENT_BINARY_DIR}/test-data/window-appearance-smoke"
+    COMMAND "$<TARGET_FILE:ztermy>"
+            --window-appearance-smoke
+            --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/window-appearance-smoke"
+    DEPENDS ztermy
+    COMMENT "Checking Windows DWM theme, opacity, and backdrop state"
+    VERBATIM
+)
+
 add_custom_target(ztermy_ui_layout_runtime_smoke
     COMMAND "$<TARGET_FILE:ztermy>"
             --ui-layout-smoke

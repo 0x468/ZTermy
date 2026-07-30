@@ -22,6 +22,8 @@
 #include <QVariant>
 #include <QVariantMap>
 
+#include <dwmapi.h>
+
 #include <array>
 #include <chrono>
 #include <cstdlib>
@@ -55,6 +57,76 @@ void processWindowEventsFor(const std::chrono::milliseconds duration)
     window.showNormal();
     processWindowEventsFor(std::chrono::milliseconds{250});
     return workAreaMatches && !window.maximized();
+}
+
+[[nodiscard]] bool queryDwmIntAttribute(const HWND windowHandle, const DWORD attribute, int *value)
+{
+    return value != nullptr && SUCCEEDED(DwmGetWindowAttribute(windowHandle, attribute, value, sizeof(*value)));
+}
+
+[[nodiscard]] bool verifyWindowAppearance(ztermy::NativeWindow &window, const qreal opacity,
+                                          const QString &backdropPreference, const bool darkMode,
+                                          const int expectedBackdrop)
+{
+    if (!window.applyAppearance(opacity, backdropPreference, darkMode))
+    {
+        qCWarning(applicationLog) << "Window appearance request was rejected"
+                                  << "opacity=" << opacity << "backdrop=" << backdropPreference
+                                  << "darkMode=" << darkMode;
+        return false;
+    }
+    processWindowEventsFor(std::chrono::milliseconds{150});
+
+    const auto windowHandle = reinterpret_cast<HWND>(window.winId()); // NOLINT(performance-no-int-to-ptr)
+    int appliedDarkMode = -1;
+    int appliedCornerPreference = -1;
+    int appliedBackdrop = -1;
+    constexpr DWORD useImmersiveDarkModeAttribute = 20;
+    constexpr DWORD windowCornerPreferenceAttribute = 33;
+    constexpr DWORD systemBackdropTypeAttribute = 38;
+    const bool darkModeRead = queryDwmIntAttribute(windowHandle, useImmersiveDarkModeAttribute, &appliedDarkMode);
+    const bool cornerPreferenceRead =
+        queryDwmIntAttribute(windowHandle, windowCornerPreferenceAttribute, &appliedCornerPreference);
+    const bool backdropRead = queryDwmIntAttribute(windowHandle, systemBackdropTypeAttribute, &appliedBackdrop);
+    const bool opacityMatches = qAbs(window.opacity() - opacity) < 0.001;
+    const bool darkModeMatches = darkModeRead && appliedDarkMode == static_cast<int>(darkMode);
+    constexpr int roundCornerPreference = 2;
+    const bool cornerPreferenceMatches = cornerPreferenceRead && appliedCornerPreference == roundCornerPreference;
+    const bool backdropMatches = backdropRead && appliedBackdrop == expectedBackdrop;
+    qCInfo(applicationLog) << "Window appearance runtime check"
+                           << "opacity=" << window.opacity() << "opacityMatches=" << opacityMatches
+                           << "darkModeRead=" << darkModeRead << "darkMode=" << appliedDarkMode
+                           << "darkModeMatches=" << darkModeMatches << "cornerPreferenceRead=" << cornerPreferenceRead
+                           << "cornerPreference=" << appliedCornerPreference
+                           << "cornerPreferenceMatches=" << cornerPreferenceMatches << "backdropRead=" << backdropRead
+                           << "backdrop=" << appliedBackdrop << "backdropMatches=" << backdropMatches;
+    return opacityMatches && darkModeMatches && cornerPreferenceMatches && backdropMatches;
+}
+
+[[nodiscard]] bool runWindowAppearanceRuntimeSmoke(ztermy::NativeWindow &window)
+{
+    window.resize(QSize{1120, 800});
+    window.show();
+    processWindowEventsFor(std::chrono::milliseconds{250});
+
+    constexpr int noBackdrop = 1;
+    constexpr int micaBackdrop = 2;
+    constexpr int acrylicBackdrop = 3;
+    const bool darkNone = verifyWindowAppearance(window, 1.0, QStringLiteral("none"), true, noBackdrop);
+    const qreal baselineOpacity = window.opacity();
+    const bool invalidOpacityRejected = !window.applyAppearance(0.49, QStringLiteral("none"), false)
+                                        && qAbs(window.opacity() - baselineOpacity) < 0.001;
+    const bool invalidBackdropRejected = !window.applyAppearance(0.75, QStringLiteral("invalid"), false)
+                                         && qAbs(window.opacity() - baselineOpacity) < 0.001;
+    const bool lightMica = verifyWindowAppearance(window, 0.85, QStringLiteral("mica"), false, micaBackdrop);
+    const bool darkAcrylic = verifyWindowAppearance(window, 0.75, QStringLiteral("acrylic"), true, acrylicBackdrop);
+    const bool restored = verifyWindowAppearance(window, 1.0, QStringLiteral("none"), true, noBackdrop);
+
+    qCInfo(applicationLog) << "Window appearance runtime summary"
+                           << "darkNone=" << darkNone << "invalidOpacityRejected=" << invalidOpacityRejected
+                           << "invalidBackdropRejected=" << invalidBackdropRejected << "lightMica=" << lightMica
+                           << "darkAcrylic=" << darkAcrylic << "restored=" << restored;
+    return darkNone && invalidOpacityRejected && invalidBackdropRejected && lightMica && darkAcrylic && restored;
 }
 
 [[nodiscard]] bool captureLayout(ztermy::NativeWindow &window, const QString &outputDirectory, const QString &name)
@@ -656,6 +728,8 @@ int main(int argc, char *argv[])
     const bool uiLayoutSmoke = QCoreApplication::arguments().contains(QStringLiteral("--ui-layout-smoke"));
     const bool uiKeyboardSmoke = QCoreApplication::arguments().contains(QStringLiteral("--ui-keyboard-smoke"));
     const bool terminalRenderSmoke = QCoreApplication::arguments().contains(QStringLiteral("--terminal-render-smoke"));
+    const bool windowAppearanceSmoke =
+        QCoreApplication::arguments().contains(QStringLiteral("--window-appearance-smoke"));
     if ((uiLayoutSmoke || uiKeyboardSmoke) && !applyUiLayoutSmokeTheme(appController, QStringLiteral("dark")))
     {
         qCCritical(applicationLog) << "Could not prepare the UI runtime smoke settings";
@@ -706,6 +780,19 @@ int main(int argc, char *argv[])
             return EXIT_FAILURE;
         }
         qCInfo(applicationLog) << "Maximized work-area runtime smoke test completed";
+        return EXIT_SUCCESS;
+    }
+    if (windowAppearanceSmoke)
+    {
+        const bool passed = runWindowAppearanceRuntimeSmoke(window);
+        appController.shutdown();
+        window.releaseResources();
+        if (!passed)
+        {
+            qCCritical(applicationLog) << "Window appearance runtime smoke test failed";
+            return EXIT_FAILURE;
+        }
+        qCInfo(applicationLog) << "Window appearance runtime smoke test completed";
         return EXIT_SUCCESS;
     }
 
