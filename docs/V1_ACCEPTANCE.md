@@ -60,6 +60,13 @@ Only runtime evidence can mark a platform or UI item complete.
   while a 10 ms Qt heartbeat fired 178 times; static Release delivered 244
   snapshots and 186 heartbeats. Both sessions stopped in under 1 ms without
   starving the Qt event loop.
+- The real-window renderer gate displayed all 20,000 PowerShell lines through
+  Qt Quick, resized twice during output, and captured line 20000, the unique
+  completion marker, and the returned prompt. Dynamic Debug completed in
+  `2892 ms` with 148 heartbeat ticks, a `68 ms` maximum heartbeat gap, and 76
+  swapped frames. Static Release completed in `1840 ms` with 209 heartbeat
+  ticks, a `14 ms` maximum gap, and 243 swapped frames. Both rendered terminal
+  pixels and remained within the 250 ms responsiveness ceiling.
 - The static Release sustained-interaction gate ran a real PowerShell/ConPTY
   session for `1800 s` across 30 independent one-minute latency windows and
   85,563 edit interactions. Every window contained 2,850-2,854 samples and
@@ -125,7 +132,7 @@ procedures and expected results.
 
 - [x] Local input dispatch P95 is below 16 ms
 - [x] SSH input adds no application-side batching delay
-- [ ] Large output does not freeze the window
+- [x] Large output does not freeze the window
 - [ ] ANSI colors, alternate screen, cursor, clear, and resize are correct
 - [ ] CJK, wide characters, combining marks, emoji, and IME are correct
 - [ ] Selection, copy, paste, search, and scrollback are stable

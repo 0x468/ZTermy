@@ -7,6 +7,7 @@
 
 #include <QAccessible>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QEventLoop>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -15,6 +16,7 @@
 #include <QMetaType>
 #include <QQuickItem>
 #include <QQuickStyle>
+#include <QSet>
 #include <QStandardPaths>
 #include <QTimer>
 #include <QVariant>
@@ -488,6 +490,134 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
     return navigationPreservedSession;
 }
 
+[[nodiscard]] bool terminalRegionHasRenderedContent(const QImage &windowImage,
+                                                    const ztermy::ui::TerminalItem &terminalItem)
+{
+    const qreal scale = windowImage.devicePixelRatio();
+    const QPointF sceneTopLeft = terminalItem.mapToScene(QPointF{});
+    const QRect terminalRect{
+        qRound(sceneTopLeft.x() * scale),
+        qRound(sceneTopLeft.y() * scale),
+        qRound(terminalItem.width() * scale),
+        qRound(terminalItem.height() * scale),
+    };
+    const QRect boundedRect = terminalRect.intersected(windowImage.rect());
+    if (boundedRect.width() < 100 || boundedRect.height() < 100)
+    {
+        return false;
+    }
+
+    QSet<QRgb> colors;
+    for (int y = boundedRect.top(); y <= boundedRect.bottom() && colors.size() < 8; y += 4)
+    {
+        for (int x = boundedRect.left(); x <= boundedRect.right() && colors.size() < 8; x += 4)
+        {
+            colors.insert(windowImage.pixel(x, y));
+        }
+    }
+    return colors.size() >= 8;
+}
+
+[[nodiscard]] bool runTerminalRenderRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller,
+                                                 ztermy::ui::TerminalItem &terminalItem, const QString &outputDirectory)
+{
+    window.resize(QSize{1120, 800});
+    window.show();
+    window.requestActivate();
+    processWindowEventsFor(std::chrono::milliseconds{250});
+
+    if (controller.startLocalTerminal().isEmpty())
+    {
+        qCWarning(applicationLog) << "Terminal render smoke could not start the local terminal";
+        return false;
+    }
+
+    QElapsedTimer startupTimer;
+    startupTimer.start();
+    while (startupTimer.elapsed() < 5'000
+           && (controller.terminalTabs().isEmpty()
+               || !controller.terminalTabs().front().toMap().value(QStringLiteral("running")).toBool()))
+    {
+        processWindowEventsFor(std::chrono::milliseconds{20});
+    }
+    if (controller.terminalTabs().isEmpty()
+        || !controller.terminalTabs().front().toMap().value(QStringLiteral("running")).toBool())
+    {
+        qCWarning(applicationLog) << "Terminal render smoke did not reach a running local session";
+        return false;
+    }
+    processWindowEventsFor(std::chrono::milliseconds{250});
+
+    std::uint64_t frameSwaps = 0;
+    const QMetaObject::Connection frameConnection =
+        QObject::connect(&window, &QQuickWindow::frameSwapped, &window, [&frameSwaps] {
+            ++frameSwaps;
+        });
+
+    std::uint64_t heartbeatTicks = 0;
+    qint64 maximumHeartbeatGapMilliseconds = 0;
+    QElapsedTimer heartbeatGap;
+    heartbeatGap.start();
+    QTimer heartbeat;
+    heartbeat.setInterval(10);
+    QObject::connect(&heartbeat, &QTimer::timeout, &window, [&] {
+        maximumHeartbeatGapMilliseconds = std::max(maximumHeartbeatGapMilliseconds, heartbeatGap.restart());
+        ++heartbeatTicks;
+    });
+    heartbeat.start();
+
+    constexpr auto completionMarker = "ZTERMY_RENDER_GATE_DONE";
+    terminalItem.inputGenerated(QByteArrayLiteral("1..20000 | ForEach-Object { \"ztermy render line $_\" }; "
+                                                  "Write-Output ('ZTERMY_RENDER_' + 'GATE_DONE')\r"));
+    QElapsedTimer completionTimer;
+    completionTimer.start();
+    qint64 nextSearchMilliseconds = 100;
+    bool compactResizeApplied = false;
+    bool regularResizeRestored = false;
+    while (completionTimer.elapsed() < 20'000 && controller.terminalSearchTotal() == 0)
+    {
+        processWindowEventsFor(std::chrono::milliseconds{20});
+        const qint64 elapsedMilliseconds = completionTimer.elapsed();
+        if (!compactResizeApplied && elapsedMilliseconds >= 250)
+        {
+            window.resize(QSize{780, 520});
+            compactResizeApplied = true;
+        }
+        if (!regularResizeRestored && elapsedMilliseconds >= 500)
+        {
+            window.resize(QSize{1120, 800});
+            regularResizeRestored = true;
+        }
+        if (elapsedMilliseconds >= nextSearchMilliseconds)
+        {
+            controller.searchTerminal(QString::fromLatin1(completionMarker), false, true);
+            nextSearchMilliseconds += 100;
+        }
+    }
+    const qint64 completionMilliseconds = completionTimer.elapsed();
+    processWindowEventsFor(std::chrono::milliseconds{250});
+    heartbeat.stop();
+    QObject::disconnect(frameConnection);
+
+    QDir().mkpath(outputDirectory);
+    const QString capturePath = QDir(outputDirectory).filePath(QStringLiteral("terminal-render-complete.png"));
+    const QImage capture = window.grabWindow();
+    const bool captureSaved = capture.save(capturePath);
+    const bool terminalRendered = terminalRegionHasRenderedContent(capture, terminalItem);
+    const bool completed = controller.terminalSearchTotal() > 0;
+    const bool responsive = heartbeatTicks >= 20 && maximumHeartbeatGapMilliseconds <= 250;
+    const bool progressiveFrames = frameSwaps >= 5;
+    const bool resizeCompleted = compactResizeApplied && regularResizeRestored && window.size() == QSize{1120, 800};
+
+    qCInfo(applicationLog) << "Terminal render runtime check"
+                           << "completed=" << completed << "completionMs=" << completionMilliseconds
+                           << "heartbeatTicks=" << heartbeatTicks
+                           << "maxHeartbeatGapMs=" << maximumHeartbeatGapMilliseconds << "frameSwaps=" << frameSwaps
+                           << "resizeCompleted=" << resizeCompleted << "captureSaved=" << captureSaved
+                           << "terminalRendered=" << terminalRendered << "capture=" << capturePath;
+    return completed && responsive && progressiveFrames && resizeCompleted && captureSaved && terminalRendered;
+}
+
 } // namespace
 
 int main(int argc, char *argv[])
@@ -525,6 +655,7 @@ int main(int argc, char *argv[])
     ztermy::AppController appController(paths->profilesFile, paths->knownHostsFile, paths->settingsFile);
     const bool uiLayoutSmoke = QCoreApplication::arguments().contains(QStringLiteral("--ui-layout-smoke"));
     const bool uiKeyboardSmoke = QCoreApplication::arguments().contains(QStringLiteral("--ui-keyboard-smoke"));
+    const bool terminalRenderSmoke = QCoreApplication::arguments().contains(QStringLiteral("--terminal-render-smoke"));
     if ((uiLayoutSmoke || uiKeyboardSmoke) && !applyUiLayoutSmokeTheme(appController, QStringLiteral("dark")))
     {
         qCCritical(applicationLog) << "Could not prepare the UI runtime smoke settings";
@@ -602,6 +733,19 @@ int main(int argc, char *argv[])
             return EXIT_FAILURE;
         }
         qCInfo(applicationLog) << "UI keyboard runtime smoke test completed";
+        return EXIT_SUCCESS;
+    }
+    if (terminalRenderSmoke)
+    {
+        const bool passed = runTerminalRenderRuntimeSmoke(window, appController, *terminalItem, paths->dataDirectory);
+        appController.shutdown();
+        window.releaseResources();
+        if (!passed)
+        {
+            qCCritical(applicationLog) << "Terminal render runtime smoke test failed";
+            return EXIT_FAILURE;
+        }
+        qCInfo(applicationLog) << "Terminal render runtime smoke test completed";
         return EXIT_SUCCESS;
     }
 

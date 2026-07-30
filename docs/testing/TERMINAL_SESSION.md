@@ -129,6 +129,29 @@ progressive snapshots, then requires session shutdown within two seconds. This
 proves the ConPTY, parser, snapshot-coalescing, and GUI-thread event-loop path;
 it does not replace visual GPU-rendering checks.
 
+Run the real-window renderer gate in both supported build shapes:
+
+```powershell
+cmake --build --preset msvc-dynamic-debug `
+  --target ztermy_terminal_render_runtime_smoke
+cmake --build --preset msvc-static-release `
+  --target ztermy_terminal_render_runtime_smoke
+```
+
+This gate opens the real Qt Quick window with an isolated data directory,
+starts a local PowerShell/ConPTY session, renders 20,000 lines through the
+terminal item, and resizes the window twice while output is active. It requires
+the independently constructed completion marker, a live 10 ms GUI heartbeat,
+at least five swapped frames, a maximum heartbeat gap no greater than 250 ms,
+and rendered terminal pixels. It saves the final window captures under:
+
+- `build/msvc-dynamic-debug/test-data/terminal-render-smoke/`
+- `build/msvc-static-release/test-data/terminal-render-smoke/`
+
+The capture must visibly contain line 20000, `ZTERMY_RENDER_GATE_DONE`, and the
+returned PowerShell prompt. This guards against completing on the echoed input
+command instead of the command's output.
+
 For the interactive renderer check, run:
 
 ```powershell
@@ -147,8 +170,11 @@ Expected:
   repainted, run the sustained-output command again before closing.
 
 The current renderer uploads a full-frame texture per delivered snapshot. This
-test and the accompanying metrics establish the baseline for damage-aware and
-batched renderer work.
+test, the automated real-window gate, and their accompanying metrics establish
+the baseline for damage-aware and batched renderer work. The automated gate
+proves bounded event-loop progress and completed rendering; the interactive
+check remains necessary for subjective smoothness, tearing, and visual-stability
+review.
 
 ## Input queue latency
 

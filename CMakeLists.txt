@@ -442,6 +442,17 @@ add_custom_target(ztermy_ui_keyboard_runtime_smoke
     VERBATIM
 )
 
+add_custom_target(ztermy_terminal_render_runtime_smoke
+    COMMAND "${CMAKE_COMMAND}" -E rm -rf
+            "${CMAKE_CURRENT_BINARY_DIR}/test-data/terminal-render-smoke"
+    COMMAND "$<TARGET_FILE:ztermy>"
+            --terminal-render-smoke
+            --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/terminal-render-smoke"
+    DEPENDS ztermy
+    COMMENT "Checking terminal rendering and GUI responsiveness under large output"
+    VERBATIM
+)
+
 if(ZTERMY_STATIC_BUILD)
     install(TARGETS ztermy RUNTIME DESTINATION . COMPONENT Runtime)
 else()
