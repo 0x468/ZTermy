@@ -139,23 +139,30 @@ void TerminalItemTests::appliesRendererPreferences()
     TestableTerminalItem item;
     QSignalSpy fontSpy(&item, &ztermy::ui::TerminalItem::fontChanged);
     QSignalSpy cursorSpy(&item, &ztermy::ui::TerminalItem::cursorAppearanceChanged);
+    QSignalSpy backgroundSpy(&item, &ztermy::ui::TerminalItem::backgroundOpacityChanged);
 
     item.setFontFamily(QStringLiteral("Cascadia Code"));
     item.setFontPixelSize(18);
     item.setCursorPreference(QStringLiteral("bar"));
     item.setCursorBlink(false);
+    item.setBackgroundOpacity(0.45);
 
     QCOMPARE(item.fontFamily(), QStringLiteral("Cascadia Code"));
     QCOMPARE(item.fontPixelSize(), 18);
     QCOMPARE(item.cursorPreference(), QStringLiteral("bar"));
     QVERIFY(!item.cursorBlink());
+    QCOMPARE(item.backgroundOpacity(), 0.45);
     QCOMPARE(fontSpy.count(), 2);
     QCOMPARE(cursorSpy.count(), 2);
+    QCOMPARE(backgroundSpy.count(), 1);
 
     item.setFontPixelSize(99);
     item.setCursorPreference(QStringLiteral("invalid"));
+    item.setBackgroundOpacity(2.0);
     QCOMPARE(item.fontPixelSize(), 18);
     QCOMPARE(item.cursorPreference(), QStringLiteral("bar"));
+    QCOMPARE(item.backgroundOpacity(), 1.0);
+    QCOMPARE(backgroundSpy.count(), 2);
 }
 
 void TerminalItemTests::routesCopyPasteAndTextKeys()
@@ -330,6 +337,7 @@ void TerminalItemTests::rendersStyledWideCellsAndCursorPixels()
         cell.background = snapshot->defaultBackground;
     }
     snapshot->cells[0].background = {.red = 180, .green = 20, .blue = 30};
+    snapshot->cells[0].explicitBackground = true;
     snapshot->cells[2].selected = true;
     snapshot->cells[4].selected = true;
     snapshot->cells[4].displayWidth = 2;
@@ -348,7 +356,9 @@ void TerminalItemTests::rendersStyledWideCellsAndCursorPixels()
     };
 
     item->setCursorBlink(false);
+    item->setBackgroundOpacity(0.0);
     item->setSnapshot(snapshot);
+    window.setColor(QColor(18, 52, 86));
     window.resize(640, 220);
     item->setSize(window.size());
     window.show();
@@ -371,6 +381,10 @@ void TerminalItemTests::rendersStyledWideCellsAndCursorPixels()
     const QColor styledBackground = pixelAtCellCenter(0, 0);
     QVERIFY(styledBackground.red() > 150);
     QVERIFY(styledBackground.green() < 50);
+    const QColor transparentDefaultBackground = pixelAtCellCenter(7, 0);
+    QVERIFY(qAbs(transparentDefaultBackground.red() - 18) <= 2);
+    QVERIFY(qAbs(transparentDefaultBackground.green() - 52) <= 2);
+    QVERIFY(qAbs(transparentDefaultBackground.blue() - 86) <= 2);
     const QColor selectionBackground = pixelAtCellCenter(2, 0);
     QVERIFY(selectionBackground.blue() > selectionBackground.red());
     QVERIFY(selectionBackground.blue() > selectionBackground.green());

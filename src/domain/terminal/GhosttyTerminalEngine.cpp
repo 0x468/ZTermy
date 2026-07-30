@@ -919,6 +919,7 @@ std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot
                 == GHOSTTY_SUCCESS)
             {
                 cell.background = terminalColor(background);
+                cell.explicitBackground = true;
             }
 
             GhosttyStyle style{};
@@ -940,6 +941,7 @@ std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot
             if (style.inverse)
             {
                 std::swap(cell.foreground, cell.background);
+                cell.explicitBackground = true;
             }
 
             std::uint32_t graphemeLength = 0;

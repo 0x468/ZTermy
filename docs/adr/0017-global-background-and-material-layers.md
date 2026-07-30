@@ -69,10 +69,12 @@ window. This is the actual native material and QML surface stack, not a
 simulated sample inside a card. Applying persists the draft; discarding or
 leaving Settings restores the persisted appearance.
 
-Terminal background transparency, background images, and explicit ANSI-cell
-background opacity will be implemented as global terminal-appearance
-settings. They are separate from window background opacity. The existing
-opaque terminal background remains the default until that work is accepted.
+Terminal default-background opacity is a separate global terminal-appearance
+setting. It changes only pixels that use the terminal's default background;
+explicit ANSI cell backgrounds, selection, glyphs, IME composition, and the
+cursor stay opaque. The default remains 100% so existing installations do not
+change appearance. Background images and optional explicit ANSI-background
+opacity remain future global features.
 
 ## Consequences
 
@@ -84,9 +86,9 @@ opaque terminal background remains the default until that work is accepted.
 - Terminal text and application controls are never faded by window opacity.
 - Windows accent synchronization remains a bounded global V1.1 feature rather
   than an SSH-profile option.
-- A future terminal-background feature must distinguish default background
-  cells from explicit ANSI backgrounds and must be tested with full-screen
-  terminal programs.
+- Terminal background transparency distinguishes default background cells
+  from explicit ANSI backgrounds and must be tested with full-screen terminal
+  programs.
 - Runtime acceptance is still required for Windows composition, light and
   dark appearances, transparency disabled in Windows Settings, resize, IME,
   and terminal latency.

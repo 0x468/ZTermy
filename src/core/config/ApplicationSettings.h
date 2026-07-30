@@ -39,6 +39,7 @@ struct ApplicationSettings final
     BackdropPreference backdrop = BackdropPreference::acrylic;
     QString terminalFontFamily = QStringLiteral("Cascadia Mono");
     int terminalFontSize = 14;
+    double terminalBackgroundOpacity = 1.0;
     CursorPreference cursor = CursorPreference::terminal;
     bool cursorBlink = true;
     bool copyOnSelect = false;

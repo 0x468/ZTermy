@@ -68,6 +68,7 @@ Rectangle {
         backdropBox.currentIndex = backdropIndex(controller.backdropPreference);
         fontFamilyField.text = controller.terminalFontFamily;
         fontSizeBox.value = controller.terminalFontSize;
+        terminalOpacitySlider.value = controller.terminalBackgroundOpacity;
         cursorBox.currentIndex = cursorIndex(controller.cursorPreference);
         cursorBlinkSwitch.checked = controller.cursorBlink;
         copyOnSelectSwitch.checked = controller.copyOnSelect;
@@ -77,7 +78,7 @@ Rectangle {
     }
 
     function applyDraft() {
-        const saved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), fontFamilyField.text, fontSizeBox.value, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, multilinePasteSwitch.checked);
+        const saved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), fontFamilyField.text, fontSizeBox.value, terminalOpacitySlider.value, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, multilinePasteSwitch.checked);
         statusIsError = !saved;
         statusMessage = saved ? "Settings saved and applied." : "These settings could not be saved. Check the font and numeric ranges.";
         if (!saved) {
@@ -168,7 +169,7 @@ Rectangle {
 
                     Label {
                         visible: pane.adjustableBackdrop
-                        text: "Background opacity"
+                        text: "Window background opacity"
                         color: Theme.text
                     }
                     RowLayout {
@@ -273,6 +274,33 @@ Rectangle {
                         to: 32
                         editable: true
                         accessibleName: "Terminal font size"
+                    }
+
+                    Label {
+                        text: "Terminal background opacity"
+                        color: Theme.text
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+
+                        AppSlider {
+                            id: terminalOpacitySlider
+                            objectName: "settingsTerminalOpacity"
+                            Layout.fillWidth: true
+                            from: 0.0
+                            to: 1.0
+                            stepSize: 0.05
+                            accessibleName: "Terminal background opacity"
+                        }
+
+                        Text {
+                            Layout.preferredWidth: 42
+                            horizontalAlignment: Text.AlignRight
+                            text: Math.round(terminalOpacitySlider.value * 100) + "%"
+                            color: Theme.textSoft
+                            font.family: Theme.terminalFont
+                            font.pixelSize: Theme.textLabel
+                        }
                     }
 
                     Label {

@@ -286,6 +286,11 @@ int AppController::terminalFontSize() const noexcept
     return m_settings.terminalFontSize;
 }
 
+qreal AppController::terminalBackgroundOpacity() const noexcept
+{
+    return m_settings.terminalBackgroundOpacity;
+}
+
 QString AppController::cursorPreference() const
 {
     return config::cursorPreferenceToken(m_settings.cursor);
@@ -694,7 +699,8 @@ bool AppController::connectHostProfile(const QString &id, const QString &secret)
 }
 
 bool AppController::saveApplicationSettings(const QString &theme, const qreal backdropOpacity, const QString &backdrop,
-                                            const QString &fontFamily, const int fontSize, const QString &cursor,
+                                            const QString &fontFamily, const int fontSize,
+                                            const qreal terminalBackgroundOpacity, const QString &cursor,
                                             const bool cursorShouldBlink, const bool shouldCopyOnSelect,
                                             const bool shouldConfirmMultilinePaste)
 {
@@ -712,6 +718,7 @@ bool AppController::saveApplicationSettings(const QString &theme, const qreal ba
         .backdrop = *parsedBackdrop,
         .terminalFontFamily = fontFamily,
         .terminalFontSize = fontSize,
+        .terminalBackgroundOpacity = terminalBackgroundOpacity,
         .cursor = *parsedCursor,
         .cursorBlink = cursorShouldBlink,
         .copyOnSelect = shouldCopyOnSelect,

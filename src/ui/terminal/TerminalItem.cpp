@@ -201,6 +201,11 @@ int TerminalItem::fontPixelSize() const noexcept
     return m_font.pixelSize();
 }
 
+qreal TerminalItem::backgroundOpacity() const noexcept
+{
+    return m_backgroundOpacity;
+}
+
 QString TerminalItem::cursorPreference() const
 {
     return m_cursorPreference;
@@ -318,6 +323,19 @@ void TerminalItem::setFontPixelSize(const int pixelSize)
     update();
     notifyInputMethod();
     emit fontChanged();
+}
+
+void TerminalItem::setBackgroundOpacity(const qreal opacity)
+{
+    const qreal normalized = std::clamp(opacity, 0.0, 1.0);
+    if (qFuzzyCompare(m_backgroundOpacity, normalized))
+    {
+        return;
+    }
+    m_backgroundOpacity = normalized;
+    ++m_revision;
+    update();
+    emit backgroundOpacityChanged();
 }
 
 void TerminalItem::setCursorPreference(const QString &preference)
@@ -447,7 +465,9 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 
     QImage image(pixelSize, QImage::Format_ARGB32_Premultiplied);
     image.setDevicePixelRatio(devicePixelRatio);
-    image.fill(color(defaultBackground));
+    QColor defaultBackgroundColor = color(defaultBackground);
+    defaultBackgroundColor.setAlphaF(static_cast<float>(m_backgroundOpacity));
+    image.fill(defaultBackgroundColor);
 
     if (m_snapshot)
     {
@@ -483,7 +503,7 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                 {
                     painter.fillRect(cellRect, selectionBackground);
                 }
-                else if (cell.background != defaultBackground)
+                else if (cell.explicitBackground)
                 {
                     painter.fillRect(cellRect, color(cell.background));
                 }

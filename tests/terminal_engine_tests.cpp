@@ -92,7 +92,7 @@ void TerminalEngineTests::exposesImmutableStyledCells()
     }
     auto &engine = **result;
 
-    constexpr std::string_view content = "\x1b[38;2;12;34;56mA\x1b[0m";
+    constexpr std::string_view content = "\x1b[38;2;12;34;56mA\x1b[48;2;7;8;9mB\x1b[0m";
     QVERIFY(!engine.feed(std::as_bytes(std::span(content))));
 
     const auto snapshot = engine.snapshot();
@@ -106,8 +106,13 @@ void TerminalEngineTests::exposesImmutableStyledCells()
     QCOMPARE(snapshot->cells.size(), std::size_t{24});
     QCOMPARE(snapshot->cell(0, 0).grapheme, std::u32string(U"A"));
     QCOMPARE(snapshot->cell(0, 0).foreground, (ztermy::terminal::TerminalColor{12, 34, 56}));
+    QVERIFY(!snapshot->cell(0, 0).explicitBackground);
+    QCOMPARE(snapshot->cell(1, 0).background, (ztermy::terminal::TerminalColor{7, 8, 9}));
+    QVERIFY(snapshot->cell(1, 0).explicitBackground);
+    QVERIFY(!snapshot->cell(2, 0).explicitBackground);
+    QVERIFY(!snapshot->cell(11, 1).explicitBackground);
     QVERIFY(snapshot->cursor.visible);
-    QCOMPARE(snapshot->cursor.column, 1);
+    QCOMPARE(snapshot->cursor.column, 2);
     QCOMPARE(snapshot->cursor.row, 0);
 }
 

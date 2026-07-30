@@ -44,6 +44,7 @@ class AppController final : public QObject
     Q_PROPERTY(QString backdropPreference READ backdropPreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString terminalFontFamily READ terminalFontFamily NOTIFY applicationSettingsChanged)
     Q_PROPERTY(int terminalFontSize READ terminalFontSize NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(qreal terminalBackgroundOpacity READ terminalBackgroundOpacity NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString cursorPreference READ cursorPreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool cursorBlink READ cursorBlink NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool copyOnSelect READ copyOnSelect NOTIFY applicationSettingsChanged)
@@ -86,6 +87,7 @@ public:
     [[nodiscard]] QString backdropPreference() const;
     [[nodiscard]] QString terminalFontFamily() const;
     [[nodiscard]] int terminalFontSize() const noexcept;
+    [[nodiscard]] qreal terminalBackgroundOpacity() const noexcept;
     [[nodiscard]] QString cursorPreference() const;
     [[nodiscard]] bool cursorBlink() const noexcept;
     [[nodiscard]] bool copyOnSelect() const noexcept;
@@ -107,8 +109,8 @@ public:
     Q_INVOKABLE bool deleteHostProfile(const QString &id);
     Q_INVOKABLE bool connectHostProfile(const QString &id, const QString &secret);
     Q_INVOKABLE bool saveApplicationSettings(const QString &theme, qreal backdropOpacity, const QString &backdrop,
-                                             const QString &fontFamily, int fontSize, const QString &cursor,
-                                             bool cursorShouldBlink, bool shouldCopyOnSelect,
+                                             const QString &fontFamily, int fontSize, qreal terminalBackgroundOpacity,
+                                             const QString &cursor, bool cursorShouldBlink, bool shouldCopyOnSelect,
                                              bool shouldConfirmMultilinePaste);
     Q_INVOKABLE bool resetApplicationSettings();
     Q_INVOKABLE void acceptHostKey(bool remember);

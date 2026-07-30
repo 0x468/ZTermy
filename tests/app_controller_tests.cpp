@@ -184,24 +184,26 @@ void AppControllerTests::persistsApplicationSettings()
     QCOMPARE(controller.themePreference(), QStringLiteral("dark"));
     QCOMPARE(controller.backdropOpacity(), 1.0);
     QCOMPARE(controller.backdropPreference(), QStringLiteral("acrylic"));
+    QCOMPARE(controller.terminalBackgroundOpacity(), 1.0);
 
     QVERIFY(controller.saveApplicationSettings(QStringLiteral("light"), 0.8, QStringLiteral("micaAlt"),
-                                               QStringLiteral("Cascadia Code"), 18, QStringLiteral("bar"), false, true,
-                                               false));
+                                               QStringLiteral("Cascadia Code"), 18, 0.45, QStringLiteral("bar"), false,
+                                               true, false));
     QCOMPARE(settingsChanged.count(), 1);
     QCOMPARE(controller.themePreference(), QStringLiteral("light"));
     QCOMPARE(controller.backdropOpacity(), 0.8);
     QCOMPARE(controller.backdropPreference(), QStringLiteral("micaAlt"));
     QCOMPARE(controller.terminalFontFamily(), QStringLiteral("Cascadia Code"));
     QCOMPARE(controller.terminalFontSize(), 18);
+    QCOMPARE(controller.terminalBackgroundOpacity(), 0.45);
     QCOMPARE(controller.cursorPreference(), QStringLiteral("bar"));
     QVERIFY(!controller.cursorBlink());
     QVERIFY(controller.copyOnSelect());
     QVERIFY(!controller.confirmMultilinePaste());
 
     QVERIFY(!controller.saveApplicationSettings(QStringLiteral("unknown"), 0.8, QStringLiteral("mica"),
-                                                QStringLiteral("Cascadia Code"), 18, QStringLiteral("bar"), false, true,
-                                                false));
+                                                QStringLiteral("Cascadia Code"), 18, 0.45, QStringLiteral("bar"), false,
+                                                true, false));
     QCOMPARE(settingsChanged.count(), 1);
 
     ztermy::AppController reloaded(profilesPath, knownHostsPath, settingsPath);
@@ -209,6 +211,7 @@ void AppControllerTests::persistsApplicationSettings()
     QCOMPARE(reloaded.backdropOpacity(), 0.8);
     QCOMPARE(reloaded.backdropPreference(), QStringLiteral("micaAlt"));
     QCOMPARE(reloaded.terminalFontFamily(), QStringLiteral("Cascadia Code"));
+    QCOMPARE(reloaded.terminalBackgroundOpacity(), 0.45);
     QVERIFY(reloaded.copyOnSelect());
 
     QVERIFY(reloaded.resetApplicationSettings());
@@ -216,6 +219,7 @@ void AppControllerTests::persistsApplicationSettings()
     QCOMPARE(reloaded.backdropOpacity(), 1.0);
     QCOMPARE(reloaded.backdropPreference(), QStringLiteral("acrylic"));
     QCOMPARE(reloaded.terminalFontFamily(), QStringLiteral("Cascadia Mono"));
+    QCOMPARE(reloaded.terminalBackgroundOpacity(), 1.0);
 }
 
 void AppControllerTests::managesMultipleLocalTerminalTabs()

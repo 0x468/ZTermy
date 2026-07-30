@@ -374,9 +374,9 @@ struct ResizeHitRuntimeCase
     const auto saveAppearance = [&controller](const QString &theme, const qreal backdropOpacity,
                                               const QString &backdrop) {
         return controller.saveApplicationSettings(theme, backdropOpacity, backdrop, controller.terminalFontFamily(),
-                                                  controller.terminalFontSize(), controller.cursorPreference(),
-                                                  controller.cursorBlink(), controller.copyOnSelect(),
-                                                  controller.confirmMultilinePaste());
+                                                  controller.terminalFontSize(), controller.terminalBackgroundOpacity(),
+                                                  controller.cursorPreference(), controller.cursorBlink(),
+                                                  controller.copyOnSelect(), controller.confirmMultilinePaste());
     };
     const auto surfaceAlpha = [&window](const char *propertyName) {
         QQuickItem *rootObject = window.rootObject();
@@ -566,7 +566,7 @@ struct ResizeHitRuntimeCase
 [[nodiscard]] bool applyUiLayoutSmokeTheme(ztermy::AppController &controller, const QString &theme)
 {
     return controller.saveApplicationSettings(theme, 1.0, QStringLiteral("acrylic"), QStringLiteral("Cascadia Mono"),
-                                              14, QStringLiteral("terminal"), true, false, true);
+                                              14, 1.0, QStringLiteral("terminal"), true, false, true);
 }
 
 [[nodiscard]] bool runUiLayoutRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller,
@@ -657,10 +657,11 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
 
 [[nodiscard]] bool verifySettingsTabOrder(ztermy::NativeWindow &window, QQuickItem *rootObject)
 {
-    constexpr std::array<const char *, 12> order{
-        "settingsTheme",          "settingsBackdrop", "settingsOpacity",     "settingsFontFamily",
-        "settingsFontSize",       "settingsCursor",   "settingsCursorBlink", "settingsCopyOnSelect",
-        "settingsMultilinePaste", "settingsReset",    "settingsDiscard",     "settingsApply",
+    constexpr std::array<const char *, 13> order{
+        "settingsTheme",        "settingsBackdrop",        "settingsOpacity", "settingsFontFamily",
+        "settingsFontSize",     "settingsTerminalOpacity", "settingsCursor",  "settingsCursorBlink",
+        "settingsCopyOnSelect", "settingsMultilinePaste",  "settingsReset",   "settingsDiscard",
+        "settingsApply",
     };
 
     if (!focusItem(window, quickItem(rootObject, order.front()), QString::fromLatin1(order.front())))

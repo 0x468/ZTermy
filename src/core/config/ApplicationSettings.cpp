@@ -15,7 +15,8 @@ namespace
 
 constexpr qint64 maximumSettingsFileSize = qint64{64} * 1024;
 constexpr qint64 legacySchemaVersion = 1;
-constexpr qint64 currentSchemaVersion = 2;
+constexpr qint64 materialSchemaVersion = 2;
+constexpr qint64 currentSchemaVersion = 3;
 
 using ztermy::config::ApplicationSettings;
 using ztermy::config::ApplicationSettingsStoreError;
@@ -91,8 +92,10 @@ template <>
 [[nodiscard]] bool validSettings(const ApplicationSettings &settings)
 {
     const QString fontFamily = settings.terminalFontFamily.trimmed();
-    return settings.backdropOpacity >= 0.0 && settings.backdropOpacity <= 1.0 && !fontFamily.isEmpty()
-           && fontFamily.size() <= 128 && settings.terminalFontSize >= 8 && settings.terminalFontSize <= 32;
+    return settings.backdropOpacity >= 0.0 && settings.backdropOpacity <= 1.0
+           && settings.terminalBackgroundOpacity >= 0.0 && settings.terminalBackgroundOpacity <= 1.0
+           && !fontFamily.isEmpty() && fontFamily.size() <= 128 && settings.terminalFontSize >= 8
+           && settings.terminalFontSize <= 32;
 }
 
 [[nodiscard]] std::expected<ApplicationSettings, ApplicationSettingsStoreError> parseSettings(const QJsonObject &root)
@@ -103,7 +106,7 @@ template <>
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
     const qint64 version = versionValue.toInteger();
-    if (version != legacySchemaVersion && version != currentSchemaVersion)
+    if (version != legacySchemaVersion && version != materialSchemaVersion && version != currentSchemaVersion)
     {
         return std::unexpected(ApplicationSettingsStoreError::unsupportedVersion);
     }
@@ -114,6 +117,7 @@ template <>
     const QJsonValue backdropValue = root.value(QStringLiteral("backdrop"));
     const QJsonValue fontFamilyValue = root.value(QStringLiteral("terminalFontFamily"));
     const QJsonValue fontSizeValue = root.value(QStringLiteral("terminalFontSize"));
+    const QJsonValue terminalBackgroundOpacityValue = root.value(QStringLiteral("terminalBackgroundOpacity"));
     const QJsonValue cursorValue = root.value(QStringLiteral("cursor"));
     const QJsonValue cursorBlinkValue = root.value(QStringLiteral("cursorBlink"));
     const QJsonValue copyOnSelectValue = root.value(QStringLiteral("copyOnSelect"));
@@ -122,6 +126,10 @@ template <>
     if (!themeValue.isString() || !opacityValue.isDouble() || !backdropValue.isString() || !fontFamilyValue.isString()
         || !fontSizeValue.isDouble() || !cursorValue.isString() || !cursorBlinkValue.isBool()
         || !copyOnSelectValue.isBool() || !confirmMultilinePasteValue.isBool())
+    {
+        return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
+    }
+    if (version == currentSchemaVersion && !terminalBackgroundOpacityValue.isDouble())
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
@@ -141,6 +149,7 @@ template <>
         .backdrop = *backdrop,
         .terminalFontFamily = fontFamilyValue.toString(),
         .terminalFontSize = static_cast<int>(fontSize),
+        .terminalBackgroundOpacity = version == currentSchemaVersion ? terminalBackgroundOpacityValue.toDouble() : 1.0,
         .cursor = *cursor,
         .cursorBlink = cursorBlinkValue.toBool(),
         .copyOnSelect = copyOnSelectValue.toBool(),
@@ -218,6 +227,7 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
         {QStringLiteral("backdrop"), backdropPreferenceToken(settings.backdrop)},
         {QStringLiteral("terminalFontFamily"), settings.terminalFontFamily.trimmed()},
         {QStringLiteral("terminalFontSize"), settings.terminalFontSize},
+        {QStringLiteral("terminalBackgroundOpacity"), settings.terminalBackgroundOpacity},
         {QStringLiteral("cursor"), cursorPreferenceToken(settings.cursor)},
         {QStringLiteral("cursorBlink"), settings.cursorBlink},
         {QStringLiteral("copyOnSelect"), settings.copyOnSelect},

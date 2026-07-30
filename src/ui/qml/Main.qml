@@ -44,7 +44,7 @@ Rectangle {
     readonly property bool activeSshConnecting: activeTerminalTab !== null && activeTerminalTab.kind === "ssh" && activeTerminalTab.connecting
     readonly property bool activeSshDisconnected: activeTerminalTab !== null && activeTerminalTab.kind === "ssh" && activeTerminalTab.remoteClosed
 
-    color: backgroundColor
+    color: root.currentPage === "terminal" ? "transparent" : backgroundColor
 
     function reportTitleBarMetrics() {
         root.windowChrome.setTitleBarMetrics(titleBarHeight, titleNavigation.width + 8, width - (captionButtonWidth * 3), width - (captionButtonWidth * 2), captionButtonWidth);
@@ -510,7 +510,7 @@ Rectangle {
             Rectangle {
                 id: terminalPanel
                 anchors.fill: parent
-                color: Theme.contentBackground
+                color: "transparent"
                 visible: root.currentPage === "terminal"
 
                 ColumnLayout {
@@ -564,7 +564,7 @@ Rectangle {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        color: Theme.workspaceBackground
+                        color: "transparent"
 
                         TerminalView {
                             id: terminalViewport
@@ -573,6 +573,7 @@ Rectangle {
                             focus: true
                             fontFamily: root.controller.terminalFontFamily
                             fontPixelSize: root.controller.terminalFontSize
+                            backgroundOpacity: root.controller.terminalBackgroundOpacity
                             cursorPreference: root.controller.cursorPreference
                             cursorBlink: root.controller.cursorBlink
                             copyOnSelect: root.controller.copyOnSelect

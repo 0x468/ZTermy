@@ -38,6 +38,7 @@ struct TerminalCell
     std::u32string grapheme;
     TerminalColor foreground;
     TerminalColor background;
+    bool explicitBackground = false;
     bool bold = false;
     bool italic = false;
     bool underline = false;

@@ -23,17 +23,18 @@ The V1 schema contains:
 - Acrylic, Transparent, Mica, or Mica Alt backdrop preference and background
   opacity;
 - terminal font family and size;
+- terminal default-background opacity;
 - terminal-controlled or user-selected cursor style and blinking;
 - copy-on-select and multiline-paste confirmation behavior.
 
 Appearance is global. SSH profiles do not contain per-profile themes,
 backdrops, terminal backgrounds, or opacity.
 
-Input is strictly typed and range checked. Backdrop opacity is limited to
-`0.0`–`1.0`, terminal font size to `8`–`32` pixels, and the font-family name
-must be non-empty and bounded. Unknown enum tokens, missing fields, fractional
-font sizes, oversized files, malformed JSON, and unsupported schema versions
-are rejected.
+Input is strictly typed and range checked. Backdrop and terminal-background
+opacity are limited to `0.0`–`1.0`, terminal font size to `8`–`32` pixels, and
+the font-family name must be non-empty and bounded. Unknown enum tokens,
+missing fields, fractional font sizes, oversized files, malformed JSON, and
+unsupported schema versions are rejected.
 
 Missing files use safe defaults. Writes use `QSaveFile` so a failed update
 does not replace the last complete document. The application controller owns
@@ -43,7 +44,12 @@ successful write. UI preview state remains separate until the user applies it.
 Schema version 2 renames `windowOpacity` to `backdropOpacity`, replaces the
 legacy None token with Transparent, and adds Mica Alt. Version 1 files are
 migrated in memory: their opacity value is retained and None maps to
-Transparent. The next successful save writes only the version 2 fields.
+Transparent.
+
+Schema version 3 adds global terminal default-background opacity. Version 1
+and 2 files migrate with an opaque terminal background (`1.0`) so upgrading
+does not silently change terminal readability. The next successful save
+writes only the version 3 fields.
 
 ## Consequences
 

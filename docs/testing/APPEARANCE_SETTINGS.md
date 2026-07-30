@@ -8,8 +8,8 @@ terminal checks.
 
 1. Change several controls without selecting **Apply**, then select
    **Discard changes**.
-2. Change theme, backdrop style, backdrop opacity, font, cursor, and behavior controls and
-   select **Apply**.
+2. Change theme, backdrop style, backdrop opacity, terminal background
+   opacity, font, cursor, and behavior controls and select **Apply**.
 3. Close and restart ztermy.
 
 Expected:
@@ -133,6 +133,31 @@ Expected:
   the active terminal cursor style.
 - Disabling blink leaves the cursor continuously visible.
 
+## Terminal background opacity
+
+1. Place ztermy over a colorful window and select Acrylic or Transparent.
+2. Apply terminal background opacity at 100%, 50%, and 0%, returning to the
+   terminal after each change.
+3. In PowerShell run:
+
+   ```powershell
+   $e = [char]27
+   Write-Host "$e[41m explicit red background $e[0m normal background"
+   ```
+
+4. Select text, type with an IME, and compare the cursor at every opacity.
+5. Open and exit a full-screen program such as `hx`, resizing it once.
+
+Expected:
+
+- At 100% the default terminal background remains unchanged.
+- At 50% and 0% only the terminal's default background reveals the selected
+  window material; text remains fully opaque.
+- The explicit red ANSI background stays solid even at 0%.
+- Selection, cursor, and IME composition remain solid and readable.
+- A full-screen program keeps its explicit colors and exits without stale
+  cells, misplaced cursor, or a crash.
+
 ## Selection and paste behavior
 
 1. Enable copy-on-select, select terminal text, and paste it into a local
@@ -159,8 +184,8 @@ Select **Reset defaults**, restart, and inspect the active data mode's
 
 Expected:
 
-- Defaults are Dark, Acrylic at 100% backdrop opacity, Cascadia Mono 14 px,
-  terminal-controlled blinking cursor, copy-on-select off, and multiline
-  confirmation on.
+- Defaults are Dark, Acrylic at 100% backdrop opacity, terminal background at
+  100% opacity, Cascadia Mono 14 px, terminal-controlled blinking cursor,
+  copy-on-select off, and multiline confirmation on.
 - The file is versioned JSON and contains no password, passphrase, private-key
   content, terminal input, or clipboard content.
