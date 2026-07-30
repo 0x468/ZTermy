@@ -115,6 +115,18 @@ The exact recorded MSI then completed its per-user lifecycle:
 - no assertion, installer error, PowerShell error dialog, or elevation prompt
   occurred.
 
+The bundle was also copied into a fresh Windows Sandbox. Both independently
+calculated hashes matched the two manifests. The portable candidate started
+without developer tools or missing dependencies, ran local PowerShell,
+visited the primary pages, resized and shut down normally, kept data beside
+the portable executable, and did not contaminate installed-mode storage.
+
+The Sandbox MSI route is not yet accepted. Windows Installer remained at
+`Preparing to install` for an unusually long time. The same MSI completed its
+host-machine lifecycle, and decompilation confirms it contains no executable
+custom action, but a verbose Sandbox installation log is still required to
+distinguish first-use Windows Installer initialization from a package defect.
+
 ## Artifact integrity
 
 | Artifact | Bytes | Independently calculated SHA-256 |
@@ -152,7 +164,7 @@ regression evidence but do not sign off this immutable candidate.
 | Selection/copy/paste/search/scrollback | NOT RUN | Exact portable candidate passed the primary interaction route; reverse/rectangular selection and wrapped-search route remains. |
 | Real-host password authentication | PASS | Static QtTest gate: 3 passed, 0 failed, hidden input, authenticated shell, 2877 ms. |
 | Installed data survives upgrade and uninstall | PASS | Exact MSI completed per-user install, identical-MSI upgrade, persistence checks, and uninstall cleanup while retaining user data. |
-| Clean Windows 11 release without developer tools | NOT RUN | Earlier Sandbox runs succeeded; the exact artifacts and hashes above remain untested there. |
+| Clean Windows 11 release without developer tools | NOT RUN | Exact hashes and portable route passed in fresh Sandbox; MSI remained at `Preparing to install` and needs a verbose installation log. |
 
 ## Historical development evidence
 
