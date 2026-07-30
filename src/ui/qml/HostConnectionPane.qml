@@ -21,11 +21,12 @@ Rectangle {
     property string pendingConnectId: ""
     property string pendingConnectName: ""
     property string pendingConnectAuthentication: ""
+    property string expandedActionsProfileId: ""
     property bool statusIsError: false
     property bool editorExpanded: controller.hostProfiles.length === 0
     readonly property bool compactLayout: width < Theme.narrowWindowWidth
     readonly property int contentInset: compactLayout ? Theme.pageInsetCompact : Theme.pageInset
-    readonly property int profileActionColumns: compactLayout ? 2 : 7
+    readonly property int profileCardColumns: compactLayout ? 1 : (width < 920 ? 2 : 3)
     readonly property var filteredGroups: buildFilteredGroups(controller.hostProfiles, searchField.text)
     readonly property int filteredProfileCount: {
         let count = 0;
@@ -277,6 +278,7 @@ Rectangle {
                 }
 
                 Text {
+                    visible: !pane.compactLayout
                     text: pane.filteredProfileCount + (pane.filteredProfileCount === 1 ? " profile" : " profiles")
                     color: pane.mutedColor
                     font.family: Theme.uiFont
@@ -321,129 +323,183 @@ Rectangle {
                         font.letterSpacing: 0.6
                     }
 
-                    Repeater {
-                        model: profileGroup.modelData.profiles
+                    Flow {
+                        id: profileFlow
 
-                        delegate: Rectangle {
-                            id: profileCard
+                        readonly property int columns: pane.profileCardColumns
+                        readonly property real cardWidth: Math.max(0, (width - (spacing * (columns - 1))) / columns)
 
-                            required property var modelData
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: childrenRect.height
+                        spacing: Theme.spacingRelated
 
-                            Layout.fillWidth: true
-                            implicitHeight: profileRow.implicitHeight + 24
-                            radius: Theme.radiusControl
-                            color: cardHover.hovered ? Theme.controlHover : pane.raisedColor
-                            border.color: cardHover.hovered ? Theme.borderStrong : pane.borderColor
+                        Repeater {
+                            model: profileGroup.modelData.profiles
 
-                            HoverHandler {
-                                id: cardHover
-                            }
+                            delegate: Rectangle {
+                                id: profileCard
 
-                            GridLayout {
-                                id: profileRow
+                                required property var modelData
+                                readonly property bool actionsExpanded: pane.expandedActionsProfileId === modelData.id
 
-                                anchors.fill: parent
-                                anchors.margins: 12
-                                columns: pane.profileActionColumns
-                                columnSpacing: Theme.spacingControl
-                                rowSpacing: Theme.spacingControl
+                                width: profileFlow.cardWidth
+                                height: profileContent.implicitHeight + 24
+                                radius: Theme.radiusControl
+                                color: cardHover.hovered ? Theme.controlHover : pane.raisedColor
+                                border.color: cardHover.hovered ? Theme.borderStrong : pane.borderColor
 
-                                Rectangle {
-                                    Layout.preferredWidth: 34
-                                    Layout.preferredHeight: 34
-                                    radius: 8
-                                    color: Theme.selectedBackground
-
-                                    AppIcon {
-                                        anchors.centerIn: parent
-                                        width: 18
-                                        height: 18
-                                        name: "terminal"
-                                        color: pane.accentColor
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: Theme.motionFast
                                     }
+                                }
+
+                                Behavior on height {
+                                    NumberAnimation {
+                                        duration: Theme.motionMedium
+                                        easing.type: Easing.OutCubic
+                                    }
+                                }
+
+                                HoverHandler {
+                                    id: cardHover
                                 }
 
                                 ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 2
+                                    id: profileContent
 
-                                    Text {
+                                    anchors.fill: parent
+                                    anchors.margins: 12
+                                    spacing: Theme.spacingControl
+
+                                    RowLayout {
                                         Layout.fillWidth: true
-                                        text: profileCard.modelData.name
-                                        color: pane.textColor
-                                        elide: Text.ElideRight
-                                        font.family: Theme.uiFont
-                                        font.pixelSize: 13
-                                        font.weight: Font.DemiBold
-                                    }
+                                        spacing: Theme.spacingControl
 
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: profileCard.modelData.username + "@" + profileCard.modelData.host + ":" + profileCard.modelData.port
-                                        color: pane.mutedColor
-                                        elide: Text.ElideMiddle
-                                        font.family: Theme.terminalFont
-                                        font.pixelSize: 11
-                                    }
-                                }
+                                        Rectangle {
+                                            Layout.preferredWidth: 36
+                                            Layout.preferredHeight: 36
+                                            radius: Theme.radiusControl
+                                            color: Theme.selectedBackground
 
-                                Rectangle {
-                                    Layout.columnSpan: pane.compactLayout ? 2 : 1
-                                    Layout.alignment: pane.compactLayout ? Qt.AlignLeft : Qt.AlignVCenter
-                                    Layout.preferredWidth: authenticationLabel.implicitWidth + 16
-                                    Layout.preferredHeight: 24
-                                    radius: 12
-                                    color: Theme.controlBackground
-                                    border.color: Theme.border
+                                            AppIcon {
+                                                anchors.centerIn: parent
+                                                width: 18
+                                                height: 18
+                                                name: "terminal"
+                                                color: pane.accentColor
+                                            }
+                                        }
 
-                                    Text {
-                                        id: authenticationLabel
-                                        anchors.centerIn: parent
-                                        text: profileCard.modelData.authentication === "password" ? "Password" : "Key"
-                                        color: Theme.textSoft
-                                        font.family: Theme.uiFont
-                                        font.pixelSize: Theme.textLabel
-                                    }
-                                }
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 2
 
-                                ActionButton {
-                                    Layout.fillWidth: pane.compactLayout
-                                    text: "Connect"
-                                    Accessible.name: "Connect to " + profileCard.modelData.name
-                                    variant: "primary"
-                                    onClicked: pane.connectSaved(profileCard.modelData)
-                                }
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: profileCard.modelData.name
+                                                color: pane.textColor
+                                                elide: Text.ElideRight
+                                                font.family: Theme.uiFont
+                                                font.pixelSize: Theme.textBody
+                                                font.weight: Font.DemiBold
+                                            }
 
-                                ActionButton {
-                                    Layout.fillWidth: pane.compactLayout
-                                    text: "Edit"
-                                    Accessible.name: "Edit " + profileCard.modelData.name
-                                    onClicked: pane.editProfile(profileCard.modelData)
-                                }
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: profileCard.modelData.username + "@" + profileCard.modelData.host + ":" + profileCard.modelData.port
+                                                color: pane.mutedColor
+                                                elide: Text.ElideMiddle
+                                                font.family: Theme.terminalFont
+                                                font.pixelSize: Theme.textLabel
+                                            }
+                                        }
 
-                                ActionButton {
-                                    Layout.fillWidth: pane.compactLayout
-                                    text: "Copy"
-                                    Accessible.name: "Copy " + profileCard.modelData.name
-                                    onClicked: {
-                                        if (pane.controller.duplicateHostProfile(profileCard.modelData.id)) {
-                                            pane.showStatus("Profile copied. Credentials were not copied because they are never stored.", false);
-                                        } else {
-                                            pane.showStatus("The profile could not be copied.", true);
+                                        Rectangle {
+                                            Layout.preferredWidth: authenticationLabel.implicitWidth + 16
+                                            Layout.preferredHeight: 24
+                                            radius: 12
+                                            color: Theme.controlBackground
+                                            border.color: Theme.border
+
+                                            Text {
+                                                id: authenticationLabel
+                                                anchors.centerIn: parent
+                                                text: profileCard.modelData.authentication === "password" ? "Password" : "Key"
+                                                color: Theme.textSoft
+                                                font.family: Theme.uiFont
+                                                font.pixelSize: Theme.textLabel
+                                            }
                                         }
                                     }
-                                }
 
-                                ActionButton {
-                                    id: deleteProfileButton
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: Theme.spacingControl
 
-                                    Layout.fillWidth: pane.compactLayout
-                                    text: "Delete"
-                                    Accessible.name: "Delete " + profileCard.modelData.name
-                                    onClicked: {
-                                        pane.pendingDeleteId = profileCard.modelData.id;
-                                        pane.pendingDeleteName = profileCard.modelData.name;
-                                        deleteDialog.openFrom(deleteProfileButton);
+                                        Item {
+                                            Layout.fillWidth: true
+                                        }
+
+                                        ActionButton {
+                                            Layout.preferredWidth: 104
+                                            text: "Connect"
+                                            accessibleName: "Connect to " + profileCard.modelData.name
+                                            variant: "primary"
+                                            onClicked: pane.connectSaved(profileCard.modelData)
+                                        }
+
+                                        ActionButton {
+                                            text: profileCard.actionsExpanded ? "Less" : "More"
+                                            accessibleName: (profileCard.actionsExpanded ? "Hide" : "Show") + " actions for " + profileCard.modelData.name
+                                            onClicked: pane.expandedActionsProfileId = profileCard.actionsExpanded ? "" : profileCard.modelData.id
+                                        }
+                                    }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        visible: profileCard.actionsExpanded
+                                        opacity: profileCard.actionsExpanded ? 1.0 : 0.0
+                                        spacing: Theme.spacingControl
+
+                                        Behavior on opacity {
+                                            NumberAnimation {
+                                                duration: Theme.motionMedium
+                                            }
+                                        }
+
+                                        ActionButton {
+                                            Layout.fillWidth: true
+                                            text: "Edit"
+                                            accessibleName: "Edit " + profileCard.modelData.name
+                                            onClicked: pane.editProfile(profileCard.modelData)
+                                        }
+
+                                        ActionButton {
+                                            Layout.fillWidth: true
+                                            text: "Copy"
+                                            accessibleName: "Copy " + profileCard.modelData.name
+                                            onClicked: {
+                                                if (pane.controller.duplicateHostProfile(profileCard.modelData.id)) {
+                                                    pane.showStatus("Profile copied. Credentials were not copied because they are never stored.", false);
+                                                } else {
+                                                    pane.showStatus("The profile could not be copied.", true);
+                                                }
+                                            }
+                                        }
+
+                                        ActionButton {
+                                            id: deleteProfileButton
+
+                                            Layout.fillWidth: true
+                                            text: "Delete"
+                                            accessibleName: "Delete " + profileCard.modelData.name
+                                            onClicked: {
+                                                pane.pendingDeleteId = profileCard.modelData.id;
+                                                pane.pendingDeleteName = profileCard.modelData.name;
+                                                deleteDialog.openFrom(deleteProfileButton);
+                                            }
+                                        }
                                     }
                                 }
                             }

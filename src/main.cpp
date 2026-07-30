@@ -550,7 +550,7 @@ struct ResizeHitRuntimeCase
     const qreal hostContentWidth = hostContent->property("width").toReal();
     const bool hostMatches = hostPane->property("compactLayout").toBool() == compact
                              && hostEditorGrid->property("columns").toInt() == (compact ? 1 : 2)
-                             && hostPane->property("profileActionColumns").toInt() == (compact ? 2 : 7)
+                             && hostPane->property("profileCardColumns").toInt() == (compact ? 1 : 2)
                              && hostContentWidth > 0.0 && hostContentWidth <= hostPaneWidth;
     const bool settingsMatch = settingsPane->property("compactLayout").toBool() == compact
                                && appearanceGrid->property("columns").toInt() == (compact ? 1 : 2)
