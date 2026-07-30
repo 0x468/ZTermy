@@ -8,13 +8,12 @@ Rectangle {
     required property string title
     property bool selected: false
     property bool running: false
-    signal activated()
-    signal closeRequested()
+    signal activated
+    signal closeRequested
 
     implicitWidth: Math.min(190, Math.max(126, titleText.implicitWidth + 54))
     implicitHeight: 42
-    color: control.selected || activateAction.hovered || activateAction.activeFocus
-           ? Theme.controlHover : "transparent"
+    color: control.selected || activateAction.hovered || activateAction.activeFocus ? Theme.controlHover : "transparent"
     border.color: activateAction.activeFocus ? Theme.focus : "transparent"
     border.width: activateAction.activeFocus ? 1 : 0
 

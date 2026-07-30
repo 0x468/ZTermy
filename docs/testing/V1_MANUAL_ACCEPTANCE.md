@@ -16,10 +16,10 @@ cmake --build --preset msvc-static-release `
   --target ztermy_v1_automated_preflight
 ```
 
-Expected: formatting and clang-tidy pass with diagnostics treated as errors,
-every real-window gate runs serially, the complete CTest suite passes, and the
-portable ZIP plus validated MSI are regenerated successfully. Do not proceed
-with manual sign-off when this target fails.
+Expected: C++ and QML formatting, clang-tidy, and qmllint pass with diagnostics
+treated as errors; every real-window gate runs serially; the complete CTest
+suite passes; and the portable ZIP plus validated MSI are regenerated
+successfully. Do not proceed with manual sign-off when this target fails.
 
 ## Evidence and result rules
 

@@ -9,7 +9,7 @@ Rectangle {
     property string accessibleName: text
     property string actionObjectName: ""
     property bool selected: false
-    signal activated()
+    signal activated
 
     implicitHeight: 38
     radius: 7

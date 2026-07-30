@@ -74,22 +74,26 @@ The V1 preflight serializes all real-window runtime gates so multiple test
 windows never compete for native foreground, DPI, or capture state. It then
 runs formatting with `--dry-run --Werror`, analyzes every project translation
 unit under `src` and `tests` with all clang-tidy diagnostics treated as errors,
-and runs the complete CTest suite. Every test executable is an explicit
-dependency, so the target cannot accidentally run stale binaries after a source
-or header change. In the static preset it also creates the portable ZIP and
-creates, validates, decompiles, and inspects the per-user MSI. The dynamic
-presets expose the same target without the two static distribution steps.
+checks all application QML with Qt 6.8 `qmlformat` and `qmllint`, and runs the
+complete CTest suite. Every test executable is an explicit dependency, so the
+target cannot accidentally run stale binaries after a source or header change.
+In the static preset it also creates the portable ZIP and creates, validates,
+decompiles, and inspects the per-user MSI. The dynamic presets expose the same
+target without the two static distribution steps.
 
 The quality gates can also be run independently:
 
 ```powershell
 cmake --build --preset msvc-dynamic-debug --target ztermy_format_check
 cmake --build --preset msvc-dynamic-debug --target ztermy_clang_tidy_check
+cmake --build --preset msvc-dynamic-debug --target ztermy_qml_quality_check
 ```
 
 The checked source set is discovered from `src` and `tests` during CMake
 generation. The compilation database for the active preset remains the source
-of truth for clang-tidy compiler flags and include paths.
+of truth for clang-tidy compiler flags and include paths. The QML format check
+formats copies below the build directory and compares hashes, so the check
+never edits working-tree files.
 
 The dynamic Qt presets use the DLL MSVC runtime. The static Qt preset uses the
 static MSVC runtime because the local static Qt build was compiled that way.

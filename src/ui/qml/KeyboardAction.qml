@@ -6,7 +6,7 @@ Item {
     required property string accessibleName
     readonly property alias hovered: hoverHandler.hovered
     readonly property alias pressed: tapHandler.pressed
-    signal activated()
+    signal activated
 
     activeFocusOnTab: true
     Accessible.role: Accessible.Button

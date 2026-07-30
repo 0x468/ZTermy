@@ -31,13 +31,7 @@ TextField {
         implicitHeight: control.compact ? 30 : 34
         radius: control.compact ? Theme.radiusSmall : Theme.radiusControl
         color: control.enabled ? Theme.fieldBackground : Theme.controlDisabled
-        border.color: control.invalid
-                      ? Theme.danger
-                      : control.activeFocus
-                        ? Theme.focus
-                        : control.hovered
-                          ? Theme.borderStrong
-                          : Theme.border
+        border.color: control.invalid ? Theme.danger : control.activeFocus ? Theme.focus : control.hovered ? Theme.borderStrong : Theme.border
         border.width: control.activeFocus || control.invalid ? 2 : 1
 
         Behavior on color {

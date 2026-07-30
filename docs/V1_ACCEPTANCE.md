@@ -22,11 +22,13 @@ Only runtime evidence can mark a platform or UI item complete.
 - The unified V1 automated preflight passes in dynamic Debug and static
   Release. Both builds pass clang-format with `--Werror` and all 42 project
   translation units pass LLVM 22.1 clang-tidy with every enabled diagnostic
-  treated as an error. Every test executable is rebuilt before the seven
-  real-window window, DPI, UI, keyboard, and terminal-render gates run
-  serially, followed by all 19 CTest tests. The static run additionally
-  regenerates the portable ZIP and completes MSI generation, ICE validation,
-  decompilation, and payload-contract checks before the runtime gates begin.
+  treated as an error. All 21 application QML files match Qt 6.8 `qmlformat`
+  and pass the generated `qmllint` module check. Every test executable is
+  rebuilt before the seven real-window window, DPI, UI, keyboard, and
+  terminal-render gates run serially, followed by all 19 CTest tests. The
+  static run additionally regenerates the portable ZIP and completes MSI
+  generation, ICE validation, decompilation, and payload-contract checks
+  before the runtime gates begin.
 - The dynamic RelWithDebInfo deployment target installs its Qt, QML, compiler,
   and OpenSSL runtime dependencies into a clean directory. Its native/QML
   smoke path passes with `PATH` restricted to Windows system directories and

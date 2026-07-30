@@ -1225,11 +1225,38 @@ add_custom_target(ztermy_clang_tidy_check
     VERBATIM
 )
 
+if(NOT TARGET Qt6::qmlformat)
+    message(FATAL_ERROR "Qt6::qmlformat is required for the QML formatting gate")
+endif()
+
+set(ZTERMY_QML_FORMAT_WORK_ROOT
+    "${CMAKE_CURRENT_BINARY_DIR}/test-data/qml-format-check"
+)
+add_custom_target(ztermy_qml_format_check
+    COMMAND "${CMAKE_COMMAND}" -E rm -rf
+            "${ZTERMY_QML_FORMAT_WORK_ROOT}"
+    COMMAND "${CMAKE_COMMAND}"
+            "-DZTERMY_QMLFORMAT_EXECUTABLE=$<TARGET_FILE:Qt6::qmlformat>"
+            "-DZTERMY_QML_SOURCE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/src/ui/qml"
+            "-DZTERMY_QML_FORMAT_WORK_ROOT=${ZTERMY_QML_FORMAT_WORK_ROOT}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/CheckQmlFormat.cmake"
+    COMMENT "Checking QML formatting with Qt qmlformat"
+    USES_TERMINAL
+    VERBATIM
+)
+
+add_custom_target(ztermy_qml_quality_check
+    DEPENDS
+        ztermy_qml_format_check
+        ztermy_qmllint
+)
+
 if(BUILD_TESTING)
     add_dependencies(ztermy_clang_tidy_check ztermy_test_binaries)
 
     set(ZTERMY_V1_PREFLIGHT_PREREQUISITES
         ztermy_test_binaries
+        ztermy_qml_quality_check
     )
 
     if(ZTERMY_STATIC_BUILD)
@@ -1297,6 +1324,7 @@ endif()
 unset(ZTERMY_FORMAT_SOURCES)
 unset(ZTERMY_TIDY_SOURCES)
 unset(ZTERMY_TIDY_TEST_SOURCES)
+unset(ZTERMY_QML_FORMAT_WORK_ROOT)
 unset(ZTERMY_CLANG_FORMAT_VERSION_OUTPUT)
 unset(ZTERMY_CLANG_FORMAT_VERSION_RESULT)
 unset(ZTERMY_CLANG_TIDY_VERSION_OUTPUT)
