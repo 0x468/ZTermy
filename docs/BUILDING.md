@@ -66,8 +66,10 @@ ctest --test-dir build/msvc-static-release --output-on-failure
 cmake --build --preset msvc-static-release --target ztermy_portable_package
 
 dotnet tool install --tool-path build/tools/wix wix --version 4.0.4
-$env:WIX = "$PWD/build/tools/wix"
-cmake --build --preset msvc-static-release --target ztermy_installer
+cmake --preset msvc-static-release `
+  -DZTERMY_WIX_ROOT="$PWD/build/tools/wix"
+cmake --build --preset msvc-static-release `
+  --target ztermy_installer_contract_smoke
 ```
 
 The dynamic Qt presets use the DLL MSVC runtime. The static Qt preset uses the
@@ -86,10 +88,12 @@ all runtime data remains below the extracted directory. See
 [testing/DISTRIBUTION.md](testing/DISTRIBUTION.md) for the runtime checks.
 
 The per-user MSI is written directly below `build/msvc-static-release`. CPack
-uses the workspace-local WiX executable selected through `WIX`; WiX does not
-need to be installed globally. The MSI contains only the static `ztermy.exe`
-runtime component and deliberately excludes `portable.flag`, dependency
-headers, libraries, and debug artifacts.
+uses the workspace-local WiX executable selected through the
+`ZTERMY_WIX_ROOT` CMake cache path; WiX does not need to be installed globally.
+The contract-smoke target generates and validates the MSI, decompiles it, and
+requires one static `ztermy.exe` payload under the per-user LocalAppData
+directory plus the direct Start-menu shortcut. It rejects `portable.flag`, Qt
+or OpenSSL DLLs, PDBs, and Ghostty development payloads.
 
 ## libghostty-vt
 

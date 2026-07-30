@@ -90,10 +90,10 @@ Start from the same static Release build used for the portable archive:
 
 ```powershell
 dotnet tool install --tool-path build/tools/wix wix --version 4.0.4
-$env:WIX = "$PWD/build/tools/wix"
-cmake --build --preset msvc-static-release --target ztermy_installer
-& "$env:WIX/wix.exe" msi validate `
-  build/msvc-static-release/ztermy-0.1.0-windows-x64.msi
+cmake --preset msvc-static-release `
+  -DZTERMY_WIX_ROOT="$PWD/build/tools/wix"
+cmake --build --preset msvc-static-release `
+  --target ztermy_installer_contract_smoke
 ```
 
 If `build/tools/wix` already contains WiX 4.0.4, omit the install command. The
@@ -115,8 +115,20 @@ Expected:
   testing, ICE69 for its shortcut component referencing the executable
   component in the same feature, and ICE91 because this package is fixed to
   per-user scope rather than switching through `ALLUSERS`.
+- The contract gate decompiles the MSI below
+  `build/msvc-static-release/test-data/installer-contract`, requires per-user
+  scope, `LocalAppDataFolder`, the direct Start-menu shortcut, same-version
+  upgrade support, and uninstall directory removal.
+- Exactly one non-empty payload is extracted and its authored name is
+  `ztermy.exe`; `portable.flag`, DLLs, PDBs, and Ghostty development files are
+  rejected.
 - No license agreement page or placeholder license is authored before the
   owner selects a project license.
+
+ICE validation calls the Windows Installer service. Run the target from a
+normal user PowerShell or Visual Studio developer shell; heavily restricted
+automation tokens can block that service even though structural decompilation
+would still be possible.
 
 ## Installer lifecycle
 

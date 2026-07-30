@@ -13,10 +13,12 @@ Only runtime evidence can mark a platform or UI item complete.
 - The extracted portable candidate starts through the native/QML smoke path,
   selects `storageMode=portable`, and creates logs and crash diagnostics only
   below its sibling `data` directory.
-- The per-user MSI target succeeds. WiX ICE validation completes with only the
-  three reviewed ICE61, ICE69, and ICE91 warnings, and decompilation confirms
-  a single `ztermy.exe` payload under `LocalAppDataFolder` plus the Start menu
-  shortcut.
+- The per-user MSI contract target succeeds. WiX ICE validation completes with
+  only the three reviewed ICE61, ICE69, and ICE91 warnings. Automated
+  decompilation requires per-user scope, `LocalAppDataFolder`, a direct Start
+  menu shortcut, same-version upgrade support, uninstall directory removal,
+  and exactly one non-empty `ztermy.exe` payload; it rejects portable markers,
+  DLLs, PDBs, and Ghostty development files.
 - The dynamic RelWithDebInfo deployment target installs its Qt, QML, compiler,
   and OpenSSL runtime dependencies into a clean directory. Its native/QML
   smoke path passes with `PATH` restricted to Windows system directories and

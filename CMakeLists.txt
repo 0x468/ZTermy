@@ -1076,13 +1076,39 @@ if(ZTERMY_STATIC_BUILD)
 
     include(CPack)
 
+    set(ZTERMY_WIX_DEFAULT_ROOT "$ENV{WIX}")
+    if(ZTERMY_WIX_DEFAULT_ROOT STREQUAL ""
+       AND EXISTS "${CMAKE_SOURCE_DIR}/build/tools/wix/wix.exe")
+        set(ZTERMY_WIX_DEFAULT_ROOT "${CMAKE_SOURCE_DIR}/build/tools/wix")
+    endif()
+    set(
+        ZTERMY_WIX_ROOT
+        "${ZTERMY_WIX_DEFAULT_ROOT}"
+        CACHE PATH
+        "Directory containing the WiX 4 wix.exe used for installer packaging and verification"
+    )
+    unset(ZTERMY_WIX_DEFAULT_ROOT)
+
     add_custom_target(ztermy_installer
-        COMMAND "${CMAKE_CPACK_COMMAND}"
+        COMMAND "${CMAKE_COMMAND}" -E env
+                "WIX=${ZTERMY_WIX_ROOT}"
+                "${CMAKE_CPACK_COMMAND}"
                 --config "${CMAKE_BINARY_DIR}/CPackConfig.cmake"
                 -G WIX
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
         DEPENDS ztermy
         COMMENT "Creating the per-user ztermy MSI installer"
+        VERBATIM
+    )
+
+    add_custom_target(ztermy_installer_contract_smoke
+        COMMAND "${CMAKE_COMMAND}"
+                "-DZTERMY_WIX_EXECUTABLE=${ZTERMY_WIX_ROOT}/wix.exe"
+                "-DZTERMY_INSTALLER=${CMAKE_BINARY_DIR}/ztermy-${PROJECT_VERSION}-windows-x64.msi"
+                "-DZTERMY_INSTALLER_INSPECTION_ROOT=${CMAKE_BINARY_DIR}/test-data/installer-contract"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyWixInstaller.cmake"
+        DEPENDS ztermy_installer
+        COMMENT "Validating and inspecting the per-user ztermy MSI contract"
         VERBATIM
     )
 endif()
