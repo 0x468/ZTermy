@@ -19,6 +19,11 @@ Only runtime evidence can mark a platform or UI item complete.
   menu shortcut, same-version upgrade support, uninstall directory removal,
   and exactly one non-empty `ztermy.exe` payload; it rejects portable markers,
   DLLs, PDBs, and Ghostty development files.
+- The unified V1 automated preflight passes in dynamic Debug and static
+  Release. In each build it serializes all seven real-window window, DPI, UI,
+  keyboard, and terminal-render gates before completing all 19 CTest tests.
+  The static run additionally regenerates the portable ZIP and passes the MSI
+  generation, ICE validation, decompilation, and payload-contract checks.
 - The dynamic RelWithDebInfo deployment target installs its Qt, QML, compiler,
   and OpenSSL runtime dependencies into a clean directory. Its native/QML
   smoke path passes with `PATH` restricted to Windows system directories and

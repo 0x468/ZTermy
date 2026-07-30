@@ -419,6 +419,7 @@ add_custom_target(ztermy_window_runtime_smoke
             --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/window-runtime-smoke"
     DEPENDS ztermy
     COMMENT "Checking the real maximized client area against the Windows monitor work area"
+    USES_TERMINAL
     VERBATIM
 )
 
@@ -430,6 +431,7 @@ add_custom_target(ztermy_window_appearance_runtime_smoke
             --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/window-appearance-smoke"
     DEPENDS ztermy
     COMMENT "Checking Windows DWM theme, opacity, and backdrop state"
+    USES_TERMINAL
     VERBATIM
 )
 
@@ -441,6 +443,7 @@ add_custom_target(ztermy_window_resize_runtime_smoke
             --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/window-resize-smoke"
     DEPENDS ztermy
     COMMENT "Checking native resize hit areas and system cursors"
+    USES_TERMINAL
     VERBATIM
 )
 
@@ -453,6 +456,7 @@ add_custom_target(ztermy_window_dpi_runtime_smoke
             -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunWindowDpiSmoke.cmake"
     DEPENDS ztermy
     COMMENT "Checking logical geometry, physical pixels, and native caption hit testing at 100%-200% scale"
+    USES_TERMINAL
     VERBATIM
 )
 
@@ -462,6 +466,7 @@ add_custom_target(ztermy_ui_layout_runtime_smoke
             --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/ui-layout-smoke"
     DEPENDS ztermy
     COMMENT "Checking compact and regular QML layout breakpoints in the real window"
+    USES_TERMINAL
     VERBATIM
 )
 
@@ -473,6 +478,7 @@ add_custom_target(ztermy_ui_keyboard_runtime_smoke
             --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/ui-keyboard-smoke"
     DEPENDS ztermy
     COMMENT "Checking the real-window keyboard route and shared control behavior"
+    USES_TERMINAL
     VERBATIM
 )
 
@@ -484,6 +490,7 @@ add_custom_target(ztermy_terminal_render_runtime_smoke
             --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/terminal-render-smoke"
     DEPENDS ztermy
     COMMENT "Checking terminal rendering and GUI responsiveness under large output"
+    USES_TERMINAL
     VERBATIM
 )
 
@@ -1112,3 +1119,32 @@ if(ZTERMY_STATIC_BUILD)
         VERBATIM
     )
 endif()
+
+set(ZTERMY_V1_PREFLIGHT_DEPENDENCIES
+    ztermy_window_runtime_smoke
+    ztermy_window_appearance_runtime_smoke
+    ztermy_window_resize_runtime_smoke
+    ztermy_window_dpi_runtime_smoke
+    ztermy_ui_layout_runtime_smoke
+    ztermy_ui_keyboard_runtime_smoke
+    ztermy_terminal_render_runtime_smoke
+)
+
+if(ZTERMY_STATIC_BUILD)
+    list(APPEND ZTERMY_V1_PREFLIGHT_DEPENDENCIES
+        ztermy_portable_package
+        ztermy_installer_contract_smoke
+    )
+endif()
+
+add_custom_target(ztermy_v1_automated_preflight
+    COMMAND "${CMAKE_CTEST_COMMAND}"
+            --test-dir "${CMAKE_BINARY_DIR}"
+            --output-on-failure
+    DEPENDS ${ZTERMY_V1_PREFLIGHT_DEPENDENCIES}
+    COMMENT "Running the complete automated V1 preflight"
+    USES_TERMINAL
+    VERBATIM
+)
+
+unset(ZTERMY_V1_PREFLIGHT_DEPENDENCIES)

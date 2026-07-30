@@ -5,6 +5,21 @@ acceptance items. Detailed procedures remain in the linked topic documents.
 Run it against one immutable static Release candidate; do not rebuild or
 replace the MSI or portable ZIP between stages.
 
+Before recording artifact hashes, run the complete automated preflight from an
+x64 Visual Studio developer PowerShell:
+
+```powershell
+$env:ZTERMY_QT_STATIC_ROOT = "D:\qt-self-built\qt-6.8.3-static"
+cmake --preset msvc-static-release `
+  -DZTERMY_WIX_ROOT="$PWD/build/tools/wix"
+cmake --build --preset msvc-static-release `
+  --target ztermy_v1_automated_preflight
+```
+
+Expected: every real-window gate runs serially, the complete CTest suite
+passes, and the portable ZIP plus validated MSI are regenerated successfully.
+Do not proceed with manual sign-off when this target fails.
+
 ## Evidence and result rules
 
 Record this metadata before testing:

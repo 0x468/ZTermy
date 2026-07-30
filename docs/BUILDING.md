@@ -62,15 +62,20 @@ Static packaging:
 ```powershell
 cmake --preset msvc-static-release
 cmake --build --preset msvc-static-release
-ctest --test-dir build/msvc-static-release --output-on-failure
-cmake --build --preset msvc-static-release --target ztermy_portable_package
 
 dotnet tool install --tool-path build/tools/wix wix --version 4.0.4
 cmake --preset msvc-static-release `
   -DZTERMY_WIX_ROOT="$PWD/build/tools/wix"
 cmake --build --preset msvc-static-release `
-  --target ztermy_installer_contract_smoke
+  --target ztermy_v1_automated_preflight
 ```
+
+The V1 preflight serializes all real-window runtime gates so multiple test
+windows never compete for native foreground, DPI, or capture state. It then
+runs the complete CTest suite. In the static preset it also creates the
+portable ZIP and creates, validates, decompiles, and inspects the per-user MSI.
+The dynamic presets expose the same target without the two static distribution
+steps.
 
 The dynamic Qt presets use the DLL MSVC runtime. The static Qt preset uses the
 static MSVC runtime because the local static Qt build was compiled that way.
