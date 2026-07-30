@@ -1,6 +1,6 @@
 # V1 release-candidate record: bf96a61
 
-Status: automated preflight passed; immutable-candidate manual sign-off pending
+Status: automated preflight passed; immutable-candidate manual sign-off in progress
 
 ## Candidate identity
 
@@ -75,6 +75,31 @@ fingerprint:
 Only the private-key path was supplied. No passphrase, private-key content,
 terminal input, or credential was written to the record.
 
+## Manual portable and password pass
+
+The project owner tested the exact Static RC after the artifact hashes below
+were locked.
+
+The interactive password gate ran against the authorized
+`test@192.168.1.25` fixture. QtTest reported `3 passed, 0 failed, 0 skipped`
+in 2877 ms using the MSVC 2022 static Release build and Qt 6.8.3. Password
+input remained hidden, the shell authenticated successfully, no credential
+appeared in output, and no PowerShell error dialog occurred.
+
+The recorded portable ZIP was extracted into a new directory and completed
+the prescribed route without a failure:
+
+- it started without a missing DLL, Qt plugin, or runtime dialog;
+- local PowerShell, Helix alternate screen, resize, exit, cursor restoration,
+  CJK, IME insertion, selection, clipboard, paste confirmation, search, and
+  scrollback behaved as expected;
+- Acrylic, Transparent, Mica, Mica Alt, independent window/terminal opacity,
+  ANSI explicit backgrounds, native maximize/restore, Snap Layouts, Win+Z,
+  edge resize, and shutdown behaved as expected;
+- configuration and diagnostics remained under the portable sibling `data`
+  directory and did not contaminate installed-mode storage;
+- no assertion, crash dialog, or lingering process was observed.
+
 ## Artifact integrity
 
 | Artifact | Bytes | Independently calculated SHA-256 |
@@ -107,10 +132,10 @@ regression evidence but do not sign off this immutable candidate.
 | Complete keyboard-only accessibility route | NOT RUN | Automated accessibility and Tab-order gate passed; full manual route remains. |
 | Normal/snapped/maximized/mixed-DPI screenshots | NOT RUN | Automated normal and synthetic-DPI captures exist; required physical matrix is incomplete. |
 | Windows artifact identity and icon clarity | NOT RUN | PE/MSI contracts passed; Explorer, taskbar, Alt+Tab, and Installed Apps still need candidate inspection. |
-| ANSI/alternate screen/cursor/clear/resize | NOT RUN | Automated engine and real-window gates passed; candidate manual route remains. |
-| CJK/wide/combining/emoji/IME | NOT RUN | Automated renderer and IME tests passed; candidate manual route remains. |
-| Selection/copy/paste/search/scrollback | NOT RUN | Automated interaction tests passed; candidate manual route remains. |
-| Real-host password authentication | NOT RUN | An earlier static candidate passed; this exact candidate has not run the interactive gate. |
+| ANSI/alternate screen/cursor/clear/resize | NOT RUN | Exact portable candidate passed ANSI background, Helix alternate-screen, resize, and cursor-restoration checks; explicit clear/cursor-movement route remains. |
+| CJK/wide/combining/emoji/IME | NOT RUN | Exact portable candidate passed CJK and middle-of-line IME checks; combining-mark and emoji route remains. |
+| Selection/copy/paste/search/scrollback | NOT RUN | Exact portable candidate passed the primary interaction route; reverse/rectangular selection and wrapped-search route remains. |
+| Real-host password authentication | PASS | Static QtTest gate: 3 passed, 0 failed, hidden input, authenticated shell, 2877 ms. |
 | Installed data survives upgrade and uninstall | NOT RUN | MSI contract passed; exact-candidate lifecycle remains. |
 | Clean Windows 11 release without developer tools | NOT RUN | Earlier Sandbox runs succeeded; the exact artifacts and hashes above remain untested there. |
 
