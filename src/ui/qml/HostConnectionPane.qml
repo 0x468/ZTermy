@@ -250,11 +250,12 @@ Rectangle {
                 ActionButton {
                     id: newHostButton
 
+                    objectName: "hostNew"
                     Layout.fillWidth: pane.compactLayout
                     Layout.alignment: pane.compactLayout ? Qt.AlignLeft : Qt.AlignRight
                     text: "New host"
                     iconName: "plus"
-                    Accessible.name: "Create a new SSH host profile"
+                    accessibleName: "Create a new SSH host profile"
                     variant: "primary"
                     onClicked: pane.beginNewProfile()
                 }
@@ -268,6 +269,7 @@ Rectangle {
                 AppTextField {
                     id: searchField
 
+                    objectName: "hostSearch"
                     Layout.fillWidth: true
                     placeholderText: "Search hosts, groups, users, or addresses"
                     accessibleName: "Search saved SSH hosts"
@@ -501,9 +503,10 @@ Rectangle {
                         }
                         AppTextField {
                             id: nameField
+                            objectName: "hostName"
                             Layout.fillWidth: true
                             placeholderText: "Home server"
-                            Accessible.name: "Profile name"
+                            accessibleName: "Profile name"
                             selectByMouse: true
                         }
 
@@ -513,9 +516,10 @@ Rectangle {
                         }
                         AppTextField {
                             id: groupField
+                            objectName: "hostGroup"
                             Layout.fillWidth: true
                             placeholderText: "Personal, Work, Lab…"
-                            Accessible.name: "SSH profile group"
+                            accessibleName: "SSH profile group"
                             selectByMouse: true
                         }
 
@@ -525,9 +529,10 @@ Rectangle {
                         }
                         AppTextField {
                             id: hostField
+                            objectName: "hostAddress"
                             Layout.fillWidth: true
                             placeholderText: "server.example.com or 192.0.2.10"
-                            Accessible.name: "SSH host"
+                            accessibleName: "SSH host"
                             selectByMouse: true
                         }
 
@@ -537,6 +542,7 @@ Rectangle {
                         }
                         AppTextField {
                             id: portField
+                            objectName: "hostPort"
                             Layout.fillWidth: true
                             text: "22"
                             inputMethodHints: Qt.ImhDigitsOnly
@@ -544,7 +550,7 @@ Rectangle {
                                 bottom: 1
                                 top: 65535
                             }
-                            Accessible.name: "SSH port"
+                            accessibleName: "SSH port"
                             selectByMouse: true
                         }
 
@@ -554,9 +560,10 @@ Rectangle {
                         }
                         AppTextField {
                             id: usernameField
+                            objectName: "hostUsername"
                             Layout.fillWidth: true
                             placeholderText: "username"
-                            Accessible.name: "SSH username"
+                            accessibleName: "SSH username"
                             selectByMouse: true
                         }
 
@@ -566,6 +573,7 @@ Rectangle {
                         }
                         AppComboBox {
                             id: authenticationBox
+                            objectName: "hostAuthentication"
                             Layout.fillWidth: true
                             model: ["Private key", "Password"]
                             accessibleName: "SSH authentication method"
@@ -584,10 +592,11 @@ Rectangle {
                         }
                         AppTextField {
                             id: keyPathField
+                            objectName: "hostKeyPath"
                             Layout.fillWidth: true
                             visible: authenticationBox.currentIndex === 0
                             text: pane.controller.defaultPrivateKeyPath
-                            Accessible.name: "Private-key file path"
+                            accessibleName: "Private-key file path"
                             selectByMouse: true
                         }
 
@@ -597,6 +606,7 @@ Rectangle {
                         }
                         AppCheckBox {
                             id: passphraseRequiredBox
+                            objectName: "hostPassphraseRequired"
                             Layout.fillWidth: true
                             visible: authenticationBox.currentIndex === 0
                             text: "This private key requires a passphrase"
@@ -611,11 +621,12 @@ Rectangle {
                         }
                         AppTextField {
                             id: credentialField
+                            objectName: "hostCredential"
                             Layout.fillWidth: true
                             visible: authenticationBox.currentIndex === 1 || passphraseRequiredBox.checked
                             placeholderText: authenticationBox.currentIndex === 0 ? "Private-key passphrase" : "SSH password"
                             echoMode: TextInput.Password
-                            Accessible.name: authenticationBox.currentIndex === 0 ? "Private-key passphrase" : "SSH password"
+                            accessibleName: authenticationBox.currentIndex === 0 ? "Private-key passphrase" : "SSH password"
                             selectByMouse: true
                         }
                     }
@@ -634,9 +645,10 @@ Rectangle {
                         rowSpacing: Theme.spacingControl
 
                         ActionButton {
+                            objectName: "hostCancel"
                             Layout.fillWidth: pane.compactLayout
                             text: "Cancel"
-                            Accessible.name: "Close host profile editor"
+                            accessibleName: "Close host profile editor"
                             onClicked: {
                                 pane.clearEditor();
                                 pane.editorExpanded = false;
@@ -650,16 +662,18 @@ Rectangle {
                         }
 
                         ActionButton {
+                            objectName: "hostSave"
                             Layout.fillWidth: pane.compactLayout
                             text: "Save profile"
-                            Accessible.name: "Save SSH profile"
+                            accessibleName: "Save SSH profile"
                             onClicked: pane.saveProfile()
                         }
 
                         ActionButton {
+                            objectName: "hostConnect"
                             Layout.fillWidth: pane.compactLayout
                             text: "Connect"
-                            Accessible.name: "Connect to SSH host"
+                            accessibleName: "Connect to SSH host"
                             variant: "primary"
                             onClicked: pane.connectCurrent()
                         }

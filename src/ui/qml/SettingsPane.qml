@@ -131,6 +131,7 @@ Rectangle {
                     }
                     AppComboBox {
                         id: themeBox
+                        objectName: "settingsTheme"
                         Layout.fillWidth: true
                         model: ["System", "Dark", "Light"]
                         accessibleName: "Application theme"
@@ -145,6 +146,7 @@ Rectangle {
 
                         AppSlider {
                             id: opacitySlider
+                            objectName: "settingsOpacity"
                             Layout.fillWidth: true
                             from: 0.5
                             to: 1.0
@@ -168,6 +170,7 @@ Rectangle {
                     }
                     AppComboBox {
                         id: backdropBox
+                        objectName: "settingsBackdrop"
                         Layout.fillWidth: true
                         model: ["None", "Mica", "Acrylic"]
                         accessibleName: "Windows backdrop material"
@@ -226,6 +229,7 @@ Rectangle {
                     }
                     AppTextField {
                         id: fontFamilyField
+                        objectName: "settingsFontFamily"
                         Layout.fillWidth: true
                         placeholderText: "Cascadia Mono"
                         selectByMouse: true
@@ -239,6 +243,7 @@ Rectangle {
                     }
                     AppSpinBox {
                         id: fontSizeBox
+                        objectName: "settingsFontSize"
                         Layout.fillWidth: true
                         from: 8
                         to: 32
@@ -252,6 +257,7 @@ Rectangle {
                     }
                     AppComboBox {
                         id: cursorBox
+                        objectName: "settingsCursor"
                         Layout.fillWidth: true
                         model: ["Terminal controlled", "Block", "Bar", "Underline"]
                         accessibleName: "Terminal cursor style"
@@ -263,6 +269,7 @@ Rectangle {
                     }
                     AppSwitch {
                         id: cursorBlinkSwitch
+                        objectName: "settingsCursorBlink"
                         Layout.fillWidth: true
                         text: "Blink cursor"
                         accessibleName: "Blink terminal cursor"
@@ -274,6 +281,7 @@ Rectangle {
                     }
                     AppSwitch {
                         id: copyOnSelectSwitch
+                        objectName: "settingsCopyOnSelect"
                         Layout.fillWidth: true
                         text: "Copy selected terminal text automatically"
                         accessibleName: "Copy terminal selection automatically"
@@ -285,6 +293,7 @@ Rectangle {
                     }
                     AppSwitch {
                         id: multilinePasteSwitch
+                        objectName: "settingsMultilinePaste"
                         Layout.fillWidth: true
                         text: "Confirm before pasting multiple lines"
                         accessibleName: "Confirm multiline terminal paste"
@@ -305,9 +314,10 @@ Rectangle {
                 rowSpacing: Theme.spacingControl
 
                 ActionButton {
+                    objectName: "settingsReset"
                     Layout.fillWidth: pane.compactLayout
                     text: "Reset defaults"
-                    Accessible.name: "Reset all application settings"
+                    accessibleName: "Reset all application settings"
                     onClicked: {
                         const reset = pane.controller.resetApplicationSettings();
                         pane.statusIsError = !reset;
@@ -322,9 +332,10 @@ Rectangle {
                 }
 
                 ActionButton {
+                    objectName: "settingsDiscard"
                     Layout.fillWidth: pane.compactLayout
                     text: "Discard changes"
-                    Accessible.name: "Discard unsaved setting changes"
+                    accessibleName: "Discard unsaved setting changes"
                     onClicked: {
                         pane.loadDraft();
                         pane.statusIsError = false;
@@ -333,9 +344,10 @@ Rectangle {
                 }
 
                 ActionButton {
+                    objectName: "settingsApply"
                     Layout.fillWidth: pane.compactLayout
                     text: "Apply"
-                    Accessible.name: "Apply application settings"
+                    accessibleName: "Apply application settings"
                     variant: "primary"
                     onClicked: pane.applyDraft()
                 }

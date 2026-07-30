@@ -25,6 +25,45 @@ build/msvc-dynamic-debug/test-data/ui-layout-smoke/
 The automated gate proves structure and produces review evidence. It does not
 replace mouse, keyboard, text-clipping, or mixed-DPI inspection.
 
+## Automated keyboard-route gate
+
+Build and run the real-window keyboard gate from a Visual Studio developer
+shell:
+
+```text
+cmake --build --preset msvc-dynamic-debug --target ztermy_ui_keyboard_runtime_smoke
+```
+
+The gate starts with isolated settings and sends key events through Qt's
+window-level keyboard path. It verifies:
+
+- Button roles and specific accessible names for title-bar, caption, sidebar,
+  new-tab, and local-machine actions.
+- Space activation of sidebar navigation and Enter activation of shared
+  action buttons and the title-bar new-tab action.
+- The complete 12-control Settings Tab order at `1120x800` and `500x360`.
+- `Alt+Down` and Escape for the shared dropdown, arrow-key changes for the
+  opacity slider and font-size spin box, and Space for all Settings switches.
+- Applying the keyboard-edited theme, opacity, font size, and behavior values.
+- New host → Search order, Enter opening the editor, and the complete
+  11-control host-editor Tab order at both window sizes.
+- Space toggling the private-key passphrase checkbox and exposing its masked
+  credential field.
+- Creating exactly one local terminal with Enter, restoring terminal focus,
+  and returning to Hosts without stopping that session.
+
+The target deletes its previous fixture directory before each run. Its
+authoritative log is:
+
+```text
+build/msvc-dynamic-debug/test-data/ui-keyboard-smoke/logs/ztermy.log
+```
+
+This gate proves event routing, focus order, accessible metadata, and state
+changes. Manual inspection remains required for focus-ring visibility,
+Narrator announcements, popup placement, text clipping, and mixed-DPI
+rendering.
+
 ## Narrow layout
 
 1. Resize the window to its minimum size.

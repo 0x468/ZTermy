@@ -5,6 +5,7 @@
 #include "platform/windows/NativeWindow.h"
 #include "ui/terminal/TerminalItem.h"
 
+#include <QAccessible>
 #include <QDir>
 #include <QEventLoop>
 #include <QFileInfo>
@@ -19,10 +20,17 @@
 #include <QVariant>
 #include <QVariantMap>
 
+#include <array>
 #include <chrono>
 #include <cstdlib>
+#include <utility>
 
 Q_LOGGING_CATEGORY(applicationLog, "ztermy.application")
+
+QT_BEGIN_NAMESPACE
+Q_GUI_EXPORT void qt_handleKeyEvent(QWindow *window, QEvent::Type type, int key, Qt::KeyboardModifiers modifiers,
+                                    const QString &text = {}, bool autorepeat = false, ushort count = 1);
+QT_END_NAMESPACE
 
 namespace
 {
@@ -141,6 +149,345 @@ void processWindowEventsFor(const std::chrono::milliseconds duration)
     return lightCompactPassed && lightRegularPassed && restoredDark;
 }
 
+[[nodiscard]] QQuickItem *quickItem(QQuickItem *rootObject, const char *objectName)
+{
+    return rootObject == nullptr ? nullptr : rootObject->findChild<QQuickItem *>(QString::fromLatin1(objectName));
+}
+
+[[nodiscard]] QString namedFocusItem(const ztermy::NativeWindow &window)
+{
+    for (QQuickItem *item = window.activeFocusItem(); item != nullptr; item = item->parentItem())
+    {
+        if (!item->objectName().isEmpty())
+        {
+            return item->objectName();
+        }
+    }
+    return {};
+}
+
+void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::KeyboardModifiers modifiers = {})
+{
+    qt_handleKeyEvent(&window, QEvent::KeyPress, key, modifiers);
+    QCoreApplication::processEvents();
+    qt_handleKeyEvent(&window, QEvent::KeyRelease, key, modifiers);
+    processWindowEventsFor(std::chrono::milliseconds{40});
+}
+
+[[nodiscard]] bool focusItem(ztermy::NativeWindow &window, QQuickItem *item, const QString &expectedName)
+{
+    if (item == nullptr || !item->isVisible() || !item->isEnabled())
+    {
+        qCWarning(applicationLog) << "UI keyboard smoke focus target unavailable" << expectedName;
+        return false;
+    }
+    item->forceActiveFocus(Qt::TabFocusReason);
+    processWindowEventsFor(std::chrono::milliseconds{40});
+    const QString actualName = namedFocusItem(window);
+    if (actualName != expectedName)
+    {
+        qCWarning(applicationLog) << "UI keyboard smoke focus mismatch"
+                                  << "expected=" << expectedName << "actual=" << actualName;
+        return false;
+    }
+    return true;
+}
+
+[[nodiscard]] bool verifyAccessibleButton(QQuickItem *rootObject, const char *objectName, const char *expectedName)
+{
+    QQuickItem *item = quickItem(rootObject, objectName);
+    QAccessibleInterface *interface = item == nullptr ? nullptr : QAccessible::queryAccessibleInterface(item);
+    const QString expected = QString::fromLatin1(expectedName);
+    if (interface == nullptr || interface->role() != QAccessible::Button
+        || interface->text(QAccessible::Name) != expected)
+    {
+        qCWarning(applicationLog) << "Accessible button contract mismatch"
+                                  << "object=" << objectName << "expectedName=" << expected
+                                  << "hasInterface=" << (interface != nullptr)
+                                  << "actualRole=" << (interface == nullptr ? -1 : static_cast<int>(interface->role()))
+                                  << "actualName="
+                                  << (interface == nullptr ? QString{} : interface->text(QAccessible::Name));
+        return false;
+    }
+    return true;
+}
+
+[[nodiscard]] bool verifySettingsTabOrder(ztermy::NativeWindow &window, QQuickItem *rootObject)
+{
+    constexpr std::array<const char *, 12> order{
+        "settingsTheme",          "settingsOpacity", "settingsBackdrop",    "settingsFontFamily",
+        "settingsFontSize",       "settingsCursor",  "settingsCursorBlink", "settingsCopyOnSelect",
+        "settingsMultilinePaste", "settingsReset",   "settingsDiscard",     "settingsApply",
+    };
+
+    if (!focusItem(window, quickItem(rootObject, order.front()), QString::fromLatin1(order.front())))
+    {
+        return false;
+    }
+    for (std::size_t index = 1; index < order.size(); ++index)
+    {
+        sendKey(window, Qt::Key_Tab);
+        const QString expectedName = QString::fromLatin1(order[index]);
+        const QString actualName = namedFocusItem(window);
+        if (actualName != expectedName)
+        {
+            qCWarning(applicationLog) << "Settings Tab order mismatch"
+                                      << "index=" << index << "expected=" << expectedName << "actual=" << actualName;
+            return false;
+        }
+    }
+    return true;
+}
+
+[[nodiscard]] bool verifyHostEditorTabOrder(ztermy::NativeWindow &window, QQuickItem *rootObject)
+{
+    constexpr std::array<const char *, 11> order{
+        "hostName",     "hostGroup",          "hostAddress", "hostPort",
+        "hostUsername", "hostAuthentication", "hostKeyPath", "hostPassphraseRequired",
+        "hostCancel",   "hostSave",           "hostConnect",
+    };
+
+    if (!focusItem(window, quickItem(rootObject, order.front()), QString::fromLatin1(order.front())))
+    {
+        return false;
+    }
+    for (std::size_t index = 1; index < order.size(); ++index)
+    {
+        sendKey(window, Qt::Key_Tab);
+        const QString expectedName = QString::fromLatin1(order[index]);
+        const QString actualName = namedFocusItem(window);
+        if (actualName != expectedName)
+        {
+            qCWarning(applicationLog) << "Host editor Tab order mismatch"
+                                      << "index=" << index << "expected=" << expectedName << "actual=" << actualName;
+            return false;
+        }
+    }
+    return true;
+}
+
+[[nodiscard]] bool runUiKeyboardRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller)
+{
+    window.resize(QSize{1120, 800});
+    window.show();
+    window.requestActivate();
+    processWindowEventsFor(std::chrono::milliseconds{250});
+
+    QQuickItem *rootObject = window.rootObject();
+    if (rootObject == nullptr)
+    {
+        return false;
+    }
+
+    constexpr std::array accessibleButtons{
+        std::pair{"hostsTitleAction", "Hosts"},         std::pair{"titleNewTabAction", "New local terminal"},
+        std::pair{"minimizeCaptionButton", "Minimize"}, std::pair{"maximizeCaptionButton", "Maximize"},
+        std::pair{"closeCaptionButton", "Close"},       std::pair{"sideHostsAction", "Hosts"},
+        std::pair{"sideSettingsAction", "Settings"},    std::pair{"localMachineAction", "Open local terminal"},
+    };
+    for (const auto &[objectName, expectedName] : accessibleButtons)
+    {
+        if (!verifyAccessibleButton(rootObject, objectName, expectedName))
+        {
+            return false;
+        }
+    }
+
+    rootObject->setProperty("currentPage", QStringLiteral("hosts"));
+    processWindowEventsFor(std::chrono::milliseconds{100});
+    QQuickItem *settingsAction = quickItem(rootObject, "sideSettingsAction");
+    if (!focusItem(window, settingsAction, QStringLiteral("sideSettingsAction")))
+    {
+        return false;
+    }
+    sendKey(window, Qt::Key_Space);
+    if (rootObject->property("currentPage").toString() != QStringLiteral("settings"))
+    {
+        qCWarning(applicationLog) << "Space did not activate Settings navigation";
+        return false;
+    }
+
+    if (!verifySettingsTabOrder(window, rootObject))
+    {
+        return false;
+    }
+    window.resize(QSize{500, 360});
+    processWindowEventsFor(std::chrono::milliseconds{150});
+    if (!verifySettingsTabOrder(window, rootObject))
+    {
+        return false;
+    }
+    window.resize(QSize{1120, 800});
+    processWindowEventsFor(std::chrono::milliseconds{150});
+
+    QQuickItem *theme = quickItem(rootObject, "settingsTheme");
+    QQuickItem *opacity = quickItem(rootObject, "settingsOpacity");
+    QQuickItem *fontSize = quickItem(rootObject, "settingsFontSize");
+    QQuickItem *cursorBlink = quickItem(rootObject, "settingsCursorBlink");
+    QQuickItem *copyOnSelect = quickItem(rootObject, "settingsCopyOnSelect");
+    QQuickItem *multilinePaste = quickItem(rootObject, "settingsMultilinePaste");
+    QQuickItem *apply = quickItem(rootObject, "settingsApply");
+    if (theme == nullptr || opacity == nullptr || fontSize == nullptr || cursorBlink == nullptr
+        || copyOnSelect == nullptr || multilinePaste == nullptr || apply == nullptr)
+    {
+        qCWarning(applicationLog) << "Settings keyboard smoke object lookup failed";
+        return false;
+    }
+
+    if (!focusItem(window, theme, QStringLiteral("settingsTheme")))
+    {
+        return false;
+    }
+    sendKey(window, Qt::Key_Down, Qt::AltModifier);
+    auto *themePopup = theme->property("popup").value<QObject *>();
+    const bool popupOpened = themePopup != nullptr && themePopup->property("visible").toBool();
+    sendKey(window, Qt::Key_Escape);
+    const bool popupClosed = themePopup != nullptr && !themePopup->property("visible").toBool();
+    sendKey(window, Qt::Key_Down);
+
+    if (!focusItem(window, opacity, QStringLiteral("settingsOpacity")))
+    {
+        return false;
+    }
+    sendKey(window, Qt::Key_Left);
+
+    if (!focusItem(window, fontSize, QStringLiteral("settingsFontSize")))
+    {
+        return false;
+    }
+    sendKey(window, Qt::Key_Up);
+
+    const auto toggleWithSpace = [&window](QQuickItem *item, const QString &name) {
+        if (!focusItem(window, item, name))
+        {
+            return false;
+        }
+        const bool before = item->property("checked").toBool();
+        sendKey(window, Qt::Key_Space);
+        return item->property("checked").toBool() != before;
+    };
+    const bool switchesChanged = toggleWithSpace(cursorBlink, QStringLiteral("settingsCursorBlink"))
+                                 && toggleWithSpace(copyOnSelect, QStringLiteral("settingsCopyOnSelect"))
+                                 && toggleWithSpace(multilinePaste, QStringLiteral("settingsMultilinePaste"));
+
+    const bool draftMatches = popupOpened && popupClosed && theme->property("currentIndex").toInt() == 2
+                              && qAbs(opacity->property("value").toReal() - 0.95) < 0.001
+                              && fontSize->property("value").toInt() == 15 && switchesChanged;
+    if (!draftMatches)
+    {
+        qCWarning(applicationLog) << "Settings keyboard edits did not produce the expected draft"
+                                  << "popupOpened=" << popupOpened << "popupClosed=" << popupClosed
+                                  << "themeIndex=" << theme->property("currentIndex").toInt()
+                                  << "opacity=" << opacity->property("value").toReal()
+                                  << "fontSize=" << fontSize->property("value").toInt()
+                                  << "switchesChanged=" << switchesChanged;
+        return false;
+    }
+
+    if (!focusItem(window, apply, QStringLiteral("settingsApply")))
+    {
+        return false;
+    }
+    sendKey(window, Qt::Key_Return);
+    const bool settingsApplied = controller.themePreference() == QStringLiteral("light")
+                                 && qAbs(controller.windowOpacity() - 0.95) < 0.001
+                                 && controller.terminalFontSize() == 15 && !controller.cursorBlink()
+                                 && controller.copyOnSelect() && !controller.confirmMultilinePaste();
+    if (!settingsApplied)
+    {
+        qCWarning(applicationLog) << "Enter did not apply the keyboard-edited settings";
+        return false;
+    }
+
+    rootObject->setProperty("currentPage", QStringLiteral("hosts"));
+    processWindowEventsFor(std::chrono::milliseconds{100});
+    QQuickItem *newHost = quickItem(rootObject, "hostNew");
+    if (!verifyAccessibleButton(rootObject, "hostNew", "Create a new SSH host profile")
+        || !focusItem(window, newHost, QStringLiteral("hostNew")))
+    {
+        return false;
+    }
+    sendKey(window, Qt::Key_Tab);
+    if (namedFocusItem(window) != QStringLiteral("hostSearch"))
+    {
+        qCWarning(applicationLog) << "Host page Tab order did not reach search after New host"
+                                  << "actual=" << namedFocusItem(window);
+        return false;
+    }
+    if (!focusItem(window, newHost, QStringLiteral("hostNew")))
+    {
+        return false;
+    }
+    sendKey(window, Qt::Key_Return);
+    QQuickItem *hostPane = quickItem(rootObject, "hostConnectionPane");
+    const bool editorOpened = hostPane != nullptr && hostPane->property("editorExpanded").toBool()
+                              && namedFocusItem(window) == QStringLiteral("hostName");
+    if (!editorOpened || !verifyHostEditorTabOrder(window, rootObject))
+    {
+        qCWarning(applicationLog) << "Enter did not open a keyboard-reachable host editor"
+                                  << "editorOpened=" << editorOpened << "focus=" << namedFocusItem(window);
+        return false;
+    }
+    window.resize(QSize{500, 360});
+    processWindowEventsFor(std::chrono::milliseconds{150});
+    if (!verifyHostEditorTabOrder(window, rootObject))
+    {
+        return false;
+    }
+    window.resize(QSize{1120, 800});
+    processWindowEventsFor(std::chrono::milliseconds{150});
+    QQuickItem *passphraseRequired = quickItem(rootObject, "hostPassphraseRequired");
+    QQuickItem *credential = quickItem(rootObject, "hostCredential");
+    if (!focusItem(window, passphraseRequired, QStringLiteral("hostPassphraseRequired")))
+    {
+        return false;
+    }
+    sendKey(window, Qt::Key_Space);
+    const bool checkboxChanged =
+        passphraseRequired->property("checked").toBool() && credential != nullptr && credential->isVisible();
+    if (!checkboxChanged)
+    {
+        qCWarning(applicationLog) << "Space did not toggle the private-key passphrase checkbox";
+        return false;
+    }
+
+    const qsizetype initialTabCount = controller.terminalTabs().size();
+    QQuickItem *newTabAction = quickItem(rootObject, "titleNewTabAction");
+    if (!focusItem(window, newTabAction, QStringLiteral("titleNewTabAction")))
+    {
+        return false;
+    }
+    sendKey(window, Qt::Key_Return);
+    processWindowEventsFor(std::chrono::milliseconds{250});
+    const bool oneTabCreated = controller.terminalTabs().size() == initialTabCount + 1
+                               && rootObject->property("currentPage").toString() == QStringLiteral("terminal")
+                               && namedFocusItem(window) == QStringLiteral("terminalViewport");
+    if (!oneTabCreated)
+    {
+        qCWarning(applicationLog) << "Enter did not create exactly one focused local terminal"
+                                  << "initialTabs=" << initialTabCount
+                                  << "finalTabs=" << controller.terminalTabs().size()
+                                  << "page=" << rootObject->property("currentPage").toString()
+                                  << "focus=" << namedFocusItem(window);
+        return false;
+    }
+
+    QQuickItem *hostsAction = quickItem(rootObject, "hostsTitleAction");
+    if (!focusItem(window, hostsAction, QStringLiteral("hostsTitleAction")))
+    {
+        return false;
+    }
+    sendKey(window, Qt::Key_Space);
+    const bool navigationPreservedSession = rootObject->property("currentPage").toString() == QStringLiteral("hosts")
+                                            && controller.terminalTabs().size() == initialTabCount + 1;
+    qCInfo(applicationLog) << "UI keyboard route check"
+                           << "settingsTabStops=" << 24 << "hostEditorTabStops=" << 22
+                           << "popupKeyboard=" << (popupOpened && popupClosed) << "settingsApplied=" << settingsApplied
+                           << "checkboxKeyboard=" << checkboxChanged << "oneTabCreated=" << oneTabCreated
+                           << "navigationPreservedSession=" << navigationPreservedSession;
+    return navigationPreservedSession;
+}
+
 } // namespace
 
 int main(int argc, char *argv[])
@@ -177,12 +524,17 @@ int main(int argc, char *argv[])
 
     ztermy::AppController appController(paths->profilesFile, paths->knownHostsFile, paths->settingsFile);
     const bool uiLayoutSmoke = QCoreApplication::arguments().contains(QStringLiteral("--ui-layout-smoke"));
+    const bool uiKeyboardSmoke = QCoreApplication::arguments().contains(QStringLiteral("--ui-keyboard-smoke"));
+    if ((uiLayoutSmoke || uiKeyboardSmoke) && !applyUiLayoutSmokeTheme(appController, QStringLiteral("dark")))
+    {
+        qCCritical(applicationLog) << "Could not prepare the UI runtime smoke settings";
+        return EXIT_FAILURE;
+    }
     if (uiLayoutSmoke
-        && (!applyUiLayoutSmokeTheme(appController, QStringLiteral("dark"))
-            || !appController.saveHostProfile(
-                QStringLiteral("ui-layout-smoke-profile"), QStringLiteral("Layout test host"),
-                QStringLiteral("192.0.2.10"), 22, QStringLiteral("developer"), QStringLiteral("private-key"),
-                QStringLiteral("C:/test/id_ed25519"), false, QStringLiteral("Test fixtures"))))
+        && !appController.saveHostProfile(QStringLiteral("ui-layout-smoke-profile"), QStringLiteral("Layout test host"),
+                                          QStringLiteral("192.0.2.10"), 22, QStringLiteral("developer"),
+                                          QStringLiteral("private-key"), QStringLiteral("C:/test/id_ed25519"), false,
+                                          QStringLiteral("Test fixtures")))
     {
         qCCritical(applicationLog) << "Could not prepare the responsive UI layout fixture";
         return EXIT_FAILURE;
@@ -237,6 +589,19 @@ int main(int argc, char *argv[])
             return EXIT_FAILURE;
         }
         qCInfo(applicationLog) << "Responsive UI layout runtime smoke test completed";
+        return EXIT_SUCCESS;
+    }
+    if (uiKeyboardSmoke)
+    {
+        const bool passed = runUiKeyboardRuntimeSmoke(window, appController);
+        appController.shutdown();
+        window.releaseResources();
+        if (!passed)
+        {
+            qCCritical(applicationLog) << "UI keyboard runtime smoke test failed";
+            return EXIT_FAILURE;
+        }
+        qCInfo(applicationLog) << "UI keyboard runtime smoke test completed";
         return EXIT_SUCCESS;
     }
 

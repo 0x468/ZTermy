@@ -7,6 +7,7 @@ Rectangle {
 
     required property string text
     property string accessibleName: text
+    property string actionObjectName: ""
     property bool selected: false
     signal activated()
 
@@ -40,6 +41,7 @@ Rectangle {
     KeyboardAction {
         id: action
 
+        objectName: control.actionObjectName
         anchors.fill: parent
         anchors.margins: 2
         accessibleName: control.accessibleName

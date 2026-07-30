@@ -17,6 +17,13 @@ ComboBox {
     implicitHeight: 34
     Accessible.name: accessibleName
 
+    Keys.onPressed: event => {
+        if (event.key === Qt.Key_Down && (event.modifiers & Qt.AltModifier) !== 0) {
+            control.popup.open();
+            event.accepted = true;
+        }
+    }
+
     contentItem: Text {
         text: control.displayText
         color: control.enabled ? Theme.text : Theme.textSubtle

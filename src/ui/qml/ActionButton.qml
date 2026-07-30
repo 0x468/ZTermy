@@ -26,6 +26,19 @@ Button {
     implicitHeight: 34
     Accessible.name: accessibleName.length > 0 ? accessibleName : text
 
+    Keys.onReturnPressed: event => {
+        if (!event.isAutoRepeat) {
+            control.clicked();
+        }
+        event.accepted = true;
+    }
+    Keys.onEnterPressed: event => {
+        if (!event.isAutoRepeat) {
+            control.clicked();
+        }
+        event.accepted = true;
+    }
+
     contentItem: Item {
         implicitWidth: buttonContent.implicitWidth
         implicitHeight: buttonContent.implicitHeight

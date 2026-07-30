@@ -265,6 +265,7 @@ Rectangle {
                 KeyboardAction {
                     id: hostsTitleAction
 
+                    objectName: "hostsTitleAction"
                     anchors.fill: parent
                     anchors.margins: 2
                     accessibleName: "Hosts"
@@ -319,6 +320,7 @@ Rectangle {
                 KeyboardAction {
                     id: titleNewTabAction
 
+                    objectName: "titleNewTabAction"
                     anchors.fill: parent
                     anchors.margins: 2
                     accessibleName: "New local terminal"
@@ -333,6 +335,7 @@ Rectangle {
             height: parent.height
 
             CaptionButton {
+                objectName: "minimizeCaptionButton"
                 width: root.captionButtonWidth
                 height: titleBar.height
                 kind: "minimize"
@@ -342,6 +345,7 @@ Rectangle {
             }
 
             CaptionButton {
+                objectName: "maximizeCaptionButton"
                 width: root.captionButtonWidth
                 height: titleBar.height
                 kind: "maximize"
@@ -353,6 +357,7 @@ Rectangle {
             }
 
             CaptionButton {
+                objectName: "closeCaptionButton"
                 width: root.captionButtonWidth
                 height: titleBar.height
                 kind: "close"
@@ -391,6 +396,7 @@ Rectangle {
                 }
 
                 SideNavigationItem {
+                    actionObjectName: "sideHostsAction"
                     Layout.fillWidth: true
                     Layout.preferredHeight: 38
                     text: "Hosts"
@@ -399,6 +405,7 @@ Rectangle {
                 }
 
                 SideNavigationItem {
+                    actionObjectName: "sideSettingsAction"
                     Layout.fillWidth: true
                     Layout.preferredHeight: 38
                     text: "Settings"
@@ -443,6 +450,7 @@ Rectangle {
                     KeyboardAction {
                         id: localMachineAction
 
+                        objectName: "localMachineAction"
                         anchors.fill: parent
                         anchors.margins: 2
                         accessibleName: "Open local terminal"

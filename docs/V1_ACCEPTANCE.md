@@ -27,6 +27,12 @@ Only runtime evidence can mark a platform or UI item complete.
   and two-column layouts, host content remains within its page, and eight
   captured Dark/Light views were reviewed for top-level clipping, shared
   control contrast, and caption-icon repainting after live theme changes.
+- The real-window keyboard gate passes in dynamic Debug and static Release.
+  It verifies eight custom actions through Windows accessibility interfaces,
+  24 Settings and 22 host-editor Tab stops across regular and compact layouts,
+  Space/Enter/arrow/Alt+Down/Escape control behavior, persisted settings,
+  private-key passphrase disclosure state, exactly one new local session, and
+  session-preserving navigation back to Hosts.
 - Automated hit-test coverage passes for caption, maximize button, client
   area, all resize edges/corners, and maximized-state behavior.
 - The real-window maximized-work-area gate passes in dynamic Debug and static
