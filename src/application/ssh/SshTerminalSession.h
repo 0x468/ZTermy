@@ -84,6 +84,14 @@ signals:
 
 private slots:
     void deliverLatestSnapshot();
+    void deliverStatus(const QString &status);
+    void deliverPhase(ztermy::ssh::SshConnectionPhase phase);
+    void deliverFailure(ztermy::ssh::SshFailureKind failure);
+    void deliverRunning(bool running);
+    void deliverHostKeyConfirmation(const QString &algorithm, const QString &fingerprint);
+    void deliverHostKeyChange(const QString &algorithm, const QString &fingerprint);
+    void deliverClipboardText(const QString &text);
+    void deliverSearchResult(const QString &query, quint32 current, quint32 total, bool wrapped);
 
 private:
     struct InputCommand final
@@ -132,6 +140,12 @@ private:
     void publishSnapshot();
     void postStatus(const QString &status);
     void postPhase(SshConnectionPhase phase);
+    void postFailure(SshFailureKind failure);
+    void postRunning(bool running);
+    void postHostKeyConfirmation(const QString &algorithm, const QString &fingerprint);
+    void postHostKeyChange(const QString &algorithm, const QString &fingerprint);
+    void postClipboardText(const QString &text);
+    void postSearchResult(const QString &query, quint32 current, quint32 total, bool wrapped);
     void finishWorker(const QString &status, SshConnectionPhase phase);
     void signalCommandWake() noexcept;
     void resetMetrics() noexcept;

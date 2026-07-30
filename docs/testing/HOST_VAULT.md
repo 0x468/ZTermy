@@ -5,6 +5,36 @@ title bar.
 Use non-sensitive test endpoints and never place a real password or passphrase
 in the profile name, group, host, username, or key-path fields.
 
+## Quick Connect and recent connections
+
+1. Enter an invalid target such as `missing-user` and activate **Connect**.
+2. Enter `user@host`, `user@host:2222`, and a bracketed IPv6 target such as
+   `user@[2001:db8::1]:2222`.
+3. Open the authentication dialog with the keyboard, switch between
+   private-key and password authentication, then press Escape.
+4. Resize the open dialog to the minimum window size and Tab through every
+   visible field and both actions.
+5. Start an unsaved connection and deliberately fail authentication.
+6. Explicitly save a Quick Connect target, fail authentication, then connect
+   that saved profile successfully.
+7. Restart ztermy.
+
+Expected:
+
+- Invalid targets remain on Hosts with a precise inline error.
+- Valid targets parse to the expected username, host, and port; unbracketed
+  IPv6 is rejected.
+- The dialog opens on **Authentication**, remains vertically scrollable at
+  minimum size, and Escape restores focus to the action that opened it.
+- **Save as a reusable host profile** is off by default.
+- Passwords and private-key passphrases disappear after submission and never
+  appear in saved profile JSON or logs.
+- Failed and unsaved connections never appear under **Recent connections**.
+- A saved profile appears in Recent only after authentication succeeds, and
+  remains there after restart.
+- Recent contains at most six saved profiles in newest-first order. Editing
+  preserves recency; duplicating starts without recency.
+
 ## Layout and editor
 
 1. With no profiles saved, verify the empty state and expanded profile editor.

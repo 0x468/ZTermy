@@ -1,9 +1,13 @@
 #include "application/AppController.h"
+#include "infrastructure/ssh/SshProfileStore.h"
 
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QVariantMap>
+
+#include <array>
+#include <vector>
 
 namespace
 {
@@ -66,6 +70,7 @@ private slots:
     void rejectsIncompleteConnections();
     void persistsApplicationSettings();
     void managesMultipleLocalTerminalTabs();
+    void loadsRecentProfilesAndParsesQuickTargets();
 };
 
 void AppControllerTests::savesUpdatesReloadsAndDeletesProfiles()
@@ -169,6 +174,87 @@ void AppControllerTests::rejectsIncompleteConnections()
         !controller.connectPrivateKey(QStringLiteral("host"), 22, QStringLiteral("user"), QStringLiteral("   "), {}));
     QVERIFY(!controller.connectPassword(QStringLiteral("host"), 22, QStringLiteral("user"), {}));
     QVERIFY(!controller.connectHostProfile(QStringLiteral("missing"), QStringLiteral("unused")));
+}
+
+void AppControllerTests::loadsRecentProfilesAndParsesQuickTargets()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("profiles.json"));
+    const std::array profiles{
+        ztermy::ssh::SshProfile{
+            .id = "older",
+            .name = "Older host",
+            .host = "older.example.test",
+            .username = "alice",
+            .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
+            .privateKeyPath = "key",
+            .lastConnectedUtcMs = 1000,
+        },
+        ztermy::ssh::SshProfile{
+            .id = "newer",
+            .name = "Newer host",
+            .host = "newer.example.test",
+            .username = "bob",
+            .authentication = ztermy::ssh::SshAuthenticationMethod::Password,
+            .lastConnectedUtcMs = 2000,
+        },
+        ztermy::ssh::SshProfile{
+            .id = "never",
+            .name = "Never connected",
+            .host = "never.example.test",
+            .username = "carol",
+            .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
+            .privateKeyPath = "key",
+        },
+    };
+    const ztermy::ssh::SshProfileStore store(path);
+    QVERIFY(store.save(profiles));
+
+    ztermy::AppController controller(path);
+    const QVariantList recent = controller.recentHostProfiles();
+    QCOMPARE(recent.size(), 2);
+    QCOMPARE(recent.at(0).toMap().value(QStringLiteral("id")).toString(), QStringLiteral("newer"));
+    QCOMPARE(recent.at(1).toMap().value(QStringLiteral("id")).toString(), QStringLiteral("older"));
+    QCOMPARE(recent.at(0).toMap().value(QStringLiteral("lastConnectedUtcMs")).toLongLong(), 2000);
+
+    const QVariantMap parsed = controller.parseQuickConnectTarget(QStringLiteral("dora@[2001:db8::1]:2222"));
+    QVERIFY(parsed.value(QStringLiteral("valid")).toBool());
+    QCOMPARE(parsed.value(QStringLiteral("username")).toString(), QStringLiteral("dora"));
+    QCOMPARE(parsed.value(QStringLiteral("host")).toString(), QStringLiteral("2001:db8::1"));
+    QCOMPARE(parsed.value(QStringLiteral("port")).toInt(), 2222);
+
+    const QVariantMap invalid = controller.parseQuickConnectTarget(QStringLiteral("dora@2001:db8::1"));
+    QVERIFY(!invalid.value(QStringLiteral("valid")).toBool());
+    QVERIFY(invalid.value(QStringLiteral("error")).toString().contains(QStringLiteral("brackets")));
+
+    QVERIFY(controller.saveHostProfile(QStringLiteral("newer"), QStringLiteral("Renamed"),
+                                       QStringLiteral("newer.example.test"), 22, QStringLiteral("bob"),
+                                       QStringLiteral("password"), {}, false, {}));
+    QCOMPARE(controller.recentHostProfiles().constFirst().toMap().value(QStringLiteral("id")).toString(),
+             QStringLiteral("newer"));
+    QVERIFY(controller.duplicateHostProfile(QStringLiteral("newer")));
+    QCOMPARE(controller.recentHostProfiles().size(), 2);
+
+    std::vector<ztermy::ssh::SshProfile> cappedProfiles;
+    cappedProfiles.reserve(8);
+    for (std::int64_t index = 0; index < 8; ++index)
+    {
+        cappedProfiles.push_back({
+            .id = "capped-" + std::to_string(index),
+            .name = "Capped " + std::to_string(index),
+            .host = "capped.example.test",
+            .username = "tester",
+            .authentication = ztermy::ssh::SshAuthenticationMethod::Password,
+            .lastConnectedUtcMs = 10'000 + index,
+        });
+    }
+    QVERIFY(store.save(cappedProfiles));
+    ztermy::AppController cappedController(path);
+    const QVariantList cappedRecent = cappedController.recentHostProfiles();
+    QCOMPARE(cappedRecent.size(), 6);
+    QCOMPARE(cappedRecent.constFirst().toMap().value(QStringLiteral("id")).toString(), QStringLiteral("capped-7"));
+    QCOMPARE(cappedRecent.constLast().toMap().value(QStringLiteral("id")).toString(), QStringLiteral("capped-2"));
 }
 
 void AppControllerTests::persistsApplicationSettings()

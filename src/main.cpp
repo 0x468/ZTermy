@@ -523,16 +523,23 @@ struct ResizeHitRuntimeCase
     auto *hostPane = rootObject->findChild<QObject *>(QStringLiteral("hostConnectionPane"));
     auto *hostContent = rootObject->findChild<QObject *>(QStringLiteral("hostContentColumn"));
     auto *hostEditorGrid = rootObject->findChild<QObject *>(QStringLiteral("hostEditorGrid"));
+    auto *quickConnectCard = rootObject->findChild<QObject *>(QStringLiteral("quickConnectCard"));
+    auto *quickConnectTarget = rootObject->findChild<QObject *>(QStringLiteral("quickConnectTarget"));
+    auto *quickConnectAction = rootObject->findChild<QObject *>(QStringLiteral("quickConnectAction"));
     const QString breakpointName = compact ? QStringLiteral("compact") : QStringLiteral("regular");
     const QString capturePrefix = themeName + QStringLiteral("-") + breakpointName;
     const bool hostCaptured = captureLayout(window, outputDirectory, capturePrefix + QStringLiteral("-hosts"));
     const qreal hostPaneWidth = hostPane == nullptr ? 0.0 : hostPane->property("width").toReal();
     const qreal hostContentWidth = hostContent == nullptr ? 0.0 : hostContent->property("width").toReal();
-    const bool hostMatches = hostPane != nullptr && hostContent != nullptr && hostEditorGrid != nullptr
-                             && hostPane->property("compactLayout").toBool() == compact
-                             && hostEditorGrid->property("columns").toInt() == (compact ? 1 : 2)
-                             && hostPane->property("profileCardColumns").toInt() == (compact ? 1 : 2)
-                             && hostContentWidth > 0.0 && hostContentWidth <= hostPaneWidth;
+    const bool hostMatches =
+        hostPane != nullptr && hostContent != nullptr && hostEditorGrid != nullptr && quickConnectCard != nullptr
+        && quickConnectTarget != nullptr && quickConnectAction != nullptr
+        && hostPane->property("compactLayout").toBool() == compact
+        && hostEditorGrid->property("columns").toInt() == (compact ? 1 : 2)
+        && hostPane->property("profileCardColumns").toInt() == (compact ? 1 : 2) && hostContentWidth > 0.0
+        && hostContentWidth <= hostPaneWidth && quickConnectCard->property("width").toReal() > 0.0
+        && quickConnectCard->property("width").toReal() <= hostContentWidth
+        && quickConnectTarget->property("width").toReal() > 0.0 && quickConnectAction->property("width").toReal() > 0.0;
 
     rootObject->setProperty("currentPage", QStringLiteral("settings"));
     processWindowEventsFor(std::chrono::milliseconds{100});
@@ -773,6 +780,32 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
     return true;
 }
 
+[[nodiscard]] bool verifyQuickConnectTabOrder(ztermy::NativeWindow &window, QQuickItem *rootObject)
+{
+    constexpr std::array order{
+        "quickAuthentication", "quickKeyPath",       "quickPassphraseRequired",
+        "quickSaveProfile",    "quickConnectCancel", "quickConnectConfirm",
+    };
+
+    if (!focusItem(window, quickItem(rootObject, order.front()), QString::fromLatin1(order.front())))
+    {
+        return false;
+    }
+    for (std::size_t index = 1; index < order.size(); ++index)
+    {
+        sendKey(window, Qt::Key_Tab);
+        const QString expectedName = QString::fromLatin1(order[index]);
+        const QString actualName = namedFocusItem(window);
+        if (actualName != expectedName)
+        {
+            qCWarning(applicationLog) << "Quick connect Tab order mismatch"
+                                      << "index=" << index << "expected=" << expectedName << "actual=" << actualName;
+            return false;
+        }
+    }
+    return true;
+}
+
 [[nodiscard]] bool runUiKeyboardRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller)
 {
     window.resize(QSize{1120, 800});
@@ -970,17 +1003,75 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
     }
     QQuickItem *newHost = quickItem(rootObject, "hostNew");
     if (!verifyAccessibleButton(rootObject, "hostNew", "Create a new SSH host profile")
+        || !verifyAccessibleButton(rootObject, "quickConnectAction", "Configure quick SSH connection")
         || !focusItem(window, newHost, QStringLiteral("hostNew")))
     {
         return false;
     }
     sendKey(window, Qt::Key_Tab);
-    if (namedFocusItem(window) != QStringLiteral("hostSearch"))
+    if (namedFocusItem(window) != QStringLiteral("quickConnectTarget"))
     {
-        qCWarning(applicationLog) << "Host page Tab order did not reach search after New host"
+        qCWarning(applicationLog) << "Host page Tab order did not reach Quick connect after New host"
                                   << "actual=" << namedFocusItem(window);
         return false;
     }
+    sendKey(window, Qt::Key_Tab);
+    if (namedFocusItem(window) != QStringLiteral("quickConnectAction"))
+    {
+        qCWarning(applicationLog) << "Host page Tab order did not reach Quick connect action"
+                                  << "actual=" << namedFocusItem(window);
+        return false;
+    }
+    sendKey(window, Qt::Key_Tab);
+    if (namedFocusItem(window) != QStringLiteral("hostSearch"))
+    {
+        qCWarning(applicationLog) << "Host page Tab order did not reach search after Quick connect"
+                                  << "actual=" << namedFocusItem(window);
+        return false;
+    }
+
+    QQuickItem *quickConnectTarget = quickItem(rootObject, "quickConnectTarget");
+    QQuickItem *quickConnectAction = quickItem(rootObject, "quickConnectAction");
+    if (quickConnectTarget == nullptr || quickConnectAction == nullptr
+        || !quickConnectTarget->setProperty("text", QStringLiteral("tester@example.invalid:2222"))
+        || !focusItem(window, quickConnectAction, QStringLiteral("quickConnectAction")))
+    {
+        return false;
+    }
+    sendKey(window, Qt::Key_Return);
+    processWindowEventsFor(std::chrono::milliseconds{100});
+    auto *quickConnectDialog = rootObject->findChild<QObject *>(QStringLiteral("quickConnectDialog"));
+    const bool quickConnectDialogOpened =
+        quickConnectDialog != nullptr && quickConnectDialog->property("visible").toBool()
+        && namedFocusItem(window) == QStringLiteral("quickAuthentication")
+        && verifyAccessibleButton(rootObject, "quickConnectCancel", "Cancel quick SSH connection")
+        && verifyAccessibleButton(rootObject, "quickConnectConfirm", "Start quick SSH connection");
+    if (!quickConnectDialogOpened || !verifyQuickConnectTabOrder(window, rootObject))
+    {
+        qCWarning(applicationLog) << "Quick connect dialog keyboard route failed"
+                                  << "opened=" << quickConnectDialogOpened << "focus=" << namedFocusItem(window);
+        return false;
+    }
+    window.resize(QSize{500, 360});
+    processWindowEventsFor(std::chrono::milliseconds{150});
+    const bool compactQuickConnectFits = quickConnectDialog->property("width").toReal() <= 452.0
+                                         && quickConnectDialog->property("height").toReal() <= 312.0
+                                         && verifyQuickConnectTabOrder(window, rootObject);
+    window.resize(QSize{1120, 800});
+    processWindowEventsFor(std::chrono::milliseconds{150});
+    sendKey(window, Qt::Key_Escape);
+    processWindowEventsFor(std::chrono::milliseconds{180});
+    if (!compactQuickConnectFits || namedFocusItem(window) != QStringLiteral("quickConnectAction"))
+    {
+        qCWarning(applicationLog) << "Quick connect compact layout or focus restoration failed"
+                                  << "compactFits=" << compactQuickConnectFits
+                                  << "dialogWidth=" << quickConnectDialog->property("width").toReal()
+                                  << "dialogHeight=" << quickConnectDialog->property("height").toReal()
+                                  << "focus=" << namedFocusItem(window);
+        return false;
+    }
+    quickConnectTarget->setProperty("text", QString{});
+
     if (!focusItem(window, newHost, QStringLiteral("hostNew")))
     {
         return false;

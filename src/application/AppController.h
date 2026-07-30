@@ -8,6 +8,7 @@
 #include <QObject>
 #include <QString>
 #include <QVariantList>
+#include <QVariantMap>
 
 #include <cstddef>
 #include <cstdint>
@@ -33,6 +34,7 @@ class AppController final : public QObject
     Q_PROPERTY(bool hostKeyChangedWarning READ hostKeyChangedWarning NOTIFY hostKeyPromptChanged)
     Q_PROPERTY(QString defaultPrivateKeyPath READ defaultPrivateKeyPath CONSTANT)
     Q_PROPERTY(QVariantList hostProfiles READ hostProfiles NOTIFY hostProfilesChanged)
+    Q_PROPERTY(QVariantList recentHostProfiles READ recentHostProfiles NOTIFY hostProfilesChanged)
     Q_PROPERTY(QVariantList terminalTabs READ terminalTabs NOTIFY terminalTabsChanged)
     Q_PROPERTY(QString activeTerminalTabId READ activeTerminalTabId NOTIFY activeTerminalTabChanged)
     Q_PROPERTY(QString terminalSearchQuery READ terminalSearchQuery NOTIFY terminalSearchChanged)
@@ -76,6 +78,7 @@ public:
     [[nodiscard]] bool hostKeyChangedWarning() const noexcept;
     [[nodiscard]] QString defaultPrivateKeyPath() const;
     [[nodiscard]] QVariantList hostProfiles() const;
+    [[nodiscard]] QVariantList recentHostProfiles() const;
     [[nodiscard]] QVariantList terminalTabs() const;
     [[nodiscard]] QString activeTerminalTabId() const;
     [[nodiscard]] QString terminalSearchQuery() const;
@@ -108,6 +111,10 @@ public:
     Q_INVOKABLE bool duplicateHostProfile(const QString &id);
     Q_INVOKABLE bool deleteHostProfile(const QString &id);
     Q_INVOKABLE bool connectHostProfile(const QString &id, const QString &secret);
+    [[nodiscard]] Q_INVOKABLE QVariantMap parseQuickConnectTarget(const QString &target) const;
+    Q_INVOKABLE bool connectQuick(const QString &target, const QString &authentication, const QString &privateKeyPath,
+                                  bool privateKeyPassphraseRequired, const QString &secret, bool saveProfile,
+                                  const QString &profileName, const QString &group);
     Q_INVOKABLE bool saveApplicationSettings(const QString &theme, qreal backdropOpacity, const QString &backdrop,
                                              const QString &fontFamily, int fontSize, qreal terminalBackgroundOpacity,
                                              const QString &cursor, bool cursorShouldBlink, bool shouldCopyOnSelect,
@@ -144,10 +151,12 @@ private:
         std::unique_ptr<terminal::LocalTerminalSessionBackend> local;
         std::unique_ptr<ssh::SshTerminalSession> ssh;
         QString searchQuery;
+        QString sourceProfileId;
         std::uint32_t searchCurrent = 0;
         std::uint32_t searchTotal = 0;
         bool searchCaseSensitive = false;
         bool running = false;
+        bool recentConnectionRecorded = false;
     };
 
     void connectTerminalSignals();
@@ -165,7 +174,8 @@ private:
     void loadHostProfiles();
     void loadApplicationSettings();
     [[nodiscard]] bool persistApplicationSettings(const config::ApplicationSettings &settings);
-    [[nodiscard]] bool startSshConnection(ssh::SshConnectionRequest request);
+    [[nodiscard]] bool startSshConnection(ssh::SshConnectionRequest request, QString sourceProfileId = {});
+    void recordRecentConnection(TerminalTab &tab);
     [[nodiscard]] TerminalTab *activeTab();
     [[nodiscard]] const TerminalTab *activeTab() const;
     [[nodiscard]] TerminalTab *findTab(const QString &id);

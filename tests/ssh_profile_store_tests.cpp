@@ -23,6 +23,7 @@ namespace
         .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
         .privateKeyPath = R"(C:\Users\developer\.ssh\id_ed25519)",
         .privateKeyPassphraseRequired = true,
+        .lastConnectedUtcMs = 1'754'000'000'123,
     };
 }
 
@@ -88,6 +89,7 @@ void SshProfileStoreTests::savesAndLoadsNonSecretProfiles()
     QVERIFY(!persisted.contains("\"password\":"));
     QVERIFY(!persisted.contains("\"passphrase\":"));
     QVERIFY(persisted.contains("privateKeyPassphraseRequired"));
+    QVERIFY(persisted.contains("\"lastConnectedUtcMs\": 1754000000123"));
     QVERIFY(persisted.contains("\"group\": \"Development\""));
     QVERIFY(!persisted.contains("privateKeyContent"));
 }
@@ -107,6 +109,7 @@ void SshProfileStoreTests::loadsProfilesWrittenBeforePassphraseMetadata()
     QVERIFY(profiles);
     QCOMPARE(profiles->size(), std::size_t{1});
     QVERIFY(!profiles->front().privateKeyPassphraseRequired);
+    QVERIFY(!profiles->front().lastConnectedUtcMs);
     QVERIFY(profiles->front().group.empty());
 }
 
@@ -142,6 +145,13 @@ void SshProfileStoreTests::rejectsInvalidProfilesAndDuplicateIds()
     auto oversizedGroupResult = store.save(oversizedGroupProfiles);
     QVERIFY(!oversizedGroupResult);
     QCOMPARE(oversizedGroupResult.error(), ztermy::ssh::SshProfileStoreError::InvalidFormat);
+
+    auto negativeTimestamp = privateKeyProfile();
+    negativeTimestamp.lastConnectedUtcMs = -1;
+    const std::array negativeTimestampProfiles{negativeTimestamp};
+    auto negativeTimestampResult = store.save(negativeTimestampProfiles);
+    QVERIFY(!negativeTimestampResult);
+    QCOMPARE(negativeTimestampResult.error(), ztermy::ssh::SshProfileStoreError::InvalidFormat);
 
     const auto profile = privateKeyProfile();
     const std::array duplicateProfiles{profile, profile};

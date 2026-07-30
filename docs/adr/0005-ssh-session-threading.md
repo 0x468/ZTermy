@@ -26,6 +26,9 @@ offered an ordinary accept path. An accepted key may be used once or atomically
 persisted through the application-owned known-host store before authentication.
 
 Terminal snapshots are immutable and coalesced before queued delivery to the Qt
+thread. Every other externally observable session event—phase, status,
+failure, running state, host-key prompt, clipboard text, and search
+result—is likewise delivered on the `SshTerminalSession` QObject's owner
 thread. Passwords, passphrases, terminal input, private-key contents, and
 secret-bearing command lines are not logged.
 
@@ -33,6 +36,8 @@ secret-bearing command lines are not logged.
 
 - Network stalls cannot block the GUI thread.
 - libssh2 session access has a simple single-thread ownership rule.
+- UI receivers and test observers never mutate their state from the SSH worker
+  thread.
 - Input latency is bounded by the short read interval until a native event-loop
   integration is justified by profiling.
 - One SSH connection currently owns one interactive terminal channel.

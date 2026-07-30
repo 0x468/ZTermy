@@ -63,10 +63,12 @@ constexpr qint64 currentSchemaVersion = 1;
     const QJsonValue authenticationValue = object.value(QStringLiteral("authentication"));
     const QJsonValue privateKeyPathValue = object.value(QStringLiteral("privateKeyPath"));
     const QJsonValue passphraseRequiredValue = object.value(QStringLiteral("privateKeyPassphraseRequired"));
+    const QJsonValue lastConnectedValue = object.value(QStringLiteral("lastConnectedUtcMs"));
     if (!idValue.isString() || !nameValue.isString() || (!groupValue.isUndefined() && !groupValue.isString())
         || !hostValue.isString() || !portValue.isDouble() || !usernameValue.isString()
         || !authenticationValue.isString() || !privateKeyPathValue.isString()
-        || (!passphraseRequiredValue.isUndefined() && !passphraseRequiredValue.isBool()))
+        || (!passphraseRequiredValue.isUndefined() && !passphraseRequiredValue.isBool())
+        || (!lastConnectedValue.isUndefined() && !lastConnectedValue.isDouble()))
     {
         return std::nullopt;
     }
@@ -84,6 +86,17 @@ constexpr qint64 currentSchemaVersion = 1;
         return std::nullopt;
     }
 
+    std::optional<std::int64_t> lastConnectedUtcMs;
+    if (!lastConnectedValue.isUndefined())
+    {
+        const qint64 timestamp = lastConnectedValue.toInteger(-1);
+        if (timestamp < 0 || static_cast<double>(timestamp) != lastConnectedValue.toDouble())
+        {
+            return std::nullopt;
+        }
+        lastConnectedUtcMs = timestamp;
+    }
+
     ztermy::ssh::SshProfile profile{
         .id = idValue.toString().toStdString(),
         .name = nameValue.toString().toStdString(),
@@ -94,13 +107,14 @@ constexpr qint64 currentSchemaVersion = 1;
         .authentication = *authentication,
         .privateKeyPath = privateKeyPathValue.toString().toStdString(),
         .privateKeyPassphraseRequired = passphraseRequiredValue.toBool(false),
+        .lastConnectedUtcMs = lastConnectedUtcMs,
     };
     return ztermy::ssh::validSshProfile(profile) ? std::optional{std::move(profile)} : std::nullopt;
 }
 
 [[nodiscard]] QJsonObject serializeProfile(const ztermy::ssh::SshProfile &profile)
 {
-    return {
+    QJsonObject object{
         {QStringLiteral("id"), QString::fromStdString(profile.id)},
         {QStringLiteral("name"), QString::fromStdString(profile.name)},
         {QStringLiteral("group"), QString::fromStdString(profile.group)},
@@ -111,6 +125,11 @@ constexpr qint64 currentSchemaVersion = 1;
         {QStringLiteral("privateKeyPath"), QString::fromStdString(profile.privateKeyPath)},
         {QStringLiteral("privateKeyPassphraseRequired"), profile.privateKeyPassphraseRequired},
     };
+    if (profile.lastConnectedUtcMs)
+    {
+        object.insert(QStringLiteral("lastConnectedUtcMs"), *profile.lastConnectedUtcMs);
+    }
+    return object;
 }
 
 [[nodiscard]] bool duplicateIds(const std::span<const ztermy::ssh::SshProfile> profiles)

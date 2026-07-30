@@ -21,6 +21,9 @@ Rectangle {
     property string pendingConnectId: ""
     property string pendingConnectName: ""
     property string pendingConnectAuthentication: ""
+    property var pendingQuickTarget: ({})
+    property string quickConnectMessage: ""
+    property bool quickConnectMessageIsError: false
     property string expandedActionsProfileId: ""
     property bool statusIsError: false
     property bool editorExpanded: controller.hostProfiles.length === 0
@@ -54,6 +57,48 @@ Rectangle {
 
     function authenticationToken() {
         return authenticationBox.currentIndex === 0 ? "private-key" : "password";
+    }
+
+    function formatRecentConnection(timestamp) {
+        return Qt.formatDateTime(new Date(Number(timestamp)), "yyyy-MM-dd HH:mm");
+    }
+
+    function openQuickConnect(sourceItem) {
+        const parsed = controller.parseQuickConnectTarget(quickConnectTarget.text);
+        if (!parsed.valid) {
+            quickConnectMessage = parsed.error;
+            quickConnectMessageIsError = true;
+            quickConnectTarget.forceActiveFocus();
+            return;
+        }
+        pendingQuickTarget = parsed;
+        quickConnectMessage = "";
+        quickConnectMessageIsError = false;
+        quickAuthentication.currentIndex = 0;
+        quickKeyPath.text = controller.defaultPrivateKeyPath;
+        quickPassphraseRequired.checked = false;
+        quickCredential.text = "";
+        quickSaveProfile.checked = false;
+        quickProfileName.text = parsed.username + "@" + parsed.host;
+        quickGroup.text = "";
+        quickDialogStatus.text = "";
+        quickConnectDialog.focusRestoreItem = sourceItem;
+        quickConnectDialog.open();
+    }
+
+    function connectQuickTarget() {
+        const secret = quickCredential.text;
+        quickCredential.text = "";
+        const authentication = quickAuthentication.currentIndex === 0 ? "private-key" : "password";
+        const started = controller.connectQuick(quickConnectTarget.text, authentication, quickKeyPath.text, quickPassphraseRequired.checked, secret, quickSaveProfile.checked, quickProfileName.text, quickGroup.text);
+        if (started) {
+            quickConnectDialog.close();
+            quickConnectTarget.text = "";
+            connectionStarted();
+        } else {
+            quickDialogStatus.kind = "error";
+            quickDialogStatus.text = "The quick connection could not be started. Check authentication and required fields.";
+        }
     }
 
     function buildFilteredGroups(profiles, searchText) {
@@ -263,6 +308,62 @@ Rectangle {
                 }
             }
 
+            SectionCard {
+                objectName: "quickConnectCard"
+                Layout.fillWidth: true
+                heading: "Quick connect"
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacingControl
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: "Connect without creating a saved profile. Use user@host, user@host:port, or user@[IPv6]:port."
+                        color: pane.mutedColor
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.spacingControl
+
+                        AppTextField {
+                            id: quickConnectTarget
+
+                            objectName: "quickConnectTarget"
+                            Layout.fillWidth: true
+                            placeholderText: "user@host[:port]"
+                            accessibleName: "Quick connect SSH target"
+                            selectByMouse: true
+                            onTextEdited: {
+                                pane.quickConnectMessage = "";
+                                pane.quickConnectMessageIsError = false;
+                            }
+                            onAccepted: pane.openQuickConnect(quickConnectTarget)
+                        }
+
+                        ActionButton {
+                            id: quickConnectAction
+
+                            objectName: "quickConnectAction"
+                            text: "Connect"
+                            accessibleName: "Configure quick SSH connection"
+                            variant: "primary"
+                            onClicked: pane.openQuickConnect(quickConnectAction)
+                        }
+                    }
+
+                    StatusMessage {
+                        Layout.fillWidth: true
+                        text: pane.quickConnectMessage
+                        kind: pane.quickConnectMessageIsError ? "error" : "info"
+                    }
+                }
+            }
+
             RowLayout {
                 Layout.fillWidth: true
                 Layout.topMargin: 8
@@ -283,6 +384,108 @@ Rectangle {
                     color: pane.mutedColor
                     font.family: Theme.uiFont
                     font.pixelSize: Theme.textLabel
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                visible: pane.controller.recentHostProfiles.length > 0
+                spacing: 8
+
+                Text {
+                    Layout.fillWidth: true
+                    text: "RECENT CONNECTIONS"
+                    color: pane.mutedColor
+                    font.family: Theme.uiFont
+                    font.pixelSize: 11
+                    font.weight: Font.DemiBold
+                    font.letterSpacing: 0.6
+                }
+
+                Flow {
+                    id: recentProfileFlow
+
+                    readonly property int columns: pane.profileCardColumns
+                    readonly property real cardWidth: Math.max(0, (width - (spacing * (columns - 1))) / columns)
+
+                    objectName: "recentConnectionsFlow"
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: childrenRect.height
+                    spacing: Theme.spacingRelated
+
+                    Repeater {
+                        model: pane.controller.recentHostProfiles
+
+                        delegate: Rectangle {
+                            id: recentProfileCard
+
+                            required property var modelData
+
+                            width: recentProfileFlow.cardWidth
+                            height: 104
+                            radius: Theme.radiusControl
+                            color: recentCardHover.hovered ? Theme.controlHover : pane.raisedColor
+                            border.color: recentCardHover.hovered ? Theme.borderStrong : pane.borderColor
+
+                            Behavior on color {
+                                ColorAnimation {
+                                    duration: Theme.motionFast
+                                }
+                            }
+
+                            HoverHandler {
+                                id: recentCardHover
+                            }
+
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                spacing: 3
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: recentProfileCard.modelData.name
+                                        color: pane.textColor
+                                        elide: Text.ElideRight
+                                        font.family: Theme.uiFont
+                                        font.pixelSize: Theme.textBody
+                                        font.weight: Font.DemiBold
+                                    }
+
+                                    ActionButton {
+                                        id: recentConnectButton
+
+                                        objectName: "recentHostConnectAction"
+                                        text: "Connect"
+                                        accessibleName: "Reconnect to " + recentProfileCard.modelData.name
+                                        variant: "primary"
+                                        onClicked: pane.connectSaved(recentProfileCard.modelData, recentConnectButton)
+                                    }
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: recentProfileCard.modelData.username + "@" + recentProfileCard.modelData.host + ":" + recentProfileCard.modelData.port
+                                    color: pane.mutedColor
+                                    elide: Text.ElideMiddle
+                                    font.family: Theme.terminalFont
+                                    font.pixelSize: Theme.textLabel
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: "Last connected " + pane.formatRecentConnection(recentProfileCard.modelData.lastConnectedUtcMs)
+                                    color: Theme.textSubtle
+                                    elide: Text.ElideRight
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.textCompact
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -779,6 +982,235 @@ Rectangle {
                             variant: "primary"
                             onClicked: pane.connectCurrent()
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    Dialog {
+        id: quickConnectDialog
+
+        objectName: "quickConnectDialog"
+        property Item focusRestoreItem: null
+
+        anchors.centerIn: parent
+        width: Math.min(520, Math.max(0, parent ? parent.width - 48 : 520))
+        height: Math.min(560, Math.max(0, parent ? parent.height - 48 : 560))
+        modal: true
+        dim: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape
+        padding: 20
+        onAboutToShow: Qt.callLater(quickAuthentication.forceActiveFocus)
+        onClosed: {
+            const restoreItem = focusRestoreItem;
+            focusRestoreItem = null;
+            quickCredential.text = "";
+            quickDialogStatus.text = "";
+            pane.pendingQuickTarget = ({});
+            if (restoreItem && restoreItem.visible && restoreItem.enabled) {
+                Qt.callLater(() => restoreItem.forceActiveFocus());
+            }
+        }
+
+        enter: Transition {
+            NumberAnimation {
+                property: "opacity"
+                from: 0
+                to: 1
+                duration: Theme.motionMedium
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        exit: Transition {
+            NumberAnimation {
+                property: "opacity"
+                from: 1
+                to: 0
+                duration: Theme.motionFast
+                easing.type: Easing.InCubic
+            }
+        }
+
+        Overlay.modal: Rectangle {
+            color: Theme.modalScrim
+        }
+
+        background: Rectangle {
+            radius: Theme.radiusPanel
+            color: pane.raisedColor
+            border.color: Theme.borderStrong
+
+            transform: Translate {
+                y: quickConnectDialog.visible ? 0 : Theme.motionDistanceSmall
+
+                Behavior on y {
+                    NumberAnimation {
+                        duration: Theme.motionMedium
+                        easing.type: Easing.OutCubic
+                    }
+                }
+            }
+        }
+
+        contentItem: ScrollView {
+            id: quickConnectScroll
+
+            clip: true
+            contentWidth: availableWidth
+            contentHeight: quickConnectContent.implicitHeight
+            Accessible.role: Accessible.Dialog
+            Accessible.name: "Quick SSH connection"
+
+            ColumnLayout {
+                id: quickConnectContent
+
+                width: quickConnectScroll.availableWidth
+                spacing: 12
+
+                Text {
+                    Layout.fillWidth: true
+                    text: "Quick connect"
+                    color: pane.textColor
+                    font.family: Theme.uiFont
+                    font.pixelSize: 18
+                    font.weight: Font.DemiBold
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: pane.pendingQuickTarget.valid ? pane.pendingQuickTarget.username + "@" + pane.pendingQuickTarget.host + ":" + pane.pendingQuickTarget.port : ""
+                    color: pane.mutedColor
+                    elide: Text.ElideMiddle
+                    font.family: Theme.terminalFont
+                    font.pixelSize: Theme.textLabel
+                }
+
+                Label {
+                    text: "Authentication"
+                    color: pane.textColor
+                }
+
+                AppComboBox {
+                    id: quickAuthentication
+
+                    objectName: "quickAuthentication"
+                    Layout.fillWidth: true
+                    model: ["Private key", "Password"]
+                    accessibleName: "Quick connect authentication method"
+                    onCurrentIndexChanged: {
+                        quickCredential.text = "";
+                        if (currentIndex === 1) {
+                            quickPassphraseRequired.checked = false;
+                        }
+                    }
+                }
+
+                AppTextField {
+                    id: quickKeyPath
+
+                    objectName: "quickKeyPath"
+                    Layout.fillWidth: true
+                    visible: quickAuthentication.currentIndex === 0
+                    placeholderText: "Private-key file"
+                    accessibleName: "Quick connect private-key file"
+                    selectByMouse: true
+                }
+
+                AppCheckBox {
+                    id: quickPassphraseRequired
+
+                    objectName: "quickPassphraseRequired"
+                    Layout.fillWidth: true
+                    visible: quickAuthentication.currentIndex === 0
+                    text: "This private key requires a passphrase"
+                    accessibleName: "Quick connect private key requires a passphrase"
+                    onCheckedChanged: quickCredential.text = ""
+                }
+
+                AppTextField {
+                    id: quickCredential
+
+                    objectName: "quickCredential"
+                    Layout.fillWidth: true
+                    visible: quickAuthentication.currentIndex === 1 || quickPassphraseRequired.checked
+                    placeholderText: quickAuthentication.currentIndex === 1 ? "SSH password" : "Private-key passphrase"
+                    echoMode: TextInput.Password
+                    accessibleName: placeholderText
+                    selectByMouse: true
+                    onAccepted: {
+                        if (quickConnectConfirm.enabled) {
+                            pane.connectQuickTarget();
+                        }
+                    }
+                }
+
+                AppCheckBox {
+                    id: quickSaveProfile
+
+                    objectName: "quickSaveProfile"
+                    Layout.fillWidth: true
+                    text: "Save as a reusable host profile"
+                    accessibleName: "Save quick connection as host profile"
+                }
+
+                AppTextField {
+                    id: quickProfileName
+
+                    objectName: "quickProfileName"
+                    Layout.fillWidth: true
+                    visible: quickSaveProfile.checked
+                    placeholderText: "Profile name"
+                    accessibleName: "Quick connection profile name"
+                    selectByMouse: true
+                }
+
+                AppTextField {
+                    id: quickGroup
+
+                    objectName: "quickGroup"
+                    Layout.fillWidth: true
+                    visible: quickSaveProfile.checked
+                    placeholderText: "Group (optional)"
+                    accessibleName: "Quick connection profile group"
+                    selectByMouse: true
+                }
+
+                StatusMessage {
+                    id: quickDialogStatus
+
+                    Layout.fillWidth: true
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+
+                    Item {
+                        Layout.fillWidth: true
+                    }
+
+                    ActionButton {
+                        id: quickConnectCancel
+
+                        objectName: "quickConnectCancel"
+                        text: "Cancel"
+                        accessibleName: "Cancel quick SSH connection"
+                        KeyNavigation.right: quickConnectConfirm
+                        onClicked: quickConnectDialog.close()
+                    }
+
+                    ActionButton {
+                        id: quickConnectConfirm
+
+                        objectName: "quickConnectConfirm"
+                        text: "Connect"
+                        accessibleName: "Start quick SSH connection"
+                        enabled: (quickAuthentication.currentIndex === 1 || quickKeyPath.text.trim().length > 0) && (quickAuthentication.currentIndex === 0 || quickCredential.text.length > 0) && (!quickPassphraseRequired.checked || quickCredential.text.length > 0) && (!quickSaveProfile.checked || quickProfileName.text.trim().length > 0)
+                        variant: "primary"
+                        KeyNavigation.left: quickConnectCancel
+                        onClicked: pane.connectQuickTarget()
                     }
                 }
             }

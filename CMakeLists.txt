@@ -185,6 +185,8 @@ add_library(ztermy_ssh_domain STATIC
     src/domain/ssh/SshHostKey.h
     src/domain/ssh/SshProfile.cpp
     src/domain/ssh/SshProfile.h
+    src/domain/ssh/SshTarget.cpp
+    src/domain/ssh/SshTarget.h
 )
 
 add_library(ztermy_ssh_persistence STATIC
@@ -900,6 +902,27 @@ if(BUILD_TESTING)
 
     add_test(NAME ssh-profile-store COMMAND ztermy_ssh_profile_store_tests)
 
+    qt_add_executable(ztermy_ssh_target_tests
+        tests/ssh_target_tests.cpp
+    )
+
+    target_compile_features(ztermy_ssh_target_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ssh_target_tests PRIVATE
+        ztermy_ssh_domain
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ssh_target_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ssh-target COMMAND ztermy_ssh_target_tests)
+
     qt_add_executable(ztermy_windows_tcp_socket_tests
         tests/windows_tcp_socket_tests.cpp
     )
@@ -970,6 +993,9 @@ if(BUILD_TESTING)
     )
 
     target_compile_features(ztermy_ssh_terminal_session_tests PRIVATE cxx_std_23)
+    set_target_properties(ztermy_ssh_terminal_session_tests PROPERTIES
+        WIN32_EXECUTABLE FALSE
+    )
     target_link_libraries(ztermy_ssh_terminal_session_tests PRIVATE
         ztermy_ssh_session
         Qt6::Network
@@ -985,7 +1011,7 @@ if(BUILD_TESTING)
         )
     endif()
 
-    add_test(NAME ssh-terminal-session COMMAND ztermy_ssh_terminal_session_tests)
+    add_test(NAME ssh-terminal-session COMMAND ztermy_ssh_terminal_session_tests -o -,txt)
 
     qt_add_executable(ztermy_terminal_engine_tests
         tests/terminal_engine_tests.cpp
@@ -1230,6 +1256,7 @@ if(BUILD_TESTING)
             ztermy_ssh_host_key_tests
             ztermy_known_hosts_store_tests
             ztermy_ssh_profile_store_tests
+            ztermy_ssh_target_tests
             ztermy_windows_tcp_socket_tests
             ztermy_ssh_handshake_tests
             ztermy_ssh_real_host_tests

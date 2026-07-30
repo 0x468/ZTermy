@@ -20,9 +20,11 @@
 #include <QTcpSocket>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QThread>
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdio>
@@ -173,16 +175,12 @@ void drainConsoleLine(const HANDLE input) noexcept
     return ztermy::security::SensitiveByteArray(std::move(utf8Password));
 }
 
-void captureMessage(const QtMsgType type, const QMessageLogContext &context, const QString &message)
+void captureMessage(const QtMsgType, const QMessageLogContext &, const QString &message)
 {
-    {
-        const QMutexLocker locker(capturedMessageMutex());
-        capturedMessages->append(message);
-    }
-    if (previousMessageHandler != nullptr)
-    {
-        previousMessageHandler(type, context, message);
-    }
+    // This handler is also called by the SSH worker. Forwarding into QtTest's
+    // process-global handler from that thread races its test-function logger.
+    const QMutexLocker locker(capturedMessageMutex());
+    capturedMessages->append(message);
 }
 
 class ScopedMessageCapture final
@@ -347,6 +345,13 @@ void SshTerminalSessionTests::reportsHandshakeTimeoutFromSilentPeer()
     ztermy::ssh::SshTerminalSession session;
     QSignalSpy failureSpy(&session, &ztermy::ssh::SshTerminalSession::failureOccurred);
     QSignalSpy statusSpy(&session, &ztermy::ssh::SshTerminalSession::statusChanged);
+    std::atomic_bool failureEmittedOnOwnerThread = false;
+    QObject::connect(
+        &session, &ztermy::ssh::SshTerminalSession::failureOccurred, &session,
+        [&session, &failureEmittedOnOwnerThread] {
+            failureEmittedOnOwnerThread.store(QThread::currentThread() == session.thread());
+        },
+        Qt::DirectConnection);
     ztermy::ssh::SshConnectionRequest request{
         .host = QStringLiteral("127.0.0.1"),
         .port = silentServer.serverPort(),
@@ -371,6 +376,7 @@ void SshTerminalSessionTests::reportsHandshakeTimeoutFromSilentPeer()
     QVERIFY(!statusSpy.isEmpty());
     QCOMPARE(statusSpy.constLast().constFirst().toString(),
              ztermy::ssh::sshFailureStatus(ztermy::ssh::SshFailureKind::TimedOut));
+    QVERIFY(failureEmittedOnOwnerThread.load());
     session.stop();
 }
 

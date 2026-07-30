@@ -8,6 +8,7 @@
 
 #include <QLoggingCategory>
 #include <QMetaObject>
+#include <QThread>
 
 #include <array>
 #include <chrono>
@@ -445,7 +446,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     SshConnectionState state;
     const auto finishFailure = [this, &state](const SshFailureKind failure, const QString &status = QString{}) {
         failState(state, failure);
-        emit failureOccurred(failure);
+        postFailure(failure);
         finishWorker(status.isEmpty() ? sshFailureStatus(failure) : status, state.phase());
     };
 
@@ -506,7 +507,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     const QString fingerprint = QString::fromStdString(sha256Fingerprint(*hostKey));
     if (*trust == HostKeyTrust::Changed)
     {
-        emit hostKeyChanged(algorithm, fingerprint);
+        postHostKeyChange(algorithm, fingerprint);
         finishFailure(SshFailureKind::HostKeyChanged);
         return;
     }
@@ -520,7 +521,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
             std::scoped_lock lock(m_hostKeyMutex);
             m_awaitingHostKey = true;
         }
-        emit hostKeyConfirmationRequired(algorithm, fingerprint);
+        postHostKeyConfirmation(algorithm, fingerprint);
 
         HostKeyDecision decision = HostKeyDecision::Pending;
         {
@@ -606,7 +607,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     postPhase(state.phase());
     postStatus(QStringLiteral("SSH terminal connected"));
     m_running.store(true);
-    emit runningChanged(true);
+    postRunning(true);
     publishSnapshot();
 
     std::array<char, std::size_t{64} * 1024U> readBuffer{};
@@ -709,8 +710,9 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                 }
                 else if (*selectedText)
                 {
-                    emit clipboardTextReady(
-                        QString::fromUtf8((*selectedText)->data(), static_cast<qsizetype>((*selectedText)->size())));
+                    const QString text =
+                        QString::fromUtf8((*selectedText)->data(), static_cast<qsizetype>((*selectedText)->size()));
+                    postClipboardText(text);
                 }
                 continue;
             }
@@ -726,8 +728,9 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                                    .arg(QString::fromStdString(result.error().message())));
                     continue;
                 }
-                emit searchResultReady(QString::fromUtf8(search->query), result->current, result->total,
-                                       result->wrapped);
+                const QString query = QString::fromUtf8(search->query);
+                const terminal::TerminalSearchResult searchResult = *result;
+                postSearchResult(query, searchResult.current, searchResult.total, searchResult.wrapped);
                 publishSnapshot();
                 continue;
             }
@@ -740,7 +743,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                                    .arg(QString::fromStdString(error.message())));
                     continue;
                 }
-                emit searchResultReady({}, 0, 0, false);
+                postSearchResult({}, 0, 0, false);
                 publishSnapshot();
                 continue;
             }
@@ -853,12 +856,112 @@ void SshTerminalSession::deliverLatestSnapshot()
 
 void SshTerminalSession::postStatus(const QString &status)
 {
-    emit statusChanged(status);
+    if (QThread::currentThread() == thread())
+    {
+        deliverStatus(status);
+        return;
+    }
+    if (!QMetaObject::invokeMethod(this, "deliverStatus", Qt::QueuedConnection, Q_ARG(QString, status)))
+    {
+        qCWarning(sshSessionLog) << "SSH status could not be queued to its owner thread";
+    }
 }
 
 void SshTerminalSession::postPhase(const SshConnectionPhase phase)
 {
-    emit phaseChanged(phase);
+    if (QThread::currentThread() == thread())
+    {
+        deliverPhase(phase);
+        return;
+    }
+    if (!QMetaObject::invokeMethod(this, "deliverPhase", Qt::QueuedConnection,
+                                   Q_ARG(ztermy::ssh::SshConnectionPhase, phase)))
+    {
+        qCWarning(sshSessionLog) << "SSH phase could not be queued to its owner thread";
+    }
+}
+
+void SshTerminalSession::postFailure(const SshFailureKind failure)
+{
+    if (QThread::currentThread() == thread())
+    {
+        deliverFailure(failure);
+        return;
+    }
+    if (!QMetaObject::invokeMethod(this, "deliverFailure", Qt::QueuedConnection,
+                                   Q_ARG(ztermy::ssh::SshFailureKind, failure)))
+    {
+        qCWarning(sshSessionLog) << "SSH failure could not be queued to its owner thread";
+    }
+}
+
+void SshTerminalSession::postRunning(const bool running)
+{
+    if (QThread::currentThread() == thread())
+    {
+        deliverRunning(running);
+        return;
+    }
+    if (!QMetaObject::invokeMethod(this, "deliverRunning", Qt::QueuedConnection, Q_ARG(bool, running)))
+    {
+        qCWarning(sshSessionLog) << "SSH running state could not be queued to its owner thread";
+    }
+}
+
+void SshTerminalSession::postHostKeyConfirmation(const QString &algorithm, const QString &fingerprint)
+{
+    if (QThread::currentThread() == thread())
+    {
+        deliverHostKeyConfirmation(algorithm, fingerprint);
+        return;
+    }
+    if (!QMetaObject::invokeMethod(this, "deliverHostKeyConfirmation", Qt::QueuedConnection, Q_ARG(QString, algorithm),
+                                   Q_ARG(QString, fingerprint)))
+    {
+        qCWarning(sshSessionLog) << "SSH host-key confirmation could not be queued to its owner thread";
+    }
+}
+
+void SshTerminalSession::postHostKeyChange(const QString &algorithm, const QString &fingerprint)
+{
+    if (QThread::currentThread() == thread())
+    {
+        deliverHostKeyChange(algorithm, fingerprint);
+        return;
+    }
+    if (!QMetaObject::invokeMethod(this, "deliverHostKeyChange", Qt::QueuedConnection, Q_ARG(QString, algorithm),
+                                   Q_ARG(QString, fingerprint)))
+    {
+        qCWarning(sshSessionLog) << "SSH host-key change could not be queued to its owner thread";
+    }
+}
+
+void SshTerminalSession::postClipboardText(const QString &text)
+{
+    if (QThread::currentThread() == thread())
+    {
+        deliverClipboardText(text);
+        return;
+    }
+    if (!QMetaObject::invokeMethod(this, "deliverClipboardText", Qt::QueuedConnection, Q_ARG(QString, text)))
+    {
+        qCWarning(sshSessionLog) << "SSH clipboard text could not be queued to its owner thread";
+    }
+}
+
+void SshTerminalSession::postSearchResult(const QString &query, const quint32 current, const quint32 total,
+                                          const bool wrapped)
+{
+    if (QThread::currentThread() == thread())
+    {
+        deliverSearchResult(query, current, total, wrapped);
+        return;
+    }
+    if (!QMetaObject::invokeMethod(this, "deliverSearchResult", Qt::QueuedConnection, Q_ARG(QString, query),
+                                   Q_ARG(quint32, current), Q_ARG(quint32, total), Q_ARG(bool, wrapped)))
+    {
+        qCWarning(sshSessionLog) << "SSH search result could not be queued to its owner thread";
+    }
 }
 
 void SshTerminalSession::finishWorker(const QString &status, const SshConnectionPhase phase)
@@ -866,10 +969,51 @@ void SshTerminalSession::finishWorker(const QString &status, const SshConnection
     logMetrics();
     if (m_running.exchange(false))
     {
-        emit runningChanged(false);
+        postRunning(false);
     }
     postPhase(phase);
     postStatus(status);
+}
+
+void SshTerminalSession::deliverStatus(const QString &status)
+{
+    emit statusChanged(status);
+}
+
+void SshTerminalSession::deliverPhase(const SshConnectionPhase phase)
+{
+    emit phaseChanged(phase);
+}
+
+void SshTerminalSession::deliverFailure(const SshFailureKind failure)
+{
+    emit failureOccurred(failure);
+}
+
+void SshTerminalSession::deliverRunning(const bool running)
+{
+    emit runningChanged(running);
+}
+
+void SshTerminalSession::deliverHostKeyConfirmation(const QString &algorithm, const QString &fingerprint)
+{
+    emit hostKeyConfirmationRequired(algorithm, fingerprint);
+}
+
+void SshTerminalSession::deliverHostKeyChange(const QString &algorithm, const QString &fingerprint)
+{
+    emit hostKeyChanged(algorithm, fingerprint);
+}
+
+void SshTerminalSession::deliverClipboardText(const QString &text)
+{
+    emit clipboardTextReady(text);
+}
+
+void SshTerminalSession::deliverSearchResult(const QString &query, const quint32 current, const quint32 total,
+                                             const bool wrapped)
+{
+    emit searchResultReady(query, current, total, wrapped);
 }
 
 void SshTerminalSession::signalCommandWake() noexcept
