@@ -119,9 +119,9 @@ Expected:
   `build/msvc-static-release/test-data/installer-contract`, requires per-user
   scope, `LocalAppDataFolder`, the direct Start-menu shortcut, same-version
   upgrade support, and uninstall directory removal.
-- Exactly one non-empty payload is extracted and its authored name is
-  `ztermy.exe`; `portable.flag`, DLLs, PDBs, and Ghostty development files are
-  rejected.
+- Exactly one non-empty executable payload is extracted and its authored name
+  is `ztermy.exe`, alongside one non-empty Installed Apps product icon;
+  `portable.flag`, DLLs, PDBs, and Ghostty development files are rejected.
 - No license agreement page or placeholder license is authored before the
   owner selects a project license.
 
@@ -129,6 +129,31 @@ ICE validation calls the Windows Installer service. Run the target from a
 normal user PowerShell or Visual Studio developer shell; heavily restricted
 automation tokens can block that service even though structural decompilation
 would still be possible.
+
+## Assemble the release handoff
+
+Build both validated static artifacts and their checksum manifests together:
+
+```powershell
+cmake --build --preset msvc-static-release --target ztermy_release_bundle
+```
+
+The authoritative handoff directory is recreated below:
+
+```text
+build/msvc-static-release/package/release/ztermy-0.1.0-windows-x64
+```
+
+Expected:
+
+- The directory contains exactly the MSI, portable ZIP, `SHA256SUMS.txt`, and
+  `release-manifest.json`.
+- `release-manifest.json` reports version `0.1.0`, platform `windows`, and
+  architecture `x64`; both manifests contain the exact SHA-256 values of the
+  copied artifacts.
+- Rebuilding removes stale files from the handoff directory.
+- No build tree, source file, PDB, DLL, portable marker, private data, or
+  license placeholder is added.
 
 ## Installer lifecycle
 

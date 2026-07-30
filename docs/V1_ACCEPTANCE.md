@@ -19,6 +19,11 @@ Only runtime evidence can mark a platform or UI item complete.
   menu shortcut, same-version upgrade support, uninstall directory removal,
   Installed Apps product icon, and exactly one non-empty `ztermy.exe` payload;
   it rejects portable markers, DLLs, PDBs, and Ghostty development files.
+- The static release-bundle target recreates one versioned handoff directory
+  containing only the validated portable ZIP, validated MSI,
+  `SHA256SUMS.txt`, and `release-manifest.json`. The JSON manifest identifies
+  Windows x64 version `0.1.0`, and both manifests contain the exact copied
+  artifact digests.
 - The unified V1 automated preflight passes in dynamic Debug and static
   Release. Both builds pass clang-format with `--Werror` and all 44 project
   translation units pass LLVM 22.1 clang-tidy with every enabled diagnostic
@@ -26,9 +31,9 @@ Only runtime evidence can mark a platform or UI item complete.
   and pass the generated `qmllint` module check. Every test executable is
   rebuilt before the seven real-window window, DPI, UI, keyboard, and
   terminal-render gates run serially, followed by all 20 CTest tests. The
-  static run additionally regenerates the portable ZIP and completes MSI
-  generation, ICE validation, decompilation, and payload-contract checks
-  before the runtime gates begin.
+  static run additionally regenerates the portable ZIP, completes MSI
+  generation, ICE validation, decompilation, and payload-contract checks, and
+  assembles the checksummed release bundle before the runtime gates begin.
 - The executable identity contract reads the finished PE through Win32 APIs.
   Dynamic Debug and static Release expose version `0.1.0`, the ztermy product,
   description and filename fields, and a loadable ztermy-owned multi-size

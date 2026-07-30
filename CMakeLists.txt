@@ -1197,6 +1197,24 @@ if(ZTERMY_STATIC_BUILD)
         COMMENT "Validating and inspecting the per-user ztermy MSI contract"
         VERBATIM
     )
+
+    set(ZTERMY_RELEASE_BUNDLE_ROOT
+        "${CMAKE_BINARY_DIR}/package/release/ztermy-${PROJECT_VERSION}-windows-x64"
+    )
+    add_custom_target(ztermy_release_bundle
+        COMMAND "${CMAKE_COMMAND}"
+                "-DZTERMY_BUILD_ROOT=${CMAKE_BINARY_DIR}"
+                "-DZTERMY_RELEASE_BUNDLE_ROOT=${ZTERMY_RELEASE_BUNDLE_ROOT}"
+                "-DZTERMY_RELEASE_VERSION=${PROJECT_VERSION}"
+                "-DZTERMY_PORTABLE_ARCHIVE=${ZTERMY_PORTABLE_PACKAGE_ROOT}/ztermy-${PROJECT_VERSION}-windows-x64-portable.zip"
+                "-DZTERMY_INSTALLER=${CMAKE_BINARY_DIR}/ztermy-${PROJECT_VERSION}-windows-x64.msi"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/AssembleReleaseBundle.cmake"
+        DEPENDS
+            ztermy_portable_package
+            ztermy_installer_contract_smoke
+        COMMENT "Assembling the checksummed ztermy release bundle"
+        VERBATIM
+    )
 endif()
 
 if(BUILD_TESTING)
@@ -1349,8 +1367,7 @@ if(BUILD_TESTING)
 
     if(ZTERMY_STATIC_BUILD)
         list(APPEND ZTERMY_V1_PREFLIGHT_PREREQUISITES
-            ztermy_portable_package
-            ztermy_installer_contract_smoke
+            ztermy_release_bundle
         )
     endif()
 
@@ -1414,6 +1431,7 @@ unset(ZTERMY_TIDY_SOURCES)
 unset(ZTERMY_TIDY_TEST_SOURCES)
 unset(ZTERMY_TIDY_TOOL_SOURCES)
 unset(ZTERMY_QML_FORMAT_WORK_ROOT)
+unset(ZTERMY_RELEASE_BUNDLE_ROOT)
 unset(ZTERMY_CLANG_FORMAT_VERSION_OUTPUT)
 unset(ZTERMY_CLANG_FORMAT_VERSION_RESULT)
 unset(ZTERMY_CLANG_TIDY_VERSION_OUTPUT)

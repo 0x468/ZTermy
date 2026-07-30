@@ -3,7 +3,7 @@
 This runbook is the single manual sign-off entry point for the remaining V1
 acceptance items. Detailed procedures remain in the linked topic documents.
 Run it against one immutable static Release candidate; do not rebuild or
-replace the MSI or portable ZIP between stages.
+replace any file in the release bundle between stages.
 
 Before recording artifact hashes, run the complete automated preflight from an
 x64 Visual Studio developer PowerShell:
@@ -18,8 +18,9 @@ cmake --build --preset msvc-static-release `
 
 Expected: C++ and QML formatting, clang-tidy, and qmllint pass with diagnostics
 treated as errors; every real-window gate runs serially; the complete CTest
-suite passes; and the portable ZIP plus validated MSI are regenerated
-successfully. Do not proceed with manual sign-off when this target fails.
+suite passes; the portable ZIP plus validated MSI are regenerated; and the
+four-file checksummed release bundle is assembled successfully. Do not proceed
+with manual sign-off when this target fails.
 
 ## Evidence and result rules
 
@@ -33,25 +34,30 @@ GPU and driver:
 Primary monitor resolution/scale:
 Secondary monitor resolution/scale:
 Windows IME:
-MSI path and SHA-256:
-Portable ZIP path and SHA-256:
+Release bundle path:
+MSI filename and SHA-256:
+Portable ZIP filename and SHA-256:
 Tester:
 ```
 
-The current candidate paths are:
+The authoritative candidate directory is:
 
 ```text
-build/msvc-static-release/ztermy-0.1.0-windows-x64.msi
-build/msvc-static-release/package/portable/ztermy-0.1.0-windows-x64-portable.zip
+build/msvc-static-release/package/release/ztermy-0.1.0-windows-x64
 ```
 
-Calculate their hashes without modifying either artifact:
+Read both manifests and independently calculate the two artifact hashes:
 
 ```powershell
-Get-FileHash .\build\msvc-static-release\ztermy-0.1.0-windows-x64.msi
-Get-FileHash `
-  .\build\msvc-static-release\package\portable\ztermy-0.1.0-windows-x64-portable.zip
+Set-Location `
+  .\build\msvc-static-release\package\release\ztermy-0.1.0-windows-x64
+Get-Content .\SHA256SUMS.txt
+Get-Content .\release-manifest.json
+Get-FileHash -Algorithm SHA256 .\*.msi, .\*.zip
 ```
+
+The calculated hashes must exactly match both manifests. Do not continue if
+either candidate changes afterwards.
 
 Use only `PASS`, `FAIL`, or `NOT RUN` in the result table:
 
@@ -188,13 +194,14 @@ passing DWM readback is useful evidence but cannot mark this fallback route
 
 ## Stage E: MSI lifecycle
 
-Use the recorded MSI and complete
+Use the recorded MSI from the release bundle and complete
 [Installer lifecycle](DISTRIBUTION.md#installer-lifecycle):
 
-1. Before installing, confirm Explorer shows the green ztermy terminal icon
-   for the portable `ztermy.exe`. The `.msi` file itself may retain Windows'
-   generic package icon. Open the executable's **Properties > Details** and
-   confirm product/file version `0.1.0`, product name `ztermy`, description
+1. Extract the recorded portable ZIP into a temporary writable directory and
+   confirm Explorer shows the green ztermy terminal icon for `ztermy.exe`.
+   The `.msi` file itself may retain Windows' generic package icon. Open the
+   executable's **Properties > Details** and confirm product/file version
+   `0.1.0`, product name `ztermy`, description
    `ztermy native SSH terminal`, and original filename `ztermy.exe`.
 2. Install per-user without elevation and launch from the Start menu. Confirm
    the shortcut, taskbar, Alt+Tab, and Installed Apps entries use the same
@@ -218,8 +225,9 @@ Sandbox. It must not have Qt, OpenSSL, Visual Studio, CMake, Ninja, Zig, or
 ztermy development directories on `PATH`. Do not install developer tools to
 make the candidate run.
 
-1. Copy only the recorded MSI and portable ZIP to the clean environment and
-   verify both SHA-256 hashes.
+1. Copy all four files from the recorded release bundle to the clean
+   environment and verify the MSI and portable ZIP against both checksum
+   manifests.
 2. Extract the portable ZIP into a new writable directory and launch
    `ztermy.exe`. Open a local PowerShell terminal, run
    `Write-Output ztermy-clean-portable`, resize, and close.
