@@ -129,7 +129,9 @@ Only runtime evidence can mark a platform or UI item complete.
 
 Platform and UI checkboxes remain open until the corresponding behavior has
 been manually exercised across the required Windows 11 and mixed-DPI scenarios.
-Use [testing/WINDOW_SHELL.md](testing/WINDOW_SHELL.md) and
+Use [testing/V1_MANUAL_ACCEPTANCE.md](testing/V1_MANUAL_ACCEPTANCE.md) as the
+ordered sign-off and evidence record. It links to the detailed procedures in
+[testing/WINDOW_SHELL.md](testing/WINDOW_SHELL.md),
 [testing/TERMINAL_SESSION.md](testing/TERMINAL_SESSION.md), and
 [testing/HOST_VAULT.md](testing/HOST_VAULT.md), and
 [testing/TERMINAL_TABS_SEARCH.md](testing/TERMINAL_TABS_SEARCH.md), and
