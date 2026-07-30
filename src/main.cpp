@@ -864,6 +864,7 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
     {
         return false;
     }
+
     sendKey(window, Qt::Key_Return);
     const bool settingsApplied = controller.themePreference() == QStringLiteral("light")
                                  && qAbs(controller.backdropOpacity() - 0.95) < 0.001
@@ -899,6 +900,7 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
     {
         return false;
     }
+
     sendKey(window, Qt::Key_Return);
     QQuickItem *hostPane = quickItem(rootObject, "hostConnectionPane");
     const bool editorOpened = hostPane != nullptr && hostPane->property("editorExpanded").toBool()
@@ -960,6 +962,39 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
                                           : quickItem(rootObject, "hostSearch")->property("text").toString());
         return false;
     }
+
+    QQuickItem *savedHostCard = visualQuickItem(rootObject, "savedHostCard");
+    QQuickItem *savedHostMoreAction = visualQuickItem(rootObject, "savedHostMoreAction");
+    QQuickItem *savedHostActionsReveal = visualQuickItem(rootObject, "savedHostActionsReveal");
+    const qreal collapsedHostCardHeight = savedHostCard == nullptr ? 0.0 : savedHostCard->height();
+    if (savedHostCard == nullptr || savedHostMoreAction == nullptr || savedHostActionsReveal == nullptr
+        || !focusItem(window, savedHostMoreAction, QStringLiteral("savedHostMoreAction")))
+    {
+        qCWarning(applicationLog) << "Saved host action reveal smoke setup failed";
+        return false;
+    }
+    sendKey(window, Qt::Key_Return);
+    processWindowEventsFor(std::chrono::milliseconds{250});
+    const bool savedHostActionsExpanded = savedHostActionsReveal->isVisible()
+                                          && savedHostActionsReveal->height() >= 30.0
+                                          && savedHostCard->height() >= collapsedHostCardHeight + 30.0
+                                          && savedHostMoreAction->property("accessibleName").toString()
+                                                 == QStringLiteral("Hide actions for Keyboard smoke host");
+    sendKey(window, Qt::Key_Return);
+    processWindowEventsFor(std::chrono::milliseconds{450});
+    const bool savedHostActionsCollapsed =
+        !savedHostActionsReveal->isVisible() && savedHostCard->height() <= collapsedHostCardHeight + 1.0;
+    if (!savedHostActionsExpanded || !savedHostActionsCollapsed
+        || !focusItem(window, savedHostConnectAction, QStringLiteral("savedHostConnectAction")))
+    {
+        qCWarning(applicationLog) << "Saved host action reveal layout failed"
+                                  << "expanded=" << savedHostActionsExpanded
+                                  << "collapsed=" << savedHostActionsCollapsed
+                                  << "cardHeight=" << savedHostCard->height()
+                                  << "collapsedHeight=" << collapsedHostCardHeight;
+        return false;
+    }
+
     sendKey(window, Qt::Key_Return);
     processWindowEventsFor(std::chrono::milliseconds{100});
     const bool savedCredentialDialogOpened = namedFocusItem(window) == QStringLiteral("savedCredentialField");

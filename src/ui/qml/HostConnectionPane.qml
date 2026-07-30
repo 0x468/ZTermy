@@ -123,7 +123,7 @@ Rectangle {
         clearEditor();
         editorExpanded = true;
         showStatus("Create a reusable SSH profile or connect without saving.", false);
-        nameField.forceActiveFocus();
+        Qt.callLater(nameField.forceActiveFocus);
     }
 
     function editProfile(profile) {
@@ -139,7 +139,7 @@ Rectangle {
         passphraseRequiredBox.checked = profile.privateKeyPassphraseRequired;
         credentialField.text = "";
         showStatus("Editing \"" + profile.name + "\".", false);
-        nameField.forceActiveFocus();
+        Qt.callLater(nameField.forceActiveFocus);
     }
 
     function saveProfile() {
@@ -339,11 +339,12 @@ Rectangle {
                             delegate: Rectangle {
                                 id: profileCard
 
+                                objectName: "savedHostCard"
                                 required property var modelData
                                 readonly property bool actionsExpanded: pane.expandedActionsProfileId === modelData.id
 
                                 width: profileFlow.cardWidth
-                                height: profileContent.implicitHeight + 24
+                                height: 24 + profileHeaderRow.implicitHeight + profilePrimaryActionsRow.implicitHeight + Theme.spacingControl + (profileActionsReveal.reveal * (profileActionsRow.implicitHeight + Theme.spacingControl))
                                 radius: Theme.radiusControl
                                 color: cardHover.hovered ? Theme.controlHover : pane.raisedColor
                                 border.color: cardHover.hovered ? Theme.borderStrong : pane.borderColor
@@ -373,6 +374,8 @@ Rectangle {
                                     spacing: Theme.spacingControl
 
                                     RowLayout {
+                                        id: profileHeaderRow
+
                                         Layout.fillWidth: true
                                         spacing: Theme.spacingControl
 
@@ -434,6 +437,8 @@ Rectangle {
                                     }
 
                                     RowLayout {
+                                        id: profilePrimaryActionsRow
+
                                         Layout.fillWidth: true
                                         spacing: Theme.spacingControl
 
@@ -453,54 +458,72 @@ Rectangle {
                                         }
 
                                         ActionButton {
+                                            objectName: "savedHostMoreAction"
                                             text: profileCard.actionsExpanded ? "Less" : "More"
                                             accessibleName: (profileCard.actionsExpanded ? "Hide" : "Show") + " actions for " + profileCard.modelData.name
                                             onClicked: pane.expandedActionsProfileId = profileCard.actionsExpanded ? "" : profileCard.modelData.id
                                         }
                                     }
 
-                                    RowLayout {
-                                        Layout.fillWidth: true
-                                        visible: profileCard.actionsExpanded
-                                        opacity: profileCard.actionsExpanded ? 1.0 : 0.0
-                                        spacing: Theme.spacingControl
+                                    Item {
+                                        id: profileActionsReveal
 
-                                        Behavior on opacity {
+                                        objectName: "savedHostActionsReveal"
+                                        property real reveal: profileCard.actionsExpanded ? 1.0 : 0.0
+
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: profileActionsRow.implicitHeight * reveal
+                                        visible: reveal > 0.001
+                                        enabled: profileCard.actionsExpanded
+                                        clip: true
+
+                                        Behavior on reveal {
                                             NumberAnimation {
                                                 duration: Theme.motionMedium
+                                                easing.type: Easing.OutCubic
                                             }
                                         }
 
-                                        ActionButton {
-                                            Layout.fillWidth: true
-                                            text: "Edit"
-                                            accessibleName: "Edit " + profileCard.modelData.name
-                                            onClicked: pane.editProfile(profileCard.modelData)
-                                        }
+                                        RowLayout {
+                                            id: profileActionsRow
 
-                                        ActionButton {
-                                            Layout.fillWidth: true
-                                            text: "Copy"
-                                            accessibleName: "Copy " + profileCard.modelData.name
-                                            onClicked: {
-                                                if (pane.controller.duplicateHostProfile(profileCard.modelData.id)) {
-                                                    pane.showStatus("Profile copied. Credentials were not copied because they are never stored.", false);
-                                                } else {
-                                                    pane.showStatus("The profile could not be copied.", true);
+                                            anchors.left: parent.left
+                                            anchors.right: parent.right
+                                            anchors.top: parent.top
+                                            opacity: profileActionsReveal.reveal
+                                            spacing: Theme.spacingControl
+
+                                            ActionButton {
+                                                Layout.fillWidth: true
+                                                text: "Edit"
+                                                accessibleName: "Edit " + profileCard.modelData.name
+                                                onClicked: pane.editProfile(profileCard.modelData)
+                                            }
+
+                                            ActionButton {
+                                                Layout.fillWidth: true
+                                                text: "Copy"
+                                                accessibleName: "Copy " + profileCard.modelData.name
+                                                onClicked: {
+                                                    if (pane.controller.duplicateHostProfile(profileCard.modelData.id)) {
+                                                        pane.showStatus("Profile copied. Credentials were not copied because they are never stored.", false);
+                                                    } else {
+                                                        pane.showStatus("The profile could not be copied.", true);
+                                                    }
                                                 }
                                             }
-                                        }
 
-                                        ActionButton {
-                                            id: deleteProfileButton
+                                            ActionButton {
+                                                id: deleteProfileButton
 
-                                            Layout.fillWidth: true
-                                            text: "Delete"
-                                            accessibleName: "Delete " + profileCard.modelData.name
-                                            onClicked: {
-                                                pane.pendingDeleteId = profileCard.modelData.id;
-                                                pane.pendingDeleteName = profileCard.modelData.name;
-                                                deleteDialog.openFrom(deleteProfileButton);
+                                                Layout.fillWidth: true
+                                                text: "Delete"
+                                                accessibleName: "Delete " + profileCard.modelData.name
+                                                onClicked: {
+                                                    pane.pendingDeleteId = profileCard.modelData.id;
+                                                    pane.pendingDeleteName = profileCard.modelData.name;
+                                                    deleteDialog.openFrom(deleteProfileButton);
+                                                }
                                             }
                                         }
                                     }
@@ -512,13 +535,32 @@ Rectangle {
             }
 
             Rectangle {
+                id: profileEditor
+
+                readonly property real naturalHeight: editorColumn.implicitHeight + 40
+                property real reveal: pane.editorExpanded ? 1.0 : 0.0
+
                 Layout.fillWidth: true
                 Layout.topMargin: 10
-                implicitHeight: editorColumn.implicitHeight + 40
-                visible: pane.editorExpanded
+                Layout.preferredHeight: naturalHeight * reveal
+                implicitHeight: naturalHeight
+                visible: reveal > 0.001
+                enabled: pane.editorExpanded
+                opacity: reveal
                 radius: Theme.radiusPanel
                 color: pane.raisedColor
                 border.color: pane.borderColor
+
+                Behavior on reveal {
+                    NumberAnimation {
+                        duration: Theme.motionMedium
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
+                transform: Translate {
+                    y: (1.0 - profileEditor.reveal) * Theme.motionDistanceSmall
+                }
 
                 ColumnLayout {
                     id: editorColumn
