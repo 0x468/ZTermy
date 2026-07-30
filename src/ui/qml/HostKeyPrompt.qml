@@ -12,12 +12,20 @@ Item {
     property color mutedColor: Theme.textSoft
     property color accentColor: Theme.accent
 
-    visible: controller.hostKeyPromptVisible
-    enabled: visible
-    focus: visible
+    visible: controller.hostKeyPromptVisible || opacity > 0.001
+    enabled: controller.hostKeyPromptVisible
+    focus: enabled
+    opacity: controller.hostKeyPromptVisible ? 1 : 0
 
-    onVisibleChanged: {
-        if (visible) {
+    Behavior on opacity {
+        NumberAnimation {
+            duration: overlay.controller.hostKeyPromptVisible ? Theme.motionMedium : Theme.motionFast
+            easing.type: overlay.controller.hostKeyPromptVisible ? Easing.OutCubic : Easing.InCubic
+        }
+    }
+
+    onEnabledChanged: {
+        if (enabled) {
             Qt.callLater(rejectButton.forceActiveFocus);
         } else if (focusRestoreItem && focusRestoreItem.visible && focusRestoreItem.enabled) {
             Qt.callLater(focusRestoreItem.forceActiveFocus);
@@ -39,12 +47,28 @@ Item {
     }
 
     Rectangle {
+        id: promptPanel
+
+        objectName: "hostKeyPromptPanel"
         width: Math.min(560, overlay.width - 48)
         implicitHeight: promptLayout.implicitHeight + 40
         anchors.centerIn: parent
         radius: Theme.radiusPanel
         color: overlay.panelColor
         border.color: overlay.controller.hostKeyChangedWarning ? Theme.danger : overlay.borderColor
+        Accessible.role: Accessible.Dialog
+        Accessible.name: overlay.controller.hostKeyChangedWarning ? "Host identity changed" : "Verify host identity"
+
+        transform: Translate {
+            y: overlay.controller.hostKeyPromptVisible ? 0 : Theme.motionDistanceSmall
+
+            Behavior on y {
+                NumberAnimation {
+                    duration: Theme.motionMedium
+                    easing.type: Easing.OutCubic
+                }
+            }
+        }
 
         ColumnLayout {
             id: promptLayout
@@ -117,7 +141,7 @@ Item {
 
                     objectName: "hostKeyReject"
                     text: overlay.controller.hostKeyChangedWarning ? "Close" : "Reject"
-                    Accessible.name: text
+                    accessibleName: text
                     KeyNavigation.left: rememberButton.visible ? rememberButton : rejectButton
                     KeyNavigation.right: trustOnceButton.visible ? trustOnceButton : rejectButton
                     onClicked: overlay.controller.rejectHostKey()
@@ -129,7 +153,7 @@ Item {
                     objectName: "hostKeyTrustOnce"
                     visible: !overlay.controller.hostKeyChangedWarning
                     text: "Trust once"
-                    Accessible.name: "Trust this host once"
+                    accessibleName: "Trust this host once"
                     KeyNavigation.left: rejectButton
                     KeyNavigation.right: rememberButton
                     onClicked: overlay.controller.acceptHostKey(false)
@@ -141,7 +165,7 @@ Item {
                     objectName: "hostKeyRemember"
                     visible: !overlay.controller.hostKeyChangedWarning
                     text: "Trust and remember"
-                    Accessible.name: "Trust and remember this host"
+                    accessibleName: "Trust and remember this host"
                     variant: "primary"
                     KeyNavigation.left: trustOnceButton
                     KeyNavigation.right: rejectButton

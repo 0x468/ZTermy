@@ -1008,6 +1008,7 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
     sendKey(window, Qt::Key_Right);
     const bool arrowMovedDialogFocus = namedFocusItem(window) == QStringLiteral("multilinePasteAccept");
     sendKey(window, Qt::Key_Escape);
+    processWindowEventsFor(std::chrono::milliseconds{180});
     const bool dialogKeyboard =
         safeDialogFocus && arrowMovedDialogFocus && namedFocusItem(window) == QStringLiteral("terminalViewport");
     if (!dialogKeyboard)

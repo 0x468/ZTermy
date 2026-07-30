@@ -25,11 +25,12 @@ Dialog {
     anchors.centerIn: parent
     width: Math.min(440, Math.max(0, parent ? parent.width - 48 : 440))
     modal: true
+    dim: true
     focus: true
     closePolicy: Popup.CloseOnEscape
     padding: 20
 
-    onOpened: rejectButton.forceActiveFocus()
+    onAboutToShow: Qt.callLater(rejectButton.forceActiveFocus)
     onClosed: {
         const restoreItem = focusRestoreItem;
         focusRestoreItem = null;
@@ -38,10 +39,45 @@ Dialog {
         }
     }
 
+    enter: Transition {
+        NumberAnimation {
+            property: "opacity"
+            from: 0
+            to: 1
+            duration: Theme.motionMedium
+            easing.type: Easing.OutCubic
+        }
+    }
+
+    exit: Transition {
+        NumberAnimation {
+            property: "opacity"
+            from: 1
+            to: 0
+            duration: Theme.motionFast
+            easing.type: Easing.InCubic
+        }
+    }
+
+    Overlay.modal: Rectangle {
+        color: Theme.modalScrim
+    }
+
     background: Rectangle {
         radius: Theme.radiusPanel
         color: Theme.elevatedBackground
         border.color: control.destructive ? Theme.dangerBorder : Theme.borderStrong
+
+        transform: Translate {
+            y: control.visible ? 0 : Theme.motionDistanceSmall
+
+            Behavior on y {
+                NumberAnimation {
+                    duration: Theme.motionMedium
+                    easing.type: Easing.OutCubic
+                }
+            }
+        }
     }
 
     contentItem: ColumnLayout {
