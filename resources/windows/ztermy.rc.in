@@ -1,0 +1,38 @@
+#include <winver.h>
+
+#define IDI_ZTERMY_ICON 101
+
+IDI_ZTERMY_ICON ICON "@ZTERMY_WINDOWS_ICON_PATH@"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
+ PRODUCTVERSION @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
+ FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+#ifdef _DEBUG
+ FILEFLAGS VS_FF_DEBUG
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "ztermy"
+            VALUE "FileDescription", "ztermy native SSH terminal"
+            VALUE "FileVersion", "@PROJECT_VERSION@"
+            VALUE "InternalName", "ztermy"
+            VALUE "LegalCopyright", "Copyright (C) 2026 ztermy contributors"
+            VALUE "OriginalFilename", "ztermy.exe"
+            VALUE "ProductName", "ztermy"
+            VALUE "ProductVersion", "@PROJECT_VERSION@"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END

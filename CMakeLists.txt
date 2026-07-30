@@ -4,7 +4,7 @@ project(
     ztermy
     VERSION 0.1.0
     DESCRIPTION "A native Windows SSH terminal"
-    LANGUAGES C CXX
+    LANGUAGES C CXX RC
 )
 
 # Some localized MSVC installations emit /showIncludes text as UTF-8 while
@@ -98,6 +98,43 @@ elseif(NOT ZTERMY_STATIC_BUILD AND NOT ZTERMY_QT_CORE_TARGET_TYPE STREQUAL "SHAR
 endif()
 
 qt_standard_project_setup(REQUIRES 6.8)
+
+set(ZTERMY_GENERATED_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
+file(MAKE_DIRECTORY "${ZTERMY_GENERATED_DIRECTORY}")
+configure_file(
+    cmake/ztermy_version.h.in
+    "${ZTERMY_GENERATED_DIRECTORY}/ztermy_version.h"
+    @ONLY
+)
+
+add_executable(ztermy_windows_icon_generator
+    tools/WindowsIconGenerator.cpp
+)
+target_compile_features(ztermy_windows_icon_generator PRIVATE cxx_std_23)
+set_target_properties(ztermy_windows_icon_generator PROPERTIES
+    AUTOMOC OFF
+    AUTOUIC OFF
+)
+
+set(ZTERMY_WINDOWS_ICON_PATH "${ZTERMY_GENERATED_DIRECTORY}/ztermy.ico")
+add_custom_command(
+    OUTPUT "${ZTERMY_WINDOWS_ICON_PATH}"
+    COMMAND "$<TARGET_FILE:ztermy_windows_icon_generator>"
+            "${ZTERMY_WINDOWS_ICON_PATH}"
+    DEPENDS ztermy_windows_icon_generator
+    COMMENT "Generating the deterministic ztermy Windows icon"
+    VERBATIM
+)
+
+configure_file(
+    resources/windows/ztermy.rc.in
+    "${ZTERMY_GENERATED_DIRECTORY}/ztermy.rc"
+    @ONLY
+)
+set_property(
+    SOURCE "${ZTERMY_GENERATED_DIRECTORY}/ztermy.rc"
+    APPEND PROPERTY OBJECT_DEPENDS "${ZTERMY_WINDOWS_ICON_PATH}"
+)
 
 add_library(ztermy_core_config STATIC
     src/core/config/ApplicationPaths.cpp
@@ -259,6 +296,7 @@ qt_add_executable(ztermy WIN32
     src/platform/windows/WindowsUiSettings.cpp
     src/platform/windows/WindowsUiSettings.h
     resources/windows/ztermy.manifest
+    "${ZTERMY_GENERATED_DIRECTORY}/ztermy.rc"
 )
 
 set_source_files_properties(
@@ -382,6 +420,7 @@ qt_generate_foreign_qml_types(ztermy_terminal_ui ztermy)
 target_compile_features(ztermy PRIVATE cxx_std_23)
 target_include_directories(ztermy PRIVATE
     "${CMAKE_CURRENT_BINARY_DIR}"
+    "${ZTERMY_GENERATED_DIRECTORY}"
     src
     src/ui/terminal
 )
@@ -561,6 +600,13 @@ if(ZTERMY_STATIC_BUILD)
 endif()
 
 if(MSVC)
+    target_compile_options(ztermy_windows_icon_generator PRIVATE
+        /permissive-
+        /utf-8
+        /W4
+        /Zc:__cplusplus
+    )
+
     target_compile_options(ztermy_core_diagnostics PRIVATE
         /permissive-
         /utf-8
@@ -1042,6 +1088,38 @@ if(BUILD_TESTING)
 
     add_test(NAME terminal-item COMMAND ztermy_terminal_item_tests)
 
+    qt_add_executable(ztermy_windows_executable_metadata_tests
+        tests/windows_executable_metadata_tests.cpp
+    )
+
+    target_compile_features(ztermy_windows_executable_metadata_tests PRIVATE cxx_std_23)
+    target_compile_definitions(ztermy_windows_executable_metadata_tests PRIVATE
+        NOMINMAX
+        UNICODE
+        WIN32_LEAN_AND_MEAN
+        _UNICODE
+        ZTERMY_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
+        ZTERMY_VERSION_MINOR=${PROJECT_VERSION_MINOR}
+        ZTERMY_VERSION_PATCH=${PROJECT_VERSION_PATCH}
+        ZTERMY_VERSION_STRING="${PROJECT_VERSION}"
+    )
+    target_link_libraries(ztermy_windows_executable_metadata_tests PRIVATE
+        Qt6::Test
+        version
+    )
+    add_dependencies(ztermy_windows_executable_metadata_tests ztermy)
+
+    if(MSVC)
+        target_compile_options(ztermy_windows_executable_metadata_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME windows-executable-metadata COMMAND ztermy_windows_executable_metadata_tests)
+
     add_test(
         NAME qml-native-window-smoke
         COMMAND ztermy
@@ -1080,6 +1158,7 @@ if(ZTERMY_STATIC_BUILD)
     set(CPACK_WIX_ROOT_FEATURE_TITLE "ztermy")
     set(CPACK_WIX_ROOT_FEATURE_DESCRIPTION "Native SSH terminal application")
     set(CPACK_WIX_PROPERTY_ARPCOMMENTS "Windows 11 native SSH terminal")
+    set(CPACK_WIX_PRODUCT_ICON "${ZTERMY_WINDOWS_ICON_PATH}")
 
     include(CPack)
 
@@ -1141,6 +1220,7 @@ if(BUILD_TESTING)
             ztermy_local_terminal_session_tests
             ztermy_app_controller_tests
             ztermy_terminal_item_tests
+            ztermy_windows_executable_metadata_tests
     )
 endif()
 
@@ -1186,6 +1266,8 @@ file(GLOB_RECURSE ZTERMY_FORMAT_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/*.h"
 )
 file(GLOB_RECURSE ZTERMY_TIDY_SOURCES
     CONFIGURE_DEPENDS
@@ -1200,6 +1282,12 @@ if(BUILD_TESTING)
     )
     list(APPEND ZTERMY_TIDY_SOURCES ${ZTERMY_TIDY_TEST_SOURCES})
 endif()
+file(GLOB_RECURSE ZTERMY_TIDY_TOOL_SOURCES
+    CONFIGURE_DEPENDS
+    LIST_DIRECTORIES FALSE
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/*.cpp"
+)
+list(APPEND ZTERMY_TIDY_SOURCES ${ZTERMY_TIDY_TOOL_SOURCES})
 list(SORT ZTERMY_FORMAT_SOURCES)
 list(SORT ZTERMY_TIDY_SOURCES)
 
@@ -1324,6 +1412,7 @@ endif()
 unset(ZTERMY_FORMAT_SOURCES)
 unset(ZTERMY_TIDY_SOURCES)
 unset(ZTERMY_TIDY_TEST_SOURCES)
+unset(ZTERMY_TIDY_TOOL_SOURCES)
 unset(ZTERMY_QML_FORMAT_WORK_ROOT)
 unset(ZTERMY_CLANG_FORMAT_VERSION_OUTPUT)
 unset(ZTERMY_CLANG_FORMAT_VERSION_RESULT)

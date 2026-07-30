@@ -17,18 +17,23 @@ Only runtime evidence can mark a platform or UI item complete.
   only the three reviewed ICE61, ICE69, and ICE91 warnings. Automated
   decompilation requires per-user scope, `LocalAppDataFolder`, a direct Start
   menu shortcut, same-version upgrade support, uninstall directory removal,
-  and exactly one non-empty `ztermy.exe` payload; it rejects portable markers,
-  DLLs, PDBs, and Ghostty development files.
+  Installed Apps product icon, and exactly one non-empty `ztermy.exe` payload;
+  it rejects portable markers, DLLs, PDBs, and Ghostty development files.
 - The unified V1 automated preflight passes in dynamic Debug and static
-  Release. Both builds pass clang-format with `--Werror` and all 42 project
+  Release. Both builds pass clang-format with `--Werror` and all 44 project
   translation units pass LLVM 22.1 clang-tidy with every enabled diagnostic
   treated as an error. All 21 application QML files match Qt 6.8 `qmlformat`
   and pass the generated `qmllint` module check. Every test executable is
   rebuilt before the seven real-window window, DPI, UI, keyboard, and
-  terminal-render gates run serially, followed by all 19 CTest tests. The
+  terminal-render gates run serially, followed by all 20 CTest tests. The
   static run additionally regenerates the portable ZIP and completes MSI
   generation, ICE validation, decompilation, and payload-contract checks
   before the runtime gates begin.
+- The executable identity contract reads the finished PE through Win32 APIs.
+  Dynamic Debug and static Release expose version `0.1.0`, the ztermy product,
+  description and filename fields, and a loadable ztermy-owned multi-size
+  application icon. The application, portable archive, and MSI versions all
+  derive from the CMake project version.
 - The dynamic RelWithDebInfo deployment target installs its Qt, QML, compiler,
   and OpenSSL runtime dependencies into a clean directory. Its native/QML
   smoke path passes with `PATH` restricted to Windows system directories and

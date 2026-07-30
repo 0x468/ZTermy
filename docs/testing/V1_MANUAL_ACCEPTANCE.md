@@ -191,16 +191,25 @@ passing DWM readback is useful evidence but cannot mark this fallback route
 Use the recorded MSI and complete
 [Installer lifecycle](DISTRIBUTION.md#installer-lifecycle):
 
-1. Install per-user without elevation and launch from the Start menu.
-2. Create a disposable non-secret profile, close ztermy, and run the exact same
+1. Before installing, confirm Explorer shows the green ztermy terminal icon
+   for the portable `ztermy.exe`. The `.msi` file itself may retain Windows'
+   generic package icon. Open the executable's **Properties > Details** and
+   confirm product/file version `0.1.0`, product name `ztermy`, description
+   `ztermy native SSH terminal`, and original filename `ztermy.exe`.
+2. Install per-user without elevation and launch from the Start menu. Confirm
+   the shortcut, taskbar, Alt+Tab, and Installed Apps entries use the same
+   sharp ztermy icon rather than a generic executable icon.
+3. Create a disposable non-secret profile, close ztermy, and run the exact same
    MSI again to exercise the V1 same-version upgrade.
-3. Confirm profiles, host trust, settings, logs, and crash diagnostics survive.
-4. Uninstall from Installed apps and inspect the Start menu, installation
+4. Confirm profiles, host trust, settings, logs, and crash diagnostics survive.
+5. Uninstall from Installed apps and inspect the Start menu, installation
    directory, Installed Apps entry, running processes, and per-user data.
 
 Expected: upgrade preserves data; uninstall removes the executable, install
 directory, shortcut, and Apps entry while deliberately preserving user data.
-No assertion, PowerShell error dialog, UAC prompt, or orphaned process appears.
+Windows identity fields are exact and all shell icon sizes remain recognizable,
+without a white/black square or generic icon. No assertion, PowerShell error
+dialog, UAC prompt, or orphaned process appears.
 
 ## Stage F: clean Windows 11 release
 
@@ -241,6 +250,7 @@ Copy this table into the V1 test record and attach evidence paths:
 | Dark/Light/System contrast and component states | NOT RUN | |
 | Complete keyboard-only accessibility route | NOT RUN | |
 | Normal/snapped/maximized/mixed-DPI screenshots | NOT RUN | |
+| Windows artifact identity and icon clarity | NOT RUN | |
 | ANSI/alternate screen/cursor/clear/resize | NOT RUN | |
 | CJK/wide/combining/emoji/IME | NOT RUN | |
 | Selection/copy/paste/search/scrollback | NOT RUN | |

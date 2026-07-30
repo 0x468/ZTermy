@@ -95,6 +95,8 @@ set(required_patterns
     "<File[^>]*Id=\"CM_FP_ztermy\\.exe\"[^>]*Name=\"ztermy\\.exe\""
     "<RemoveFolder[^>]*On=\"uninstall\"[^>]*Directory=\"INSTALL_ROOT\""
     "<MajorUpgrade[^>]*AllowSameVersionUpgrades=\"yes\""
+    "<Property[^>]*Id=\"ARPPRODUCTICON\"[^>]*Value=\"ProductIcon\\.ico\""
+    "<Icon[^>]*Id=\"ProductIcon\\.ico\""
 )
 foreach(required_pattern IN LISTS required_patterns)
     if(NOT installer_source MATCHES "${required_pattern}")
@@ -130,19 +132,49 @@ file(GLOB_RECURSE extracted_files
     "${extracted_payload}/*"
 )
 list(LENGTH extracted_files extracted_file_count)
-if(NOT extracted_file_count EQUAL 1)
+if(NOT extracted_file_count EQUAL 2)
     message(FATAL_ERROR
-        "Expected exactly one extracted MSI payload, observed "
+        "Expected one executable and one product icon, observed "
         "${extracted_file_count}: ${extracted_files}"
     )
 endif()
-list(GET extracted_files 0 extracted_executable)
+
+set(extracted_executables ${extracted_files})
+list(FILTER extracted_executables
+    INCLUDE REGEX "/File/CM_FP_ztermy\\.exe$"
+)
+list(LENGTH extracted_executables extracted_executable_count)
+if(NOT extracted_executable_count EQUAL 1)
+    message(FATAL_ERROR
+        "Expected exactly one extracted ztermy executable, observed: "
+        "${extracted_executables}"
+    )
+endif()
+list(GET extracted_executables 0 extracted_executable)
 file(SIZE "${extracted_executable}" extracted_executable_size)
 if(extracted_executable_size LESS 1)
     message(FATAL_ERROR "Extracted ztermy executable is empty")
 endif()
 
+set(extracted_icons ${extracted_files})
+list(FILTER extracted_icons
+    INCLUDE REGEX "/Icon/ProductIcon\\.ico$"
+)
+list(LENGTH extracted_icons extracted_icon_count)
+if(NOT extracted_icon_count EQUAL 1)
+    message(FATAL_ERROR
+        "Expected exactly one extracted ztermy product icon, observed: "
+        "${extracted_icons}"
+    )
+endif()
+list(GET extracted_icons 0 extracted_icon)
+file(SIZE "${extracted_icon}" extracted_icon_size)
+if(extracted_icon_size LESS 1)
+    message(FATAL_ERROR "Extracted ztermy product icon is empty")
+endif()
+
 message(STATUS
     "Installer contract passed: per-user LocalAppData package, one ztermy.exe, "
-    "Start-menu shortcut, same-version upgrade, and uninstall folder removal"
+    "product icon, Start-menu shortcut, same-version upgrade, and uninstall "
+    "folder removal"
 )

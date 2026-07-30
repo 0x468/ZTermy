@@ -4,6 +4,7 @@
 #include "platform/windows/CrashDiagnostics.h"
 #include "platform/windows/NativeWindow.h"
 #include "ui/terminal/TerminalItem.h"
+#include "ztermy_version.h"
 
 #include <QAccessible>
 #include <QDir>
@@ -955,7 +956,7 @@ int main(int argc, char *argv[])
     QGuiApplication application(argc, argv);
     QGuiApplication::setApplicationDisplayName(QStringLiteral("ztermy"));
     QGuiApplication::setApplicationName(QStringLiteral("ztermy"));
-    QGuiApplication::setApplicationVersion(QStringLiteral("0.1.0"));
+    QGuiApplication::setApplicationVersion(QStringLiteral(ZTERMY_VERSION_STRING));
     QGuiApplication::setOrganizationName(QStringLiteral("ztermy"));
 
     const QString executableDirectory = QCoreApplication::applicationDirPath();

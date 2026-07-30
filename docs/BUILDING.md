@@ -73,13 +73,16 @@ cmake --build --preset msvc-static-release `
 The V1 preflight serializes all real-window runtime gates so multiple test
 windows never compete for native foreground, DPI, or capture state. It then
 runs formatting with `--dry-run --Werror`, analyzes every project translation
-unit under `src` and `tests` with all clang-tidy diagnostics treated as errors,
+unit under `src`, `tests`, and `tools` with all clang-tidy diagnostics treated
+as errors,
 checks all application QML with Qt 6.8 `qmlformat` and `qmllint`, and runs the
 complete CTest suite. Every test executable is an explicit dependency, so the
 target cannot accidentally run stale binaries after a source or header change.
 In the static preset it also creates the portable ZIP and creates, validates,
-decompiles, and inspects the per-user MSI. The dynamic presets expose the same
-target without the two static distribution steps.
+decompiles, and inspects the per-user MSI. The final executable contract checks
+the PE version strings, fixed numeric version, and native icon rather than
+trusting CMake configuration alone. The dynamic presets expose the same target
+without the two static distribution steps.
 
 The quality gates can also be run independently:
 
@@ -89,7 +92,7 @@ cmake --build --preset msvc-dynamic-debug --target ztermy_clang_tidy_check
 cmake --build --preset msvc-dynamic-debug --target ztermy_qml_quality_check
 ```
 
-The checked source set is discovered from `src` and `tests` during CMake
+The checked source set is discovered from `src`, `tests`, and `tools` during CMake
 generation. The compilation database for the active preset remains the source
 of truth for clang-tidy compiler flags and include paths. The QML format check
 formats copies below the build directory and compares hashes, so the check
