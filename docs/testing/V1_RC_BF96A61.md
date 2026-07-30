@@ -100,6 +100,21 @@ the prescribed route without a failure:
   directory and did not contaminate installed-mode storage;
 - no assertion, crash dialog, or lingering process was observed.
 
+The exact recorded MSI then completed its per-user lifecycle:
+
+- installation required no elevation and launched from the Start menu;
+- Explorer, Start, taskbar, Alt+Tab, and Installed Apps displayed the expected
+  ztermy identity and clear green terminal icon;
+- a disposable password-authentication profile containing no password and a
+  changed terminal-opacity setting survived a second run of the identical MSI;
+- the same-version upgrade created no duplicate shortcut and retained profiles,
+  host trust, settings, logs, and diagnostics;
+- uninstall removed the executable, installation directory, shortcut,
+  Installed Apps entry, and running process while intentionally preserving the
+  per-user data directory;
+- no assertion, installer error, PowerShell error dialog, or elevation prompt
+  occurred.
+
 ## Artifact integrity
 
 | Artifact | Bytes | Independently calculated SHA-256 |
@@ -131,12 +146,12 @@ regression evidence but do not sign off this immutable candidate.
 | Dark/Light/System contrast and component states | NOT RUN | Automated Dark/Light captures passed; full manual component-state route remains. |
 | Complete keyboard-only accessibility route | NOT RUN | Automated accessibility and Tab-order gate passed; full manual route remains. |
 | Normal/snapped/maximized/mixed-DPI screenshots | NOT RUN | Automated normal and synthetic-DPI captures exist; required physical matrix is incomplete. |
-| Windows artifact identity and icon clarity | NOT RUN | PE/MSI contracts passed; Explorer, taskbar, Alt+Tab, and Installed Apps still need candidate inspection. |
+| Windows artifact identity and icon clarity | PASS | Exact portable/MSI candidate showed the expected versioned ztermy identity and clear icon in Explorer and Windows shell surfaces. |
 | ANSI/alternate screen/cursor/clear/resize | NOT RUN | Exact portable candidate passed ANSI background, Helix alternate-screen, resize, and cursor-restoration checks; explicit clear/cursor-movement route remains. |
 | CJK/wide/combining/emoji/IME | NOT RUN | Exact portable candidate passed CJK and middle-of-line IME checks; combining-mark and emoji route remains. |
 | Selection/copy/paste/search/scrollback | NOT RUN | Exact portable candidate passed the primary interaction route; reverse/rectangular selection and wrapped-search route remains. |
 | Real-host password authentication | PASS | Static QtTest gate: 3 passed, 0 failed, hidden input, authenticated shell, 2877 ms. |
-| Installed data survives upgrade and uninstall | NOT RUN | MSI contract passed; exact-candidate lifecycle remains. |
+| Installed data survives upgrade and uninstall | PASS | Exact MSI completed per-user install, identical-MSI upgrade, persistence checks, and uninstall cleanup while retaining user data. |
 | Clean Windows 11 release without developer tools | NOT RUN | Earlier Sandbox runs succeeded; the exact artifacts and hashes above remain untested there. |
 
 ## Historical development evidence
