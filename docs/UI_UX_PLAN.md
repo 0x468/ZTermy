@@ -1,6 +1,6 @@
 # V1 UI/UX convergence plan
 
-Status: in progress
+Status: release-candidate implementation; manual visual acceptance pending
 
 ## Goal
 

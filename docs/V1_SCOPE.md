@@ -1,6 +1,6 @@
 # ztermy V1 scope
 
-Status: draft
+Status: accepted for V1
 
 ## Product goal
 

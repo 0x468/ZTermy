@@ -1,6 +1,6 @@
 # V1 acceptance
 
-Status: draft
+Status: release candidate; manual sign-off pending
 
 Only runtime evidence can mark a platform or UI item complete.
 
