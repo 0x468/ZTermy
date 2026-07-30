@@ -37,11 +37,12 @@ cmake --build --preset msvc-dynamic-debug --target ztermy_ui_keyboard_runtime_sm
 The gate starts with isolated settings and sends key events through Qt's
 window-level keyboard path. It verifies:
 
-- Button roles and specific accessible names for title-bar, caption, sidebar,
-  new-tab, and local-machine actions.
-- Space activation of sidebar navigation and Enter activation of shared
-  action buttons and the title-bar new-tab action.
-- The complete 12-control Settings Tab order at `1120x800` and `500x360`.
+- Button roles and specific accessible names for title-bar, caption,
+  Settings shortcut/tab/category, new-tab, and local-machine actions.
+- Space activation of the on-demand Settings tab and category navigation,
+  plus Enter activation of shared action buttons and the title-bar new-tab
+  action.
+- Category-specific Settings Tab order at `1120x800` and `500x360`.
 - `Alt+Down` and Escape for the shared dropdown, arrow-key changes for the
   opacity slider and font-size spin box, and Space for all Settings switches.
 - Applying the keyboard-edited theme, opacity, font size, and behavior values.
@@ -69,15 +70,15 @@ rendering.
 1. Resize the window to its minimum size.
 2. Open Hosts, scroll through the complete new-connection editor, and create a
    temporary saved host if none exists.
-3. Inspect all saved-host actions, then open Settings and scroll from the
-   theme control through the bottom action row.
+3. Inspect all saved-host actions, then open Settings, switch between
+   Appearance and Terminal, and scroll through each category.
 4. Widen the window to approximately `1120x800` and repeat.
 
 Expected:
 
 - The navigation rail becomes narrower at the minimum width.
-- Hosts and Settings use one label/control column when narrow and two columns
-  when wide.
+- Hosts and Settings details use one label/control column when narrow and two
+  columns when wide; the Settings category rail remains usable in both.
 - Saved-host Connect, Edit, Copy, and Delete actions remain available in a
   two-column compact action area instead of clipping horizontally.
 - New host, form fields, switches, explanations, and bottom actions remain
@@ -152,8 +153,8 @@ Expected:
 Expected:
 
 - The vault sidebar appears only on the Hosts workspace.
-- Hosts and Settings use the same 38 px navigation geometry, accent marker,
-  hover surface, and keyboard-focus border.
+- Hosts navigation and Settings categories use the same accent marker, hover
+  surface, and keyboard-focus border.
 - Host content and the sidebar remain aligned without a horizontal jump or
   clipped controls.
 - Returning to a terminal hides the sidebar and restores the active session.
@@ -162,8 +163,9 @@ Expected:
 ## Keyboard navigation
 
 1. Open Hosts, then press Tab without using the mouse.
-2. Move through the Hosts and Settings navigation actions, the local-machine
-   action, title-bar tabs, tab close buttons, and the new-tab action.
+2. Move through Hosts navigation, the Settings shortcut, Settings work tab and
+   category actions, the local-machine action, terminal tabs, tab close
+   buttons, and the new-tab action.
 3. Activate each action once with Space and once with Enter.
 4. Continue tabbing into the active page controls.
 
@@ -172,7 +174,8 @@ Expected:
 - Each self-drawn action participates in the tab order.
 - Keyboard focus is always visible with the shared focus color.
 - Screen readers receive a button role and a specific accessible name.
-- Hosts and Settings switch without creating or stopping sessions.
+- Opening or closing the singleton Settings tab does not create or stop
+  terminal sessions and restores the previous workspace.
 - The local-machine and new-tab actions each create exactly one terminal.
 - Keyboard activation never begins a native window drag.
 

@@ -12,6 +12,8 @@ Rectangle {
     property bool loadingDraft: false
     property string statusMessage: ""
     property bool statusIsError: false
+    property string currentCategory: "appearance"
+    property real contentReveal: 1.0
     readonly property bool draftDark: themeBox.currentIndex === 1 || (themeBox.currentIndex === 0 && Theme.systemDark)
     readonly property bool adjustableBackdrop: backdropBox.currentIndex === 0 || backdropBox.currentIndex === 1
     readonly property bool compactLayout: width < Theme.narrowWindowWidth
@@ -19,6 +21,75 @@ Rectangle {
 
     signal appearancePreviewRequested(string theme, real opacity, string backdrop)
     signal appearancePreviewEnded
+
+    component CategoryButton: Rectangle {
+        id: categoryControl
+
+        required property string title
+        required property string iconName
+        property bool selected: false
+        property string actionObjectName: ""
+        signal activated
+
+        implicitHeight: 40
+        radius: Theme.radiusControl
+        color: selected ? Theme.controlBackground : (categoryAction.hovered || categoryAction.activeFocus ? Theme.controlHover : "transparent")
+        border.color: categoryAction.activeFocus ? Theme.focus : "transparent"
+        border.width: categoryAction.activeFocus ? 1 : 0
+
+        function focusAction() {
+            categoryAction.forceActiveFocus();
+        }
+
+        Behavior on color {
+            ColorAnimation {
+                duration: Theme.motionFast
+            }
+        }
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.leftMargin: 8
+            anchors.verticalCenter: parent.verticalCenter
+            width: 3
+            height: 18
+            radius: 2
+            visible: categoryControl.selected
+            color: Theme.accent
+        }
+
+        Row {
+            anchors.left: parent.left
+            anchors.leftMargin: 16
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 10
+
+            AppIcon {
+                width: 16
+                height: 16
+                name: categoryControl.iconName
+                color: categoryControl.selected ? Theme.text : Theme.textMuted
+            }
+
+            Text {
+                text: categoryControl.title
+                color: categoryControl.selected ? Theme.text : Theme.textSoft
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.textBody
+                font.weight: categoryControl.selected ? Font.DemiBold : Font.Normal
+            }
+        }
+
+        KeyboardAction {
+            id: categoryAction
+
+            objectName: categoryControl.actionObjectName
+            anchors.fill: parent
+            anchors.margins: 2
+            accessibleName: categoryControl.title + " settings"
+            onActivated: categoryControl.activated()
+        }
+    }
 
     color: Theme.workspaceBackground
     palette.base: Theme.raisedBackground
@@ -61,6 +132,26 @@ Rectangle {
         appearancePreviewRequested(themeToken(), opacitySlider.value, backdropToken());
     }
 
+    function selectCategory(category) {
+        if (currentCategory === category) {
+            focusCurrentCategory();
+            return;
+        }
+        contentReveal = Theme.animationsEnabled ? 0.0 : 1.0;
+        currentCategory = category;
+        if (Theme.animationsEnabled) {
+            categoryRevealAnimation.restart();
+        }
+    }
+
+    function focusCurrentCategory() {
+        if (currentCategory === "terminal") {
+            terminalCategory.focusAction();
+        } else {
+            appearanceCategory.focusAction();
+        }
+    }
+
     function loadDraft() {
         loadingDraft = true;
         themeBox.currentIndex = themeIndex(controller.themePreference);
@@ -95,10 +186,95 @@ Rectangle {
     }
     Component.onCompleted: loadDraft()
 
+    NumberAnimation {
+        id: categoryRevealAnimation
+
+        target: pane
+        property: "contentReveal"
+        from: 0.0
+        to: 1.0
+        duration: Theme.motionMedium
+        easing.type: Easing.OutCubic
+    }
+
+    Rectangle {
+        id: categoryRail
+
+        objectName: "settingsCategoryRail"
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        width: pane.compactLayout ? 132 : 196
+        color: Theme.panelBackground
+
+        Rectangle {
+            anchors.right: parent.right
+            width: 1
+            height: parent.height
+            color: Theme.border
+        }
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: pane.compactLayout ? 10 : 14
+            spacing: 8
+
+            Text {
+                Layout.leftMargin: 4
+                Layout.bottomMargin: 8
+                text: "SETTINGS"
+                color: Theme.textSubtle
+                font.family: Theme.uiFont
+                font.pixelSize: 10
+                font.letterSpacing: 1.2
+                font.weight: Font.DemiBold
+            }
+
+            CategoryButton {
+                id: appearanceCategory
+
+                Layout.fillWidth: true
+                title: "Appearance"
+                iconName: "appearance"
+                actionObjectName: "settingsAppearanceCategory"
+                selected: pane.currentCategory === "appearance"
+                onActivated: pane.selectCategory("appearance")
+            }
+
+            CategoryButton {
+                id: terminalCategory
+
+                Layout.fillWidth: true
+                title: "Terminal"
+                iconName: "terminal"
+                actionObjectName: "settingsTerminalCategory"
+                selected: pane.currentCategory === "terminal"
+                onActivated: pane.selectCategory("terminal")
+            }
+
+            Item {
+                Layout.fillHeight: true
+            }
+
+            Text {
+                Layout.fillWidth: true
+                Layout.leftMargin: 4
+                visible: !pane.compactLayout
+                text: "Stored locally"
+                color: Theme.textSubtle
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.textCompact
+            }
+        }
+    }
+
     ScrollView {
         id: scrollView
 
-        anchors.fill: parent
+        anchors.left: categoryRail.right
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
         anchors.rightMargin: 8
         contentWidth: availableWidth
         contentHeight: contentColumn.implicitHeight + 72
@@ -110,9 +286,10 @@ Rectangle {
             y: pane.compactLayout ? 24 : 38
             width: Math.max(0, Math.min(920, scrollView.availableWidth - (pane.contentInset * 2)))
             spacing: Theme.spacingSection
+            opacity: pane.contentReveal
 
             Text {
-                text: "Settings"
+                text: pane.currentCategory === "appearance" ? "Appearance" : "Terminal"
                 color: Theme.text
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.textTitle
@@ -121,7 +298,7 @@ Rectangle {
 
             Text {
                 Layout.fillWidth: true
-                text: "Appearance and terminal preferences are stored locally for this ztermy data mode."
+                text: pane.currentCategory === "appearance" ? "Choose the application theme and Windows backdrop used across ztermy." : "Configure the global terminal font, background, cursor, selection, and paste behavior."
                 color: Theme.textMuted
                 wrapMode: Text.WordWrap
                 font.family: Theme.uiFont
@@ -130,6 +307,7 @@ Rectangle {
 
             SectionCard {
                 Layout.fillWidth: true
+                visible: pane.currentCategory === "appearance"
                 heading: "Window appearance"
 
                 GridLayout {
@@ -237,6 +415,7 @@ Rectangle {
 
             SectionCard {
                 Layout.fillWidth: true
+                visible: pane.currentCategory === "terminal"
                 heading: "Terminal"
 
                 GridLayout {

@@ -11,7 +11,8 @@ Rectangle {
     required property var windowChrome
     readonly property int titleBarHeight: Theme.titleBarHeight
     readonly property int captionButtonWidth: 46
-    readonly property int titleNavigationWidth: Math.min(790, Math.max(310, width - (captionButtonWidth * 3) - 96))
+    readonly property int titleQuickActionWidth: 40
+    readonly property int titleNavigationWidth: Math.min(830, Math.max(310, width - (captionButtonWidth * 3) - titleQuickActionWidth - 96))
     readonly property color backgroundColor: Theme.windowBackground
     readonly property color panelColor: Theme.panelBackground
     readonly property color chromeColor: Theme.chromeBackground
@@ -26,6 +27,8 @@ Rectangle {
     readonly property color mutedColor: Theme.textMuted
     readonly property color accentColor: Theme.accent
     property string currentPage: "terminal"
+    property bool settingsTabOpen: false
+    property string settingsReturnPage: "terminal"
     property bool terminalSearchVisible: false
     property int pendingPasteLineCount: 0
     property bool appearancePreviewActive: false
@@ -47,7 +50,24 @@ Rectangle {
     color: root.currentPage === "terminal" ? "transparent" : backgroundColor
 
     function reportTitleBarMetrics() {
-        root.windowChrome.setTitleBarMetrics(titleBarHeight, titleNavigation.width + 8, width - (captionButtonWidth * 3), width - (captionButtonWidth * 2), captionButtonWidth);
+        root.windowChrome.setTitleBarMetrics(titleBarHeight, titleNavigation.width + 8, width - (captionButtonWidth * 3) - titleQuickActionWidth, width - (captionButtonWidth * 2), captionButtonWidth);
+    }
+
+    function openSettingsTab() {
+        if (currentPage !== "settings") {
+            settingsReturnPage = currentPage;
+        }
+        settingsTabOpen = true;
+        currentPage = "settings";
+        Qt.callLater(settingsPane.focusCurrentCategory);
+    }
+
+    function closeSettingsTab() {
+        if (!settingsTabOpen) {
+            return;
+        }
+        settingsTabOpen = false;
+        currentPage = settingsReturnPage === "settings" ? (controller.terminalTabs.length > 0 ? "terminal" : "hosts") : settingsReturnPage;
     }
 
     function openTerminalSearch() {
@@ -154,6 +174,9 @@ Rectangle {
     }
     onWidthChanged: reportTitleBarMetrics()
     onCurrentPageChanged: {
+        if (currentPage === "settings") {
+            settingsTabOpen = true;
+        }
         if (currentPage !== "settings") {
             endWindowAppearancePreview();
         }
@@ -325,12 +348,27 @@ Rectangle {
                 }
             }
 
+            TerminalTabAction {
+                id: settingsTitleTab
+
+                visible: root.settingsTabOpen
+                width: visible ? implicitWidth : 0
+                height: titleNavigation.height
+                title: "Settings"
+                iconName: "settings"
+                actionObjectName: "settingsTitleAction"
+                closeActionObjectName: "settingsTitleCloseAction"
+                selected: root.currentPage === "settings"
+                onActivated: root.openSettingsTab()
+                onCloseRequested: root.closeSettingsTab()
+            }
+
             ListView {
                 id: titleTerminalTabs
 
                 objectName: "titleTerminalTabs"
                 currentIndex: -1
-                width: count === 0 ? 0 : Math.min(Math.max(contentWidth, 126), Math.max(140, root.titleNavigationWidth - 174))
+                width: count === 0 ? 0 : Math.min(Math.max(contentWidth, 126), Math.max(140, root.titleNavigationWidth - 174 - settingsTitleTab.width))
                 height: titleNavigation.height
                 orientation: ListView.Horizontal
                 spacing: 2
@@ -412,9 +450,43 @@ Rectangle {
         }
 
         Row {
+            id: titleControls
+
             anchors.right: parent.right
             anchors.top: parent.top
             height: parent.height
+
+            Rectangle {
+                width: root.titleQuickActionWidth
+                height: titleBar.height
+                color: settingsShortcutAction.hovered || settingsShortcutAction.activeFocus ? Theme.controlHover : "transparent"
+                border.color: settingsShortcutAction.activeFocus ? Theme.focus : "transparent"
+                border.width: settingsShortcutAction.activeFocus ? 1 : 0
+
+                Behavior on color {
+                    ColorAnimation {
+                        duration: Theme.motionFast
+                    }
+                }
+
+                AppIcon {
+                    anchors.centerIn: parent
+                    width: 16
+                    height: 16
+                    name: "settings"
+                    color: root.currentPage === "settings" ? root.textColor : root.mutedColor
+                }
+
+                KeyboardAction {
+                    id: settingsShortcutAction
+
+                    objectName: "settingsShortcutAction"
+                    anchors.fill: parent
+                    anchors.margins: 2
+                    accessibleName: "Open Settings"
+                    onActivated: root.openSettingsTab()
+                }
+            }
 
             CaptionButton {
                 objectName: "minimizeCaptionButton"
@@ -460,7 +532,9 @@ Rectangle {
         Rectangle {
             Layout.fillHeight: true
             Layout.preferredWidth: visible ? (root.width < Theme.narrowWindowWidth ? Theme.navigationWidthCompact : Theme.navigationWidth) : 0
-            visible: root.currentPage === "hosts" || root.currentPage === "settings"
+            Layout.minimumWidth: Layout.preferredWidth
+            Layout.maximumWidth: Layout.preferredWidth
+            visible: root.currentPage === "hosts"
             color: root.panelColor
 
             ColumnLayout {
@@ -484,15 +558,6 @@ Rectangle {
                     text: "Hosts"
                     selected: root.currentPage === "hosts"
                     onActivated: root.currentPage = "hosts"
-                }
-
-                SideNavigationItem {
-                    actionObjectName: "sideSettingsAction"
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 38
-                    text: "Settings"
-                    selected: root.currentPage === "settings"
-                    onActivated: root.currentPage = "settings"
                 }
 
                 Item {
@@ -1026,6 +1091,8 @@ Rectangle {
             }
 
             SettingsPane {
+                id: settingsPane
+
                 anchors.fill: parent
                 visible: root.currentPage === "settings"
                 controller: root.controller

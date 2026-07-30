@@ -136,16 +136,14 @@ empty navigation item.
 - The current page uses large stacked section cards and explicit Apply,
   Discard, and Reset actions.
 
-### Open decision
+### Accepted ztermy translation
 
-An independent Settings window improves separation from terminal work and
-matches the reference model, but adds a second native-window lifecycle,
-appearance synchronization, DPI, persistence, focus, Snap/resize, and testing
-surface. Keeping Settings in the main window is simpler and preserves the
-current tab model.
-
-This choice is intentionally not made by the audit. It requires owner review
-before the Settings implementation stage.
+Settings stays in the main native window as an on-demand singleton work tab.
+A global shortcut immediately before the caption buttons opens or reselects
+the tab; closing it restores the prior workspace. The Settings surface adopts
+the reference category-rail/detail-page hierarchy without copying its separate
+window lifecycle or unsupported categories. See
+[ADR 0018](adr/0018-on-demand-settings-work-tab.md).
 
 ## Interaction and motion
 

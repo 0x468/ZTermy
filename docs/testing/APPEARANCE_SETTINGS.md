@@ -1,8 +1,8 @@
 # Appearance settings manual verification
 
-Run the dynamic Debug build on Windows 11. Open **Hosts**, select
-**Settings** in the sidebar, and keep a local terminal tab available for the
-terminal checks.
+Run the dynamic Debug build on Windows 11. Select the Settings shortcut
+immediately before the caption buttons and keep a local terminal tab available
+for the terminal checks.
 
 ## Settings page and persistence
 
@@ -17,9 +17,11 @@ Expected:
 - The preview updates without changing the active application theme.
 - Discard restores the currently saved values.
 - Apply updates the application without opening a second window.
+- Repeated use of the shortcut reselects one Settings tab rather than creating
+  duplicates; closing that tab returns to the previous workspace.
 - Restart restores every applied value from `settings.json`.
-- Window appearance and Terminal cards share the same inset, heading,
-  background, border, and corner radius without clipping their controls.
+- Appearance and Terminal switch through the Settings category rail without
+  clipping their controls.
 - The Settings page remains scrollable and usable at the minimum window size.
 
 ## Theme, opacity, and Windows backdrop

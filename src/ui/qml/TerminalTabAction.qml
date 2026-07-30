@@ -8,6 +8,9 @@ Rectangle {
     required property string title
     property bool selected: false
     property bool running: false
+    property string iconName: ""
+    property string actionObjectName: ""
+    property string closeActionObjectName: ""
     property real enterProgress: Theme.animationsEnabled ? 0.0 : 1.0
     signal activated
     signal closeRequested
@@ -54,14 +57,26 @@ Rectangle {
         width: 6
         height: 6
         radius: 3
+        visible: control.iconName.length === 0
         color: control.running ? Theme.accent : Theme.textSubtle
+    }
+
+    AppIcon {
+        anchors.left: parent.left
+        anchors.leftMargin: 10
+        anchors.verticalCenter: parent.verticalCenter
+        width: 14
+        height: 14
+        visible: control.iconName.length > 0
+        name: control.iconName
+        color: control.selected ? Theme.text : Theme.textMuted
     }
 
     Text {
         id: titleText
 
         anchors.left: parent.left
-        anchors.leftMargin: 24
+        anchors.leftMargin: control.iconName.length > 0 ? 30 : 24
         anchors.right: closeButton.left
         anchors.rightMargin: 3
         anchors.verticalCenter: parent.verticalCenter
@@ -75,6 +90,7 @@ Rectangle {
     KeyboardAction {
         id: activateAction
 
+        objectName: control.actionObjectName
         anchors.left: parent.left
         anchors.right: closeButton.left
         anchors.top: parent.top
@@ -121,6 +137,7 @@ Rectangle {
         KeyboardAction {
             id: closeAction
 
+            objectName: control.closeActionObjectName
             anchors.fill: parent
             anchors.margins: 2
             accessibleName: "Close " + control.title

@@ -526,35 +526,41 @@ struct ResizeHitRuntimeCase
     const QString breakpointName = compact ? QStringLiteral("compact") : QStringLiteral("regular");
     const QString capturePrefix = themeName + QStringLiteral("-") + breakpointName;
     const bool hostCaptured = captureLayout(window, outputDirectory, capturePrefix + QStringLiteral("-hosts"));
+    const qreal hostPaneWidth = hostPane == nullptr ? 0.0 : hostPane->property("width").toReal();
+    const qreal hostContentWidth = hostContent == nullptr ? 0.0 : hostContent->property("width").toReal();
+    const bool hostMatches = hostPane != nullptr && hostContent != nullptr && hostEditorGrid != nullptr
+                             && hostPane->property("compactLayout").toBool() == compact
+                             && hostEditorGrid->property("columns").toInt() == (compact ? 1 : 2)
+                             && hostPane->property("profileCardColumns").toInt() == (compact ? 1 : 2)
+                             && hostContentWidth > 0.0 && hostContentWidth <= hostPaneWidth;
 
     rootObject->setProperty("currentPage", QStringLiteral("settings"));
     processWindowEventsFor(std::chrono::milliseconds{100});
     auto *settingsPane = rootObject->findChild<QObject *>(QStringLiteral("settingsPane"));
+    auto *settingsCategoryRail = rootObject->findChild<QObject *>(QStringLiteral("settingsCategoryRail"));
     auto *appearanceGrid = rootObject->findChild<QObject *>(QStringLiteral("settingsAppearanceGrid"));
     auto *terminalGrid = rootObject->findChild<QObject *>(QStringLiteral("settingsTerminalGrid"));
     const bool settingsCaptured = captureLayout(window, outputDirectory, capturePrefix + QStringLiteral("-settings"));
 
     if (hostPane == nullptr || hostContent == nullptr || hostEditorGrid == nullptr || settingsPane == nullptr
-        || appearanceGrid == nullptr || terminalGrid == nullptr)
+        || settingsCategoryRail == nullptr || appearanceGrid == nullptr || terminalGrid == nullptr)
     {
         qCWarning(applicationLog) << "UI layout smoke object lookup failed"
                                   << "hostPane=" << (hostPane != nullptr) << "hostContent=" << (hostContent != nullptr)
                                   << "hostEditorGrid=" << (hostEditorGrid != nullptr)
                                   << "settingsPane=" << (settingsPane != nullptr)
+                                  << "settingsCategoryRail=" << (settingsCategoryRail != nullptr)
                                   << "appearanceGrid=" << (appearanceGrid != nullptr)
                                   << "terminalGrid=" << (terminalGrid != nullptr);
         return false;
     }
 
-    const qreal hostPaneWidth = hostPane->property("width").toReal();
-    const qreal hostContentWidth = hostContent->property("width").toReal();
-    const bool hostMatches = hostPane->property("compactLayout").toBool() == compact
-                             && hostEditorGrid->property("columns").toInt() == (compact ? 1 : 2)
-                             && hostPane->property("profileCardColumns").toInt() == (compact ? 1 : 2)
-                             && hostContentWidth > 0.0 && hostContentWidth <= hostPaneWidth;
-    const bool settingsMatch = settingsPane->property("compactLayout").toBool() == compact
-                               && appearanceGrid->property("columns").toInt() == (compact ? 1 : 2)
-                               && terminalGrid->property("columns").toInt() == (compact ? 1 : 2);
+    const bool settingsMatch =
+        settingsPane->property("compactLayout").toBool() == compact
+        && settingsCategoryRail->property("width").toReal() > 0.0
+        && settingsCategoryRail->property("width").toReal() < settingsPane->property("width").toReal()
+        && appearanceGrid->property("columns").toInt() == (compact ? 1 : 2)
+        && terminalGrid->property("columns").toInt() == (compact ? 1 : 2);
 
     qCInfo(applicationLog) << "UI layout breakpoint check"
                            << "theme=" << themeName << "size=" << size << "compact=" << compact
@@ -678,30 +684,66 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
 
 [[nodiscard]] bool verifySettingsTabOrder(ztermy::NativeWindow &window, QQuickItem *rootObject)
 {
-    constexpr std::array<const char *, 13> order{
-        "settingsTheme",        "settingsBackdrop",        "settingsOpacity", "settingsFontFamily",
-        "settingsFontSize",     "settingsTerminalOpacity", "settingsCursor",  "settingsCursorBlink",
-        "settingsCopyOnSelect", "settingsMultilinePaste",  "settingsReset",   "settingsDiscard",
-        "settingsApply",
+    const auto verifyOrder = [&window, rootObject](const auto &order) {
+        if (!focusItem(window, quickItem(rootObject, order.front()), QString::fromLatin1(order.front())))
+        {
+            return false;
+        }
+        for (std::size_t index = 1; index < order.size(); ++index)
+        {
+            sendKey(window, Qt::Key_Tab);
+            const QString expectedName = QString::fromLatin1(order[index]);
+            const QString actualName = namedFocusItem(window);
+            if (actualName != expectedName)
+            {
+                qCWarning(applicationLog)
+                    << "Settings Tab order mismatch"
+                    << "index=" << index << "expected=" << expectedName << "actual=" << actualName;
+                return false;
+            }
+        }
+        return true;
     };
 
-    if (!focusItem(window, quickItem(rootObject, order.front()), QString::fromLatin1(order.front())))
+    QQuickItem *appearanceCategory = quickItem(rootObject, "settingsAppearanceCategory");
+    if (!focusItem(window, appearanceCategory, QStringLiteral("settingsAppearanceCategory")))
     {
         return false;
     }
-    for (std::size_t index = 1; index < order.size(); ++index)
+    sendKey(window, Qt::Key_Space);
+    processWindowEventsFor(std::chrono::milliseconds{100});
+    auto *settingsPane = rootObject->findChild<QObject *>(QStringLiteral("settingsPane"));
+    if (settingsPane == nullptr || settingsPane->property("currentCategory").toString() != QStringLiteral("appearance"))
     {
-        sendKey(window, Qt::Key_Tab);
-        const QString expectedName = QString::fromLatin1(order[index]);
-        const QString actualName = namedFocusItem(window);
-        if (actualName != expectedName)
-        {
-            qCWarning(applicationLog) << "Settings Tab order mismatch"
-                                      << "index=" << index << "expected=" << expectedName << "actual=" << actualName;
-            return false;
-        }
+        qCWarning(applicationLog) << "Appearance settings category did not activate from the keyboard";
+        return false;
     }
-    return true;
+    constexpr std::array appearanceOrder{
+        "settingsTheme", "settingsBackdrop", "settingsOpacity", "settingsReset", "settingsDiscard", "settingsApply",
+    };
+    if (!verifyOrder(appearanceOrder))
+    {
+        return false;
+    }
+
+    QQuickItem *terminalCategory = quickItem(rootObject, "settingsTerminalCategory");
+    if (!focusItem(window, terminalCategory, QStringLiteral("settingsTerminalCategory")))
+    {
+        return false;
+    }
+    sendKey(window, Qt::Key_Space);
+    processWindowEventsFor(std::chrono::milliseconds{100});
+    if (settingsPane->property("currentCategory").toString() != QStringLiteral("terminal"))
+    {
+        qCWarning(applicationLog) << "Terminal settings category did not activate from the keyboard";
+        return false;
+    }
+    constexpr std::array terminalOrder{
+        "settingsFontFamily",  "settingsFontSize",     "settingsTerminalOpacity", "settingsCursor",
+        "settingsCursorBlink", "settingsCopyOnSelect", "settingsMultilinePaste",  "settingsReset",
+        "settingsDiscard",     "settingsApply",
+    };
+    return verifyOrder(terminalOrder);
 }
 
 [[nodiscard]] bool verifyHostEditorTabOrder(ztermy::NativeWindow &window, QQuickItem *rootObject)
@@ -751,7 +793,7 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
         std::pair{"maximizeCaptionButton", "Maximize"},
         std::pair{"closeCaptionButton", "Close"},
         std::pair{"sideHostsAction", "Hosts"},
-        std::pair{"sideSettingsAction", "Settings"},
+        std::pair{"settingsShortcutAction", "Open Settings"},
         std::pair{"localMachineAction", "Open local terminal"},
         std::pair{"terminalFindAction", "Find in terminal"},
     };
@@ -765,15 +807,20 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
 
     rootObject->setProperty("currentPage", QStringLiteral("hosts"));
     processWindowEventsFor(std::chrono::milliseconds{100});
-    QQuickItem *settingsAction = quickItem(rootObject, "sideSettingsAction");
-    if (!focusItem(window, settingsAction, QStringLiteral("sideSettingsAction")))
+    QQuickItem *settingsAction = quickItem(rootObject, "settingsShortcutAction");
+    if (!focusItem(window, settingsAction, QStringLiteral("settingsShortcutAction")))
     {
         return false;
     }
     sendKey(window, Qt::Key_Space);
-    if (rootObject->property("currentPage").toString() != QStringLiteral("settings"))
+    if (rootObject->property("currentPage").toString() != QStringLiteral("settings")
+        || !rootObject->property("settingsTabOpen").toBool()
+        || !verifyAccessibleButton(rootObject, "settingsTitleAction", "Activate Settings")
+        || !verifyAccessibleButton(rootObject, "settingsTitleCloseAction", "Close Settings")
+        || !verifyAccessibleButton(rootObject, "settingsAppearanceCategory", "Appearance settings")
+        || !verifyAccessibleButton(rootObject, "settingsTerminalCategory", "Terminal settings"))
     {
-        qCWarning(applicationLog) << "Space did not activate Settings navigation";
+        qCWarning(applicationLog) << "Space did not open the singleton Settings work tab";
         return false;
     }
 
@@ -804,6 +851,13 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
         return false;
     }
 
+    QQuickItem *appearanceCategory = quickItem(rootObject, "settingsAppearanceCategory");
+    if (!focusItem(window, appearanceCategory, QStringLiteral("settingsAppearanceCategory")))
+    {
+        return false;
+    }
+    sendKey(window, Qt::Key_Space);
+
     if (!focusItem(window, theme, QStringLiteral("settingsTheme")))
     {
         return false;
@@ -815,11 +869,32 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
     const bool popupClosed = themePopup != nullptr && !themePopup->property("visible").toBool();
     sendKey(window, Qt::Key_Down);
 
+    if (!opacity->isVisible() || !opacity->isEnabled())
+    {
+        auto *settingsPane = rootObject->findChild<QObject *>(QStringLiteral("settingsPane"));
+        qCWarning(applicationLog) << "Window opacity control unexpectedly unavailable"
+                                  << "category="
+                                  << (settingsPane == nullptr ? QStringLiteral("<missing>")
+                                                              : settingsPane->property("currentCategory").toString())
+                                  << "backdropIndex="
+                                  << (quickItem(rootObject, "settingsBackdrop") == nullptr
+                                          ? -1
+                                          : quickItem(rootObject, "settingsBackdrop")->property("currentIndex").toInt())
+                                  << "visible=" << opacity->isVisible() << "enabled=" << opacity->isEnabled();
+        return false;
+    }
     if (!focusItem(window, opacity, QStringLiteral("settingsOpacity")))
     {
         return false;
     }
     sendKey(window, Qt::Key_Left);
+
+    QQuickItem *terminalCategory = quickItem(rootObject, "settingsTerminalCategory");
+    if (!focusItem(window, terminalCategory, QStringLiteral("settingsTerminalCategory")))
+    {
+        return false;
+    }
+    sendKey(window, Qt::Key_Space);
 
     if (!focusItem(window, fontSize, QStringLiteral("settingsFontSize")))
     {
@@ -876,11 +951,19 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
         return false;
     }
 
-    rootObject->setProperty("currentPage", QStringLiteral("hosts"));
-    processWindowEventsFor(std::chrono::milliseconds{100});
-    if (rootObject->property("appearancePreviewActive").toBool())
+    QQuickItem *settingsCloseAction = quickItem(rootObject, "settingsTitleCloseAction");
+    if (!focusItem(window, settingsCloseAction, QStringLiteral("settingsTitleCloseAction")))
     {
-        qCWarning(applicationLog) << "Leaving Settings did not end the window appearance preview";
+        return false;
+    }
+    sendKey(window, Qt::Key_Space);
+    processWindowEventsFor(std::chrono::milliseconds{100});
+    if (rootObject->property("appearancePreviewActive").toBool() || rootObject->property("settingsTabOpen").toBool()
+        || rootObject->property("currentPage").toString() != QStringLiteral("hosts"))
+    {
+        qCWarning(applicationLog) << "Closing Settings did not restore the previous workspace"
+                                  << "page=" << rootObject->property("currentPage").toString()
+                                  << "tabOpen=" << rootObject->property("settingsTabOpen").toBool();
         return false;
     }
     QQuickItem *newHost = quickItem(rootObject, "hostNew");

@@ -111,10 +111,10 @@ input or animates terminal cells.
 
 - Converge settings hierarchy and density without displaying unsupported
   categories.
+- Open Settings as a singleton, on-demand work tab from the global title-bar
+  shortcut. Inside the tab, use a left category rail and right detail page.
 - Refine host editing, host-key confirmation, paste confirmation, empty,
   loading, disconnected, and error recovery states.
-- Resolve whether Settings remains a main work tab or becomes an independent
-  native window before implementation of this stage.
 
 ### 5. Interaction and motion convergence
 
@@ -143,11 +143,10 @@ input or animates terminal cells.
 
 ## Major decisions
 
-The following choice requires owner review before its implementation:
-
-1. Settings presentation: retain the current main-window Settings surface or
-   introduce a separate native Settings window similar to the reference
-   product.
+The owner selected an on-demand, singleton Settings work tab in the main
+window. A global title-bar shortcut opens it; its content follows the
+reference category-rail/detail-page pattern. See
+[ADR 0018](adr/0018-on-demand-settings-work-tab.md).
 
 Further decisions are added here when they materially change navigation,
 security boundaries, persistence, terminal performance, or the Windows-native
