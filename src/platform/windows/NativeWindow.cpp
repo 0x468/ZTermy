@@ -5,6 +5,7 @@
 #include <QEvent>
 #include <QGuiApplication>
 #include <QLoggingCategory>
+#include <QOperatingSystemVersion>
 #include <QScreen>
 #include <QStyleHints>
 #include <QVariant>
@@ -23,6 +24,8 @@ Q_LOGGING_CATEGORY(windowLog, "ztermy.window")
 constexpr DWORD kDwmUseImmersiveDarkMode = 20;
 constexpr DWORD kDwmWindowCornerPreference = 33;
 constexpr DWORD kDwmSystemBackdropType = 38;
+constexpr DWORD kDwmRedirectionBitmapAlpha = 39;
+constexpr int kRedirectionBitmapAlphaMinimumBuild = 26100;
 constexpr int kDwmWindowCornerRound = 2;
 constexpr int kDwmSystemBackdropNone = 1;
 constexpr int kDwmSystemBackdropMainWindow = 2;
@@ -642,9 +645,20 @@ bool NativeWindow::applyBackdrop()
         DwmSetWindowAttribute(windowHandle, kDwmWindowCornerPreference, &cornerPreference, sizeof(cornerPreference));
     const HRESULT backdropResult =
         DwmSetWindowAttribute(windowHandle, kDwmSystemBackdropType, &backdropType, sizeof(backdropType));
+    const bool redirectionAlphaSupported =
+        QOperatingSystemVersion::current().microVersion() >= kRedirectionBitmapAlphaMinimumBuild;
+    const BOOL redirectionAlpha = backdropType == kDwmSystemBackdropNone ? FALSE : TRUE;
+    const HRESULT redirectionAlphaResult = redirectionAlphaSupported
+                                               ? DwmSetWindowAttribute(windowHandle, kDwmRedirectionBitmapAlpha,
+                                                                       &redirectionAlpha, sizeof(redirectionAlpha))
+                                               : S_OK;
     const HRESULT frameResult = DwmExtendFrameIntoClientArea(windowHandle, &frameMargins);
-    const bool applied =
-        SUCCEEDED(darkResult) && SUCCEEDED(cornerResult) && SUCCEEDED(backdropResult) && SUCCEEDED(frameResult);
+    const bool applied = SUCCEEDED(darkResult) && SUCCEEDED(cornerResult) && SUCCEEDED(backdropResult)
+                         && SUCCEEDED(redirectionAlphaResult) && SUCCEEDED(frameResult);
+    qCInfo(windowLog) << "applied DWM appearance"
+                      << "backdropType=" << backdropType << "redirectionAlphaSupported=" << redirectionAlphaSupported
+                      << "redirectionAlpha=" << static_cast<bool>(redirectionAlpha)
+                      << "surfaceAlphaBits=" << format().alphaBufferSize() << "result=" << applied;
     if (!applied)
     {
         qCWarning(windowLog) << "Some requested DWM appearance attributes are unavailable";

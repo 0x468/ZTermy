@@ -17,6 +17,7 @@
 #include <QMetaType>
 #include <QQuickItem>
 #include <QQuickStyle>
+#include <QQuickWindow>
 #include <QSet>
 #include <QStandardPaths>
 #include <QTimer>
@@ -365,6 +366,9 @@ struct ResizeHitRuntimeCase
     window.show();
     processWindowEventsFor(std::chrono::milliseconds{250});
 
+    const bool defaultAlphaBuffer = QQuickWindow::hasDefaultAlphaBuffer();
+    const int surfaceAlphaBits = window.format().alphaBufferSize();
+    const bool translucentSurfaceCapable = defaultAlphaBuffer && surfaceAlphaBits > 0 && window.color().alpha() == 0;
     constexpr int noBackdrop = 1;
     constexpr int micaBackdrop = 2;
     constexpr int acrylicBackdrop = 3;
@@ -401,6 +405,9 @@ struct ResizeHitRuntimeCase
     const bool restoredSurfaceOpaque = surfaceAlpha() == 255;
 
     qCInfo(applicationLog) << "Window appearance runtime summary"
+                           << "defaultAlphaBuffer=" << defaultAlphaBuffer << "surfaceAlphaBits=" << surfaceAlphaBits
+                           << "transparentClearColor=" << (window.color().alpha() == 0)
+                           << "translucentSurfaceCapable=" << translucentSurfaceCapable
                            << "darkNoneSaved=" << darkNoneSaved << "darkNone=" << darkNone
                            << "noneSurfaceOpaque=" << noneSurfaceOpaque
                            << "invalidOpacityRejected=" << invalidOpacityRejected
@@ -410,9 +417,9 @@ struct ResizeHitRuntimeCase
                            << "acrylicSurfaceTranslucent=" << acrylicSurfaceTranslucent
                            << "restoredSaved=" << restoredSaved << "restored=" << restored
                            << "restoredSurfaceOpaque=" << restoredSurfaceOpaque;
-    return darkNoneSaved && darkNone && noneSurfaceOpaque && invalidOpacityRejected && invalidBackdropRejected
-           && lightMicaSaved && lightMica && micaSurfaceTranslucent && darkAcrylicSaved && darkAcrylic
-           && acrylicSurfaceTranslucent && restoredSaved && restored && restoredSurfaceOpaque;
+    return translucentSurfaceCapable && darkNoneSaved && darkNone && noneSurfaceOpaque && invalidOpacityRejected
+           && invalidBackdropRejected && lightMicaSaved && lightMica && micaSurfaceTranslucent && darkAcrylicSaved
+           && darkAcrylic && acrylicSurfaceTranslucent && restoredSaved && restored && restoredSurfaceOpaque;
 }
 
 [[nodiscard]] bool captureLayout(ztermy::NativeWindow &window, const QString &outputDirectory, const QString &name)
@@ -1057,6 +1064,7 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
 // NOLINTNEXTLINE(bugprone-exception-escape)
 int main(int argc, char *argv[])
 {
+    QQuickWindow::setDefaultAlphaBuffer(true);
     QGuiApplication application(argc, argv);
     QGuiApplication::setApplicationDisplayName(QStringLiteral("ztermy"));
     QGuiApplication::setApplicationName(QStringLiteral("ztermy"));

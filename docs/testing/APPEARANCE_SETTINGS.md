@@ -40,10 +40,13 @@ checks 100%, 85%, and 75% Qt window opacity, rejects values below the supported
 range and unknown backdrop tokens without changing the baseline. The QML
 surface contract additionally requires an opaque surface for None, translucent
 surfaces for Mica and Acrylic, and an opaque surface again after restoring the
-default Dark/None/100% state. A passing gate proves the requested native state
-reached DWM and that the scene permits the material to be visible; the visual
-checks below remain necessary for readability, material appearance, and
-interaction review.
+default Dark/None/100% state. The native Qt Quick window must request an alpha
+buffer before its creation, expose at least one alpha bit, and use a transparent
+clear color. On Windows 11 build 26100 and later, the gate also requires DWM to
+accept redirected-bitmap alpha for Mica and Acrylic. A passing gate proves the
+requested native state reached DWM and that the complete scene/compositor path
+permits the material to be visible; the visual checks below remain necessary
+for readability, material appearance, and interaction review.
 
 1. Apply Dark and Light themes at 100% opacity.
 2. Apply System theme, then change the Windows app color mode and restart
@@ -56,8 +59,10 @@ Expected:
 - Text, borders, fields, dialogs, title-bar controls, and focus indicators
   remain readable in both themes.
 - System follows the Windows app color mode.
-- Opacity affects the application window; backdrop selection does not alter
-  terminal cell colors or stored terminal content.
+- None is visibly opaque. Mica carries the desktop-derived long-lived window
+  material; Acrylic is more visibly translucent and samples the content behind
+  the window. Backdrop selection does not alter terminal cell colors or stored
+  terminal content.
 - Unsupported DWM attributes degrade to a normal background without a crash.
 - Snap Layouts, native resizing, maximized work-area sizing, and custom
   caption buttons remain functional.
