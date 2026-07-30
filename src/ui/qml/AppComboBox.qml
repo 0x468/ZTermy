@@ -96,6 +96,26 @@ ComboBox {
         implicitHeight: Math.min(contentItem.implicitHeight + 2, 240)
         padding: 1
 
+        enter: Transition {
+            NumberAnimation {
+                property: "opacity"
+                from: 0
+                to: 1
+                duration: Theme.motionMedium
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        exit: Transition {
+            NumberAnimation {
+                property: "opacity"
+                from: 1
+                to: 0
+                duration: Theme.motionFast
+                easing.type: Easing.InCubic
+            }
+        }
+
         contentItem: ListView {
             clip: true
             implicitHeight: contentHeight
@@ -108,6 +128,17 @@ ComboBox {
             radius: Theme.radiusControl
             color: Theme.floatingBackground
             border.color: Theme.borderStrong
+
+            transform: Translate {
+                y: control.popup.visible ? 0 : -Theme.motionDistanceSmall
+
+                Behavior on y {
+                    NumberAnimation {
+                        duration: Theme.motionMedium
+                        easing.type: Easing.OutCubic
+                    }
+                }
+            }
         }
     }
 

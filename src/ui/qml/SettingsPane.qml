@@ -144,6 +144,13 @@ Rectangle {
         }
     }
 
+    function revealCurrentCategory() {
+        contentReveal = Theme.animationsEnabled ? 0.0 : 1.0;
+        if (Theme.animationsEnabled) {
+            categoryRevealAnimation.restart();
+        }
+    }
+
     function focusCurrentCategory() {
         if (currentCategory === "terminal") {
             terminalCategory.focusAction();

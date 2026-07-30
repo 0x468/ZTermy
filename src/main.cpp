@@ -863,10 +863,12 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
         return false;
     }
     sendKey(window, Qt::Key_Down, Qt::AltModifier);
+    processWindowEventsFor(std::chrono::milliseconds{220});
     auto *themePopup = theme->property("popup").value<QObject *>();
-    const bool popupOpened = themePopup != nullptr && themePopup->property("visible").toBool();
+    const bool popupOpened = themePopup != nullptr && themePopup->property("opened").toBool();
     sendKey(window, Qt::Key_Escape);
-    const bool popupClosed = themePopup != nullptr && !themePopup->property("visible").toBool();
+    const bool popupClosed = themePopup != nullptr && !themePopup->property("opened").toBool();
+    processWindowEventsFor(std::chrono::milliseconds{160});
     sendKey(window, Qt::Key_Down);
 
     if (!opacity->isVisible() || !opacity->isEnabled())

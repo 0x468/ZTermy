@@ -11,6 +11,7 @@ Rectangle {
     property string iconName: ""
     property string actionObjectName: ""
     property string closeActionObjectName: ""
+    property bool componentReady: false
     property real enterProgress: Theme.animationsEnabled ? 0.0 : 1.0
     signal activated
     signal closeRequested
@@ -25,11 +26,24 @@ Rectangle {
         x: -Theme.motionDistanceSmall * (1.0 - control.enterProgress)
     }
 
-    Component.onCompleted: {
+    function beginEntry() {
         if (Theme.animationsEnabled) {
+            enterProgress = 0.0;
             enterAnimation.start();
         } else {
             enterProgress = 1.0;
+        }
+    }
+
+    Component.onCompleted: {
+        componentReady = true;
+        if (visible) {
+            beginEntry();
+        }
+    }
+    onVisibleChanged: {
+        if (componentReady && visible) {
+            beginEntry();
         }
     }
 

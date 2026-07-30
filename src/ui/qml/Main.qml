@@ -29,6 +29,7 @@ Rectangle {
     property string currentPage: "terminal"
     property bool settingsTabOpen: false
     property string settingsReturnPage: "terminal"
+    property real hostsPageReveal: 1.0
     property bool terminalSearchVisible: false
     property int pendingPasteLineCount: 0
     property bool appearancePreviewActive: false
@@ -59,6 +60,7 @@ Rectangle {
         }
         settingsTabOpen = true;
         currentPage = "settings";
+        settingsPane.revealCurrentCategory();
         Qt.callLater(settingsPane.focusCurrentCategory);
     }
 
@@ -177,6 +179,12 @@ Rectangle {
         if (currentPage === "settings") {
             settingsTabOpen = true;
         }
+        if (currentPage === "hosts") {
+            hostsPageReveal = Theme.animationsEnabled ? 0.0 : 1.0;
+            if (Theme.animationsEnabled) {
+                hostsPageEntryAnimation.restart();
+            }
+        }
         if (currentPage !== "settings") {
             endWindowAppearancePreview();
         }
@@ -240,6 +248,17 @@ Rectangle {
         function onActiveTerminalTabChanged() {
             Qt.callLater(titleTerminalTabs.syncCurrentIndex);
         }
+    }
+
+    NumberAnimation {
+        id: hostsPageEntryAnimation
+
+        target: root
+        property: "hostsPageReveal"
+        from: 0.0
+        to: 1.0
+        duration: Theme.motionMedium
+        easing.type: Easing.OutCubic
     }
 
     Connections {
@@ -377,6 +396,31 @@ Rectangle {
                 onCountChanged: Qt.callLater(ensureCurrentTabVisible)
                 onCurrentIndexChanged: Qt.callLater(ensureCurrentTabVisible)
                 onWidthChanged: Qt.callLater(ensureCurrentTabVisible)
+
+                addDisplaced: Transition {
+                    NumberAnimation {
+                        properties: "x"
+                        duration: Theme.motionMedium
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
+                remove: Transition {
+                    NumberAnimation {
+                        property: "opacity"
+                        to: 0.0
+                        duration: Theme.motionFast
+                        easing.type: Easing.InCubic
+                    }
+                }
+
+                removeDisplaced: Transition {
+                    NumberAnimation {
+                        properties: "x"
+                        duration: Theme.motionMedium
+                        easing.type: Easing.OutCubic
+                    }
+                }
 
                 function syncCurrentIndex() {
                     let activeIndex = -1;
@@ -1080,6 +1124,7 @@ Rectangle {
             HostConnectionPane {
                 anchors.fill: parent
                 visible: root.currentPage === "hosts"
+                opacity: root.hostsPageReveal
                 controller: root.controller
                 backgroundColor: Theme.workspaceBackground
                 raisedColor: root.raisedColor
@@ -1088,6 +1133,10 @@ Rectangle {
                 mutedColor: root.mutedColor
                 accentColor: root.accentColor
                 onConnectionStarted: root.currentPage = "terminal"
+
+                transform: Translate {
+                    y: Theme.motionDistanceSmall * (1.0 - root.hostsPageReveal)
+                }
             }
 
             SettingsPane {
