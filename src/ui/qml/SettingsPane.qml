@@ -13,6 +13,7 @@ Rectangle {
     property string statusMessage: ""
     property bool statusIsError: false
     readonly property bool draftDark: themeBox.currentIndex === 1 || (themeBox.currentIndex === 0 && Theme.systemDark)
+    readonly property bool adjustableBackdrop: backdropBox.currentIndex === 0 || backdropBox.currentIndex === 1
     readonly property bool compactLayout: width < Theme.narrowWindowWidth
     readonly property int contentInset: compactLayout ? Theme.pageInsetCompact : Theme.pageInset
 
@@ -31,7 +32,7 @@ Rectangle {
     }
 
     function backdropIndex(token) {
-        return token === "mica" ? 1 : token === "acrylic" ? 2 : 0;
+        return token === "transparent" ? 1 : token === "mica" ? 2 : token === "micaAlt" ? 3 : 0;
     }
 
     function cursorIndex(token) {
@@ -43,7 +44,7 @@ Rectangle {
     }
 
     function backdropToken() {
-        return backdropBox.currentIndex === 1 ? "mica" : backdropBox.currentIndex === 2 ? "acrylic" : "none";
+        return backdropBox.currentIndex === 1 ? "transparent" : backdropBox.currentIndex === 2 ? "mica" : backdropBox.currentIndex === 3 ? "micaAlt" : "acrylic";
     }
 
     function cursorToken() {
@@ -53,7 +54,7 @@ Rectangle {
     function loadDraft() {
         loadingDraft = true;
         themeBox.currentIndex = themeIndex(controller.themePreference);
-        opacitySlider.value = controller.windowOpacity;
+        opacitySlider.value = controller.backdropOpacity;
         backdropBox.currentIndex = backdropIndex(controller.backdropPreference);
         fontFamilyField.text = controller.terminalFontFamily;
         fontSizeBox.value = controller.terminalFontSize;
@@ -139,20 +140,34 @@ Rectangle {
                     }
 
                     Label {
-                        text: "Window opacity"
+                        text: "Windows backdrop"
+                        color: Theme.text
+                    }
+                    AppComboBox {
+                        id: backdropBox
+                        objectName: "settingsBackdrop"
+                        Layout.fillWidth: true
+                        model: ["Acrylic", "Transparent", "Mica", "Mica Alt"]
+                        accessibleName: "Windows backdrop material"
+                    }
+
+                    Label {
+                        visible: pane.adjustableBackdrop
+                        text: "Backdrop opacity"
                         color: Theme.text
                     }
                     RowLayout {
+                        visible: pane.adjustableBackdrop
                         Layout.fillWidth: true
 
                         AppSlider {
                             id: opacitySlider
                             objectName: "settingsOpacity"
                             Layout.fillWidth: true
-                            from: 0.5
+                            from: 0.0
                             to: 1.0
                             stepSize: 0.05
-                            accessibleName: "Application window opacity"
+                            accessibleName: "Backdrop opacity"
                         }
 
                         Text {
@@ -165,18 +180,6 @@ Rectangle {
                         }
                     }
 
-                    Label {
-                        text: "Windows backdrop"
-                        color: Theme.text
-                    }
-                    AppComboBox {
-                        id: backdropBox
-                        objectName: "settingsBackdrop"
-                        Layout.fillWidth: true
-                        model: ["None", "Mica", "Acrylic"]
-                        accessibleName: "Windows backdrop material"
-                    }
-
                     Item {
                         Layout.columnSpan: appearanceLayout.columns
                         Layout.fillWidth: true
@@ -185,9 +188,11 @@ Rectangle {
                         Rectangle {
                             anchors.fill: parent
                             radius: Theme.radiusControl
-                            color: pane.draftDark ? "#111827" : "#FFFFFF"
+                            color: {
+                                const alpha = backdropBox.currentIndex === 0 ? 0.72 * opacitySlider.value : backdropBox.currentIndex === 1 ? opacitySlider.value : backdropBox.currentIndex === 2 ? 0.82 : 0.88;
+                                return pane.draftDark ? Qt.rgba(0.067, 0.094, 0.153, alpha) : Qt.rgba(1.0, 1.0, 1.0, alpha);
+                            }
                             border.color: pane.draftDark ? "#334155" : "#94A3B8"
-                            opacity: opacitySlider.value
 
                             Row {
                                 anchors.centerIn: parent
@@ -200,7 +205,7 @@ Rectangle {
                                     color: pane.draftDark ? "#22C55E" : "#15803D"
                                 }
                                 Text {
-                                    text: themeBox.currentText + " · " + backdropBox.currentText + " · preview"
+                                    text: themeBox.currentText + " · " + backdropBox.currentText + (pane.adjustableBackdrop ? " · " + Math.round(opacitySlider.value * 100) + "%" : " · system controlled")
                                     color: pane.draftDark ? "#F8FAFC" : "#0F172A"
                                     font.family: Theme.uiFont
                                     font.pixelSize: Theme.textBody

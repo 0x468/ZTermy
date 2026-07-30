@@ -40,7 +40,7 @@ class AppController final : public QObject
     Q_PROPERTY(int terminalSearchTotal READ terminalSearchTotal NOTIFY terminalSearchChanged)
     Q_PROPERTY(bool terminalSearchCaseSensitive READ terminalSearchCaseSensitive NOTIFY terminalSearchChanged)
     Q_PROPERTY(QString themePreference READ themePreference NOTIFY applicationSettingsChanged)
-    Q_PROPERTY(qreal windowOpacity READ windowOpacity NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(qreal backdropOpacity READ backdropOpacity NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString backdropPreference READ backdropPreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString terminalFontFamily READ terminalFontFamily NOTIFY applicationSettingsChanged)
     Q_PROPERTY(int terminalFontSize READ terminalFontSize NOTIFY applicationSettingsChanged)
@@ -82,7 +82,7 @@ public:
     [[nodiscard]] int terminalSearchTotal() const noexcept;
     [[nodiscard]] bool terminalSearchCaseSensitive() const noexcept;
     [[nodiscard]] QString themePreference() const;
-    [[nodiscard]] qreal windowOpacity() const noexcept;
+    [[nodiscard]] qreal backdropOpacity() const noexcept;
     [[nodiscard]] QString backdropPreference() const;
     [[nodiscard]] QString terminalFontFamily() const;
     [[nodiscard]] int terminalFontSize() const noexcept;
@@ -106,7 +106,7 @@ public:
     Q_INVOKABLE bool duplicateHostProfile(const QString &id);
     Q_INVOKABLE bool deleteHostProfile(const QString &id);
     Q_INVOKABLE bool connectHostProfile(const QString &id, const QString &secret);
-    Q_INVOKABLE bool saveApplicationSettings(const QString &theme, qreal opacity, const QString &backdrop,
+    Q_INVOKABLE bool saveApplicationSettings(const QString &theme, qreal backdropOpacity, const QString &backdrop,
                                              const QString &fontFamily, int fontSize, const QString &cursor,
                                              bool cursorShouldBlink, bool shouldCopyOnSelect,
                                              bool shouldConfirmMultilinePaste);

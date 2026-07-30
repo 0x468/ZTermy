@@ -321,15 +321,13 @@ struct ResizeHitRuntimeCase
     return value != nullptr && SUCCEEDED(DwmGetWindowAttribute(windowHandle, attribute, value, sizeof(*value)));
 }
 
-[[nodiscard]] bool verifyWindowAppearance(ztermy::NativeWindow &window, const qreal opacity,
-                                          const QString &backdropPreference, const bool darkMode,
-                                          const int expectedBackdrop)
+[[nodiscard]] bool verifyWindowAppearance(ztermy::NativeWindow &window, const QString &backdropPreference,
+                                          const bool darkMode, const int expectedBackdrop)
 {
-    if (!window.applyAppearance(opacity, backdropPreference, darkMode))
+    if (!window.applyAppearance(backdropPreference, darkMode))
     {
         qCWarning(applicationLog) << "Window appearance request was rejected"
-                                  << "opacity=" << opacity << "backdrop=" << backdropPreference
-                                  << "darkMode=" << darkMode;
+                                  << "backdrop=" << backdropPreference << "darkMode=" << darkMode;
         return false;
     }
     processWindowEventsFor(std::chrono::milliseconds{150});
@@ -345,19 +343,19 @@ struct ResizeHitRuntimeCase
     const bool cornerPreferenceRead =
         queryDwmIntAttribute(windowHandle, windowCornerPreferenceAttribute, &appliedCornerPreference);
     const bool backdropRead = queryDwmIntAttribute(windowHandle, systemBackdropTypeAttribute, &appliedBackdrop);
-    const bool opacityMatches = qAbs(window.opacity() - opacity) < 0.001;
+    const bool windowRemainsOpaque = qAbs(window.opacity() - 1.0) < 0.001;
     const bool darkModeMatches = darkModeRead && appliedDarkMode == static_cast<int>(darkMode);
     constexpr int roundCornerPreference = 2;
     const bool cornerPreferenceMatches = cornerPreferenceRead && appliedCornerPreference == roundCornerPreference;
     const bool backdropMatches = backdropRead && appliedBackdrop == expectedBackdrop;
     qCInfo(applicationLog) << "Window appearance runtime check"
-                           << "opacity=" << window.opacity() << "opacityMatches=" << opacityMatches
+                           << "windowOpacity=" << window.opacity() << "windowRemainsOpaque=" << windowRemainsOpaque
                            << "darkModeRead=" << darkModeRead << "darkMode=" << appliedDarkMode
                            << "darkModeMatches=" << darkModeMatches << "cornerPreferenceRead=" << cornerPreferenceRead
                            << "cornerPreference=" << appliedCornerPreference
                            << "cornerPreferenceMatches=" << cornerPreferenceMatches << "backdropRead=" << backdropRead
                            << "backdrop=" << appliedBackdrop << "backdropMatches=" << backdropMatches;
-    return opacityMatches && darkModeMatches && cornerPreferenceMatches && backdropMatches;
+    return windowRemainsOpaque && darkModeMatches && cornerPreferenceMatches && backdropMatches;
 }
 
 [[nodiscard]] bool runWindowAppearanceRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller)
@@ -369,57 +367,89 @@ struct ResizeHitRuntimeCase
     const bool defaultAlphaBuffer = QQuickWindow::hasDefaultAlphaBuffer();
     const int surfaceAlphaBits = window.format().alphaBufferSize();
     const bool translucentSurfaceCapable = defaultAlphaBuffer && surfaceAlphaBits > 0 && window.color().alpha() == 0;
-    constexpr int noBackdrop = 1;
+    constexpr int transparentBackdrop = 1;
     constexpr int micaBackdrop = 2;
     constexpr int acrylicBackdrop = 3;
-    const auto saveAppearance = [&controller](const QString &theme, const qreal opacity, const QString &backdrop) {
-        return controller.saveApplicationSettings(theme, opacity, backdrop, controller.terminalFontFamily(),
+    constexpr int micaAltBackdrop = 4;
+    const auto saveAppearance = [&controller](const QString &theme, const qreal backdropOpacity,
+                                              const QString &backdrop) {
+        return controller.saveApplicationSettings(theme, backdropOpacity, backdrop, controller.terminalFontFamily(),
                                                   controller.terminalFontSize(), controller.cursorPreference(),
                                                   controller.cursorBlink(), controller.copyOnSelect(),
                                                   controller.confirmMultilinePaste());
     };
-    const auto surfaceAlpha = [&window] {
+    const auto surfaceAlpha = [&window](const char *propertyName) {
         QQuickItem *rootObject = window.rootObject();
-        return rootObject == nullptr ? -1 : rootObject->property("backgroundColor").value<QColor>().alpha();
+        return rootObject == nullptr ? -1 : rootObject->property(propertyName).value<QColor>().alpha();
     };
-    const bool darkNoneSaved = saveAppearance(QStringLiteral("dark"), 1.0, QStringLiteral("none"));
+    const bool darkAcrylicSaved = saveAppearance(QStringLiteral("dark"), 1.0, QStringLiteral("acrylic"));
     processWindowEventsFor(std::chrono::milliseconds{150});
-    const bool darkNone = verifyWindowAppearance(window, 1.0, QStringLiteral("none"), true, noBackdrop);
-    const bool noneSurfaceOpaque = surfaceAlpha() == 255;
-    const qreal baselineOpacity = window.opacity();
-    const bool invalidOpacityRejected = !window.applyAppearance(0.49, QStringLiteral("none"), false)
-                                        && qAbs(window.opacity() - baselineOpacity) < 0.001;
-    const bool invalidBackdropRejected = !window.applyAppearance(0.75, QStringLiteral("invalid"), false)
-                                         && qAbs(window.opacity() - baselineOpacity) < 0.001;
-    const bool lightMicaSaved = saveAppearance(QStringLiteral("light"), 0.85, QStringLiteral("mica"));
+    const bool darkAcrylic = verifyWindowAppearance(window, QStringLiteral("acrylic"), true, acrylicBackdrop);
+    const int acrylicRootAlpha = surfaceAlpha("backgroundColor");
+    const int acrylicContentAlpha = surfaceAlpha("contentColor");
+    const int acrylicChromeAlpha = surfaceAlpha("chromeColor");
+    const bool acrylicSurfaceContract =
+        acrylicRootAlpha == 0 && acrylicContentAlpha > 0 && acrylicContentAlpha < 255 && acrylicChromeAlpha > 0;
+    const bool invalidBackdropRejected =
+        !window.applyAppearance(QStringLiteral("invalid"), false) && qAbs(window.opacity() - 1.0) < 0.001;
+    const bool invalidBackdropOpacityRejected =
+        !saveAppearance(QStringLiteral("dark"), -0.1, QStringLiteral("acrylic"));
+
+    const bool transparentSaved = saveAppearance(QStringLiteral("dark"), 0.55, QStringLiteral("transparent"));
     processWindowEventsFor(std::chrono::milliseconds{150});
-    const bool lightMica = verifyWindowAppearance(window, 0.85, QStringLiteral("mica"), false, micaBackdrop);
-    const bool micaSurfaceTranslucent = surfaceAlpha() > 0 && surfaceAlpha() < 255;
-    const bool darkAcrylicSaved = saveAppearance(QStringLiteral("dark"), 0.75, QStringLiteral("acrylic"));
+    const bool transparent = verifyWindowAppearance(window, QStringLiteral("transparent"), true, transparentBackdrop);
+    const int transparentContentAlpha = surfaceAlpha("contentColor");
+    const bool transparentSurfaceContract =
+        surfaceAlpha("backgroundColor") == 0 && transparentContentAlpha > 0 && transparentContentAlpha < 255;
+
+    const bool lightMicaSaved = saveAppearance(QStringLiteral("light"), 0.1, QStringLiteral("mica"));
     processWindowEventsFor(std::chrono::milliseconds{150});
-    const bool darkAcrylic = verifyWindowAppearance(window, 0.75, QStringLiteral("acrylic"), true, acrylicBackdrop);
-    const bool acrylicSurfaceTranslucent = surfaceAlpha() > 0 && surfaceAlpha() < 255;
-    const bool restoredSaved = saveAppearance(QStringLiteral("dark"), 1.0, QStringLiteral("none"));
+    const bool lightMica = verifyWindowAppearance(window, QStringLiteral("mica"), false, micaBackdrop);
+    const int micaRootAlpha = surfaceAlpha("backgroundColor");
+    const int micaContentAlpha = surfaceAlpha("contentColor");
+    const int micaChromeAlpha = surfaceAlpha("chromeColor");
+    const bool micaSurfaceContract =
+        micaRootAlpha == 0 && micaContentAlpha > 0 && micaContentAlpha < 255 && micaChromeAlpha > 0;
+
+    const bool darkMicaAltSaved = saveAppearance(QStringLiteral("dark"), 0.9, QStringLiteral("micaAlt"));
     processWindowEventsFor(std::chrono::milliseconds{150});
-    const bool restored = verifyWindowAppearance(window, 1.0, QStringLiteral("none"), true, noBackdrop);
-    const bool restoredSurfaceOpaque = surfaceAlpha() == 255;
+    const bool darkMicaAlt = verifyWindowAppearance(window, QStringLiteral("micaAlt"), true, micaAltBackdrop);
+    const int micaAltContentAlpha = surfaceAlpha("contentColor");
+    const int micaAltChromeAlpha = surfaceAlpha("chromeColor");
+    const bool micaAltSurfaceContract = surfaceAlpha("backgroundColor") == 0 && micaAltContentAlpha > micaContentAlpha
+                                        && micaAltChromeAlpha > micaChromeAlpha;
+    const bool adjustableSurfacesDistinct =
+        acrylicContentAlpha != transparentContentAlpha && acrylicChromeAlpha < micaChromeAlpha;
+
+    const bool restoredSaved = saveAppearance(QStringLiteral("dark"), 1.0, QStringLiteral("acrylic"));
+    processWindowEventsFor(std::chrono::milliseconds{150});
+    const bool restored = verifyWindowAppearance(window, QStringLiteral("acrylic"), true, acrylicBackdrop);
 
     qCInfo(applicationLog) << "Window appearance runtime summary"
                            << "defaultAlphaBuffer=" << defaultAlphaBuffer << "surfaceAlphaBits=" << surfaceAlphaBits
                            << "transparentClearColor=" << (window.color().alpha() == 0)
                            << "translucentSurfaceCapable=" << translucentSurfaceCapable
-                           << "darkNoneSaved=" << darkNoneSaved << "darkNone=" << darkNone
-                           << "noneSurfaceOpaque=" << noneSurfaceOpaque
-                           << "invalidOpacityRejected=" << invalidOpacityRejected
-                           << "invalidBackdropRejected=" << invalidBackdropRejected << "lightMica=" << lightMica
-                           << "lightMicaSaved=" << lightMicaSaved << "micaSurfaceTranslucent=" << micaSurfaceTranslucent
                            << "darkAcrylicSaved=" << darkAcrylicSaved << "darkAcrylic=" << darkAcrylic
-                           << "acrylicSurfaceTranslucent=" << acrylicSurfaceTranslucent
-                           << "restoredSaved=" << restoredSaved << "restored=" << restored
-                           << "restoredSurfaceOpaque=" << restoredSurfaceOpaque;
-    return translucentSurfaceCapable && darkNoneSaved && darkNone && noneSurfaceOpaque && invalidOpacityRejected
-           && invalidBackdropRejected && lightMicaSaved && lightMica && micaSurfaceTranslucent && darkAcrylicSaved
-           && darkAcrylic && acrylicSurfaceTranslucent && restoredSaved && restored && restoredSurfaceOpaque;
+                           << "acrylicRootAlpha=" << acrylicRootAlpha << "acrylicContentAlpha=" << acrylicContentAlpha
+                           << "acrylicChromeAlpha=" << acrylicChromeAlpha
+                           << "acrylicSurfaceContract=" << acrylicSurfaceContract
+                           << "invalidBackdropRejected=" << invalidBackdropRejected
+                           << "invalidBackdropOpacityRejected=" << invalidBackdropOpacityRejected
+                           << "transparentSaved=" << transparentSaved << "transparent=" << transparent
+                           << "transparentContentAlpha=" << transparentContentAlpha
+                           << "transparentSurfaceContract=" << transparentSurfaceContract << "lightMica=" << lightMica
+                           << "lightMicaSaved=" << lightMicaSaved << "micaRootAlpha=" << micaRootAlpha
+                           << "micaContentAlpha=" << micaContentAlpha << "micaChromeAlpha=" << micaChromeAlpha
+                           << "micaSurfaceContract=" << micaSurfaceContract << "darkMicaAltSaved=" << darkMicaAltSaved
+                           << "darkMicaAlt=" << darkMicaAlt << "micaAltContentAlpha=" << micaAltContentAlpha
+                           << "micaAltChromeAlpha=" << micaAltChromeAlpha
+                           << "micaAltSurfaceContract=" << micaAltSurfaceContract
+                           << "adjustableSurfacesDistinct=" << adjustableSurfacesDistinct
+                           << "restoredSaved=" << restoredSaved << "restored=" << restored;
+    return translucentSurfaceCapable && darkAcrylicSaved && darkAcrylic && acrylicSurfaceContract
+           && invalidBackdropRejected && invalidBackdropOpacityRejected && transparentSaved && transparent
+           && transparentSurfaceContract && lightMicaSaved && lightMica && micaSurfaceContract && darkMicaAltSaved
+           && darkMicaAlt && micaAltSurfaceContract && adjustableSurfacesDistinct && restoredSaved && restored;
 }
 
 [[nodiscard]] bool captureLayout(ztermy::NativeWindow &window, const QString &outputDirectory, const QString &name)
@@ -489,8 +519,8 @@ struct ResizeHitRuntimeCase
 
 [[nodiscard]] bool applyUiLayoutSmokeTheme(ztermy::AppController &controller, const QString &theme)
 {
-    return controller.saveApplicationSettings(theme, 1.0, QStringLiteral("none"), QStringLiteral("Cascadia Mono"), 14,
-                                              QStringLiteral("terminal"), true, false, true);
+    return controller.saveApplicationSettings(theme, 1.0, QStringLiteral("acrylic"), QStringLiteral("Cascadia Mono"),
+                                              14, QStringLiteral("terminal"), true, false, true);
 }
 
 [[nodiscard]] bool runUiLayoutRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller,
@@ -582,9 +612,9 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
 [[nodiscard]] bool verifySettingsTabOrder(ztermy::NativeWindow &window, QQuickItem *rootObject)
 {
     constexpr std::array<const char *, 12> order{
-        "settingsTheme",          "settingsOpacity", "settingsBackdrop",    "settingsFontFamily",
-        "settingsFontSize",       "settingsCursor",  "settingsCursorBlink", "settingsCopyOnSelect",
-        "settingsMultilinePaste", "settingsReset",   "settingsDiscard",     "settingsApply",
+        "settingsTheme",          "settingsBackdrop", "settingsOpacity",     "settingsFontFamily",
+        "settingsFontSize",       "settingsCursor",   "settingsCursorBlink", "settingsCopyOnSelect",
+        "settingsMultilinePaste", "settingsReset",    "settingsDiscard",     "settingsApply",
     };
 
     if (!focusItem(window, quickItem(rootObject, order.front()), QString::fromLatin1(order.front())))
@@ -757,7 +787,7 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
     }
     sendKey(window, Qt::Key_Return);
     const bool settingsApplied = controller.themePreference() == QStringLiteral("light")
-                                 && qAbs(controller.windowOpacity() - 0.95) < 0.001
+                                 && qAbs(controller.backdropOpacity() - 0.95) < 0.001
                                  && controller.terminalFontSize() == 15 && !controller.cursorBlink()
                                  && controller.copyOnSelect() && !controller.confirmMultilinePaste();
     if (!settingsApplied)

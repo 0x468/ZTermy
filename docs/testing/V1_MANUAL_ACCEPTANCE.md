@@ -179,11 +179,12 @@ does not provide the requested Mica or Acrylic effect. If every available
 environment supports both effects, record `NOT RUN`.
 
 1. Start the static Release candidate with a disposable data directory.
-2. Apply 75% opacity with None, then Mica, then Acrylic.
+2. Compare Acrylic and Transparent at 50% backdrop opacity, then Mica and
+   Mica Alt with their system-controlled opacity.
 3. After each change, resize, snap, maximize, restore, open a dialog, and use
    the terminal and Settings controls.
 4. Restart ztermy and confirm the saved selection can still be opened and
-   changed back to None/100%.
+   changed back to Acrylic/100%.
 
 Expected: an unavailable effect falls back to an ordinary readable background;
 the window never becomes black, fully invisible, unclickable, or unstable.

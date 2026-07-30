@@ -20,13 +20,14 @@ types.
 The V1 schema contains:
 
 - system, dark, or light theme preference;
-- window opacity and Windows backdrop preference;
+- Acrylic, Transparent, Mica, or Mica Alt backdrop preference and background
+  opacity;
 - terminal font family and size;
 - terminal-controlled or user-selected cursor style and blinking;
 - copy-on-select and multiline-paste confirmation behavior.
 
-Input is strictly typed and range checked. Window opacity is limited to
-`0.5`–`1.0`, terminal font size to `8`–`32` pixels, and the font-family name
+Input is strictly typed and range checked. Backdrop opacity is limited to
+`0.0`–`1.0`, terminal font size to `8`–`32` pixels, and the font-family name
 must be non-empty and bounded. Unknown enum tokens, missing fields, fractional
 font sizes, oversized files, malformed JSON, and unsupported schema versions
 are rejected.
@@ -35,6 +36,11 @@ Missing files use safe defaults. Writes use `QSaveFile` so a failed update
 does not replace the last complete document. The application controller owns
 the current validated value and emits one change notification only after a
 successful write. UI preview state remains separate until the user applies it.
+
+Schema version 2 renames `windowOpacity` to `backdropOpacity`, replaces the
+legacy None token with Transparent, and adds Mica Alt. Version 1 files are
+migrated in memory: their opacity value is retained and None maps to
+Transparent. The next successful save writes only the version 2 fields.
 
 ## Consequences
 

@@ -22,6 +22,7 @@ class ApplicationSettingsTests final : public QObject
 private slots:
     void missingFileUsesDefaults();
     void savesAndLoadsEveryPreference();
+    void migratesLegacyWindowOpacityAndNoneBackdrop();
     void rejectsMalformedUnsupportedAndIncompleteDocuments();
     void rejectsOutOfRangeValues();
     void createsMissingParentDirectory();
@@ -46,8 +47,8 @@ void ApplicationSettingsTests::savesAndLoadsEveryPreference()
 
     const ztermy::config::ApplicationSettings expected{
         .theme = ztermy::config::ThemePreference::light,
-        .windowOpacity = 0.82,
-        .backdrop = ztermy::config::BackdropPreference::mica,
+        .backdropOpacity = 0.82,
+        .backdrop = ztermy::config::BackdropPreference::micaAlt,
         .terminalFontFamily = QStringLiteral("Cascadia Code"),
         .terminalFontSize = 18,
         .cursor = ztermy::config::CursorPreference::bar,
@@ -63,6 +64,41 @@ void ApplicationSettingsTests::savesAndLoadsEveryPreference()
     QCOMPARE(*loaded, expected);
 }
 
+void ApplicationSettingsTests::migratesLegacyWindowOpacityAndNoneBackdrop()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("settings.json"));
+    const ztermy::config::ApplicationSettingsStore store(path);
+
+    QVERIFY(writeFile(path, QByteArrayLiteral(R"({
+        "version": 1,
+        "theme": "dark",
+        "windowOpacity": 0.75,
+        "backdrop": "none",
+        "terminalFontFamily": "Cascadia Mono",
+        "terminalFontSize": 14,
+        "cursor": "terminal",
+        "cursorBlink": true,
+        "copyOnSelect": false,
+        "confirmMultilinePaste": true
+    })")));
+
+    const auto loaded = store.load();
+    QVERIFY(loaded);
+    QCOMPARE(loaded->backdropOpacity, 0.75);
+    QCOMPARE(loaded->backdrop, ztermy::config::BackdropPreference::transparent);
+
+    QVERIFY(store.save(*loaded));
+    QFile saved(path);
+    QVERIFY(saved.open(QIODevice::ReadOnly));
+    const QByteArray persisted = saved.readAll();
+    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 2")));
+    QVERIFY(persisted.contains(QByteArrayLiteral("\"backdropOpacity\": 0.75")));
+    QVERIFY(persisted.contains(QByteArrayLiteral("\"backdrop\": \"transparent\"")));
+    QVERIFY(!persisted.contains(QByteArrayLiteral("windowOpacity")));
+}
+
 void ApplicationSettingsTests::rejectsMalformedUnsupportedAndIncompleteDocuments()
 {
     QTemporaryDir directory;
@@ -75,7 +111,7 @@ void ApplicationSettingsTests::rejectsMalformedUnsupportedAndIncompleteDocuments
     QVERIFY(!malformed);
     QCOMPARE(malformed.error(), ztermy::config::ApplicationSettingsStoreError::invalidFormat);
 
-    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":2})")));
+    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":3})")));
     const auto unsupported = store.load();
     QVERIFY(!unsupported);
     QCOMPARE(unsupported.error(), ztermy::config::ApplicationSettingsStoreError::unsupportedVersion);
@@ -93,7 +129,7 @@ void ApplicationSettingsTests::rejectsOutOfRangeValues()
     const ztermy::config::ApplicationSettingsStore store(directory.filePath(QStringLiteral("settings.json")));
 
     auto invalidOpacity = ztermy::config::ApplicationSettings{};
-    invalidOpacity.windowOpacity = 0.49;
+    invalidOpacity.backdropOpacity = -0.01;
     const auto opacityResult = store.save(invalidOpacity);
     QVERIFY(!opacityResult);
     QCOMPARE(opacityResult.error(), ztermy::config::ApplicationSettingsStoreError::invalidFormat);

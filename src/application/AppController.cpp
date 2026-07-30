@@ -266,9 +266,9 @@ QString AppController::themePreference() const
     return config::themePreferenceToken(m_settings.theme);
 }
 
-qreal AppController::windowOpacity() const noexcept
+qreal AppController::backdropOpacity() const noexcept
 {
-    return m_settings.windowOpacity;
+    return m_settings.backdropOpacity;
 }
 
 QString AppController::backdropPreference() const
@@ -693,7 +693,7 @@ bool AppController::connectHostProfile(const QString &id, const QString &secret)
                              utf8QString(profile->privateKeyPath), secret);
 }
 
-bool AppController::saveApplicationSettings(const QString &theme, const qreal opacity, const QString &backdrop,
+bool AppController::saveApplicationSettings(const QString &theme, const qreal backdropOpacity, const QString &backdrop,
                                             const QString &fontFamily, const int fontSize, const QString &cursor,
                                             const bool cursorShouldBlink, const bool shouldCopyOnSelect,
                                             const bool shouldConfirmMultilinePaste)
@@ -708,7 +708,7 @@ bool AppController::saveApplicationSettings(const QString &theme, const qreal op
 
     return persistApplicationSettings({
         .theme = *parsedTheme,
-        .windowOpacity = opacity,
+        .backdropOpacity = backdropOpacity,
         .backdrop = *parsedBackdrop,
         .terminalFontFamily = fontFamily,
         .terminalFontSize = fontSize,

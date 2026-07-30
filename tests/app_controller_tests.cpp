@@ -182,15 +182,16 @@ void AppControllerTests::persistsApplicationSettings()
     ztermy::AppController controller(profilesPath, knownHostsPath, settingsPath);
     QSignalSpy settingsChanged(&controller, &ztermy::AppController::applicationSettingsChanged);
     QCOMPARE(controller.themePreference(), QStringLiteral("dark"));
-    QCOMPARE(controller.windowOpacity(), 1.0);
+    QCOMPARE(controller.backdropOpacity(), 1.0);
+    QCOMPARE(controller.backdropPreference(), QStringLiteral("acrylic"));
 
-    QVERIFY(controller.saveApplicationSettings(QStringLiteral("light"), 0.8, QStringLiteral("mica"),
+    QVERIFY(controller.saveApplicationSettings(QStringLiteral("light"), 0.8, QStringLiteral("micaAlt"),
                                                QStringLiteral("Cascadia Code"), 18, QStringLiteral("bar"), false, true,
                                                false));
     QCOMPARE(settingsChanged.count(), 1);
     QCOMPARE(controller.themePreference(), QStringLiteral("light"));
-    QCOMPARE(controller.windowOpacity(), 0.8);
-    QCOMPARE(controller.backdropPreference(), QStringLiteral("mica"));
+    QCOMPARE(controller.backdropOpacity(), 0.8);
+    QCOMPARE(controller.backdropPreference(), QStringLiteral("micaAlt"));
     QCOMPARE(controller.terminalFontFamily(), QStringLiteral("Cascadia Code"));
     QCOMPARE(controller.terminalFontSize(), 18);
     QCOMPARE(controller.cursorPreference(), QStringLiteral("bar"));
@@ -205,13 +206,15 @@ void AppControllerTests::persistsApplicationSettings()
 
     ztermy::AppController reloaded(profilesPath, knownHostsPath, settingsPath);
     QCOMPARE(reloaded.themePreference(), QStringLiteral("light"));
-    QCOMPARE(reloaded.windowOpacity(), 0.8);
+    QCOMPARE(reloaded.backdropOpacity(), 0.8);
+    QCOMPARE(reloaded.backdropPreference(), QStringLiteral("micaAlt"));
     QCOMPARE(reloaded.terminalFontFamily(), QStringLiteral("Cascadia Code"));
     QVERIFY(reloaded.copyOnSelect());
 
     QVERIFY(reloaded.resetApplicationSettings());
     QCOMPARE(reloaded.themePreference(), QStringLiteral("dark"));
-    QCOMPARE(reloaded.windowOpacity(), 1.0);
+    QCOMPARE(reloaded.backdropOpacity(), 1.0);
+    QCOMPARE(reloaded.backdropPreference(), QStringLiteral("acrylic"));
     QCOMPARE(reloaded.terminalFontFamily(), QStringLiteral("Cascadia Mono"));
 }
 

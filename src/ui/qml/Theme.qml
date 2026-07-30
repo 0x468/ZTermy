@@ -6,14 +6,25 @@ QtObject {
     property string preference: "dark"
     property bool systemDark: true
     property bool animationsEnabled: true
-    property bool backdropActive: false
+    property string backdropPreference: "acrylic"
+    property real backdropOpacity: 1.0
     readonly property bool dark: preference === "dark" || (preference === "system" && systemDark)
+    readonly property bool micaBackdrop: backdropPreference === "mica"
+    readonly property bool micaAltBackdrop: backdropPreference === "micaAlt"
+    readonly property bool acrylicBackdrop: backdropPreference === "acrylic"
+    readonly property bool transparentBackdrop: backdropPreference === "transparent"
+    readonly property bool backdropActive: micaBackdrop || micaAltBackdrop || acrylicBackdrop || transparentBackdrop
+    readonly property real normalizedBackdropOpacity: Math.max(0.0, Math.min(1.0, backdropOpacity))
 
-    readonly property color windowBackground: dark ? (backdropActive ? "#D90B0F14" : "#FF0B0F14") : (backdropActive ? "#D9F8FAFC" : "#FFF8FAFC")
-    readonly property color panelBackground: dark ? (backdropActive ? "#E6111824" : "#FF111824") : (backdropActive ? "#E6F1F5F9" : "#FFF1F5F9")
-    readonly property color chromeBackground: dark ? (backdropActive ? "#D90F1722" : "#FF0F1722") : (backdropActive ? "#D9E2E8F0" : "#FFE2E8F0")
-    readonly property color contentBackground: dark ? (backdropActive ? "#E60A0E14" : "#FF0A0E14") : (backdropActive ? "#E6FFFFFF" : "#FFFFFFFF")
-    readonly property color workspaceBackground: dark ? (backdropActive ? "#F20B1017" : "#FF0B1017") : (backdropActive ? "#F2FFFFFF" : "#FFFFFFFF")
+    readonly property color windowBackground: backdropActive ? "transparent" : (dark ? "#FF0B0F14" : "#FFF8FAFC")
+    readonly property color panelBackground: withAlpha(dark ? "#111824" : "#F1F5F9", panelAlpha)
+    readonly property color chromeBackground: withAlpha(dark ? "#0F1722" : "#E2E8F0", chromeAlpha)
+    readonly property color contentBackground: withAlpha(dark ? "#0A0E14" : "#FFFFFF", contentAlpha)
+    readonly property color workspaceBackground: withAlpha(dark ? "#0B1017" : "#FFFFFF", workspaceAlpha)
+    readonly property real panelAlpha: micaBackdrop ? 0.82 : micaAltBackdrop ? 0.88 : acrylicBackdrop ? 0.72 * normalizedBackdropOpacity : transparentBackdrop ? 0.92 * normalizedBackdropOpacity : 1.0
+    readonly property real chromeAlpha: micaBackdrop ? 0.60 : micaAltBackdrop ? 0.72 : acrylicBackdrop ? 0.48 * normalizedBackdropOpacity : transparentBackdrop ? 0.75 * normalizedBackdropOpacity : 1.0
+    readonly property real contentAlpha: micaBackdrop ? 0.82 : micaAltBackdrop ? 0.88 : acrylicBackdrop ? 0.72 * normalizedBackdropOpacity : transparentBackdrop ? normalizedBackdropOpacity : 1.0
+    readonly property real workspaceAlpha: micaBackdrop ? 0.88 : micaAltBackdrop ? 0.92 : acrylicBackdrop ? 0.78 * normalizedBackdropOpacity : transparentBackdrop ? normalizedBackdropOpacity : 1.0
     readonly property color raisedBackground: dark ? "#1E293B" : "#E2E8F0"
     readonly property color elevatedBackground: dark ? "#141E2B" : "#F1F5F9"
     readonly property color controlBackground: dark ? "#172033" : "#E2E8F0"
@@ -60,6 +71,10 @@ QtObject {
     readonly property int radiusControl: 8
     readonly property int radiusPanel: 12
     readonly property int motionFast: animationsEnabled ? 120 : 0
+
+    function withAlpha(baseColor: color, alpha: real): color {
+        return Qt.rgba(baseColor.r, baseColor.g, baseColor.b, Math.max(0.0, Math.min(1.0, alpha)));
+    }
 
     readonly property int spacingDense: 4
     readonly property int spacingControl: 8

@@ -18,9 +18,10 @@ enum class ThemePreference : std::uint8_t
 
 enum class BackdropPreference : std::uint8_t
 {
-    none,
-    mica,
     acrylic,
+    transparent,
+    mica,
+    micaAlt,
 };
 
 enum class CursorPreference : std::uint8_t
@@ -34,8 +35,8 @@ enum class CursorPreference : std::uint8_t
 struct ApplicationSettings final
 {
     ThemePreference theme = ThemePreference::dark;
-    double windowOpacity = 1.0;
-    BackdropPreference backdrop = BackdropPreference::none;
+    double backdropOpacity = 1.0;
+    BackdropPreference backdrop = BackdropPreference::acrylic;
     QString terminalFontFamily = QStringLiteral("Cascadia Mono");
     int terminalFontSize = 14;
     CursorPreference cursor = CursorPreference::terminal;

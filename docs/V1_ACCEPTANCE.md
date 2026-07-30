@@ -110,14 +110,14 @@ Only runtime evidence can mark a platform or UI item complete.
   responsiveness ceiling.
 - The real-window appearance gate passed in dynamic Debug and static Release.
   DWM readback matched immersive Dark and Light mode, rounded corners, and
-  None/Mica/Acrylic backdrop values `1`/`2`/`3`; Qt readback matched opacity
-  `1.0`/`0.85`/`0.75`. QML surface readback additionally verified that None
-  remains opaque, Mica and Acrylic expose translucent application surfaces,
-  and returning to None restores opacity. The window exposes an 8-bit alpha
-  buffer with a transparent clear color, and Windows 11 redirected-bitmap alpha
-  is enabled for both system materials. Invalid opacity and backdrop values
-  were rejected without changing the established state, and the gate restored
-  Dark/None/100%.
+  Transparent/Mica/Acrylic/Mica Alt backdrop values `1`/`2`/`3`/`4`. The Qt
+  window remained fully opaque while QML background surfaces carried the
+  adjustable Acrylic/Transparent opacity and fixed Mica/Mica Alt palettes.
+  Mica Alt used a stronger tint than Mica. The window exposes an 8-bit alpha
+  buffer with a transparent clear color, and Windows 11 redirected-bitmap
+  alpha is enabled. Invalid backdrop opacity and backdrop values were rejected
+  without changing the established native state, and the gate restored
+  Dark/Acrylic/100%.
 - The static Release sustained-interaction gate ran a real PowerShell/ConPTY
   session for `1800 s` across 30 independent one-minute latency windows and
   85,563 edit interactions. Every window contained 2,850-2,854 samples and

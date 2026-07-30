@@ -14,6 +14,9 @@ Rectangle {
     readonly property int titleNavigationWidth: Math.min(790, Math.max(310, width - (captionButtonWidth * 3) - 96))
     readonly property color backgroundColor: Theme.windowBackground
     readonly property color panelColor: Theme.panelBackground
+    readonly property color chromeColor: Theme.chromeBackground
+    readonly property color contentColor: Theme.contentBackground
+    readonly property color workspaceColor: Theme.workspaceBackground
     readonly property color raisedColor: Theme.raisedBackground
     readonly property color borderColor: Theme.border
     readonly property color textColor: Theme.text
@@ -57,7 +60,7 @@ Rectangle {
     }
 
     function applyWindowAppearance() {
-        root.windowChrome.applyAppearance(controller.windowOpacity, controller.backdropPreference, Theme.dark);
+        root.windowChrome.applyAppearance(controller.backdropPreference, Theme.dark);
     }
 
     function startLocalTerminalTab() {
@@ -111,8 +114,14 @@ Rectangle {
 
     Binding {
         target: Theme
-        property: "backdropActive"
-        value: root.controller.backdropPreference !== "none"
+        property: "backdropPreference"
+        value: root.controller.backdropPreference
+    }
+
+    Binding {
+        target: Theme
+        property: "backdropOpacity"
+        value: root.controller.backdropOpacity
     }
 
     Component.onCompleted: {

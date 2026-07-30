@@ -14,7 +14,8 @@ namespace
 {
 
 constexpr qint64 maximumSettingsFileSize = qint64{64} * 1024;
-constexpr qint64 currentSchemaVersion = 1;
+constexpr qint64 legacySchemaVersion = 1;
+constexpr qint64 currentSchemaVersion = 2;
 
 using ztermy::config::ApplicationSettings;
 using ztermy::config::ApplicationSettingsStoreError;
@@ -46,17 +47,21 @@ template <>
 template <>
 [[nodiscard]] std::optional<BackdropPreference> parsePreference(const QString &token)
 {
-    if (token == QStringLiteral("none"))
+    if (token == QStringLiteral("acrylic"))
     {
-        return BackdropPreference::none;
+        return BackdropPreference::acrylic;
+    }
+    if (token == QStringLiteral("transparent") || token == QStringLiteral("none"))
+    {
+        return BackdropPreference::transparent;
     }
     if (token == QStringLiteral("mica"))
     {
         return BackdropPreference::mica;
     }
-    if (token == QStringLiteral("acrylic"))
+    if (token == QStringLiteral("micaAlt"))
     {
-        return BackdropPreference::acrylic;
+        return BackdropPreference::micaAlt;
     }
     return std::nullopt;
 }
@@ -86,21 +91,26 @@ template <>
 [[nodiscard]] bool validSettings(const ApplicationSettings &settings)
 {
     const QString fontFamily = settings.terminalFontFamily.trimmed();
-    return settings.windowOpacity >= 0.5 && settings.windowOpacity <= 1.0 && !fontFamily.isEmpty()
+    return settings.backdropOpacity >= 0.0 && settings.backdropOpacity <= 1.0 && !fontFamily.isEmpty()
            && fontFamily.size() <= 128 && settings.terminalFontSize >= 8 && settings.terminalFontSize <= 32;
 }
 
 [[nodiscard]] std::expected<ApplicationSettings, ApplicationSettingsStoreError> parseSettings(const QJsonObject &root)
 {
     const QJsonValue versionValue = root.value(QStringLiteral("version"));
-    if (!versionValue.isDouble() || versionValue.toInteger() != currentSchemaVersion)
+    if (!versionValue.isDouble())
     {
-        return std::unexpected(versionValue.isDouble() ? ApplicationSettingsStoreError::unsupportedVersion
-                                                       : ApplicationSettingsStoreError::invalidFormat);
+        return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
+    }
+    const qint64 version = versionValue.toInteger();
+    if (version != legacySchemaVersion && version != currentSchemaVersion)
+    {
+        return std::unexpected(ApplicationSettingsStoreError::unsupportedVersion);
     }
 
     const QJsonValue themeValue = root.value(QStringLiteral("theme"));
-    const QJsonValue opacityValue = root.value(QStringLiteral("windowOpacity"));
+    const QJsonValue opacityValue = root.value(version == legacySchemaVersion ? QStringLiteral("windowOpacity")
+                                                                              : QStringLiteral("backdropOpacity"));
     const QJsonValue backdropValue = root.value(QStringLiteral("backdrop"));
     const QJsonValue fontFamilyValue = root.value(QStringLiteral("terminalFontFamily"));
     const QJsonValue fontSizeValue = root.value(QStringLiteral("terminalFontSize"));
@@ -127,7 +137,7 @@ template <>
 
     ApplicationSettings settings{
         .theme = *theme,
-        .windowOpacity = opacityValue.toDouble(),
+        .backdropOpacity = opacityValue.toDouble(),
         .backdrop = *backdrop,
         .terminalFontFamily = fontFamilyValue.toString(),
         .terminalFontSize = static_cast<int>(fontSize),
@@ -204,7 +214,7 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
     const QJsonObject root{
         {QStringLiteral("version"), currentSchemaVersion},
         {QStringLiteral("theme"), themePreferenceToken(settings.theme)},
-        {QStringLiteral("windowOpacity"), settings.windowOpacity},
+        {QStringLiteral("backdropOpacity"), settings.backdropOpacity},
         {QStringLiteral("backdrop"), backdropPreferenceToken(settings.backdrop)},
         {QStringLiteral("terminalFontFamily"), settings.terminalFontFamily.trimmed()},
         {QStringLiteral("terminalFontSize"), settings.terminalFontSize},
@@ -245,13 +255,16 @@ QString backdropPreferenceToken(const BackdropPreference preference)
 {
     switch (preference)
     {
-        case BackdropPreference::mica:
-            return QStringLiteral("mica");
         case BackdropPreference::acrylic:
             return QStringLiteral("acrylic");
-        case BackdropPreference::none:
+        case BackdropPreference::transparent:
+            return QStringLiteral("transparent");
+        case BackdropPreference::mica:
+            return QStringLiteral("mica");
+        case BackdropPreference::micaAlt:
+            return QStringLiteral("micaAlt");
         default:
-            return QStringLiteral("none");
+            return QStringLiteral("acrylic");
     }
 }
 

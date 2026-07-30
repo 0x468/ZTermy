@@ -30,6 +30,7 @@ constexpr int kDwmWindowCornerRound = 2;
 constexpr int kDwmSystemBackdropNone = 1;
 constexpr int kDwmSystemBackdropMainWindow = 2;
 constexpr int kDwmSystemBackdropTransientWindow = 3;
+constexpr int kDwmSystemBackdropTabbedWindow = 4;
 constexpr auto kNativeWindowProperty = L"ztermy.NativeWindow";
 constexpr UINT kNcUahDrawCaption = 0x00AE;
 constexpr UINT kNcUahDrawFrame = 0x00AF;
@@ -180,19 +181,17 @@ void NativeWindow::closeWindow()
     close();
 }
 
-bool NativeWindow::applyAppearance(const qreal opacity, const QString &backdropPreference, const bool darkMode)
+bool NativeWindow::applyAppearance(const QString &backdropPreference, const bool darkMode)
 {
-    if (opacity < 0.5 || opacity > 1.0
-        || (backdropPreference != QStringLiteral("none") && backdropPreference != QStringLiteral("mica")
-            && backdropPreference != QStringLiteral("acrylic")))
+    if (backdropPreference != QStringLiteral("acrylic") && backdropPreference != QStringLiteral("transparent")
+        && backdropPreference != QStringLiteral("mica") && backdropPreference != QStringLiteral("micaAlt"))
     {
         return false;
     }
 
-    m_applicationOpacity = opacity;
     m_backdropPreference = backdropPreference;
     m_darkMode = darkMode;
-    setOpacity(m_applicationOpacity);
+    setOpacity(1.0);
     return applyBackdrop();
 }
 
@@ -614,7 +613,7 @@ void NativeWindow::configureNativeWindow()
     SetWindowPos(windowHandle, nullptr, 0, 0, 0, 0,
                  SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
 
-    setOpacity(m_applicationOpacity);
+    setOpacity(1.0);
     (void)applyBackdrop();
 }
 
@@ -632,6 +631,10 @@ bool NativeWindow::applyBackdrop()
     {
         backdropType = kDwmSystemBackdropTransientWindow;
     }
+    else if (m_backdropPreference == QStringLiteral("micaAlt"))
+    {
+        backdropType = kDwmSystemBackdropTabbedWindow;
+    }
     const MARGINS frameMargins{
         .cxLeftWidth = 1,
         .cxRightWidth = 1,
@@ -647,7 +650,7 @@ bool NativeWindow::applyBackdrop()
         DwmSetWindowAttribute(windowHandle, kDwmSystemBackdropType, &backdropType, sizeof(backdropType));
     const bool redirectionAlphaSupported =
         QOperatingSystemVersion::current().microVersion() >= kRedirectionBitmapAlphaMinimumBuild;
-    const BOOL redirectionAlpha = backdropType == kDwmSystemBackdropNone ? FALSE : TRUE;
+    const BOOL redirectionAlpha = TRUE;
     const HRESULT redirectionAlphaResult = redirectionAlphaSupported
                                                ? DwmSetWindowAttribute(windowHandle, kDwmRedirectionBitmapAlpha,
                                                                        &redirectionAlpha, sizeof(redirectionAlpha))

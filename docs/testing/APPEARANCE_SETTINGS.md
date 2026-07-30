@@ -8,7 +8,7 @@ terminal checks.
 
 1. Change several controls without selecting **Apply**, then select
    **Discard changes**.
-2. Change theme, opacity, backdrop, font, cursor, and behavior controls and
+2. Change theme, backdrop style, backdrop opacity, font, cursor, and behavior controls and
    select **Apply**.
 3. Close and restart ztermy.
 
@@ -35,34 +35,46 @@ cmake --build --preset msvc-static-release `
 
 The gate opens the real native window and uses `DwmGetWindowAttribute` to
 verify Dark and Light immersive-mode values, the Windows 11 rounded-corner
-preference, and the exact None, Mica, and Acrylic backdrop types. It also
-checks 100%, 85%, and 75% Qt window opacity, rejects values below the supported
-range and unknown backdrop tokens without changing the baseline. The QML
-surface contract additionally requires an opaque surface for None, translucent
-surfaces for Mica and Acrylic, and an opaque surface again after restoring the
-default Dark/None/100% state. The native Qt Quick window must request an alpha
-buffer before its creation, expose at least one alpha bit, and use a transparent
-clear color. On Windows 11 build 26100 and later, the gate also requires DWM to
-accept redirected-bitmap alpha for Mica and Acrylic. A passing gate proves the
-requested native state reached DWM and that the complete scene/compositor path
-permits the material to be visible; the visual checks below remain necessary
-for readability, material appearance, and interaction review.
+preference, and the exact Acrylic, Transparent, Mica, and Mica Alt backdrop
+types. It requires the Qt window itself to remain at 100% opacity in every
+mode, rejects out-of-range backdrop opacity and unknown backdrop tokens, and
+checks that only the QML background surfaces change alpha. Acrylic and
+Transparent must have adjustable translucent surfaces; Mica must retain a
+fixed surface palette; Mica Alt must use a stronger fixed tint than Mica. All
+four modes require a fully transparent scene root.
 
-1. Apply Dark and Light themes at 100% opacity.
-2. Apply System theme, then change the Windows app color mode and restart
+The native Qt Quick window must request an alpha buffer before its creation,
+expose at least one alpha bit, and use a transparent clear color. On Windows
+11 build 26100 and later, the gate also requires DWM to accept
+redirected-bitmap alpha. A passing gate proves the requested native state
+reached DWM and that the scene/compositor path permits the background to be
+visible; the visual checks below remain necessary for readability, material
+appearance, and interaction review.
+
+1. Place ztermy over a colorful, high-contrast window or desktop background.
+2. In Dark and Light themes, compare Acrylic, Transparent, Mica, and Mica Alt.
+3. In Acrylic and Transparent, compare backdrop opacity at 0%, 50%, and 100%.
+4. Confirm the opacity control is unavailable for Mica and Mica Alt.
+5. Maximize, restore, snap, and resize after each backdrop change.
+6. Apply System theme, then change the Windows app color mode and restart
    ztermy.
-3. At 75% opacity, compare None, Mica, and Acrylic backdrops.
-4. Maximize, restore, snap, and resize after each backdrop change.
 
 Expected:
 
 - Text, borders, fields, dialogs, title-bar controls, and focus indicators
   remain readable in both themes.
 - System follows the Windows app color mode.
-- None is visibly opaque. Mica carries the desktop-derived long-lived window
-  material; Acrylic is more visibly translucent and samples the content behind
-  the window. Backdrop selection does not alter terminal cell colors or stored
-  terminal content.
+- Acrylic continuously blurs and samples content behind the window. Changing
+  backdrop opacity changes only its tinting surfaces and never removes the
+  live blur by fading the final window.
+- Transparent provides ordinary see-through surfaces without Acrylic blur.
+  Its opacity control directly changes those background surfaces.
+- Mica carries the wallpaper- and theme-derived long-lived material. Mica Alt
+  has a stronger tint suitable for the tabbed title-bar hierarchy. Their
+  appearance is system controlled and does not expose backdrop opacity.
+- Backdrop selection and opacity do not alter terminal cell colors, stored
+  terminal content, text opacity, control opacity, or the native window's
+  final opacity.
 - Unsupported DWM attributes degrade to a normal background without a crash.
 - Snap Layouts, native resizing, maximized work-area sizing, and custom
   caption buttons remain functional.
@@ -147,7 +159,7 @@ Select **Reset defaults**, restart, and inspect the active data mode's
 
 Expected:
 
-- Defaults are Dark, 100% opacity, no backdrop, Cascadia Mono 14 px,
+- Defaults are Dark, Acrylic at 100% backdrop opacity, Cascadia Mono 14 px,
   terminal-controlled blinking cursor, copy-on-select off, and multiline
   confirmation on.
 - The file is versioned JSON and contains no password, passphrase, private-key

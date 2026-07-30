@@ -91,7 +91,9 @@ Expected:
 
 1. In Settings, open every Theme, Backdrop, and Cursor dropdown with the mouse,
    Enter, Space, and `Alt+Down`; move with arrow keys and dismiss with Escape.
-2. Change Window opacity with mouse drag, arrow keys, Page Up, and Page Down.
+2. In Acrylic and Transparent, change Backdrop opacity with mouse drag, arrow
+   keys, Page Up, and Page Down. Confirm the control is absent for Mica and
+   Mica Alt.
 3. Edit Font size directly, then use its minus and plus actions.
 4. Toggle all three switches with mouse and Space.
 5. In a private-key host editor, toggle the passphrase checkbox.

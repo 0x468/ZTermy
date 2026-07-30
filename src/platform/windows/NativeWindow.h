@@ -33,7 +33,7 @@ public:
     Q_INVOKABLE void minimizeWindow();
     Q_INVOKABLE void toggleMaximize();
     Q_INVOKABLE void closeWindow();
-    Q_INVOKABLE bool applyAppearance(qreal opacity, const QString &backdropPreference, bool darkMode);
+    Q_INVOKABLE bool applyAppearance(const QString &backdropPreference, bool darkMode);
     Q_INVOKABLE void setTitleBarMetrics(qreal titleHeight, qreal captionLeft, qreal controlsLeft, qreal maximizeLeft,
                                         qreal maximizeWidth);
 
@@ -69,8 +69,7 @@ private:
     qreal m_maximizeWidth = 46.0;
     bool m_maximizeButtonHovered = false;
     bool m_maximizeButtonPressed = false;
-    qreal m_applicationOpacity = 1.0;
-    QString m_backdropPreference = QStringLiteral("none");
+    QString m_backdropPreference = QStringLiteral("acrylic");
     bool m_darkMode = true;
     windowing::ClientAreaAnimationPreference m_animationPreference;
     HWND m_windowHandle = nullptr;
