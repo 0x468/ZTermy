@@ -141,6 +141,26 @@ wrapping, history anchoring, absolute scrollbar navigation, and return to the
 live prompt all behaved as documented. No crash, assertion, stale frame,
 duplicate input, half-cell selection, or forced scroll jump occurred.
 
+The exact portable candidate also completed the final single-display UI route
+at regular and minimum window sizes. Hosts, Settings, Terminal, profile
+create/edit/copy/search/delete, settings discard/apply/reset, terminal tabs,
+page scrolling, and compact-to-regular transitions remained aligned and
+reachable without clipping or stale layout.
+
+With the mouse set aside, Tab and Shift+Tab reached every tested title-bar,
+tab, host, settings, dialog, search, and paste-confirmation action. Enter,
+Space, Alt+Down, arrows, and Escape retained their expected control semantics;
+focus stayed visible, dialogs contained focus, and each activation occurred
+once. First-host-key confirmation was keyboard operable.
+
+Dark, Light, and System were inspected across normal, hover, pressed, focused,
+selected, disabled, validation, success, destructive, dialog, material, and
+opacity states. System followed the Windows application color mode after
+restart. Normal, snapped, maximized, and minimum-size single-display layouts
+were visually accepted at the current physical scale. No manual screenshots
+were saved, so the screenshot-evidence row remains open alongside the
+unavailable physical mixed-DPI matrix.
+
 ## Artifact integrity
 
 | Artifact | Bytes | Independently calculated SHA-256 |
@@ -168,10 +188,10 @@ regression evidence but do not sign off this immutable candidate.
 | --- | --- | --- |
 | Mixed-DPI physical monitor transition | NOT RUN | Only one physical display is available. |
 | Unsupported opacity/backdrop fallback | NOT RUN | No environment with unavailable Acrylic/Mica has been identified. |
-| Narrow/regular mouse and keyboard visual route | NOT RUN | Automated captures passed; candidate still needs the complete manual route. |
-| Dark/Light/System contrast and component states | NOT RUN | Automated Dark/Light captures passed; full manual component-state route remains. |
-| Complete keyboard-only accessibility route | NOT RUN | Automated accessibility and Tab-order gate passed; full manual route remains. |
-| Normal/snapped/maximized/mixed-DPI screenshots | NOT RUN | Automated normal and synthetic-DPI captures exist; required physical matrix is incomplete. |
+| Narrow/regular mouse and keyboard visual route | PASS | Exact portable candidate completed regular/minimum mouse workflows and compact transitions without clipping or overlap. |
+| Dark/Light/System contrast and component states | PASS | Exact portable candidate passed full theme, semantic-state, material, opacity, and System-following inspection. |
+| Complete keyboard-only accessibility route | PASS | Exact portable candidate completed the keyboard-only Hosts, Settings, dialogs, search, paste, and host-key route. |
+| Normal/snapped/maximized/mixed-DPI screenshots | NOT RUN | Single-display normal/snapped/maximized/minimum layouts were visually accepted and automated captures exist; no manual screenshots or physical mixed-DPI evidence were saved. |
 | Windows artifact identity and icon clarity | PASS | Exact portable/MSI candidate showed the expected versioned ztermy identity and clear icon in Explorer and Windows shell surfaces. |
 | ANSI/alternate screen/cursor/clear/resize | PASS | Exact portable candidate passed ANSI foreground/background, cursor movement, clear, Helix alternate-screen restore, and repeated resize. |
 | CJK/wide/combining/emoji/IME | PASS | Exact portable candidate preserved combining, wide CJK, emoji, and uncommitted/committed Chinese IME behavior. |
