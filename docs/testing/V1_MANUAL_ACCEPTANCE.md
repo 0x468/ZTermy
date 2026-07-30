@@ -59,13 +59,18 @@ Get-FileHash -Algorithm SHA256 .\*.msi, .\*.zip
 The calculated hashes must exactly match both manifests. Do not continue if
 either candidate changes afterwards.
 
-Use only `PASS`, `FAIL`, or `NOT RUN` in the result table:
+Use only `PASS`, `FAIL`, `NOT RUN`, or `WAIVED` in the result table:
 
 - `PASS` requires the complete procedure and its expected result.
 - `FAIL` records the first failing step, visible symptom, environment metadata,
   and a screenshot or recording when practical.
 - `NOT RUN` is required when hardware, an unsupported-DWM environment, network
   access, or a clean machine is unavailable. It never counts as acceptance.
+- `WAIVED` requires explicit project-owner approval in the candidate record,
+  including the unavailable condition, retained risk, and strongest available
+  automated or manual evidence. It may accept a missing environment or
+  evidence-retention requirement for a personal release, but it must never
+  conceal an observed failure or replace a runnable required test.
 - Record evidence paths, not secret content. Do not capture passwords,
   passphrases, private keys, terminal commands containing secrets, or
   credential-bearing logs.
@@ -267,4 +272,6 @@ Copy this table into the V1 test record and attach evidence paths:
 | Installed data survives upgrade and uninstall | NOT RUN | |
 | Clean Windows 11 release without developer tools | NOT RUN | |
 
-V1 manual acceptance is complete only when all thirteen rows are `PASS`.
+V1 manual acceptance is complete only when all thirteen rows are `PASS` or
+carry an explicit owner-approved `WAIVED` decision, with no `FAIL` or
+`NOT RUN` result remaining.

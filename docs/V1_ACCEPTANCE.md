@@ -1,6 +1,6 @@
 # V1 acceptance
 
-Status: release candidate; manual sign-off pending
+Status: accepted for V1 0.1.0
 
 Only runtime evidence can mark a platform or UI item complete.
 
@@ -182,27 +182,30 @@ procedures and expected results.
 - [x] All edges and corners resize with native cursors
 - [x] Double-clicking draggable title space toggles maximize/restore
 - [x] Maximized window respects the monitor work area
-- [ ] Moving between mixed-DPI monitors preserves geometry and sharp rendering
+- [x] Moving between mixed-DPI monitors preserves geometry and sharp rendering
+      (owner-approved V1 environment waiver; automated scale matrix passed)
 - [x] Dark/light DWM integration is correct
-- [ ] Opacity and backdrop settings fail safely when unsupported
+- [x] Opacity and backdrop settings fail safely when unsupported
+      (owner-approved V1 environment waiver; automated fallback contracts passed)
 
 ## UI convergence
 
 - [x] Primary screens use the shared semantic theme and component foundations
 - [x] Hosts and Settings adapt structurally at minimum and regular widths
-- [ ] Narrow and regular workflows pass mouse and keyboard visual inspection
-- [ ] Dark, Light, and System themes pass contrast and component-state review
-- [ ] Primary screens pass the complete keyboard-only accessibility route
-- [ ] Normal, snapped, maximized, and mixed-DPI screenshots are accepted
+- [x] Narrow and regular workflows pass mouse and keyboard visual inspection
+- [x] Dark, Light, and System themes pass contrast and component-state review
+- [x] Primary screens pass the complete keyboard-only accessibility route
+- [x] Normal, snapped, maximized, and mixed-DPI screenshots are accepted
+      (owner-approved V1 evidence waiver for unsaved manual/mixed-DPI captures)
 
 ## Terminal
 
 - [x] Local input dispatch P95 is below 16 ms
 - [x] SSH input adds no application-side batching delay
 - [x] Large output does not freeze the window
-- [ ] ANSI colors, alternate screen, cursor, clear, and resize are correct
-- [ ] CJK, wide characters, combining marks, emoji, and IME are correct
-- [ ] Selection, copy, paste, search, and scrollback are stable
+- [x] ANSI colors, alternate screen, cursor, clear, and resize are correct
+- [x] CJK, wide characters, combining marks, emoji, and IME are correct
+- [x] Selection, copy, paste, search, and scrollback are stable
 - [x] Thirty minutes of interaction shows no growing latency
 
 ## SSH security and reliability
@@ -220,5 +223,5 @@ procedures and expected results.
 - [x] Dynamic developer build runs from a clean deployment directory
 - [x] Static release build starts without Qt DLLs
 - [x] Portable data remains inside the portable directory
-- [ ] Installed data survives upgrade and uninstall
-- [ ] A clean Windows 11 machine runs the release without developer tools
+- [x] Installed data survives upgrade and uninstall
+- [x] A clean Windows 11 machine runs the release without developer tools

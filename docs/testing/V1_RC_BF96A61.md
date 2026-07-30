@@ -1,6 +1,6 @@
 # V1 release-candidate record: bf96a61
 
-Status: automated preflight passed; immutable-candidate manual sign-off in progress
+Status: accepted for V1 0.1.0
 
 ## Candidate identity
 
@@ -186,12 +186,12 @@ regression evidence but do not sign off this immutable candidate.
 
 | Acceptance item | Result | Evidence / first failing step |
 | --- | --- | --- |
-| Mixed-DPI physical monitor transition | NOT RUN | Only one physical display is available. |
-| Unsupported opacity/backdrop fallback | NOT RUN | No environment with unavailable Acrylic/Mica has been identified. |
+| Mixed-DPI physical monitor transition | WAIVED | Owner-approved V1 waiver: only one physical display is available; automated 100%/125%/150%/200% DPI gates passed, but physical cross-monitor transition risk remains. |
+| Unsupported opacity/backdrop fallback | WAIVED | Owner-approved V1 waiver: host and Sandbox both support Acrylic/Mica; invalid/unsupported DWM handling is automated, but a genuinely unsupported compositor remains untested. |
 | Narrow/regular mouse and keyboard visual route | PASS | Exact portable candidate completed regular/minimum mouse workflows and compact transitions without clipping or overlap. |
 | Dark/Light/System contrast and component states | PASS | Exact portable candidate passed full theme, semantic-state, material, opacity, and System-following inspection. |
 | Complete keyboard-only accessibility route | PASS | Exact portable candidate completed the keyboard-only Hosts, Settings, dialogs, search, paste, and host-key route. |
-| Normal/snapped/maximized/mixed-DPI screenshots | NOT RUN | Single-display normal/snapped/maximized/minimum layouts were visually accepted and automated captures exist; no manual screenshots or physical mixed-DPI evidence were saved. |
+| Normal/snapped/maximized/mixed-DPI screenshots | WAIVED | Owner-approved V1 waiver: single-display states were visually accepted and automated Dark/Light plus synthetic-DPI captures are retained; manual and physical mixed-DPI screenshots were not saved. |
 | Windows artifact identity and icon clarity | PASS | Exact portable/MSI candidate showed the expected versioned ztermy identity and clear icon in Explorer and Windows shell surfaces. |
 | ANSI/alternate screen/cursor/clear/resize | PASS | Exact portable candidate passed ANSI foreground/background, cursor movement, clear, Helix alternate-screen restore, and repeated resize. |
 | CJK/wide/combining/emoji/IME | PASS | Exact portable candidate preserved combining, wide CJK, emoji, and uncommitted/committed Chinese IME behavior. |
@@ -219,10 +219,14 @@ development, including:
 These results support release confidence but intentionally remain separate
 from the immutable-candidate result table.
 
-## Completion rule
+## Completion decision
 
-Follow [V1_MANUAL_ACCEPTANCE.md](V1_MANUAL_ACCEPTANCE.md). Under the current
-policy V1 is not formally accepted until every result-table row is `PASS`.
-If unavailable physical hardware or an unsupported-DWM environment is to be
-waived for this personal Windows 11 release, that policy change must be
-recorded explicitly rather than silently treating `NOT RUN` as passing.
+Follow [V1_MANUAL_ACCEPTANCE.md](V1_MANUAL_ACCEPTANCE.md). On 2026-07-30 the
+project owner explicitly approved the three documented V1 waivers for physical
+mixed-DPI transition, an actually unsupported DWM material environment, and
+manual screenshot retention. All ten runnable acceptance rows are `PASS`; the
+three unavailable/evidence rows are `WAIVED`; no row is `FAIL` or `NOT RUN`.
+
+The immutable `bf96a61` Windows x64 artifacts are therefore accepted as ztermy
+V1 `0.1.0`. The waivers remain visible risks for a future test-matrix expansion
+and must not be described as tested behavior.
