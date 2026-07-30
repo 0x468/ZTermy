@@ -75,6 +75,11 @@ remain renderer-owned layers rather than application-control colors.
 Color is never the only status signal. Connected, warning, failure, and
 selected states also use text, shape, or an accessible name.
 
+V1 uses the ztermy green accent. The planned V1.1 global accent source offers
+ztermy, Follow Windows, and Custom choices. System and custom colors require a
+contrast-safe derived palette for hover, pressed, focus, selected, and accent
+text roles; raw Windows color values must not be assigned to every role.
+
 ### Typography
 
 - Application UI: `Segoe UI Variable`, using the installed Windows font.

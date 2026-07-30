@@ -26,6 +26,12 @@ profiles do not own themes, backdrop modes, background images, or opacity.
 A future lightweight host color or icon may identify a connection, but it
 must not duplicate the global appearance model.
 
+V1 keeps the existing ztermy green semantic accent. A V1.1 appearance
+extension may add a global accent source with ztermy, Follow Windows, and
+Custom choices. A Windows or custom color must be transformed or rejected
+when it cannot preserve text, focus, selected, and destructive-state
+contrast; ztermy green remains the fallback.
+
 The visual stack has three independently owned layers:
 
 1. `NativeWindow` applies one Windows system backdrop to the whole client
@@ -76,6 +82,8 @@ opaque terminal background remains the default until that work is accepted.
   their content unreadable.
 - Mica behavior is not distorted by an unrelated opacity slider.
 - Terminal text and application controls are never faded by window opacity.
+- Windows accent synchronization remains a bounded global V1.1 feature rather
+  than an SSH-profile option.
 - A future terminal-background feature must distinguish default background
   cells from explicit ANSI backgrounds and must be tested with full-screen
   terminal programs.
