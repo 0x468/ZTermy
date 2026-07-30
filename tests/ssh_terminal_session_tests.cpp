@@ -10,10 +10,13 @@
 
 #include <QFileInfo>
 #include <QGlobalStatic>
+#include <QHostAddress>
 #include <QMutex>
 #include <QSet>
 #include <QSignalSpy>
 #include <QStringList>
+#include <QTcpServer>
+#include <QTcpSocket>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -81,10 +84,14 @@ class SshTerminalSessionTests final : public QObject
 private slots:
     void rejectsInvalidStartupConfiguration();
     void presentsDistinctFailureStatuses();
+    void reportsConnectionRefusalFromLiveSocket();
+    void reportsHandshakeTimeoutFromSilentPeer();
     void sensitiveCredentialsAreMoveOnlyAndClearable();
     void doesNotExposeCredentialsInStatusOrLogs();
     void ignoresTerminalInteractionWhileDisconnected();
     void connectsAfterExplicitHostKeyConfirmation();
+    void reportsAuthenticationRejectionOnRealHost();
+    void reportsRemoteCloseOnRealHost();
     void measuresInteractiveInputQueueLatency();
     void survivesRepeatedConnectDisconnectCycles();
 };
@@ -153,6 +160,79 @@ void SshTerminalSessionTests::presentsDistinctFailureStatuses()
              QStringLiteral("SSH authentication was rejected"));
     QCOMPARE(ztermy::ssh::sshFailureStatus(SshFailureKind::RemoteClosed),
              QStringLiteral("SSH remote host closed the connection"));
+}
+
+void SshTerminalSessionTests::reportsConnectionRefusalFromLiveSocket()
+{
+    QTcpServer portReservation;
+    QVERIFY(portReservation.listen(QHostAddress::LocalHost, 0));
+    const quint16 refusedPort = portReservation.serverPort();
+    portReservation.close();
+
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ztermy::ssh::SshTerminalSession session;
+    QSignalSpy failureSpy(&session, &ztermy::ssh::SshTerminalSession::failureOccurred);
+    QSignalSpy statusSpy(&session, &ztermy::ssh::SshTerminalSession::statusChanged);
+    ztermy::ssh::SshConnectionRequest request{
+        .host = QStringLiteral("127.0.0.1"),
+        .port = refusedPort,
+        .username = QStringLiteral("unused"),
+        .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
+        .privateKeyPath = QStringLiteral("unused"),
+        .knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json")),
+    };
+
+    QVERIFY(!session.start(std::move(request), {.columns = 80, .rows = 24}));
+    QTRY_VERIFY_WITH_TIMEOUT(std::ranges::any_of(failureSpy,
+                                                 [](const QList<QVariant> &arguments) {
+                                                     return !arguments.isEmpty()
+                                                            && qvariant_cast<ztermy::ssh::SshFailureKind>(
+                                                                   arguments.constFirst())
+                                                                   == ztermy::ssh::SshFailureKind::ConnectionRefused;
+                                                 }),
+                             5s);
+    QVERIFY(!statusSpy.isEmpty());
+    QCOMPARE(statusSpy.constLast().constFirst().toString(),
+             ztermy::ssh::sshFailureStatus(ztermy::ssh::SshFailureKind::ConnectionRefused));
+    session.stop();
+}
+
+void SshTerminalSessionTests::reportsHandshakeTimeoutFromSilentPeer()
+{
+    QTcpServer silentServer;
+    QVERIFY(silentServer.listen(QHostAddress::LocalHost, 0));
+
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ztermy::ssh::SshTerminalSession session;
+    QSignalSpy failureSpy(&session, &ztermy::ssh::SshTerminalSession::failureOccurred);
+    QSignalSpy statusSpy(&session, &ztermy::ssh::SshTerminalSession::statusChanged);
+    ztermy::ssh::SshConnectionRequest request{
+        .host = QStringLiteral("127.0.0.1"),
+        .port = silentServer.serverPort(),
+        .username = QStringLiteral("unused"),
+        .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
+        .privateKeyPath = QStringLiteral("unused"),
+        .knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json")),
+    };
+
+    QVERIFY(!session.start(std::move(request), {.columns = 80, .rows = 24}));
+    QTRY_VERIFY_WITH_TIMEOUT(silentServer.hasPendingConnections(), 2s);
+    std::unique_ptr<QTcpSocket> silentPeer(silentServer.nextPendingConnection());
+    QVERIFY(silentPeer);
+    QTRY_VERIFY_WITH_TIMEOUT(std::ranges::any_of(failureSpy,
+                                                 [](const QList<QVariant> &arguments) {
+                                                     return !arguments.isEmpty()
+                                                            && qvariant_cast<ztermy::ssh::SshFailureKind>(
+                                                                   arguments.constFirst())
+                                                                   == ztermy::ssh::SshFailureKind::TimedOut;
+                                                 }),
+                             12s);
+    QVERIFY(!statusSpy.isEmpty());
+    QCOMPARE(statusSpy.constLast().constFirst().toString(),
+             ztermy::ssh::sshFailureStatus(ztermy::ssh::SshFailureKind::TimedOut));
+    session.stop();
 }
 
 void SshTerminalSessionTests::sensitiveCredentialsAreMoveOnlyAndClearable()
@@ -357,6 +437,101 @@ void SshTerminalSessionTests::connectsAfterExplicitHostKeyConfirmation()
         15s);
     QCOMPARE(confirmationSpy.count(), 0);
     QTRY_VERIFY_WITH_TIMEOUT(snapshotSpy.count() > 0, 5s);
+    session.stop();
+}
+
+void SshTerminalSessionTests::reportsAuthenticationRejectionOnRealHost()
+{
+    const QByteArray host = qgetenv("ZTERMY_TEST_SSH_HOST");
+    const QByteArray privateKey = qgetenv("ZTERMY_TEST_SSH_PRIVATE_KEY");
+    const QByteArray expectedFingerprint = qgetenv("ZTERMY_TEST_SSH_EXPECTED_FINGERPRINT");
+    if (host.isEmpty() || privateKey.isEmpty() || expectedFingerprint.isEmpty())
+    {
+        QSKIP("Set the real-host private-key gate variables to run authentication rejection");
+    }
+
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ztermy::ssh::SshTerminalSession session;
+    QSignalSpy confirmationSpy(&session, &ztermy::ssh::SshTerminalSession::hostKeyConfirmationRequired);
+    QSignalSpy failureSpy(&session, &ztermy::ssh::SshTerminalSession::failureOccurred);
+    QSignalSpy statusSpy(&session, &ztermy::ssh::SshTerminalSession::statusChanged);
+    ztermy::ssh::SshConnectionRequest request{
+        .host = QString::fromUtf8(host),
+        .port = 22,
+        .username = QStringLiteral("ztermy-intentional-unknown-user"),
+        .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
+        .privateKeyPath = QString::fromUtf8(privateKey),
+        .knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json")),
+    };
+
+    QVERIFY(!session.start(std::move(request), {.columns = 80, .rows = 24}));
+    QTRY_COMPARE_WITH_TIMEOUT(confirmationSpy.count(), 1, 10s);
+    QCOMPARE(confirmationSpy.constFirst().at(1).toString(), QString::fromLatin1(expectedFingerprint));
+    session.confirmHostKey(true);
+    QTRY_VERIFY_WITH_TIMEOUT(
+        std::ranges::any_of(failureSpy,
+                            [](const QList<QVariant> &arguments) {
+                                return !arguments.isEmpty()
+                                       && qvariant_cast<ztermy::ssh::SshFailureKind>(arguments.constFirst())
+                                              == ztermy::ssh::SshFailureKind::AuthenticationRejected;
+                            }),
+        20s);
+    QVERIFY(!statusSpy.isEmpty());
+    QCOMPARE(statusSpy.constLast().constFirst().toString(),
+             ztermy::ssh::sshFailureStatus(ztermy::ssh::SshFailureKind::AuthenticationRejected));
+    session.stop();
+}
+
+void SshTerminalSessionTests::reportsRemoteCloseOnRealHost()
+{
+    const QByteArray host = qgetenv("ZTERMY_TEST_SSH_HOST");
+    const QByteArray username = qgetenv("ZTERMY_TEST_SSH_USERNAME");
+    const QByteArray privateKey = qgetenv("ZTERMY_TEST_SSH_PRIVATE_KEY");
+    const QByteArray expectedFingerprint = qgetenv("ZTERMY_TEST_SSH_EXPECTED_FINGERPRINT");
+    if (host.isEmpty() || username.isEmpty() || privateKey.isEmpty() || expectedFingerprint.isEmpty())
+    {
+        QSKIP("Set the real-host private-key gate variables to run remote close");
+    }
+
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ztermy::ssh::SshTerminalSession session;
+    QSignalSpy confirmationSpy(&session, &ztermy::ssh::SshTerminalSession::hostKeyConfirmationRequired);
+    QSignalSpy runningSpy(&session, &ztermy::ssh::SshTerminalSession::runningChanged);
+    QSignalSpy failureSpy(&session, &ztermy::ssh::SshTerminalSession::failureOccurred);
+    QSignalSpy statusSpy(&session, &ztermy::ssh::SshTerminalSession::statusChanged);
+    ztermy::ssh::SshConnectionRequest request{
+        .host = QString::fromUtf8(host),
+        .port = 22,
+        .username = QString::fromUtf8(username),
+        .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
+        .privateKeyPath = QString::fromUtf8(privateKey),
+        .knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json")),
+    };
+
+    QVERIFY(!session.start(std::move(request), {.columns = 80, .rows = 24}));
+    QTRY_COMPARE_WITH_TIMEOUT(confirmationSpy.count(), 1, 10s);
+    QCOMPARE(confirmationSpy.constFirst().at(1).toString(), QString::fromLatin1(expectedFingerprint));
+    session.confirmHostKey(true);
+    QTRY_VERIFY_WITH_TIMEOUT(std::ranges::any_of(runningSpy,
+                                                 [](const QList<QVariant> &arguments) {
+                                                     return !arguments.isEmpty() && arguments.constFirst().toBool();
+                                                 }),
+                             20s);
+
+    session.queueInput(QByteArrayLiteral("exit\r"));
+    QTRY_VERIFY_WITH_TIMEOUT(std::ranges::any_of(failureSpy,
+                                                 [](const QList<QVariant> &arguments) {
+                                                     return !arguments.isEmpty()
+                                                            && qvariant_cast<ztermy::ssh::SshFailureKind>(
+                                                                   arguments.constFirst())
+                                                                   == ztermy::ssh::SshFailureKind::RemoteClosed;
+                                                 }),
+                             15s);
+    QVERIFY(!statusSpy.isEmpty());
+    QCOMPARE(statusSpy.constLast().constFirst().toString(),
+             ztermy::ssh::sshFailureStatus(ztermy::ssh::SshFailureKind::RemoteClosed));
     session.stop();
 }
 

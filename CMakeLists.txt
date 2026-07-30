@@ -907,6 +907,7 @@ if(BUILD_TESTING)
     target_compile_features(ztermy_ssh_terminal_session_tests PRIVATE cxx_std_23)
     target_link_libraries(ztermy_ssh_terminal_session_tests PRIVATE
         ztermy_ssh_session
+        Qt6::Network
         Qt6::Test
     )
 

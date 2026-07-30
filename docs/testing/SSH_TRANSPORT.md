@@ -145,8 +145,8 @@ four non-secret variables as the private-key authentication gate.
 ## Application session gate
 
 `ztermy_ssh_terminal_session_tests` verifies invalid profile rejection without
-network access. With the four private-key gate variables set, it also exercises
-the complete worker-thread flow against the real server:
+external network access. With the four private-key gate variables set, it also
+exercises the complete worker-thread flow against the real server:
 
 1. connect and negotiate without blocking the Qt test thread;
 2. stop at the unknown-host boundary and expose the observed fingerprint;
@@ -161,10 +161,26 @@ The test never sends terminal input and uses a temporary known-host store.
 The default, network-independent coverage also:
 
 - verifies all SSH failure kinds retain distinct user-visible status text;
+- connects to a newly closed ephemeral localhost port and requires
+  `ConnectionRefused`;
+- connects to an ephemeral localhost peer that accepts the socket but sends no
+  SSH banner and requires `TimedOut`;
 - sends unique password and private-key passphrase sentinels into failing
   worker requests; and
 - captures Qt messages and emitted statuses to prove neither sentinel is
   exposed.
+
+With the four private-key gate variables set, two additional focused tests
+exercise the remaining live boundaries:
+
+- an intentionally nonexistent username must produce
+  `AuthenticationRejected`; and
+- a successfully authenticated shell receives the fixed non-secret `exit`
+  request and must produce `RemoteClosed`.
+
+The real-host tests first compare the observed host-key fingerprint with the
+independently supplied expected value. They do not use a password or
+passphrase, and their reports contain no private-key content or terminal data.
 
 ## Interactive input latency gate
 

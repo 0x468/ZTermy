@@ -80,6 +80,26 @@ Expected:
 - Confirm removes only that profile; trusted host keys remain untouched.
 - The deletion survives restart.
 
+## Connection failure presentation
+
+Use only endpoints that you own or are authorized to test.
+
+1. Connect a private-key profile with an intentionally invalid username.
+2. Connect a profile to a known unused port on `127.0.0.1`.
+3. Connect to a controlled endpoint that accepts TCP but does not send an SSH
+   banner.
+4. Connect a valid profile and enter `exit` in the remote shell.
+
+Expected:
+
+- The four outcomes are described respectively as authentication rejected,
+  connection refused, connection timed out, and remote host closed.
+- Each failure returns the session UI to a stable disconnected state and
+  exposes a sensible retry or profile-edit action.
+- No case crashes, retries indefinitely, or leaves the Hosts workflow blocked.
+- Logs contain classification and timing information only; they contain no
+  password, passphrase, private-key content, or terminal input.
+
 ## Secret-storage check
 
 After the tests, inspect:

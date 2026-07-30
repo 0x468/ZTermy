@@ -93,6 +93,13 @@ Only runtime evidence can mark a platform or UI item complete.
 - Automated SSH coverage preserves distinct failure state and user-visible
   status contracts for name resolution, refusal, timeout, transport, host-key,
   authentication, channel, remote-close, cancellation, and protocol failures.
+- The full application-session gate verifies those contracts at live I/O
+  boundaries in both dynamic Debug and static Release. A closed ephemeral
+  localhost port reports connection refusal, a connected silent peer reports
+  handshake timeout, an intentionally unknown username on the authorized
+  private-key fixture reports authentication rejection, and a successful
+  shell followed by `exit` reports remote close. All four paths produced their
+  exact distinct status text without exposing credentials or terminal data.
 - The opt-in real-host SSH input gate processed 120 events at 5 ms intervals.
   Dynamic Debug measured P95 `250 us`, P99 `250 us`, and maximum `182 us`;
   static Release measured P95 `100 us`, P99 `250 us`, and maximum `126 us`.
@@ -160,7 +167,7 @@ procedures and expected results.
 - [x] Private-key authentication passes on a real host
 - [x] Unknown host keys require confirmation before authentication
 - [x] Changed host keys block the connection before authentication
-- [ ] Authentication failure, timeout, refusal, and remote close are distinct
+- [x] Authentication failure, timeout, refusal, and remote close are distinct
 - [x] Twenty connect/disconnect cycles leave no workers or handles behind
 - [x] Logs and configuration contain no credentials
 
