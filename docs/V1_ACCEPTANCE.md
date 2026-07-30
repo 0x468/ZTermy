@@ -4,6 +4,10 @@ Status: release candidate; manual sign-off pending
 
 Only runtime evidence can mark a platform or UI item complete.
 
+The current immutable candidate, automated results, artifact hashes, and
+remaining manual sign-off are recorded in
+[testing/V1_RC_BF96A61.md](testing/V1_RC_BF96A61.md).
+
 ## Current milestone evidence
 
 - MSVC + Ninja dynamic Debug build succeeds.
