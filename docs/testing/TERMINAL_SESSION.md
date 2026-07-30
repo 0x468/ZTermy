@@ -11,9 +11,12 @@ cmake --build --preset msvc-dynamic-debug
 The automated tests cover ConPTY transport, split VT parsing, true-color cell
 styles, primary/alternate-screen restoration, erase and cursor modes, resize,
 wide CJK cells, combining graphemes, emoji cells, snapshot extraction, queued
-shell input, IME preedit layout, and shutdown. The checks below cover behavior
-that still requires an interactive GUI, Windows input services, font fallback,
-or visual judgment.
+shell input, IME preedit layout, and shutdown. The `terminal-item` test also
+renders a controlled snapshot in a real Qt Quick window and samples the final
+captured pixels. It requires styled and selected backgrounds, a two-cell block
+cursor, and a CJK glyph that visibly occupies the second cell. The checks below
+cover behavior that still requires an interactive GUI, Windows input services,
+real shell applications, or visual judgment.
 
 ## Basic session
 

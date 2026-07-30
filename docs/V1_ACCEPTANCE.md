@@ -51,7 +51,9 @@ Only runtime evidence can mark a platform or UI item complete.
   composition behavior across resize and shutdown. It also verifies exclusive
   copy/paste shortcut routing, multiline confirmation, normal text input,
   linear and rectangular drag selection, click-to-clear, copy-on-select, and
-  accumulated high-resolution wheel scrolling.
+  accumulated high-resolution wheel scrolling. A real Qt Quick window capture
+  verifies final pixels for styled and selected backgrounds, a two-cell block
+  cursor, and a CJK glyph extending into its trailing cell.
 - Automated end-to-end coverage verifies PowerShell startup, queued input,
   parsed sentinel output, and session shutdown.
 - The opt-in local ConPTY input gate processed 120 events at 5 ms intervals.

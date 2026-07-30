@@ -1,7 +1,9 @@
 #include "ui/terminal/TerminalItem.h"
 #include "ui/terminal/TerminalTextLayout.h"
 
+#include <QColor>
 #include <QGuiApplication>
+#include <QImage>
 #include <QInputMethodEvent>
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -62,6 +64,7 @@ private slots:
     void confirmsMultilinePaste();
     void selectsCellsAndCopiesOnMouseRelease();
     void accumulatesWheelDeltasIntoScrollRows();
+    void rendersStyledWideCellsAndCursorPixels();
     void rendersImeAcrossResizeAndShutdown();
 };
 
@@ -288,6 +291,93 @@ void TerminalItemTests::accumulatesWheelDeltasIntoScrollRows()
     sendWheel(-240);
     QCOMPARE(scrollSpy.count(), 2);
     QCOMPARE(scrollSpy.at(1).at(0).toInt(), 6);
+}
+
+void TerminalItemTests::rendersStyledWideCellsAndCursorPixels()
+{
+    QQuickWindow window;
+    auto *item = new TestableTerminalItem(window.contentItem());
+    auto snapshot = std::make_shared<ztermy::terminal::TerminalSnapshot>();
+    snapshot->columns = 8;
+    snapshot->rows = 3;
+    snapshot->defaultForeground = {.red = 230, .green = 232, .blue = 235};
+    snapshot->defaultBackground = {.red = 5, .green = 7, .blue = 9};
+    snapshot->cells.resize(static_cast<std::size_t>(snapshot->columns) * snapshot->rows);
+    for (auto &cell : snapshot->cells)
+    {
+        cell.foreground = snapshot->defaultForeground;
+        cell.background = snapshot->defaultBackground;
+    }
+    snapshot->cells[0].background = {.red = 180, .green = 20, .blue = 30};
+    snapshot->cells[2].selected = true;
+    snapshot->cells[8].grapheme = U"中";
+    snapshot->cells[8].foreground = {.red = 240, .green = 40, .blue = 40};
+    snapshot->cells[8].displayWidth = 2;
+    snapshot->cells[9].displayWidth = 0;
+    snapshot->cursor = {
+        .column = 0,
+        .row = 2,
+        .width = 2,
+        .style = ztermy::terminal::TerminalCursorStyle::block,
+        .color = {.red = 20, .green = 230, .blue = 80},
+        .visible = true,
+    };
+
+    item->setCursorBlink(false);
+    item->setSnapshot(snapshot);
+    window.resize(640, 220);
+    item->setSize(window.size());
+    window.show();
+    QTest::qWait(100);
+    const QImage capture = window.grabWindow();
+    QVERIFY(!capture.isNull());
+
+    const QRectF cursorRect = item->inputMethodQuery(Qt::ImCursorRectangle).toRectF();
+    const qreal cellWidth = cursorRect.width() / 2.0;
+    const qreal cellHeight = cursorRect.height();
+    const qreal horizontalPadding = cursorRect.x();
+    const qreal verticalPadding = cursorRect.y() - (2.0 * cellHeight);
+    const qreal scale = capture.devicePixelRatio();
+    const auto pixelAtCellCenter = [&](const int column, const int row) {
+        const int x = qRound((horizontalPadding + ((static_cast<qreal>(column) + 0.5) * cellWidth)) * scale);
+        const int y = qRound((verticalPadding + ((static_cast<qreal>(row) + 0.5) * cellHeight)) * scale);
+        return capture.pixelColor(x, y);
+    };
+
+    const QColor styledBackground = pixelAtCellCenter(0, 0);
+    QVERIFY(styledBackground.red() > 150);
+    QVERIFY(styledBackground.green() < 50);
+    const QColor selectionBackground = pixelAtCellCenter(2, 0);
+    QVERIFY(selectionBackground.blue() > selectionBackground.red());
+    QVERIFY(selectionBackground.blue() > selectionBackground.green());
+
+    const QColor cursorFirstCell = pixelAtCellCenter(0, 2);
+    const QColor cursorSecondCell = pixelAtCellCenter(1, 2);
+    QVERIFY(cursorFirstCell.green() > cursorFirstCell.red());
+    QVERIFY(cursorFirstCell.green() > cursorFirstCell.blue());
+    QVERIFY(cursorSecondCell.green() > cursorSecondCell.red());
+    QVERIFY(cursorSecondCell.green() > cursorSecondCell.blue());
+
+    int wideGlyphPixelsInSecondCell = 0;
+    const int secondCellLeft = qRound((horizontalPadding + cellWidth) * scale);
+    const int secondCellRight = qRound((horizontalPadding + (2.0 * cellWidth)) * scale);
+    const int glyphTop = qRound((verticalPadding + cellHeight) * scale);
+    const int glyphBottom = qRound((verticalPadding + (2.0 * cellHeight)) * scale);
+    for (int y = glyphTop; y < glyphBottom; ++y)
+    {
+        for (int x = secondCellLeft; x < secondCellRight; ++x)
+        {
+            const QColor pixel = capture.pixelColor(x, y);
+            if (pixel.red() > 100 && pixel.red() > (pixel.green() * 2) && pixel.red() > (pixel.blue() * 2))
+            {
+                ++wideGlyphPixelsInSecondCell;
+            }
+        }
+    }
+    QVERIFY(wideGlyphPixelsInSecondCell > 2);
+
+    window.close();
+    QCoreApplication::processEvents();
 }
 
 void TerminalItemTests::rendersImeAcrossResizeAndShutdown()
