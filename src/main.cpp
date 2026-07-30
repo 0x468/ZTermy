@@ -724,10 +724,15 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
     }
 
     constexpr std::array accessibleButtons{
-        std::pair{"hostsTitleAction", "Hosts"},         std::pair{"titleNewTabAction", "New local terminal"},
-        std::pair{"minimizeCaptionButton", "Minimize"}, std::pair{"maximizeCaptionButton", "Maximize"},
-        std::pair{"closeCaptionButton", "Close"},       std::pair{"sideHostsAction", "Hosts"},
-        std::pair{"sideSettingsAction", "Settings"},    std::pair{"localMachineAction", "Open local terminal"},
+        std::pair{"hostsTitleAction", "Hosts"},
+        std::pair{"titleNewTabAction", "New local terminal"},
+        std::pair{"minimizeCaptionButton", "Minimize"},
+        std::pair{"maximizeCaptionButton", "Maximize"},
+        std::pair{"closeCaptionButton", "Close"},
+        std::pair{"sideHostsAction", "Hosts"},
+        std::pair{"sideSettingsAction", "Settings"},
+        std::pair{"localMachineAction", "Open local terminal"},
+        std::pair{"terminalFindAction", "Find in terminal"},
     };
     for (const auto &[objectName, expectedName] : accessibleButtons)
     {
@@ -944,6 +949,55 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
                                   << "ctrlShiftFOpened=" << terminalSearchOpened << "focus=" << namedFocusItem(window);
         return false;
     }
+
+    QQuickItem *terminalFindAction = quickItem(rootObject, "terminalFindAction");
+    if (!focusItem(window, terminalFindAction, QStringLiteral("terminalFindAction")))
+    {
+        return false;
+    }
+    sendKey(window, Qt::Key_Return);
+    const bool terminalFindActionOpened = rootObject->property("terminalSearchVisible").toBool()
+                                          && namedFocusItem(window) == QStringLiteral("terminalSearchQuery");
+    sendKey(window, Qt::Key_Escape);
+    if (!terminalFindActionOpened || rootObject->property("terminalSearchVisible").toBool()
+        || namedFocusItem(window) != QStringLiteral("terminalViewport"))
+    {
+        qCWarning(applicationLog) << "Terminal Find action keyboard routing failed"
+                                  << "opened=" << terminalFindActionOpened << "focus=" << namedFocusItem(window);
+        return false;
+    }
+
+    while (controller.terminalTabs().size() < 8)
+    {
+        if (controller.startLocalTerminal().isEmpty())
+        {
+            qCWarning(applicationLog) << "Unable to create terminal tabs for overflow smoke";
+            return false;
+        }
+    }
+    processWindowEventsFor(std::chrono::milliseconds{350});
+    QQuickItem *titleTerminalTabs = quickItem(rootObject, "titleTerminalTabs");
+    const bool activeOverflowTabVisible =
+        titleTerminalTabs != nullptr
+        && titleTerminalTabs->property("currentIndex").toInt() == controller.terminalTabs().size() - 1
+        && titleTerminalTabs->property("contentX").toReal() > 0.0;
+    if (!activeOverflowTabVisible)
+    {
+        qCWarning(applicationLog)
+            << "Active overflow tab was not scrolled into view"
+            << "tabCount=" << controller.terminalTabs().size() << "currentIndex="
+            << (titleTerminalTabs == nullptr ? -1 : titleTerminalTabs->property("currentIndex").toInt())
+            << "contentX=" << (titleTerminalTabs == nullptr ? -1.0 : titleTerminalTabs->property("contentX").toReal());
+        return false;
+    }
+
+    const QVariantList overflowTabs = controller.terminalTabs();
+    for (qsizetype index = overflowTabs.size() - 1; index > 0; --index)
+    {
+        controller.closeTerminalTab(overflowTabs.at(index).toMap().value(QStringLiteral("id")).toString());
+    }
+    controller.activateTerminalTab(overflowTabs.first().toMap().value(QStringLiteral("id")).toString());
+    processWindowEventsFor(std::chrono::milliseconds{250});
 
     QQuickItem *terminalViewport = quickItem(rootObject, "terminalViewport");
     const bool dialogOpened = terminalViewport != nullptr

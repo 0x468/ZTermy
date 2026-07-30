@@ -208,9 +208,14 @@ Rectangle {
         }
 
         function onTerminalTabsChanged() {
+            Qt.callLater(titleTerminalTabs.syncCurrentIndex);
             if (root.currentPage === "terminal" && root.controller.terminalTabs.length === 0) {
                 Qt.callLater(emptyTerminalPrimaryAction.forceActiveFocus);
             }
+        }
+
+        function onActiveTerminalTabChanged() {
+            Qt.callLater(titleTerminalTabs.syncCurrentIndex);
         }
     }
 
@@ -324,12 +329,34 @@ Rectangle {
                 id: titleTerminalTabs
 
                 objectName: "titleTerminalTabs"
+                currentIndex: -1
                 width: count === 0 ? 0 : Math.min(Math.max(contentWidth, 126), Math.max(140, root.titleNavigationWidth - 174))
                 height: titleNavigation.height
                 orientation: ListView.Horizontal
                 spacing: 2
                 clip: true
                 model: root.controller.terminalTabs
+                onCountChanged: Qt.callLater(ensureCurrentTabVisible)
+                onCurrentIndexChanged: Qt.callLater(ensureCurrentTabVisible)
+                onWidthChanged: Qt.callLater(ensureCurrentTabVisible)
+
+                function syncCurrentIndex() {
+                    let activeIndex = -1;
+                    for (let index = 0; index < root.controller.terminalTabs.length; ++index) {
+                        if (root.controller.terminalTabs[index].id === root.controller.activeTerminalTabId) {
+                            activeIndex = index;
+                            break;
+                        }
+                    }
+                    currentIndex = activeIndex;
+                    Qt.callLater(ensureCurrentTabVisible);
+                }
+
+                function ensureCurrentTabVisible() {
+                    if (currentIndex >= 0 && currentIndex < count) {
+                        positionViewAtIndex(currentIndex, ListView.Contain);
+                    }
+                }
 
                 delegate: TerminalTabAction {
                     id: titleTerminalTab
@@ -531,7 +558,7 @@ Rectangle {
 
                     Rectangle {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 27
+                        Layout.preferredHeight: 26
                         color: Theme.workspaceBackground
 
                         Rectangle {
@@ -541,35 +568,117 @@ Rectangle {
                             color: root.borderColor
                         }
 
-                        Row {
+                        RowLayout {
+                            anchors.fill: parent
                             anchors.left: parent.left
                             anchors.leftMargin: 10
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: 7
+                            anchors.right: parent.right
+                            anchors.rightMargin: 8
+                            spacing: 8
 
                             Rectangle {
-                                width: 6
-                                height: 6
+                                Layout.alignment: Qt.AlignVCenter
+                                Layout.preferredWidth: 6
+                                Layout.preferredHeight: 6
                                 radius: 3
-                                color: root.controller.sshActive ? root.accentColor : Theme.textSubtle
+                                color: root.activeTerminalTab && root.activeTerminalTab.running ? root.accentColor : Theme.textSubtle
                             }
 
                             Text {
+                                Layout.alignment: Qt.AlignVCenter
+                                Layout.maximumWidth: 220
+                                text: root.activeTerminalTab ? root.activeTerminalTab.title : "Terminal"
+                                color: root.textColor
+                                elide: Text.ElideRight
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.textCompact
+                                font.weight: Font.DemiBold
+                            }
+
+                            Rectangle {
+                                Layout.alignment: Qt.AlignVCenter
+                                Layout.preferredWidth: 1
+                                Layout.preferredHeight: 12
+                                color: root.borderColor
+                                visible: terminalSessionStatus.visible
+                            }
+
+                            Text {
+                                id: terminalSessionStatus
+
+                                Layout.alignment: Qt.AlignVCenter
+                                Layout.fillWidth: true
+                                visible: root.width >= 720
                                 text: terminalViewport.statusText
                                 color: root.mutedColor
-                                font.family: Theme.terminalFont
+                                elide: Text.ElideRight
+                                font.family: Theme.uiFont
                                 font.pixelSize: Theme.textCompact
                             }
-                        }
 
-                        Text {
-                            anchors.right: parent.right
-                            anchors.rightMargin: 12
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: "UTF-8   Ctrl+Shift+F  Find"
-                            color: Theme.textSubtle
-                            font.family: Theme.uiFont
-                            font.pixelSize: Theme.textCompact
+                            Item {
+                                Layout.fillWidth: !terminalSessionStatus.visible
+                                visible: !terminalSessionStatus.visible
+                            }
+
+                            Text {
+                                Layout.alignment: Qt.AlignVCenter
+                                text: "UTF-8"
+                                color: Theme.textSubtle
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.textCompact
+                            }
+
+                            Rectangle {
+                                Layout.alignment: Qt.AlignVCenter
+                                Layout.preferredWidth: 1
+                                Layout.preferredHeight: 12
+                                color: root.borderColor
+                            }
+
+                            Rectangle {
+                                Layout.alignment: Qt.AlignVCenter
+                                Layout.preferredWidth: 66
+                                Layout.preferredHeight: 22
+                                radius: Theme.radiusSmall
+                                color: terminalFindAction.hovered || terminalFindAction.activeFocus ? Theme.controlHover : "transparent"
+                                border.color: terminalFindAction.activeFocus ? Theme.focus : "transparent"
+                                border.width: terminalFindAction.activeFocus ? 1 : 0
+
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: Theme.motionFast
+                                    }
+                                }
+
+                                Row {
+                                    anchors.centerIn: parent
+                                    spacing: 5
+
+                                    AppIcon {
+                                        width: 13
+                                        height: 13
+                                        name: "search"
+                                        color: root.mutedColor
+                                    }
+
+                                    Text {
+                                        text: "Find"
+                                        color: root.mutedColor
+                                        font.family: Theme.uiFont
+                                        font.pixelSize: Theme.textCompact
+                                    }
+                                }
+
+                                KeyboardAction {
+                                    id: terminalFindAction
+
+                                    objectName: "terminalFindAction"
+                                    anchors.fill: parent
+                                    accessibleName: "Find in terminal"
+                                    onActivated: root.openTerminalSearch()
+                                }
+                            }
                         }
                     }
 
