@@ -182,6 +182,42 @@ The real-host tests first compare the observed host-key fingerprint with the
 independently supplied expected value. They do not use a password or
 passphrase, and their reports contain no private-key content or terminal data.
 
+## Interactive password authentication gate
+
+Password authentication is deliberately excluded from unattended CTest runs:
+a real password must never appear in a command line, environment variable,
+script, report, or log. The focused test reads it directly from an interactive
+Windows console with echo disabled, converts it into `SensitiveByteArray`, and
+zeroes the fixed UTF-16 input buffer immediately.
+
+Build the test target, set only the non-secret host identity, then invoke the
+single test function directly:
+
+```powershell
+$env:ZTERMY_TEST_SSH_PASSWORD_INTERACTIVE = "1"
+$env:ZTERMY_TEST_SSH_HOST = "server.example.test"
+$env:ZTERMY_TEST_SSH_USERNAME = "password-test-user"
+$env:ZTERMY_TEST_SSH_EXPECTED_FINGERPRINT = "SHA256:verified-value"
+.\build\msvc-dynamic-debug\ztermy_ssh_terminal_session_tests.exe `
+  authenticatesWithInteractivePasswordOnRealHost
+Remove-Item Env:ZTERMY_TEST_SSH_PASSWORD_INTERACTIVE
+```
+
+Type the password only at the hidden console prompt. The gate fails
+immediately instead of reading redirected input when no interactive Windows
+console is attached. It uses a temporary known-host store, independently
+checks the observed fingerprint before authentication, requires the remote
+shell to reach running state, and then stops the worker cleanly.
+
+Expected:
+
+- The password is not echoed while it is entered.
+- The independently verified host-key fingerprint must match before the
+  password is submitted.
+- The session reaches running state and disconnects without an assertion.
+- QtTest output and the newest Debug log contain no password, terminal input,
+  or private-key content.
+
 ## Interactive input latency gate
 
 The opt-in real-host test accepts only host identity, an independently verified

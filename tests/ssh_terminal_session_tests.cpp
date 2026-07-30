@@ -8,6 +8,7 @@
 
 #include "application/ssh/SshTerminalSession.h"
 
+#include <QCoreApplication>
 #include <QFileInfo>
 #include <QGlobalStatic>
 #include <QHostAddress>
@@ -23,6 +24,9 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstddef>
+#include <cstdio>
+#include <expected>
 #include <type_traits>
 #include <utility>
 
@@ -34,6 +38,140 @@ namespace
 Q_GLOBAL_STATIC(QMutex, capturedMessageMutex)
 Q_GLOBAL_STATIC(QStringList, capturedMessages)
 QtMessageHandler previousMessageHandler = nullptr;
+
+class ScopedConsoleMode final
+{
+public:
+    explicit ScopedConsoleMode(const HANDLE handle) : m_handle(handle)
+    {
+        m_valid = m_handle != nullptr && m_handle != INVALID_HANDLE_VALUE
+                  && GetConsoleMode(m_handle, &m_originalMode) != FALSE;
+    }
+
+    ~ScopedConsoleMode()
+    {
+        if (m_changed)
+        {
+            SetConsoleMode(m_handle, m_originalMode);
+        }
+    }
+
+    ScopedConsoleMode(const ScopedConsoleMode &) = delete;
+    ScopedConsoleMode &operator=(const ScopedConsoleMode &) = delete;
+
+    [[nodiscard]] bool hideEcho()
+    {
+        if (!m_valid)
+        {
+            return false;
+        }
+        m_changed = SetConsoleMode(m_handle, m_originalMode & ~(ENABLE_ECHO_INPUT | ENABLE_PROCESSED_INPUT)) != FALSE;
+        return m_changed;
+    }
+
+private:
+    HANDLE m_handle = INVALID_HANDLE_VALUE;
+    DWORD m_originalMode = 0;
+    bool m_valid = false;
+    bool m_changed = false;
+};
+
+void drainConsoleLine(const HANDLE input) noexcept
+{
+    std::array<wchar_t, 128> discard{};
+    for (;;)
+    {
+        DWORD charactersRead = 0;
+        const BOOL read =
+            ReadConsoleW(input, discard.data(), static_cast<DWORD>(discard.size()), &charactersRead, nullptr);
+        const auto inputEnd = discard.begin() + static_cast<std::ptrdiff_t>(charactersRead);
+        const bool reachedLineEnd = std::ranges::any_of(discard.begin(), inputEnd, [](const wchar_t character) {
+            return character == L'\r' || character == L'\n';
+        });
+        SecureZeroMemory(discard.data(), sizeof(discard));
+        if (read == FALSE || reachedLineEnd)
+        {
+            return;
+        }
+    }
+}
+
+[[nodiscard]] std::expected<ztermy::security::SensitiveByteArray, QString> readHiddenConsolePassword()
+{
+    constexpr DWORD maximumPasswordCharacters = 1024;
+    std::array<wchar_t, maximumPasswordCharacters + 2> utf16Password{};
+    const HANDLE input = GetStdHandle(STD_INPUT_HANDLE);
+    ScopedConsoleMode consoleMode(input);
+    if (!consoleMode.hideEcho())
+    {
+        return std::unexpected(QStringLiteral("Password gate requires an interactive Windows console"));
+    }
+
+    std::fputs("SSH test password (input hidden): ", stdout);
+    std::fflush(stdout);
+    DWORD charactersRead = 0;
+    const BOOL read =
+        ReadConsoleW(input, utf16Password.data(), static_cast<DWORD>(utf16Password.size()), &charactersRead, nullptr);
+    std::fputc('\n', stdout);
+    std::fflush(stdout);
+    if (read == FALSE)
+    {
+        SecureZeroMemory(utf16Password.data(), sizeof(utf16Password));
+        return std::unexpected(QStringLiteral("Could not read the password from the Windows console"));
+    }
+
+    const auto inputEnd = utf16Password.begin() + static_cast<std::ptrdiff_t>(charactersRead);
+    const bool cancelled = std::ranges::find(utf16Password.begin(), inputEnd, L'\x0003') != inputEnd;
+    const bool completeLine =
+        charactersRead > 0
+        && (utf16Password.at(charactersRead - 1) == L'\r' || utf16Password.at(charactersRead - 1) == L'\n');
+    if (cancelled)
+    {
+        SecureZeroMemory(utf16Password.data(), sizeof(utf16Password));
+        return std::unexpected(QStringLiteral("Password input was cancelled"));
+    }
+    if (!completeLine)
+    {
+        drainConsoleLine(input);
+    }
+
+    while (charactersRead > 0
+           && (utf16Password.at(charactersRead - 1) == L'\r' || utf16Password.at(charactersRead - 1) == L'\n'))
+    {
+        --charactersRead;
+    }
+    if (!completeLine || charactersRead > maximumPasswordCharacters)
+    {
+        SecureZeroMemory(utf16Password.data(), sizeof(utf16Password));
+        return std::unexpected(QStringLiteral("The password is too long"));
+    }
+    if (charactersRead == 0)
+    {
+        SecureZeroMemory(utf16Password.data(), sizeof(utf16Password));
+        return std::unexpected(QStringLiteral("The password cannot be empty"));
+    }
+
+    const int utf8Size = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, utf16Password.data(),
+                                             static_cast<int>(charactersRead), nullptr, 0, nullptr, nullptr);
+    if (utf8Size <= 0)
+    {
+        SecureZeroMemory(utf16Password.data(), sizeof(utf16Password));
+        return std::unexpected(QStringLiteral("The password is not valid Unicode"));
+    }
+
+    QByteArray utf8Password(utf8Size, Qt::Uninitialized);
+    const int converted =
+        WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, utf16Password.data(), static_cast<int>(charactersRead),
+                            utf8Password.data(), utf8Size, nullptr, nullptr);
+    SecureZeroMemory(utf16Password.data(), sizeof(utf16Password));
+    if (converted != utf8Size)
+    {
+        SecureZeroMemory(utf8Password.data(), static_cast<SIZE_T>(utf8Password.size()));
+        return std::unexpected(QStringLiteral("Could not convert the password to UTF-8"));
+    }
+
+    return ztermy::security::SensitiveByteArray(std::move(utf8Password));
+}
 
 void captureMessage(const QtMsgType type, const QMessageLogContext &context, const QString &message)
 {
@@ -92,6 +230,7 @@ private slots:
     void connectsAfterExplicitHostKeyConfirmation();
     void reportsAuthenticationRejectionOnRealHost();
     void reportsRemoteCloseOnRealHost();
+    void authenticatesWithInteractivePasswordOnRealHost();
     void measuresInteractiveInputQueueLatency();
     void survivesRepeatedConnectDisconnectCycles();
 };
@@ -533,6 +672,61 @@ void SshTerminalSessionTests::reportsRemoteCloseOnRealHost()
     QCOMPARE(statusSpy.constLast().constFirst().toString(),
              ztermy::ssh::sshFailureStatus(ztermy::ssh::SshFailureKind::RemoteClosed));
     session.stop();
+}
+
+void SshTerminalSessionTests::authenticatesWithInteractivePasswordOnRealHost()
+{
+    const bool invokedDirectly =
+        QCoreApplication::arguments().contains(QStringLiteral("authenticatesWithInteractivePasswordOnRealHost"));
+    if (!invokedDirectly || qgetenv("ZTERMY_TEST_SSH_PASSWORD_INTERACTIVE") != QByteArrayLiteral("1"))
+    {
+        QSKIP("Set ZTERMY_TEST_SSH_PASSWORD_INTERACTIVE=1 and invoke this test directly");
+    }
+
+    const QByteArray host = qgetenv("ZTERMY_TEST_SSH_HOST");
+    const QByteArray username = qgetenv("ZTERMY_TEST_SSH_USERNAME");
+    const QByteArray expectedFingerprint = qgetenv("ZTERMY_TEST_SSH_EXPECTED_FINGERPRINT");
+    if (host.isEmpty() || username.isEmpty() || expectedFingerprint.isEmpty())
+    {
+        QSKIP("Set the real-host identity variables to run interactive password authentication");
+    }
+
+    auto password = readHiddenConsolePassword();
+    if (!password)
+    {
+        QFAIL(qPrintable(password.error()));
+    }
+
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ztermy::ssh::SshTerminalSession session;
+    QSignalSpy confirmationSpy(&session, &ztermy::ssh::SshTerminalSession::hostKeyConfirmationRequired);
+    QSignalSpy runningSpy(&session, &ztermy::ssh::SshTerminalSession::runningChanged);
+    ztermy::ssh::SshConnectionRequest request{
+        .host = QString::fromUtf8(host),
+        .port = 22,
+        .username = QString::fromUtf8(username),
+        .authentication = ztermy::ssh::SshAuthenticationMethod::Password,
+        .secret = std::move(*password),
+        .knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json")),
+    };
+
+    QVERIFY(!session.start(std::move(request), {.columns = 80, .rows = 24}));
+    QTRY_COMPARE_WITH_TIMEOUT(confirmationSpy.count(), 1, 10s);
+    QCOMPARE(confirmationSpy.constFirst().at(1).toString(), QString::fromLatin1(expectedFingerprint));
+    session.confirmHostKey(true);
+    QTRY_VERIFY_WITH_TIMEOUT(std::ranges::any_of(runningSpy,
+                                                 [](const QList<QVariant> &arguments) {
+                                                     return !arguments.isEmpty() && arguments.constFirst().toBool();
+                                                 }),
+                             20s);
+    runningSpy.clear();
+    session.stop();
+    QTRY_VERIFY_WITH_TIMEOUT(std::ranges::any_of(runningSpy,
+                                                 [](const QList<QVariant> &arguments) {
+                                                     return !arguments.isEmpty() && !arguments.constFirst().toBool();
+                                                 }),
+                             5s);
 }
 
 void SshTerminalSessionTests::measuresInteractiveInputQueueLatency()

@@ -80,6 +80,29 @@ Expected:
 - Confirm removes only that profile; trusted host keys remain untouched.
 - The deletion survives restart.
 
+## Password authentication
+
+1. Save a password profile without entering a password.
+2. Select **Connect**, enter the password in the per-attempt credential
+   dialog, and accept the independently verified host key if it is new.
+3. Close the connected tab and connect the saved profile again.
+4. Make one connection attempt with an intentionally incorrect password, then
+   retry with the correct password.
+5. Restart ztermy and connect the profile once more.
+
+Expected:
+
+- Saving never asks for or stores the password.
+- The credential dialog masks input, clears it after cancel or submission, and
+  is required on every new connection attempt.
+- A new host key is confirmed before authentication; the already trusted key
+  does not prompt again.
+- The incorrect password reports `SSH authentication was rejected` without
+  removing the profile or trusted host key.
+- The correct password opens an interactive terminal in every successful
+  attempt.
+- Restart preserves only the non-secret profile and host trust.
+
 ## Connection failure presentation
 
 Use only endpoints that you own or are authorized to test.
