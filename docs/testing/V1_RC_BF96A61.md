@@ -121,11 +121,14 @@ without developer tools or missing dependencies, ran local PowerShell,
 visited the primary pages, resized and shut down normally, kept data beside
 the portable executable, and did not contaminate installed-mode storage.
 
-The Sandbox MSI route is not yet accepted. Windows Installer remained at
-`Preparing to install` for an unusually long time. The same MSI completed its
+The Sandbox MSI remained at `Preparing to install` for an unusually long time
+but eventually completed without intervention, missing dependencies, an
+elevation prompt, rollback, or error dialog. It launched and used
+installed-mode storage as expected. The owner accepted the delay for V1 as a
+Sandbox/Windows Installer first-use observation. The same MSI completed its
 host-machine lifecycle, and decompilation confirms it contains no executable
-custom action, but a verbose Sandbox installation log is still required to
-distinguish first-use Windows Installer initialization from a package defect.
+custom action. Installer latency may be revisited with a verbose MSI timing
+log if it reproduces on a normal clean Windows installation.
 
 ## Artifact integrity
 
@@ -164,7 +167,7 @@ regression evidence but do not sign off this immutable candidate.
 | Selection/copy/paste/search/scrollback | NOT RUN | Exact portable candidate passed the primary interaction route; reverse/rectangular selection and wrapped-search route remains. |
 | Real-host password authentication | PASS | Static QtTest gate: 3 passed, 0 failed, hidden input, authenticated shell, 2877 ms. |
 | Installed data survives upgrade and uninstall | PASS | Exact MSI completed per-user install, identical-MSI upgrade, persistence checks, and uninstall cleanup while retaining user data. |
-| Clean Windows 11 release without developer tools | NOT RUN | Exact hashes and portable route passed in fresh Sandbox; MSI remained at `Preparing to install` and needs a verbose installation log. |
+| Clean Windows 11 release without developer tools | PASS | Exact hashes, portable mode, MSI install/launch, storage isolation, and shutdown passed in fresh Sandbox; first MSI preparation was slow but completed. |
 
 ## Historical development evidence
 
