@@ -1,6 +1,6 @@
 # V1.1 NetCatty UI/UX audit
 
-Status: baseline in progress
+Status: implementation complete; owner acceptance pending
 
 ## Evidence and policy
 

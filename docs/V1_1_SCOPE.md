@@ -1,6 +1,6 @@
 # ztermy V1.1 scope
 
-Status: active
+Status: implementation complete; owner acceptance pending
 
 ## Goal
 
