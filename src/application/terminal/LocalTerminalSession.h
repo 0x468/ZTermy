@@ -132,7 +132,7 @@ private:
     void resetMetrics() noexcept;
     void logMetrics() const;
 
-    static constexpr std::size_t maximumQueuedInputBytes = 1024U * 1024U;
+    static constexpr std::size_t maximumQueuedInputBytes = std::size_t{1024} * 1024;
 
     std::unique_ptr<ConPtyProcess> m_process;
     std::unique_ptr<GhosttyTerminalEngine> m_engine;

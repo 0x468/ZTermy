@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 namespace ztermy::windowing
 {
 
@@ -38,7 +40,7 @@ struct HitTestMetrics
 [[nodiscard]] Rect constrainMaximizedClientRect(Rect proposedClientRect, Rect workArea) noexcept;
 [[nodiscard]] Size scaleLogicalSizeForDpi(Size logicalSize, unsigned int dpi) noexcept;
 
-enum class HitArea
+enum class HitArea : std::uint8_t
 {
     Client,
     Caption,

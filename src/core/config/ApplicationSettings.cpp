@@ -13,7 +13,7 @@
 namespace
 {
 
-constexpr qint64 maximumSettingsFileSize = 64 * 1024;
+constexpr qint64 maximumSettingsFileSize = qint64{64} * 1024;
 constexpr qint64 currentSchemaVersion = 1;
 
 using ztermy::config::ApplicationSettings;

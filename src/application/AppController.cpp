@@ -383,7 +383,7 @@ bool AppController::closeTerminalTab(const QString &id)
     }
 
     const bool closingActive = (*position)->id == m_activeTabId;
-    const std::size_t index = static_cast<std::size_t>(std::distance(m_tabs.begin(), position));
+    const auto index = static_cast<std::size_t>(std::distance(m_tabs.begin(), position));
     if ((*position)->id == m_hostKeyTabId)
     {
         clearHostKeyPrompt();

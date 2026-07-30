@@ -46,17 +46,55 @@ void processWindowEventsFor(const std::chrono::milliseconds duration)
     eventLoop.exec();
 }
 
+template <typename Predicate>
+[[nodiscard]] bool processWindowEventsUntil(Predicate predicate, const std::chrono::milliseconds timeout)
+{
+    QElapsedTimer elapsed;
+    elapsed.start();
+    while (elapsed.elapsed() < timeout.count())
+    {
+        if (predicate())
+        {
+            return true;
+        }
+        processWindowEventsFor(std::chrono::milliseconds{25});
+    }
+    return predicate();
+}
+
 [[nodiscard]] bool runWindowRuntimeSmoke(ztermy::NativeWindow &window)
 {
     window.show();
-    processWindowEventsFor(std::chrono::milliseconds{250});
-    window.showMaximized();
-    processWindowEventsFor(std::chrono::milliseconds{500});
+    if (!processWindowEventsUntil(
+            [&window]() {
+                return window.isVisible();
+            },
+            std::chrono::seconds{2}))
+    {
+        qCWarning(applicationLog) << "Window runtime smoke did not become visible";
+        return false;
+    }
 
-    const bool workAreaMatches = window.maximized() && window.maximizedClientMatchesWorkArea();
+    window.showMaximized();
+    const bool workAreaMatches = processWindowEventsUntil(
+        [&window]() {
+            return window.maximized() && window.maximizedClientMatchesWorkArea();
+        },
+        std::chrono::seconds{3});
+    if (!workAreaMatches)
+    {
+        qCWarning(applicationLog) << "Window runtime smoke did not reach the maximized work area"
+                                  << "maximized=" << window.maximized()
+                                  << "workAreaMatches=" << window.maximizedClientMatchesWorkArea();
+    }
+
     window.showNormal();
-    processWindowEventsFor(std::chrono::milliseconds{250});
-    return workAreaMatches && !window.maximized();
+    const bool restored = processWindowEventsUntil(
+        [&window]() {
+            return !window.maximized();
+        },
+        std::chrono::seconds{2});
+    return workAreaMatches && restored;
 }
 
 struct ResizeHitRuntimeCase
@@ -909,6 +947,9 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
 
 } // namespace
 
+// Qt framework entry points are exception-opaque. Let unexpected failures reach
+// the process crash-diagnostics boundary instead of swallowing them here.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 int main(int argc, char *argv[])
 {
     QGuiApplication application(argc, argv);

@@ -3,12 +3,13 @@
 #include <QString>
 #include <QStringList>
 
+#include <cstdint>
 #include <expected>
 
 namespace ztermy::config
 {
 
-enum class StorageMode
+enum class StorageMode : std::uint8_t
 {
     installed,
     portable,

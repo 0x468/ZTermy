@@ -1120,31 +1120,184 @@ if(ZTERMY_STATIC_BUILD)
     )
 endif()
 
-set(ZTERMY_V1_PREFLIGHT_DEPENDENCIES
-    ztermy_window_runtime_smoke
-    ztermy_window_appearance_runtime_smoke
-    ztermy_window_resize_runtime_smoke
-    ztermy_window_dpi_runtime_smoke
-    ztermy_ui_layout_runtime_smoke
-    ztermy_ui_keyboard_runtime_smoke
-    ztermy_terminal_render_runtime_smoke
-)
-
-if(ZTERMY_STATIC_BUILD)
-    list(APPEND ZTERMY_V1_PREFLIGHT_DEPENDENCIES
-        ztermy_portable_package
-        ztermy_installer_contract_smoke
+if(BUILD_TESTING)
+    add_custom_target(ztermy_test_binaries
+        DEPENDS
+            ztermy_application_paths_tests
+            ztermy_application_settings_tests
+            ztermy_latency_histogram_tests
+            ztermy_window_hit_test_tests
+            ztermy_conpty_process_tests
+            ztermy_ssh_runtime_tests
+            ztermy_ssh_connection_state_tests
+            ztermy_ssh_host_key_tests
+            ztermy_known_hosts_store_tests
+            ztermy_ssh_profile_store_tests
+            ztermy_windows_tcp_socket_tests
+            ztermy_ssh_handshake_tests
+            ztermy_ssh_real_host_tests
+            ztermy_ssh_terminal_session_tests
+            ztermy_terminal_engine_tests
+            ztermy_local_terminal_session_tests
+            ztermy_app_controller_tests
+            ztermy_terminal_item_tests
     )
 endif()
 
-add_custom_target(ztermy_v1_automated_preflight
-    COMMAND "${CMAKE_CTEST_COMMAND}"
-            --test-dir "${CMAKE_BINARY_DIR}"
-            --output-on-failure
-    DEPENDS ${ZTERMY_V1_PREFLIGHT_DEPENDENCIES}
-    COMMENT "Running the complete automated V1 preflight"
+find_program(ZTERMY_CLANG_FORMAT_EXECUTABLE NAMES clang-format REQUIRED)
+find_program(ZTERMY_CLANG_TIDY_EXECUTABLE NAMES clang-tidy REQUIRED)
+
+execute_process(
+    COMMAND "${ZTERMY_CLANG_FORMAT_EXECUTABLE}" --version
+    RESULT_VARIABLE ZTERMY_CLANG_FORMAT_VERSION_RESULT
+    OUTPUT_VARIABLE ZTERMY_CLANG_FORMAT_VERSION_OUTPUT
+    ERROR_VARIABLE ZTERMY_CLANG_FORMAT_VERSION_OUTPUT
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+if(NOT ZTERMY_CLANG_FORMAT_VERSION_RESULT EQUAL 0
+   OR NOT ZTERMY_CLANG_FORMAT_VERSION_OUTPUT MATCHES "version ([0-9]+\\.[0-9]+(\\.[0-9]+)?)"
+   OR CMAKE_MATCH_1 VERSION_LESS "22.1")
+    message(FATAL_ERROR
+        "ztermy requires clang-format 22.1 or newer for its formatting gate; "
+        "found: ${ZTERMY_CLANG_FORMAT_VERSION_OUTPUT}"
+    )
+endif()
+
+execute_process(
+    COMMAND "${ZTERMY_CLANG_TIDY_EXECUTABLE}" --version
+    RESULT_VARIABLE ZTERMY_CLANG_TIDY_VERSION_RESULT
+    OUTPUT_VARIABLE ZTERMY_CLANG_TIDY_VERSION_OUTPUT
+    ERROR_VARIABLE ZTERMY_CLANG_TIDY_VERSION_OUTPUT
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+if(NOT ZTERMY_CLANG_TIDY_VERSION_RESULT EQUAL 0
+   OR NOT ZTERMY_CLANG_TIDY_VERSION_OUTPUT MATCHES "version ([0-9]+\\.[0-9]+(\\.[0-9]+)?)"
+   OR CMAKE_MATCH_1 VERSION_LESS "22.1")
+    message(FATAL_ERROR
+        "ztermy requires clang-tidy 22.1 or newer for its static-analysis gate; "
+        "found: ${ZTERMY_CLANG_TIDY_VERSION_OUTPUT}"
+    )
+endif()
+
+file(GLOB_RECURSE ZTERMY_FORMAT_SOURCES
+    CONFIGURE_DEPENDS
+    LIST_DIRECTORIES FALSE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.h"
+)
+file(GLOB_RECURSE ZTERMY_TIDY_SOURCES
+    CONFIGURE_DEPENDS
+    LIST_DIRECTORIES FALSE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+)
+if(BUILD_TESTING)
+    file(GLOB_RECURSE ZTERMY_TIDY_TEST_SOURCES
+        CONFIGURE_DEPENDS
+        LIST_DIRECTORIES FALSE
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp"
+    )
+    list(APPEND ZTERMY_TIDY_SOURCES ${ZTERMY_TIDY_TEST_SOURCES})
+endif()
+list(SORT ZTERMY_FORMAT_SOURCES)
+list(SORT ZTERMY_TIDY_SOURCES)
+
+add_custom_target(ztermy_format_check
+    COMMAND "${ZTERMY_CLANG_FORMAT_EXECUTABLE}"
+            --dry-run
+            --Werror
+            ${ZTERMY_FORMAT_SOURCES}
+    COMMENT "Checking C++ formatting"
     USES_TERMINAL
     VERBATIM
 )
 
-unset(ZTERMY_V1_PREFLIGHT_DEPENDENCIES)
+add_custom_target(ztermy_clang_tidy_check
+    COMMAND "${ZTERMY_CLANG_TIDY_EXECUTABLE}"
+            -p "${CMAKE_BINARY_DIR}"
+            --warnings-as-errors=*
+            --quiet
+            ${ZTERMY_TIDY_SOURCES}
+    DEPENDS ztermy
+    COMMENT "Running clang-tidy with all diagnostics treated as errors"
+    USES_TERMINAL
+    VERBATIM
+)
+
+if(BUILD_TESTING)
+    add_dependencies(ztermy_clang_tidy_check ztermy_test_binaries)
+
+    set(ZTERMY_V1_PREFLIGHT_PREREQUISITES
+        ztermy_test_binaries
+    )
+
+    if(ZTERMY_STATIC_BUILD)
+        list(APPEND ZTERMY_V1_PREFLIGHT_PREREQUISITES
+            ztermy_portable_package
+            ztermy_installer_contract_smoke
+        )
+    endif()
+
+    add_custom_target(ztermy_v1_preflight_prerequisites
+        DEPENDS ${ZTERMY_V1_PREFLIGHT_PREREQUISITES}
+    )
+
+    set(ZTERMY_V1_PREFLIGHT_DATA_ROOT
+        "${CMAKE_CURRENT_BINARY_DIR}/test-data/v1-runtime-preflight"
+    )
+    add_custom_target(ztermy_v1_runtime_preflight
+        COMMAND "${CMAKE_COMMAND}" -E rm -rf
+                "${ZTERMY_V1_PREFLIGHT_DATA_ROOT}"
+        COMMAND "$<TARGET_FILE:ztermy>"
+                --window-runtime-smoke
+                --data-dir "${ZTERMY_V1_PREFLIGHT_DATA_ROOT}/window-work-area"
+        COMMAND "$<TARGET_FILE:ztermy>"
+                --window-appearance-smoke
+                --data-dir "${ZTERMY_V1_PREFLIGHT_DATA_ROOT}/window-appearance"
+        COMMAND "$<TARGET_FILE:ztermy>"
+                --window-resize-smoke
+                --data-dir "${ZTERMY_V1_PREFLIGHT_DATA_ROOT}/window-resize"
+        COMMAND "${CMAKE_COMMAND}"
+                "-DZTERMY_DPI_SMOKE_EXECUTABLE=$<TARGET_FILE:ztermy>"
+                "-DZTERMY_DPI_SMOKE_DATA_ROOT=${ZTERMY_V1_PREFLIGHT_DATA_ROOT}/window-dpi"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunWindowDpiSmoke.cmake"
+        COMMAND "$<TARGET_FILE:ztermy>"
+                --ui-layout-smoke
+                --data-dir "${ZTERMY_V1_PREFLIGHT_DATA_ROOT}/ui-layout"
+        COMMAND "$<TARGET_FILE:ztermy>"
+                --ui-keyboard-smoke
+                --data-dir "${ZTERMY_V1_PREFLIGHT_DATA_ROOT}/ui-keyboard"
+        COMMAND "$<TARGET_FILE:ztermy>"
+                --terminal-render-smoke
+                --data-dir "${ZTERMY_V1_PREFLIGHT_DATA_ROOT}/terminal-render"
+        DEPENDS ztermy_v1_preflight_prerequisites
+        COMMENT "Running all seven real-window V1 gates serially"
+        USES_TERMINAL
+        VERBATIM
+    )
+
+    add_custom_target(ztermy_v1_automated_preflight
+        COMMAND "${CMAKE_CTEST_COMMAND}"
+                --test-dir "${CMAKE_BINARY_DIR}"
+                --output-on-failure
+        DEPENDS
+            ztermy_format_check
+            ztermy_clang_tidy_check
+            ztermy_v1_runtime_preflight
+        COMMENT "Running the complete automated V1 preflight"
+        USES_TERMINAL
+        VERBATIM
+    )
+
+    unset(ZTERMY_V1_PREFLIGHT_DATA_ROOT)
+    unset(ZTERMY_V1_PREFLIGHT_PREREQUISITES)
+endif()
+
+unset(ZTERMY_FORMAT_SOURCES)
+unset(ZTERMY_TIDY_SOURCES)
+unset(ZTERMY_TIDY_TEST_SOURCES)
+unset(ZTERMY_CLANG_FORMAT_VERSION_OUTPUT)
+unset(ZTERMY_CLANG_FORMAT_VERSION_RESULT)
+unset(ZTERMY_CLANG_TIDY_VERSION_OUTPUT)
+unset(ZTERMY_CLANG_TIDY_VERSION_RESULT)

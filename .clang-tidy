@@ -7,10 +7,10 @@ Checks: >
   performance-*,
   portability-*,
   -bugprone-easily-swappable-parameters,
-  -modernize-use-trailing-return-type
+  -modernize-use-trailing-return-type,
+  -portability-avoid-pragma-once
 WarningsAsErrors: ''
-HeaderFilterRegex: '^(src|tests)/'
+HeaderFilterRegex: '(^|.*[\\/])(src|tests)[\\/].*'
 SystemHeaders: false
 FormatStyle: file
 ...
-

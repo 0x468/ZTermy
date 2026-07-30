@@ -636,7 +636,7 @@ GhosttyTerminalEngine::search(const std::string_view query, const TerminalSearch
         const auto current = std::ranges::find_if(matches, sameStart);
         if (current != matches.end())
         {
-            const std::size_t currentIndex = static_cast<std::size_t>(std::distance(matches.begin(), current));
+            const auto currentIndex = static_cast<std::size_t>(std::distance(matches.begin(), current));
             if (direction == TerminalSearchDirection::forward)
             {
                 selectedIndex = currentIndex + 1U;

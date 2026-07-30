@@ -77,7 +77,7 @@ protected:
     void geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) override;
     void keyPressEvent(QKeyEvent *event) override;
     void inputMethodEvent(QInputMethodEvent *event) override;
-    QVariant inputMethodQuery(Qt::InputMethodQuery query) const override;
+    [[nodiscard]] QVariant inputMethodQuery(Qt::InputMethodQuery query) const override;
     void focusOutEvent(QFocusEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;

@@ -11,6 +11,7 @@
 
 #include <array>
 #include <chrono>
+#include <expected>
 #include <span>
 #include <string>
 #include <utility>
@@ -124,34 +125,37 @@ namespace
     return QStringLiteral("SSH connection failed");
 }
 
+void requireStateTransition(const std::expected<void, ztermy::ssh::SshStateError> &result, const char *operation)
+{
+    if (!result)
+    {
+        qFatal("Invalid SSH connection state transition while %s", operation);
+    }
+}
+
 void startState(ztermy::ssh::SshConnectionState &state)
 {
-    const auto result = state.start();
-    Q_ASSERT(result);
+    requireStateTransition(state.start(), "starting");
 }
 
 void advanceState(ztermy::ssh::SshConnectionState &state, const ztermy::ssh::SshConnectionPhase phase)
 {
-    const auto result = state.advanceTo(phase);
-    Q_ASSERT(result);
+    requireStateTransition(state.advanceTo(phase), "advancing");
 }
 
 void failState(ztermy::ssh::SshConnectionState &state, const ztermy::ssh::SshFailureKind failure)
 {
-    const auto result = state.fail(failure);
-    Q_ASSERT(result);
+    requireStateTransition(state.fail(failure), "failing");
 }
 
 void requestClose(ztermy::ssh::SshConnectionState &state)
 {
-    const auto result = state.requestClose();
-    Q_ASSERT(result);
+    requireStateTransition(state.requestClose(), "requesting close");
 }
 
 void completeClose(ztermy::ssh::SshConnectionState &state)
 {
-    const auto result = state.completeClose();
-    Q_ASSERT(result);
+    requireStateTransition(state.completeClose(), "completing close");
 }
 
 } // namespace

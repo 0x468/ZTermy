@@ -20,10 +20,13 @@ Only runtime evidence can mark a platform or UI item complete.
   and exactly one non-empty `ztermy.exe` payload; it rejects portable markers,
   DLLs, PDBs, and Ghostty development files.
 - The unified V1 automated preflight passes in dynamic Debug and static
-  Release. In each build it serializes all seven real-window window, DPI, UI,
-  keyboard, and terminal-render gates before completing all 19 CTest tests.
-  The static run additionally regenerates the portable ZIP and passes the MSI
-  generation, ICE validation, decompilation, and payload-contract checks.
+  Release. Both builds pass clang-format with `--Werror` and all 42 project
+  translation units pass LLVM 22.1 clang-tidy with every enabled diagnostic
+  treated as an error. Every test executable is rebuilt before the seven
+  real-window window, DPI, UI, keyboard, and terminal-render gates run
+  serially, followed by all 19 CTest tests. The static run additionally
+  regenerates the portable ZIP and completes MSI generation, ICE validation,
+  decompilation, and payload-contract checks before the runtime gates begin.
 - The dynamic RelWithDebInfo deployment target installs its Qt, QML, compiler,
   and OpenSSL runtime dependencies into a clean directory. Its native/QML
   smoke path passes with `PATH` restricted to Windows system directories and
