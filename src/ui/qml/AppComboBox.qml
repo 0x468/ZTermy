@@ -7,6 +7,12 @@ ComboBox {
     id: control
 
     property string accessibleName: ""
+    property var displayTextModel: []
+    readonly property string effectiveDisplayText: textForIndex(currentIndex, currentText)
+
+    function textForIndex(index, fallback) {
+        return index >= 0 && index < displayTextModel.length ? displayTextModel[index] : fallback;
+    }
 
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
@@ -25,7 +31,7 @@ ComboBox {
     }
 
     contentItem: Text {
-        text: control.displayText
+        text: control.effectiveDisplayText
         color: control.enabled ? Theme.text : Theme.textSubtle
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
@@ -57,7 +63,7 @@ ComboBox {
 
         width: control.width
         implicitHeight: 34
-        text: modelData
+        text: control.textForIndex(index, modelData)
         highlighted: control.highlightedIndex === index
 
         contentItem: Text {

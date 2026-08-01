@@ -97,6 +97,42 @@ private:
     return {terminalColor.red, terminalColor.green, terminalColor.blue};
 }
 
+constexpr std::array<QFont::Tag, 4> ligatureFeatures{
+    QFont::Tag{"liga"},
+    QFont::Tag{"clig"},
+    QFont::Tag{"calt"},
+    QFont::Tag{"dlig"},
+};
+
+void configureLigatures(QFont &font, const bool enabled)
+{
+    for (const QFont::Tag feature : ligatureFeatures)
+    {
+        if (enabled)
+        {
+            font.unsetFeature(feature);
+        }
+        else
+        {
+            font.setFeature(feature, 0);
+        }
+    }
+}
+
+[[nodiscard]] bool ligatureRunCell(const ztermy::terminal::TerminalCell &cell)
+{
+    return !cell.invisible && cell.displayWidth == 1 && cell.grapheme.size() == 1 && cell.grapheme.front() >= U'!'
+           && cell.grapheme.front() <= U'~';
+}
+
+[[nodiscard]] bool sameTextStyle(const ztermy::terminal::TerminalCell &first,
+                                 const ztermy::terminal::TerminalCell &second)
+{
+    return first.selected == second.selected && first.bold == second.bold && first.italic == second.italic
+           && first.underline == second.underline && first.strikethrough == second.strikethrough
+           && first.overline == second.overline && color(first.foreground) == color(second.foreground);
+}
+
 [[nodiscard]] QByteArray encodedKey(QKeyEvent *event)
 {
     const bool control = event->modifiers().testFlag(Qt::ControlModifier);
@@ -163,6 +199,7 @@ namespace ztermy::ui
 
 TerminalItem::TerminalItem(QQuickItem *parent) : QQuickItem(parent)
 {
+    m_statusText = tr("Starting local terminal...");
     setFlag(ItemHasContents, true);
     setFlag(ItemAcceptsInputMethod, true);
     setAcceptedMouseButtons(Qt::LeftButton);
@@ -199,6 +236,11 @@ QString TerminalItem::fontFamily() const
 int TerminalItem::fontPixelSize() const noexcept
 {
     return m_font.pixelSize();
+}
+
+bool TerminalItem::ligaturesEnabled() const noexcept
+{
+    return m_ligaturesEnabled;
 }
 
 qreal TerminalItem::backgroundOpacity() const noexcept
@@ -322,6 +364,19 @@ void TerminalItem::setFontPixelSize(const int pixelSize)
     reportTerminalSize();
     update();
     notifyInputMethod();
+    emit fontChanged();
+}
+
+void TerminalItem::setLigaturesEnabled(const bool enabled)
+{
+    if (m_ligaturesEnabled == enabled)
+    {
+        return;
+    }
+    m_ligaturesEnabled = enabled;
+    configureLigatures(m_font, enabled);
+    ++m_revision;
+    update();
     emit fontChanged();
 }
 
@@ -479,6 +534,9 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         const std::vector<PreeditCluster> preeditClusters = layoutPreeditText(m_preeditText, m_font, cellWidthValue);
         const int insertedColumns = preeditColumnCount(preeditClusters);
         const int snapshotColumns = static_cast<int>(m_snapshot->columns);
+        const bool terminalCursorVisible =
+            preeditClusters.empty() && m_snapshot->cursor.visible && (!m_cursorBlink || m_cursorBlinkPhase)
+            && m_snapshot->cursor.column < m_snapshot->columns && m_snapshot->cursor.row < m_snapshot->rows;
 
         for (quint16 row = 0; row < m_snapshot->rows; ++row)
         {
@@ -537,11 +595,37 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                 painter.setFont(cellFont);
                 painter.setPen(cell.selected ? selectionForeground : color(cell.foreground));
 
-                const QString grapheme =
+                QString grapheme =
                     QString::fromUcs4(cell.grapheme.data(), static_cast<qsizetype>(cell.grapheme.size()));
+                quint16 runEnd = column;
+                int previousDisplayColumn = displayColumn;
+                const bool currentCellHasCursor =
+                    terminalCursorVisible && row == m_snapshot->cursor.row && column == m_snapshot->cursor.column;
+                if (m_ligaturesEnabled && ligatureRunCell(cell) && !currentCellHasCursor)
+                {
+                    while (runEnd + 1 < m_snapshot->columns)
+                    {
+                        const terminal::TerminalCell &next = m_snapshot->cell(runEnd + 1, row);
+                        const bool nextCellHasCursor = terminalCursorVisible && row == m_snapshot->cursor.row
+                                                       && runEnd + 1 == m_snapshot->cursor.column;
+                        const int nextDisplayColumn =
+                            !preeditClusters.empty() && row == m_snapshot->cursor.row
+                                ? shiftedTerminalColumn(runEnd + 1, m_snapshot->cursor.column, insertedColumns)
+                                : runEnd + 1;
+                        if (nextDisplayColumn >= snapshotColumns || nextDisplayColumn != previousDisplayColumn + 1
+                            || nextCellHasCursor || !ligatureRunCell(next) || !sameTextStyle(cell, next))
+                        {
+                            break;
+                        }
+                        grapheme.append(QChar(static_cast<char16_t>(next.grapheme.front())));
+                        ++runEnd;
+                        previousDisplayColumn = nextDisplayColumn;
+                    }
+                }
                 const QPointF baseline{horizontalPadding + (displayColumn * cellWidthValue),
                                        verticalPadding + (row * cellHeightValue) + metrics.ascent()};
                 painter.drawText(baseline, grapheme);
+                column = runEnd;
             }
         }
 

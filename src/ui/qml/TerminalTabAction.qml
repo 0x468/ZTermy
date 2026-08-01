@@ -110,7 +110,7 @@ Rectangle {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.margins: 2
-        accessibleName: "Activate " + control.title
+        accessibleName: qsTr("Activate %1").arg(control.title)
         onActivated: control.activated()
     }
 
@@ -154,7 +154,7 @@ Rectangle {
             objectName: control.closeActionObjectName
             anchors.fill: parent
             anchors.margins: 2
-            accessibleName: "Close " + control.title
+            accessibleName: qsTr("Close %1").arg(control.title)
             onActivated: control.closeRequested()
         }
     }

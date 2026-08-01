@@ -143,16 +143,18 @@ void TerminalItemTests::appliesRendererPreferences()
 
     item.setFontFamily(QStringLiteral("Cascadia Code"));
     item.setFontPixelSize(18);
+    item.setLigaturesEnabled(false);
     item.setCursorPreference(QStringLiteral("bar"));
     item.setCursorBlink(false);
     item.setBackgroundOpacity(0.45);
 
     QCOMPARE(item.fontFamily(), QStringLiteral("Cascadia Code"));
     QCOMPARE(item.fontPixelSize(), 18);
+    QVERIFY(!item.ligaturesEnabled());
     QCOMPARE(item.cursorPreference(), QStringLiteral("bar"));
     QVERIFY(!item.cursorBlink());
     QCOMPARE(item.backgroundOpacity(), 0.45);
-    QCOMPARE(fontSpy.count(), 2);
+    QCOMPARE(fontSpy.count(), 3);
     QCOMPARE(cursorSpy.count(), 2);
     QCOMPARE(backgroundSpy.count(), 1);
 

@@ -82,7 +82,7 @@ endfunction()
 
 ztermy_add_libssh2()
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Quick QuickControls2)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui LinguistTools Quick QuickControls2)
 
 get_target_property(ZTERMY_QT_CORE_TARGET_TYPE Qt6::Core TYPE)
 if(ZTERMY_STATIC_BUILD AND NOT ZTERMY_QT_CORE_TARGET_TYPE STREQUAL "STATIC_LIBRARY")
@@ -314,6 +314,10 @@ qt_add_executable(ztermy WIN32
     src/main.cpp
     src/application/AppController.cpp
     src/application/AppController.h
+    src/application/FontCatalog.cpp
+    src/application/FontCatalog.h
+    src/application/LocalizationManager.cpp
+    src/application/LocalizationManager.h
     src/core/logging/Logging.cpp
     src/core/logging/Logging.h
     src/platform/windows/CrashDiagnostics.cpp
@@ -431,6 +435,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/AppTextField.qml
         src/ui/qml/CaptionButton.qml
         src/ui/qml/ConfirmationDialog.qml
+        src/ui/qml/FontPicker.qml
         src/ui/qml/HostConnectionPane.qml
         src/ui/qml/HostKeyPrompt.qml
         src/ui/qml/KeyboardAction.qml
@@ -443,6 +448,44 @@ qt_add_qml_module(ztermy
         src/ui/qml/TerminalTabAction.qml
         src/ui/qml/Theme.qml
 )
+
+set(ZTERMY_TRANSLATION_FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/translations/ztermy_zh_CN.ts"
+)
+qt_add_translations(ztermy
+    SOURCE_TARGETS
+        ztermy
+        ztermy_terminal_session
+        ztermy_ssh_session
+        ztermy_terminal_ui
+    TS_FILES ${ZTERMY_TRANSLATION_FILES}
+    RESOURCE_PREFIX "/i18n"
+    LUPDATE_OPTIONS -no-obsolete
+    LRELEASE_OPTIONS -nounfinished
+    NO_GENERATE_PLURALS_TS_FILE
+)
+
+find_program(ZTERMY_PWSH_EXECUTABLE NAMES pwsh REQUIRED)
+add_custom_target(ztermy_translation_gate
+    COMMAND
+        "${ZTERMY_PWSH_EXECUTABLE}" -NoProfile -File
+        "${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_translations.ps1"
+        -CatalogPath "${ZTERMY_TRANSLATION_FILES}"
+        -SourceRoot "${CMAKE_CURRENT_SOURCE_DIR}"
+    DEPENDS update_translations
+    COMMENT "Verifying translation freshness, completeness, placeholders, and localization call sites"
+    VERBATIM
+)
+if(BUILD_TESTING)
+    add_test(
+        NAME translation-catalog
+        COMMAND
+            "${ZTERMY_PWSH_EXECUTABLE}" -NoProfile -File
+            "${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_translations.ps1"
+            -CatalogPath "${ZTERMY_TRANSLATION_FILES}"
+            -SourceRoot "${CMAKE_CURRENT_SOURCE_DIR}"
+    )
+endif()
 
 qt_generate_foreign_qml_types(ztermy_terminal_ui ztermy)
 
@@ -766,6 +809,55 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME application-settings COMMAND ztermy_application_settings_tests)
+
+    qt_add_executable(ztermy_localization_manager_tests
+        tests/localization_manager_tests.cpp
+        src/application/LocalizationManager.cpp
+        src/application/LocalizationManager.h
+    )
+
+    target_compile_features(ztermy_localization_manager_tests PRIVATE cxx_std_23)
+    target_include_directories(ztermy_localization_manager_tests PRIVATE src)
+    target_link_libraries(ztermy_localization_manager_tests PRIVATE
+        ztermy_core_config
+        Qt6::Qml
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_localization_manager_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME localization-manager COMMAND ztermy_localization_manager_tests)
+
+    qt_add_executable(ztermy_font_catalog_tests
+        tests/font_catalog_tests.cpp
+        src/application/FontCatalog.cpp
+        src/application/FontCatalog.h
+    )
+
+    target_compile_features(ztermy_font_catalog_tests PRIVATE cxx_std_23)
+    target_include_directories(ztermy_font_catalog_tests PRIVATE src)
+    target_link_libraries(ztermy_font_catalog_tests PRIVATE
+        Qt6::Gui
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_font_catalog_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME font-catalog COMMAND ztermy_font_catalog_tests)
 
     qt_add_executable(ztermy_credential_vault_tests
         tests/credential_vault_tests.cpp
@@ -1305,6 +1397,7 @@ if(BUILD_TESTING)
         DEPENDS
             ztermy_application_paths_tests
             ztermy_application_settings_tests
+            ztermy_localization_manager_tests
             ztermy_latency_histogram_tests
             ztermy_window_hit_test_tests
             ztermy_conpty_process_tests
@@ -1322,6 +1415,7 @@ if(BUILD_TESTING)
             ztermy_local_terminal_session_tests
             ztermy_app_controller_tests
             ztermy_terminal_item_tests
+            ztermy_font_catalog_tests
             ztermy_windows_executable_metadata_tests
     )
 endif()

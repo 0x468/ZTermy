@@ -9,8 +9,8 @@ Dialog {
 
     property string heading: ""
     property string description: ""
-    property string acceptText: "Continue"
-    property string rejectText: "Cancel"
+    property string acceptText: qsTr("Continue")
+    property string rejectText: qsTr("Cancel")
     property string acceptObjectName: ""
     property string rejectObjectName: ""
     property bool destructive: false

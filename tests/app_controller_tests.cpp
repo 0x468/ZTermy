@@ -491,31 +491,46 @@ void AppControllerTests::persistsApplicationSettings()
     QCOMPARE(controller.backdropPreference(), QStringLiteral("acrylic"));
     QCOMPARE(controller.accentPreference(), QStringLiteral("ztermy"));
     QCOMPARE(controller.customAccent(), QStringLiteral("#22C55E"));
+    QVERIFY(controller.uiFontFamily().isEmpty());
+    QVERIFY(!controller.showAllTerminalFonts());
+    QVERIFY(controller.terminalLigatures());
     QCOMPARE(controller.terminalBackgroundOpacity(), 1.0);
+    QCOMPARE(controller.languagePreference(), QStringLiteral("system"));
 
     QVERIFY(controller.saveApplicationSettings(
         QStringLiteral("light"), 0.8, QStringLiteral("micaAlt"), QStringLiteral("custom"), QStringLiteral("#3366cc"),
-        QStringLiteral("Cascadia Code"), 18, 0.45, QStringLiteral("bar"), false, true, false));
+        QStringLiteral("Microsoft YaHei UI"), QStringLiteral("Cascadia Code"), 18, true, false, 0.45,
+        QStringLiteral("bar"), false, true, false, QStringLiteral("zh_CN")));
     QCOMPARE(settingsChanged.count(), 1);
     QCOMPARE(controller.themePreference(), QStringLiteral("light"));
     QCOMPARE(controller.backdropOpacity(), 0.8);
     QCOMPARE(controller.backdropPreference(), QStringLiteral("micaAlt"));
     QCOMPARE(controller.accentPreference(), QStringLiteral("custom"));
     QCOMPARE(controller.customAccent(), QStringLiteral("#3366CC"));
+    QCOMPARE(controller.uiFontFamily(), QStringLiteral("Microsoft YaHei UI"));
     QCOMPARE(controller.terminalFontFamily(), QStringLiteral("Cascadia Code"));
     QCOMPARE(controller.terminalFontSize(), 18);
+    QVERIFY(controller.showAllTerminalFonts());
+    QVERIFY(!controller.terminalLigatures());
     QCOMPARE(controller.terminalBackgroundOpacity(), 0.45);
     QCOMPARE(controller.cursorPreference(), QStringLiteral("bar"));
     QVERIFY(!controller.cursorBlink());
     QVERIFY(controller.copyOnSelect());
     QVERIFY(!controller.confirmMultilinePaste());
+    QCOMPARE(controller.languagePreference(), QStringLiteral("zh_CN"));
 
+    QVERIFY(!controller.saveApplicationSettings(QStringLiteral("unknown"), 0.8, QStringLiteral("mica"),
+                                                QStringLiteral("system"), QStringLiteral("#3366CC"), {},
+                                                QStringLiteral("Cascadia Code"), 18, false, true, 0.45,
+                                                QStringLiteral("bar"), false, true, false, QStringLiteral("zh_CN")));
     QVERIFY(!controller.saveApplicationSettings(
-        QStringLiteral("unknown"), 0.8, QStringLiteral("mica"), QStringLiteral("system"), QStringLiteral("#3366CC"),
-        QStringLiteral("Cascadia Code"), 18, 0.45, QStringLiteral("bar"), false, true, false));
-    QVERIFY(!controller.saveApplicationSettings(
-        QStringLiteral("light"), 0.8, QStringLiteral("mica"), QStringLiteral("custom"), QStringLiteral("invalid"),
-        QStringLiteral("Cascadia Code"), 18, 0.45, QStringLiteral("bar"), false, true, false));
+        QStringLiteral("light"), 0.8, QStringLiteral("mica"), QStringLiteral("system"), QStringLiteral("#3366CC"), {},
+        QStringLiteral("Cascadia Code"), 18, false, true, 0.45, QStringLiteral("bar"), false, true, false,
+        QStringLiteral("unsupported")));
+    QVERIFY(!controller.saveApplicationSettings(QStringLiteral("light"), 0.8, QStringLiteral("mica"),
+                                                QStringLiteral("custom"), QStringLiteral("invalid"), {},
+                                                QStringLiteral("Cascadia Code"), 18, false, true, 0.45,
+                                                QStringLiteral("bar"), false, true, false, QStringLiteral("zh_CN")));
     QCOMPARE(settingsChanged.count(), 1);
 
     ztermy::AppController reloaded(profilesPath, knownHostsPath, settingsPath);
@@ -524,9 +539,13 @@ void AppControllerTests::persistsApplicationSettings()
     QCOMPARE(reloaded.backdropPreference(), QStringLiteral("micaAlt"));
     QCOMPARE(reloaded.accentPreference(), QStringLiteral("custom"));
     QCOMPARE(reloaded.customAccent(), QStringLiteral("#3366CC"));
+    QCOMPARE(reloaded.uiFontFamily(), QStringLiteral("Microsoft YaHei UI"));
     QCOMPARE(reloaded.terminalFontFamily(), QStringLiteral("Cascadia Code"));
+    QVERIFY(reloaded.showAllTerminalFonts());
+    QVERIFY(!reloaded.terminalLigatures());
     QCOMPARE(reloaded.terminalBackgroundOpacity(), 0.45);
     QVERIFY(reloaded.copyOnSelect());
+    QCOMPARE(reloaded.languagePreference(), QStringLiteral("zh_CN"));
 
     QVERIFY(reloaded.resetApplicationSettings());
     QCOMPARE(reloaded.themePreference(), QStringLiteral("dark"));
@@ -536,6 +555,7 @@ void AppControllerTests::persistsApplicationSettings()
     QCOMPARE(reloaded.customAccent(), QStringLiteral("#22C55E"));
     QCOMPARE(reloaded.terminalFontFamily(), QStringLiteral("Cascadia Mono"));
     QCOMPARE(reloaded.terminalBackgroundOpacity(), 1.0);
+    QCOMPARE(reloaded.languagePreference(), QStringLiteral("system"));
 }
 
 void AppControllerTests::managesMultipleLocalTerminalTabs()
@@ -560,6 +580,11 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
     QVERIFY(!controller.terminalTabs().constFirst().toMap().value(QStringLiteral("connecting")).toBool());
     QVERIFY(!controller.terminalTabs().constFirst().toMap().value(QStringLiteral("failed")).toBool());
     QVERIFY(!controller.terminalTabs().constFirst().toMap().value(QStringLiteral("remoteClosed")).toBool());
+    QCOMPARE(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("status")).toString(),
+             QStringLiteral("Fake local terminal connected"));
+    controller.retranslateUiState();
+    QCOMPARE(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("status")).toString(),
+             QStringLiteral("Local PowerShell connected"));
 
     const QString second = controller.startLocalTerminal();
     QVERIFY(!second.isEmpty());

@@ -66,7 +66,7 @@ TextField {
         enabled: control.enabled
         hoverEnabled: true
         focusPolicy: Qt.StrongFocus
-        Accessible.name: control.passwordVisible ? "Hide password" : "Show password"
+        Accessible.name: control.passwordVisible ? qsTr("Hide password") : qsTr("Show password")
         Accessible.role: Accessible.Button
         onClicked: control.passwordVisible = !control.passwordVisible
 

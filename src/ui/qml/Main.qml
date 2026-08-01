@@ -8,6 +8,7 @@ Rectangle {
     id: root
 
     required property var controller
+    required property var fontCatalog
     required property var windowChrome
     readonly property int titleBarHeight: Theme.titleBarHeight
     readonly property int captionButtonWidth: 46
@@ -219,6 +220,12 @@ Rectangle {
         value: root.windowChrome.systemAccentColor
     }
 
+    Binding {
+        target: Theme
+        property: "uiFont"
+        value: root.fontCatalog.effectiveUiFamily(root.controller.uiFontFamily)
+    }
+
     Component.onCompleted: {
         reportTitleBarMetrics();
         applyWindowAppearance();
@@ -402,7 +409,7 @@ Rectangle {
                     }
 
                     Text {
-                        text: "Hosts"
+                        text: qsTr("Hosts")
                         color: root.currentPage === "hosts" ? root.textColor : root.mutedColor
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.textBody
@@ -416,7 +423,7 @@ Rectangle {
                     objectName: "hostsTitleAction"
                     anchors.fill: parent
                     anchors.margins: 2
-                    accessibleName: "Hosts"
+                    accessibleName: qsTr("Hosts")
                     onActivated: root.currentPage = "hosts"
                 }
             }
@@ -427,7 +434,7 @@ Rectangle {
                 visible: root.settingsTabOpen
                 width: visible ? implicitWidth : 0
                 height: titleNavigation.height
-                title: "Settings"
+                title: qsTr("Settings")
                 iconName: "settings"
                 actionObjectName: "settingsTitleAction"
                 closeActionObjectName: "settingsTitleCloseAction"
@@ -541,7 +548,7 @@ Rectangle {
                     objectName: "titleNewTabAction"
                     anchors.fill: parent
                     anchors.margins: 2
-                    accessibleName: "New local terminal"
+                    accessibleName: qsTr("New local terminal")
                     onActivated: root.startLocalTerminalTab()
                 }
             }
@@ -595,7 +602,7 @@ Rectangle {
                     objectName: "portableVaultStatusAction"
                     anchors.fill: parent
                     anchors.margins: 2
-                    accessibleName: root.controller.portableVaultInitialized ? "Portable vault locked; unlock" : "Portable vault not configured; open Security settings"
+                    accessibleName: root.controller.portableVaultInitialized ? qsTr("Portable vault locked; unlock") : qsTr("Portable vault not configured; open Security settings")
                     onActivated: root.requestPortableVaultAccess(portableVaultStatusAction)
                 }
             }
@@ -627,7 +634,7 @@ Rectangle {
                     objectName: "settingsShortcutAction"
                     anchors.fill: parent
                     anchors.margins: 2
-                    accessibleName: "Open Settings"
+                    accessibleName: qsTr("Open Settings")
                     onActivated: root.openSettingsTab()
                 }
             }
@@ -638,7 +645,7 @@ Rectangle {
                 height: titleBar.height
                 kind: "minimize"
                 chrome: root.windowChrome
-                accessibleName: "Minimize"
+                accessibleName: qsTr("Minimize")
                 onActivated: root.windowChrome.minimizeWindow()
             }
 
@@ -648,7 +655,7 @@ Rectangle {
                 height: titleBar.height
                 kind: "maximize"
                 chrome: root.windowChrome
-                accessibleName: root.windowChrome.maximized ? "Restore" : "Maximize"
+                accessibleName: root.windowChrome.maximized ? qsTr("Restore") : qsTr("Maximize")
                 externallyHovered: root.windowChrome.maximizeButtonHovered
                 externallyPressed: root.windowChrome.maximizeButtonPressed
                 onActivated: root.windowChrome.toggleMaximize()
@@ -660,7 +667,7 @@ Rectangle {
                 height: titleBar.height
                 kind: "close"
                 chrome: root.windowChrome
-                accessibleName: "Close"
+                accessibleName: qsTr("Close")
                 onActivated: root.windowChrome.closeWindow()
             }
         }
@@ -699,7 +706,7 @@ Rectangle {
                     actionObjectName: "sideHostsAction"
                     Layout.fillWidth: true
                     Layout.preferredHeight: 38
-                    text: "Hosts"
+                    text: qsTr("Hosts")
                     selected: root.currentPage === "hosts"
                     onActivated: root.currentPage = "hosts"
                 }
@@ -724,14 +731,14 @@ Rectangle {
                         spacing: 3
 
                         Text {
-                            text: "Local machine"
+                            text: qsTr("Local machine")
                             color: root.textColor
                             font.family: Theme.uiFont
                             font.pixelSize: 12
                         }
 
                         Text {
-                            text: "Windows 11 · ready"
+                            text: qsTr("Windows 11 · ready")
                             color: root.mutedColor
                             font.family: Theme.uiFont
                             font.pixelSize: 10
@@ -744,7 +751,7 @@ Rectangle {
                         objectName: "localMachineAction"
                         anchors.fill: parent
                         anchors.margins: 2
-                        accessibleName: "Open local terminal"
+                        accessibleName: qsTr("Open local terminal")
                         onActivated: root.startLocalTerminalTab()
                     }
                 }
@@ -796,7 +803,7 @@ Rectangle {
                             Text {
                                 Layout.alignment: Qt.AlignVCenter
                                 Layout.maximumWidth: 220
-                                text: root.activeTerminalTab ? root.activeTerminalTab.title : "Terminal"
+                                text: root.activeTerminalTab ? root.activeTerminalTab.title : qsTr("Terminal")
                                 color: root.textColor
                                 elide: Text.ElideRight
                                 font.family: Theme.uiFont
@@ -872,7 +879,7 @@ Rectangle {
                                     }
 
                                     Text {
-                                        text: "Find"
+                                        text: qsTr("Find")
                                         color: root.mutedColor
                                         font.family: Theme.uiFont
                                         font.pixelSize: Theme.textCompact
@@ -884,7 +891,7 @@ Rectangle {
 
                                     objectName: "terminalFindAction"
                                     anchors.fill: parent
-                                    accessibleName: "Find in terminal"
+                                    accessibleName: qsTr("Find in terminal")
                                     onActivated: root.openTerminalSearch()
                                 }
                             }
@@ -903,6 +910,7 @@ Rectangle {
                             focus: true
                             fontFamily: root.controller.terminalFontFamily
                             fontPixelSize: root.controller.terminalFontSize
+                            ligaturesEnabled: root.controller.terminalLigatures
                             backgroundOpacity: root.controller.terminalBackgroundOpacity
                             cursorPreference: root.controller.cursorPreference
                             cursorBlink: root.controller.cursorBlink
@@ -1010,8 +1018,8 @@ Rectangle {
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 30
                                     compact: true
-                                    placeholderText: "Find in terminal"
-                                    accessibleName: "Terminal search query"
+                                    placeholderText: qsTr("Find in terminal")
+                                    accessibleName: qsTr("Terminal search query")
 
                                     onTextEdited: searchDelay.restart()
                                     Keys.onPressed: event => {
@@ -1048,7 +1056,7 @@ Rectangle {
                                         searchDelay.stop();
                                         root.controller.searchTerminal(searchField.text, false, checked);
                                     }
-                                    Accessible.name: "Match case"
+                                    Accessible.name: qsTr("Match case")
                                     Accessible.checked: checked
 
                                     contentItem: Text {
@@ -1077,7 +1085,7 @@ Rectangle {
                                         color: root.textColor
                                     }
                                     onClicked: root.controller.searchTerminal(searchField.text, true, caseSensitiveButton.checked)
-                                    Accessible.name: "Previous match"
+                                    Accessible.name: qsTr("Previous match")
                                 }
 
                                 ToolButton {
@@ -1088,7 +1096,7 @@ Rectangle {
                                         color: root.textColor
                                     }
                                     onClicked: root.controller.searchTerminal(searchField.text, false, caseSensitiveButton.checked)
-                                    Accessible.name: "Next match"
+                                    Accessible.name: qsTr("Next match")
                                 }
 
                                 ToolButton {
@@ -1099,7 +1107,7 @@ Rectangle {
                                         color: root.textColor
                                     }
                                     onClicked: root.closeTerminalSearch()
-                                    Accessible.name: "Close terminal search"
+                                    Accessible.name: qsTr("Close terminal search")
                                 }
                             }
                         }
@@ -1114,21 +1122,21 @@ Rectangle {
                             z: 9
                             kind: "empty"
                             centered: true
-                            heading: "No terminal sessions"
-                            description: "Open a local PowerShell session or choose an SSH host from the Hosts workspace."
+                            heading: qsTr("No terminal sessions")
+                            description: qsTr("Open a local PowerShell session or choose an SSH host from the Hosts workspace.")
 
                             ActionButton {
                                 id: emptyTerminalPrimaryAction
 
-                                text: "New terminal"
-                                accessibleName: "Open a new local terminal"
+                                text: qsTr("New terminal")
+                                accessibleName: qsTr("Open a new local terminal")
                                 variant: "primary"
                                 onClicked: root.startLocalTerminalTab()
                             }
 
                             ActionButton {
-                                text: "Browse hosts"
-                                accessibleName: "Browse saved SSH hosts"
+                                text: qsTr("Browse hosts")
+                                accessibleName: qsTr("Browse saved SSH hosts")
                                 onClicked: root.currentPage = "hosts"
                             }
                         }
@@ -1139,13 +1147,13 @@ Rectangle {
                             visible: root.activeSshConnecting
                             z: 9
                             kind: "loading"
-                            heading: "Connecting to SSH host"
+                            heading: qsTr("Connecting to SSH host")
                             description: root.activeTerminalTab ? root.activeTerminalTab.status : ""
-                            detail: "Connection setup runs outside the interface thread. You can close this tab to cancel."
+                            detail: qsTr("Connection setup runs outside the interface thread. You can close this tab to cancel.")
 
                             ActionButton {
-                                text: "Cancel connection"
-                                Accessible.name: "Cancel SSH connection and close tab"
+                                text: qsTr("Cancel connection")
+                                Accessible.name: qsTr("Cancel SSH connection and close tab")
                                 onClicked: {
                                     if (root.activeTerminalTab) {
                                         root.controller.closeTerminalTab(root.activeTerminalTab.id);
@@ -1160,13 +1168,13 @@ Rectangle {
                             visible: root.activeSshDisconnected
                             z: 9
                             kind: "disconnected"
-                            heading: "SSH session ended"
+                            heading: qsTr("SSH session ended")
                             description: root.activeTerminalTab ? root.activeTerminalTab.status : ""
-                            detail: "The remote host closed the terminal connection. Credentials are not retained for automatic reconnection."
+                            detail: qsTr("The remote host closed the terminal connection. Credentials are not retained for automatic reconnection.")
 
                             ActionButton {
-                                text: "Close tab"
-                                accessibleName: "Close ended SSH terminal tab"
+                                text: qsTr("Close tab")
+                                accessibleName: qsTr("Close ended SSH terminal tab")
                                 onClicked: {
                                     if (root.activeTerminalTab) {
                                         root.controller.closeTerminalTab(root.activeTerminalTab.id);
@@ -1175,8 +1183,8 @@ Rectangle {
                             }
 
                             ActionButton {
-                                text: "Review host"
-                                accessibleName: "Return to SSH host profiles"
+                                text: qsTr("Review host")
+                                accessibleName: qsTr("Return to SSH host profiles")
                                 variant: "primary"
                                 onClicked: root.currentPage = "hosts"
                             }
@@ -1188,13 +1196,13 @@ Rectangle {
                             visible: root.activeSshFailure
                             z: 9
                             kind: "error"
-                            heading: "SSH session unavailable"
+                            heading: qsTr("SSH session unavailable")
                             description: root.activeTerminalTab ? root.activeTerminalTab.status : ""
-                            detail: "Review the host and authentication settings before starting a new connection. Credentials are not retained for retry."
+                            detail: qsTr("Review the host and authentication settings before starting a new connection. Credentials are not retained for retry.")
 
                             ActionButton {
-                                text: "Close tab"
-                                Accessible.name: "Close failed SSH terminal tab"
+                                text: qsTr("Close tab")
+                                Accessible.name: qsTr("Close failed SSH terminal tab")
                                 onClicked: {
                                     if (root.activeTerminalTab) {
                                         root.controller.closeTerminalTab(root.activeTerminalTab.id);
@@ -1203,8 +1211,8 @@ Rectangle {
                             }
 
                             ActionButton {
-                                text: "Review host"
-                                Accessible.name: "Return to SSH host profiles"
+                                text: qsTr("Review host")
+                                Accessible.name: qsTr("Return to SSH host profiles")
                                 variant: "primary"
                                 onClicked: root.currentPage = "hosts"
                             }
@@ -1246,6 +1254,7 @@ Rectangle {
                 anchors.fill: parent
                 visible: root.currentPage === "settings"
                 controller: root.controller
+                fontCatalog: root.fontCatalog
                 onAppearancePreviewEnded: root.endWindowAppearancePreview()
                 onAppearancePreviewRequested: (theme, opacity, backdrop, accent, customAccent) => {
                     root.previewWindowAppearance(theme, opacity, backdrop, accent, customAccent);
@@ -1290,10 +1299,10 @@ Rectangle {
         contentItem: ColumnLayout {
             spacing: 14
             Accessible.role: Accessible.Dialog
-            Accessible.name: "Unlock portable credential vault"
+            Accessible.name: qsTr("Unlock portable credential vault")
 
             Text {
-                text: "Unlock portable vault"
+                text: qsTr("Unlock portable vault")
                 color: root.textColor
                 font.family: Theme.uiFont
                 font.pixelSize: 18
@@ -1302,7 +1311,7 @@ Rectangle {
 
             Text {
                 Layout.preferredWidth: 390
-                text: "Unlock saved SSH passwords and private-key passphrases for this ztermy session. The master password is never stored."
+                text: qsTr("Unlock saved SSH passwords and private-key passphrases for this ztermy session. The master password is never stored.")
                 color: root.mutedColor
                 wrapMode: Text.WordWrap
                 font.family: Theme.uiFont
@@ -1314,9 +1323,9 @@ Rectangle {
 
                 objectName: "startupPortableVaultPassword"
                 Layout.fillWidth: true
-                placeholderText: "Master password (minimum 8 characters)"
+                placeholderText: qsTr("Master password (minimum 8 characters)")
                 passwordRevealable: true
-                accessibleName: "Portable vault master password"
+                accessibleName: qsTr("Portable vault master password")
                 selectByMouse: true
                 onAccepted: portableVaultUnlockAction.clicked()
             }
@@ -1332,8 +1341,8 @@ Rectangle {
                 Layout.fillWidth: true
 
                 ActionButton {
-                    text: "Open Security"
-                    accessibleName: "Open credential Security settings"
+                    text: qsTr("Open Security")
+                    accessibleName: qsTr("Open credential Security settings")
                     onClicked: {
                         portableVaultUnlockDialog.close();
                         root.openSecuritySettingsTab();
@@ -1345,16 +1354,16 @@ Rectangle {
                 }
 
                 ActionButton {
-                    text: "Not now"
-                    accessibleName: "Keep portable vault locked"
+                    text: qsTr("Not now")
+                    accessibleName: qsTr("Keep portable vault locked")
                     onClicked: portableVaultUnlockDialog.close()
                 }
 
                 ActionButton {
                     id: portableVaultUnlockAction
 
-                    text: "Unlock"
-                    accessibleName: "Unlock portable credential vault"
+                    text: qsTr("Unlock")
+                    accessibleName: qsTr("Unlock portable credential vault")
                     enabled: portableVaultUnlockPassword.text.length >= 8
                     variant: "primary"
                     onClicked: {
@@ -1373,9 +1382,9 @@ Rectangle {
     ConfirmationDialog {
         id: multilinePasteDialog
 
-        heading: "Paste multiple lines?"
-        description: "The clipboard contains " + root.pendingPasteLineCount + " lines. Pasting may execute commands immediately in the active terminal."
-        acceptText: "Paste"
+        heading: qsTr("Paste multiple lines?")
+        description: qsTr("The clipboard contains %n line(s). Pasting may execute commands immediately in the active terminal.", "", root.pendingPasteLineCount)
+        acceptText: qsTr("Paste")
         acceptObjectName: "multilinePasteAccept"
         rejectObjectName: "multilinePasteReject"
         onAccepted: {

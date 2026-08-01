@@ -48,13 +48,17 @@ class AppController final : public QObject
     Q_PROPERTY(QString backdropPreference READ backdropPreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString accentPreference READ accentPreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString customAccent READ customAccent NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(QString uiFontFamily READ uiFontFamily NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString terminalFontFamily READ terminalFontFamily NOTIFY applicationSettingsChanged)
     Q_PROPERTY(int terminalFontSize READ terminalFontSize NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(bool showAllTerminalFonts READ showAllTerminalFonts NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(bool terminalLigatures READ terminalLigatures NOTIFY applicationSettingsChanged)
     Q_PROPERTY(qreal terminalBackgroundOpacity READ terminalBackgroundOpacity NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString cursorPreference READ cursorPreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool cursorBlink READ cursorBlink NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool copyOnSelect READ copyOnSelect NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool confirmMultilinePaste READ confirmMultilinePaste NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(QString languagePreference READ languagePreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString credentialStoragePreference READ credentialStoragePreference NOTIFY credentialVaultChanged)
     Q_PROPERTY(QString effectiveCredentialStorage READ effectiveCredentialStorage NOTIFY credentialVaultChanged)
     Q_PROPERTY(bool portableVaultInitialized READ portableVaultInitialized NOTIFY credentialVaultChanged)
@@ -104,13 +108,18 @@ public:
     [[nodiscard]] QString backdropPreference() const;
     [[nodiscard]] QString accentPreference() const;
     [[nodiscard]] QString customAccent() const;
+    [[nodiscard]] QString uiFontFamily() const;
     [[nodiscard]] QString terminalFontFamily() const;
     [[nodiscard]] int terminalFontSize() const noexcept;
+    [[nodiscard]] bool showAllTerminalFonts() const noexcept;
+    [[nodiscard]] bool terminalLigatures() const noexcept;
     [[nodiscard]] qreal terminalBackgroundOpacity() const noexcept;
     [[nodiscard]] QString cursorPreference() const;
     [[nodiscard]] bool cursorBlink() const noexcept;
     [[nodiscard]] bool copyOnSelect() const noexcept;
     [[nodiscard]] bool confirmMultilinePaste() const noexcept;
+    [[nodiscard]] QString languagePreference() const;
+    void retranslateUiState();
     [[nodiscard]] QString credentialStoragePreference() const;
     [[nodiscard]] QString effectiveCredentialStorage() const;
     [[nodiscard]] bool portableVaultInitialized() const noexcept;
@@ -150,9 +159,10 @@ public:
                                   const QString &profileName, const QString &group);
     Q_INVOKABLE bool saveApplicationSettings(const QString &theme, qreal backdropOpacity, const QString &backdrop,
                                              const QString &accent, const QString &customAccent,
-                                             const QString &fontFamily, int fontSize, qreal terminalBackgroundOpacity,
+                                             const QString &uiFontFamily, const QString &fontFamily, int fontSize,
+                                             bool showAllFonts, bool ligatures, qreal terminalBackgroundOpacity,
                                              const QString &cursor, bool cursorShouldBlink, bool shouldCopyOnSelect,
-                                             bool shouldConfirmMultilinePaste);
+                                             bool shouldConfirmMultilinePaste, const QString &language);
     Q_INVOKABLE bool resetApplicationSettings();
     Q_INVOKABLE bool initializePortableCredentialVault(const QString &masterPassword);
     Q_INVOKABLE bool unlockPortableCredentialVault(const QString &masterPassword);

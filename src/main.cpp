@@ -1,4 +1,6 @@
 #include "application/AppController.h"
+#include "application/FontCatalog.h"
+#include "application/LocalizationManager.h"
 #include "core/config/ApplicationPaths.h"
 #include "core/logging/Logging.h"
 #include "platform/windows/CrashDiagnostics.h"
@@ -376,11 +378,12 @@ struct ResizeHitRuntimeCase
     constexpr int micaAltBackdrop = 4;
     const auto saveAppearance = [&controller](const QString &theme, const qreal backdropOpacity,
                                               const QString &backdrop) {
-        return controller.saveApplicationSettings(theme, backdropOpacity, backdrop, controller.accentPreference(),
-                                                  controller.customAccent(), controller.terminalFontFamily(),
-                                                  controller.terminalFontSize(), controller.terminalBackgroundOpacity(),
-                                                  controller.cursorPreference(), controller.cursorBlink(),
-                                                  controller.copyOnSelect(), controller.confirmMultilinePaste());
+        return controller.saveApplicationSettings(
+            theme, backdropOpacity, backdrop, controller.accentPreference(), controller.customAccent(),
+            controller.uiFontFamily(), controller.terminalFontFamily(), controller.terminalFontSize(),
+            controller.showAllTerminalFonts(), controller.terminalLigatures(), controller.terminalBackgroundOpacity(),
+            controller.cursorPreference(), controller.cursorBlink(), controller.copyOnSelect(),
+            controller.confirmMultilinePaste(), controller.languagePreference());
     };
     const auto surfaceAlpha = [&window](const char *propertyName) {
         QQuickItem *rootObject = window.rootObject();
@@ -598,8 +601,9 @@ struct ResizeHitRuntimeCase
 [[nodiscard]] bool applyUiLayoutSmokeTheme(ztermy::AppController &controller, const QString &theme)
 {
     return controller.saveApplicationSettings(theme, 1.0, QStringLiteral("acrylic"), QStringLiteral("ztermy"),
-                                              QStringLiteral("#22C55E"), QStringLiteral("Cascadia Mono"), 14, 1.0,
-                                              QStringLiteral("terminal"), true, false, true);
+                                              QStringLiteral("#22C55E"), {}, QStringLiteral("Cascadia Mono"), 14, false,
+                                              true, 1.0, QStringLiteral("terminal"), true, false, true,
+                                              QStringLiteral("en"));
 }
 
 [[nodiscard]] bool runUiLayoutRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller,
@@ -733,6 +737,36 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
     return true;
 }
 
+[[nodiscard]] bool verifyFontPickerKeyboard(ztermy::NativeWindow &window, QQuickItem *rootObject,
+                                            const char *pickerObjectName, const char *searchObjectName)
+{
+    QQuickItem *picker = quickItem(rootObject, pickerObjectName);
+    if (!focusItem(window, picker, QString::fromLatin1(pickerObjectName)))
+    {
+        return false;
+    }
+    sendKey(window, Qt::Key_Space);
+    const bool searchFocused = processWindowEventsUntil(
+        [&window, searchObjectName] {
+            return namedFocusItem(window) == QString::fromLatin1(searchObjectName);
+        },
+        std::chrono::seconds{1});
+    sendKey(window, Qt::Key_Escape);
+    const bool pickerFocusRestored = processWindowEventsUntil(
+        [&window, pickerObjectName] {
+            return namedFocusItem(window) == QString::fromLatin1(pickerObjectName);
+        },
+        std::chrono::seconds{1});
+    if (!searchFocused || !pickerFocusRestored)
+    {
+        qCWarning(applicationLog) << "Font picker keyboard route failed"
+                                  << "picker=" << pickerObjectName << "search=" << searchObjectName
+                                  << "searchFocused=" << searchFocused << "focusRestored=" << pickerFocusRestored
+                                  << "actualFocus=" << namedFocusItem(window);
+    }
+    return searchFocused && pickerFocusRestored;
+}
+
 [[nodiscard]] bool verifySettingsTabOrder(ztermy::NativeWindow &window, QQuickItem *rootObject)
 {
     const auto verifyOrder = [&window, rootObject](const auto &order) {
@@ -770,8 +804,8 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
         return false;
     }
     constexpr std::array appearanceOrder{
-        "settingsTheme", "settingsAccent",  "settingsBackdrop", "settingsOpacity",
-        "settingsReset", "settingsDiscard", "settingsApply",
+        "settingsLanguage", "settingsUiFont", "settingsTheme",   "settingsAccent", "settingsBackdrop",
+        "settingsOpacity",  "settingsReset",  "settingsDiscard", "settingsApply",
     };
     if (!verifyOrder(appearanceOrder))
     {
@@ -821,11 +855,19 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
         qCWarning(applicationLog) << "Terminal settings category did not activate from the keyboard";
         return false;
     }
-    constexpr std::array terminalOrder{
-        "settingsFontFamily",  "settingsFontSize",     "settingsTerminalOpacity", "settingsCursor",
-        "settingsCursorBlink", "settingsCopyOnSelect", "settingsMultilinePaste",  "settingsReset",
-        "settingsDiscard",     "settingsApply",
+    std::vector<const char *> terminalOrder{
+        "settingsFontFamily",   "settingsShowAllTerminalFonts",
+        "settingsFontSize",     "settingsTerminalOpacity",
+        "settingsCursor",       "settingsCursorBlink",
+        "settingsCopyOnSelect", "settingsMultilinePaste",
+        "settingsReset",        "settingsDiscard",
+        "settingsApply",
     };
+    QQuickItem *terminalLigatures = quickItem(rootObject, "settingsTerminalLigatures");
+    if (terminalLigatures != nullptr && terminalLigatures->isEnabled())
+    {
+        terminalOrder.insert(terminalOrder.begin() + 3, "settingsTerminalLigatures");
+    }
     return verifyOrder(terminalOrder);
 }
 
@@ -943,7 +985,15 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
         return false;
     }
 
+    if (!verifyFontPickerKeyboard(window, rootObject, "settingsUiFont", "settingsUiFontSearch"))
+    {
+        return false;
+    }
     if (!verifySettingsTabOrder(window, rootObject))
+    {
+        return false;
+    }
+    if (!verifyFontPickerKeyboard(window, rootObject, "settingsFontFamily", "settingsTerminalFontSearch"))
     {
         return false;
     }
@@ -1307,16 +1357,20 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
         return false;
     }
     sendKey(window, Qt::Key_Return);
-    processWindowEventsFor(std::chrono::milliseconds{250});
-    const bool savedHostActionsExpanded = savedHostActionsReveal->isVisible()
-                                          && savedHostActionsReveal->height() >= 30.0
-                                          && savedHostCard->height() >= collapsedHostCardHeight + 30.0
-                                          && savedHostMoreAction->property("accessibleName").toString()
-                                                 == QStringLiteral("Hide actions for Keyboard smoke host");
+    const bool savedHostActionsExpanded = processWindowEventsUntil(
+        [savedHostActionsReveal, savedHostCard, savedHostMoreAction, collapsedHostCardHeight] {
+            return savedHostActionsReveal->isVisible() && savedHostActionsReveal->height() >= 30.0
+                   && savedHostCard->height() >= collapsedHostCardHeight + 30.0
+                   && savedHostMoreAction->property("accessibleName").toString()
+                          == QStringLiteral("Hide actions for Keyboard smoke host");
+        },
+        std::chrono::seconds{1});
     sendKey(window, Qt::Key_Return);
-    processWindowEventsFor(std::chrono::milliseconds{450});
-    const bool savedHostActionsCollapsed =
-        !savedHostActionsReveal->isVisible() && savedHostCard->height() <= collapsedHostCardHeight + 1.0;
+    const bool savedHostActionsCollapsed = processWindowEventsUntil(
+        [savedHostActionsReveal, savedHostCard, collapsedHostCardHeight] {
+            return !savedHostActionsReveal->isVisible() && savedHostCard->height() <= collapsedHostCardHeight + 1.0;
+        },
+        std::chrono::seconds{1});
     if (!savedHostActionsExpanded || !savedHostActionsCollapsed
         || !focusItem(window, savedHostConnectAction, QStringLiteral("savedHostConnectAction")))
     {
@@ -1677,6 +1731,8 @@ int main(int argc, char *argv[])
 
     ztermy::AppController appController(paths->profilesFile, paths->knownHostsFile, paths->settingsFile,
                                         paths->credentialsFile, paths->mode);
+    ztermy::FontCatalog fontCatalog;
+    fontCatalog.applyUiFont(appController.uiFontFamily());
     const bool uiLayoutSmoke = QCoreApplication::arguments().contains(QStringLiteral("--ui-layout-smoke"));
     const bool uiKeyboardSmoke = QCoreApplication::arguments().contains(QStringLiteral("--ui-keyboard-smoke"));
     const bool terminalRenderSmoke = QCoreApplication::arguments().contains(QStringLiteral("--terminal-render-smoke"));
@@ -1684,6 +1740,15 @@ int main(int argc, char *argv[])
         QCoreApplication::arguments().contains(QStringLiteral("--window-appearance-smoke"));
     const bool windowResizeSmoke = QCoreApplication::arguments().contains(QStringLiteral("--window-resize-smoke"));
     const bool windowDpiSmoke = QCoreApplication::arguments().contains(QStringLiteral("--window-dpi-smoke"));
+    ztermy::LocalizationManager localizationManager;
+    const auto initialLanguage = uiLayoutSmoke || uiKeyboardSmoke
+                                     ? std::optional{ztermy::config::LanguagePreference::english}
+                                     : ztermy::config::parseLanguagePreference(appController.languagePreference());
+    if (!initialLanguage || !localizationManager.apply(*initialLanguage))
+    {
+        qCCritical(applicationLog) << "Could not apply the configured UI language";
+        return EXIT_FAILURE;
+    }
     if ((uiLayoutSmoke || uiKeyboardSmoke) && !applyUiLayoutSmokeTheme(appController, QStringLiteral("dark")))
     {
         qCCritical(applicationLog) << "Could not prepare the UI runtime smoke settings";
@@ -1702,10 +1767,23 @@ int main(int argc, char *argv[])
     ztermy::NativeWindow window;
     QVariantMap initialProperties;
     initialProperties.insert(QStringLiteral("controller"), QVariant::fromValue(static_cast<QObject *>(&appController)));
+    initialProperties.insert(QStringLiteral("fontCatalog"), QVariant::fromValue(static_cast<QObject *>(&fontCatalog)));
     if (!window.load(initialProperties))
     {
         return EXIT_FAILURE;
     }
+    QObject::connect(&appController, &ztermy::AppController::applicationSettingsChanged, &window,
+                     [&appController, &fontCatalog, &localizationManager, &window] {
+                         fontCatalog.applyUiFont(appController.uiFontFamily());
+                         const auto language =
+                             ztermy::config::parseLanguagePreference(appController.languagePreference());
+                         if (!language || !localizationManager.apply(*language, window.engine()))
+                         {
+                             qCWarning(applicationLog) << "Could not apply the updated UI language";
+                             return;
+                         }
+                         appController.retranslateUiState();
+                     });
 
     auto *terminalItem = window.findChild<ztermy::ui::TerminalItem *>(QStringLiteral("terminalViewport"));
     if (terminalItem == nullptr)

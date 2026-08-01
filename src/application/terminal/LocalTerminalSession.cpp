@@ -71,7 +71,7 @@ std::error_code LocalTerminalSession::start(const TerminalGeometry geometry)
     resetMetrics();
     m_running.store(true);
     emit runningChanged(true);
-    emit statusChanged(QStringLiteral("Local PowerShell connected"));
+    emit statusChanged(tr("Local PowerShell connected"));
     publishSnapshot();
 
     m_readThread = std::jthread([this](const std::stop_token &token) {
@@ -81,11 +81,11 @@ std::error_code LocalTerminalSession::start(const TerminalGeometry geometry)
         }
         catch (const std::exception &exception)
         {
-            postStatus(QStringLiteral("Terminal read worker failed: %1").arg(QString::fromUtf8(exception.what())));
+            postStatus(tr("Terminal read worker failed: %1").arg(QString::fromUtf8(exception.what())));
         }
         catch (...)
         {
-            postStatus(QStringLiteral("Terminal read worker failed with an unknown error"));
+            postStatus(tr("Terminal read worker failed with an unknown error"));
         }
     });
     m_writeThread = std::jthread([this](const std::stop_token &token) {
@@ -95,11 +95,11 @@ std::error_code LocalTerminalSession::start(const TerminalGeometry geometry)
         }
         catch (const std::exception &exception)
         {
-            postStatus(QStringLiteral("Terminal write worker failed: %1").arg(QString::fromUtf8(exception.what())));
+            postStatus(tr("Terminal write worker failed: %1").arg(QString::fromUtf8(exception.what())));
         }
         catch (...)
         {
-            postStatus(QStringLiteral("Terminal write worker failed with an unknown error"));
+            postStatus(tr("Terminal write worker failed with an unknown error"));
         }
     });
     qCInfo(terminalSessionLog) << "Local terminal session started";
@@ -148,7 +148,7 @@ void LocalTerminalSession::stop() noexcept
     {
         logMetrics();
         emit runningChanged(false);
-        emit statusChanged(QStringLiteral("Local terminal stopped"));
+        emit statusChanged(tr("Local terminal stopped"));
         qCInfo(terminalSessionLog) << "Local terminal session stopped";
     }
 }
@@ -332,8 +332,7 @@ void LocalTerminalSession::readLoop(const std::stop_token &stopToken)
         {
             if (!stopToken.stop_requested())
             {
-                postStatus(QStringLiteral("Terminal read failed: %1")
-                               .arg(QString::fromStdString(readResult.error().message())));
+                postStatus(tr("Terminal read failed: %1").arg(QString::fromStdString(readResult.error().message())));
             }
             break;
         }
@@ -348,8 +347,7 @@ void LocalTerminalSession::readLoop(const std::stop_token &stopToken)
             const std::error_code feedError = m_engine->feed(std::span(buffer).first(*readResult));
             if (feedError)
             {
-                postStatus(
-                    QStringLiteral("Terminal parser failed: %1").arg(QString::fromStdString(feedError.message())));
+                postStatus(tr("Terminal parser failed: %1").arg(QString::fromStdString(feedError.message())));
                 break;
             }
         }
@@ -358,7 +356,7 @@ void LocalTerminalSession::readLoop(const std::stop_token &stopToken)
 
     if (!stopToken.stop_requested())
     {
-        postStatus(QStringLiteral("Local shell exited"));
+        postStatus(tr("Local shell exited"));
     }
 }
 
@@ -400,8 +398,8 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
             }
             if (selectionError)
             {
-                postStatus(QStringLiteral("Terminal selection clear failed: %1")
-                               .arg(QString::fromStdString(selectionError.message())));
+                postStatus(
+                    tr("Terminal selection clear failed: %1").arg(QString::fromStdString(selectionError.message())));
             }
             publishSnapshot();
 
@@ -409,8 +407,7 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
                 std::as_bytes(std::span(input->bytes.constData(), static_cast<std::size_t>(input->bytes.size())));
             if (const std::error_code writeError = m_process->write(bytes))
             {
-                postStatus(
-                    QStringLiteral("Terminal write failed: %1").arg(QString::fromStdString(writeError.message())));
+                postStatus(tr("Terminal write failed: %1").arg(QString::fromStdString(writeError.message())));
                 break;
             }
             continue;
@@ -430,20 +427,18 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
             }
             if (selectionError)
             {
-                postStatus(QStringLiteral("Terminal selection clear failed: %1")
-                               .arg(QString::fromStdString(selectionError.message())));
+                postStatus(
+                    tr("Terminal selection clear failed: %1").arg(QString::fromStdString(selectionError.message())));
             }
             if (!encoded)
             {
-                postStatus(
-                    QStringLiteral("Terminal paste failed: %1").arg(QString::fromStdString(encoded.error().message())));
+                postStatus(tr("Terminal paste failed: %1").arg(QString::fromStdString(encoded.error().message())));
                 continue;
             }
             publishSnapshot();
             if (const std::error_code writeError = m_process->write(*encoded))
             {
-                postStatus(
-                    QStringLiteral("Terminal write failed: %1").arg(QString::fromStdString(writeError.message())));
+                postStatus(tr("Terminal write failed: %1").arg(QString::fromStdString(writeError.message())));
                 break;
             }
             continue;
@@ -468,8 +463,7 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
             }
             if (selectionError)
             {
-                postStatus(QStringLiteral("Terminal selection failed: %1")
-                               .arg(QString::fromStdString(selectionError.message())));
+                postStatus(tr("Terminal selection failed: %1").arg(QString::fromStdString(selectionError.message())));
                 continue;
             }
             publishSnapshot();
@@ -485,8 +479,7 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
             }
             if (!selectedText)
             {
-                postStatus(QStringLiteral("Terminal copy failed: %1")
-                               .arg(QString::fromStdString(selectedText.error().message())));
+                postStatus(tr("Terminal copy failed: %1").arg(QString::fromStdString(selectedText.error().message())));
             }
             else if (*selectedText)
             {
@@ -507,8 +500,7 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
             }
             if (!result)
             {
-                postStatus(
-                    QStringLiteral("Terminal search failed: %1").arg(QString::fromStdString(result.error().message())));
+                postStatus(tr("Terminal search failed: %1").arg(QString::fromStdString(result.error().message())));
                 continue;
             }
             emit searchResultReady(QString::fromUtf8(search->query), result->current, result->total, result->wrapped);
@@ -525,8 +517,7 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
             }
             if (error)
             {
-                postStatus(
-                    QStringLiteral("Terminal search clear failed: %1").arg(QString::fromStdString(error.message())));
+                postStatus(tr("Terminal search clear failed: %1").arg(QString::fromStdString(error.message())));
                 continue;
             }
             emit searchResultReady({}, 0, 0, false);
@@ -537,15 +528,14 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
         const auto geometry = std::get<TerminalGeometry>(command);
         if (const std::error_code resizeError = m_process->resize({.columns = geometry.columns, .rows = geometry.rows}))
         {
-            postStatus(QStringLiteral("Terminal resize failed: %1").arg(QString::fromStdString(resizeError.message())));
+            postStatus(tr("Terminal resize failed: %1").arg(QString::fromStdString(resizeError.message())));
             continue;
         }
         {
             std::scoped_lock lock(m_engineMutex);
             if (const std::error_code resizeError = m_engine->resize(geometry))
             {
-                postStatus(QStringLiteral("Terminal state resize failed: %1")
-                               .arg(QString::fromStdString(resizeError.message())));
+                postStatus(tr("Terminal state resize failed: %1").arg(QString::fromStdString(resizeError.message())));
                 continue;
             }
         }
@@ -562,8 +552,8 @@ void LocalTerminalSession::publishSnapshot()
         auto snapshotResult = m_engine->snapshot();
         if (!snapshotResult)
         {
-            postStatus(QStringLiteral("Terminal snapshot failed: %1")
-                           .arg(QString::fromStdString(snapshotResult.error().message())));
+            postStatus(
+                tr("Terminal snapshot failed: %1").arg(QString::fromStdString(snapshotResult.error().message())));
             return;
         }
         snapshot = std::make_shared<const TerminalSnapshot>(std::move(*snapshotResult));

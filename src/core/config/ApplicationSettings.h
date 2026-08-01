@@ -47,6 +47,13 @@ enum class CredentialStoragePreference : std::uint8_t
     session,
 };
 
+enum class LanguagePreference : std::uint8_t
+{
+    system,
+    english,
+    simplifiedChinese,
+};
+
 struct ApplicationSettings final
 {
     ThemePreference theme = ThemePreference::dark;
@@ -54,14 +61,18 @@ struct ApplicationSettings final
     BackdropPreference backdrop = BackdropPreference::acrylic;
     AccentPreference accent = AccentPreference::ztermy;
     QString customAccent = QStringLiteral("#22C55E");
+    QString uiFontFamily;
     QString terminalFontFamily = QStringLiteral("Cascadia Mono");
     int terminalFontSize = 14;
+    bool showAllTerminalFonts = false;
+    bool terminalLigatures = true;
     double terminalBackgroundOpacity = 1.0;
     CursorPreference cursor = CursorPreference::terminal;
     bool cursorBlink = true;
     bool copyOnSelect = false;
     bool confirmMultilinePaste = true;
     CredentialStoragePreference credentialStorage = CredentialStoragePreference::automatic;
+    LanguagePreference language = LanguagePreference::system;
 
     [[nodiscard]] friend bool operator==(const ApplicationSettings &, const ApplicationSettings &) = default;
 };
@@ -92,10 +103,12 @@ private:
 [[nodiscard]] QString accentPreferenceToken(AccentPreference preference);
 [[nodiscard]] QString cursorPreferenceToken(CursorPreference preference);
 [[nodiscard]] QString credentialStoragePreferenceToken(CredentialStoragePreference preference);
+[[nodiscard]] QString languagePreferenceToken(LanguagePreference preference);
 [[nodiscard]] std::optional<ThemePreference> parseThemePreference(const QString &token);
 [[nodiscard]] std::optional<BackdropPreference> parseBackdropPreference(const QString &token);
 [[nodiscard]] std::optional<AccentPreference> parseAccentPreference(const QString &token);
 [[nodiscard]] std::optional<CursorPreference> parseCursorPreference(const QString &token);
 [[nodiscard]] std::optional<CredentialStoragePreference> parseCredentialStoragePreference(const QString &token);
+[[nodiscard]] std::optional<LanguagePreference> parseLanguagePreference(const QString &token);
 
 } // namespace ztermy::config

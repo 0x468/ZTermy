@@ -102,7 +102,7 @@ Rectangle {
             connectionStarted();
         } else {
             quickDialogStatus.kind = "error";
-            quickDialogStatus.text = "The quick connection could not be started. Check authentication and required fields.";
+            quickDialogStatus.text = qsTr("The quick connection could not be started. Check authentication and required fields.");
         }
     }
 
@@ -110,7 +110,7 @@ Rectangle {
         const query = searchText.trim().toLocaleLowerCase();
         const groups = {};
         for (const profile of profiles) {
-            const groupName = profile.group.trim().length > 0 ? profile.group.trim() : "Ungrouped";
+            const groupName = profile.group.trim().length > 0 ? profile.group.trim() : qsTr("Ungrouped");
             const searchable = [profile.name, groupName, profile.username, profile.host, String(profile.port), profile.authentication].join(" ").toLocaleLowerCase();
             if (query.length > 0 && searchable.indexOf(query) < 0) {
                 continue;
@@ -136,16 +136,16 @@ Rectangle {
     function validate(requireName, requireCredential) {
         const privateKey = authenticationToken() === "private-key";
         if ((requireName && nameField.text.trim().length === 0) || hostField.text.trim().length === 0 || usernameField.text.trim().length === 0 || (privateKey && keyPathField.text.trim().length === 0) || portField.text.length === 0) {
-            showStatus("Complete every required field.", true);
+            showStatus(qsTr("Complete every required field."), true);
             return false;
         }
         const port = portNumber();
         if (port < 1 || port > 65535) {
-            showStatus("Port must be between 1 and 65535.", true);
+            showStatus(qsTr("Port must be between 1 and 65535."), true);
             return false;
         }
         if (requireCredential && (!privateKey || passphraseRequiredBox.checked) && credentialField.text.length === 0) {
-            showStatus(privateKey ? "Enter the private-key passphrase." : "Enter the SSH password.", true);
+            showStatus(privateKey ? qsTr("Enter the private-key passphrase.") : qsTr("Enter the SSH password."), true);
             return false;
         }
         return true;
@@ -177,7 +177,7 @@ Rectangle {
         clearEditor();
         editorExpanded = false;
         if (announce) {
-            showStatus("Profile editor closed.", false);
+            showStatus(qsTr("Profile editor closed."), false);
         }
     }
 
@@ -201,7 +201,7 @@ Rectangle {
     function beginNewProfile() {
         clearEditor();
         editorExpanded = true;
-        showStatus("Create a reusable SSH profile or connect now.", false);
+        showStatus(qsTr("Create a reusable SSH profile or connect now."), false);
         Qt.callLater(nameField.forceActiveFocus);
     }
 
@@ -236,7 +236,7 @@ Rectangle {
         rememberCredentialSwitch.checked = true;
         nameWasAutoFilled = false;
         editingCredentialStored = profile.credentialStored;
-        showStatus("Editing \"" + profile.name + "\".", false);
+        showStatus(qsTr("Editing \"%1\".").arg(profile.name), false);
         Qt.callLater(pane.refreshEditingCredential);
         Qt.callLater(nameField.forceActiveFocus);
     }
@@ -249,9 +249,9 @@ Rectangle {
         if (controller.saveHostProfileWithCredential(editingProfileId, nameField.text, hostField.text, portNumber(), usernameField.text, authenticationToken(), keyPathField.text, passphraseRequiredBox.checked, groupField.text, credentialField.text, rememberCredentialSwitch.checked)) {
             clearEditor();
             editorExpanded = false;
-            showStatus("Profile and credential preferences saved.", false);
+            showStatus(qsTr("Profile and credential preferences saved."), false);
         } else {
-            showStatus(controller.credentialOperationError.length > 0 ? controller.credentialOperationError : "The profile could not be saved.", true);
+            showStatus(controller.credentialOperationError.length > 0 ? controller.credentialOperationError : qsTr("The profile could not be saved."), true);
         }
     }
 
@@ -268,7 +268,7 @@ Rectangle {
             editorExpanded = false;
             connectionStarted();
         } else {
-            showStatus(controller.credentialOperationError.length > 0 ? controller.credentialOperationError : "The profile could not be saved or connected.", true);
+            showStatus(controller.credentialOperationError.length > 0 ? controller.credentialOperationError : qsTr("The profile could not be saved or connected."), true);
         }
     }
 
@@ -287,7 +287,7 @@ Rectangle {
             if (controller.connectHostProfile(profile.id, "")) {
                 connectionStarted();
             } else {
-                showStatus(controller.credentialOperationError.length > 0 ? controller.credentialOperationError : "The saved profile could not be connected.", true);
+                showStatus(controller.credentialOperationError.length > 0 ? controller.credentialOperationError : qsTr("The saved profile could not be connected."), true);
             }
             return;
         }
@@ -304,7 +304,7 @@ Rectangle {
         if (controller.connectHostProfile(profile.id, "")) {
             connectionStarted();
         } else {
-            showStatus("The saved profile could not be connected.", true);
+            showStatus(qsTr("The saved profile could not be connected."), true);
         }
     }
 
@@ -325,7 +325,7 @@ Rectangle {
             credentialDialog.close();
             connectionStarted();
         } else {
-            showStatus(controller.credentialOperationError.length > 0 ? controller.credentialOperationError : "The saved profile could not be connected.", true);
+            showStatus(controller.credentialOperationError.length > 0 ? controller.credentialOperationError : qsTr("The saved profile could not be connected."), true);
         }
     }
 
@@ -361,7 +361,7 @@ Rectangle {
                     spacing: Theme.spacingDense
 
                     Text {
-                        text: "Hosts"
+                        text: qsTr("Hosts")
                         color: pane.textColor
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.textTitle
@@ -370,7 +370,7 @@ Rectangle {
 
                     Text {
                         Layout.fillWidth: true
-                        text: "Search, connect, and organize SSH hosts from one workspace."
+                        text: qsTr("Search, connect, and organize SSH hosts from one workspace.")
                         color: pane.mutedColor
                         wrapMode: Text.WordWrap
                         font.family: Theme.uiFont
@@ -384,9 +384,9 @@ Rectangle {
                     objectName: "hostNew"
                     Layout.fillWidth: pane.compactLayout
                     Layout.alignment: pane.compactLayout ? Qt.AlignLeft : Qt.AlignRight
-                    text: "New host"
+                    text: qsTr("New host")
                     iconName: "plus"
-                    accessibleName: "Create a new SSH host profile"
+                    accessibleName: qsTr("Create a new SSH host profile")
                     variant: "primary"
                     onClicked: pane.beginNewProfile()
                 }
@@ -395,7 +395,7 @@ Rectangle {
             SectionCard {
                 objectName: "quickConnectCard"
                 Layout.fillWidth: true
-                heading: "Quick connect"
+                heading: qsTr("Quick connect")
 
                 ColumnLayout {
                     Layout.fillWidth: true
@@ -403,7 +403,7 @@ Rectangle {
 
                     Text {
                         Layout.fillWidth: true
-                        text: "Connect without creating a saved profile. Use user@host, user@host:port, or user@[IPv6]:port."
+                        text: qsTr("Connect without creating a saved profile. Use user@host, user@host:port, or user@[IPv6]:port.")
                         color: pane.mutedColor
                         wrapMode: Text.WordWrap
                         font.family: Theme.uiFont
@@ -420,7 +420,7 @@ Rectangle {
                             objectName: "quickConnectTarget"
                             Layout.fillWidth: true
                             placeholderText: "user@host[:port]"
-                            accessibleName: "Quick connect SSH target"
+                            accessibleName: qsTr("Quick connect SSH target")
                             selectByMouse: true
                             onTextEdited: {
                                 pane.quickConnectMessage = "";
@@ -433,8 +433,8 @@ Rectangle {
                             id: quickConnectAction
 
                             objectName: "quickConnectAction"
-                            text: "Connect"
-                            accessibleName: "Configure quick SSH connection"
+                            text: qsTr("Connect")
+                            accessibleName: qsTr("Configure quick SSH connection")
                             variant: "primary"
                             onClicked: pane.openQuickConnect(quickConnectAction)
                         }
@@ -458,13 +458,13 @@ Rectangle {
 
                     objectName: "hostSearch"
                     Layout.fillWidth: true
-                    placeholderText: "Search hosts, groups, users, or addresses"
-                    accessibleName: "Search saved SSH hosts"
+                    placeholderText: qsTr("Search hosts, groups, users, or addresses")
+                    accessibleName: qsTr("Search saved SSH hosts")
                 }
 
                 Text {
                     visible: !pane.compactLayout
-                    text: pane.filteredProfileCount + (pane.filteredProfileCount === 1 ? " profile" : " profiles")
+                    text: qsTr("%n profile(s)", "", pane.filteredProfileCount)
                     color: pane.mutedColor
                     font.family: Theme.uiFont
                     font.pixelSize: Theme.textLabel
@@ -478,7 +478,7 @@ Rectangle {
 
                 Text {
                     Layout.fillWidth: true
-                    text: "RECENT CONNECTIONS"
+                    text: qsTr("RECENT CONNECTIONS")
                     color: pane.mutedColor
                     font.family: Theme.uiFont
                     font.pixelSize: 11
@@ -543,8 +543,8 @@ Rectangle {
                                         id: recentConnectButton
 
                                         objectName: "recentHostConnectAction"
-                                        text: "Connect"
-                                        accessibleName: "Reconnect to " + recentProfileCard.modelData.name
+                                        text: qsTr("Connect")
+                                        accessibleName: qsTr("Reconnect to %1").arg(recentProfileCard.modelData.name)
                                         variant: "primary"
                                         onClicked: pane.connectSaved(recentProfileCard.modelData, recentConnectButton)
                                     }
@@ -561,7 +561,7 @@ Rectangle {
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: "Last connected " + pane.formatRecentConnection(recentProfileCard.modelData.lastConnectedUtcMs)
+                                    text: qsTr("Last connected %1").arg(pane.formatRecentConnection(recentProfileCard.modelData.lastConnectedUtcMs))
                                     color: Theme.textSubtle
                                     elide: Text.ElideRight
                                     font.family: Theme.uiFont
@@ -576,16 +576,16 @@ Rectangle {
             StatePanel {
                 Layout.fillWidth: true
                 visible: pane.controller.hostProfiles.length === 0
-                heading: "No saved hosts yet"
-                description: "Select New host to make future connections one click away."
+                heading: qsTr("No saved hosts yet")
+                description: qsTr("Select New host to make future connections one click away.")
                 centered: true
             }
 
             StatePanel {
                 Layout.fillWidth: true
                 visible: pane.controller.hostProfiles.length > 0 && pane.filteredProfileCount === 0
-                heading: "No matching hosts"
-                description: "Try another host name, group, user, or address."
+                heading: qsTr("No matching hosts")
+                description: qsTr("Try another host name, group, user, or address.")
                 centered: true
             }
 
@@ -715,7 +715,7 @@ Rectangle {
                                             Text {
                                                 id: authenticationLabel
                                                 anchors.centerIn: parent
-                                                text: profileCard.modelData.authentication === "password" ? "Password" : "Key"
+                                                text: profileCard.modelData.authentication === "password" ? qsTr("Password") : qsTr("Key")
                                                 color: Theme.textSoft
                                                 font.family: Theme.uiFont
                                                 font.pixelSize: Theme.textLabel
@@ -738,16 +738,16 @@ Rectangle {
 
                                             objectName: "savedHostConnectAction"
                                             Layout.preferredWidth: 104
-                                            text: "Connect"
-                                            accessibleName: "Connect to " + profileCard.modelData.name
+                                            text: qsTr("Connect")
+                                            accessibleName: qsTr("Connect to %1").arg(profileCard.modelData.name)
                                             variant: "primary"
                                             onClicked: pane.connectSaved(profileCard.modelData, connectProfileButton)
                                         }
 
                                         ActionButton {
                                             objectName: "savedHostMoreAction"
-                                            text: profileCard.actionsExpanded ? "Less" : "More"
-                                            accessibleName: (profileCard.actionsExpanded ? "Hide" : "Show") + " actions for " + profileCard.modelData.name
+                                            text: profileCard.actionsExpanded ? qsTr("Less") : qsTr("More")
+                                            accessibleName: profileCard.actionsExpanded ? qsTr("Hide actions for %1").arg(profileCard.modelData.name) : qsTr("Show actions for %1").arg(profileCard.modelData.name)
                                             onClicked: pane.expandedActionsProfileId = profileCard.actionsExpanded ? "" : profileCard.modelData.id
                                         }
                                     }
@@ -782,20 +782,20 @@ Rectangle {
 
                                             ActionButton {
                                                 Layout.fillWidth: true
-                                                text: "Edit"
-                                                accessibleName: "Edit " + profileCard.modelData.name
+                                                text: qsTr("Edit")
+                                                accessibleName: qsTr("Edit %1").arg(profileCard.modelData.name)
                                                 onClicked: pane.editProfile(profileCard.modelData)
                                             }
 
                                             ActionButton {
                                                 Layout.fillWidth: true
-                                                text: "Copy"
-                                                accessibleName: "Copy " + profileCard.modelData.name
+                                                text: qsTr("Copy")
+                                                accessibleName: qsTr("Copy %1").arg(profileCard.modelData.name)
                                                 onClicked: {
                                                     if (pane.controller.duplicateHostProfile(profileCard.modelData.id)) {
-                                                        pane.showStatus("Profile copied without its saved credential.", false);
+                                                        pane.showStatus(qsTr("Profile copied without its saved credential."), false);
                                                     } else {
-                                                        pane.showStatus("The profile could not be copied.", true);
+                                                        pane.showStatus(qsTr("The profile could not be copied."), true);
                                                     }
                                                 }
                                             }
@@ -804,8 +804,8 @@ Rectangle {
                                                 id: deleteProfileButton
 
                                                 Layout.fillWidth: true
-                                                text: "Delete"
-                                                accessibleName: "Delete " + profileCard.modelData.name
+                                                text: qsTr("Delete")
+                                                accessibleName: qsTr("Delete %1").arg(profileCard.modelData.name)
                                                 onClicked: {
                                                     pane.pendingDeleteId = profileCard.modelData.id;
                                                     pane.pendingDeleteName = profileCard.modelData.name;
@@ -818,8 +818,8 @@ Rectangle {
 
                                                 Layout.fillWidth: true
                                                 visible: profileCard.modelData.credentialStored
-                                                text: "Forget secret"
-                                                accessibleName: "Forget saved credential for " + profileCard.modelData.name
+                                                text: qsTr("Forget secret")
+                                                accessibleName: qsTr("Forget saved credential for %1").arg(profileCard.modelData.name)
                                                 onClicked: {
                                                     pane.pendingForgetId = profileCard.modelData.id;
                                                     pane.pendingForgetName = profileCard.modelData.name;
@@ -887,7 +887,7 @@ Rectangle {
                                 Layout.fillWidth: true
 
                                 Text {
-                                    text: pane.editingProfileId.length > 0 ? "Edit profile" : "New connection"
+                                    text: pane.editingProfileId.length > 0 ? qsTr("Edit profile") : qsTr("New connection")
                                     color: pane.textColor
                                     font.family: Theme.uiFont
                                     font.pixelSize: 16
@@ -899,15 +899,15 @@ Rectangle {
                                 }
 
                                 Text {
-                                    text: authenticationBox.currentIndex === 0 ? "Private-key authentication" : "Password authentication"
+                                    text: authenticationBox.currentIndex === 0 ? qsTr("Private-key authentication") : qsTr("Password authentication")
                                     color: pane.mutedColor
                                     font.family: Theme.uiFont
                                     font.pixelSize: 11
                                 }
 
                                 ActionButton {
-                                    text: "Close"
-                                    accessibleName: "Close host profile editor"
+                                    text: qsTr("Close")
+                                    accessibleName: qsTr("Close host profile editor")
                                     onClicked: pane.dismissEditor(false)
                                 }
                             }
@@ -919,13 +919,13 @@ Rectangle {
 
                                 StatusMessage {
                                     Layout.fillWidth: true
-                                    text: !pane.controller.portableVaultInitialized ? "Create the portable vault before saving credentials." : "The portable vault is locked. Unlock it before saving a new credential."
+                                    text: !pane.controller.portableVaultInitialized ? qsTr("Create the portable vault before saving credentials.") : qsTr("The portable vault is locked. Unlock it before saving a new credential.")
                                 }
 
                                 ActionButton {
                                     objectName: "hostOpenCredentialSecurity"
-                                    text: "Open Security"
-                                    accessibleName: "Open credential security settings"
+                                    text: qsTr("Open Security")
+                                    accessibleName: qsTr("Open credential security settings")
                                     onClicked: pane.securitySettingsRequested()
                                 }
                             }
@@ -938,15 +938,15 @@ Rectangle {
                                 rowSpacing: 10
 
                                 Label {
-                                    text: "Profile name"
+                                    text: qsTr("Profile name")
                                     color: pane.textColor
                                 }
                                 AppTextField {
                                     id: nameField
                                     objectName: "hostName"
                                     Layout.fillWidth: true
-                                    placeholderText: hostField.text.trim().length > 0 ? hostField.text.trim() : "Defaults to the host name"
-                                    accessibleName: "Profile name"
+                                    placeholderText: hostField.text.trim().length > 0 ? hostField.text.trim() : qsTr("Defaults to the host name")
+                                    accessibleName: qsTr("Profile name")
                                     selectByMouse: true
                                     onActiveFocusChanged: {
                                         if (activeFocus && pane.nameWasAutoFilled) {
@@ -969,20 +969,20 @@ Rectangle {
                                 }
 
                                 Label {
-                                    text: "Group"
+                                    text: qsTr("Group")
                                     color: pane.textColor
                                 }
                                 AppTextField {
                                     id: groupField
                                     objectName: "hostGroup"
                                     Layout.fillWidth: true
-                                    placeholderText: "Personal, Work, Lab…"
-                                    accessibleName: "SSH profile group"
+                                    placeholderText: qsTr("Personal, Work, Lab…")
+                                    accessibleName: qsTr("SSH profile group")
                                     selectByMouse: true
                                 }
 
                                 Label {
-                                    text: "Host"
+                                    text: qsTr("Host")
                                     color: pane.textColor
                                 }
                                 AppTextField {
@@ -990,7 +990,7 @@ Rectangle {
                                     objectName: "hostAddress"
                                     Layout.fillWidth: true
                                     placeholderText: "server.example.com or 192.0.2.10"
-                                    accessibleName: "SSH host"
+                                    accessibleName: qsTr("SSH host")
                                     selectByMouse: true
                                     onTextEdited: {
                                         if (nameField.text.trim().length === 0 || pane.nameWasAutoFilled) {
@@ -1001,7 +1001,7 @@ Rectangle {
                                 }
 
                                 Label {
-                                    text: "Port"
+                                    text: qsTr("Port")
                                     color: pane.textColor
                                 }
                                 AppTextField {
@@ -1014,33 +1014,33 @@ Rectangle {
                                         bottom: 1
                                         top: 65535
                                     }
-                                    accessibleName: "SSH port"
+                                    accessibleName: qsTr("SSH port")
                                     selectByMouse: true
                                 }
 
                                 Label {
-                                    text: "Username"
+                                    text: qsTr("Username")
                                     color: pane.textColor
                                 }
                                 AppTextField {
                                     id: usernameField
                                     objectName: "hostUsername"
                                     Layout.fillWidth: true
-                                    placeholderText: "username"
-                                    accessibleName: "SSH username"
+                                    placeholderText: qsTr("username")
+                                    accessibleName: qsTr("SSH username")
                                     selectByMouse: true
                                 }
 
                                 Label {
-                                    text: "Authentication"
+                                    text: qsTr("Authentication")
                                     color: pane.textColor
                                 }
                                 AppComboBox {
                                     id: authenticationBox
                                     objectName: "hostAuthentication"
                                     Layout.fillWidth: true
-                                    model: ["Private key", "Password"]
-                                    accessibleName: "SSH authentication method"
+                                    model: [qsTr("Private key"), qsTr("Password")]
+                                    accessibleName: qsTr("SSH authentication method")
                                     onCurrentIndexChanged: {
                                         credentialField.text = "";
                                         if (currentIndex === 1) {
@@ -1050,7 +1050,7 @@ Rectangle {
                                 }
 
                                 Label {
-                                    text: "Private key"
+                                    text: qsTr("Private key")
                                     color: pane.textColor
                                     visible: authenticationBox.currentIndex === 0
                                 }
@@ -1060,7 +1060,7 @@ Rectangle {
                                     Layout.fillWidth: true
                                     visible: authenticationBox.currentIndex === 0
                                     text: pane.controller.defaultPrivateKeyPath
-                                    accessibleName: "Private-key file path"
+                                    accessibleName: qsTr("Private-key file path")
                                     selectByMouse: true
                                 }
 
@@ -1073,13 +1073,13 @@ Rectangle {
                                     objectName: "hostPassphraseRequired"
                                     Layout.fillWidth: true
                                     visible: authenticationBox.currentIndex === 0
-                                    text: "This private key requires a passphrase"
-                                    accessibleName: "Private key requires a passphrase"
+                                    text: qsTr("This private key requires a passphrase")
+                                    accessibleName: qsTr("Private key requires a passphrase")
                                     onCheckedChanged: credentialField.text = ""
                                 }
 
                                 Label {
-                                    text: authenticationBox.currentIndex === 0 ? "Passphrase" : "Password"
+                                    text: authenticationBox.currentIndex === 0 ? qsTr("Passphrase") : qsTr("Password")
                                     color: pane.textColor
                                     visible: authenticationBox.currentIndex === 1 || passphraseRequiredBox.checked
                                 }
@@ -1088,9 +1088,9 @@ Rectangle {
                                     objectName: "hostCredential"
                                     Layout.fillWidth: true
                                     visible: authenticationBox.currentIndex === 1 || passphraseRequiredBox.checked
-                                    placeholderText: authenticationBox.currentIndex === 0 ? "Private-key passphrase" : "SSH password"
+                                    placeholderText: authenticationBox.currentIndex === 0 ? qsTr("Private-key passphrase") : qsTr("SSH password")
                                     passwordRevealable: true
-                                    accessibleName: authenticationBox.currentIndex === 0 ? "Private-key passphrase" : "SSH password"
+                                    accessibleName: authenticationBox.currentIndex === 0 ? qsTr("Private-key passphrase") : qsTr("SSH password")
                                     selectByMouse: true
                                 }
 
@@ -1105,7 +1105,7 @@ Rectangle {
                                     Layout.fillWidth: true
                                     visible: credentialField.visible
                                     checked: true
-                                    text: pane.editingCredentialStored && credentialField.text.length === 0 ? "Keep saved credential" : "Save credential securely"
+                                    text: pane.editingCredentialStored && credentialField.text.length === 0 ? qsTr("Keep saved credential") : qsTr("Save credential securely")
                                     accessibleName: text
                                 }
                             }
@@ -1126,8 +1126,8 @@ Rectangle {
                                 ActionButton {
                                     objectName: "hostCancel"
                                     Layout.fillWidth: pane.compactLayout
-                                    text: "Cancel"
-                                    accessibleName: "Close host profile editor"
+                                    text: qsTr("Cancel")
+                                    accessibleName: qsTr("Close host profile editor")
                                     onClicked: pane.dismissEditor(true)
                                 }
 
@@ -1139,16 +1139,16 @@ Rectangle {
                                 ActionButton {
                                     objectName: "hostSave"
                                     Layout.fillWidth: pane.compactLayout
-                                    text: "Save profile"
-                                    accessibleName: "Save SSH profile"
+                                    text: qsTr("Save profile")
+                                    accessibleName: qsTr("Save SSH profile")
                                     onClicked: pane.saveProfile()
                                 }
 
                                 ActionButton {
                                     objectName: "hostConnect"
                                     Layout.fillWidth: pane.compactLayout
-                                    text: "Connect"
-                                    accessibleName: "Connect to SSH host"
+                                    text: qsTr("Connect")
+                                    accessibleName: qsTr("Connect to SSH host")
                                     variant: "primary"
                                     onClicked: pane.connectCurrent()
                                 }
@@ -1254,7 +1254,7 @@ Rectangle {
             contentWidth: availableWidth
             contentHeight: quickConnectContent.implicitHeight
             Accessible.role: Accessible.Dialog
-            Accessible.name: "Quick SSH connection"
+            Accessible.name: qsTr("Quick SSH connection")
 
             ColumnLayout {
                 id: quickConnectContent
@@ -1264,7 +1264,7 @@ Rectangle {
 
                 Text {
                     Layout.fillWidth: true
-                    text: "Quick connect"
+                    text: qsTr("Quick connect")
                     color: pane.textColor
                     font.family: Theme.uiFont
                     font.pixelSize: 18
@@ -1281,7 +1281,7 @@ Rectangle {
                 }
 
                 Label {
-                    text: "Authentication"
+                    text: qsTr("Authentication")
                     color: pane.textColor
                 }
 
@@ -1290,8 +1290,8 @@ Rectangle {
 
                     objectName: "quickAuthentication"
                     Layout.fillWidth: true
-                    model: ["Private key", "Password"]
-                    accessibleName: "Quick connect authentication method"
+                    model: [qsTr("Private key"), qsTr("Password")]
+                    accessibleName: qsTr("Quick connect authentication method")
                     onCurrentIndexChanged: {
                         quickCredential.text = "";
                         if (currentIndex === 1) {
@@ -1306,8 +1306,8 @@ Rectangle {
                     objectName: "quickKeyPath"
                     Layout.fillWidth: true
                     visible: quickAuthentication.currentIndex === 0
-                    placeholderText: "Private-key file"
-                    accessibleName: "Quick connect private-key file"
+                    placeholderText: qsTr("Private-key file")
+                    accessibleName: qsTr("Quick connect private-key file")
                     selectByMouse: true
                 }
 
@@ -1317,8 +1317,8 @@ Rectangle {
                     objectName: "quickPassphraseRequired"
                     Layout.fillWidth: true
                     visible: quickAuthentication.currentIndex === 0
-                    text: "This private key requires a passphrase"
-                    accessibleName: "Quick connect private key requires a passphrase"
+                    text: qsTr("This private key requires a passphrase")
+                    accessibleName: qsTr("Quick connect private key requires a passphrase")
                     onCheckedChanged: quickCredential.text = ""
                 }
 
@@ -1328,7 +1328,7 @@ Rectangle {
                     objectName: "quickCredential"
                     Layout.fillWidth: true
                     visible: quickAuthentication.currentIndex === 1 || quickPassphraseRequired.checked
-                    placeholderText: quickAuthentication.currentIndex === 1 ? "SSH password" : "Private-key passphrase"
+                    placeholderText: quickAuthentication.currentIndex === 1 ? qsTr("SSH password") : qsTr("Private-key passphrase")
                     echoMode: TextInput.Password
                     accessibleName: placeholderText
                     selectByMouse: true
@@ -1344,8 +1344,8 @@ Rectangle {
 
                     objectName: "quickSaveProfile"
                     Layout.fillWidth: true
-                    text: "Save as a reusable host profile"
-                    accessibleName: "Save quick connection as host profile"
+                    text: qsTr("Save as a reusable host profile")
+                    accessibleName: qsTr("Save quick connection as host profile")
                 }
 
                 AppTextField {
@@ -1354,8 +1354,8 @@ Rectangle {
                     objectName: "quickProfileName"
                     Layout.fillWidth: true
                     visible: quickSaveProfile.checked
-                    placeholderText: "Profile name"
-                    accessibleName: "Quick connection profile name"
+                    placeholderText: qsTr("Profile name")
+                    accessibleName: qsTr("Quick connection profile name")
                     selectByMouse: true
                 }
 
@@ -1365,8 +1365,8 @@ Rectangle {
                     objectName: "quickGroup"
                     Layout.fillWidth: true
                     visible: quickSaveProfile.checked
-                    placeholderText: "Group (optional)"
-                    accessibleName: "Quick connection profile group"
+                    placeholderText: qsTr("Group (optional)")
+                    accessibleName: qsTr("Quick connection profile group")
                     selectByMouse: true
                 }
 
@@ -1387,8 +1387,8 @@ Rectangle {
                         id: quickConnectCancel
 
                         objectName: "quickConnectCancel"
-                        text: "Cancel"
-                        accessibleName: "Cancel quick SSH connection"
+                        text: qsTr("Cancel")
+                        accessibleName: qsTr("Cancel quick SSH connection")
                         KeyNavigation.right: quickConnectConfirm
                         onClicked: quickConnectDialog.close()
                     }
@@ -1397,8 +1397,8 @@ Rectangle {
                         id: quickConnectConfirm
 
                         objectName: "quickConnectConfirm"
-                        text: "Connect"
-                        accessibleName: "Start quick SSH connection"
+                        text: qsTr("Connect")
+                        accessibleName: qsTr("Start quick SSH connection")
                         enabled: (quickAuthentication.currentIndex === 1 || quickKeyPath.text.trim().length > 0) && (quickAuthentication.currentIndex === 0 || quickCredential.text.length > 0) && (!quickPassphraseRequired.checked || quickCredential.text.length > 0) && (!quickSaveProfile.checked || quickProfileName.text.trim().length > 0)
                         variant: "primary"
                         KeyNavigation.left: quickConnectCancel
@@ -1447,10 +1447,10 @@ Rectangle {
         contentItem: ColumnLayout {
             spacing: 14
             Accessible.role: Accessible.Dialog
-            Accessible.name: "Unlock portable credential vault"
+            Accessible.name: qsTr("Unlock portable credential vault")
 
             Text {
-                text: "Unlock portable vault"
+                text: qsTr("Unlock portable vault")
                 color: pane.textColor
                 font.family: Theme.uiFont
                 font.pixelSize: 18
@@ -1459,7 +1459,7 @@ Rectangle {
 
             Text {
                 Layout.preferredWidth: 380
-                text: "Enter the portable-vault master password to connect to \"" + pane.pendingConnectName + "\"."
+                text: qsTr("Enter the portable-vault master password to connect to \"%1\".").arg(pane.pendingConnectName)
                 color: pane.mutedColor
                 wrapMode: Text.WordWrap
                 font.family: Theme.uiFont
@@ -1471,9 +1471,9 @@ Rectangle {
 
                 objectName: "portableUnlockPassword"
                 Layout.fillWidth: true
-                placeholderText: "Master password (minimum 8 characters)"
+                placeholderText: qsTr("Master password (minimum 8 characters)")
                 echoMode: TextInput.Password
-                accessibleName: "Portable vault master password"
+                accessibleName: qsTr("Portable vault master password")
                 selectByMouse: true
                 onAccepted: portableUnlockAction.clicked()
             }
@@ -1493,16 +1493,16 @@ Rectangle {
                 }
 
                 ActionButton {
-                    text: "Cancel"
-                    accessibleName: "Cancel portable vault unlock"
+                    text: qsTr("Cancel")
+                    accessibleName: qsTr("Cancel portable vault unlock")
                     onClicked: portableUnlockDialog.close()
                 }
 
                 ActionButton {
                     id: portableUnlockAction
 
-                    text: "Unlock and connect"
-                    accessibleName: "Unlock portable vault and connect"
+                    text: qsTr("Unlock and connect")
+                    accessibleName: qsTr("Unlock portable vault and connect")
                     enabled: portableUnlockPassword.text.length >= 8
                     variant: "primary"
                     onClicked: {
@@ -1516,7 +1516,7 @@ Rectangle {
                             portableUnlockDialog.close();
                             pane.connectionStarted();
                         } else {
-                            portableUnlockStatus.text = pane.controller.credentialOperationError.length > 0 ? pane.controller.credentialOperationError : "The saved profile could not be connected.";
+                            portableUnlockStatus.text = pane.controller.credentialOperationError.length > 0 ? pane.controller.credentialOperationError : qsTr("The saved profile could not be connected.");
                         }
                     }
                 }
@@ -1592,10 +1592,10 @@ Rectangle {
         contentItem: ColumnLayout {
             spacing: 14
             Accessible.role: Accessible.Dialog
-            Accessible.name: pane.pendingConnectAuthentication === "password" ? "Enter SSH password" : "Enter key passphrase"
+            Accessible.name: pane.pendingConnectAuthentication === "password" ? qsTr("Enter SSH password") : qsTr("Enter key passphrase")
 
             Text {
-                text: pane.pendingConnectAuthentication === "password" ? "Enter SSH password" : "Enter key passphrase"
+                text: pane.pendingConnectAuthentication === "password" ? qsTr("Enter SSH password") : qsTr("Enter key passphrase")
                 color: pane.textColor
                 font.family: Theme.uiFont
                 font.pixelSize: 18
@@ -1604,7 +1604,7 @@ Rectangle {
 
             Text {
                 Layout.preferredWidth: 360
-                text: "Authenticate to \"" + pane.pendingConnectName + "\". You can save this credential in the active secure store."
+                text: qsTr("Authenticate to \"%1\". You can save this credential in the active secure store.").arg(pane.pendingConnectName)
                 color: pane.mutedColor
                 wrapMode: Text.WordWrap
                 font.family: Theme.uiFont
@@ -1616,7 +1616,7 @@ Rectangle {
 
                 objectName: "savedCredentialField"
                 Layout.fillWidth: true
-                placeholderText: pane.pendingConnectAuthentication === "password" ? "SSH password" : "Private-key passphrase"
+                placeholderText: pane.pendingConnectAuthentication === "password" ? qsTr("SSH password") : qsTr("Private-key passphrase")
                 echoMode: TextInput.Password
                 accessibleName: placeholderText
                 selectByMouse: true
@@ -1629,8 +1629,8 @@ Rectangle {
                 objectName: "savedCredentialRemember"
                 Layout.fillWidth: true
                 checked: true
-                text: "Save this credential securely"
-                accessibleName: "Save this credential in the active secure store"
+                text: qsTr("Save this credential securely")
+                accessibleName: qsTr("Save this credential in the active secure store")
             }
 
             RowLayout {
@@ -1644,8 +1644,8 @@ Rectangle {
                     id: savedCredentialCancel
 
                     objectName: "savedCredentialCancel"
-                    text: "Cancel"
-                    accessibleName: "Cancel saved host authentication"
+                    text: qsTr("Cancel")
+                    accessibleName: qsTr("Cancel saved host authentication")
                     KeyNavigation.right: connectSavedButton
                     onClicked: credentialDialog.close()
                 }
@@ -1654,8 +1654,8 @@ Rectangle {
                     id: connectSavedButton
 
                     objectName: "savedCredentialConnect"
-                    text: "Connect"
-                    accessibleName: "Connect to saved SSH host"
+                    text: qsTr("Connect")
+                    accessibleName: qsTr("Connect to saved SSH host")
                     enabled: savedCredentialField.text.length > 0
                     variant: "primary"
                     KeyNavigation.left: savedCredentialCancel
@@ -1668,15 +1668,15 @@ Rectangle {
     ConfirmationDialog {
         id: forgetCredentialDialog
 
-        heading: "Forget saved credential?"
-        description: "Remove the password or key passphrase for \"" + pane.pendingForgetName + "\" from the active secure store? The host profile remains."
-        acceptText: "Forget credential"
+        heading: qsTr("Forget saved credential?")
+        description: qsTr("Remove the password or key passphrase for \"%1\" from the active secure store? The host profile remains.").arg(pane.pendingForgetName)
+        acceptText: qsTr("Forget credential")
         destructive: true
         onAccepted: {
             if (pane.controller.forgetHostCredential(pane.pendingForgetId)) {
-                pane.showStatus("Saved credential removed.", false);
+                pane.showStatus(qsTr("Saved credential removed."), false);
             } else {
-                pane.showStatus(pane.controller.credentialOperationError.length > 0 ? pane.controller.credentialOperationError : "The saved credential could not be removed.", true);
+                pane.showStatus(pane.controller.credentialOperationError.length > 0 ? pane.controller.credentialOperationError : qsTr("The saved credential could not be removed."), true);
             }
             focusRestoreItem = newHostButton;
             pane.pendingForgetId = "";
@@ -1691,15 +1691,15 @@ Rectangle {
     ConfirmationDialog {
         id: deleteDialog
 
-        heading: "Delete saved host?"
-        description: "Remove \"" + pane.pendingDeleteName + "\" and its credential from the active store? Copies deliberately retained in another store can be cleared in Settings > Security. This does not change the remote server or trusted host keys."
-        acceptText: "Delete"
+        heading: qsTr("Delete saved host?")
+        description: qsTr("Remove \"%1\" and its credential from the active store? Copies deliberately retained in another store can be cleared in Settings > Security. This does not change the remote server or trusted host keys.").arg(pane.pendingDeleteName)
+        acceptText: qsTr("Delete")
         destructive: true
         onAccepted: {
             if (pane.controller.deleteHostProfile(pane.pendingDeleteId)) {
-                pane.showStatus("Profile deleted.", false);
+                pane.showStatus(qsTr("Profile deleted."), false);
             } else {
-                pane.showStatus("The profile could not be deleted.", true);
+                pane.showStatus(qsTr("The profile could not be deleted."), true);
             }
             focusRestoreItem = newHostButton;
             pane.pendingDeleteId = "";

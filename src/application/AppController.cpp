@@ -4,6 +4,7 @@
 #include "infrastructure/security/InMemoryCredentialVault.h"
 #include "ui/terminal/TerminalItem.h"
 
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
@@ -144,37 +145,44 @@ credentialPreferenceForStorage(const ztermy::security::CredentialStorage storage
     switch (error)
     {
         case Locked:
-            return QStringLiteral("Unlock the portable credential vault first.");
+            return QCoreApplication::translate("AppController", "Unlock the portable credential vault first.");
         case Unavailable:
-            return QStringLiteral("The selected credential store is unavailable in this Windows session.");
+            return QCoreApplication::translate("AppController",
+                                               "The selected credential store is unavailable in this Windows session.");
         case AccessDenied:
-            return QStringLiteral("Windows denied access to the selected credential store.");
+            return QCoreApplication::translate("AppController",
+                                               "Windows denied access to the selected credential store.");
         case AuthenticationFailed:
-            return QStringLiteral("The vault password is incorrect, or the vault was modified.");
+            return QCoreApplication::translate("AppController",
+                                               "The vault password is incorrect, or the vault was modified.");
         case WeakMasterPassword:
-            return QStringLiteral("Use a vault password with at least 8 UTF-8 bytes.");
+            return QCoreApplication::translate("AppController", "Use a vault password with at least 8 UTF-8 bytes.");
         case AlreadyInitialized:
-            return QStringLiteral("The portable credential vault is already initialized.");
+            return QCoreApplication::translate("AppController",
+                                               "The portable credential vault is already initialized.");
         case CorruptData:
-            return QStringLiteral("The portable credential vault is damaged or invalid.");
+            return QCoreApplication::translate("AppController", "The portable credential vault is damaged or invalid.");
         case UnsupportedVersion:
-            return QStringLiteral("This credential vault was created by an unsupported ztermy version.");
+            return QCoreApplication::translate("AppController",
+                                               "This credential vault was created by an unsupported ztermy version.");
         case EmptySecret:
-            return QStringLiteral("Enter a password or key passphrase before saving it.");
+            return QCoreApplication::translate("AppController", "Enter a password or key passphrase before saving it.");
         case SecretTooLarge:
-            return QStringLiteral("The credential is larger than the supported limit.");
+            return QCoreApplication::translate("AppController", "The credential is larger than the supported limit.");
         case NotFound:
-            return QStringLiteral("No saved credential was found for this host.");
+            return QCoreApplication::translate("AppController", "No saved credential was found for this host.");
         case InvalidKey:
-            return QStringLiteral("The credential reference is invalid.");
+            return QCoreApplication::translate("AppController", "The credential reference is invalid.");
         case IoError:
-            return QStringLiteral("The credential store could not be read or written.");
+            return QCoreApplication::translate("AppController", "The credential store could not be read or written.");
         case CryptoError:
-            return QStringLiteral("Windows could not complete the credential encryption operation.");
+            return QCoreApplication::translate("AppController",
+                                               "Windows could not complete the credential encryption operation.");
         case MigrationFailed:
-            return QStringLiteral("Credential migration was rolled back because verification failed.");
+            return QCoreApplication::translate("AppController",
+                                               "Credential migration was rolled back because verification failed.");
     }
-    return QStringLiteral("The credential operation failed.");
+    return QCoreApplication::translate("AppController", "The credential operation failed.");
 }
 
 void logCredentialRollbackResult(std::expected<void, ztermy::security::CredentialVaultError> result,
@@ -200,17 +208,86 @@ void logCredentialRollbackResult(std::expected<void, ztermy::security::Credentia
     switch (error)
     {
         case MissingUsername:
-            return QStringLiteral("Enter a username before @.");
+            return QCoreApplication::translate("AppController", "Enter a username before @.");
         case MissingHost:
-            return QStringLiteral("Enter a host after @.");
+            return QCoreApplication::translate("AppController", "Enter a host after @.");
         case InvalidPort:
-            return QStringLiteral("Port must be a number from 1 to 65535.");
+            return QCoreApplication::translate("AppController", "Port must be a number from 1 to 65535.");
         case BracketsRequired:
-            return QStringLiteral("Wrap an IPv6 host in brackets, for example user@[::1]:22.");
+            return QCoreApplication::translate("AppController",
+                                               "Wrap an IPv6 host in brackets, for example user@[::1]:22.");
         case InvalidFormat:
-            return QStringLiteral("Use user@host or user@host:port.");
+            return QCoreApplication::translate("AppController", "Use user@host or user@host:port.");
     }
-    return QStringLiteral("Use user@host or user@host:port.");
+    return QCoreApplication::translate("AppController", "Use user@host or user@host:port.");
+}
+
+[[nodiscard]] QString localizedSshFailure(const std::optional<ztermy::ssh::SshFailureKind> failure)
+{
+    using enum ztermy::ssh::SshFailureKind;
+    if (!failure)
+    {
+        return QCoreApplication::translate("SshTerminalSession", "SSH connection failed");
+    }
+    switch (*failure)
+    {
+        case NameResolutionFailed:
+            return QCoreApplication::translate("SshTerminalSession", "SSH host name resolution failed");
+        case ConnectionRefused:
+            return QCoreApplication::translate("SshTerminalSession", "SSH connection was refused");
+        case TimedOut:
+            return QCoreApplication::translate("SshTerminalSession", "SSH operation timed out");
+        case TransportError:
+            return QCoreApplication::translate("SshTerminalSession", "SSH transport failed");
+        case HostKeyChanged:
+            return QCoreApplication::translate("SshTerminalSession", "SSH host key changed");
+        case HostKeyInvalid:
+            return QCoreApplication::translate("SshTerminalSession", "SSH host key could not be verified");
+        case AuthenticationRejected:
+            return QCoreApplication::translate("SshTerminalSession", "SSH authentication was rejected");
+        case AuthenticationUnavailable:
+            return QCoreApplication::translate("SshTerminalSession", "SSH authentication method is unavailable");
+        case ChannelOpenFailed:
+            return QCoreApplication::translate("SshTerminalSession", "SSH terminal channel could not be opened");
+        case RemoteClosed:
+            return QCoreApplication::translate("SshTerminalSession", "SSH remote host closed the connection");
+        case Cancelled:
+            return QCoreApplication::translate("SshTerminalSession", "SSH connection cancelled");
+        case ProtocolError:
+            return QCoreApplication::translate("SshTerminalSession", "SSH protocol error");
+    }
+    return QCoreApplication::translate("SshTerminalSession", "SSH connection failed");
+}
+
+[[nodiscard]] QString localizedSshStatus(const ztermy::ssh::SshConnectionPhase phase,
+                                         const std::optional<ztermy::ssh::SshFailureKind> failure)
+{
+    using enum ztermy::ssh::SshConnectionPhase;
+    switch (phase)
+    {
+        case Resolving:
+            return QCoreApplication::translate("ztermy::ssh::SshTerminalSession", "Resolving SSH host");
+        case Connecting:
+            return QCoreApplication::translate("ztermy::ssh::SshTerminalSession", "Connecting to SSH host");
+        case Handshaking:
+            return QCoreApplication::translate("ztermy::ssh::SshTerminalSession", "Negotiating SSH connection");
+        case VerifyingHostKey:
+            return QCoreApplication::translate("ztermy::ssh::SshTerminalSession", "Verifying SSH host key");
+        case AwaitingHostKeyConfirmation:
+            return QCoreApplication::translate("ztermy::ssh::SshTerminalSession", "SSH host key confirmation required");
+        case Authenticating:
+            return QCoreApplication::translate("ztermy::ssh::SshTerminalSession", "Authenticating SSH session");
+        case OpeningChannel:
+            return QCoreApplication::translate("ztermy::ssh::SshTerminalSession", "Opening SSH terminal");
+        case Connected:
+            return QCoreApplication::translate("ztermy::ssh::SshTerminalSession", "SSH terminal connected");
+        case Failed:
+            return localizedSshFailure(failure);
+        case Closing:
+        case Disconnected:
+            return QCoreApplication::translate("ztermy::ssh::SshTerminalSession", "SSH terminal disconnected");
+    }
+    return QCoreApplication::translate("SshTerminalSession", "SSH connection failed");
 }
 
 } // namespace
@@ -515,6 +592,11 @@ QString AppController::customAccent() const
     return m_settings.customAccent;
 }
 
+QString AppController::uiFontFamily() const
+{
+    return m_settings.uiFontFamily;
+}
+
 QString AppController::terminalFontFamily() const
 {
     return m_settings.terminalFontFamily;
@@ -523,6 +605,16 @@ QString AppController::terminalFontFamily() const
 int AppController::terminalFontSize() const noexcept
 {
     return m_settings.terminalFontSize;
+}
+
+bool AppController::showAllTerminalFonts() const noexcept
+{
+    return m_settings.showAllTerminalFonts;
+}
+
+bool AppController::terminalLigatures() const noexcept
+{
+    return m_settings.terminalLigatures;
 }
 
 qreal AppController::terminalBackgroundOpacity() const noexcept
@@ -548,6 +640,32 @@ bool AppController::copyOnSelect() const noexcept
 bool AppController::confirmMultilinePaste() const noexcept
 {
     return m_settings.confirmMultilinePaste;
+}
+
+QString AppController::languagePreference() const
+{
+    return config::languagePreferenceToken(m_settings.language);
+}
+
+void AppController::retranslateUiState()
+{
+    for (const auto &tab : m_tabs)
+    {
+        if (tab->kind == TerminalTabKind::Local)
+        {
+            tab->status = tab->running ? QCoreApplication::translate("ztermy::terminal::LocalTerminalSession",
+                                                                     "Local PowerShell connected")
+                                       : QCoreApplication::translate("ztermy::terminal::LocalTerminalSession",
+                                                                     "Local terminal stopped");
+        }
+        else
+        {
+            tab->status = localizedSshStatus(tab->sshPhase, tab->sshFailure);
+        }
+    }
+    setCredentialOperationError({});
+    showActiveTab();
+    emit terminalTabsChanged();
 }
 
 QString AppController::credentialStoragePreference() const
@@ -581,15 +699,15 @@ QString AppController::startLocalTerminal()
     {
         if (m_terminal != nullptr)
         {
-            m_terminal->setStatusText(QStringLiteral("The maximum of 32 terminal tabs is already open"));
+            m_terminal->setStatusText(tr("The maximum of 32 terminal tabs is already open"));
         }
         return {};
     }
 
     auto tab = std::make_unique<TerminalTab>();
     tab->id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    tab->title = QStringLiteral("PowerShell %1").arg(m_nextLocalTabNumber++);
-    tab->status = QStringLiteral("Starting local terminal...");
+    tab->title = tr("PowerShell %1").arg(m_nextLocalTabNumber++);
+    tab->status = tr("Starting local terminal...");
     tab->kind = TerminalTabKind::Local;
     tab->local = m_localSessionFactory();
     if (!tab->local)
@@ -610,8 +728,7 @@ QString AppController::startLocalTerminal()
     const std::error_code error = created->local->start({.columns = 100, .rows = 30});
     if (error)
     {
-        created->status =
-            QStringLiteral("Unable to start local terminal: %1").arg(QString::fromStdString(error.message()));
+        created->status = tr("Unable to start local terminal: %1").arg(QString::fromStdString(error.message()));
         showActiveTab();
         emit terminalTabsChanged();
     }
@@ -743,7 +860,7 @@ bool AppController::connectPrivateKey(const QString &host, const int port, const
     {
         if (m_terminal != nullptr)
         {
-            m_terminal->setStatusText(QStringLiteral("Complete the SSH host, port, username, and private-key fields"));
+            m_terminal->setStatusText(tr("Complete the SSH host, port, username, and private-key fields"));
         }
         return false;
     }
@@ -767,7 +884,7 @@ bool AppController::connectPassword(const QString &host, const int port, const Q
     {
         if (m_terminal != nullptr)
         {
-            m_terminal->setStatusText(QStringLiteral("Complete the SSH host, port, username, and password fields"));
+            m_terminal->setStatusText(tr("Complete the SSH host, port, username, and password fields"));
         }
         return false;
     }
@@ -790,7 +907,7 @@ bool AppController::startSshConnection(ssh::SshConnectionRequest request, QStrin
     {
         if (m_terminal != nullptr)
         {
-            m_terminal->setStatusText(QStringLiteral("The maximum of 32 terminal tabs is already open"));
+            m_terminal->setStatusText(tr("The maximum of 32 terminal tabs is already open"));
         }
         return false;
     }
@@ -798,7 +915,7 @@ bool AppController::startSshConnection(ssh::SshConnectionRequest request, QStrin
     auto tab = std::make_unique<TerminalTab>();
     tab->id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     tab->title = QStringLiteral("%1@%2").arg(request.username, request.host);
-    tab->status = QStringLiteral("Starting SSH connection...");
+    tab->status = tr("Starting SSH connection...");
     tab->kind = TerminalTabKind::Ssh;
     tab->sourceProfileId = std::move(sourceProfileId);
     tab->sshPhase = ssh::SshConnectionPhase::Resolving;
@@ -865,7 +982,7 @@ bool AppController::saveAndConnectHostProfile(const QString &id, const QString &
     }
     if (m_credentialOperationError.isEmpty())
     {
-        setCredentialOperationError(QStringLiteral("The profile was saved, but the connection could not be started."));
+        setCredentialOperationError(tr("The profile was saved, but the connection could not be started."));
     }
     return false;
 }
@@ -939,7 +1056,7 @@ bool AppController::saveHostProfileInternal(const QString &id, const QString &na
         && !m_credentialVaults->portableInitialized())
     {
         setCredentialOperationError(
-            QStringLiteral("Create the portable credential vault in Settings > Security before saving a secret."));
+            tr("Create the portable credential vault in Settings > Security before saving a secret."));
         return false;
     }
     const bool shouldRemovePrevious =
@@ -1191,7 +1308,7 @@ QString AppController::readHostCredential(const QString &id)
     const auto profile = std::ranges::find(m_profiles, utf8String(id.trimmed()), &ssh::SshProfile::id);
     if (profile == m_profiles.end() || !profile->credentialReference)
     {
-        setCredentialOperationError(QStringLiteral("This host profile has no saved credential."));
+        setCredentialOperationError(tr("This host profile has no saved credential."));
         return {};
     }
 
@@ -1232,7 +1349,7 @@ bool AppController::connectHostProfile(const QString &id, const QString &secret)
     if ((profile->authentication == ssh::SshAuthenticationMethod::Password || profile->privateKeyPassphraseRequired)
         && connectionSecret.empty())
     {
-        setCredentialOperationError(QStringLiteral("Enter the credential required by this host."));
+        setCredentialOperationError(tr("Enter the credential required by this host."));
         return false;
     }
     ssh::SshConnectionRequest request{
@@ -1317,16 +1434,18 @@ bool AppController::connectQuick(const QString &target, const QString &authentic
 
 bool AppController::saveApplicationSettings(const QString &theme, const qreal backdropOpacity, const QString &backdrop,
                                             const QString &accent, const QString &customAccent,
-                                            const QString &fontFamily, const int fontSize,
+                                            const QString &uiFontFamily, const QString &fontFamily, const int fontSize,
+                                            const bool showAllFonts, const bool ligatures,
                                             const qreal terminalBackgroundOpacity, const QString &cursor,
                                             const bool cursorShouldBlink, const bool shouldCopyOnSelect,
-                                            const bool shouldConfirmMultilinePaste)
+                                            const bool shouldConfirmMultilinePaste, const QString &language)
 {
     const auto parsedTheme = config::parseThemePreference(theme);
     const auto parsedBackdrop = config::parseBackdropPreference(backdrop);
     const auto parsedAccent = config::parseAccentPreference(accent);
     const auto parsedCursor = config::parseCursorPreference(cursor);
-    if (!parsedTheme || !parsedBackdrop || !parsedAccent || !parsedCursor)
+    const auto parsedLanguage = config::parseLanguagePreference(language);
+    if (!parsedTheme || !parsedBackdrop || !parsedAccent || !parsedCursor || !parsedLanguage)
     {
         return false;
     }
@@ -1337,14 +1456,18 @@ bool AppController::saveApplicationSettings(const QString &theme, const qreal ba
         .backdrop = *parsedBackdrop,
         .accent = *parsedAccent,
         .customAccent = customAccent.trimmed().toUpper(),
+        .uiFontFamily = uiFontFamily,
         .terminalFontFamily = fontFamily,
         .terminalFontSize = fontSize,
+        .showAllTerminalFonts = showAllFonts,
+        .terminalLigatures = ligatures,
         .terminalBackgroundOpacity = terminalBackgroundOpacity,
         .cursor = *parsedCursor,
         .cursorBlink = cursorShouldBlink,
         .copyOnSelect = shouldCopyOnSelect,
         .confirmMultilinePaste = shouldConfirmMultilinePaste,
         .credentialStorage = m_settings.credentialStorage,
+        .language = *parsedLanguage,
     });
 }
 
@@ -1410,7 +1533,7 @@ bool AppController::migrateCredentialStorage(const QString &target, const bool r
     const auto parsedTarget = parseCredentialStorage(target);
     if (!parsedTarget)
     {
-        setCredentialOperationError(QStringLiteral("Choose system, portable, or session credential storage."));
+        setCredentialOperationError(tr("Choose system, portable, or session credential storage."));
         return false;
     }
     const security::CredentialStorage previousStorage = m_credentialVaults->storage();
@@ -1431,7 +1554,7 @@ bool AppController::migrateCredentialStorage(const QString &target, const bool r
     if (!persistApplicationSettings(updatedSettings))
     {
         m_credentialVaults->select(previousStorage);
-        setCredentialOperationError(QStringLiteral(
+        setCredentialOperationError(tr(
             "Credentials were copied, but the storage preference could not be saved. The old store remains active."));
         emit credentialVaultChanged();
         return false;
@@ -1442,8 +1565,7 @@ bool AppController::migrateCredentialStorage(const QString &target, const bool r
         auto cleaned = m_credentialVaults->removeAll(previousStorage);
         if (!cleaned)
         {
-            setCredentialOperationError(
-                QStringLiteral("Migration succeeded, but credentials remain in the previous store."));
+            setCredentialOperationError(tr("Migration succeeded, but credentials remain in the previous store."));
             emit credentialVaultChanged();
             return false;
         }
@@ -1501,8 +1623,7 @@ bool AppController::removeAllSavedCredentials()
                     key, security::SensitiveByteArray(QByteArray(bytes.data(), static_cast<qsizetype>(bytes.size())))),
                 "remove-all restore");
         }
-        setCredentialOperationError(
-            QStringLiteral("Credentials were restored because host profiles could not be updated."));
+        setCredentialOperationError(tr("Credentials were restored because host profiles could not be updated."));
         return false;
     }
     m_profiles = std::move(updated);
@@ -1517,7 +1638,7 @@ bool AppController::clearCredentialStorage(const QString &target)
     const auto parsedTarget = parseCredentialStorage(target);
     if (!parsedTarget)
     {
-        setCredentialOperationError(QStringLiteral("Choose system, portable, or session credential storage."));
+        setCredentialOperationError(tr("Choose system, portable, or session credential storage."));
         return false;
     }
     if (*parsedTarget == m_credentialVaults->storage())
@@ -1718,7 +1839,7 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
                          setHostKeyPrompt(algorithm, fingerprint, true);
                          if (m_terminal != nullptr)
                          {
-                             m_terminal->setStatusText(QStringLiteral("SSH host key changed; connection blocked"));
+                             m_terminal->setStatusText(tr("SSH host key changed; connection blocked"));
                          }
                      });
 }
@@ -1891,7 +2012,7 @@ void AppController::showActiveTab()
     if (tab == nullptr)
     {
         m_terminal->setSnapshot({});
-        m_terminal->setStatusText(QStringLiteral("No terminal session"));
+        m_terminal->setStatusText(tr("No terminal session"));
         return;
     }
     m_terminal->setSnapshot(tab->snapshot);

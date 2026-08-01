@@ -9,16 +9,24 @@ Rectangle {
 
     objectName: "settingsPane"
     required property var controller
+    required property var fontCatalog
     property bool loadingDraft: false
     property string statusMessage: ""
     property bool statusIsError: false
     property string currentCategory: "appearance"
+    property string languageDraft: "system"
+    property string uiFontDraft: ""
+    property string terminalFontDraft: "Cascadia Mono"
     property real contentReveal: 1.0
     readonly property bool draftDark: themeBox.currentIndex === 1 || (themeBox.currentIndex === 0 && Theme.systemDark)
     readonly property bool adjustableBackdrop: backdropBox.currentIndex === 0 || backdropBox.currentIndex === 1
     readonly property bool customAccentSelected: accentBox.currentIndex === 2
     readonly property bool compactLayout: width < Theme.narrowWindowWidth
     readonly property int contentInset: compactLayout ? Theme.pageInsetCompact : Theme.pageInset
+    readonly property bool terminalLigatureAvailable: fontCatalog.supportsLigatures(terminalFontDraft)
+    readonly property bool uiFontHasCjk: fontCatalog.supportsCjk(uiFontDraft)
+    readonly property var uiFontOptions: systemFontOptions(fontCatalog.allFamilies)
+    readonly property var terminalFontOptions: visibleTerminalFonts(showAllFontsSwitch.checked, terminalFontDraft)
 
     signal appearancePreviewRequested(string theme, real opacity, string backdrop, string accent, string customAccent)
     signal appearancePreviewEnded
@@ -87,7 +95,7 @@ Rectangle {
             objectName: categoryControl.actionObjectName
             anchors.fill: parent
             anchors.margins: 2
-            accessibleName: categoryControl.title + " settings"
+            accessibleName: qsTr("%1 settings").arg(categoryControl.title)
             onActivated: categoryControl.activated()
         }
     }
@@ -122,6 +130,34 @@ Rectangle {
         return token === "portable" ? 1 : token === "session" ? 2 : 0;
     }
 
+    function languageIndex(token) {
+        return token === "en" ? 1 : token === "zh_CN" ? 2 : 0;
+    }
+
+    function languageToken(index) {
+        return index === 1 ? "en" : index === 2 ? "zh_CN" : "system";
+    }
+
+    function systemFontOptions(families) {
+        const result = [""];
+        for (let index = 0; index < families.length; ++index) {
+            result.push(families[index]);
+        }
+        return result;
+    }
+
+    function visibleTerminalFonts(showAll, selected) {
+        const source = showAll ? fontCatalog.allFamilies : fontCatalog.monospacedFamilies;
+        const result = [];
+        if (selected.length > 0 && source.indexOf(selected) < 0) {
+            result.push(selected);
+        }
+        for (let index = 0; index < source.length; ++index) {
+            result.push(source[index]);
+        }
+        return result;
+    }
+
     function credentialStorageToken() {
         return credentialStorageTokenForIndex(credentialStorageBox.currentIndex);
     }
@@ -130,13 +166,17 @@ Rectangle {
         return index === 1 ? "portable" : index === 2 ? "session" : "system";
     }
 
+    function credentialStorageLabel(token) {
+        return token === "portable" ? qsTr("Portable encrypted vault") : token === "session" ? qsTr("Session only") : qsTr("Windows Credential Manager");
+    }
+
     function showCredentialResult(success, successMessage) {
         statusIsError = !success;
-        statusMessage = success ? successMessage : (controller.credentialOperationError.length > 0 ? controller.credentialOperationError : "The credential operation failed.");
+        statusMessage = success ? successMessage : (controller.credentialOperationError.length > 0 ? controller.credentialOperationError : qsTr("The credential operation failed."));
     }
 
     function performCredentialMigration() {
-        showCredentialResult(controller.migrateCredentialStorage(credentialStorageToken(), removeCredentialSource.checked), "Credentials migrated and verified.");
+        showCredentialResult(controller.migrateCredentialStorage(credentialStorageToken(), removeCredentialSource.checked), qsTr("Credentials migrated and verified."));
     }
 
     function themeToken() {
@@ -183,7 +223,9 @@ Rectangle {
     }
 
     function focusCurrentCategory() {
-        if (currentCategory === "terminal") {
+        if (currentCategory === "application") {
+            applicationCategory.focusAction();
+        } else if (currentCategory === "terminal") {
             terminalCategory.focusAction();
         } else if (currentCategory === "security") {
             securityCategory.focusAction();
@@ -199,13 +241,17 @@ Rectangle {
         backdropBox.currentIndex = backdropIndex(controller.backdropPreference);
         accentBox.currentIndex = accentIndex(controller.accentPreference);
         customAccentField.text = controller.customAccent;
-        fontFamilyField.text = controller.terminalFontFamily;
+        uiFontDraft = controller.uiFontFamily;
+        terminalFontDraft = controller.terminalFontFamily;
         fontSizeBox.value = controller.terminalFontSize;
+        showAllFontsSwitch.checked = controller.showAllTerminalFonts;
+        ligatureSwitch.checked = controller.terminalLigatures;
         terminalOpacitySlider.value = controller.terminalBackgroundOpacity;
         cursorBox.currentIndex = cursorIndex(controller.cursorPreference);
         cursorBlinkSwitch.checked = controller.cursorBlink;
         copyOnSelectSwitch.checked = controller.copyOnSelect;
         multilinePasteSwitch.checked = controller.confirmMultilinePaste;
+        languageDraft = controller.languagePreference;
         credentialStorageBox.currentIndex = credentialStorageIndex(controller.effectiveCredentialStorage);
         credentialCleanupStorageBox.currentIndex = credentialStorageIndex(controller.effectiveCredentialStorage);
         loadingDraft = false;
@@ -215,12 +261,12 @@ Rectangle {
     function applyDraft() {
         if (customAccentSelected && !customAccentField.acceptableInput) {
             statusIsError = true;
-            statusMessage = "Custom accent must use the #RRGGBB format.";
+            statusMessage = qsTr("Custom accent must use the #RRGGBB format.");
             return;
         }
-        const saved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), accentToken(), customAccentField.text, fontFamilyField.text, fontSizeBox.value, terminalOpacitySlider.value, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, multilinePasteSwitch.checked);
+        const saved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), accentToken(), customAccentField.text, uiFontDraft, terminalFontDraft, fontSizeBox.value, showAllFontsSwitch.checked, ligatureSwitch.checked, terminalOpacitySlider.value, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, multilinePasteSwitch.checked, languageDraft);
         statusIsError = !saved;
-        statusMessage = saved ? "Settings saved and applied." : "These settings could not be saved. Check the font and numeric ranges.";
+        statusMessage = saved ? qsTr("Settings saved and applied.") : qsTr("These settings could not be saved. Check the font and numeric ranges.");
         if (!saved) {
             loadDraft();
         }
@@ -271,7 +317,7 @@ Rectangle {
             Text {
                 Layout.leftMargin: 4
                 Layout.bottomMargin: 8
-                text: "SETTINGS"
+                text: qsTr("SETTINGS")
                 color: Theme.textSubtle
                 font.family: Theme.uiFont
                 font.pixelSize: 10
@@ -280,10 +326,21 @@ Rectangle {
             }
 
             CategoryButton {
+                id: applicationCategory
+
+                Layout.fillWidth: true
+                title: qsTr("Application")
+                iconName: "settings"
+                actionObjectName: "settingsApplicationCategory"
+                selected: pane.currentCategory === "application"
+                onActivated: pane.selectCategory("application")
+            }
+
+            CategoryButton {
                 id: appearanceCategory
 
                 Layout.fillWidth: true
-                title: "Appearance"
+                title: qsTr("Appearance")
                 iconName: "appearance"
                 actionObjectName: "settingsAppearanceCategory"
                 selected: pane.currentCategory === "appearance"
@@ -291,25 +348,25 @@ Rectangle {
             }
 
             CategoryButton {
-                id: securityCategory
-
-                Layout.fillWidth: true
-                title: "Security"
-                iconName: "settings"
-                actionObjectName: "settingsSecurityCategory"
-                selected: pane.currentCategory === "security"
-                onActivated: pane.selectCategory("security")
-            }
-
-            CategoryButton {
                 id: terminalCategory
 
                 Layout.fillWidth: true
-                title: "Terminal"
+                title: qsTr("Terminal")
                 iconName: "terminal"
                 actionObjectName: "settingsTerminalCategory"
                 selected: pane.currentCategory === "terminal"
                 onActivated: pane.selectCategory("terminal")
+            }
+
+            CategoryButton {
+                id: securityCategory
+
+                Layout.fillWidth: true
+                title: qsTr("Security")
+                iconName: "settings"
+                actionObjectName: "settingsSecurityCategory"
+                selected: pane.currentCategory === "security"
+                onActivated: pane.selectCategory("security")
             }
 
             Item {
@@ -320,7 +377,7 @@ Rectangle {
                 Layout.fillWidth: true
                 Layout.leftMargin: 4
                 visible: !pane.compactLayout
-                text: "Stored locally"
+                text: qsTr("Stored locally")
                 color: Theme.textSubtle
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.textCompact
@@ -349,7 +406,7 @@ Rectangle {
             opacity: pane.contentReveal
 
             Text {
-                text: pane.currentCategory === "appearance" ? "Appearance" : pane.currentCategory === "terminal" ? "Terminal" : "Security"
+                text: pane.currentCategory === "application" ? qsTr("Application") : pane.currentCategory === "appearance" ? qsTr("Appearance") : pane.currentCategory === "terminal" ? qsTr("Terminal") : qsTr("Security")
                 color: Theme.text
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.textTitle
@@ -358,7 +415,7 @@ Rectangle {
 
             Text {
                 Layout.fillWidth: true
-                text: pane.currentCategory === "appearance" ? "Choose the application theme and Windows backdrop used across ztermy." : pane.currentCategory === "terminal" ? "Configure the global terminal font, background, cursor, selection, and paste behavior." : "Choose where SSH passwords and key passphrases are stored, unlock the portable vault, or migrate credentials safely."
+                text: pane.currentCategory === "application" ? qsTr("View ztermy version and application information.") : pane.currentCategory === "appearance" ? qsTr("Choose the language, interface font, theme, and Windows backdrop used across ztermy.") : pane.currentCategory === "terminal" ? qsTr("Configure the global terminal font, background, cursor, selection, and paste behavior.") : qsTr("Choose where SSH passwords and key passphrases are stored, unlock the portable vault, or migrate credentials safely.")
                 color: Theme.textMuted
                 wrapMode: Text.WordWrap
                 font.family: Theme.uiFont
@@ -367,8 +424,133 @@ Rectangle {
 
             SectionCard {
                 Layout.fillWidth: true
+                visible: pane.currentCategory === "application"
+                heading: qsTr("About ztermy")
+
+                GridLayout {
+                    Layout.fillWidth: true
+                    columns: pane.compactLayout ? 1 : 2
+                    columnSpacing: 18
+                    rowSpacing: 12
+
+                    Label {
+                        text: qsTr("Application")
+                        color: Theme.text
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("ztermy")
+                        color: Theme.textSoft
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textBody
+                    }
+
+                    Label {
+                        text: qsTr("Version")
+                        color: Theme.text
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: Qt.application.version
+                        color: Theme.textSoft
+                        font.family: Theme.terminalFont
+                        font.pixelSize: Theme.textBody
+                    }
+
+                    Label {
+                        text: qsTr("Platform")
+                        color: Theme.text
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("Windows 11 · native Qt 6 · C++23")
+                        color: Theme.textSoft
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textBody
+                    }
+
+                    Text {
+                        Layout.columnSpan: parent.columns
+                        Layout.fillWidth: true
+                        text: qsTr("A personal native SSH terminal. NetCatty and other terminals are product references; ztermy uses its own C++ and Qt implementation.")
+                        color: Theme.textMuted
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
+                    }
+                }
+            }
+
+            SectionCard {
+                Layout.fillWidth: true
                 visible: pane.currentCategory === "appearance"
-                heading: "Window appearance"
+                heading: qsTr("Language and interface")
+
+                GridLayout {
+                    objectName: "settingsApplicationGrid"
+                    Layout.fillWidth: true
+                    columns: pane.compactLayout ? 1 : 2
+                    columnSpacing: 18
+                    rowSpacing: 12
+
+                    Label {
+                        text: qsTr("Display language")
+                        color: Theme.text
+                    }
+                    AppComboBox {
+                        id: languageBox
+
+                        objectName: "settingsLanguage"
+                        Layout.fillWidth: true
+                        model: ["system", "en", "zh_CN"]
+                        currentIndex: pane.languageIndex(pane.languageDraft)
+                        accessibleName: qsTr("Application display language")
+                        displayTextModel: [qsTr("System"), qsTr("English"), qsTr("Simplified Chinese")]
+                        onActivated: index => pane.languageDraft = pane.languageToken(index)
+                    }
+
+                    Text {
+                        Layout.columnSpan: parent.columns
+                        Layout.fillWidth: true
+                        text: qsTr("System follows the Windows display language. Unsupported system languages use English.")
+                        color: Theme.textMuted
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
+                    }
+
+                    Label {
+                        text: qsTr("Interface font")
+                        color: Theme.text
+                    }
+                    FontPicker {
+                        objectName: "settingsUiFont"
+                        Layout.fillWidth: true
+                        families: pane.uiFontOptions
+                        family: pane.uiFontDraft
+                        systemFamily: pane.fontCatalog.systemUiFamily
+                        showFontPreview: false
+                        accessibleName: qsTr("Application interface font")
+                        searchObjectName: "settingsUiFontSearch"
+                        onFamilyActivated: family => pane.uiFontDraft = family
+                    }
+
+                    Text {
+                        Layout.columnSpan: parent.columns
+                        Layout.fillWidth: true
+                        text: pane.uiFontDraft.length === 0 ? qsTr("System default follows the Windows UI font and its script-aware fallback chain.") : pane.uiFontHasCjk ? qsTr("The selected font contains Chinese glyphs.") : qsTr("The selected font does not contain Chinese glyphs; Windows font fallback will render Chinese text.")
+                        color: pane.uiFontDraft.length > 0 && !pane.uiFontHasCjk ? Theme.textMuted : Theme.textSubtle
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
+                    }
+                }
+            }
+
+            SectionCard {
+                Layout.fillWidth: true
+                visible: pane.currentCategory === "appearance"
+                heading: qsTr("Window appearance")
 
                 GridLayout {
                     id: appearanceLayout
@@ -380,34 +562,36 @@ Rectangle {
                     rowSpacing: 12
 
                     Label {
-                        text: "Theme"
+                        text: qsTr("Theme")
                         color: Theme.text
                     }
                     AppComboBox {
                         id: themeBox
                         objectName: "settingsTheme"
                         Layout.fillWidth: true
-                        model: ["System", "Dark", "Light"]
-                        accessibleName: "Application theme"
+                        model: ["system", "dark", "light"]
+                        displayTextModel: [qsTr("System"), qsTr("Dark"), qsTr("Light")]
+                        accessibleName: qsTr("Application theme")
                         onCurrentIndexChanged: pane.previewDraft()
                     }
 
                     Label {
-                        text: "Accent color"
+                        text: qsTr("Accent color")
                         color: Theme.text
                     }
                     AppComboBox {
                         id: accentBox
                         objectName: "settingsAccent"
                         Layout.fillWidth: true
-                        model: ["ztermy", "Follow Windows", "Custom"]
-                        accessibleName: "Application accent color source"
+                        model: ["ztermy", "system", "custom"]
+                        displayTextModel: ["ztermy", qsTr("Follow Windows"), qsTr("Custom")]
+                        accessibleName: qsTr("Application accent color source")
                         onCurrentIndexChanged: pane.previewDraft()
                     }
 
                     Label {
                         visible: pane.customAccentSelected
-                        text: "Custom accent"
+                        text: qsTr("Custom accent")
                         color: Theme.text
                     }
                     AppTextField {
@@ -421,26 +605,27 @@ Rectangle {
                         validator: RegularExpressionValidator {
                             regularExpression: /^#[0-9A-Fa-f]{6}$/
                         }
-                        Accessible.name: "Custom application accent color"
+                        Accessible.name: qsTr("Custom application accent color")
                         onTextChanged: pane.previewDraft()
                     }
 
                     Label {
-                        text: "Windows backdrop"
+                        text: qsTr("Windows backdrop")
                         color: Theme.text
                     }
                     AppComboBox {
                         id: backdropBox
                         objectName: "settingsBackdrop"
                         Layout.fillWidth: true
-                        model: ["Acrylic", "Transparent", "Mica", "Mica Alt"]
-                        accessibleName: "Windows backdrop material"
+                        model: ["acrylic", "transparent", "mica", "micaAlt"]
+                        displayTextModel: [qsTr("Acrylic"), qsTr("Transparent"), "Mica", "Mica Alt"]
+                        accessibleName: qsTr("Windows backdrop material")
                         onCurrentIndexChanged: pane.previewDraft()
                     }
 
                     Label {
                         visible: pane.adjustableBackdrop
-                        text: "Window background opacity"
+                        text: qsTr("Window background opacity")
                         color: Theme.text
                     }
                     RowLayout {
@@ -454,7 +639,7 @@ Rectangle {
                             from: 0.0
                             to: 1.0
                             stepSize: 0.05
-                            accessibleName: "Window background opacity"
+                            accessibleName: qsTr("Window background opacity")
                             onValueChanged: pane.previewDraft()
                         }
 
@@ -495,7 +680,7 @@ Rectangle {
                                 }
                                 Text {
                                     Layout.alignment: Qt.AlignVCenter
-                                    text: themeBox.currentText + " · " + accentBox.currentText + " · " + backdropBox.currentText + (pane.adjustableBackdrop ? " · " + Math.round(opacitySlider.value * 100) + "%" : " · system controlled")
+                                    text: pane.adjustableBackdrop ? qsTr("%1 · %2 · %3 · %4%").arg(themeBox.effectiveDisplayText).arg(accentBox.effectiveDisplayText).arg(backdropBox.effectiveDisplayText).arg(Math.round(opacitySlider.value * 100)) : qsTr("%1 · %2 · %3 · system controlled").arg(themeBox.effectiveDisplayText).arg(accentBox.effectiveDisplayText).arg(backdropBox.effectiveDisplayText)
                                     color: pane.draftDark ? "#F8FAFC" : "#0F172A"
                                     font.family: Theme.uiFont
                                     font.pixelSize: Theme.textBody
@@ -509,7 +694,7 @@ Rectangle {
             SectionCard {
                 Layout.fillWidth: true
                 visible: pane.currentCategory === "terminal"
-                heading: "Terminal"
+                heading: qsTr("Terminal")
 
                 GridLayout {
                     id: terminalLayout
@@ -521,21 +706,49 @@ Rectangle {
                     rowSpacing: 12
 
                     Label {
-                        text: "Font family"
+                        text: qsTr("Font family")
                         color: Theme.text
                     }
-                    AppTextField {
-                        id: fontFamilyField
+                    FontPicker {
                         objectName: "settingsFontFamily"
                         Layout.fillWidth: true
-                        placeholderText: "Cascadia Mono"
-                        selectByMouse: true
-                        maximumLength: 128
-                        Accessible.name: "Terminal font family"
+                        families: pane.terminalFontOptions
+                        family: pane.terminalFontDraft
+                        systemFamily: pane.fontCatalog.systemUiFamily
+                        accessibleName: qsTr("Terminal font family")
+                        searchObjectName: "settingsTerminalFontSearch"
+                        onFamilyActivated: family => pane.terminalFontDraft = family
+                    }
+
+                    Item {
+                        visible: !pane.compactLayout
+                        implicitHeight: showAllFontsSwitch.implicitHeight
+                    }
+                    AppCheckBox {
+                        id: showAllFontsSwitch
+
+                        objectName: "settingsShowAllTerminalFonts"
+                        Layout.fillWidth: true
+                        text: qsTr("Show all installed fonts")
+                        accessibleName: text
+                        ToolTip.visible: hovered
+                        ToolTip.delay: 500
+                        ToolTip.text: qsTr("By default, only monospaced fonts suitable for a terminal grid are shown.")
+                    }
+
+                    Text {
+                        Layout.columnSpan: terminalLayout.columns
+                        Layout.fillWidth: true
+                        visible: !pane.fontCatalog.isMonospaced(pane.terminalFontDraft)
+                        text: qsTr("This is not a monospaced font. Terminal columns remain fixed, so some glyphs may overlap or leave extra spacing.")
+                        color: Theme.textMuted
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
                     }
 
                     Label {
-                        text: "Font size"
+                        text: qsTr("Font size")
                         color: Theme.text
                     }
                     AppSpinBox {
@@ -545,11 +758,35 @@ Rectangle {
                         from: 8
                         to: 32
                         editable: true
-                        accessibleName: "Terminal font size"
+                        accessibleName: qsTr("Terminal font size")
+                    }
+
+                    Item {
+                        visible: !pane.compactLayout
+                        implicitHeight: ligatureSwitch.implicitHeight
+                    }
+                    AppSwitch {
+                        id: ligatureSwitch
+
+                        objectName: "settingsTerminalLigatures"
+                        Layout.fillWidth: true
+                        enabled: pane.terminalLigatureAvailable
+                        text: qsTr("Programming ligatures")
+                        accessibleName: qsTr("Enable terminal programming ligatures")
+                    }
+
+                    Text {
+                        Layout.columnSpan: terminalLayout.columns
+                        Layout.fillWidth: true
+                        text: pane.terminalLigatureAvailable ? qsTr("The selected font exposes OpenType ligature features. Ligatures are shaped only across compatible single-width terminal cells.") : qsTr("The selected font does not expose supported OpenType ligature features.")
+                        color: Theme.textMuted
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
                     }
 
                     Label {
-                        text: "Terminal background opacity"
+                        text: qsTr("Terminal background opacity")
                         color: Theme.text
                     }
                     RowLayout {
@@ -562,7 +799,7 @@ Rectangle {
                             from: 0.0
                             to: 1.0
                             stepSize: 0.05
-                            accessibleName: "Terminal background opacity"
+                            accessibleName: qsTr("Terminal background opacity")
                         }
 
                         Text {
@@ -576,15 +813,16 @@ Rectangle {
                     }
 
                     Label {
-                        text: "Cursor"
+                        text: qsTr("Cursor")
                         color: Theme.text
                     }
                     AppComboBox {
                         id: cursorBox
                         objectName: "settingsCursor"
                         Layout.fillWidth: true
-                        model: ["Terminal controlled", "Block", "Bar", "Underline"]
-                        accessibleName: "Terminal cursor style"
+                        model: ["terminal", "block", "bar", "underline"]
+                        displayTextModel: [qsTr("Terminal controlled"), qsTr("Block"), qsTr("Bar"), qsTr("Underline")]
+                        accessibleName: qsTr("Terminal cursor style")
                     }
 
                     Item {
@@ -595,8 +833,8 @@ Rectangle {
                         id: cursorBlinkSwitch
                         objectName: "settingsCursorBlink"
                         Layout.fillWidth: true
-                        text: "Blink cursor"
-                        accessibleName: "Blink terminal cursor"
+                        text: qsTr("Blink cursor")
+                        accessibleName: qsTr("Blink terminal cursor")
                     }
 
                     Item {
@@ -607,8 +845,8 @@ Rectangle {
                         id: copyOnSelectSwitch
                         objectName: "settingsCopyOnSelect"
                         Layout.fillWidth: true
-                        text: "Copy selected terminal text automatically"
-                        accessibleName: "Copy terminal selection automatically"
+                        text: qsTr("Copy selected terminal text automatically")
+                        accessibleName: qsTr("Copy terminal selection automatically")
                     }
 
                     Item {
@@ -619,8 +857,8 @@ Rectangle {
                         id: multilinePasteSwitch
                         objectName: "settingsMultilinePaste"
                         Layout.fillWidth: true
-                        text: "Confirm before pasting multiple lines"
-                        accessibleName: "Confirm multiline terminal paste"
+                        text: qsTr("Confirm before pasting multiple lines")
+                        accessibleName: qsTr("Confirm multiline terminal paste")
                     }
                 }
             }
@@ -628,7 +866,7 @@ Rectangle {
             SectionCard {
                 Layout.fillWidth: true
                 visible: pane.currentCategory === "security"
-                heading: "Credential storage"
+                heading: qsTr("Credential storage")
 
                 ColumnLayout {
                     Layout.fillWidth: true
@@ -636,7 +874,7 @@ Rectangle {
 
                     Text {
                         Layout.fillWidth: true
-                        text: "Windows Credential Manager is the installed-mode default. Portable mode uses an AES-256-GCM encrypted vault protected by your master password. Session storage is erased when ztermy exits."
+                        text: qsTr("Windows Credential Manager is the installed-mode default. Portable mode uses an AES-256-GCM encrypted vault protected by your master password. Session storage is erased when ztermy exits.")
                         color: Theme.textMuted
                         wrapMode: Text.WordWrap
                         font.family: Theme.uiFont
@@ -650,7 +888,7 @@ Rectangle {
                         rowSpacing: 12
 
                         Label {
-                            text: "Move credentials to"
+                            text: qsTr("Move credentials to")
                             color: Theme.text
                         }
                         AppComboBox {
@@ -658,8 +896,9 @@ Rectangle {
 
                             objectName: "settingsCredentialStorage"
                             Layout.fillWidth: true
-                            model: ["Windows Credential Manager", "Portable encrypted vault", "Session only"]
-                            accessibleName: "Credential storage destination"
+                            model: ["system", "portable", "session"]
+                            displayTextModel: [qsTr("Windows Credential Manager"), qsTr("Portable encrypted vault"), qsTr("Session only")]
+                            accessibleName: qsTr("Credential storage destination")
                         }
 
                         Item {
@@ -672,7 +911,7 @@ Rectangle {
                             objectName: "settingsCredentialRemoveSource"
                             Layout.fillWidth: true
                             checked: true
-                            text: "Remove verified copies from the previous store"
+                            text: qsTr("Remove verified copies from the previous store")
                             accessibleName: text
                         }
                     }
@@ -682,7 +921,7 @@ Rectangle {
 
                         Text {
                             Layout.fillWidth: true
-                            text: "Active store: " + pane.controller.effectiveCredentialStorage
+                            text: qsTr("Active store: %1").arg(pane.credentialStorageLabel(pane.controller.effectiveCredentialStorage))
                             color: Theme.textSoft
                             font.family: Theme.uiFont
                             font.pixelSize: Theme.textLabel
@@ -690,8 +929,8 @@ Rectangle {
 
                         ActionButton {
                             objectName: "settingsCredentialMigrate"
-                            text: "Migrate"
-                            accessibleName: "Migrate credentials to selected storage"
+                            text: qsTr("Migrate")
+                            accessibleName: qsTr("Migrate credentials to selected storage")
                             variant: "primary"
                             enabled: pane.credentialStorageToken() !== pane.controller.effectiveCredentialStorage && (pane.credentialStorageToken() !== "portable" || (pane.controller.portableVaultInitialized && !pane.controller.portableVaultLocked))
                             onClicked: {
@@ -709,7 +948,7 @@ Rectangle {
             SectionCard {
                 Layout.fillWidth: true
                 visible: pane.currentCategory === "security"
-                heading: "Portable vault"
+                heading: qsTr("Portable vault")
 
                 ColumnLayout {
                     Layout.fillWidth: true
@@ -717,7 +956,7 @@ Rectangle {
 
                     Text {
                         Layout.fillWidth: true
-                        text: !pane.controller.portableVaultInitialized ? "Create a master password before migrating credentials into the portable vault." : pane.controller.portableVaultLocked ? "The portable vault is locked. Unlock it to connect with or modify saved credentials." : "The portable vault is unlocked for this ztermy session. The master password is never persisted."
+                        text: !pane.controller.portableVaultInitialized ? qsTr("Create a master password before migrating credentials into the portable vault.") : pane.controller.portableVaultLocked ? qsTr("The portable vault is locked. Unlock it to connect with or modify saved credentials.") : qsTr("The portable vault is unlocked for this ztermy session. The master password is never persisted.")
                         color: Theme.textMuted
                         wrapMode: Text.WordWrap
                         font.family: Theme.uiFont
@@ -729,7 +968,7 @@ Rectangle {
 
                         objectName: "settingsPortableVaultPassword"
                         Layout.fillWidth: true
-                        placeholderText: pane.controller.portableVaultInitialized && pane.controller.portableVaultLocked ? "Master password (minimum 8 characters)" : pane.controller.portableVaultInitialized ? "New master password (minimum 8 characters)" : "Create master password (minimum 8 characters)"
+                        placeholderText: pane.controller.portableVaultInitialized && pane.controller.portableVaultLocked ? qsTr("Master password (minimum 8 characters)") : pane.controller.portableVaultInitialized ? qsTr("New master password (minimum 8 characters)") : qsTr("Create master password (minimum 8 characters)")
                         echoMode: TextInput.Password
                         accessibleName: placeholderText
                         selectByMouse: true
@@ -741,7 +980,7 @@ Rectangle {
                         objectName: "settingsPortableVaultPasswordConfirm"
                         Layout.fillWidth: true
                         visible: !pane.controller.portableVaultInitialized || !pane.controller.portableVaultLocked
-                        placeholderText: "Confirm master password (minimum 8 characters)"
+                        placeholderText: qsTr("Confirm master password (minimum 8 characters)")
                         echoMode: TextInput.Password
                         accessibleName: placeholderText
                         selectByMouse: true
@@ -750,7 +989,7 @@ Rectangle {
                     Text {
                         Layout.fillWidth: true
                         visible: portablePasswordField.text.length > 0 && portablePasswordField.text.length < 8
-                        text: "The master password must contain at least 8 characters."
+                        text: qsTr("The master password must contain at least 8 characters.")
                         color: Theme.dangerText
                         wrapMode: Text.WordWrap
                         font.family: Theme.uiFont
@@ -762,13 +1001,13 @@ Rectangle {
 
                         ActionButton {
                             visible: pane.controller.portableVaultInitialized && !pane.controller.portableVaultLocked
-                            text: "Lock"
-                            accessibleName: "Lock portable credential vault"
+                            text: qsTr("Lock")
+                            accessibleName: qsTr("Lock portable credential vault")
                             onClicked: {
                                 pane.controller.lockPortableCredentialVault();
                                 portablePasswordField.text = "";
                                 portablePasswordConfirmField.text = "";
-                                pane.showCredentialResult(true, "Portable vault locked.");
+                                pane.showCredentialResult(true, qsTr("Portable vault locked."));
                             }
                         }
 
@@ -778,8 +1017,8 @@ Rectangle {
 
                         ActionButton {
                             objectName: "settingsPortableVaultAction"
-                            text: !pane.controller.portableVaultInitialized ? "Create vault" : pane.controller.portableVaultLocked ? "Unlock" : "Change password"
-                            accessibleName: text + " for portable credential vault"
+                            text: !pane.controller.portableVaultInitialized ? qsTr("Create vault") : pane.controller.portableVaultLocked ? qsTr("Unlock") : qsTr("Change password")
+                            accessibleName: qsTr("%1 for portable credential vault").arg(text)
                             variant: "primary"
                             enabled: portablePasswordField.text.length >= 8 && (pane.controller.portableVaultInitialized && pane.controller.portableVaultLocked || portablePasswordField.text === portablePasswordConfirmField.text)
                             onClicked: {
@@ -787,13 +1026,13 @@ Rectangle {
                                 let message = "";
                                 if (!pane.controller.portableVaultInitialized) {
                                     success = pane.controller.initializePortableCredentialVault(portablePasswordField.text);
-                                    message = "Portable vault created and unlocked.";
+                                    message = qsTr("Portable vault created and unlocked.");
                                 } else if (pane.controller.portableVaultLocked) {
                                     success = pane.controller.unlockPortableCredentialVault(portablePasswordField.text);
-                                    message = "Portable vault unlocked.";
+                                    message = qsTr("Portable vault unlocked.");
                                 } else {
                                     success = pane.controller.changePortableVaultMasterPassword(portablePasswordField.text);
-                                    message = "Portable vault password changed.";
+                                    message = qsTr("Portable vault password changed.");
                                 }
                                 pane.showCredentialResult(success, message);
                                 if (success) {
@@ -809,7 +1048,7 @@ Rectangle {
             SectionCard {
                 Layout.fillWidth: true
                 visible: pane.currentCategory === "security"
-                heading: "Credential cleanup"
+                heading: qsTr("Credential cleanup")
 
                 ColumnLayout {
                     Layout.fillWidth: true
@@ -817,7 +1056,7 @@ Rectangle {
 
                     Text {
                         Layout.fillWidth: true
-                        text: "Clear active credentials or remove copies deliberately retained in another store. Clearing the active store also detaches credentials from saved hosts."
+                        text: qsTr("Clear active credentials or remove copies deliberately retained in another store. Clearing the active store also detaches credentials from saved hosts.")
                         color: Theme.textMuted
                         wrapMode: Text.WordWrap
                         font.family: Theme.uiFont
@@ -831,7 +1070,7 @@ Rectangle {
                         rowSpacing: Theme.spacingControl
 
                         Label {
-                            text: "Credential store"
+                            text: qsTr("Credential store")
                             color: Theme.text
                         }
 
@@ -840,8 +1079,9 @@ Rectangle {
 
                             objectName: "settingsCredentialCleanupStorage"
                             Layout.fillWidth: true
-                            model: ["Windows Credential Manager", "Portable encrypted vault", "Session only"]
-                            accessibleName: "Credential store to clear"
+                            model: ["system", "portable", "session"]
+                            displayTextModel: [qsTr("Windows Credential Manager"), qsTr("Portable encrypted vault"), qsTr("Session only")]
+                            accessibleName: qsTr("Credential store to clear")
                         }
 
                         ActionButton {
@@ -849,8 +1089,8 @@ Rectangle {
 
                             objectName: "settingsRemoveAllCredentials"
                             Layout.fillWidth: pane.compactLayout
-                            text: "Clear store"
-                            accessibleName: "Clear selected credential store"
+                            text: qsTr("Clear store")
+                            accessibleName: qsTr("Clear selected credential store")
                             onClicked: removeAllCredentialsDialog.openFrom(removeAllCredentialsButton)
                         }
                     }
@@ -865,7 +1105,7 @@ Rectangle {
 
             GridLayout {
                 Layout.fillWidth: true
-                visible: pane.currentCategory !== "security"
+                visible: pane.currentCategory === "appearance" || pane.currentCategory === "terminal"
                 columns: pane.compactLayout ? 1 : 4
                 columnSpacing: Theme.spacingControl
                 rowSpacing: Theme.spacingControl
@@ -873,12 +1113,12 @@ Rectangle {
                 ActionButton {
                     objectName: "settingsReset"
                     Layout.fillWidth: pane.compactLayout
-                    text: "Reset defaults"
-                    accessibleName: "Reset all application settings"
+                    text: qsTr("Reset defaults")
+                    accessibleName: qsTr("Reset all application settings")
                     onClicked: {
                         const reset = pane.controller.resetApplicationSettings();
                         pane.statusIsError = !reset;
-                        pane.statusMessage = reset ? "Default settings restored." : "Default settings could not be restored.";
+                        pane.statusMessage = reset ? qsTr("Default settings restored.") : qsTr("Default settings could not be restored.");
                         pane.loadDraft();
                     }
                 }
@@ -891,12 +1131,12 @@ Rectangle {
                 ActionButton {
                     objectName: "settingsDiscard"
                     Layout.fillWidth: pane.compactLayout
-                    text: "Discard changes"
-                    accessibleName: "Discard unsaved setting changes"
+                    text: qsTr("Discard changes")
+                    accessibleName: qsTr("Discard unsaved setting changes")
                     onClicked: {
                         pane.loadDraft();
                         pane.statusIsError = false;
-                        pane.statusMessage = "Unsaved changes discarded.";
+                        pane.statusMessage = qsTr("Unsaved changes discarded.");
                     }
                 }
 
@@ -904,8 +1144,8 @@ Rectangle {
                     id: applyButton
                     objectName: "settingsApply"
                     Layout.fillWidth: pane.compactLayout
-                    text: "Apply"
-                    accessibleName: "Apply application settings"
+                    text: qsTr("Apply")
+                    accessibleName: qsTr("Apply application settings")
                     variant: "primary"
                     enabled: !pane.customAccentSelected || customAccentField.acceptableInput
                     onClicked: pane.applyDraft()
@@ -917,9 +1157,9 @@ Rectangle {
     ConfirmationDialog {
         id: credentialMigrationDialog
 
-        heading: pane.credentialStorageToken() === "session" ? "Move credentials to session-only storage?" : "Remove credentials from the previous store?"
-        description: pane.credentialStorageToken() === "session" ? "Credentials will be verified in memory and removed from the persistent store. They will be lost when ztermy exits." : "After every credential is copied and verified, ztermy will remove its copy from the previous store."
-        acceptText: "Migrate and remove"
+        heading: pane.credentialStorageToken() === "session" ? qsTr("Move credentials to session-only storage?") : qsTr("Remove credentials from the previous store?")
+        description: pane.credentialStorageToken() === "session" ? qsTr("Credentials will be verified in memory and removed from the persistent store. They will be lost when ztermy exits.") : qsTr("After every credential is copied and verified, ztermy will remove its copy from the previous store.")
+        acceptText: qsTr("Migrate and remove")
         destructive: pane.credentialStorageToken() === "session"
         onAccepted: pane.performCredentialMigration()
     }
@@ -930,12 +1170,12 @@ Rectangle {
         readonly property string selectedStorage: pane.credentialStorageTokenForIndex(credentialCleanupStorageBox.currentIndex)
         readonly property bool clearsActiveStorage: selectedStorage === pane.controller.effectiveCredentialStorage
 
-        heading: clearsActiveStorage ? "Clear the active credential store?" : "Clear retained credential copies?"
-        description: clearsActiveStorage ? "This permanently removes ztermy passwords and key passphrases from the active store. Host profiles remain, but will ask for credentials next time." : "This permanently removes all ztermy credential copies from the selected inactive store. Credentials and host references in the active store remain unchanged."
-        acceptText: "Clear store"
+        heading: clearsActiveStorage ? qsTr("Clear the active credential store?") : qsTr("Clear retained credential copies?")
+        description: clearsActiveStorage ? qsTr("This permanently removes ztermy passwords and key passphrases from the active store. Host profiles remain, but will ask for credentials next time.") : qsTr("This permanently removes all ztermy credential copies from the selected inactive store. Credentials and host references in the active store remain unchanged.")
+        acceptText: qsTr("Clear store")
         destructive: true
         onAccepted: {
-            pane.showCredentialResult(pane.controller.clearCredentialStorage(selectedStorage), clearsActiveStorage ? "Active credentials were removed and detached from saved hosts." : "Retained credential copies were removed from the selected store.");
+            pane.showCredentialResult(pane.controller.clearCredentialStorage(selectedStorage), clearsActiveStorage ? qsTr("Active credentials were removed and detached from saved hosts.") : qsTr("Retained credential copies were removed from the selected store."));
             focusRestoreItem = removeAllCredentialsButton;
         }
     }

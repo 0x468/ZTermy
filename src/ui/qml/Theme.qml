@@ -76,7 +76,9 @@ QtObject {
     readonly property color closeHover: "#C42B1C"
     readonly property color modalScrim: "#99000000"
 
-    readonly property string uiFont: "Segoe UI Variable"
+    // Main.qml binds this to FontCatalog's Windows-aware effective UI family.
+    // An empty fallback leaves Qt controls on the application font during startup.
+    property string uiFont: ""
     readonly property string terminalFont: "Cascadia Mono"
 
     readonly property int textTitle: 20

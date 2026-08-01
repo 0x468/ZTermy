@@ -1,6 +1,6 @@
 # ADR 0022: Qt localization pipeline
 
-Status: proposed for V1.3
+Status: accepted for V1.3
 
 ## Context
 
@@ -21,8 +21,9 @@ Qt's translation system:
   explicit stable context.
 - Dynamic values use `%1` placeholders and plural-aware translations rather
   than translated-fragment concatenation.
-- `QTranslator` loads compiled `.qm` catalogs for System, English, and
-  Simplified Chinese preferences. A language change calls
+- `QTranslator` loads the compiled Simplified Chinese `.qm` catalog when it is
+  the effective language; English uses the canonical source strings and System
+  resolves to one of those two languages. A language change calls
   `QQmlEngine::retranslate()` so normal UI text updates without restarting;
   native resources that cannot update safely may request a restart explicitly.
 - Qt Linguist `.ts` catalogs are versioned; generated `.qm` files are build
@@ -34,7 +35,9 @@ Qt's translation system:
 - Terminal output, hostnames, usernames, paths, saved profile data, protocol
   tokens, and diagnostic logs are not translated. Accessibility names,
   validation, dialogs, empty states, installer UI, and system notifications are
-  translated.
+  translated. Installer/bootstrapper UI owned by Windows Installer or another
+  packaging technology remains outside this application catalog and can be
+  localized with the future custom installer.
 
 The language preference is global rather than per profile. Locale fallback is
 requested locale -> base language -> canonical English; missing text must never

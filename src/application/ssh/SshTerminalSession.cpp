@@ -6,6 +6,7 @@
 #include "infrastructure/ssh/Libssh2Session.h"
 #include "infrastructure/ssh/WindowsTcpSocket.h"
 
+#include <QCoreApplication>
 #include <QLoggingCategory>
 #include <QMetaObject>
 #include <QThread>
@@ -99,31 +100,31 @@ namespace
     switch (failure)
     {
         case SshFailureKind::NameResolutionFailed:
-            return QStringLiteral("SSH host name resolution failed");
+            return QCoreApplication::translate("SshTerminalSession", "SSH host name resolution failed");
         case SshFailureKind::ConnectionRefused:
-            return QStringLiteral("SSH connection was refused");
+            return QCoreApplication::translate("SshTerminalSession", "SSH connection was refused");
         case SshFailureKind::TimedOut:
-            return QStringLiteral("SSH operation timed out");
+            return QCoreApplication::translate("SshTerminalSession", "SSH operation timed out");
         case SshFailureKind::TransportError:
-            return QStringLiteral("SSH transport failed");
+            return QCoreApplication::translate("SshTerminalSession", "SSH transport failed");
         case SshFailureKind::HostKeyChanged:
-            return QStringLiteral("SSH host key changed");
+            return QCoreApplication::translate("SshTerminalSession", "SSH host key changed");
         case SshFailureKind::HostKeyInvalid:
-            return QStringLiteral("SSH host key could not be verified");
+            return QCoreApplication::translate("SshTerminalSession", "SSH host key could not be verified");
         case SshFailureKind::AuthenticationRejected:
-            return QStringLiteral("SSH authentication was rejected");
+            return QCoreApplication::translate("SshTerminalSession", "SSH authentication was rejected");
         case SshFailureKind::AuthenticationUnavailable:
-            return QStringLiteral("SSH authentication method is unavailable");
+            return QCoreApplication::translate("SshTerminalSession", "SSH authentication method is unavailable");
         case SshFailureKind::ChannelOpenFailed:
-            return QStringLiteral("SSH terminal channel could not be opened");
+            return QCoreApplication::translate("SshTerminalSession", "SSH terminal channel could not be opened");
         case SshFailureKind::RemoteClosed:
-            return QStringLiteral("SSH remote host closed the connection");
+            return QCoreApplication::translate("SshTerminalSession", "SSH remote host closed the connection");
         case SshFailureKind::Cancelled:
-            return QStringLiteral("SSH connection cancelled");
+            return QCoreApplication::translate("SshTerminalSession", "SSH connection cancelled");
         case SshFailureKind::ProtocolError:
-            return QStringLiteral("SSH protocol error");
+            return QCoreApplication::translate("SshTerminalSession", "SSH protocol error");
     }
-    return QStringLiteral("SSH connection failed");
+    return QCoreApplication::translate("SshTerminalSession", "SSH connection failed");
 }
 
 void requireStateTransition(const std::expected<void, ztermy::ssh::SshStateError> &result, const char *operation)
@@ -216,7 +217,7 @@ std::error_code SshTerminalSession::start(SshConnectionRequest request, const te
         m_awaitingHostKey = false;
     }
     postPhase(SshConnectionPhase::Resolving);
-    postStatus(QStringLiteral("Resolving SSH host"));
+    postStatus(tr("Resolving SSH host"));
 
     m_worker = std::jthread([this, request = std::move(request), geometry](const std::stop_token &stopToken) mutable {
         try
@@ -225,7 +226,7 @@ std::error_code SshTerminalSession::start(SshConnectionRequest request, const te
         }
         catch (...)
         {
-            finishWorker(QStringLiteral("SSH worker failed unexpectedly"), SshConnectionPhase::Failed);
+            finishWorker(tr("SSH worker failed unexpectedly"), SshConnectionPhase::Failed);
         }
     });
     return {};
@@ -309,7 +310,7 @@ void SshTerminalSession::queueByteCommand(Command command, const std::size_t byt
     std::scoped_lock lock(m_commandMutex);
     if (byteCount > maximumQueuedInputBytes - std::min(m_queuedInputBytes, maximumQueuedInputBytes))
     {
-        postStatus(QStringLiteral("SSH input queue is full"));
+        postStatus(tr("SSH input queue is full"));
         return;
     }
     m_queuedInputBytes += byteCount;
@@ -453,7 +454,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     startState(state);
     advanceState(state, SshConnectionPhase::Connecting);
     postPhase(state.phase());
-    postStatus(QStringLiteral("Connecting to SSH host"));
+    postStatus(tr("Connecting to SSH host"));
 
     const QByteArray hostUtf8 = request.host.trimmed().toUtf8();
     const std::string host(hostUtf8.constData(), static_cast<std::size_t>(hostUtf8.size()));
@@ -474,7 +475,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
 
     advanceState(state, SshConnectionPhase::Handshaking);
     postPhase(state.phase());
-    postStatus(QStringLiteral("Negotiating SSH connection"));
+    postStatus(tr("Negotiating SSH connection"));
     auto handshake = (*session)->handshake(*socket, 10s, stopToken);
     if (!handshake)
     {
@@ -485,7 +486,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
 
     advanceState(state, SshConnectionPhase::VerifyingHostKey);
     postPhase(state.phase());
-    postStatus(QStringLiteral("Verifying SSH host key"));
+    postStatus(tr("Verifying SSH host key"));
     auto hostKey = (*session)->hostKey();
     const KnownHostsStore knownHostsStore(request.knownHostsPath);
     auto knownHosts = knownHostsStore.load();
@@ -516,7 +517,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     {
         advanceState(state, SshConnectionPhase::AwaitingHostKeyConfirmation);
         postPhase(state.phase());
-        postStatus(QStringLiteral("SSH host key confirmation required"));
+        postStatus(tr("SSH host key confirmation required"));
         {
             std::scoped_lock lock(m_hostKeyMutex);
             m_awaitingHostKey = true;
@@ -553,7 +554,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
         });
         if (decision == HostKeyDecision::AcceptAndRemember && !knownHostsStore.save(*knownHosts))
         {
-            finishFailure(SshFailureKind::HostKeyInvalid, QStringLiteral("SSH host key could not be saved"));
+            finishFailure(SshFailureKind::HostKeyInvalid, tr("SSH host key could not be saved"));
             return;
         }
         trust = (*session)->verifyHostKey(endpoint, *knownHosts);
@@ -566,7 +567,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
 
     advanceState(state, SshConnectionPhase::Authenticating);
     postPhase(state.phase());
-    postStatus(QStringLiteral("Authenticating SSH session"));
+    postStatus(tr("Authenticating SSH session"));
     const QByteArray usernameUtf8 = request.username.toUtf8();
     const QByteArray privateKeyPathUtf8 = request.privateKeyPath.toUtf8();
     const std::string username(usernameUtf8.constData(), static_cast<std::size_t>(usernameUtf8.size()));
@@ -594,7 +595,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
 
     advanceState(state, SshConnectionPhase::OpeningChannel);
     postPhase(state.phase());
-    postStatus(QStringLiteral("Opening SSH terminal"));
+    postStatus(tr("Opening SSH terminal"));
     auto open = (*session)->openTerminal(*socket, geometry.columns, geometry.rows, "xterm-256color", 10s, stopToken);
     if (!open)
     {
@@ -605,7 +606,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
 
     advanceState(state, SshConnectionPhase::Connected);
     postPhase(state.phase());
-    postStatus(QStringLiteral("SSH terminal connected"));
+    postStatus(tr("SSH terminal connected"));
     m_running.store(true);
     postRunning(true);
     publishSnapshot();
@@ -620,7 +621,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
             m_queuedInputBytes = 0;
             if (!m_commandWakeEvent.reset())
             {
-                finishFailure(SshFailureKind::ProtocolError, QStringLiteral("SSH command wake event failed"));
+                finishFailure(SshFailureKind::ProtocolError, tr("SSH command wake event failed"));
                 return;
             }
         }
@@ -634,7 +635,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                 m_engine->scrollToBottom();
                 if (selectionError)
                 {
-                    postStatus(QStringLiteral("SSH terminal selection clear failed: %1")
+                    postStatus(tr("SSH terminal selection clear failed: %1")
                                    .arg(QString::fromStdString(selectionError.message())));
                 }
                 publishSnapshot();
@@ -656,7 +657,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                 m_engine->scrollToBottom();
                 if (selectionError)
                 {
-                    postStatus(QStringLiteral("SSH terminal selection clear failed: %1")
+                    postStatus(tr("SSH terminal selection clear failed: %1")
                                    .arg(QString::fromStdString(selectionError.message())));
                 }
                 const auto bytes =
@@ -664,8 +665,8 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                 auto encoded = m_engine->encodePaste(bytes);
                 if (!encoded)
                 {
-                    postStatus(QStringLiteral("SSH terminal paste failed: %1")
-                                   .arg(QString::fromStdString(encoded.error().message())));
+                    postStatus(
+                        tr("SSH terminal paste failed: %1").arg(QString::fromStdString(encoded.error().message())));
                     continue;
                 }
                 publishSnapshot();
@@ -692,8 +693,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
             {
                 if (const std::error_code error = m_engine->setSelection(selection->selection))
                 {
-                    postStatus(QStringLiteral("SSH terminal selection failed: %1")
-                                   .arg(QString::fromStdString(error.message())));
+                    postStatus(tr("SSH terminal selection failed: %1").arg(QString::fromStdString(error.message())));
                     continue;
                 }
                 publishSnapshot();
@@ -705,8 +705,8 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                 auto selectedText = m_engine->selectedText();
                 if (!selectedText)
                 {
-                    postStatus(QStringLiteral("SSH terminal copy failed: %1")
-                                   .arg(QString::fromStdString(selectedText.error().message())));
+                    postStatus(
+                        tr("SSH terminal copy failed: %1").arg(QString::fromStdString(selectedText.error().message())));
                 }
                 else if (*selectedText)
                 {
@@ -724,8 +724,8 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                     search->direction, search->caseSensitive);
                 if (!result)
                 {
-                    postStatus(QStringLiteral("SSH terminal search failed: %1")
-                                   .arg(QString::fromStdString(result.error().message())));
+                    postStatus(
+                        tr("SSH terminal search failed: %1").arg(QString::fromStdString(result.error().message())));
                     continue;
                 }
                 const QString query = QString::fromUtf8(search->query);
@@ -739,8 +739,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
             {
                 if (const std::error_code error = m_engine->clearSearch())
                 {
-                    postStatus(QStringLiteral("SSH terminal search clear failed: %1")
-                                   .arg(QString::fromStdString(error.message())));
+                    postStatus(tr("SSH terminal search clear failed: %1").arg(QString::fromStdString(error.message())));
                     continue;
                 }
                 postSearchResult({}, 0, 0, false);
@@ -758,7 +757,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
             }
             if (const std::error_code error = m_engine->resize(requested))
             {
-                finishFailure(SshFailureKind::ProtocolError, QStringLiteral("SSH terminal state resize failed"));
+                finishFailure(SshFailureKind::ProtocolError, tr("SSH terminal state resize failed"));
                 return;
             }
             publishSnapshot();
@@ -792,7 +791,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
         const auto bytes = std::as_bytes(std::span(readBuffer).first(*read));
         if (const std::error_code error = m_engine->feed(bytes))
         {
-            finishFailure(SshFailureKind::ProtocolError, QStringLiteral("SSH terminal parser failed"));
+            finishFailure(SshFailureKind::ProtocolError, tr("SSH terminal parser failed"));
             return;
         }
         publishSnapshot();
@@ -805,11 +804,11 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
         const auto close = (*session)->closeTerminal(*socket, 2s);
         if (!close)
         {
-            postStatus(QStringLiteral("SSH terminal closed without a complete channel shutdown"));
+            postStatus(tr("SSH terminal closed without a complete channel shutdown"));
         }
     }
     completeClose(state);
-    finishWorker(QStringLiteral("SSH terminal disconnected"), state.phase());
+    finishWorker(tr("SSH terminal disconnected"), state.phase());
 }
 
 void SshTerminalSession::publishSnapshot()
@@ -817,7 +816,7 @@ void SshTerminalSession::publishSnapshot()
     auto result = m_engine->snapshot();
     if (!result)
     {
-        postStatus(QStringLiteral("SSH terminal snapshot failed"));
+        postStatus(tr("SSH terminal snapshot failed"));
         return;
     }
 

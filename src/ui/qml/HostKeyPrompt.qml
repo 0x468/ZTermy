@@ -57,7 +57,7 @@ Item {
         color: overlay.panelColor
         border.color: overlay.controller.hostKeyChangedWarning ? Theme.danger : overlay.borderColor
         Accessible.role: Accessible.Dialog
-        Accessible.name: overlay.controller.hostKeyChangedWarning ? "Host identity changed" : "Verify host identity"
+        Accessible.name: overlay.controller.hostKeyChangedWarning ? qsTr("Host identity changed") : qsTr("Verify host identity")
 
         transform: Translate {
             y: overlay.controller.hostKeyPromptVisible ? 0 : Theme.motionDistanceSmall
@@ -78,7 +78,7 @@ Item {
 
             Text {
                 Layout.fillWidth: true
-                text: overlay.controller.hostKeyChangedWarning ? "Host identity changed" : "Verify host identity"
+                text: overlay.controller.hostKeyChangedWarning ? qsTr("Host identity changed") : qsTr("Verify host identity")
                 color: overlay.textColor
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.textTitle
@@ -87,7 +87,7 @@ Item {
 
             Text {
                 Layout.fillWidth: true
-                text: overlay.controller.hostKeyChangedWarning ? "The saved host key does not match. The connection was blocked. Verify the server outside ztermy before changing trust." : "This host is not trusted yet. Compare the fingerprint with a value obtained from the server administrator."
+                text: overlay.controller.hostKeyChangedWarning ? qsTr("The saved host key does not match. The connection was blocked. Verify the server outside ztermy before changing trust.") : qsTr("This host is not trusted yet. Compare the fingerprint with a value obtained from the server administrator.")
                 color: overlay.mutedColor
                 wrapMode: Text.WordWrap
                 font.family: Theme.uiFont
@@ -123,7 +123,7 @@ Item {
                         wrapMode: TextEdit.WrapAnywhere
                         font.family: Theme.terminalFont
                         font.pixelSize: 12
-                        Accessible.name: "Observed SSH host fingerprint"
+                        Accessible.name: qsTr("Observed SSH host fingerprint")
                     }
                 }
             }
@@ -140,7 +140,7 @@ Item {
                     id: rejectButton
 
                     objectName: "hostKeyReject"
-                    text: overlay.controller.hostKeyChangedWarning ? "Close" : "Reject"
+                    text: overlay.controller.hostKeyChangedWarning ? qsTr("Close") : qsTr("Reject")
                     accessibleName: text
                     KeyNavigation.left: rememberButton.visible ? rememberButton : rejectButton
                     KeyNavigation.right: trustOnceButton.visible ? trustOnceButton : rejectButton
@@ -152,8 +152,8 @@ Item {
 
                     objectName: "hostKeyTrustOnce"
                     visible: !overlay.controller.hostKeyChangedWarning
-                    text: "Trust once"
-                    accessibleName: "Trust this host once"
+                    text: qsTr("Trust once")
+                    accessibleName: qsTr("Trust this host once")
                     KeyNavigation.left: rejectButton
                     KeyNavigation.right: rememberButton
                     onClicked: overlay.controller.acceptHostKey(false)
@@ -164,8 +164,8 @@ Item {
 
                     objectName: "hostKeyRemember"
                     visible: !overlay.controller.hostKeyChangedWarning
-                    text: "Trust and remember"
-                    accessibleName: "Trust and remember this host"
+                    text: qsTr("Trust and remember")
+                    accessibleName: qsTr("Trust and remember this host")
                     variant: "primary"
                     KeyNavigation.left: trustOnceButton
                     KeyNavigation.right: rejectButton

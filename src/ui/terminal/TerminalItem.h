@@ -27,6 +27,7 @@ class TerminalItem : public QQuickItem
     Q_PROPERTY(QString statusText READ statusText NOTIFY statusTextChanged)
     Q_PROPERTY(QString fontFamily READ fontFamily WRITE setFontFamily NOTIFY fontChanged)
     Q_PROPERTY(int fontPixelSize READ fontPixelSize WRITE setFontPixelSize NOTIFY fontChanged)
+    Q_PROPERTY(bool ligaturesEnabled READ ligaturesEnabled WRITE setLigaturesEnabled NOTIFY fontChanged)
     Q_PROPERTY(
         qreal backgroundOpacity READ backgroundOpacity WRITE setBackgroundOpacity NOTIFY backgroundOpacityChanged)
     Q_PROPERTY(QString cursorPreference READ cursorPreference WRITE setCursorPreference NOTIFY cursorAppearanceChanged)
@@ -44,6 +45,7 @@ public:
     [[nodiscard]] QString statusText() const;
     [[nodiscard]] QString fontFamily() const;
     [[nodiscard]] int fontPixelSize() const noexcept;
+    [[nodiscard]] bool ligaturesEnabled() const noexcept;
     [[nodiscard]] qreal backgroundOpacity() const noexcept;
     [[nodiscard]] QString cursorPreference() const;
     [[nodiscard]] bool cursorBlink() const noexcept;
@@ -60,6 +62,7 @@ public slots:
     void requestCurrentSize();
     void setFontFamily(const QString &family);
     void setFontPixelSize(int pixelSize);
+    void setLigaturesEnabled(bool enabled);
     void setBackgroundOpacity(qreal opacity);
     void setCursorPreference(const QString &preference);
     void setCursorBlink(bool enabled);
@@ -111,7 +114,7 @@ private:
     ztermy::terminal::TerminalSnapshotPtr m_snapshot;
     QFont m_font;
     QTimer m_cursorBlinkTimer;
-    QString m_statusText = QStringLiteral("Starting local terminal...");
+    QString m_statusText;
     QString m_cursorPreference = QStringLiteral("terminal");
     QByteArray m_pendingMultilinePaste;
     std::uint64_t m_revision = 0;
@@ -126,6 +129,7 @@ private:
     bool m_selectionMoved = false;
     bool m_cursorBlink = true;
     bool m_cursorBlinkPhase = true;
+    bool m_ligaturesEnabled = true;
     bool m_copyOnSelect = false;
     bool m_confirmMultilinePaste = true;
     int m_wheelRemainder = 0;
