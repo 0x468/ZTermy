@@ -1,6 +1,6 @@
 # ztermy V1.1 scope
 
-Status: implementation complete; owner acceptance pending
+Status: accepted on 2026-08-01
 
 ## Goal
 

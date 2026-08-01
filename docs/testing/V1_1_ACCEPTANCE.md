@@ -2,7 +2,7 @@
 
 Candidate source commit: `c9adc55`
 
-Status: automated gates passed; owner runtime acceptance pending
+Status: accepted by the owner on 2026-08-01
 
 ## Implemented scope
 
@@ -40,6 +40,14 @@ was unavailable and returned WiX error 217. The MSI itself was generated.
 The V1 owner acceptance already covered install, launch, uninstall, and a
 Windows Sandbox installation; repeat that lifecycle only if the installer
 payload is changed after this candidate.
+
+## Owner acceptance evidence
+
+On 2026-08-01, the owner completed the runtime checklist below and confirmed
+that every item behaved as expected. This covers work-tab navigation and
+overflow, Hosts and Quick Connect flows, recent connections, all appearance
+and accent sources, keyboard and reduced-motion behavior, terminal and native
+window regression checks, and the portable candidate.
 
 ## Owner runtime acceptance
 

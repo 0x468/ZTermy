@@ -1,6 +1,6 @@
 # V1.1 NetCatty UI/UX audit
 
-Status: implementation complete; owner acceptance pending
+Status: implemented and accepted on 2026-08-01
 
 ## Evidence and policy
 
