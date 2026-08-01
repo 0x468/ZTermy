@@ -1,7 +1,9 @@
 #pragma once
 
+#include "application/security/CredentialVaultCoordinator.h"
 #include "application/ssh/SshTerminalSession.h"
 #include "application/terminal/LocalTerminalSession.h"
+#include "core/config/ApplicationPaths.h"
 #include "core/config/ApplicationSettings.h"
 #include "infrastructure/ssh/SshProfileStore.h"
 
@@ -53,6 +55,11 @@ class AppController final : public QObject
     Q_PROPERTY(bool cursorBlink READ cursorBlink NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool copyOnSelect READ copyOnSelect NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool confirmMultilinePaste READ confirmMultilinePaste NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(QString credentialStoragePreference READ credentialStoragePreference NOTIFY credentialVaultChanged)
+    Q_PROPERTY(QString effectiveCredentialStorage READ effectiveCredentialStorage NOTIFY credentialVaultChanged)
+    Q_PROPERTY(bool portableVaultInitialized READ portableVaultInitialized NOTIFY credentialVaultChanged)
+    Q_PROPERTY(bool portableVaultLocked READ portableVaultLocked NOTIFY credentialVaultChanged)
+    Q_PROPERTY(QString credentialOperationError READ credentialOperationError NOTIFY credentialVaultChanged)
 
 public:
     using LocalTerminalSessionFactory = std::function<std::unique_ptr<terminal::LocalTerminalSessionBackend>()>;
@@ -65,6 +72,11 @@ public:
                   QObject *parent = nullptr);
     AppController(QString profileStorePath, QString knownHostsPath, QString settingsPath,
                   LocalTerminalSessionFactory localSessionFactory, QObject *parent = nullptr);
+    AppController(QString profileStorePath, QString knownHostsPath, QString settingsPath, QString credentialsPath,
+                  config::StorageMode storageMode, QObject *parent = nullptr);
+    AppController(QString profileStorePath, QString knownHostsPath, QString settingsPath, QString credentialsPath,
+                  config::StorageMode storageMode, LocalTerminalSessionFactory localSessionFactory,
+                  QObject *parent = nullptr);
     ~AppController() override;
 
     AppController(const AppController &) = delete;
@@ -99,6 +111,11 @@ public:
     [[nodiscard]] bool cursorBlink() const noexcept;
     [[nodiscard]] bool copyOnSelect() const noexcept;
     [[nodiscard]] bool confirmMultilinePaste() const noexcept;
+    [[nodiscard]] QString credentialStoragePreference() const;
+    [[nodiscard]] QString effectiveCredentialStorage() const;
+    [[nodiscard]] bool portableVaultInitialized() const noexcept;
+    [[nodiscard]] bool portableVaultLocked() const noexcept;
+    [[nodiscard]] QString credentialOperationError() const;
 
     Q_INVOKABLE QString startLocalTerminal();
     Q_INVOKABLE bool activateTerminalTab(const QString &id);
@@ -112,8 +129,20 @@ public:
                                      const QString &username, const QString &authentication,
                                      const QString &privateKeyPath, bool privateKeyPassphraseRequired,
                                      const QString &group);
+    Q_INVOKABLE bool saveHostProfileWithCredential(const QString &id, const QString &name, const QString &host,
+                                                   int port, const QString &username, const QString &authentication,
+                                                   const QString &privateKeyPath, bool privateKeyPassphraseRequired,
+                                                   const QString &group, const QString &secret,
+                                                   bool rememberCredential);
+    Q_INVOKABLE bool saveAndConnectHostProfile(const QString &id, const QString &name, const QString &host, int port,
+                                               const QString &username, const QString &authentication,
+                                               const QString &privateKeyPath, bool privateKeyPassphraseRequired,
+                                               const QString &group, const QString &secret, bool rememberCredential);
     Q_INVOKABLE bool duplicateHostProfile(const QString &id);
     Q_INVOKABLE bool deleteHostProfile(const QString &id);
+    Q_INVOKABLE bool forgetHostCredential(const QString &id);
+    Q_INVOKABLE bool saveHostCredential(const QString &id, const QString &secret);
+    [[nodiscard]] Q_INVOKABLE QString readHostCredential(const QString &id);
     Q_INVOKABLE bool connectHostProfile(const QString &id, const QString &secret);
     [[nodiscard]] Q_INVOKABLE QVariantMap parseQuickConnectTarget(const QString &target) const;
     Q_INVOKABLE bool connectQuick(const QString &target, const QString &authentication, const QString &privateKeyPath,
@@ -125,6 +154,13 @@ public:
                                              const QString &cursor, bool cursorShouldBlink, bool shouldCopyOnSelect,
                                              bool shouldConfirmMultilinePaste);
     Q_INVOKABLE bool resetApplicationSettings();
+    Q_INVOKABLE bool initializePortableCredentialVault(const QString &masterPassword);
+    Q_INVOKABLE bool unlockPortableCredentialVault(const QString &masterPassword);
+    Q_INVOKABLE bool changePortableVaultMasterPassword(const QString &masterPassword);
+    Q_INVOKABLE void lockPortableCredentialVault();
+    Q_INVOKABLE bool migrateCredentialStorage(const QString &target, bool removeSource);
+    Q_INVOKABLE bool removeAllSavedCredentials();
+    Q_INVOKABLE bool clearCredentialStorage(const QString &target);
     Q_INVOKABLE void acceptHostKey(bool remember);
     Q_INVOKABLE void rejectHostKey();
 
@@ -136,6 +172,7 @@ signals:
     void activeTerminalTabChanged();
     void terminalSearchChanged();
     void applicationSettingsChanged();
+    void credentialVaultChanged();
 
 private:
     enum class TerminalTabKind : std::uint8_t
@@ -179,6 +216,12 @@ private:
     void loadHostProfiles();
     void loadApplicationSettings();
     [[nodiscard]] bool persistApplicationSettings(const config::ApplicationSettings &settings);
+    [[nodiscard]] bool saveHostProfileInternal(const QString &id, const QString &name, const QString &host, int port,
+                                               const QString &username, const QString &authentication,
+                                               const QString &privateKeyPath, bool privateKeyPassphraseRequired,
+                                               const QString &group, const QString &secret, bool rememberCredential,
+                                               bool manageCredential);
+    void setCredentialOperationError(QString message);
     [[nodiscard]] bool startSshConnection(ssh::SshConnectionRequest request, QString sourceProfileId = {});
     void recordRecentConnection(TerminalTab &tab);
     [[nodiscard]] TerminalTab *activeTab();
@@ -194,6 +237,9 @@ private:
     ssh::SshProfileStore m_profileStore;
     config::ApplicationSettingsStore m_settingsStore;
     config::ApplicationSettings m_settings;
+    std::unique_ptr<security::CredentialVaultCoordinator> m_credentialVaults;
+    security::CredentialStorage m_defaultCredentialStorage = security::CredentialStorage::Session;
+    QString m_credentialOperationError;
     QString m_knownHostsPath;
     std::vector<ssh::SshProfile> m_profiles;
     std::vector<std::unique_ptr<TerminalTab>> m_tabs;

@@ -1,6 +1,6 @@
 # ADR 0006: Store SSH profiles without credentials
 
-- Status: Accepted
+- Status: Superseded in part by ADR 0021
 - Date: 2026-07-29
 
 ## Context

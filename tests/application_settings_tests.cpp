@@ -60,6 +60,7 @@ void ApplicationSettingsTests::savesAndLoadsEveryPreference()
         .cursorBlink = false,
         .copyOnSelect = true,
         .confirmMultilinePaste = false,
+        .credentialStorage = ztermy::config::CredentialStoragePreference::portable,
     };
     const ztermy::config::ApplicationSettingsStore store(directory.filePath(QStringLiteral("settings.json")));
 
@@ -99,7 +100,7 @@ void ApplicationSettingsTests::migratesLegacyWindowOpacityAndNoneBackdrop()
     QFile saved(path);
     QVERIFY(saved.open(QIODevice::ReadOnly));
     const QByteArray persisted = saved.readAll();
-    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 4")));
+    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 5")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdropOpacity\": 0.75")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdrop\": \"transparent\"")));
     QVERIFY(!persisted.contains(QByteArrayLiteral("windowOpacity")));
@@ -157,6 +158,7 @@ void ApplicationSettingsTests::migratesTerminalAppearanceSchemaWithDefaultAccent
     QCOMPARE(loaded->accent, ztermy::config::AccentPreference::ztermy);
     QCOMPARE(loaded->customAccent, QStringLiteral("#22C55E"));
     QCOMPARE(loaded->terminalBackgroundOpacity, 0.4);
+    QCOMPARE(loaded->credentialStorage, ztermy::config::CredentialStoragePreference::automatic);
 }
 
 void ApplicationSettingsTests::rejectsMalformedUnsupportedAndIncompleteDocuments()
@@ -171,7 +173,7 @@ void ApplicationSettingsTests::rejectsMalformedUnsupportedAndIncompleteDocuments
     QVERIFY(!malformed);
     QCOMPARE(malformed.error(), ztermy::config::ApplicationSettingsStoreError::invalidFormat);
 
-    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":5})")));
+    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":6})")));
     const auto unsupported = store.load();
     QVERIFY(!unsupported);
     QCOMPARE(unsupported.error(), ztermy::config::ApplicationSettingsStoreError::unsupportedVersion);

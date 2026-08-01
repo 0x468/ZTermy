@@ -24,6 +24,7 @@ struct ApplicationPaths final
     QString profilesFile;
     QString knownHostsFile;
     QString settingsFile;
+    QString credentialsFile;
     QString logsDirectory;
     QString crashDirectory;
 };

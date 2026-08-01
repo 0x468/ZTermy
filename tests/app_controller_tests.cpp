@@ -1,9 +1,12 @@
 #include "application/AppController.h"
+#include "infrastructure/security/PortableCredentialVault.h"
 #include "infrastructure/ssh/SshProfileStore.h"
+#include "platform/windows/WindowsCredentialVault.h"
 
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QUuid>
 #include <QVariantMap>
 
 #include <array>
@@ -58,6 +61,25 @@ private:
     bool m_running = false;
 };
 
+class WindowsCredentialCleanupGuard final
+{
+public:
+    explicit WindowsCredentialCleanupGuard(ztermy::security::CredentialKey key) : m_key(std::move(key)) {}
+
+    ~WindowsCredentialCleanupGuard()
+    {
+        ztermy::security::WindowsCredentialVault vault;
+        const auto removed = vault.remove(m_key);
+        (void)removed;
+    }
+
+    WindowsCredentialCleanupGuard(const WindowsCredentialCleanupGuard &) = delete;
+    WindowsCredentialCleanupGuard &operator=(const WindowsCredentialCleanupGuard &) = delete;
+
+private:
+    ztermy::security::CredentialKey m_key;
+};
+
 } // namespace
 
 class AppControllerTests final : public QObject
@@ -67,6 +89,11 @@ class AppControllerTests final : public QObject
 private slots:
     void savesUpdatesReloadsAndDeletesProfiles();
     void rejectsInvalidProfiles();
+    void managesSavedCredentialsAndPortableVault();
+    void sessionCredentialDoesNotAppearStoredAfterRestart();
+    void installedControllerPersistsCredentialAcrossRestart();
+    void portableControllerPersistsCredentialAcrossRestart();
+    void saveAndConnectPersistsBeforeConnectionOutcome();
     void rejectsIncompleteConnections();
     void persistsApplicationSettings();
     void managesMultipleLocalTerminalTabs();
@@ -147,8 +174,10 @@ void AppControllerTests::rejectsInvalidProfiles()
     ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")));
     QSignalSpy changes(&controller, &ztermy::AppController::hostProfilesChanged);
 
-    QVERIFY(!controller.saveHostProfile({}, {}, QStringLiteral("host"), 22, QStringLiteral("user"),
-                                        QStringLiteral("private-key"), QStringLiteral("key"), false, {}));
+    QVERIFY(controller.saveHostProfile({}, {}, QStringLiteral("host"), 22, QStringLiteral("user"),
+                                       QStringLiteral("private-key"), QStringLiteral("key"), false, {}));
+    QCOMPARE(controller.hostProfiles().front().toMap().value(QStringLiteral("name")).toString(),
+             QStringLiteral("host"));
     QVERIFY(!controller.saveHostProfile({}, QStringLiteral("Name"), {}, 22, QStringLiteral("user"),
                                         QStringLiteral("private-key"), QStringLiteral("key"), false, {}));
     QVERIFY(!controller.saveHostProfile({}, QStringLiteral("Name"), QStringLiteral("host"), 0, QStringLiteral("user"),
@@ -158,8 +187,198 @@ void AppControllerTests::rejectsInvalidProfiles()
     QVERIFY(!controller.saveHostProfile({}, QStringLiteral("Name"), QStringLiteral("host"), 22, QStringLiteral("user"),
                                         QStringLiteral("agent"), {}, false, {}));
     QVERIFY(!controller.duplicateHostProfile(QStringLiteral("missing")));
-    QCOMPARE(changes.count(), 0);
-    QVERIFY(controller.hostProfiles().isEmpty());
+    QCOMPARE(changes.count(), 1);
+    QCOMPARE(controller.hostProfiles().size(), 1);
+}
+
+void AppControllerTests::managesSavedCredentialsAndPortableVault()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")));
+    const QString id = QStringLiteral("credential-profile");
+
+    QVERIFY(controller.saveHostProfileWithCredential(id, {}, QStringLiteral("server.example.test"), 22,
+                                                     QStringLiteral("developer"), QStringLiteral("password"), {}, false,
+                                                     QStringLiteral("Lab"), QStringLiteral("saved-password"), true));
+    QCOMPARE(controller.hostProfiles().front().toMap().value(QStringLiteral("credentialStored")).toBool(), true);
+    QCOMPARE(controller.readHostCredential(id), QStringLiteral("saved-password"));
+    QVERIFY(controller.credentialOperationError().isEmpty());
+
+    QVERIFY(controller.duplicateHostProfile(id));
+    QCOMPARE(controller.hostProfiles().at(1).toMap().value(QStringLiteral("credentialStored")).toBool(), false);
+    QVERIFY(controller.forgetHostCredential(id));
+    QCOMPARE(controller.hostProfiles().front().toMap().value(QStringLiteral("credentialStored")).toBool(), false);
+
+    QVERIFY(controller.saveHostProfileWithCredential(id, {}, QStringLiteral("server.example.test"), 22,
+                                                     QStringLiteral("developer"), QStringLiteral("password"), {}, false,
+                                                     QStringLiteral("Lab"), QStringLiteral("replacement"), true));
+    QVERIFY(controller.initializePortableCredentialVault(QStringLiteral("correct horse battery staple")));
+    QVERIFY(controller.migrateCredentialStorage(QStringLiteral("portable"), true));
+    QCOMPARE(controller.effectiveCredentialStorage(), QStringLiteral("portable"));
+    controller.lockPortableCredentialVault();
+    QVERIFY(controller.portableVaultLocked());
+    QVERIFY(controller.readHostCredential(id).isEmpty());
+    QVERIFY(controller.credentialOperationError().contains(QStringLiteral("Unlock"), Qt::CaseInsensitive));
+    QVERIFY(!controller.connectHostProfile(id, {}));
+    QVERIFY(!controller.unlockPortableCredentialVault(QStringLiteral("wrong password")));
+    QVERIFY(controller.unlockPortableCredentialVault(QStringLiteral("correct horse battery staple")));
+    QCOMPARE(controller.readHostCredential(id), QStringLiteral("replacement"));
+    QVERIFY(controller.deleteHostProfile(id));
+}
+
+void AppControllerTests::sessionCredentialDoesNotAppearStoredAfterRestart()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString profilesPath = directory.filePath(QStringLiteral("profiles.json"));
+    const QString id = QStringLiteral("session-credential-profile");
+
+    {
+        ztermy::AppController controller(profilesPath);
+        QVERIFY(controller.saveHostProfileWithCredential(
+            id, {}, QStringLiteral("server.example.test"), 22, QStringLiteral("developer"), QStringLiteral("password"),
+            {}, false, QStringLiteral("Lab"), QStringLiteral("session-password"), true));
+        QCOMPARE(controller.hostProfiles().front().toMap().value(QStringLiteral("credentialStored")).toBool(), true);
+    }
+
+    ztermy::AppController reopened(profilesPath);
+    QCOMPARE(reopened.hostProfiles().front().toMap().value(QStringLiteral("credentialStored")).toBool(), false);
+    QVERIFY(reopened.saveHostCredential(id, QStringLiteral("replacement-session-password")));
+    QCOMPARE(reopened.hostProfiles().front().toMap().value(QStringLiteral("credentialStored")).toBool(), true);
+}
+
+void AppControllerTests::installedControllerPersistsCredentialAcrossRestart()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString profilesPath = directory.filePath(QStringLiteral("profiles.json"));
+    const QString knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json"));
+    const QString settingsPath = directory.filePath(QStringLiteral("settings.json"));
+    const QString credentialsPath = directory.filePath(QStringLiteral("credentials.zvlt"));
+    const QString id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const ztermy::security::CredentialKey key{.profileId = id.toStdString(),
+                                              .kind = ztermy::security::CredentialKind::Password};
+    const WindowsCredentialCleanupGuard cleanup(key);
+
+    {
+        ztermy::AppController controller(profilesPath, knownHostsPath, settingsPath, credentialsPath,
+                                         ztermy::config::StorageMode::installed);
+        const bool saved = controller.saveHostProfileWithCredential(
+            id, {}, QStringLiteral("server.example.test"), 22, QStringLiteral("developer"), QStringLiteral("password"),
+            {}, false, QStringLiteral("Lab"), QStringLiteral("unverified-password"), true);
+        if (!saved
+            && controller.credentialOperationError().contains(QStringLiteral("unavailable"), Qt::CaseInsensitive))
+        {
+            QSKIP("Windows Credential Manager is unavailable in this logon session");
+        }
+        QVERIFY(saved);
+        QCOMPARE(controller.effectiveCredentialStorage(), QStringLiteral("system"));
+        QVERIFY(controller.saveHostCredential(id, QStringLiteral("intentionally-wrong-password")));
+    }
+
+    ztermy::security::WindowsCredentialVault vault;
+    auto persisted = vault.read(key);
+    QVERIFY(persisted);
+    QCOMPARE(QByteArray(persisted->view().data(), static_cast<qsizetype>(persisted->view().size())),
+             QByteArrayLiteral("intentionally-wrong-password"));
+
+    ztermy::AppController reopened(profilesPath, knownHostsPath, settingsPath, credentialsPath,
+                                   ztermy::config::StorageMode::installed);
+    QCOMPARE(reopened.effectiveCredentialStorage(), QStringLiteral("system"));
+    QCOMPARE(reopened.hostProfiles().front().toMap().value(QStringLiteral("credentialStored")).toBool(), true);
+    QVERIFY(reopened.initializePortableCredentialVault(QStringLiteral("residual cleanup master password")));
+    QVERIFY(reopened.migrateCredentialStorage(QStringLiteral("portable"), false));
+    QVERIFY(reopened.clearCredentialStorage(QStringLiteral("system")));
+    const auto clearedInactiveCopy = vault.read(key);
+    QVERIFY(!clearedInactiveCopy);
+    QCOMPARE(clearedInactiveCopy.error(), ztermy::security::CredentialVaultError::NotFound);
+    QCOMPARE(reopened.hostProfiles().front().toMap().value(QStringLiteral("credentialStored")).toBool(), true);
+    QVERIFY(reopened.migrateCredentialStorage(QStringLiteral("system"), false));
+    QVERIFY(reopened.forgetHostCredential(id));
+    QCOMPARE(reopened.hostProfiles().front().toMap().value(QStringLiteral("credentialStored")).toBool(), false);
+    const auto removed = vault.read(key);
+    QVERIFY(!removed);
+    QCOMPARE(removed.error(), ztermy::security::CredentialVaultError::NotFound);
+}
+
+void AppControllerTests::portableControllerPersistsCredentialAcrossRestart()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString profilesPath = directory.filePath(QStringLiteral("profiles.json"));
+    const QString knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json"));
+    const QString settingsPath = directory.filePath(QStringLiteral("settings.json"));
+    const QString credentialsPath = directory.filePath(QStringLiteral("credentials.zvlt"));
+    const QString id = QStringLiteral("portable-controller-profile");
+
+    {
+        ztermy::AppController controller(profilesPath, knownHostsPath, settingsPath, credentialsPath,
+                                         ztermy::config::StorageMode::portable);
+        QCOMPARE(controller.effectiveCredentialStorage(), QStringLiteral("portable"));
+        QVERIFY(!controller.portableVaultInitialized());
+        QVERIFY(controller.clearCredentialStorage(QStringLiteral("portable")));
+        QVERIFY(controller.migrateCredentialStorage(QStringLiteral("session"), true));
+        QCOMPARE(controller.effectiveCredentialStorage(), QStringLiteral("session"));
+        QCOMPARE(controller.credentialStoragePreference(), QStringLiteral("session"));
+        QVERIFY(controller.migrateCredentialStorage(QStringLiteral("portable"), true));
+        QCOMPARE(controller.effectiveCredentialStorage(), QStringLiteral("portable"));
+        QVERIFY(!controller.saveHostProfileWithCredential(
+            id, {}, QStringLiteral("server.example.test"), 22, QStringLiteral("developer"), QStringLiteral("password"),
+            {}, false, QStringLiteral("Lab"), QStringLiteral("unverified-portable-secret"), true));
+        QVERIFY(controller.credentialOperationError().contains(QStringLiteral("Create the portable credential vault")));
+        QVERIFY(controller.hostProfiles().isEmpty());
+        QVERIFY(controller.initializePortableCredentialVault(QStringLiteral("original portable password")));
+        QVERIFY(controller.saveHostProfileWithCredential(
+            id, {}, QStringLiteral("server.example.test"), 22, QStringLiteral("developer"), QStringLiteral("password"),
+            {}, false, QStringLiteral("Lab"), QStringLiteral("unverified-portable-secret"), true));
+    }
+
+    {
+        ztermy::AppController reopened(profilesPath, knownHostsPath, settingsPath, credentialsPath,
+                                       ztermy::config::StorageMode::portable);
+        QVERIFY(reopened.portableVaultInitialized());
+        QVERIFY(reopened.portableVaultLocked());
+        QCOMPARE(reopened.hostProfiles().front().toMap().value(QStringLiteral("credentialStored")).toBool(), true);
+        QVERIFY(!reopened.unlockPortableCredentialVault(QStringLiteral("wrong portable password")));
+        QVERIFY(reopened.portableVaultLocked());
+        QVERIFY(reopened.unlockPortableCredentialVault(QStringLiteral("original portable password")));
+        QVERIFY(reopened.changePortableVaultMasterPassword(QStringLiteral("replacement portable password")));
+    }
+
+    ztermy::AppController finalController(profilesPath, knownHostsPath, settingsPath, credentialsPath,
+                                          ztermy::config::StorageMode::portable);
+    QVERIFY(!finalController.unlockPortableCredentialVault(QStringLiteral("original portable password")));
+    QVERIFY(finalController.unlockPortableCredentialVault(QStringLiteral("replacement portable password")));
+    QVERIFY(finalController.clearCredentialStorage(QStringLiteral("portable")));
+    QCOMPARE(finalController.hostProfiles().front().toMap().value(QStringLiteral("credentialStored")).toBool(), false);
+    QVERIFY(finalController.deleteHostProfile(id));
+    QVERIFY(finalController.hostProfiles().isEmpty());
+
+    ztermy::security::PortableCredentialVault audit(credentialsPath);
+    QVERIFY(audit.unlock(ztermy::security::SensitiveByteArray(QByteArrayLiteral("replacement portable password"))));
+    QVERIFY(audit.listKeys()->empty());
+}
+
+void AppControllerTests::saveAndConnectPersistsBeforeConnectionOutcome()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")));
+
+    QVERIFY(controller.saveAndConnectHostProfile(
+        {}, {}, QStringLiteral("127.0.0.1"), 1, QStringLiteral("connection-test"), QStringLiteral("password"), {},
+        false, QStringLiteral("Tests"), QStringLiteral("pre-auth-secret"), true));
+    QCOMPARE(controller.hostProfiles().size(), 1);
+    QCOMPARE(controller.hostProfiles().front().toMap().value(QStringLiteral("name")).toString(),
+             QStringLiteral("127.0.0.1"));
+    QCOMPARE(controller.hostProfiles().front().toMap().value(QStringLiteral("credentialStored")).toBool(), true);
+
+    QTRY_VERIFY_WITH_TIMEOUT(!controller.terminalTabs().isEmpty()
+                                 && controller.terminalTabs().front().toMap().value(QStringLiteral("failed")).toBool(),
+                             5000);
+    QCOMPARE(controller.hostProfiles().front().toMap().value(QStringLiteral("credentialStored")).toBool(), true);
+    controller.shutdown();
 }
 
 void AppControllerTests::rejectsIncompleteConnections()

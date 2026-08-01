@@ -101,6 +101,7 @@ resolveApplicationPaths(const QStringList &arguments, const QString &executableD
     paths.profilesFile = QDir(paths.dataDirectory).filePath(QStringLiteral("profiles.json"));
     paths.knownHostsFile = QDir(paths.dataDirectory).filePath(QStringLiteral("known_hosts.json"));
     paths.settingsFile = QDir(paths.dataDirectory).filePath(QStringLiteral("settings.json"));
+    paths.credentialsFile = QDir(paths.dataDirectory).filePath(QStringLiteral("credentials.zvlt"));
     paths.logsDirectory = QDir(paths.localDataDirectory).filePath(QStringLiteral("logs"));
     paths.crashDirectory = QDir(paths.localDataDirectory).filePath(QStringLiteral("crashes"));
     return paths;

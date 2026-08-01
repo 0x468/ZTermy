@@ -28,6 +28,8 @@ void ApplicationPathsTests::resolvesInstalledDirectories()
     QCOMPARE(paths->mode, ztermy::config::StorageMode::installed);
     QCOMPARE(QDir::toNativeSeparators(paths->profilesFile),
              QStringLiteral(R"(C:\Users\person\AppData\Roaming\ztermy\profiles.json)"));
+    QCOMPARE(QDir::toNativeSeparators(paths->credentialsFile),
+             QStringLiteral(R"(C:\Users\person\AppData\Roaming\ztermy\credentials.zvlt)"));
     QCOMPARE(QDir::toNativeSeparators(paths->logsDirectory),
              QStringLiteral(R"(C:\Users\person\AppData\Local\ztermy\logs)"));
 }
@@ -48,6 +50,8 @@ void ApplicationPathsTests::resolvesPortableArgumentAndMarker()
     QCOMPARE(markerPaths->mode, ztermy::config::StorageMode::portable);
     QCOMPARE(QDir::toNativeSeparators(argumentPaths->dataDirectory), QStringLiteral(R"(D:\apps\ztermy\data)"));
     QCOMPARE(argumentPaths->dataDirectory, markerPaths->dataDirectory);
+    QCOMPARE(argumentPaths->credentialsFile,
+             QDir(argumentPaths->dataDirectory).filePath(QStringLiteral("credentials.zvlt")));
     QCOMPARE(argumentPaths->crashDirectory, QDir(argumentPaths->dataDirectory).filePath(QStringLiteral("crashes")));
 }
 

@@ -36,6 +36,9 @@ Q_LOGGING_CATEGORY(applicationLog, "ztermy.application")
 QT_BEGIN_NAMESPACE
 Q_GUI_EXPORT void qt_handleKeyEvent(QWindow *window, QEvent::Type type, int key, Qt::KeyboardModifiers modifiers,
                                     const QString &text = {}, bool autorepeat = false, ushort count = 1);
+Q_GUI_EXPORT void qt_handleMouseEvent(QWindow *window, const QPointF &local, const QPointF &global,
+                                      Qt::MouseButtons state, Qt::MouseButton button, QEvent::Type type,
+                                      Qt::KeyboardModifiers modifiers, int timestamp);
 QT_END_NAMESPACE
 
 namespace
@@ -549,6 +552,20 @@ struct ResizeHitRuntimeCase
     auto *appearanceGrid = rootObject->findChild<QObject *>(QStringLiteral("settingsAppearanceGrid"));
     auto *terminalGrid = rootObject->findChild<QObject *>(QStringLiteral("settingsTerminalGrid"));
     const bool settingsCaptured = captureLayout(window, outputDirectory, capturePrefix + QStringLiteral("-settings"));
+    bool securityCaptured = false;
+    bool securityMatches = false;
+    if (settingsPane != nullptr)
+    {
+        settingsPane->setProperty("currentCategory", QStringLiteral("security"));
+        processWindowEventsFor(std::chrono::milliseconds{200});
+        auto *credentialStorage = rootObject->findChild<QObject *>(QStringLiteral("settingsCredentialStorage"));
+        auto *portablePassword = rootObject->findChild<QObject *>(QStringLiteral("settingsPortableVaultPassword"));
+        securityCaptured = captureLayout(window, outputDirectory, capturePrefix + QStringLiteral("-security"));
+        securityMatches = credentialStorage != nullptr && portablePassword != nullptr
+                          && credentialStorage->property("visible").toBool()
+                          && portablePassword->property("visible").toBool();
+        settingsPane->setProperty("currentCategory", QStringLiteral("appearance"));
+    }
 
     if (hostPane == nullptr || hostContent == nullptr || hostEditorGrid == nullptr || settingsPane == nullptr
         || settingsCategoryRail == nullptr || appearanceGrid == nullptr || terminalGrid == nullptr)
@@ -573,8 +590,9 @@ struct ResizeHitRuntimeCase
     qCInfo(applicationLog) << "UI layout breakpoint check"
                            << "theme=" << themeName << "size=" << size << "compact=" << compact
                            << "hostPaneWidth=" << hostPaneWidth << "hostContentWidth=" << hostContentWidth
-                           << "hostMatches=" << hostMatches << "settingsMatch=" << settingsMatch;
-    return hostMatches && settingsMatch && hostCaptured && settingsCaptured;
+                           << "hostMatches=" << hostMatches << "settingsMatch=" << settingsMatch
+                           << "securityMatches=" << securityMatches;
+    return hostMatches && settingsMatch && securityMatches && hostCaptured && settingsCaptured && securityCaptured;
 }
 
 [[nodiscard]] bool applyUiLayoutSmokeTheme(ztermy::AppController &controller, const QString &theme)
@@ -651,6 +669,30 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
     QCoreApplication::processEvents();
     qt_handleKeyEvent(&window, QEvent::KeyRelease, key, modifiers);
     processWindowEventsFor(std::chrono::milliseconds{40});
+}
+
+void sendText(ztermy::NativeWindow &window, const QStringView text)
+{
+    for (const QChar character : text)
+    {
+        qt_handleKeyEvent(&window, QEvent::KeyPress, Qt::Key_unknown, {}, QString{character});
+        QCoreApplication::processEvents();
+        qt_handleKeyEvent(&window, QEvent::KeyRelease, Qt::Key_unknown, {}, QString{character});
+    }
+    processWindowEventsFor(std::chrono::milliseconds{40});
+}
+
+void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPointF itemPosition)
+{
+    static int timestamp = 1;
+    const QPointF local = item.mapToScene(itemPosition);
+    const QPointF global = window.mapToGlobal(local.toPoint());
+    qt_handleMouseEvent(&window, local, global, Qt::LeftButton, Qt::LeftButton, QEvent::MouseButtonPress, {},
+                        timestamp++);
+    QCoreApplication::processEvents();
+    qt_handleMouseEvent(&window, local, global, Qt::NoButton, Qt::LeftButton, QEvent::MouseButtonRelease, {},
+                        timestamp++);
+    processWindowEventsFor(std::chrono::milliseconds{80});
 }
 
 [[nodiscard]] bool focusItem(ztermy::NativeWindow &window, QQuickItem *item, const QString &expectedName)
@@ -736,6 +778,37 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
         return false;
     }
 
+    QQuickItem *securityCategory = quickItem(rootObject, "settingsSecurityCategory");
+    if (!focusItem(window, securityCategory, QStringLiteral("settingsSecurityCategory")))
+    {
+        return false;
+    }
+    sendKey(window, Qt::Key_Space);
+    processWindowEventsFor(std::chrono::milliseconds{100});
+    if (settingsPane->property("currentCategory").toString() != QStringLiteral("security"))
+    {
+        qCWarning(applicationLog) << "Security settings category did not activate from the keyboard";
+        return false;
+    }
+    QQuickItem *portablePassword = quickItem(rootObject, "settingsPortableVaultPassword");
+    QQuickItem *portablePasswordConfirm = quickItem(rootObject, "settingsPortableVaultPasswordConfirm");
+    if (portablePassword == nullptr || portablePasswordConfirm == nullptr
+        || !portablePassword->setProperty("text", QStringLiteral("keyboard-vault-password"))
+        || !portablePasswordConfirm->setProperty("text", QStringLiteral("keyboard-vault-password")))
+    {
+        return false;
+    }
+    constexpr std::array securityOrder{
+        "settingsCredentialStorage",     "settingsCredentialRemoveSource",
+        "settingsPortableVaultPassword", "settingsPortableVaultPasswordConfirm",
+        "settingsPortableVaultAction",   "settingsCredentialCleanupStorage",
+        "settingsRemoveAllCredentials",
+    };
+    if (!verifyOrder(securityOrder))
+    {
+        return false;
+    }
+
     QQuickItem *terminalCategory = quickItem(rootObject, "settingsTerminalCategory");
     if (!focusItem(window, terminalCategory, QStringLiteral("settingsTerminalCategory")))
     {
@@ -758,11 +831,21 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
 
 [[nodiscard]] bool verifyHostEditorTabOrder(ztermy::NativeWindow &window, QQuickItem *rootObject)
 {
-    constexpr std::array<const char *, 11> order{
-        "hostName",     "hostGroup",          "hostAddress", "hostPort",
-        "hostUsername", "hostAuthentication", "hostKeyPath", "hostPassphraseRequired",
-        "hostCancel",   "hostSave",           "hostConnect",
+    constexpr std::array<const char *, 12> passwordOrder{
+        "hostName",
+        "hostGroup",
+        "hostAddress",
+        "hostPort",
+        "hostUsername",
+        "hostAuthentication",
+        "hostCredential",
+        "hostCredentialReveal",
+        "hostRememberCredential",
+        "hostCancel",
+        "hostSave",
+        "hostConnect",
     };
+    const auto &order = passwordOrder;
 
     if (!focusItem(window, quickItem(rootObject, order.front()), QString::fromLatin1(order.front())))
     {
@@ -786,8 +869,7 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
 [[nodiscard]] bool verifyQuickConnectTabOrder(ztermy::NativeWindow &window, QQuickItem *rootObject)
 {
     constexpr std::array order{
-        "quickAuthentication", "quickKeyPath",       "quickPassphraseRequired",
-        "quickSaveProfile",    "quickConnectCancel", "quickConnectConfirm",
+        "quickAuthentication", "quickCredential", "quickSaveProfile", "quickConnectCancel", "quickConnectConfirm",
     };
 
     if (!focusItem(window, quickItem(rootObject, order.front()), QString::fromLatin1(order.front())))
@@ -809,7 +891,8 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
     return true;
 }
 
-[[nodiscard]] bool runUiKeyboardRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller)
+[[nodiscard]] bool runUiKeyboardRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller,
+                                             const QString &outputDirectory)
 {
     window.resize(QSize{1120, 800});
     window.show();
@@ -1054,8 +1137,10 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
     sendKey(window, Qt::Key_Return);
     processWindowEventsFor(std::chrono::milliseconds{100});
     auto *quickConnectDialog = rootObject->findChild<QObject *>(QStringLiteral("quickConnectDialog"));
+    QQuickItem *quickCredential = quickItem(rootObject, "quickCredential");
     const bool quickConnectDialogOpened =
-        quickConnectDialog != nullptr && quickConnectDialog->property("visible").toBool()
+        quickConnectDialog != nullptr && quickConnectDialog->property("visible").toBool() && quickCredential != nullptr
+        && quickCredential->setProperty("text", QStringLiteral("keyboard-smoke-secret"))
         && namedFocusItem(window) == QStringLiteral("quickAuthentication")
         && verifyAccessibleButton(rootObject, "quickConnectCancel", "Cancel quick SSH connection")
         && verifyAccessibleButton(rootObject, "quickConnectConfirm", "Start quick SSH connection");
@@ -1094,10 +1179,50 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
     QQuickItem *hostPane = quickItem(rootObject, "hostConnectionPane");
     const bool editorOpened = hostPane != nullptr && hostPane->property("editorExpanded").toBool()
                               && namedFocusItem(window) == QStringLiteral("hostName");
-    if (!editorOpened || !verifyHostEditorTabOrder(window, rootObject))
+    processWindowEventsFor(std::chrono::milliseconds{250});
+    const bool editorCaptured = captureLayout(window, outputDirectory, QStringLiteral("new-host-editor"));
+    QQuickItem *hostMasterScroll = quickItem(rootObject, "hostMasterScroll");
+    QQuickItem *hostDetailPane = quickItem(rootObject, "hostDetailPane");
+    QQuickItem *hostDetailDismissRegion = quickItem(rootObject, "hostDetailDismissRegion");
+    const bool editorUsesSplitLayout =
+        hostPane != nullptr && hostMasterScroll != nullptr && hostDetailPane != nullptr
+        && hostDetailDismissRegion != nullptr && hostDetailPane->isVisible() && hostMasterScroll->width() > 300.0
+        && hostDetailPane->width() >= 440.0
+        && qAbs(hostMasterScroll->width() + hostDetailPane->width() - hostPane->width()) <= 1.0
+        && qAbs(hostDetailDismissRegion->width() - hostMasterScroll->width()) <= 1.0;
+    if (!editorOpened || !editorCaptured || !editorUsesSplitLayout || !verifyHostEditorTabOrder(window, rootObject))
     {
         qCWarning(applicationLog) << "Enter did not open a keyboard-reachable host editor"
-                                  << "editorOpened=" << editorOpened << "focus=" << namedFocusItem(window);
+                                  << "editorOpened=" << editorOpened << "editorCaptured=" << editorCaptured
+                                  << "splitLayout=" << editorUsesSplitLayout << "focus=" << namedFocusItem(window);
+        return false;
+    }
+    QQuickItem *hostAddress = quickItem(rootObject, "hostAddress");
+    QQuickItem *hostName = quickItem(rootObject, "hostName");
+    constexpr auto generatedName = u"selection.example.test";
+    if (!focusItem(window, hostAddress, QStringLiteral("hostAddress")))
+    {
+        return false;
+    }
+    sendText(window, generatedName);
+    const bool profileNameAutoFilled =
+        hostName != nullptr && hostName->property("text").toString() == QStringView{generatedName};
+    if (hostName != nullptr)
+    {
+        sendMouseClick(window, *hostName, QPointF{hostName->width() - 12.0, hostName->height() / 2.0});
+    }
+    const bool profileNameSelectionStable =
+        hostName != nullptr && namedFocusItem(window) == QStringLiteral("hostName")
+        && hostName->property("selectedText").toString() == QStringView{generatedName}
+        && hostName->property("selectionStart").toInt() == 0
+        && hostName->property("selectionEnd").toInt() == QStringView{generatedName}.size();
+    if (!profileNameAutoFilled || !profileNameSelectionStable)
+    {
+        qCWarning(applicationLog) << "Auto-generated profile name did not retain full selection after pointer release"
+                                  << "autoFilled=" << profileNameAutoFilled
+                                  << "stableSelection=" << profileNameSelectionStable << "selectedText="
+                                  << (hostName == nullptr ? QStringLiteral("<missing>")
+                                                          : hostName->property("selectedText").toString());
         return false;
     }
     window.resize(QSize{500, 360});
@@ -1108,8 +1233,14 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
     }
     window.resize(QSize{1120, 800});
     processWindowEventsFor(std::chrono::milliseconds{150});
+    QQuickItem *hostAuthentication = quickItem(rootObject, "hostAuthentication");
     QQuickItem *passphraseRequired = quickItem(rootObject, "hostPassphraseRequired");
     QQuickItem *credential = quickItem(rootObject, "hostCredential");
+    if (hostAuthentication == nullptr || !hostAuthentication->setProperty("currentIndex", 0))
+    {
+        return false;
+    }
+    processWindowEventsFor(std::chrono::milliseconds{100});
     if (!focusItem(window, passphraseRequired, QStringLiteral("hostPassphraseRequired")))
     {
         return false;
@@ -1120,6 +1251,19 @@ void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::Keyboard
     if (!checkboxChanged)
     {
         qCWarning(applicationLog) << "Space did not toggle the private-key passphrase checkbox";
+        return false;
+    }
+
+    sendMouseClick(window, *hostDetailDismissRegion,
+                   QPointF{hostDetailDismissRegion->width() / 2.0, hostDetailDismissRegion->height() / 2.0});
+    processWindowEventsFor(std::chrono::milliseconds{250});
+    const bool editorDismissed = !hostPane->property("editorExpanded").toBool() && hostDetailPane->width() <= 0.5
+                                 && hostMasterScroll->width() >= hostPane->width() - 9.0;
+    if (!editorDismissed)
+    {
+        qCWarning(applicationLog) << "Host detail pane did not release the master layout"
+                                  << "detailWidth=" << hostDetailPane->width()
+                                  << "masterWidth=" << hostMasterScroll->width() << "paneWidth=" << hostPane->width();
         return false;
     }
 
@@ -1531,7 +1675,8 @@ int main(int argc, char *argv[])
     QQuickStyle::setStyle(QStringLiteral("Basic"));
     qRegisterMetaType<ztermy::terminal::TerminalSnapshotPtr>();
 
-    ztermy::AppController appController(paths->profilesFile, paths->knownHostsFile, paths->settingsFile);
+    ztermy::AppController appController(paths->profilesFile, paths->knownHostsFile, paths->settingsFile,
+                                        paths->credentialsFile, paths->mode);
     const bool uiLayoutSmoke = QCoreApplication::arguments().contains(QStringLiteral("--ui-layout-smoke"));
     const bool uiKeyboardSmoke = QCoreApplication::arguments().contains(QStringLiteral("--ui-keyboard-smoke"));
     const bool terminalRenderSmoke = QCoreApplication::arguments().contains(QStringLiteral("--terminal-render-smoke"));
@@ -1646,7 +1791,7 @@ int main(int argc, char *argv[])
     }
     if (uiKeyboardSmoke)
     {
-        const bool passed = runUiKeyboardRuntimeSmoke(window, appController);
+        const bool passed = runUiKeyboardRuntimeSmoke(window, appController, paths->dataDirectory);
         appController.shutdown();
         window.releaseResources();
         if (!passed)
@@ -1670,8 +1815,6 @@ int main(int argc, char *argv[])
         qCInfo(applicationLog) << "Terminal render runtime smoke test completed";
         return EXIT_SUCCESS;
     }
-
-    appController.startLocalTerminal();
 
     window.show();
     const int exitCode = application.exec();

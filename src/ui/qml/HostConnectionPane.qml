@@ -18,18 +18,22 @@ Rectangle {
     property string editingProfileId: ""
     property string pendingDeleteId: ""
     property string pendingDeleteName: ""
+    property string pendingForgetId: ""
+    property string pendingForgetName: ""
     property string pendingConnectId: ""
     property string pendingConnectName: ""
     property string pendingConnectAuthentication: ""
+    property bool nameWasAutoFilled: false
+    property bool editingCredentialStored: false
     property var pendingQuickTarget: ({})
     property string quickConnectMessage: ""
     property bool quickConnectMessageIsError: false
     property string expandedActionsProfileId: ""
     property bool statusIsError: false
-    property bool editorExpanded: controller.hostProfiles.length === 0
+    property bool editorExpanded: false
     readonly property bool compactLayout: width < Theme.narrowWindowWidth
     readonly property int contentInset: compactLayout ? Theme.pageInsetCompact : Theme.pageInset
-    readonly property int profileCardColumns: compactLayout ? 1 : (width < 920 ? 2 : 3)
+    readonly property int profileCardColumns: scrollView.availableWidth < 700 ? 1 : (scrollView.availableWidth < 1050 ? 2 : 3)
     readonly property var filteredGroups: buildFilteredGroups(controller.hostProfiles, searchField.text)
     readonly property int filteredProfileCount: {
         let count = 0;
@@ -40,6 +44,7 @@ Rectangle {
     }
 
     signal connectionStarted
+    signal securitySettingsRequested
 
     color: backgroundColor
     palette.base: Theme.raisedBackground
@@ -74,7 +79,7 @@ Rectangle {
         pendingQuickTarget = parsed;
         quickConnectMessage = "";
         quickConnectMessageIsError = false;
-        quickAuthentication.currentIndex = 0;
+        quickAuthentication.currentIndex = 1;
         quickKeyPath.text = controller.defaultPrivateKeyPath;
         quickPassphraseRequired.checked = false;
         quickCredential.text = "";
@@ -157,18 +162,63 @@ Rectangle {
         groupField.text = "";
         hostField.text = "";
         portField.text = "22";
-        usernameField.text = "";
-        authenticationBox.currentIndex = 0;
+        usernameField.text = "root";
+        authenticationBox.currentIndex = 1;
         keyPathField.text = controller.defaultPrivateKeyPath;
         passphraseRequiredBox.checked = false;
         credentialField.text = "";
+        credentialField.passwordVisible = false;
+        rememberCredentialSwitch.checked = true;
+        nameWasAutoFilled = false;
+        editingCredentialStored = false;
+    }
+
+    function dismissEditor(announce) {
+        clearEditor();
+        editorExpanded = false;
+        if (announce) {
+            showStatus("Profile editor closed.", false);
+        }
+    }
+
+    function refreshEditingCredential() {
+        if (!editorExpanded || editingProfileId.length === 0 || !editingCredentialStored) {
+            return;
+        }
+        if (controller.effectiveCredentialStorage === "portable" && controller.portableVaultLocked) {
+            return;
+        }
+        const secret = controller.readHostCredential(editingProfileId);
+        if (secret.length > 0) {
+            credentialField.text = secret;
+            return;
+        }
+        if (controller.credentialOperationError.length > 0) {
+            showStatus(controller.credentialOperationError, true);
+        }
     }
 
     function beginNewProfile() {
         clearEditor();
         editorExpanded = true;
-        showStatus("Create a reusable SSH profile or connect without saving.", false);
+        showStatus("Create a reusable SSH profile or connect now.", false);
         Qt.callLater(nameField.forceActiveFocus);
+    }
+
+    Component.onCompleted: {
+        if (controller.hostProfiles.length === 0) {
+            clearEditor();
+        }
+    }
+
+    Connections {
+        target: pane.controller
+
+        function onCredentialVaultChanged() {
+            if (pane.editorExpanded && pane.editingCredentialStored && credentialField.text.length === 0) {
+                Qt.callLater(pane.refreshEditingCredential);
+            }
+        }
     }
 
     function editProfile(profile) {
@@ -183,21 +233,25 @@ Rectangle {
         keyPathField.text = profile.privateKeyPath;
         passphraseRequiredBox.checked = profile.privateKeyPassphraseRequired;
         credentialField.text = "";
+        rememberCredentialSwitch.checked = true;
+        nameWasAutoFilled = false;
+        editingCredentialStored = profile.credentialStored;
         showStatus("Editing \"" + profile.name + "\".", false);
+        Qt.callLater(pane.refreshEditingCredential);
         Qt.callLater(nameField.forceActiveFocus);
     }
 
     function saveProfile() {
         statusText.text = "";
-        if (!validate(true, false)) {
+        if (!validate(false, false)) {
             return;
         }
-        if (controller.saveHostProfile(editingProfileId, nameField.text, hostField.text, portNumber(), usernameField.text, authenticationToken(), keyPathField.text, passphraseRequiredBox.checked, groupField.text)) {
+        if (controller.saveHostProfileWithCredential(editingProfileId, nameField.text, hostField.text, portNumber(), usernameField.text, authenticationToken(), keyPathField.text, passphraseRequiredBox.checked, groupField.text, credentialField.text, rememberCredentialSwitch.checked)) {
             clearEditor();
             editorExpanded = false;
-            showStatus("Profile saved. Passwords and key passphrases are never stored.", false);
+            showStatus("Profile and credential preferences saved.", false);
         } else {
-            showStatus("The profile could not be saved.", true);
+            showStatus(controller.credentialOperationError.length > 0 ? controller.credentialOperationError : "The profile could not be saved.", true);
         }
     }
 
@@ -208,21 +262,42 @@ Rectangle {
         }
         const secret = credentialField.text;
         credentialField.text = "";
-        const started = authenticationToken() === "private-key" ? controller.connectPrivateKey(hostField.text, portNumber(), usernameField.text, keyPathField.text, secret) : controller.connectPassword(hostField.text, portNumber(), usernameField.text, secret);
+        const started = controller.saveAndConnectHostProfile(editingProfileId, nameField.text, hostField.text, portNumber(), usernameField.text, authenticationToken(), keyPathField.text, passphraseRequiredBox.checked, groupField.text, secret, rememberCredentialSwitch.checked);
         if (started) {
+            clearEditor();
+            editorExpanded = false;
             connectionStarted();
         } else {
-            showStatus("The connection settings could not be started.", true);
+            showStatus(controller.credentialOperationError.length > 0 ? controller.credentialOperationError : "The profile could not be saved or connected.", true);
         }
     }
 
     function connectSaved(profile, sourceItem) {
+        if (profile.credentialStored) {
+            if (controller.effectiveCredentialStorage === "portable" && controller.portableVaultLocked) {
+                pendingConnectId = profile.id;
+                pendingConnectName = profile.name;
+                pendingConnectAuthentication = profile.authentication;
+                portableUnlockDialog.focusRestoreItem = sourceItem;
+                portableUnlockPassword.text = "";
+                portableUnlockStatus.text = "";
+                portableUnlockDialog.open();
+                return;
+            }
+            if (controller.connectHostProfile(profile.id, "")) {
+                connectionStarted();
+            } else {
+                showStatus(controller.credentialOperationError.length > 0 ? controller.credentialOperationError : "The saved profile could not be connected.", true);
+            }
+            return;
+        }
         if (profile.authentication === "password" || profile.privateKeyPassphraseRequired) {
             pendingConnectId = profile.id;
             pendingConnectName = profile.name;
             pendingConnectAuthentication = profile.authentication;
             credentialDialog.focusRestoreItem = sourceItem;
             savedCredentialField.text = "";
+            savedCredentialRemember.checked = true;
             credentialDialog.open();
             return;
         }
@@ -239,21 +314,30 @@ Rectangle {
         }
         const profileId = pendingConnectId;
         const secret = savedCredentialField.text;
-        savedCredentialField.text = "";
-        if (controller.connectHostProfile(profileId, secret)) {
+        let started = false;
+        if (savedCredentialRemember.checked) {
+            started = controller.saveHostCredential(profileId, secret) && controller.connectHostProfile(profileId, "");
+        } else {
+            started = controller.connectHostProfile(profileId, secret);
+        }
+        if (started) {
+            savedCredentialField.text = "";
             credentialDialog.close();
             connectionStarted();
         } else {
-            showStatus("The saved profile could not be connected.", true);
-            credentialDialog.close();
+            showStatus(controller.credentialOperationError.length > 0 ? controller.credentialOperationError : "The saved profile could not be connected.", true);
         }
     }
 
     ScrollView {
         id: scrollView
 
-        anchors.fill: parent
-        anchors.rightMargin: 8
+        objectName: "hostMasterScroll"
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.rightMargin: profileEditor.width + (8 * (1.0 - profileEditor.reveal))
         contentWidth: availableWidth
         contentHeight: contentColumn.implicitHeight + 76
 
@@ -277,7 +361,7 @@ Rectangle {
                     spacing: Theme.spacingDense
 
                     Text {
-                        text: "Host Vault"
+                        text: "Hosts"
                         color: pane.textColor
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.textTitle
@@ -286,7 +370,7 @@ Rectangle {
 
                     Text {
                         Layout.fillWidth: true
-                        text: "Keep connection details organized without storing passwords or private-key passphrases."
+                        text: "Search, connect, and organize SSH hosts from one workspace."
                         color: pane.mutedColor
                         wrapMode: Text.WordWrap
                         font.family: Theme.uiFont
@@ -493,7 +577,7 @@ Rectangle {
                 Layout.fillWidth: true
                 visible: pane.controller.hostProfiles.length === 0
                 heading: "No saved hosts yet"
-                description: "Add a host below to make future connections one click away."
+                description: "Select New host to make future connections one click away."
                 centered: true
             }
 
@@ -709,7 +793,7 @@ Rectangle {
                                                 accessibleName: "Copy " + profileCard.modelData.name
                                                 onClicked: {
                                                     if (pane.controller.duplicateHostProfile(profileCard.modelData.id)) {
-                                                        pane.showStatus("Profile copied. Credentials were not copied because they are never stored.", false);
+                                                        pane.showStatus("Profile copied without its saved credential.", false);
                                                     } else {
                                                         pane.showStatus("The profile could not be copied.", true);
                                                     }
@@ -728,6 +812,20 @@ Rectangle {
                                                     deleteDialog.openFrom(deleteProfileButton);
                                                 }
                                             }
+
+                                            ActionButton {
+                                                id: forgetCredentialButton
+
+                                                Layout.fillWidth: true
+                                                visible: profileCard.modelData.credentialStored
+                                                text: "Forget secret"
+                                                accessibleName: "Forget saved credential for " + profileCard.modelData.name
+                                                onClicked: {
+                                                    pane.pendingForgetId = profileCard.modelData.id;
+                                                    pane.pendingForgetName = profileCard.modelData.name;
+                                                    forgetCredentialDialog.openFrom(forgetCredentialButton);
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -737,251 +835,345 @@ Rectangle {
                 }
             }
 
-            Rectangle {
-                id: profileEditor
-
-                readonly property real naturalHeight: editorColumn.implicitHeight + 40
-                property real reveal: pane.editorExpanded ? 1.0 : 0.0
-
+            Item {
                 Layout.fillWidth: true
-                Layout.topMargin: 10
-                Layout.preferredHeight: naturalHeight * reveal
-                implicitHeight: naturalHeight
-                visible: reveal > 0.001
-                enabled: pane.editorExpanded
-                opacity: reveal
-                radius: Theme.radiusPanel
-                color: pane.raisedColor
-                border.color: pane.borderColor
+                Layout.preferredHeight: 0
 
-                Behavior on reveal {
-                    NumberAnimation {
-                        duration: Theme.motionMedium
-                        easing.type: Easing.OutCubic
-                    }
-                }
+                Rectangle {
+                    id: profileEditor
 
-                transform: Translate {
-                    y: (1.0 - profileEditor.reveal) * Theme.motionDistanceSmall
-                }
+                    property real reveal: pane.editorExpanded ? 1.0 : 0.0
+                    readonly property real targetWidth: pane.compactLayout ? pane.width : Math.min(560, Math.max(440, pane.width * 0.52))
 
-                ColumnLayout {
-                    id: editorColumn
+                    objectName: "hostDetailPane"
+                    parent: pane
+                    anchors.top: parent.top
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    width: targetWidth * reveal
+                    z: 20
+                    visible: reveal > 0.001
+                    enabled: pane.editorExpanded
+                    opacity: reveal
+                    clip: true
+                    color: pane.raisedColor
+                    border.color: pane.borderColor
 
-                    anchors.fill: parent
-                    anchors.margins: 20
-                    spacing: 14
-
-                    RowLayout {
-                        Layout.fillWidth: true
-
-                        Text {
-                            text: pane.editingProfileId.length > 0 ? "Edit profile" : "New connection"
-                            color: pane.textColor
-                            font.family: Theme.uiFont
-                            font.pixelSize: 16
-                            font.weight: Font.DemiBold
-                        }
-
-                        Item {
-                            Layout.fillWidth: true
-                        }
-
-                        Text {
-                            text: authenticationBox.currentIndex === 0 ? "Private-key authentication" : "Password authentication"
-                            color: pane.mutedColor
-                            font.family: Theme.uiFont
-                            font.pixelSize: 11
+                    Behavior on reveal {
+                        NumberAnimation {
+                            duration: Theme.motionMedium
+                            easing.type: Easing.OutCubic
                         }
                     }
 
-                    GridLayout {
-                        objectName: "hostEditorGrid"
-                        Layout.fillWidth: true
-                        columns: pane.compactLayout ? 1 : 2
-                        columnSpacing: 14
-                        rowSpacing: 10
+                    ScrollView {
+                        id: editorScroll
 
-                        Label {
-                            text: "Profile name"
-                            color: pane.textColor
-                        }
-                        AppTextField {
-                            id: nameField
-                            objectName: "hostName"
-                            Layout.fillWidth: true
-                            placeholderText: "Home server"
-                            accessibleName: "Profile name"
-                            selectByMouse: true
-                        }
+                        anchors.fill: parent
+                        anchors.rightMargin: 6
+                        clip: true
+                        contentWidth: availableWidth
+                        contentHeight: editorColumn.implicitHeight + 40
 
-                        Label {
-                            text: "Group"
-                            color: pane.textColor
-                        }
-                        AppTextField {
-                            id: groupField
-                            objectName: "hostGroup"
-                            Layout.fillWidth: true
-                            placeholderText: "Personal, Work, Lab…"
-                            accessibleName: "SSH profile group"
-                            selectByMouse: true
-                        }
+                        ColumnLayout {
+                            id: editorColumn
 
-                        Label {
-                            text: "Host"
-                            color: pane.textColor
-                        }
-                        AppTextField {
-                            id: hostField
-                            objectName: "hostAddress"
-                            Layout.fillWidth: true
-                            placeholderText: "server.example.com or 192.0.2.10"
-                            accessibleName: "SSH host"
-                            selectByMouse: true
-                        }
+                            x: 20
+                            y: 20
+                            width: Math.max(0, editorScroll.availableWidth - 40)
+                            spacing: 14
 
-                        Label {
-                            text: "Port"
-                            color: pane.textColor
-                        }
-                        AppTextField {
-                            id: portField
-                            objectName: "hostPort"
-                            Layout.fillWidth: true
-                            text: "22"
-                            inputMethodHints: Qt.ImhDigitsOnly
-                            validator: IntValidator {
-                                bottom: 1
-                                top: 65535
+                            RowLayout {
+                                Layout.fillWidth: true
+
+                                Text {
+                                    text: pane.editingProfileId.length > 0 ? "Edit profile" : "New connection"
+                                    color: pane.textColor
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: 16
+                                    font.weight: Font.DemiBold
+                                }
+
+                                Item {
+                                    Layout.fillWidth: true
+                                }
+
+                                Text {
+                                    text: authenticationBox.currentIndex === 0 ? "Private-key authentication" : "Password authentication"
+                                    color: pane.mutedColor
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: 11
+                                }
+
+                                ActionButton {
+                                    text: "Close"
+                                    accessibleName: "Close host profile editor"
+                                    onClicked: pane.dismissEditor(false)
+                                }
                             }
-                            accessibleName: "SSH port"
-                            selectByMouse: true
-                        }
 
-                        Label {
-                            text: "Username"
-                            color: pane.textColor
-                        }
-                        AppTextField {
-                            id: usernameField
-                            objectName: "hostUsername"
-                            Layout.fillWidth: true
-                            placeholderText: "username"
-                            accessibleName: "SSH username"
-                            selectByMouse: true
-                        }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: Theme.spacingControl
+                                visible: pane.controller.effectiveCredentialStorage === "portable" && (!pane.controller.portableVaultInitialized || pane.controller.portableVaultLocked)
 
-                        Label {
-                            text: "Authentication"
-                            color: pane.textColor
-                        }
-                        AppComboBox {
-                            id: authenticationBox
-                            objectName: "hostAuthentication"
-                            Layout.fillWidth: true
-                            model: ["Private key", "Password"]
-                            accessibleName: "SSH authentication method"
-                            onCurrentIndexChanged: {
-                                credentialField.text = "";
-                                if (currentIndex === 1) {
-                                    passphraseRequiredBox.checked = false;
+                                StatusMessage {
+                                    Layout.fillWidth: true
+                                    text: !pane.controller.portableVaultInitialized ? "Create the portable vault before saving credentials." : "The portable vault is locked. Unlock it before saving a new credential."
+                                }
+
+                                ActionButton {
+                                    objectName: "hostOpenCredentialSecurity"
+                                    text: "Open Security"
+                                    accessibleName: "Open credential security settings"
+                                    onClicked: pane.securitySettingsRequested()
+                                }
+                            }
+
+                            GridLayout {
+                                objectName: "hostEditorGrid"
+                                Layout.fillWidth: true
+                                columns: pane.compactLayout ? 1 : 2
+                                columnSpacing: 14
+                                rowSpacing: 10
+
+                                Label {
+                                    text: "Profile name"
+                                    color: pane.textColor
+                                }
+                                AppTextField {
+                                    id: nameField
+                                    objectName: "hostName"
+                                    Layout.fillWidth: true
+                                    placeholderText: hostField.text.trim().length > 0 ? hostField.text.trim() : "Defaults to the host name"
+                                    accessibleName: "Profile name"
+                                    selectByMouse: true
+                                    onActiveFocusChanged: {
+                                        if (activeFocus && pane.nameWasAutoFilled) {
+                                            selectAll();
+                                        }
+                                    }
+                                    onTextEdited: pane.nameWasAutoFilled = false
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        enabled: pane.nameWasAutoFilled
+                                        acceptedButtons: Qt.LeftButton
+                                        cursorShape: Qt.IBeamCursor
+                                        preventStealing: true
+                                        onPressed: nameField.forceActiveFocus(Qt.MouseFocusReason)
+                                        onReleased: {
+                                            nameField.selectAll();
+                                        }
+                                    }
+                                }
+
+                                Label {
+                                    text: "Group"
+                                    color: pane.textColor
+                                }
+                                AppTextField {
+                                    id: groupField
+                                    objectName: "hostGroup"
+                                    Layout.fillWidth: true
+                                    placeholderText: "Personal, Work, Lab…"
+                                    accessibleName: "SSH profile group"
+                                    selectByMouse: true
+                                }
+
+                                Label {
+                                    text: "Host"
+                                    color: pane.textColor
+                                }
+                                AppTextField {
+                                    id: hostField
+                                    objectName: "hostAddress"
+                                    Layout.fillWidth: true
+                                    placeholderText: "server.example.com or 192.0.2.10"
+                                    accessibleName: "SSH host"
+                                    selectByMouse: true
+                                    onTextEdited: {
+                                        if (nameField.text.trim().length === 0 || pane.nameWasAutoFilled) {
+                                            nameField.text = text.trim();
+                                            pane.nameWasAutoFilled = text.trim().length > 0;
+                                        }
+                                    }
+                                }
+
+                                Label {
+                                    text: "Port"
+                                    color: pane.textColor
+                                }
+                                AppTextField {
+                                    id: portField
+                                    objectName: "hostPort"
+                                    Layout.fillWidth: true
+                                    text: "22"
+                                    inputMethodHints: Qt.ImhDigitsOnly
+                                    validator: IntValidator {
+                                        bottom: 1
+                                        top: 65535
+                                    }
+                                    accessibleName: "SSH port"
+                                    selectByMouse: true
+                                }
+
+                                Label {
+                                    text: "Username"
+                                    color: pane.textColor
+                                }
+                                AppTextField {
+                                    id: usernameField
+                                    objectName: "hostUsername"
+                                    Layout.fillWidth: true
+                                    placeholderText: "username"
+                                    accessibleName: "SSH username"
+                                    selectByMouse: true
+                                }
+
+                                Label {
+                                    text: "Authentication"
+                                    color: pane.textColor
+                                }
+                                AppComboBox {
+                                    id: authenticationBox
+                                    objectName: "hostAuthentication"
+                                    Layout.fillWidth: true
+                                    model: ["Private key", "Password"]
+                                    accessibleName: "SSH authentication method"
+                                    onCurrentIndexChanged: {
+                                        credentialField.text = "";
+                                        if (currentIndex === 1) {
+                                            passphraseRequiredBox.checked = false;
+                                        }
+                                    }
+                                }
+
+                                Label {
+                                    text: "Private key"
+                                    color: pane.textColor
+                                    visible: authenticationBox.currentIndex === 0
+                                }
+                                AppTextField {
+                                    id: keyPathField
+                                    objectName: "hostKeyPath"
+                                    Layout.fillWidth: true
+                                    visible: authenticationBox.currentIndex === 0
+                                    text: pane.controller.defaultPrivateKeyPath
+                                    accessibleName: "Private-key file path"
+                                    selectByMouse: true
+                                }
+
+                                Item {
+                                    visible: !pane.compactLayout && authenticationBox.currentIndex === 0
+                                    implicitHeight: passphraseRequiredBox.implicitHeight
+                                }
+                                AppCheckBox {
+                                    id: passphraseRequiredBox
+                                    objectName: "hostPassphraseRequired"
+                                    Layout.fillWidth: true
+                                    visible: authenticationBox.currentIndex === 0
+                                    text: "This private key requires a passphrase"
+                                    accessibleName: "Private key requires a passphrase"
+                                    onCheckedChanged: credentialField.text = ""
+                                }
+
+                                Label {
+                                    text: authenticationBox.currentIndex === 0 ? "Passphrase" : "Password"
+                                    color: pane.textColor
+                                    visible: authenticationBox.currentIndex === 1 || passphraseRequiredBox.checked
+                                }
+                                AppTextField {
+                                    id: credentialField
+                                    objectName: "hostCredential"
+                                    Layout.fillWidth: true
+                                    visible: authenticationBox.currentIndex === 1 || passphraseRequiredBox.checked
+                                    placeholderText: authenticationBox.currentIndex === 0 ? "Private-key passphrase" : "SSH password"
+                                    passwordRevealable: true
+                                    accessibleName: authenticationBox.currentIndex === 0 ? "Private-key passphrase" : "SSH password"
+                                    selectByMouse: true
+                                }
+
+                                Item {
+                                    visible: !pane.compactLayout && credentialField.visible
+                                    implicitHeight: rememberCredentialSwitch.implicitHeight
+                                }
+                                AppSwitch {
+                                    id: rememberCredentialSwitch
+
+                                    objectName: "hostRememberCredential"
+                                    Layout.fillWidth: true
+                                    visible: credentialField.visible
+                                    checked: true
+                                    text: pane.editingCredentialStored && credentialField.text.length === 0 ? "Keep saved credential" : "Save credential securely"
+                                    accessibleName: text
+                                }
+                            }
+
+                            StatusMessage {
+                                id: statusText
+
+                                Layout.fillWidth: true
+                                kind: pane.statusIsError ? "error" : "success"
+                            }
+
+                            GridLayout {
+                                Layout.fillWidth: true
+                                columns: pane.compactLayout ? 1 : 4
+                                columnSpacing: Theme.spacingControl
+                                rowSpacing: Theme.spacingControl
+
+                                ActionButton {
+                                    objectName: "hostCancel"
+                                    Layout.fillWidth: pane.compactLayout
+                                    text: "Cancel"
+                                    accessibleName: "Close host profile editor"
+                                    onClicked: pane.dismissEditor(true)
+                                }
+
+                                Item {
+                                    Layout.fillWidth: true
+                                    visible: !pane.compactLayout
+                                }
+
+                                ActionButton {
+                                    objectName: "hostSave"
+                                    Layout.fillWidth: pane.compactLayout
+                                    text: "Save profile"
+                                    accessibleName: "Save SSH profile"
+                                    onClicked: pane.saveProfile()
+                                }
+
+                                ActionButton {
+                                    objectName: "hostConnect"
+                                    Layout.fillWidth: pane.compactLayout
+                                    text: "Connect"
+                                    accessibleName: "Connect to SSH host"
+                                    variant: "primary"
+                                    onClicked: pane.connectCurrent()
                                 }
                             }
                         }
-
-                        Label {
-                            text: "Private key"
-                            color: pane.textColor
-                            visible: authenticationBox.currentIndex === 0
-                        }
-                        AppTextField {
-                            id: keyPathField
-                            objectName: "hostKeyPath"
-                            Layout.fillWidth: true
-                            visible: authenticationBox.currentIndex === 0
-                            text: pane.controller.defaultPrivateKeyPath
-                            accessibleName: "Private-key file path"
-                            selectByMouse: true
-                        }
-
-                        Item {
-                            visible: !pane.compactLayout && authenticationBox.currentIndex === 0
-                            implicitHeight: passphraseRequiredBox.implicitHeight
-                        }
-                        AppCheckBox {
-                            id: passphraseRequiredBox
-                            objectName: "hostPassphraseRequired"
-                            Layout.fillWidth: true
-                            visible: authenticationBox.currentIndex === 0
-                            text: "This private key requires a passphrase"
-                            accessibleName: "Private key requires a passphrase"
-                            onCheckedChanged: credentialField.text = ""
-                        }
-
-                        Label {
-                            text: authenticationBox.currentIndex === 0 ? "Passphrase" : "Password"
-                            color: pane.textColor
-                            visible: authenticationBox.currentIndex === 1 || passphraseRequiredBox.checked
-                        }
-                        AppTextField {
-                            id: credentialField
-                            objectName: "hostCredential"
-                            Layout.fillWidth: true
-                            visible: authenticationBox.currentIndex === 1 || passphraseRequiredBox.checked
-                            placeholderText: authenticationBox.currentIndex === 0 ? "Private-key passphrase" : "SSH password"
-                            echoMode: TextInput.Password
-                            accessibleName: authenticationBox.currentIndex === 0 ? "Private-key passphrase" : "SSH password"
-                            selectByMouse: true
-                        }
                     }
+                }
 
-                    StatusMessage {
-                        id: statusText
+                Item {
+                    id: editorDismissRegion
 
-                        Layout.fillWidth: true
-                        kind: pane.statusIsError ? "error" : "success"
-                    }
+                    objectName: "hostDetailDismissRegion"
+                    parent: pane
+                    anchors.top: parent.top
+                    anchors.left: parent.left
+                    anchors.bottom: parent.bottom
+                    width: Math.max(0, pane.width - profileEditor.width)
+                    visible: pane.editorExpanded && width > 0
+                    enabled: visible
+                    z: 19
 
-                    GridLayout {
-                        Layout.fillWidth: true
-                        columns: pane.compactLayout ? 1 : 4
-                        columnSpacing: Theme.spacingControl
-                        rowSpacing: Theme.spacingControl
-
-                        ActionButton {
-                            objectName: "hostCancel"
-                            Layout.fillWidth: pane.compactLayout
-                            text: "Cancel"
-                            accessibleName: "Close host profile editor"
-                            onClicked: {
-                                pane.clearEditor();
-                                pane.editorExpanded = false;
-                                pane.showStatus("Profile editor closed.", false);
-                            }
-                        }
-
-                        Item {
-                            Layout.fillWidth: true
-                            visible: !pane.compactLayout
-                        }
-
-                        ActionButton {
-                            objectName: "hostSave"
-                            Layout.fillWidth: pane.compactLayout
-                            text: "Save profile"
-                            accessibleName: "Save SSH profile"
-                            onClicked: pane.saveProfile()
-                        }
-
-                        ActionButton {
-                            objectName: "hostConnect"
-                            Layout.fillWidth: pane.compactLayout
-                            text: "Connect"
-                            accessibleName: "Connect to SSH host"
-                            variant: "primary"
-                            onClicked: pane.connectCurrent()
-                        }
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.ArrowCursor
+                        onClicked: pane.dismissEditor(false)
                     }
                 }
             }
@@ -1218,6 +1410,121 @@ Rectangle {
     }
 
     Dialog {
+        id: portableUnlockDialog
+
+        property Item focusRestoreItem: null
+
+        anchors.centerIn: parent
+        modal: true
+        dim: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape
+        padding: 20
+        onAboutToShow: Qt.callLater(portableUnlockPassword.forceActiveFocus)
+        onClosed: {
+            const restoreItem = focusRestoreItem;
+            focusRestoreItem = null;
+            portableUnlockPassword.text = "";
+            portableUnlockStatus.text = "";
+            pane.pendingConnectId = "";
+            pane.pendingConnectName = "";
+            pane.pendingConnectAuthentication = "";
+            if (restoreItem && restoreItem.visible && restoreItem.enabled) {
+                Qt.callLater(() => restoreItem.forceActiveFocus());
+            }
+        }
+
+        Overlay.modal: Rectangle {
+            color: Theme.modalScrim
+        }
+
+        background: Rectangle {
+            radius: Theme.radiusPanel
+            color: Theme.floatingBackground
+            border.color: Theme.borderStrong
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 14
+            Accessible.role: Accessible.Dialog
+            Accessible.name: "Unlock portable credential vault"
+
+            Text {
+                text: "Unlock portable vault"
+                color: pane.textColor
+                font.family: Theme.uiFont
+                font.pixelSize: 18
+                font.weight: Font.DemiBold
+            }
+
+            Text {
+                Layout.preferredWidth: 380
+                text: "Enter the portable-vault master password to connect to \"" + pane.pendingConnectName + "\"."
+                color: pane.mutedColor
+                wrapMode: Text.WordWrap
+                font.family: Theme.uiFont
+                font.pixelSize: 12
+            }
+
+            AppTextField {
+                id: portableUnlockPassword
+
+                objectName: "portableUnlockPassword"
+                Layout.fillWidth: true
+                placeholderText: "Master password (minimum 8 characters)"
+                echoMode: TextInput.Password
+                accessibleName: "Portable vault master password"
+                selectByMouse: true
+                onAccepted: portableUnlockAction.clicked()
+            }
+
+            StatusMessage {
+                id: portableUnlockStatus
+
+                Layout.fillWidth: true
+                kind: "error"
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+
+                Item {
+                    Layout.fillWidth: true
+                }
+
+                ActionButton {
+                    text: "Cancel"
+                    accessibleName: "Cancel portable vault unlock"
+                    onClicked: portableUnlockDialog.close()
+                }
+
+                ActionButton {
+                    id: portableUnlockAction
+
+                    text: "Unlock and connect"
+                    accessibleName: "Unlock portable vault and connect"
+                    enabled: portableUnlockPassword.text.length >= 8
+                    variant: "primary"
+                    onClicked: {
+                        if (!pane.controller.unlockPortableCredentialVault(portableUnlockPassword.text)) {
+                            portableUnlockStatus.text = pane.controller.credentialOperationError;
+                            portableUnlockPassword.selectAll();
+                            return;
+                        }
+                        portableUnlockPassword.text = "";
+                        if (pane.controller.connectHostProfile(pane.pendingConnectId, "")) {
+                            portableUnlockDialog.close();
+                            pane.connectionStarted();
+                        } else {
+                            portableUnlockStatus.text = pane.controller.credentialOperationError.length > 0 ? pane.controller.credentialOperationError : "The saved profile could not be connected.";
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Dialog {
         id: credentialDialog
 
         property Item focusRestoreItem: null
@@ -1297,7 +1604,7 @@ Rectangle {
 
             Text {
                 Layout.preferredWidth: 360
-                text: "Authenticate to \"" + pane.pendingConnectName + "\". This credential is kept only for this connection attempt."
+                text: "Authenticate to \"" + pane.pendingConnectName + "\". You can save this credential in the active secure store."
                 color: pane.mutedColor
                 wrapMode: Text.WordWrap
                 font.family: Theme.uiFont
@@ -1314,6 +1621,16 @@ Rectangle {
                 accessibleName: placeholderText
                 selectByMouse: true
                 onAccepted: pane.connectPendingSaved()
+            }
+
+            AppSwitch {
+                id: savedCredentialRemember
+
+                objectName: "savedCredentialRemember"
+                Layout.fillWidth: true
+                checked: true
+                text: "Save this credential securely"
+                accessibleName: "Save this credential in the active secure store"
             }
 
             RowLayout {
@@ -1349,10 +1666,33 @@ Rectangle {
     }
 
     ConfirmationDialog {
+        id: forgetCredentialDialog
+
+        heading: "Forget saved credential?"
+        description: "Remove the password or key passphrase for \"" + pane.pendingForgetName + "\" from the active secure store? The host profile remains."
+        acceptText: "Forget credential"
+        destructive: true
+        onAccepted: {
+            if (pane.controller.forgetHostCredential(pane.pendingForgetId)) {
+                pane.showStatus("Saved credential removed.", false);
+            } else {
+                pane.showStatus(pane.controller.credentialOperationError.length > 0 ? pane.controller.credentialOperationError : "The saved credential could not be removed.", true);
+            }
+            focusRestoreItem = newHostButton;
+            pane.pendingForgetId = "";
+            pane.pendingForgetName = "";
+        }
+        onRejected: {
+            pane.pendingForgetId = "";
+            pane.pendingForgetName = "";
+        }
+    }
+
+    ConfirmationDialog {
         id: deleteDialog
 
         heading: "Delete saved host?"
-        description: "Remove \"" + pane.pendingDeleteName + "\" from this device? This does not change the remote server or trusted host keys."
+        description: "Remove \"" + pane.pendingDeleteName + "\" and its credential from the active store? Copies deliberately retained in another store can be cleared in Settings > Security. This does not change the remote server or trusted host keys."
         acceptText: "Delete"
         destructive: true
         onAccepted: {

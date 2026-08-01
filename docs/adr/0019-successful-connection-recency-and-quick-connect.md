@@ -1,6 +1,6 @@
 # ADR 0019: Successful-connection recency and Quick Connect
 
-Status: accepted
+Status: superseded in part by ADR 0021
 
 ## Context
 
@@ -11,7 +11,9 @@ attempt. Quick Connect must remain useful without turning transient
 credentials into persisted profile data.
 
 The existing SSH profile schema already stores non-secret connection metadata.
-Passwords and private-key passphrases are ephemeral by design.
+At the time of this decision, passwords and private-key passphrases were
+ephemeral. ADR 0021 replaces that constraint when the user explicitly saves a
+credential.
 
 ## Decision
 

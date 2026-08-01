@@ -18,12 +18,14 @@ constexpr qint64 maximumSettingsFileSize = qint64{64} * 1024;
 constexpr qint64 legacySchemaVersion = 1;
 constexpr qint64 materialSchemaVersion = 2;
 constexpr qint64 terminalAppearanceSchemaVersion = 3;
-constexpr qint64 currentSchemaVersion = 4;
+constexpr qint64 accentSchemaVersion = 4;
+constexpr qint64 currentSchemaVersion = 5;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::ApplicationSettings;
 using ztermy::config::ApplicationSettingsStoreError;
 using ztermy::config::BackdropPreference;
+using ztermy::config::CredentialStoragePreference;
 using ztermy::config::CursorPreference;
 using ztermy::config::ThemePreference;
 
@@ -110,6 +112,28 @@ template <>
     return std::nullopt;
 }
 
+template <>
+[[nodiscard]] std::optional<CredentialStoragePreference> parsePreference(const QString &token)
+{
+    if (token == QStringLiteral("automatic"))
+    {
+        return CredentialStoragePreference::automatic;
+    }
+    if (token == QStringLiteral("system"))
+    {
+        return CredentialStoragePreference::system;
+    }
+    if (token == QStringLiteral("portable"))
+    {
+        return CredentialStoragePreference::portable;
+    }
+    if (token == QStringLiteral("session"))
+    {
+        return CredentialStoragePreference::session;
+    }
+    return std::nullopt;
+}
+
 [[nodiscard]] bool validSettings(const ApplicationSettings &settings)
 {
     const QString fontFamily = settings.terminalFontFamily.trimmed();
@@ -135,7 +159,7 @@ template <>
     }
     const qint64 version = versionValue.toInteger();
     if (version != legacySchemaVersion && version != materialSchemaVersion && version != terminalAppearanceSchemaVersion
-        && version != currentSchemaVersion)
+        && version != accentSchemaVersion && version != currentSchemaVersion)
     {
         return std::unexpected(ApplicationSettingsStoreError::unsupportedVersion);
     }
@@ -153,6 +177,7 @@ template <>
     const QJsonValue cursorBlinkValue = root.value(QStringLiteral("cursorBlink"));
     const QJsonValue copyOnSelectValue = root.value(QStringLiteral("copyOnSelect"));
     const QJsonValue confirmMultilinePasteValue = root.value(QStringLiteral("confirmMultilinePaste"));
+    const QJsonValue credentialStorageValue = root.value(QStringLiteral("credentialStorage"));
 
     if (!themeValue.isString() || !opacityValue.isDouble() || !backdropValue.isString() || !fontFamilyValue.isString()
         || !fontSizeValue.isDouble() || !cursorValue.isString() || !cursorBlinkValue.isBool()
@@ -164,18 +189,26 @@ template <>
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
-    if (version == currentSchemaVersion && (!accentValue.isString() || !customAccentValue.isString()))
+    if (version >= accentSchemaVersion && (!accentValue.isString() || !customAccentValue.isString()))
+    {
+        return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
+    }
+    if (version == currentSchemaVersion && !credentialStorageValue.isString())
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
 
     const auto theme = parsePreference<ThemePreference>(themeValue.toString());
     const auto backdrop = parsePreference<BackdropPreference>(backdropValue.toString());
-    const auto accent = version == currentSchemaVersion ? parsePreference<AccentPreference>(accentValue.toString())
-                                                        : std::optional{AccentPreference::ztermy};
+    const auto accent = version >= accentSchemaVersion ? parsePreference<AccentPreference>(accentValue.toString())
+                                                       : std::optional{AccentPreference::ztermy};
     const auto cursor = parsePreference<CursorPreference>(cursorValue.toString());
+    const auto credentialStorage = version == currentSchemaVersion
+                                       ? parsePreference<CredentialStoragePreference>(credentialStorageValue.toString())
+                                       : std::optional{CredentialStoragePreference::automatic};
     const qint64 fontSize = fontSizeValue.toInteger(-1);
-    if (!theme || !backdrop || !accent || !cursor || fontSizeValue.toDouble() != static_cast<double>(fontSize))
+    if (!theme || !backdrop || !accent || !cursor || !credentialStorage
+        || fontSizeValue.toDouble() != static_cast<double>(fontSize))
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
@@ -185,7 +218,7 @@ template <>
         .backdropOpacity = opacityValue.toDouble(),
         .backdrop = *backdrop,
         .accent = *accent,
-        .customAccent = version == currentSchemaVersion ? customAccentValue.toString() : QStringLiteral("#22C55E"),
+        .customAccent = version >= accentSchemaVersion ? customAccentValue.toString() : QStringLiteral("#22C55E"),
         .terminalFontFamily = fontFamilyValue.toString(),
         .terminalFontSize = static_cast<int>(fontSize),
         .terminalBackgroundOpacity =
@@ -194,6 +227,7 @@ template <>
         .cursorBlink = cursorBlinkValue.toBool(),
         .copyOnSelect = copyOnSelectValue.toBool(),
         .confirmMultilinePaste = confirmMultilinePasteValue.toBool(),
+        .credentialStorage = *credentialStorage,
     };
     if (!validSettings(settings))
     {
@@ -275,6 +309,7 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
         {QStringLiteral("cursorBlink"), settings.cursorBlink},
         {QStringLiteral("copyOnSelect"), settings.copyOnSelect},
         {QStringLiteral("confirmMultilinePaste"), settings.confirmMultilinePaste},
+        {QStringLiteral("credentialStorage"), credentialStoragePreferenceToken(settings.credentialStorage)},
     };
 
     QSaveFile file(m_filePath);
@@ -351,6 +386,22 @@ QString cursorPreferenceToken(const CursorPreference preference)
     }
 }
 
+QString credentialStoragePreferenceToken(const CredentialStoragePreference preference)
+{
+    switch (preference)
+    {
+        case CredentialStoragePreference::system:
+            return QStringLiteral("system");
+        case CredentialStoragePreference::portable:
+            return QStringLiteral("portable");
+        case CredentialStoragePreference::session:
+            return QStringLiteral("session");
+        case CredentialStoragePreference::automatic:
+        default:
+            return QStringLiteral("automatic");
+    }
+}
+
 std::optional<ThemePreference> parseThemePreference(const QString &token)
 {
     return parsePreference<ThemePreference>(token);
@@ -369,6 +420,11 @@ std::optional<AccentPreference> parseAccentPreference(const QString &token)
 std::optional<CursorPreference> parseCursorPreference(const QString &token)
 {
     return parsePreference<CursorPreference>(token);
+}
+
+std::optional<CredentialStoragePreference> parseCredentialStoragePreference(const QString &token)
+{
+    return parsePreference<CredentialStoragePreference>(token);
 }
 
 } // namespace ztermy::config

@@ -118,6 +118,27 @@ Rectangle {
         return token === "system" ? 1 : token === "custom" ? 2 : 0;
     }
 
+    function credentialStorageIndex(token) {
+        return token === "portable" ? 1 : token === "session" ? 2 : 0;
+    }
+
+    function credentialStorageToken() {
+        return credentialStorageTokenForIndex(credentialStorageBox.currentIndex);
+    }
+
+    function credentialStorageTokenForIndex(index) {
+        return index === 1 ? "portable" : index === 2 ? "session" : "system";
+    }
+
+    function showCredentialResult(success, successMessage) {
+        statusIsError = !success;
+        statusMessage = success ? successMessage : (controller.credentialOperationError.length > 0 ? controller.credentialOperationError : "The credential operation failed.");
+    }
+
+    function performCredentialMigration() {
+        showCredentialResult(controller.migrateCredentialStorage(credentialStorageToken(), removeCredentialSource.checked), "Credentials migrated and verified.");
+    }
+
     function themeToken() {
         return themeBox.currentIndex === 0 ? "system" : themeBox.currentIndex === 2 ? "light" : "dark";
     }
@@ -164,6 +185,8 @@ Rectangle {
     function focusCurrentCategory() {
         if (currentCategory === "terminal") {
             terminalCategory.focusAction();
+        } else if (currentCategory === "security") {
+            securityCategory.focusAction();
         } else {
             appearanceCategory.focusAction();
         }
@@ -183,6 +206,8 @@ Rectangle {
         cursorBlinkSwitch.checked = controller.cursorBlink;
         copyOnSelectSwitch.checked = controller.copyOnSelect;
         multilinePasteSwitch.checked = controller.confirmMultilinePaste;
+        credentialStorageBox.currentIndex = credentialStorageIndex(controller.effectiveCredentialStorage);
+        credentialCleanupStorageBox.currentIndex = credentialStorageIndex(controller.effectiveCredentialStorage);
         loadingDraft = false;
         previewDraft();
     }
@@ -266,6 +291,17 @@ Rectangle {
             }
 
             CategoryButton {
+                id: securityCategory
+
+                Layout.fillWidth: true
+                title: "Security"
+                iconName: "settings"
+                actionObjectName: "settingsSecurityCategory"
+                selected: pane.currentCategory === "security"
+                onActivated: pane.selectCategory("security")
+            }
+
+            CategoryButton {
                 id: terminalCategory
 
                 Layout.fillWidth: true
@@ -313,7 +349,7 @@ Rectangle {
             opacity: pane.contentReveal
 
             Text {
-                text: pane.currentCategory === "appearance" ? "Appearance" : "Terminal"
+                text: pane.currentCategory === "appearance" ? "Appearance" : pane.currentCategory === "terminal" ? "Terminal" : "Security"
                 color: Theme.text
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.textTitle
@@ -322,7 +358,7 @@ Rectangle {
 
             Text {
                 Layout.fillWidth: true
-                text: pane.currentCategory === "appearance" ? "Choose the application theme and Windows backdrop used across ztermy." : "Configure the global terminal font, background, cursor, selection, and paste behavior."
+                text: pane.currentCategory === "appearance" ? "Choose the application theme and Windows backdrop used across ztermy." : pane.currentCategory === "terminal" ? "Configure the global terminal font, background, cursor, selection, and paste behavior." : "Choose where SSH passwords and key passphrases are stored, unlock the portable vault, or migrate credentials safely."
                 color: Theme.textMuted
                 wrapMode: Text.WordWrap
                 font.family: Theme.uiFont
@@ -589,6 +625,238 @@ Rectangle {
                 }
             }
 
+            SectionCard {
+                Layout.fillWidth: true
+                visible: pane.currentCategory === "security"
+                heading: "Credential storage"
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacingControl
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: "Windows Credential Manager is the installed-mode default. Portable mode uses an AES-256-GCM encrypted vault protected by your master password. Session storage is erased when ztermy exits."
+                        color: Theme.textMuted
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
+                    }
+
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: pane.compactLayout ? 1 : 2
+                        columnSpacing: 18
+                        rowSpacing: 12
+
+                        Label {
+                            text: "Move credentials to"
+                            color: Theme.text
+                        }
+                        AppComboBox {
+                            id: credentialStorageBox
+
+                            objectName: "settingsCredentialStorage"
+                            Layout.fillWidth: true
+                            model: ["Windows Credential Manager", "Portable encrypted vault", "Session only"]
+                            accessibleName: "Credential storage destination"
+                        }
+
+                        Item {
+                            visible: !pane.compactLayout
+                            implicitHeight: removeCredentialSource.implicitHeight
+                        }
+                        AppCheckBox {
+                            id: removeCredentialSource
+
+                            objectName: "settingsCredentialRemoveSource"
+                            Layout.fillWidth: true
+                            checked: true
+                            text: "Remove verified copies from the previous store"
+                            accessibleName: text
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: "Active store: " + pane.controller.effectiveCredentialStorage
+                            color: Theme.textSoft
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.textLabel
+                        }
+
+                        ActionButton {
+                            objectName: "settingsCredentialMigrate"
+                            text: "Migrate"
+                            accessibleName: "Migrate credentials to selected storage"
+                            variant: "primary"
+                            enabled: pane.credentialStorageToken() !== pane.controller.effectiveCredentialStorage && (pane.credentialStorageToken() !== "portable" || (pane.controller.portableVaultInitialized && !pane.controller.portableVaultLocked))
+                            onClicked: {
+                                if (removeCredentialSource.checked) {
+                                    credentialMigrationDialog.openFrom(this);
+                                } else {
+                                    pane.performCredentialMigration();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            SectionCard {
+                Layout.fillWidth: true
+                visible: pane.currentCategory === "security"
+                heading: "Portable vault"
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacingControl
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: !pane.controller.portableVaultInitialized ? "Create a master password before migrating credentials into the portable vault." : pane.controller.portableVaultLocked ? "The portable vault is locked. Unlock it to connect with or modify saved credentials." : "The portable vault is unlocked for this ztermy session. The master password is never persisted."
+                        color: Theme.textMuted
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
+                    }
+
+                    AppTextField {
+                        id: portablePasswordField
+
+                        objectName: "settingsPortableVaultPassword"
+                        Layout.fillWidth: true
+                        placeholderText: pane.controller.portableVaultInitialized && pane.controller.portableVaultLocked ? "Master password (minimum 8 characters)" : pane.controller.portableVaultInitialized ? "New master password (minimum 8 characters)" : "Create master password (minimum 8 characters)"
+                        echoMode: TextInput.Password
+                        accessibleName: placeholderText
+                        selectByMouse: true
+                    }
+
+                    AppTextField {
+                        id: portablePasswordConfirmField
+
+                        objectName: "settingsPortableVaultPasswordConfirm"
+                        Layout.fillWidth: true
+                        visible: !pane.controller.portableVaultInitialized || !pane.controller.portableVaultLocked
+                        placeholderText: "Confirm master password (minimum 8 characters)"
+                        echoMode: TextInput.Password
+                        accessibleName: placeholderText
+                        selectByMouse: true
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        visible: portablePasswordField.text.length > 0 && portablePasswordField.text.length < 8
+                        text: "The master password must contain at least 8 characters."
+                        color: Theme.dangerText
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+
+                        ActionButton {
+                            visible: pane.controller.portableVaultInitialized && !pane.controller.portableVaultLocked
+                            text: "Lock"
+                            accessibleName: "Lock portable credential vault"
+                            onClicked: {
+                                pane.controller.lockPortableCredentialVault();
+                                portablePasswordField.text = "";
+                                portablePasswordConfirmField.text = "";
+                                pane.showCredentialResult(true, "Portable vault locked.");
+                            }
+                        }
+
+                        Item {
+                            Layout.fillWidth: true
+                        }
+
+                        ActionButton {
+                            objectName: "settingsPortableVaultAction"
+                            text: !pane.controller.portableVaultInitialized ? "Create vault" : pane.controller.portableVaultLocked ? "Unlock" : "Change password"
+                            accessibleName: text + " for portable credential vault"
+                            variant: "primary"
+                            enabled: portablePasswordField.text.length >= 8 && (pane.controller.portableVaultInitialized && pane.controller.portableVaultLocked || portablePasswordField.text === portablePasswordConfirmField.text)
+                            onClicked: {
+                                let success = false;
+                                let message = "";
+                                if (!pane.controller.portableVaultInitialized) {
+                                    success = pane.controller.initializePortableCredentialVault(portablePasswordField.text);
+                                    message = "Portable vault created and unlocked.";
+                                } else if (pane.controller.portableVaultLocked) {
+                                    success = pane.controller.unlockPortableCredentialVault(portablePasswordField.text);
+                                    message = "Portable vault unlocked.";
+                                } else {
+                                    success = pane.controller.changePortableVaultMasterPassword(portablePasswordField.text);
+                                    message = "Portable vault password changed.";
+                                }
+                                pane.showCredentialResult(success, message);
+                                if (success) {
+                                    portablePasswordField.text = "";
+                                    portablePasswordConfirmField.text = "";
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            SectionCard {
+                Layout.fillWidth: true
+                visible: pane.currentCategory === "security"
+                heading: "Credential cleanup"
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacingControl
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: "Clear active credentials or remove copies deliberately retained in another store. Clearing the active store also detaches credentials from saved hosts."
+                        color: Theme.textMuted
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
+                    }
+
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: pane.compactLayout ? 1 : 3
+                        columnSpacing: Theme.spacingControl
+                        rowSpacing: Theme.spacingControl
+
+                        Label {
+                            text: "Credential store"
+                            color: Theme.text
+                        }
+
+                        AppComboBox {
+                            id: credentialCleanupStorageBox
+
+                            objectName: "settingsCredentialCleanupStorage"
+                            Layout.fillWidth: true
+                            model: ["Windows Credential Manager", "Portable encrypted vault", "Session only"]
+                            accessibleName: "Credential store to clear"
+                        }
+
+                        ActionButton {
+                            id: removeAllCredentialsButton
+
+                            objectName: "settingsRemoveAllCredentials"
+                            Layout.fillWidth: pane.compactLayout
+                            text: "Clear store"
+                            accessibleName: "Clear selected credential store"
+                            onClicked: removeAllCredentialsDialog.openFrom(removeAllCredentialsButton)
+                        }
+                    }
+                }
+            }
+
             StatusMessage {
                 Layout.fillWidth: true
                 text: pane.statusMessage
@@ -597,6 +865,7 @@ Rectangle {
 
             GridLayout {
                 Layout.fillWidth: true
+                visible: pane.currentCategory !== "security"
                 columns: pane.compactLayout ? 1 : 4
                 columnSpacing: Theme.spacingControl
                 rowSpacing: Theme.spacingControl
@@ -642,6 +911,32 @@ Rectangle {
                     onClicked: pane.applyDraft()
                 }
             }
+        }
+    }
+
+    ConfirmationDialog {
+        id: credentialMigrationDialog
+
+        heading: pane.credentialStorageToken() === "session" ? "Move credentials to session-only storage?" : "Remove credentials from the previous store?"
+        description: pane.credentialStorageToken() === "session" ? "Credentials will be verified in memory and removed from the persistent store. They will be lost when ztermy exits." : "After every credential is copied and verified, ztermy will remove its copy from the previous store."
+        acceptText: "Migrate and remove"
+        destructive: pane.credentialStorageToken() === "session"
+        onAccepted: pane.performCredentialMigration()
+    }
+
+    ConfirmationDialog {
+        id: removeAllCredentialsDialog
+
+        readonly property string selectedStorage: pane.credentialStorageTokenForIndex(credentialCleanupStorageBox.currentIndex)
+        readonly property bool clearsActiveStorage: selectedStorage === pane.controller.effectiveCredentialStorage
+
+        heading: clearsActiveStorage ? "Clear the active credential store?" : "Clear retained credential copies?"
+        description: clearsActiveStorage ? "This permanently removes ztermy passwords and key passphrases from the active store. Host profiles remain, but will ask for credentials next time." : "This permanently removes all ztermy credential copies from the selected inactive store. Credentials and host references in the active store remain unchanged."
+        acceptText: "Clear store"
+        destructive: true
+        onAccepted: {
+            pane.showCredentialResult(pane.controller.clearCredentialStorage(selectedStorage), clearsActiveStorage ? "Active credentials were removed and detached from saved hosts." : "Retained credential copies were removed from the selected store.");
+            focusRestoreItem = removeAllCredentialsButton;
         }
     }
 }

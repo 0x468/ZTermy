@@ -1,5 +1,9 @@
 # Host Vault manual verification
 
+> This document preserves the accepted V1/V1.1 baseline. V1.2 credential
+> persistence and updated host flows are verified by
+> [V1_2_CREDENTIALS.md](V1_2_CREDENTIALS.md).
+
 Run the dynamic Debug build on Windows 11 and open **Hosts** from the custom
 title bar.
 Use non-sensitive test endpoints and never place a real password or passphrase

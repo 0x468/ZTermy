@@ -1,6 +1,7 @@
 #include "application/AppController.h"
 
 #include "domain/ssh/SshTarget.h"
+#include "infrastructure/security/InMemoryCredentialVault.h"
 #include "ui/terminal/TerminalItem.h"
 
 #include <QDateTime>
@@ -36,6 +37,11 @@ namespace
     return QFileInfo(profileStorePath).dir().filePath(QStringLiteral("settings.json"));
 }
 
+[[nodiscard]] QString siblingCredentialsFile(const QString &profileStorePath)
+{
+    return QFileInfo(profileStorePath).dir().filePath(QStringLiteral("credentials.zvlt"));
+}
+
 [[nodiscard]] std::string utf8String(const QString &value)
 {
     const QByteArray bytes = value.toUtf8();
@@ -47,7 +53,30 @@ namespace
     return QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size()));
 }
 
-[[nodiscard]] QVariantMap profileVariantMap(const ztermy::ssh::SshProfile &profile)
+[[nodiscard]] bool profileHasStoredCredential(const ztermy::ssh::SshProfile &profile,
+                                              const std::vector<ztermy::security::CredentialKey> *availableKeys)
+{
+    if (!profile.credentialReference)
+    {
+        return false;
+    }
+    if (availableKeys == nullptr)
+    {
+        // A locked or temporarily unavailable persistent backend cannot be
+        // enumerated. Preserve the non-secret profile metadata so the UI can
+        // offer the appropriate unlock/recovery flow.
+        return true;
+    }
+    const ztermy::security::CredentialKey key{
+        .profileId = *profile.credentialReference,
+        .kind = profile.authentication == ztermy::ssh::SshAuthenticationMethod::PrivateKey
+                    ? ztermy::security::CredentialKind::PrivateKeyPassphrase
+                    : ztermy::security::CredentialKind::Password,
+    };
+    return std::ranges::find(*availableKeys, key) != availableKeys->end();
+}
+
+[[nodiscard]] QVariantMap profileVariantMap(const ztermy::ssh::SshProfile &profile, const bool credentialStored)
 {
     QVariantMap result{
         {QStringLiteral("id"), utf8QString(profile.id)},
@@ -61,12 +90,108 @@ namespace
                                                : QStringLiteral("password")},
         {QStringLiteral("privateKeyPath"), utf8QString(profile.privateKeyPath)},
         {QStringLiteral("privateKeyPassphraseRequired"), profile.privateKeyPassphraseRequired},
+        {QStringLiteral("credentialStored"), credentialStored},
     };
     if (profile.lastConnectedUtcMs)
     {
         result.insert(QStringLiteral("lastConnectedUtcMs"), *profile.lastConnectedUtcMs);
     }
     return result;
+}
+
+[[nodiscard]] ztermy::security::CredentialStorage
+defaultCredentialStorage(const ztermy::config::StorageMode mode) noexcept
+{
+    return mode == ztermy::config::StorageMode::installed ? ztermy::security::CredentialStorage::System
+                                                          : ztermy::security::CredentialStorage::Portable;
+}
+
+[[nodiscard]] std::optional<ztermy::security::CredentialStorage> parseCredentialStorage(const QString &value)
+{
+    if (value == QStringLiteral("system"))
+    {
+        return ztermy::security::CredentialStorage::System;
+    }
+    if (value == QStringLiteral("portable"))
+    {
+        return ztermy::security::CredentialStorage::Portable;
+    }
+    if (value == QStringLiteral("session"))
+    {
+        return ztermy::security::CredentialStorage::Session;
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] ztermy::config::CredentialStoragePreference
+credentialPreferenceForStorage(const ztermy::security::CredentialStorage storage) noexcept
+{
+    switch (storage)
+    {
+        case ztermy::security::CredentialStorage::System:
+            return ztermy::config::CredentialStoragePreference::system;
+        case ztermy::security::CredentialStorage::Portable:
+            return ztermy::config::CredentialStoragePreference::portable;
+        case ztermy::security::CredentialStorage::Session:
+            return ztermy::config::CredentialStoragePreference::session;
+    }
+    return ztermy::config::CredentialStoragePreference::automatic;
+}
+
+[[nodiscard]] QString credentialVaultErrorMessage(const ztermy::security::CredentialVaultError error)
+{
+    using enum ztermy::security::CredentialVaultError;
+    switch (error)
+    {
+        case Locked:
+            return QStringLiteral("Unlock the portable credential vault first.");
+        case Unavailable:
+            return QStringLiteral("The selected credential store is unavailable in this Windows session.");
+        case AccessDenied:
+            return QStringLiteral("Windows denied access to the selected credential store.");
+        case AuthenticationFailed:
+            return QStringLiteral("The vault password is incorrect, or the vault was modified.");
+        case WeakMasterPassword:
+            return QStringLiteral("Use a vault password with at least 8 UTF-8 bytes.");
+        case AlreadyInitialized:
+            return QStringLiteral("The portable credential vault is already initialized.");
+        case CorruptData:
+            return QStringLiteral("The portable credential vault is damaged or invalid.");
+        case UnsupportedVersion:
+            return QStringLiteral("This credential vault was created by an unsupported ztermy version.");
+        case EmptySecret:
+            return QStringLiteral("Enter a password or key passphrase before saving it.");
+        case SecretTooLarge:
+            return QStringLiteral("The credential is larger than the supported limit.");
+        case NotFound:
+            return QStringLiteral("No saved credential was found for this host.");
+        case InvalidKey:
+            return QStringLiteral("The credential reference is invalid.");
+        case IoError:
+            return QStringLiteral("The credential store could not be read or written.");
+        case CryptoError:
+            return QStringLiteral("Windows could not complete the credential encryption operation.");
+        case MigrationFailed:
+            return QStringLiteral("Credential migration was rolled back because verification failed.");
+    }
+    return QStringLiteral("The credential operation failed.");
+}
+
+void logCredentialRollbackResult(std::expected<void, ztermy::security::CredentialVaultError> result,
+                                 const char *operation)
+{
+    if (!result)
+    {
+        qCWarning(appControllerLog) << "Credential rollback failed during" << operation
+                                    << "error=" << static_cast<int>(result.error());
+    }
+}
+
+[[nodiscard]] ztermy::security::CredentialKind credentialKind(const ztermy::ssh::SshProfile &profile) noexcept
+{
+    return profile.authentication == ztermy::ssh::SshAuthenticationMethod::Password
+               ? ztermy::security::CredentialKind::Password
+               : ztermy::security::CredentialKind::PrivateKeyPassphrase;
 }
 
 [[nodiscard]] QString quickConnectError(const ztermy::ssh::SshTargetError error)
@@ -135,6 +260,8 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
       m_profileStore(std::move(profileStorePath)),
       m_settingsStore(settingsPath.isEmpty() ? siblingSettingsFile(m_profileStore.filePath())
                                              : std::move(settingsPath)),
+      m_credentialVaults(std::make_unique<security::CredentialVaultCoordinator>(
+          siblingCredentialsFile(m_profileStore.filePath()), security::CredentialStorage::Session)),
       m_knownHostsPath(std::move(knownHostsPath))
 {
     if (!m_localSessionFactory)
@@ -144,6 +271,44 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
         };
     }
     Q_ASSERT(m_localSessionFactory);
+    loadHostProfiles();
+    loadApplicationSettings();
+}
+
+AppController::AppController(QString profileStorePath, QString knownHostsPath, QString settingsPath,
+                             QString credentialsPath, const config::StorageMode storageMode, QObject *parent)
+    : AppController(
+          std::move(profileStorePath), std::move(knownHostsPath), std::move(settingsPath), std::move(credentialsPath),
+          storageMode,
+          [] {
+              return std::make_unique<terminal::LocalTerminalSession>();
+          },
+          parent)
+{
+}
+
+AppController::AppController(QString profileStorePath, QString knownHostsPath, QString settingsPath,
+                             QString credentialsPath, const config::StorageMode storageMode,
+                             LocalTerminalSessionFactory localSessionFactory, QObject *parent)
+    : QObject(parent),
+      m_localSessionFactory(std::move(localSessionFactory)),
+      m_profileStore(std::move(profileStorePath)),
+      m_settingsStore(settingsPath.isEmpty() ? siblingSettingsFile(m_profileStore.filePath())
+                                             : std::move(settingsPath)),
+      m_credentialVaults(std::make_unique<security::CredentialVaultCoordinator>(
+          credentialsPath.isEmpty() ? siblingCredentialsFile(m_profileStore.filePath()) : std::move(credentialsPath),
+          defaultCredentialStorage(storageMode))),
+      m_defaultCredentialStorage(defaultCredentialStorage(storageMode)),
+      m_knownHostsPath(std::move(knownHostsPath))
+{
+    if (!m_localSessionFactory)
+    {
+        m_localSessionFactory = [] {
+            return std::make_unique<terminal::LocalTerminalSession>();
+        };
+    }
+    Q_ASSERT(m_localSessionFactory);
+    Q_ASSERT(m_credentialVaults);
     loadHostProfiles();
     loadApplicationSettings();
 }
@@ -226,17 +391,21 @@ QString AppController::defaultPrivateKeyPath() const
 
 QVariantList AppController::hostProfiles() const
 {
+    const auto keys = m_credentialVaults->active().listKeys();
+    const std::vector<security::CredentialKey> *availableKeys = keys ? &*keys : nullptr;
     QVariantList result;
     result.reserve(static_cast<qsizetype>(m_profiles.size()));
     for (const ssh::SshProfile &profile : m_profiles)
     {
-        result.append(profileVariantMap(profile));
+        result.append(profileVariantMap(profile, profileHasStoredCredential(profile, availableKeys)));
     }
     return result;
 }
 
 QVariantList AppController::recentHostProfiles() const
 {
+    const auto keys = m_credentialVaults->active().listKeys();
+    const std::vector<security::CredentialKey> *availableKeys = keys ? &*keys : nullptr;
     std::vector<const ssh::SshProfile *> recent;
     recent.reserve(m_profiles.size());
     for (const ssh::SshProfile &profile : m_profiles)
@@ -258,7 +427,7 @@ QVariantList AppController::recentHostProfiles() const
     result.reserve(static_cast<qsizetype>(recent.size()));
     for (const ssh::SshProfile *profile : recent)
     {
-        result.append(profileVariantMap(*profile));
+        result.append(profileVariantMap(*profile, profileHasStoredCredential(*profile, availableKeys)));
     }
     return result;
 }
@@ -379,6 +548,31 @@ bool AppController::copyOnSelect() const noexcept
 bool AppController::confirmMultilinePaste() const noexcept
 {
     return m_settings.confirmMultilinePaste;
+}
+
+QString AppController::credentialStoragePreference() const
+{
+    return config::credentialStoragePreferenceToken(m_settings.credentialStorage);
+}
+
+QString AppController::effectiveCredentialStorage() const
+{
+    return QString::fromLatin1(security::credentialStorageToken(m_credentialVaults->storage()));
+}
+
+bool AppController::portableVaultInitialized() const noexcept
+{
+    return m_credentialVaults->portableInitialized();
+}
+
+bool AppController::portableVaultLocked() const noexcept
+{
+    return m_credentialVaults->portableLocked();
+}
+
+QString AppController::credentialOperationError() const
+{
+    return m_credentialOperationError;
 }
 
 QString AppController::startLocalTerminal()
@@ -638,9 +832,53 @@ bool AppController::saveHostProfile(const QString &id, const QString &name, cons
                                     const QString &privateKeyPath, const bool privateKeyPassphraseRequired,
                                     const QString &group)
 {
-    const QString normalizedName = name.trimmed();
-    const QString normalizedGroup = group.trimmed();
+    return saveHostProfileInternal(id, name, host, port, username, authentication, privateKeyPath,
+                                   privateKeyPassphraseRequired, group, {}, false, false);
+}
+
+bool AppController::saveHostProfileWithCredential(const QString &id, const QString &name, const QString &host,
+                                                  const int port, const QString &username,
+                                                  const QString &authentication, const QString &privateKeyPath,
+                                                  const bool privateKeyPassphraseRequired, const QString &group,
+                                                  const QString &secret, const bool rememberCredential)
+{
+    return saveHostProfileInternal(id, name, host, port, username, authentication, privateKeyPath,
+                                   privateKeyPassphraseRequired, group, secret, rememberCredential, true);
+}
+
+bool AppController::saveAndConnectHostProfile(const QString &id, const QString &name, const QString &host,
+                                              const int port, const QString &username, const QString &authentication,
+                                              const QString &privateKeyPath, const bool privateKeyPassphraseRequired,
+                                              const QString &group, const QString &secret,
+                                              const bool rememberCredential)
+{
+    const QString profileId =
+        id.trimmed().isEmpty() ? QUuid::createUuid().toString(QUuid::WithoutBraces) : id.trimmed();
+    if (!saveHostProfileInternal(profileId, name, host, port, username, authentication, privateKeyPath,
+                                 privateKeyPassphraseRequired, group, secret, rememberCredential, true))
+    {
+        return false;
+    }
+    if (connectHostProfile(profileId, rememberCredential ? QString{} : secret))
+    {
+        return true;
+    }
+    if (m_credentialOperationError.isEmpty())
+    {
+        setCredentialOperationError(QStringLiteral("The profile was saved, but the connection could not be started."));
+    }
+    return false;
+}
+
+bool AppController::saveHostProfileInternal(const QString &id, const QString &name, const QString &host, const int port,
+                                            const QString &username, const QString &authentication,
+                                            const QString &privateKeyPath, const bool privateKeyPassphraseRequired,
+                                            const QString &group, const QString &secret, const bool rememberCredential,
+                                            const bool manageCredential)
+{
     const QString normalizedHost = host.trimmed();
+    const QString normalizedName = name.trimmed().isEmpty() ? normalizedHost : name.trimmed();
+    const QString normalizedGroup = group.trimmed();
     const QString normalizedUsername = username.trimmed();
     const QString normalizedPrivateKeyPath = privateKeyPath.trimmed();
     const QString profileId = id.isEmpty() ? QUuid::createUuid().toString(QUuid::WithoutBraces) : id.trimmed();
@@ -674,6 +912,7 @@ bool AppController::saveHostProfile(const QString &id, const QString &name, cons
 
     std::vector<ssh::SshProfile> updated = m_profiles;
     const auto existing = std::ranges::find(updated, profile.id, &ssh::SshProfile::id);
+    std::optional<security::CredentialKey> previousKey;
     if (existing == updated.end())
     {
         updated.push_back(profile);
@@ -681,15 +920,119 @@ bool AppController::saveHostProfile(const QString &id, const QString &name, cons
     else
     {
         profile.lastConnectedUtcMs = existing->lastConnectedUtcMs;
+        if (existing->credentialReference)
+        {
+            previousKey =
+                security::CredentialKey{.profileId = *existing->credentialReference, .kind = credentialKind(*existing)};
+        }
+        if (!manageCredential
+            || (rememberCredential && secret.isEmpty() && existing->authentication == profile.authentication))
+        {
+            profile.credentialReference = existing->credentialReference;
+        }
         *existing = profile;
+    }
+
+    const security::CredentialKey desiredKey{.profileId = profile.id, .kind = credentialKind(profile)};
+    const bool shouldStore = manageCredential && rememberCredential && !secret.isEmpty();
+    if (shouldStore && m_credentialVaults->storage() == security::CredentialStorage::Portable
+        && !m_credentialVaults->portableInitialized())
+    {
+        setCredentialOperationError(
+            QStringLiteral("Create the portable credential vault in Settings > Security before saving a secret."));
+        return false;
+    }
+    const bool shouldRemovePrevious =
+        manageCredential && previousKey
+        && (!rememberCredential || (shouldStore && *previousKey != desiredKey)
+            || (rememberCredential && secret.isEmpty() && profile.credentialReference != previousKey->profileId));
+    std::optional<security::SensitiveByteArray> previousDesiredSecret;
+    std::optional<security::SensitiveByteArray> removedPreviousSecret;
+
+    if (shouldStore)
+    {
+        auto previous = m_credentialVaults->active().read(desiredKey);
+        if (previous)
+        {
+            previousDesiredSecret = std::move(*previous);
+        }
+        else if (previous.error() != security::CredentialVaultError::NotFound)
+        {
+            setCredentialOperationError(credentialVaultErrorMessage(previous.error()));
+            return false;
+        }
+        auto stored = m_credentialVaults->active().store(desiredKey, security::SensitiveByteArray(secret.toUtf8()));
+        if (!stored)
+        {
+            setCredentialOperationError(credentialVaultErrorMessage(stored.error()));
+            return false;
+        }
+        profile.credentialReference = profile.id;
+        const auto target = std::ranges::find(updated, profile.id, &ssh::SshProfile::id);
+        Q_ASSERT(target != updated.end());
+        target->credentialReference = profile.credentialReference;
+    }
+
+    const auto rollbackDesiredCredential = [&] {
+        if (!shouldStore)
+        {
+            return;
+        }
+        if (previousDesiredSecret)
+        {
+            const std::string_view bytes = previousDesiredSecret->view();
+            logCredentialRollbackResult(m_credentialVaults->active().store(
+                                            desiredKey, security::SensitiveByteArray(QByteArray(
+                                                            bytes.data(), static_cast<qsizetype>(bytes.size())))),
+                                        "profile-save restore");
+        }
+        else
+        {
+            logCredentialRollbackResult(m_credentialVaults->active().remove(desiredKey), "profile-save removal");
+        }
+    };
+
+    if (shouldRemovePrevious && previousKey)
+    {
+        auto previous = m_credentialVaults->active().read(*previousKey);
+        if (previous)
+        {
+            removedPreviousSecret = std::move(*previous);
+        }
+        else if (previous.error() != security::CredentialVaultError::NotFound)
+        {
+            rollbackDesiredCredential();
+            setCredentialOperationError(credentialVaultErrorMessage(previous.error()));
+            return false;
+        }
+        const auto removed = m_credentialVaults->active().remove(*previousKey);
+        if (!removed && removed.error() != security::CredentialVaultError::NotFound)
+        {
+            rollbackDesiredCredential();
+            setCredentialOperationError(credentialVaultErrorMessage(removed.error()));
+            return false;
+        }
     }
 
     if (!m_profileStore.save(updated))
     {
+        if (shouldStore)
+        {
+            rollbackDesiredCredential();
+        }
+        if (shouldRemovePrevious && previousKey && removedPreviousSecret)
+        {
+            const std::string_view bytes = removedPreviousSecret->view();
+            logCredentialRollbackResult(m_credentialVaults->active().store(
+                                            *previousKey, security::SensitiveByteArray(QByteArray(
+                                                              bytes.data(), static_cast<qsizetype>(bytes.size())))),
+                                        "previous credential restore");
+        }
         qCWarning(appControllerLog) << "Unable to persist SSH profiles";
         return false;
     }
     m_profiles = std::move(updated);
+    setCredentialOperationError({});
     emit hostProfilesChanged();
     return true;
 }
@@ -717,6 +1060,7 @@ bool AppController::duplicateHostProfile(const QString &id)
     ssh::SshProfile copy = *source;
     copy.id = utf8String(QUuid::createUuid().toString(QUuid::WithoutBraces));
     copy.name = utf8String(copyName);
+    copy.credentialReference.reset();
     copy.lastConnectedUtcMs.reset();
     std::vector<ssh::SshProfile> updated = m_profiles;
     updated.push_back(std::move(copy));
@@ -739,16 +1083,130 @@ bool AppController::deleteHostProfile(const QString &id)
     {
         return false;
     }
+    std::optional<security::CredentialKey> key;
+    std::optional<security::SensitiveByteArray> removedSecret;
+    if (profile->credentialReference)
+    {
+        key = security::CredentialKey{.profileId = *profile->credentialReference, .kind = credentialKind(*profile)};
+        auto current = m_credentialVaults->active().read(*key);
+        if (current)
+        {
+            removedSecret = std::move(*current);
+        }
+        else if (current.error() != security::CredentialVaultError::NotFound)
+        {
+            setCredentialOperationError(credentialVaultErrorMessage(current.error()));
+            return false;
+        }
+        const auto removed = m_credentialVaults->active().remove(*key);
+        if (!removed && removed.error() != security::CredentialVaultError::NotFound)
+        {
+            setCredentialOperationError(credentialVaultErrorMessage(removed.error()));
+            return false;
+        }
+    }
     updated.erase(profile);
 
     if (!m_profileStore.save(updated))
     {
+        if (key && removedSecret)
+        {
+            const std::string_view bytes = removedSecret->view();
+            logCredentialRollbackResult(
+                m_credentialVaults->active().store(
+                    *key, security::SensitiveByteArray(QByteArray(bytes.data(), static_cast<qsizetype>(bytes.size())))),
+                "deleted profile restore");
+        }
         qCWarning(appControllerLog) << "Unable to persist SSH profiles after deletion";
         return false;
     }
     m_profiles = std::move(updated);
+    setCredentialOperationError({});
     emit hostProfilesChanged();
     return true;
+}
+
+bool AppController::forgetHostCredential(const QString &id)
+{
+    std::vector<ssh::SshProfile> updated = m_profiles;
+    const auto profile = std::ranges::find(updated, utf8String(id.trimmed()), &ssh::SshProfile::id);
+    if (profile == updated.end() || !profile->credentialReference)
+    {
+        return false;
+    }
+    const security::CredentialKey key{.profileId = *profile->credentialReference, .kind = credentialKind(*profile)};
+    auto current = m_credentialVaults->active().read(key);
+    std::optional<security::SensitiveByteArray> removedSecret;
+    if (current)
+    {
+        removedSecret = std::move(*current);
+    }
+    else if (current.error() != security::CredentialVaultError::NotFound)
+    {
+        setCredentialOperationError(credentialVaultErrorMessage(current.error()));
+        return false;
+    }
+    const auto removed = m_credentialVaults->active().remove(key);
+    if (!removed && removed.error() != security::CredentialVaultError::NotFound)
+    {
+        setCredentialOperationError(credentialVaultErrorMessage(removed.error()));
+        return false;
+    }
+    profile->credentialReference.reset();
+    if (!m_profileStore.save(updated))
+    {
+        if (removedSecret)
+        {
+            const std::string_view bytes = removedSecret->view();
+            logCredentialRollbackResult(
+                m_credentialVaults->active().store(
+                    key, security::SensitiveByteArray(QByteArray(bytes.data(), static_cast<qsizetype>(bytes.size())))),
+                "forgotten credential restore");
+        }
+        return false;
+    }
+    m_profiles = std::move(updated);
+    setCredentialOperationError({});
+    emit hostProfilesChanged();
+    return true;
+}
+
+bool AppController::saveHostCredential(const QString &id, const QString &secret)
+{
+    const auto profile = std::ranges::find(m_profiles, utf8String(id.trimmed()), &ssh::SshProfile::id);
+    if (profile == m_profiles.end() || secret.isEmpty())
+    {
+        return false;
+    }
+    return saveHostProfileWithCredential(
+        id, utf8QString(profile->name), utf8QString(profile->host), profile->port, utf8QString(profile->username),
+        profile->authentication == ssh::SshAuthenticationMethod::PrivateKey ? QStringLiteral("private-key")
+                                                                            : QStringLiteral("password"),
+        utf8QString(profile->privateKeyPath), profile->privateKeyPassphraseRequired, utf8QString(profile->group),
+        secret, true);
+}
+
+QString AppController::readHostCredential(const QString &id)
+{
+    const auto profile = std::ranges::find(m_profiles, utf8String(id.trimmed()), &ssh::SshProfile::id);
+    if (profile == m_profiles.end() || !profile->credentialReference)
+    {
+        setCredentialOperationError(QStringLiteral("This host profile has no saved credential."));
+        return {};
+    }
+
+    const security::CredentialKey key{.profileId = *profile->credentialReference, .kind = credentialKind(*profile)};
+    auto secret = m_credentialVaults->active().read(key);
+    if (!secret)
+    {
+        setCredentialOperationError(credentialVaultErrorMessage(secret.error()));
+        return {};
+    }
+
+    const std::string_view bytes = secret->view();
+    QString result = QString::fromUtf8(bytes.data(), static_cast<qsizetype>(bytes.size()));
+    setCredentialOperationError({});
+    return result;
 }
 
 bool AppController::connectHostProfile(const QString &id, const QString &secret)
@@ -759,12 +1217,22 @@ bool AppController::connectHostProfile(const QString &id, const QString &secret)
     {
         return false;
     }
-    if (profile->authentication == ssh::SshAuthenticationMethod::Password && secret.isEmpty())
+    security::SensitiveByteArray connectionSecret(secret.toUtf8());
+    if (connectionSecret.empty() && profile->credentialReference)
     {
-        return false;
+        auto stored = m_credentialVaults->active().read(
+            {.profileId = *profile->credentialReference, .kind = credentialKind(*profile)});
+        if (!stored)
+        {
+            setCredentialOperationError(credentialVaultErrorMessage(stored.error()));
+            return false;
+        }
+        connectionSecret = std::move(*stored);
     }
-    if (profile->privateKeyPassphraseRequired && secret.isEmpty())
+    if ((profile->authentication == ssh::SshAuthenticationMethod::Password || profile->privateKeyPassphraseRequired)
+        && connectionSecret.empty())
     {
+        setCredentialOperationError(QStringLiteral("Enter the credential required by this host."));
         return false;
     }
     ssh::SshConnectionRequest request{
@@ -773,9 +1241,10 @@ bool AppController::connectHostProfile(const QString &id, const QString &secret)
         .username = utf8QString(profile->username),
         .authentication = profile->authentication,
         .privateKeyPath = utf8QString(profile->privateKeyPath),
-        .secret = security::SensitiveByteArray(secret.toUtf8()),
+        .secret = std::move(connectionSecret),
         .knownHostsPath = m_knownHostsPath,
     };
+    setCredentialOperationError({});
     return startSshConnection(std::move(request), id);
 }
 
@@ -825,12 +1294,12 @@ bool AppController::connectQuick(const QString &target, const QString &authentic
     if (shouldSaveProfile)
     {
         const QString id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-        if (!saveHostProfile(id, profileName, host, parsed->port, username, authentication, normalizedKeyPath,
-                             privateKeyPassphraseRequired, group))
+        if (!saveHostProfileWithCredential(id, profileName, host, parsed->port, username, authentication,
+                                           normalizedKeyPath, privateKeyPassphraseRequired, group, secret, true))
         {
             return false;
         }
-        return connectHostProfile(id, secret);
+        return connectHostProfile(id, {});
     }
 
     ssh::SshConnectionRequest request{
@@ -875,12 +1344,196 @@ bool AppController::saveApplicationSettings(const QString &theme, const qreal ba
         .cursorBlink = cursorShouldBlink,
         .copyOnSelect = shouldCopyOnSelect,
         .confirmMultilinePaste = shouldConfirmMultilinePaste,
+        .credentialStorage = m_settings.credentialStorage,
     });
 }
 
 bool AppController::resetApplicationSettings()
 {
-    return persistApplicationSettings(config::ApplicationSettings{});
+    config::ApplicationSettings defaults;
+    defaults.credentialStorage = m_settings.credentialStorage;
+    return persistApplicationSettings(defaults);
+}
+
+bool AppController::initializePortableCredentialVault(const QString &masterPassword)
+{
+    auto initialized = m_credentialVaults->initializePortable(security::SensitiveByteArray(masterPassword.toUtf8()));
+    if (!initialized)
+    {
+        setCredentialOperationError(credentialVaultErrorMessage(initialized.error()));
+        return false;
+    }
+    setCredentialOperationError({});
+    emit hostProfilesChanged();
+    emit credentialVaultChanged();
+    return true;
+}
+
+bool AppController::unlockPortableCredentialVault(const QString &masterPassword)
+{
+    auto unlocked = m_credentialVaults->unlockPortable(security::SensitiveByteArray(masterPassword.toUtf8()));
+    if (!unlocked)
+    {
+        setCredentialOperationError(credentialVaultErrorMessage(unlocked.error()));
+        return false;
+    }
+    setCredentialOperationError({});
+    emit hostProfilesChanged();
+    emit credentialVaultChanged();
+    return true;
+}
+
+bool AppController::changePortableVaultMasterPassword(const QString &masterPassword)
+{
+    auto changed =
+        m_credentialVaults->changePortableMasterPassword(security::SensitiveByteArray(masterPassword.toUtf8()));
+    if (!changed)
+    {
+        setCredentialOperationError(credentialVaultErrorMessage(changed.error()));
+        return false;
+    }
+    setCredentialOperationError({});
+    emit credentialVaultChanged();
+    return true;
+}
+
+void AppController::lockPortableCredentialVault()
+{
+    m_credentialVaults->lockPortable();
+    setCredentialOperationError({});
+    emit hostProfilesChanged();
+    emit credentialVaultChanged();
+}
+
+bool AppController::migrateCredentialStorage(const QString &target, const bool removeSource)
+{
+    const auto parsedTarget = parseCredentialStorage(target);
+    if (!parsedTarget)
+    {
+        setCredentialOperationError(QStringLiteral("Choose system, portable, or session credential storage."));
+        return false;
+    }
+    const security::CredentialStorage previousStorage = m_credentialVaults->storage();
+    if (*parsedTarget == previousStorage)
+    {
+        setCredentialOperationError({});
+        return true;
+    }
+    auto migrated = m_credentialVaults->migrate(*parsedTarget, false);
+    if (!migrated)
+    {
+        setCredentialOperationError(credentialVaultErrorMessage(migrated.error()));
+        return false;
+    }
+
+    config::ApplicationSettings updatedSettings = m_settings;
+    updatedSettings.credentialStorage = credentialPreferenceForStorage(*parsedTarget);
+    if (!persistApplicationSettings(updatedSettings))
+    {
+        m_credentialVaults->select(previousStorage);
+        setCredentialOperationError(QStringLiteral(
+            "Credentials were copied, but the storage preference could not be saved. The old store remains active."));
+        emit credentialVaultChanged();
+        return false;
+    }
+    emit hostProfilesChanged();
+    if (removeSource)
+    {
+        auto cleaned = m_credentialVaults->removeAll(previousStorage);
+        if (!cleaned)
+        {
+            setCredentialOperationError(
+                QStringLiteral("Migration succeeded, but credentials remain in the previous store."));
+            emit credentialVaultChanged();
+            return false;
+        }
+    }
+    setCredentialOperationError({});
+    emit credentialVaultChanged();
+    return true;
+}
+
+bool AppController::removeAllSavedCredentials()
+{
+    std::vector<security::CredentialKey> keys;
+    const bool emptyUninitializedPortable = m_credentialVaults->storage() == security::CredentialStorage::Portable
+                                            && !m_credentialVaults->portableInitialized();
+    if (!emptyUninitializedPortable)
+    {
+        auto listedKeys = m_credentialVaults->active().listKeys();
+        if (!listedKeys)
+        {
+            setCredentialOperationError(credentialVaultErrorMessage(listedKeys.error()));
+            return false;
+        }
+        keys = std::move(*listedKeys);
+    }
+    std::vector<std::pair<security::CredentialKey, security::SensitiveByteArray>> backup;
+    backup.reserve(keys.size());
+    for (const security::CredentialKey &key : keys)
+    {
+        auto secret = m_credentialVaults->active().read(key);
+        if (!secret)
+        {
+            setCredentialOperationError(credentialVaultErrorMessage(secret.error()));
+            return false;
+        }
+        backup.emplace_back(key, std::move(*secret));
+    }
+    auto removed = m_credentialVaults->removeAll();
+    if (!removed)
+    {
+        setCredentialOperationError(credentialVaultErrorMessage(removed.error()));
+        return false;
+    }
+    std::vector<ssh::SshProfile> updated = m_profiles;
+    for (ssh::SshProfile &profile : updated)
+    {
+        profile.credentialReference.reset();
+    }
+    if (!m_profileStore.save(updated))
+    {
+        for (const auto &[key, secret] : backup)
+        {
+            const std::string_view bytes = secret.view();
+            logCredentialRollbackResult(
+                m_credentialVaults->active().store(
+                    key, security::SensitiveByteArray(QByteArray(bytes.data(), static_cast<qsizetype>(bytes.size())))),
+                "remove-all restore");
+        }
+        setCredentialOperationError(
+            QStringLiteral("Credentials were restored because host profiles could not be updated."));
+        return false;
+    }
+    m_profiles = std::move(updated);
+    setCredentialOperationError({});
+    emit hostProfilesChanged();
+    emit credentialVaultChanged();
+    return true;
+}
+
+bool AppController::clearCredentialStorage(const QString &target)
+{
+    const auto parsedTarget = parseCredentialStorage(target);
+    if (!parsedTarget)
+    {
+        setCredentialOperationError(QStringLiteral("Choose system, portable, or session credential storage."));
+        return false;
+    }
+    if (*parsedTarget == m_credentialVaults->storage())
+    {
+        return removeAllSavedCredentials();
+    }
+
+    auto removed = m_credentialVaults->removeAll(*parsedTarget);
+    if (!removed)
+    {
+        setCredentialOperationError(credentialVaultErrorMessage(removed.error()));
+        return false;
+    }
+    setCredentialOperationError({});
+    emit credentialVaultChanged();
+    return true;
 }
 
 void AppController::acceptHostKey(const bool remember)
@@ -1290,6 +1943,22 @@ void AppController::loadApplicationSettings()
         return;
     }
     m_settings = std::move(*settings);
+    security::CredentialStorage selected = m_defaultCredentialStorage;
+    switch (m_settings.credentialStorage)
+    {
+        case config::CredentialStoragePreference::system:
+            selected = security::CredentialStorage::System;
+            break;
+        case config::CredentialStoragePreference::portable:
+            selected = security::CredentialStorage::Portable;
+            break;
+        case config::CredentialStoragePreference::session:
+            selected = security::CredentialStorage::Session;
+            break;
+        case config::CredentialStoragePreference::automatic:
+            break;
+    }
+    m_credentialVaults->select(selected);
 }
 
 bool AppController::persistApplicationSettings(const config::ApplicationSettings &settings)
@@ -1306,6 +1975,16 @@ bool AppController::persistApplicationSettings(const config::ApplicationSettings
     m_settings = settings;
     emit applicationSettingsChanged();
     return true;
+}
+
+void AppController::setCredentialOperationError(QString message)
+{
+    if (m_credentialOperationError == message)
+    {
+        return;
+    }
+    m_credentialOperationError = std::move(message);
+    emit credentialVaultChanged();
 }
 
 } // namespace ztermy

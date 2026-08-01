@@ -39,6 +39,14 @@ enum class CursorPreference : std::uint8_t
     underline,
 };
 
+enum class CredentialStoragePreference : std::uint8_t
+{
+    automatic,
+    system,
+    portable,
+    session,
+};
+
 struct ApplicationSettings final
 {
     ThemePreference theme = ThemePreference::dark;
@@ -53,6 +61,7 @@ struct ApplicationSettings final
     bool cursorBlink = true;
     bool copyOnSelect = false;
     bool confirmMultilinePaste = true;
+    CredentialStoragePreference credentialStorage = CredentialStoragePreference::automatic;
 
     [[nodiscard]] friend bool operator==(const ApplicationSettings &, const ApplicationSettings &) = default;
 };
@@ -82,9 +91,11 @@ private:
 [[nodiscard]] QString backdropPreferenceToken(BackdropPreference preference);
 [[nodiscard]] QString accentPreferenceToken(AccentPreference preference);
 [[nodiscard]] QString cursorPreferenceToken(CursorPreference preference);
+[[nodiscard]] QString credentialStoragePreferenceToken(CredentialStoragePreference preference);
 [[nodiscard]] std::optional<ThemePreference> parseThemePreference(const QString &token);
 [[nodiscard]] std::optional<BackdropPreference> parseBackdropPreference(const QString &token);
 [[nodiscard]] std::optional<AccentPreference> parseAccentPreference(const QString &token);
 [[nodiscard]] std::optional<CursorPreference> parseCursorPreference(const QString &token);
+[[nodiscard]] std::optional<CredentialStoragePreference> parseCredentialStoragePreference(const QString &token);
 
 } // namespace ztermy::config

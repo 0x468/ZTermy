@@ -24,6 +24,7 @@ struct SshProfile
     SshAuthenticationMethod authentication = SshAuthenticationMethod::PrivateKey;
     std::string privateKeyPath;
     bool privateKeyPassphraseRequired = false;
+    std::optional<std::string> credentialReference;
     std::optional<std::int64_t> lastConnectedUtcMs;
 
     friend bool operator==(const SshProfile &, const SshProfile &) = default;

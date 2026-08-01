@@ -42,12 +42,13 @@ window-level keyboard path. It verifies:
 - Space activation of the on-demand Settings tab and category navigation,
   plus Enter activation of shared action buttons and the title-bar new-tab
   action.
-- Category-specific Settings Tab order at `1120x800` and `500x360`.
+- Category-specific Appearance, Security, and Terminal Settings Tab order at
+  `1120x800` and `500x360`.
 - `Alt+Down` and Escape for the shared dropdown, arrow-key changes for the
   opacity slider and font-size spin box, and Space for all Settings switches.
 - Applying the keyboard-edited theme, opacity, font size, and behavior values.
-- New host → Search order, Enter opening the editor, and the complete
-  11-control host-editor Tab order at both window sizes.
+- New host → Search order, Enter opening the right-side editor, and the
+  complete password-default host-editor Tab order at both window sizes.
 - Space toggling the private-key passphrase checkbox and exposing its masked
   credential field.
 - Creating exactly one local terminal with Enter, restoring terminal focus,

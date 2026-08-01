@@ -12,7 +12,8 @@ Rectangle {
     readonly property int titleBarHeight: Theme.titleBarHeight
     readonly property int captionButtonWidth: 46
     readonly property int titleQuickActionWidth: 40
-    readonly property int titleNavigationWidth: Math.min(830, Math.max(310, width - (captionButtonWidth * 3) - titleQuickActionWidth - 96))
+    readonly property int titleSecurityActionWidth: portableVaultNeedsAttention ? 40 : 0
+    readonly property int titleNavigationWidth: Math.min(830, Math.max(310, width - (captionButtonWidth * 3) - titleQuickActionWidth - titleSecurityActionWidth - 96))
     readonly property color backgroundColor: Theme.windowBackground
     readonly property color panelColor: Theme.panelBackground
     readonly property color chromeColor: Theme.chromeBackground
@@ -26,9 +27,10 @@ Rectangle {
     readonly property color textColor: Theme.text
     readonly property color mutedColor: Theme.textMuted
     readonly property color accentColor: Theme.accent
-    property string currentPage: "terminal"
+    property string currentPage: "hosts"
     property bool settingsTabOpen: false
-    property string settingsReturnPage: "terminal"
+    property string settingsReturnPage: "hosts"
+    property bool startupVaultPromptPresented: false
     property real hostsPageReveal: 1.0
     property bool terminalSearchVisible: false
     property int pendingPasteLineCount: 0
@@ -49,11 +51,31 @@ Rectangle {
     readonly property bool activeSshFailure: activeTerminalTab !== null && activeTerminalTab.kind === "ssh" && activeTerminalTab.failed
     readonly property bool activeSshConnecting: activeTerminalTab !== null && activeTerminalTab.kind === "ssh" && activeTerminalTab.connecting
     readonly property bool activeSshDisconnected: activeTerminalTab !== null && activeTerminalTab.kind === "ssh" && activeTerminalTab.remoteClosed
+    readonly property bool portableVaultNeedsAttention: controller.effectiveCredentialStorage === "portable" && (!controller.portableVaultInitialized || controller.portableVaultLocked)
 
     color: root.currentPage === "terminal" ? "transparent" : backgroundColor
 
     function reportTitleBarMetrics() {
-        root.windowChrome.setTitleBarMetrics(titleBarHeight, titleNavigation.width + 8, width - (captionButtonWidth * 3) - titleQuickActionWidth, width - (captionButtonWidth * 2), captionButtonWidth);
+        root.windowChrome.setTitleBarMetrics(titleBarHeight, titleNavigation.width + 8, width - (captionButtonWidth * 3) - titleQuickActionWidth - titleSecurityActionWidth, width - (captionButtonWidth * 2), captionButtonWidth);
+    }
+
+    function requestPortableVaultAccess(sourceItem) {
+        if (!controller.portableVaultInitialized) {
+            openSecuritySettingsTab();
+            return;
+        }
+        portableVaultUnlockDialog.focusRestoreItem = sourceItem || null;
+        portableVaultUnlockPassword.text = "";
+        portableVaultUnlockStatus.text = "";
+        portableVaultUnlockDialog.open();
+    }
+
+    function presentStartupVaultPrompt() {
+        if (startupVaultPromptPresented || controller.effectiveCredentialStorage !== "portable" || !controller.portableVaultInitialized || !controller.portableVaultLocked) {
+            return;
+        }
+        startupVaultPromptPresented = true;
+        requestPortableVaultAccess(null);
     }
 
     function openSettingsTab() {
@@ -64,6 +86,11 @@ Rectangle {
         currentPage = "settings";
         settingsPane.revealCurrentCategory();
         Qt.callLater(settingsPane.focusCurrentCategory);
+    }
+
+    function openSecuritySettingsTab() {
+        settingsPane.currentCategory = "security";
+        openSettingsTab();
     }
 
     function closeSettingsTab() {
@@ -195,6 +222,7 @@ Rectangle {
     Component.onCompleted: {
         reportTitleBarMetrics();
         applyWindowAppearance();
+        Qt.callLater(root.presentStartupVaultPrompt);
     }
     onWidthChanged: reportTitleBarMetrics()
     onCurrentPageChanged: {
@@ -269,6 +297,10 @@ Rectangle {
 
         function onActiveTerminalTabChanged() {
             Qt.callLater(titleTerminalTabs.syncCurrentIndex);
+        }
+
+        function onCredentialVaultChanged() {
+            Qt.callLater(root.reportTitleBarMetrics);
         }
     }
 
@@ -521,6 +553,52 @@ Rectangle {
             anchors.right: parent.right
             anchors.top: parent.top
             height: parent.height
+
+            Rectangle {
+                width: root.titleSecurityActionWidth
+                height: titleBar.height
+                visible: root.portableVaultNeedsAttention
+                color: portableVaultStatusAction.hovered || portableVaultStatusAction.activeFocus ? Theme.controlHover : "transparent"
+                border.color: portableVaultStatusAction.activeFocus ? Theme.focus : "transparent"
+                border.width: portableVaultStatusAction.activeFocus ? 1 : 0
+
+                Behavior on color {
+                    ColorAnimation {
+                        duration: Theme.motionFast
+                    }
+                }
+
+                AppIcon {
+                    anchors.centerIn: parent
+                    width: 16
+                    height: 16
+                    name: "lock"
+                    color: Theme.dangerText
+                }
+
+                Rectangle {
+                    anchors.right: parent.right
+                    anchors.rightMargin: 7
+                    anchors.top: parent.top
+                    anchors.topMargin: 7
+                    width: 6
+                    height: 6
+                    radius: 3
+                    color: Theme.danger
+                    border.color: Theme.chromeBackground
+                    border.width: 1
+                }
+
+                KeyboardAction {
+                    id: portableVaultStatusAction
+
+                    objectName: "portableVaultStatusAction"
+                    anchors.fill: parent
+                    anchors.margins: 2
+                    accessibleName: root.controller.portableVaultInitialized ? "Portable vault locked; unlock" : "Portable vault not configured; open Security settings"
+                    onActivated: root.requestPortableVaultAccess(portableVaultStatusAction)
+                }
+            }
 
             Rectangle {
                 width: root.titleQuickActionWidth
@@ -1155,6 +1233,7 @@ Rectangle {
                 mutedColor: root.mutedColor
                 accentColor: root.accentColor
                 onConnectionStarted: root.currentPage = "terminal"
+                onSecuritySettingsRequested: root.openSecuritySettingsTab()
 
                 transform: Translate {
                     y: Theme.motionDistanceSmall * (1.0 - root.hostsPageReveal)
@@ -1170,6 +1249,122 @@ Rectangle {
                 onAppearancePreviewEnded: root.endWindowAppearancePreview()
                 onAppearancePreviewRequested: (theme, opacity, backdrop, accent, customAccent) => {
                     root.previewWindowAppearance(theme, opacity, backdrop, accent, customAccent);
+                }
+            }
+        }
+    }
+
+    Dialog {
+        id: portableVaultUnlockDialog
+
+        property Item focusRestoreItem: null
+
+        objectName: "startupPortableVaultUnlockDialog"
+        anchors.centerIn: parent
+        modal: true
+        dim: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape
+        padding: 20
+        onAboutToShow: Qt.callLater(portableVaultUnlockPassword.forceActiveFocus)
+        onClosed: {
+            const restoreItem = focusRestoreItem;
+            focusRestoreItem = null;
+            portableVaultUnlockPassword.text = "";
+            portableVaultUnlockStatus.text = "";
+            if (restoreItem && restoreItem.visible && restoreItem.enabled) {
+                Qt.callLater(() => restoreItem.forceActiveFocus());
+            }
+        }
+
+        Overlay.modal: Rectangle {
+            color: Theme.modalScrim
+        }
+
+        background: Rectangle {
+            radius: Theme.radiusPanel
+            color: Theme.floatingBackground
+            border.color: Theme.borderStrong
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 14
+            Accessible.role: Accessible.Dialog
+            Accessible.name: "Unlock portable credential vault"
+
+            Text {
+                text: "Unlock portable vault"
+                color: root.textColor
+                font.family: Theme.uiFont
+                font.pixelSize: 18
+                font.weight: Font.DemiBold
+            }
+
+            Text {
+                Layout.preferredWidth: 390
+                text: "Unlock saved SSH passwords and private-key passphrases for this ztermy session. The master password is never stored."
+                color: root.mutedColor
+                wrapMode: Text.WordWrap
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.textLabel
+            }
+
+            AppTextField {
+                id: portableVaultUnlockPassword
+
+                objectName: "startupPortableVaultPassword"
+                Layout.fillWidth: true
+                placeholderText: "Master password (minimum 8 characters)"
+                passwordRevealable: true
+                accessibleName: "Portable vault master password"
+                selectByMouse: true
+                onAccepted: portableVaultUnlockAction.clicked()
+            }
+
+            StatusMessage {
+                id: portableVaultUnlockStatus
+
+                Layout.fillWidth: true
+                kind: "error"
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+
+                ActionButton {
+                    text: "Open Security"
+                    accessibleName: "Open credential Security settings"
+                    onClicked: {
+                        portableVaultUnlockDialog.close();
+                        root.openSecuritySettingsTab();
+                    }
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                }
+
+                ActionButton {
+                    text: "Not now"
+                    accessibleName: "Keep portable vault locked"
+                    onClicked: portableVaultUnlockDialog.close()
+                }
+
+                ActionButton {
+                    id: portableVaultUnlockAction
+
+                    text: "Unlock"
+                    accessibleName: "Unlock portable credential vault"
+                    enabled: portableVaultUnlockPassword.text.length >= 8
+                    variant: "primary"
+                    onClicked: {
+                        if (!root.controller.unlockPortableCredentialVault(portableVaultUnlockPassword.text)) {
+                            portableVaultUnlockStatus.text = root.controller.credentialOperationError;
+                            portableVaultUnlockPassword.selectAll();
+                            return;
+                        }
+                        portableVaultUnlockDialog.close();
+                    }
                 }
             }
         }

@@ -1,6 +1,6 @@
 # ADR 0007: Keep SSH credentials ephemeral
 
-- Status: Accepted
+- Status: Superseded by ADR 0021
 - Date: 2026-07-29
 
 ## Context

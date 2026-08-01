@@ -42,5 +42,8 @@ contents, terminal input, and clipboard contents remain forbidden.
 - An installed build must not ship `portable.flag`, especially under
   `Program Files`, where the directory is normally not writable.
 - Future schema migrations have one well-defined data root per mode.
+- Portable and custom-data modes keep their encrypted credential vault at
+  `credentials.zvlt` below that same root; installed mode uses the operating
+  system vault by default.
 - The current portable package is a static-Qt ZIP. An installer remains a
   separate artifact and deliberately excludes the portable marker.

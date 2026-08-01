@@ -148,6 +148,33 @@ add_library(ztermy_core_diagnostics STATIC
     src/core/diagnostics/LatencyHistogram.h
 )
 
+add_library(ztermy_credential_vault STATIC
+    src/application/security/CredentialVaultCoordinator.cpp
+    src/application/security/CredentialVaultCoordinator.h
+    src/core/security/CredentialVault.cpp
+    src/core/security/CredentialVault.h
+    src/core/security/SensitiveByteArray.h
+    src/infrastructure/security/InMemoryCredentialVault.cpp
+    src/infrastructure/security/InMemoryCredentialVault.h
+    src/infrastructure/security/PortableCredentialVault.cpp
+    src/infrastructure/security/PortableCredentialVault.h
+    src/platform/windows/WindowsCredentialVault.cpp
+    src/platform/windows/WindowsCredentialVault.h
+)
+
+target_compile_features(ztermy_credential_vault PUBLIC cxx_std_23)
+target_include_directories(ztermy_credential_vault PUBLIC src)
+target_compile_definitions(ztermy_credential_vault PRIVATE
+    NOMINMAX
+    UNICODE
+    WIN32_LEAN_AND_MEAN
+    _UNICODE
+)
+target_link_libraries(ztermy_credential_vault
+    PUBLIC Qt6::Core
+    PRIVATE OpenSSL::Crypto Advapi32
+)
+
 target_compile_features(ztermy_core_diagnostics PUBLIC cxx_std_23)
 target_include_directories(ztermy_core_diagnostics PUBLIC src)
 
@@ -440,6 +467,7 @@ if(ZTERMY_STATIC_BUILD)
 endif()
 
 target_link_libraries(ztermy PRIVATE
+    ztermy_credential_vault
     ztermy_core_config
     ztermy_ssh_persistence
     ztermy_ssh_session
@@ -623,6 +651,13 @@ if(MSVC)
         /Zc:__cplusplus
     )
 
+    target_compile_options(ztermy_credential_vault PRIVATE
+        /permissive-
+        /utf-8
+        /W4
+        /Zc:__cplusplus
+    )
+
     target_compile_options(ztermy_terminal_transport PRIVATE
         /permissive-
         /utf-8
@@ -731,6 +766,27 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME application-settings COMMAND ztermy_application_settings_tests)
+
+    qt_add_executable(ztermy_credential_vault_tests
+        tests/credential_vault_tests.cpp
+    )
+
+    target_compile_features(ztermy_credential_vault_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_credential_vault_tests PRIVATE
+        ztermy_credential_vault
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_credential_vault_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME credential-vault COMMAND ztermy_credential_vault_tests)
 
     qt_add_executable(ztermy_latency_histogram_tests
         tests/latency_histogram_tests.cpp
@@ -1074,6 +1130,7 @@ if(BUILD_TESTING)
         _UNICODE
     )
     target_link_libraries(ztermy_app_controller_tests PRIVATE
+        ztermy_credential_vault
         ztermy_core_config
         ztermy_ssh_persistence
         ztermy_ssh_session

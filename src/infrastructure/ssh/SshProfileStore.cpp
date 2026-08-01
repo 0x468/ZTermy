@@ -19,7 +19,8 @@ namespace
 
 constexpr qint64 maximumFileSize = qint64{1024} * 1024;
 constexpr qsizetype maximumProfileCount = 128;
-constexpr qint64 currentSchemaVersion = 1;
+constexpr qint64 legacySchemaVersion = 1;
+constexpr qint64 currentSchemaVersion = 2;
 
 [[nodiscard]] std::optional<ztermy::ssh::SshAuthenticationMethod> parseAuthentication(const QString &value)
 {
@@ -46,7 +47,7 @@ constexpr qint64 currentSchemaVersion = 1;
     return {};
 }
 
-[[nodiscard]] std::optional<ztermy::ssh::SshProfile> parseProfile(const QJsonValue &value)
+[[nodiscard]] std::optional<ztermy::ssh::SshProfile> parseProfile(const QJsonValue &value, const qint64 version)
 {
     if (!value.isObject())
     {
@@ -64,11 +65,14 @@ constexpr qint64 currentSchemaVersion = 1;
     const QJsonValue privateKeyPathValue = object.value(QStringLiteral("privateKeyPath"));
     const QJsonValue passphraseRequiredValue = object.value(QStringLiteral("privateKeyPassphraseRequired"));
     const QJsonValue lastConnectedValue = object.value(QStringLiteral("lastConnectedUtcMs"));
+    const QJsonValue credentialReferenceValue = object.value(QStringLiteral("credentialReference"));
     if (!idValue.isString() || !nameValue.isString() || (!groupValue.isUndefined() && !groupValue.isString())
         || !hostValue.isString() || !portValue.isDouble() || !usernameValue.isString()
         || !authenticationValue.isString() || !privateKeyPathValue.isString()
         || (!passphraseRequiredValue.isUndefined() && !passphraseRequiredValue.isBool())
-        || (!lastConnectedValue.isUndefined() && !lastConnectedValue.isDouble()))
+        || (!lastConnectedValue.isUndefined() && !lastConnectedValue.isDouble())
+        || (version >= currentSchemaVersion && !credentialReferenceValue.isUndefined()
+            && !credentialReferenceValue.isString()))
     {
         return std::nullopt;
     }
@@ -107,6 +111,9 @@ constexpr qint64 currentSchemaVersion = 1;
         .authentication = *authentication,
         .privateKeyPath = privateKeyPathValue.toString().toStdString(),
         .privateKeyPassphraseRequired = passphraseRequiredValue.toBool(false),
+        .credentialReference = credentialReferenceValue.isString()
+                                   ? std::optional{credentialReferenceValue.toString().toStdString()}
+                                   : std::nullopt,
         .lastConnectedUtcMs = lastConnectedUtcMs,
     };
     return ztermy::ssh::validSshProfile(profile) ? std::optional{std::move(profile)} : std::nullopt;
@@ -128,6 +135,10 @@ constexpr qint64 currentSchemaVersion = 1;
     if (profile.lastConnectedUtcMs)
     {
         object.insert(QStringLiteral("lastConnectedUtcMs"), *profile.lastConnectedUtcMs);
+    }
+    if (profile.credentialReference)
+    {
+        object.insert(QStringLiteral("credentialReference"), QString::fromStdString(*profile.credentialReference));
     }
     return object;
 }
@@ -188,7 +199,8 @@ std::expected<std::vector<SshProfile>, SshProfileStoreError> SshProfileStore::lo
     const QJsonObject root = document.object();
     const QJsonValue versionValue = root.value(QStringLiteral("version"));
     const QJsonValue profilesValue = root.value(QStringLiteral("profiles"));
-    if (!versionValue.isDouble() || versionValue.toInteger() != currentSchemaVersion)
+    if (!versionValue.isDouble()
+        || (versionValue.toInteger() != legacySchemaVersion && versionValue.toInteger() != currentSchemaVersion))
     {
         return std::unexpected(versionValue.isDouble() ? SshProfileStoreError::UnsupportedVersion
                                                        : SshProfileStoreError::InvalidFormat);
@@ -208,7 +220,7 @@ std::expected<std::vector<SshProfile>, SshProfileStoreError> SshProfileStore::lo
     profiles.reserve(static_cast<std::size_t>(profileValues.size()));
     for (const auto &value : profileValues)
     {
-        auto profile = parseProfile(value);
+        auto profile = parseProfile(value, versionValue.toInteger());
         if (!profile)
         {
             return std::unexpected(SshProfileStoreError::InvalidFormat);

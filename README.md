@@ -1,8 +1,8 @@
 # ztermy
 
 ztermy is a Windows 11-first native SSH terminal application built with Qt 6
-and C++23. The current V1 release candidate is intended for personal use and
-awaits its final manual Windows acceptance pass.
+and C++23. V1 is accepted; V1.2 is adding secure credential persistence and a
+more focused NetCatty-referenced host workflow for personal use.
 
 Netcatty is the primary product reference for the initial feature set and
 visual direction. Its source code, assets, themes, branding, and implementation
@@ -35,16 +35,14 @@ includes:
   private-key authentication and strict application-owned host trust;
 - saved host management, multiple independent terminal tabs, search,
   selection, clipboard workflows, scrollback, CJK, emoji, and Windows IME;
+- Windows Credential Manager integration plus a password-protected portable
+  credential vault with verified migration and cleanup controls;
 - persistent appearance and terminal settings, structured diagnostics, a
   static portable package, and a per-user MSI; and
 - one checksummed release handoff with machine-readable artifact metadata.
 
-The remaining V1 gates require human evidence for a real password-authenticated
-host, physical mixed-DPI movement, visual and keyboard review, unsupported DWM
-fallback, installer lifecycle, and a clean Windows 11 environment. See
-[docs/V1_SCOPE.md](docs/V1_SCOPE.md),
-[docs/V1_ACCEPTANCE.md](docs/V1_ACCEPTANCE.md), and the ordered
-[manual acceptance runbook](docs/testing/V1_MANUAL_ACCEPTANCE.md).
+See [docs/V1_2_SCOPE.md](docs/V1_2_SCOPE.md) for the active milestone and
+[docs/V1_ACCEPTANCE.md](docs/V1_ACCEPTANCE.md) for the accepted V1 baseline.
 
 ## Building
 

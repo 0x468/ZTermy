@@ -123,5 +123,9 @@ data directory.
 ## Persistence and secrets
 
 Non-secret configuration has an explicit schema version and migration policy.
-Passwords and passphrases are not serialized. Persistent secrets use a Windows
-credential facility selected in a later ADR.
+Passwords and passphrases never enter profile JSON. Installed mode stores them
+as generic entries in Windows Credential Manager. Portable/custom-data modes
+use a versioned AES-256-GCM vault whose key is derived from a user-supplied
+master password with scrypt; session-only storage remains available. A global
+coordinator performs copy, read-back verification, active-store switching, and
+optional source cleanup. See ADR 0021.
