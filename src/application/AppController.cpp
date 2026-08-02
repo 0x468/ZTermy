@@ -8,6 +8,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
+#include <QHash>
 #include <QLoggingCategory>
 #include <QMetaObject>
 #include <QPointer>
@@ -24,6 +25,7 @@
 #include <optional>
 #include <string_view>
 #include <system_error>
+#include <utility>
 
 Q_LOGGING_CATEGORY(appControllerLog, "ztermy.application.controller")
 
@@ -53,6 +55,11 @@ namespace
 [[nodiscard]] QString siblingQuickCommandsFile(const QString &settingsPath)
 {
     return QFileInfo(settingsPath).dir().filePath(QStringLiteral("quick_commands.json"));
+}
+
+[[nodiscard]] QString siblingWorkspaceStateFile(const QString &settingsPath)
+{
+    return QFileInfo(settingsPath).dir().filePath(QStringLiteral("workspace_state.json"));
 }
 
 [[nodiscard]] std::string utf8String(const QString &value)
@@ -499,6 +506,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
       m_settingsStore(settingsPath.isEmpty() ? siblingSettingsFile(m_profileStore.filePath())
                                              : std::move(settingsPath)),
       m_quickCommandStore(siblingQuickCommandsFile(m_settingsStore.filePath())),
+      m_workspaceStateStore(siblingWorkspaceStateFile(m_settingsStore.filePath())),
       m_credentialVaults(std::make_unique<security::CredentialVaultCoordinator>(
           siblingCredentialsFile(m_profileStore.filePath()), security::CredentialStorage::Session)),
       m_knownHostsPath(std::move(knownHostsPath))
@@ -518,6 +526,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     initializeActionRegistry();
     initializeTransferManager();
     loadQuickCommands();
+    loadWorkspaceState();
 }
 
 AppController::AppController(QString profileStorePath, QString knownHostsPath, QString settingsPath,
@@ -541,6 +550,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
       m_settingsStore(settingsPath.isEmpty() ? siblingSettingsFile(m_profileStore.filePath())
                                              : std::move(settingsPath)),
       m_quickCommandStore(siblingQuickCommandsFile(m_settingsStore.filePath())),
+      m_workspaceStateStore(siblingWorkspaceStateFile(m_settingsStore.filePath())),
       m_credentialVaults(std::make_unique<security::CredentialVaultCoordinator>(
           credentialsPath.isEmpty() ? siblingCredentialsFile(m_profileStore.filePath()) : std::move(credentialsPath),
           defaultCredentialStorage(storageMode))),
@@ -561,7 +571,9 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     loadHostProfiles();
     loadApplicationSettings();
     initializeActionRegistry();
+    initializeTransferManager();
     loadQuickCommands();
+    loadWorkspaceState();
 }
 
 AppController::~AppController()
@@ -697,6 +709,7 @@ QVariantList AppController::terminalTabs() const
             {QStringLiteral("status"), tab->status},
             {QStringLiteral("identity"), tab->identity.isEmpty() ? tab->title : tab->identity},
             {QStringLiteral("address"), tab->address},
+            {QStringLiteral("connectedUtcMs"), tab->connectedUtcMs},
             {QStringLiteral("running"), tab->running},
             {QStringLiteral("connecting"), tab->kind == TerminalTabKind::Ssh
                                                && tab->sshPhase != ssh::SshConnectionPhase::Disconnected
@@ -859,6 +872,28 @@ QString AppController::activeSftpPath() const
 {
     const TerminalTab *tab = activeTab();
     return tab == nullptr ? QStringLiteral("/") : tab->sftpPath;
+}
+
+QVariantList AppController::recentSftpPaths() const
+{
+    const TerminalTab *tab = activeTab();
+    if (tab == nullptr || tab->sourceProfileId.isEmpty())
+    {
+        return {};
+    }
+    const workbench::ProfileWorkspaceState *state =
+        workbench::findProfileWorkspaceState(m_workspaceState, utf8String(tab->sourceProfileId));
+    if (state == nullptr)
+    {
+        return {};
+    }
+    QVariantList paths;
+    paths.reserve(static_cast<qsizetype>(state->recentRemotePaths.size()));
+    for (const std::string &path : state->recentRemotePaths)
+    {
+        paths.push_back(utf8QString(path));
+    }
+    return paths;
 }
 
 QString AppController::activeSftpState() const
@@ -1243,6 +1278,7 @@ bool AppController::toggleTerminalWorkbench(const QString &page)
     }
     emit terminalTabsChanged();
     emit sftpChanged();
+    persistWorkspaceState(*tab);
     return true;
 }
 
@@ -1275,6 +1311,7 @@ void AppController::setTerminalWorkbenchWidth(const qreal width)
         return;
     }
     tab->workbenchWidth = bounded;
+    persistWorkspaceState(*tab);
     emit terminalTabsChanged();
 }
 
@@ -1287,6 +1324,7 @@ void AppController::moveTerminalWorkbench()
     }
     tab->workbenchSide =
         tab->workbenchSide == QStringLiteral("left") ? QStringLiteral("right") : QStringLiteral("left");
+    persistWorkspaceState(*tab);
     emit terminalTabsChanged();
 }
 
@@ -1314,6 +1352,7 @@ void AppController::setTerminalComposerHeight(const qreal height)
         return;
     }
     tab->composerHeight = bounded;
+    persistWorkspaceState(*tab);
     emit terminalTabsChanged();
 }
 
@@ -1887,6 +1926,7 @@ bool AppController::startSshConnection(ssh::SshConnectionRequest request, QStrin
     tab->status = tr("Starting SSH connection...");
     tab->kind = TerminalTabKind::Ssh;
     tab->sourceProfileId = std::move(sourceProfileId);
+    applyWorkspaceState(*tab);
     tab->sshPhase = ssh::SshConnectionPhase::Resolving;
     tab->ssh = std::make_unique<ssh::SshTerminalSession>();
     const QString tabId = tab->id;
@@ -2066,13 +2106,55 @@ void AppController::initializeTransferManager()
 
 void AppController::applyTransferSnapshot(const sftp::TransferTasksPtr &tasks)
 {
+    QHash<QString, QString> previousStatuses;
+    previousStatuses.reserve(m_transferTasks.size());
+    for (const QVariant &value : std::as_const(m_transferTasks))
+    {
+        const QVariantMap task = value.toMap();
+        previousStatuses.insert(task.value(QStringLiteral("id")).toString(),
+                                task.value(QStringLiteral("status")).toString());
+    }
+
     QVariantList values;
     if (tasks)
     {
         values.reserve(static_cast<qsizetype>(tasks->size()));
         for (const sftp::TransferTask &task : *tasks)
         {
-            values.push_back(transferTaskValue(task));
+            const QVariantMap value = transferTaskValue(task);
+            values.push_back(value);
+
+            const QString taskId = value.value(QStringLiteral("id")).toString();
+            const QString status = value.value(QStringLiteral("status")).toString();
+            const QString previousStatus = previousStatuses.value(taskId);
+            const bool terminalStatus = status == QStringLiteral("completed") || status == QStringLiteral("failed")
+                                        || status == QStringLiteral("cancelled");
+            if (!previousStatus.isEmpty() && previousStatus != status && terminalStatus)
+            {
+                const bool download = value.value(QStringLiteral("direction")).toString() == QStringLiteral("download");
+                QString kind = QStringLiteral("info");
+                QString title;
+                if (status == QStringLiteral("completed"))
+                {
+                    kind = QStringLiteral("success");
+                    title = download ? tr("Download complete") : tr("Upload complete");
+                }
+                else if (status == QStringLiteral("failed"))
+                {
+                    kind = QStringLiteral("error");
+                    title = tr("File transfer failed");
+                }
+                else
+                {
+                    title = tr("File transfer cancelled");
+                }
+                emit transferNotificationRequested({
+                    {QStringLiteral("taskId"), taskId},
+                    {QStringLiteral("kind"), kind},
+                    {QStringLiteral("title"), title},
+                    {QStringLiteral("message"), value.value(QStringLiteral("displayName")).toString()},
+                });
+            }
         }
     }
     m_transferTasks = std::move(values);
@@ -2951,6 +3033,10 @@ void AppController::connectLocalTabSignals(TerminalTab &tab)
                          if (TerminalTab *updated = findTab(tabId))
                          {
                              updated->running = running;
+                             if (running && updated->connectedUtcMs == 0)
+                             {
+                                 updated->connectedUtcMs = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
+                             }
                              emit terminalTabsChanged();
                          }
                      });
@@ -3012,6 +3098,10 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
         if (TerminalTab *updated = findTab(tabId))
         {
             updated->running = running;
+            if (running && updated->connectedUtcMs == 0)
+            {
+                updated->connectedUtcMs = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
+            }
             emit terminalTabsChanged();
         }
     });
@@ -3022,6 +3112,7 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
                              updated->sshPhase = phase;
                              if (phase == ssh::SshConnectionPhase::Connected)
                              {
+                                 updated->connectedUtcMs = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
                                  recordRecentConnection(*updated);
                              }
                              emit terminalTabsChanged();
@@ -3170,6 +3261,7 @@ void AppController::connectSftpTabSignals(TerminalTab &tab)
                          updated->sftpState = QStringLiteral("ready");
                          updated->sftpError.clear();
                          updated->sftpModel->setEntries(entries);
+                         persistWorkspaceState(*updated, true);
                          if (m_activeTabId == tabId)
                          {
                              emit sftpChanged();
@@ -3614,6 +3706,62 @@ void AppController::loadQuickCommands()
         return;
     }
     m_quickCommands = std::move(*quickCommands);
+}
+
+void AppController::loadWorkspaceState()
+{
+    auto state = m_workspaceStateStore.load();
+    if (!state)
+    {
+        qCWarning(appControllerLog) << "Unable to load workspace state; using safe defaults";
+        return;
+    }
+    m_workspaceState = std::move(*state);
+}
+
+void AppController::applyWorkspaceState(TerminalTab &tab) const
+{
+    if (tab.sourceProfileId.isEmpty())
+    {
+        return;
+    }
+    const workbench::ProfileWorkspaceState *state =
+        workbench::findProfileWorkspaceState(m_workspaceState, utf8String(tab.sourceProfileId));
+    if (state == nullptr)
+    {
+        return;
+    }
+    tab.sftpPath = utf8QString(state->lastRemotePath);
+    tab.sftpRequestedPath = tab.sftpPath;
+    tab.workbenchPage = utf8QString(state->workbenchPage);
+    tab.workbenchSide = utf8QString(state->workbenchSide);
+    tab.workbenchWidth = state->workbenchWidth;
+    tab.composerHeight = state->composerHeight;
+}
+
+void AppController::persistWorkspaceState(const TerminalTab &tab, const bool shouldRecordRemotePath)
+{
+    if (tab.sourceProfileId.isEmpty())
+    {
+        return;
+    }
+    workbench::WorkspaceState candidate = m_workspaceState;
+    workbench::ProfileWorkspaceState &state =
+        workbench::ensureProfileWorkspaceState(candidate, utf8String(tab.sourceProfileId));
+    if (shouldRecordRemotePath)
+    {
+        workbench::recordRecentRemotePath(state, utf8String(tab.sftpPath));
+    }
+    state.workbenchPage = utf8String(tab.workbenchPage);
+    state.workbenchSide = utf8String(tab.workbenchSide);
+    state.workbenchWidth = tab.workbenchWidth;
+    state.composerHeight = tab.composerHeight;
+    if (!m_workspaceStateStore.save(candidate))
+    {
+        qCWarning(appControllerLog) << "Unable to persist safe workspace state";
+        return;
+    }
+    m_workspaceState = std::move(candidate);
 }
 
 bool AppController::persistApplicationSettings(const config::ApplicationSettings &settings)

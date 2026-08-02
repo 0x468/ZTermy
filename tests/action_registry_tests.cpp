@@ -41,6 +41,10 @@ void ActionRegistryTests::exposesStableMetadataAndContext()
     QVERIFY(palette.value(QStringLiteral("enabled")).toBool());
     QVERIFY(palette.value(QStringLiteral("paletteVisible")).toBool());
 
+    const QVariantMap transfers = actionById(registry.actions(false), QStringLiteral("application.transfers"));
+    QVERIFY(transfers.value(QStringLiteral("enabled")).toBool());
+    QVERIFY(transfers.value(QStringLiteral("paletteVisible")).toBool());
+
     const QVariantMap terminalFind = actionById(registry.actions(false), QStringLiteral("terminal.find"));
     QVERIFY(!terminalFind.value(QStringLiteral("enabled")).toBool());
     QVERIFY(

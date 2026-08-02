@@ -55,6 +55,16 @@ constexpr std::array actions{
         .autoRepeat = false,
     },
     ActionDescriptor{
+        .id = "application.transfers",
+        .category = "application",
+        .label = QT_TRANSLATE_NOOP("ActionRegistry", "File transfers"),
+        .description = QT_TRANSLATE_NOOP("ActionRegistry", "Open the application-wide file transfer center."),
+        .defaultShortcut = "",
+        .terminalRequired = false,
+        .paletteVisible = true,
+        .autoRepeat = false,
+    },
+    ActionDescriptor{
         .id = "terminal.newLocal",
         .category = "application",
         .label = QT_TRANSLATE_NOOP("ActionRegistry", "New local terminal"),

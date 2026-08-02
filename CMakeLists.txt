@@ -244,6 +244,8 @@ add_library(ztermy_workbench_domain STATIC
     src/domain/workbench/QuickCommand.h
     src/domain/workbench/ShellHistory.cpp
     src/domain/workbench/ShellHistory.h
+    src/domain/workbench/WorkspaceState.cpp
+    src/domain/workbench/WorkspaceState.h
 )
 
 add_library(ztermy_workbench_persistence STATIC
@@ -251,6 +253,8 @@ add_library(ztermy_workbench_persistence STATIC
     src/infrastructure/workbench/PowerShellHistoryReader.h
     src/infrastructure/workbench/QuickCommandStore.cpp
     src/infrastructure/workbench/QuickCommandStore.h
+    src/infrastructure/workbench/WorkspaceStateStore.cpp
+    src/infrastructure/workbench/WorkspaceStateStore.h
 )
 
 target_compile_features(ztermy_workbench_domain PUBLIC cxx_std_23)
@@ -542,6 +546,10 @@ set_source_files_properties(
     src/ui/qml/TransferCenter.qml
     PROPERTIES QT_RESOURCE_ALIAS TransferCenter.qml
 )
+set_source_files_properties(
+    src/ui/qml/TransferToast.qml
+    PROPERTIES QT_RESOURCE_ALIAS TransferToast.qml
+)
 
 qt_add_qml_module(ztermy
     URI Ztermy
@@ -580,6 +588,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/TerminalComposer.qml
         src/ui/qml/TerminalWorkbench.qml
         src/ui/qml/TransferCenter.qml
+        src/ui/qml/TransferToast.qml
         src/ui/qml/Theme.qml
 )
 
@@ -1115,6 +1124,27 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME quick-command-store COMMAND ztermy_quick_command_store_tests)
+
+    qt_add_executable(ztermy_workspace_state_store_tests
+        tests/workspace_state_store_tests.cpp
+    )
+
+    target_compile_features(ztermy_workspace_state_store_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_workspace_state_store_tests PRIVATE
+        ztermy_workbench_persistence
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_workspace_state_store_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME workspace-state-store COMMAND ztermy_workspace_state_store_tests)
 
     qt_add_executable(ztermy_workbench_domain_tests
         tests/workbench_domain_tests.cpp
@@ -1770,6 +1800,7 @@ if(BUILD_TESTING)
             ztermy_sftp_directory_model_tests
             ztermy_transfer_executor_tests
             ztermy_transfer_manager_tests
+            ztermy_workspace_state_store_tests
             ztermy_terminal_engine_tests
             ztermy_local_terminal_session_tests
             ztermy_app_controller_tests

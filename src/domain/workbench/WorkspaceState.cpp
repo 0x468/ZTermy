@@ -1,0 +1,74 @@
+#include "domain/workbench/WorkspaceState.h"
+
+#include <algorithm>
+#include <cmath>
+#include <utility>
+
+namespace ztermy::workbench
+{
+namespace
+{
+
+bool validRemotePath(const std::string_view path) noexcept
+{
+    return !path.empty() && path.size() <= 4096 && path.front() == '/' && path.find('\0') == std::string_view::npos;
+}
+
+bool validPage(const std::string_view page) noexcept
+{
+    return page == "history" || page == "scripts" || page == "sftp";
+}
+
+} // namespace
+
+bool validProfileWorkspaceState(const ProfileWorkspaceState &state) noexcept
+{
+    if (state.profileId.empty() || state.profileId.size() > 256 || !validRemotePath(state.lastRemotePath)
+        || state.recentRemotePaths.size() > maximumRecentRemotePaths || !validPage(state.workbenchPage)
+        || (state.workbenchSide != "left" && state.workbenchSide != "right") || !std::isfinite(state.workbenchWidth)
+        || state.workbenchWidth < 320.0 || state.workbenchWidth > 960.0 || !std::isfinite(state.composerHeight)
+        || state.composerHeight < 96.0 || state.composerHeight > 480.0)
+    {
+        return false;
+    }
+    return std::ranges::all_of(state.recentRemotePaths, validRemotePath);
+}
+
+ProfileWorkspaceState *findProfileWorkspaceState(WorkspaceState &state, const std::string_view profileId)
+{
+    const auto found = std::ranges::find(state.profiles, profileId, &ProfileWorkspaceState::profileId);
+    return found == state.profiles.end() ? nullptr : &*found;
+}
+
+const ProfileWorkspaceState *findProfileWorkspaceState(const WorkspaceState &state, const std::string_view profileId)
+{
+    const auto found = std::ranges::find(state.profiles, profileId, &ProfileWorkspaceState::profileId);
+    return found == state.profiles.end() ? nullptr : &*found;
+}
+
+ProfileWorkspaceState &ensureProfileWorkspaceState(WorkspaceState &state, std::string profileId)
+{
+    if (ProfileWorkspaceState *existing = findProfileWorkspaceState(state, profileId))
+    {
+        return *existing;
+    }
+    state.profiles.push_back(ProfileWorkspaceState{.profileId = std::move(profileId)});
+    return state.profiles.back();
+}
+
+void recordRecentRemotePath(ProfileWorkspaceState &state, std::string remotePath)
+{
+    if (!validRemotePath(remotePath))
+    {
+        return;
+    }
+    state.lastRemotePath = remotePath;
+    std::erase(state.recentRemotePaths, remotePath);
+    state.recentRemotePaths.insert(state.recentRemotePaths.begin(), std::move(remotePath));
+    if (state.recentRemotePaths.size() > maximumRecentRemotePaths)
+    {
+        state.recentRemotePaths.resize(maximumRecentRemotePaths);
+    }
+}
+
+} // namespace ztermy::workbench

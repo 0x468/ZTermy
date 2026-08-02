@@ -42,6 +42,7 @@ Rectangle {
     property real previewBackdropOpacity: 1.0
     property string previewAccentPreference: "ztermy"
     property color previewCustomAccent: "#22C55E"
+    property double sessionClock: Date.now()
     readonly property var activeTerminalTab: {
         for (const tab of controller.terminalTabs) {
             if (tab.id === controller.activeTerminalTabId) {
@@ -252,6 +253,9 @@ Rectangle {
         case "application.settings":
             openSettingsTab();
             break;
+        case "application.transfers":
+            transferCenter.open();
+            break;
         case "terminal.newLocal":
             startLocalTerminalTab();
             break;
@@ -294,6 +298,19 @@ Rectangle {
             controller.copyActiveTerminalAddress();
             break;
         }
+    }
+
+    function formatSessionDuration(startedUtcMs) {
+        if (!startedUtcMs || startedUtcMs <= 0) {
+            return "";
+        }
+        const seconds = Math.max(0, Math.floor((sessionClock - startedUtcMs) / 1000));
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const remainingSeconds = seconds % 60;
+        const paddedMinutes = String(minutes).padStart(2, "0");
+        const paddedSeconds = String(remainingSeconds).padStart(2, "0");
+        return hours > 0 ? hours + ":" + paddedMinutes + ":" + paddedSeconds : paddedMinutes + ":" + paddedSeconds;
     }
 
     Binding {
@@ -430,6 +447,17 @@ Rectangle {
         function onActionRequested(actionId) {
             root.executeAction(actionId);
         }
+
+        function onTransferNotificationRequested(notification) {
+            transferToast.present(notification);
+        }
+    }
+
+    Timer {
+        interval: 1000
+        running: root.visible
+        repeat: true
+        onTriggered: root.sessionClock = Date.now()
     }
 
     NumberAnimation {
@@ -903,6 +931,14 @@ Rectangle {
         controller: root.controller
     }
 
+    TransferToast {
+        id: transferToast
+
+        x: root.width - width - 16
+        y: root.titleBarHeight + 14
+        z: 100
+    }
+
     RowLayout {
         anchors.top: titleBar.bottom
         anchors.left: parent.left
@@ -1079,6 +1115,16 @@ Rectangle {
                                 elide: Text.ElideRight
                                 font.family: Theme.uiFont
                                 font.pixelSize: Theme.textCompact
+                            }
+
+                            Text {
+                                Layout.alignment: Qt.AlignVCenter
+                                visible: root.width >= 900 && root.activeTerminalTab !== null && root.activeTerminalTab.connectedUtcMs > 0
+                                text: root.activeTerminalTab !== null ? qsTr("Connected %1").arg(root.formatSessionDuration(root.activeTerminalTab.connectedUtcMs)) : ""
+                                color: root.mutedColor
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.textCompact
+                                Accessible.name: text
                             }
 
                             Item {

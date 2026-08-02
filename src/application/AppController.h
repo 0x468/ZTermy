@@ -11,6 +11,7 @@
 #include "infrastructure/ssh/SshProfileStore.h"
 #include "infrastructure/workbench/PowerShellHistoryReader.h"
 #include "infrastructure/workbench/QuickCommandStore.h"
+#include "infrastructure/workbench/WorkspaceStateStore.h"
 
 #include <QMetaType>
 #include <QObject>
@@ -63,6 +64,7 @@ class AppController final : public QObject
     Q_PROPERTY(QString terminalHistoryError READ terminalHistoryError NOTIFY terminalHistoryChanged)
     Q_PROPERTY(QObject *activeSftpDirectoryModel READ activeSftpDirectoryModel NOTIFY sftpChanged)
     Q_PROPERTY(QString activeSftpPath READ activeSftpPath NOTIFY sftpChanged)
+    Q_PROPERTY(QVariantList recentSftpPaths READ recentSftpPaths NOTIFY sftpChanged)
     Q_PROPERTY(QString activeSftpState READ activeSftpState NOTIFY sftpChanged)
     Q_PROPERTY(QString activeSftpError READ activeSftpError NOTIFY sftpChanged)
     Q_PROPERTY(QVariantList transferTasks READ transferTasks NOTIFY transferTasksChanged)
@@ -136,6 +138,7 @@ public:
     [[nodiscard]] QString terminalHistoryError() const;
     [[nodiscard]] QObject *activeSftpDirectoryModel() const noexcept;
     [[nodiscard]] QString activeSftpPath() const;
+    [[nodiscard]] QVariantList recentSftpPaths() const;
     [[nodiscard]] QString activeSftpState() const;
     [[nodiscard]] QString activeSftpError() const;
     [[nodiscard]] QVariantList transferTasks() const;
@@ -256,6 +259,7 @@ signals:
     void terminalHistoryChanged();
     void sftpChanged();
     void transferTasksChanged();
+    void transferNotificationRequested(const QVariantMap &notification);
     void transferConflictRequested(const QString &taskId, const QVariantMap &conflict);
     void actionRegistryChanged();
     void actionRequested(const QString &actionId);
@@ -291,6 +295,7 @@ private:
         QString sourceProfileId;
         QString identity;
         QString address;
+        qint64 connectedUtcMs = 0;
         std::uint32_t searchCurrent = 0;
         std::uint32_t searchTotal = 0;
         bool searchCaseSensitive = false;
@@ -337,6 +342,7 @@ private:
     void loadHostProfiles();
     void loadApplicationSettings();
     void loadQuickCommands();
+    void loadWorkspaceState();
     void initializeActionRegistry();
     [[nodiscard]] QVariantMap shortcutResult(const actions::ShortcutValidation &validation) const;
     void applyTerminalHistoryTaskResult(const QString &tabId, quint64 requestId, ShellHistoryEntries entries,
@@ -358,6 +364,8 @@ private:
     void applyTransferSnapshot(const sftp::TransferTasksPtr &tasks);
     void stopSftpSession(TerminalTab &tab);
     void requestSftpDirectory(TerminalTab &tab, const QString &remotePath);
+    void applyWorkspaceState(TerminalTab &tab) const;
+    void persistWorkspaceState(const TerminalTab &tab, bool recordRemotePath = false);
     void recordRecentConnection(TerminalTab &tab);
     [[nodiscard]] TerminalTab *activeTab();
     [[nodiscard]] const TerminalTab *activeTab() const;
@@ -374,6 +382,8 @@ private:
     config::ApplicationSettings m_settings;
     actions::ActionRegistry m_actionRegistry;
     workbench::QuickCommandStore m_quickCommandStore;
+    workbench::WorkspaceStateStore m_workspaceStateStore;
+    workbench::WorkspaceState m_workspaceState;
     std::vector<workbench::QuickCommand> m_quickCommands;
     QString m_quickCommandOperationError;
     std::unique_ptr<security::CredentialVaultCoordinator> m_credentialVaults;

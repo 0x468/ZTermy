@@ -125,6 +125,19 @@ Item {
             }
 
             BrowserToolButton {
+                enabled: browser.controller.recentSftpPaths.length > 0 && browser.controller.activeSftpState !== "loading"
+                onClicked: recentPathsMenu.popup()
+                Accessible.name: qsTr("Recent remote paths")
+                contentItem: AppIcon {
+                    name: "history"
+                    color: parent.enabled ? Theme.textSoft : Theme.textSubtle
+                }
+                AppToolTip {
+                    text: qsTr("Recent paths")
+                }
+            }
+
+            BrowserToolButton {
                 enabled: browser.controller.activeSftpState !== "loading"
                 onClicked: browser.controller.refreshSftpDirectory()
                 Accessible.name: qsTr("Refresh folder")
@@ -359,6 +372,54 @@ Item {
                 }
             }
 
+            DropArea {
+                id: uploadDropArea
+
+                anchors.fill: parent
+                visible: browser.controller.activeSftpState === "ready"
+                keys: ["text/uri-list"]
+                z: 20
+                onDropped: drop => {
+                    if (!drop.hasUrls) {
+                        return;
+                    }
+                    for (const url of drop.urls) {
+                        browser.controller.enqueueSftpUpload(url.toString());
+                    }
+                    drop.acceptProposedAction();
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    visible: uploadDropArea.containsDrag
+                    radius: Theme.radiusControl
+                    color: Theme.selectedBackground
+                    border.color: Theme.accent
+                    border.width: 2
+
+                    Column {
+                        anchors.centerIn: parent
+                        spacing: 8
+
+                        AppIcon {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: 24
+                            height: 24
+                            name: "upload"
+                            color: Theme.accent
+                        }
+
+                        Text {
+                            text: qsTr("Drop files to upload")
+                            color: Theme.text
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.textBody
+                            font.weight: Font.DemiBold
+                        }
+                    }
+                }
+            }
+
             ScrollBar.vertical: ScrollBar {}
         }
 
@@ -400,6 +461,22 @@ Item {
             ActionButton {
                 text: qsTr("Try again")
                 onClicked: browser.controller.refreshSftpDirectory()
+            }
+        }
+    }
+
+    AppMenu {
+        id: recentPathsMenu
+
+        Repeater {
+            model: browser.controller.recentSftpPaths
+
+            AppMenuItem {
+                required property string modelData
+
+                text: modelData
+                Accessible.name: qsTr("Open recent remote path %1").arg(modelData)
+                onTriggered: browser.controller.navigateSftpDirectory(modelData)
             }
         }
     }

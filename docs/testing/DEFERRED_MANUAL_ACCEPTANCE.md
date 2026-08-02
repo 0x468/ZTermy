@@ -98,6 +98,43 @@ Status: `PENDING`
   must be distinguished from expected user-data retention.
 - Verify file identity/version/icon/start-menu entry and release checksums.
 
+## V1.7 session productivity
+
+Status: `PENDING`
+
+1. Open a saved SSH profile, browse at least three remote directories, close the
+   terminal, restart ztermy, and explicitly reconnect to the same profile.
+   Expected: ztermy starts on Hosts without reconnecting; the SFTP recent-path
+   menu is newest-first and opens valid paths; the last path, panel side/width,
+   selected workbench page, and composer height are reused only after reconnect.
+2. Drag one or more files from Windows Explorer over the SFTP listing.
+   Expected: a themed drop target appears; dropping queues each regular file into
+   the current remote directory; the terminal remains responsive; unsupported or
+   empty drag data does nothing. Directory drag is not promised in V1.7.
+3. Complete, fail, and cancel transfers while the transfer center is both open
+   and closed.
+   Expected: one non-blocking themed toast appears per terminal transition, uses
+   readable light/dark colors, can be dismissed from keyboard or pointer, and
+   auto-dismisses. It never steals terminal focus or repeats for an unchanged
+   state.
+4. Open the command palette and run File transfers, then assign and use a custom
+   shortcut for that action.
+   Expected: the global transfer center opens without requiring a terminal; the
+   shortcut persists and conflict validation behaves like other actions.
+5. Keep a local terminal and an SSH terminal open for several minutes.
+   Expected: the compact connected-duration label advances once per second when
+   enough width is available, does not cause terminal repaint jank, and remains
+   hidden at narrow widths without clipping other toolbar actions.
+6. Inspect the selected data directory after using these features.
+   Expected: `workspace_state.json` contains only profile IDs, normalized remote
+   paths, page/side tokens, and bounded sizes. It contains no password,
+   passphrase, terminal output/input, command history, or private-key contents.
+
+Cross-cutting expected behavior: recent-path menus, drag/drop feedback, transfer
+toasts, duration metadata, and the transfer action remain keyboard accessible,
+localized in English and Simplified Chinese, readable in both themes, and usable
+at 100–200% DPI.
+
 ## Evidence template
 
 ```text
@@ -109,4 +146,3 @@ Cases executed:
 Result: PASS | FAIL | PARTIAL
 Observed differences, logs, screenshots:
 ```
-

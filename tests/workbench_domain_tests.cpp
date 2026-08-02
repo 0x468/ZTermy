@@ -1,4 +1,5 @@
 #include "domain/workbench/ShellHistory.h"
+#include "domain/workbench/WorkspaceState.h"
 
 #include <QTest>
 
@@ -15,6 +16,7 @@ private slots:
     void parsesExtendedZshHistory();
     void parsesFishHistoryEscapes();
     void parsesPowerShellContinuationsAndCapsNewestEntries();
+    void recordsBoundedRecentRemotePaths();
 };
 
 void WorkbenchDomainTests::parsesTimestampedBashAndMultilineEntries()
@@ -54,6 +56,23 @@ void WorkbenchDomainTests::parsesPowerShellContinuationsAndCapsNewestEntries()
     QCOMPARE(entries[0].command, std::string("Get-Location"));
     QCOMPARE(entries[1].command, std::string("Write-Output `\n  value"));
     QCOMPARE(entries[0].shell, ztermy::workbench::ShellKind::powershell);
+}
+
+void WorkbenchDomainTests::recordsBoundedRecentRemotePaths()
+{
+    ztermy::workbench::WorkspaceState workspace;
+    auto &profile = ztermy::workbench::ensureProfileWorkspaceState(workspace, "profile-1");
+    for (int index = 0; index < 15; ++index)
+    {
+        ztermy::workbench::recordRecentRemotePath(profile, "/srv/path-" + std::to_string(index));
+    }
+    ztermy::workbench::recordRecentRemotePath(profile, "/srv/path-10");
+
+    QCOMPARE(profile.recentRemotePaths.size(), ztermy::workbench::maximumRecentRemotePaths);
+    QCOMPARE(profile.recentRemotePaths.front(), std::string("/srv/path-10"));
+    QCOMPARE(profile.lastRemotePath, std::string("/srv/path-10"));
+    QVERIFY(ztermy::workbench::validProfileWorkspaceState(profile));
+    QCOMPARE(ztermy::workbench::findProfileWorkspaceState(workspace, "profile-1"), &profile);
 }
 
 QTEST_GUILESS_MAIN(WorkbenchDomainTests)
