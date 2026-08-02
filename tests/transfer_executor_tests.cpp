@@ -5,6 +5,7 @@
 #include <QtTest/QTest>
 
 #include <algorithm>
+#include <functional>
 #include <map>
 #include <optional>
 #include <span>
@@ -233,6 +234,7 @@ private slots:
     void uploadsThroughTemporaryRemotePath();
     void uploadConflictWaitsForExplicitDecision();
     void cancelledUploadRemovesTemporaryRemoteFile();
+    void retryRemovesStaleTemporaryUpload();
 };
 
 void TransferExecutorTests::reportsDownloadConflictWithoutTouchingDestination()
@@ -347,6 +349,26 @@ void TransferExecutorTests::cancelledUploadRemovesTemporaryRemoteFile()
     QVERIFY(client.files.empty());
     QCOMPARE(client.removedPaths.size(), std::size_t{1});
     QVERIFY(client.removedPaths.front().starts_with("/remote/file.txt.ztermy-part-"));
+}
+
+void TransferExecutorTests::retryRemovesStaleTemporaryUpload()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString source = directory.filePath(QStringLiteral("upload.txt"));
+    QVERIFY(writeLocal(source, QByteArrayLiteral("replacement")));
+    const auto task = uploadTask(source);
+    const std::string temporaryPath =
+        task.destinationPath + ".ztermy-part-" + std::to_string(std::hash<std::string_view>{}(task.id));
+    MemorySftpClient client;
+    client.files[temporaryPath] = bytes("stale-partial");
+
+    const auto result = ztermy::sftp::executeTransfer(client, task, {}, {}, {});
+
+    QCOMPARE(result.kind, ztermy::sftp::TransferExecutionResultKind::Completed);
+    QCOMPARE(client.files.at(task.destinationPath), bytes("replacement"));
+    QVERIFY(std::ranges::find(client.removedPaths, temporaryPath) != client.removedPaths.end());
+    QVERIFY(!client.files.contains(temporaryPath));
 }
 
 } // namespace

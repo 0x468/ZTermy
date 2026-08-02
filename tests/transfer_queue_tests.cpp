@@ -28,6 +28,7 @@ private slots:
     void schedulesFifoWithinConcurrencyLimit();
     void validatesMonotonicProgressAndCompletion();
     void supportsFailureAttentionCancellationAndRetry();
+    void restoresOnlyExplicitInterruptedTasks();
 };
 
 void TransferQueueTests::requiresPositiveConcurrency()
@@ -96,6 +97,27 @@ void TransferQueueTests::supportsFailureAttentionCancellationAndRetry()
     QVERIFY(queue.cancel("cancelled", 3));
     QCOMPARE(queue.find("cancelled")->status, ztermy::sftp::TransferStatus::Cancelled);
     QCOMPARE(queue.retry("cancelled").error(), ztermy::sftp::TransferQueueError::InvalidTransition);
+}
+
+void TransferQueueTests::restoresOnlyExplicitInterruptedTasks()
+{
+    ztermy::sftp::TransferQueue queue;
+    auto interrupted = task("interrupted");
+    interrupted.status = ztermy::sftp::TransferStatus::Failed;
+    interrupted.errorCode = "interrupted";
+    interrupted.retryable = true;
+    interrupted.transferredBytes = 40;
+    interrupted.totalBytes = 100;
+
+    QVERIFY(queue.restoreInterrupted(interrupted));
+    QCOMPARE(queue.find("interrupted")->status, ztermy::sftp::TransferStatus::Failed);
+    QVERIFY(queue.retry("interrupted"));
+    QCOMPARE(queue.find("interrupted")->status, ztermy::sftp::TransferStatus::Queued);
+    QCOMPARE(queue.restoreInterrupted(interrupted).error(), ztermy::sftp::TransferQueueError::DuplicateTask);
+
+    interrupted.id = "ordinary-failure";
+    interrupted.errorCode = "remote-io";
+    QCOMPARE(queue.restoreInterrupted(interrupted).error(), ztermy::sftp::TransferQueueError::InvalidTask);
 }
 
 } // namespace

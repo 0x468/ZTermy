@@ -322,6 +322,19 @@ TransferExecutionResult executeUpload(SftpClient &client, const TransferTask &ta
     }
 
     const std::string temporaryPath = temporaryRemotePath(destination, task.id);
+    auto staleTemporary = client.statEntry(temporaryPath, stopToken);
+    if (!staleTemporary)
+    {
+        return remoteFailure(staleTemporary.error());
+    }
+    if (*staleTemporary)
+    {
+        auto removed = client.removeEntry(temporaryPath, false, stopToken);
+        if (!removed)
+        {
+            return remoteFailure(removed.error());
+        }
+    }
     auto opened = client.openFileForWrite(temporaryPath, false, stopToken);
     if (!opened)
     {

@@ -46,7 +46,7 @@ public:
 
     [[nodiscard]] std::error_code start(SshConnectionRequest request, terminal::TerminalGeometry geometry);
     void stop() noexcept;
-    void setOutputSink(std::shared_ptr<terminal::TerminalOutputSink> sink);
+    void setOutputSink(const std::shared_ptr<terminal::TerminalOutputSink> &sink);
     [[nodiscard]] diagnostics::LatencySummary inputQueueLatencySummary() const noexcept;
 
 public slots:

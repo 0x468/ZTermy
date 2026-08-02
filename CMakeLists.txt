@@ -339,6 +339,8 @@ add_library(ztermy_sftp_session STATIC
     src/application/sftp/TransferExecutor.h
     src/application/sftp/TransferManager.cpp
     src/application/sftp/TransferManager.h
+    src/infrastructure/sftp/TransferRecoveryStore.cpp
+    src/infrastructure/sftp/TransferRecoveryStore.h
 )
 
 target_compile_features(ztermy_terminal_session PUBLIC cxx_std_23)
@@ -1143,6 +1145,27 @@ if(BUILD_TESTING)
 
     add_test(NAME transfer-manager COMMAND ztermy_transfer_manager_tests)
 
+    qt_add_executable(ztermy_transfer_recovery_store_tests
+        tests/transfer_recovery_store_tests.cpp
+    )
+
+    target_compile_features(ztermy_transfer_recovery_store_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_transfer_recovery_store_tests PRIVATE
+        ztermy_sftp_session
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_transfer_recovery_store_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME transfer-recovery-store COMMAND ztermy_transfer_recovery_store_tests)
+
     qt_add_executable(ztermy_quick_command_store_tests
         tests/quick_command_store_tests.cpp
     )
@@ -1841,6 +1864,7 @@ if(BUILD_TESTING)
             ztermy_sftp_directory_model_tests
             ztermy_transfer_executor_tests
             ztermy_transfer_manager_tests
+            ztermy_transfer_recovery_store_tests
             ztermy_workspace_state_store_tests
             ztermy_terminal_engine_tests
             ztermy_local_terminal_session_tests

@@ -32,6 +32,7 @@ public:
     [[nodiscard]] const TransferTask *find(std::string_view taskId) const noexcept;
 
     [[nodiscard]] std::expected<void, TransferQueueError> enqueue(TransferTask task);
+    [[nodiscard]] std::expected<void, TransferQueueError> restoreInterrupted(TransferTask task);
     [[nodiscard]] std::optional<TransferTask> takeNext(std::int64_t startedUtcMs);
     [[nodiscard]] std::expected<void, TransferQueueError> updateProgress(std::string_view taskId,
                                                                          std::uint64_t transferredBytes,

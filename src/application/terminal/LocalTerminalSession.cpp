@@ -153,9 +153,9 @@ void LocalTerminalSession::stop() noexcept
     }
 }
 
-void LocalTerminalSession::setOutputSink(std::shared_ptr<TerminalOutputSink> sink)
+void LocalTerminalSession::setOutputSink(const std::shared_ptr<TerminalOutputSink> &sink)
 {
-    m_outputSink = std::move(sink);
+    m_outputSink = sink;
 }
 
 void LocalTerminalSession::queueInput(const QByteArray &bytes)

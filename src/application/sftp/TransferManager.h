@@ -30,6 +30,7 @@ enum class TransferCredentialError : std::uint8_t
 };
 
 using TransferRequestProvider = std::function<std::expected<ssh::SshConnectionRequest, TransferCredentialError>()>;
+using TransferRecoveryRequestProviderFactory = std::function<TransferRequestProvider(const std::string &endpointId)>;
 using TransferTasksPtr = std::shared_ptr<const std::vector<TransferTask>>;
 using FileConflictPtr = std::shared_ptr<const FileConflict>;
 
@@ -48,6 +49,7 @@ public:
     [[nodiscard]] std::expected<void, TransferQueueError>
     enqueue(TransferTask task, TransferRequestProvider requestProvider, TransferExecutionOptions options = {});
     [[nodiscard]] TransferTasksPtr snapshot() const;
+    void enableRecovery(QString path, TransferRecoveryRequestProviderFactory requestProviderFactory);
 
 public slots:
     void cancel(const QString &taskId);
@@ -62,6 +64,7 @@ signals:
     void conflictRequired(const QString &taskId, ztermy::sftp::FileConflictPtr conflict);
     void hostKeyConfirmationRequired(const QString &taskId, const QString &algorithm, const QString &fingerprint);
     void hostKeyChanged(const QString &taskId, const QString &algorithm, const QString &fingerprint);
+    void recoveryError(const QString &errorCode);
 
 private slots:
     void deliverCredentialError(const QString &taskId, ztermy::sftp::TransferCredentialError error);
@@ -104,7 +107,8 @@ private:
                         std::uint64_t bytesPerSecond);
     void handleCredentialError(const std::string &taskId, TransferCredentialError error);
     void handleResult(const std::string &taskId, TransferExecutionResult result);
-    void publishSnapshot();
+    void publishSnapshot(bool persist = true);
+    void persistRecovery();
     [[nodiscard]] static QString qTaskId(std::string_view taskId);
     [[nodiscard]] static std::string taskId(const QString &taskId);
 
@@ -112,6 +116,9 @@ private:
     SftpClientFactory m_clientFactory;
     std::unordered_map<std::string, WorkSpec> m_work;
     std::unordered_map<std::string, WorkerRecord> m_workers;
+    std::unique_ptr<class TransferRecoveryStore> m_recoveryStore;
+    TransferRecoveryRequestProviderFactory m_recoveryRequestProviderFactory;
+    bool m_recoveryWriteFailed = false;
 };
 
 } // namespace ztermy::sftp

@@ -62,6 +62,11 @@ namespace
     return QFileInfo(settingsPath).dir().filePath(QStringLiteral("workspace_state.json"));
 }
 
+[[nodiscard]] QString siblingTransferRecoveryFile(const QString &settingsPath)
+{
+    return QFileInfo(settingsPath).dir().filePath(QStringLiteral("transfer_recovery.json"));
+}
+
 [[nodiscard]] std::string utf8String(const QString &value)
 {
     const QByteArray bytes = value.toUtf8();
@@ -367,6 +372,71 @@ void logCredentialRollbackResult(std::expected<void, ztermy::security::Credentia
     return QStringLiteral("failed");
 }
 
+[[nodiscard]] QString transferErrorMessage(const std::string &errorCode)
+{
+    const QString code = utf8QString(errorCode);
+    if (code == QStringLiteral("interrupted"))
+    {
+        return QCoreApplication::translate("AppController",
+                                           "Interrupted by the previous shutdown. Retry to start the transfer again.");
+    }
+    if (code == QStringLiteral("credential-locked"))
+    {
+        return QCoreApplication::translate("AppController", "Unlock the credential vault, then retry the transfer.");
+    }
+    if (code == QStringLiteral("credential-unavailable") || code == QStringLiteral("authentication-unavailable"))
+    {
+        return QCoreApplication::translate("AppController", "Review the saved authentication method, then retry.");
+    }
+    if (code == QStringLiteral("authentication-rejected"))
+    {
+        return QCoreApplication::translate("AppController",
+                                           "Authentication was rejected. Update the credential, then retry.");
+    }
+    if (code == QStringLiteral("remote-timeout"))
+    {
+        return QCoreApplication::translate("AppController",
+                                           "The remote operation timed out. Check connectivity, then retry.");
+    }
+    if (code == QStringLiteral("remote-connection-lost"))
+    {
+        return QCoreApplication::translate("AppController", "The remote connection was lost. Reconnect, then retry.");
+    }
+    if (code == QStringLiteral("local-io") || code == QStringLiteral("commit-failed"))
+    {
+        return QCoreApplication::translate(
+            "AppController", "The local file could not be written. Check the path, permissions, and free space.");
+    }
+    if (code == QStringLiteral("remote-io"))
+    {
+        return QCoreApplication::translate(
+            "AppController", "The remote file operation failed. Check the path and permissions, then retry.");
+    }
+    if (code == QStringLiteral("file-conflict"))
+    {
+        return QCoreApplication::translate("AppController", "Choose whether to replace, rename, skip, or cancel.");
+    }
+    if (code == QStringLiteral("incompatible-conflict") || code == QStringLiteral("invalid-conflict-rename"))
+    {
+        return QCoreApplication::translate("AppController", "Choose a compatible destination name and try again.");
+    }
+    if (code == QStringLiteral("invalid-task"))
+    {
+        return QCoreApplication::translate("AppController", "The source or destination is no longer valid.");
+    }
+    if (code == QStringLiteral("credential-cancelled") || code == QStringLiteral("cancelled"))
+    {
+        return QCoreApplication::translate("AppController", "Authentication was cancelled.");
+    }
+    if (code == QStringLiteral("worker-initialization-failed"))
+    {
+        return QCoreApplication::translate("AppController", "The transfer worker could not start. Retry the transfer.");
+    }
+    return code.isEmpty() ? QString{}
+                          : QCoreApplication::translate(
+                                "AppController", "The transfer failed. Review the paths and connection, then retry.");
+}
+
 [[nodiscard]] QVariantMap transferTaskValue(const ztermy::sftp::TransferTask &task)
 {
     return {
@@ -383,6 +453,7 @@ void logCredentialRollbackResult(std::expected<void, ztermy::security::Credentia
         {QStringLiteral("transferredBytes"), QVariant::fromValue<qulonglong>(task.transferredBytes)},
         {QStringLiteral("bytesPerSecond"), QVariant::fromValue<qulonglong>(task.bytesPerSecond)},
         {QStringLiteral("errorCode"), utf8QString(task.errorCode)},
+        {QStringLiteral("errorMessage"), transferErrorMessage(task.errorCode)},
         {QStringLiteral("retryable"), task.retryable},
     };
 }
@@ -2231,6 +2302,22 @@ void AppController::initializeTransferManager()
                          m_hostKeyPromptVisible = true;
                          emit hostKeyPromptChanged();
                      });
+    QObject::connect(
+        m_transferManager.get(), &sftp::TransferManager::recoveryError, this, [this](const QString &errorCode) {
+            emit transferNotificationRequested({
+                {QStringLiteral("kind"), QStringLiteral("error")},
+                {QStringLiteral("title"), tr("Transfer recovery unavailable")},
+                {QStringLiteral("message"),
+                 errorCode == QStringLiteral("recovery-load-failed")
+                     ? tr("The previous transfer state could not be read. New transfers are still available.")
+                     : tr("Transfer recovery state could not be saved. Active transfers may not be recoverable after "
+                          "exit.")},
+            });
+        });
+    m_transferManager->enableRecovery(siblingTransferRecoveryFile(m_settingsStore.filePath()),
+                                      [this](const std::string &endpointId) {
+                                          return transferRequestProvider(utf8QString(endpointId));
+                                      });
 }
 
 void AppController::applyTransferSnapshot(const sftp::TransferTasksPtr &tasks)

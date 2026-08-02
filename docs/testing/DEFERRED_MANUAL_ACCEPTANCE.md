@@ -167,6 +167,19 @@ Status: `PENDING`
    Chinese, light and dark themes, and 100–200% DPI.
    Expected: focus returns predictably after file dialogs, accessible names are
    meaningful, labels fit, and no control is clipped or pointer-only.
+6. Start a large upload and download, exit ztermy before completion, then start
+   it again without opening a terminal.
+   Expected: no host connection starts automatically; the transfer center shows
+   each saved operation as interrupted with an actionable Retry state; the
+   journal contains paths and transfer metadata but no credential or terminal
+   content.
+7. Unlock the required vault if needed and explicitly retry an interrupted
+   transfer. Also test a missing profile, rejected credential, unavailable local
+   destination, and unwritable remote directory.
+   Expected: retry restarts from the beginning, a stale temporary upload created
+   by the same task is removed, successful/cancelled entries leave the recovery
+   journal, and each failure presents a localized corrective action without
+   exposing sensitive data.
 
 ## Evidence template
 

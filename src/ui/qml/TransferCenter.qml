@@ -38,14 +38,14 @@ Popup {
         case "running":
             return task.totalBytes > 0 ? qsTr("%1 of %2").arg(formatBytes(task.transferredBytes)).arg(formatBytes(task.totalBytes)) : qsTr("Transferring");
         case "needs-attention":
-            return qsTr("Needs attention");
+            return task.errorMessage || qsTr("Needs attention");
         case "completed":
             return qsTr("Completed");
         case "cancelled":
             return qsTr("Cancelled");
         case "failed":
         default:
-            return qsTr("Failed");
+            return task.errorMessage || qsTr("Failed");
         }
     }
 

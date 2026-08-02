@@ -50,7 +50,7 @@ signals:
     void stateChanged();
 
 private:
-    void run(QString path, const std::stop_token &stopToken) noexcept;
+    void run(const QString &path, const std::stop_token &stopToken);
     void publishState(SessionLogState state, QString error = {});
 
     static constexpr std::size_t maximumQueuedBytes = std::size_t{4} * 1024 * 1024;

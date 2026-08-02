@@ -1,4 +1,5 @@
 #include "application/sftp/TransferManager.h"
+#include "infrastructure/sftp/TransferRecoveryStore.h"
 
 #include "core/security/SensitiveByteArray.h"
 
@@ -192,6 +193,7 @@ private slots:
     void enforcesConnectionLimitAndBackfillsAfterCancellation();
     void exposesLockedCredentialsAsNeedsAttention();
     void resumesExplicitConflictDecision();
+    void restoresInterruptedTransferForExplicitRetry();
 };
 
 void TransferManagerTests::initTestCase()
@@ -268,6 +270,38 @@ void TransferManagerTests::resumesExplicitConflictDecision()
     manager.resolveConflict(QStringLiteral("conflict"), ztermy::sftp::ConflictAction::Skip);
 
     QTRY_VERIFY(findTask(manager.snapshot(), "conflict")->status == ztermy::sftp::TransferStatus::Completed);
+}
+
+void TransferManagerTests::restoresInterruptedTransferForExplicitRetry()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString source = directory.filePath(QStringLiteral("source.txt"));
+    QVERIFY(writeLocal(source));
+    const QString recoveryPath = directory.filePath(QStringLiteral("transfer_recovery.json"));
+    auto interrupted = uploadTask("recovered", source);
+    interrupted.status = ztermy::sftp::TransferStatus::Running;
+    interrupted.totalBytes = 7;
+    interrupted.transferredBytes = 3;
+    ztermy::sftp::TransferRecoveryStore store(recoveryPath);
+    QVERIFY(store.save(std::span(&interrupted, std::size_t{1})));
+
+    const auto state = std::make_shared<ManagerFakeState>();
+    ztermy::sftp::TransferManager manager(1, clientFactory(state));
+    manager.enableRecovery(recoveryPath, [](const std::string &) {
+        return requestProvider();
+    });
+
+    const auto recoveredSnapshot = manager.snapshot();
+    const auto *restored = findTask(recoveredSnapshot, "recovered");
+    QVERIFY(restored != nullptr);
+    QCOMPARE(restored->status, ztermy::sftp::TransferStatus::Failed);
+    QCOMPARE(restored->errorCode, std::string("interrupted"));
+    manager.retry(QStringLiteral("recovered"));
+    QTRY_VERIFY(findTask(manager.snapshot(), "recovered")->status == ztermy::sftp::TransferStatus::Completed);
+    const auto remaining = store.load();
+    QVERIFY(remaining.has_value());
+    QVERIFY(remaining->empty());
 }
 
 } // namespace

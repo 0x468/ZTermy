@@ -39,7 +39,7 @@ public:
 
     [[nodiscard]] virtual std::error_code start(TerminalGeometry geometry) = 0;
     virtual void stop() noexcept = 0;
-    virtual void setOutputSink(std::shared_ptr<TerminalOutputSink>) {}
+    virtual void setOutputSink(const std::shared_ptr<TerminalOutputSink> &) {}
 
 public slots:
     virtual void queueInput(const QByteArray &bytes) = 0;
@@ -74,7 +74,7 @@ public:
 
     [[nodiscard]] std::error_code start(TerminalGeometry geometry) override;
     void stop() noexcept override;
-    void setOutputSink(std::shared_ptr<TerminalOutputSink> sink) override;
+    void setOutputSink(const std::shared_ptr<TerminalOutputSink> &sink) override;
     [[nodiscard]] diagnostics::LatencySummary inputQueueLatencySummary() const noexcept;
     [[nodiscard]] diagnostics::LatencySummary takeInputQueueLatencySummary() noexcept;
 

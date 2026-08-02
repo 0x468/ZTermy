@@ -88,7 +88,7 @@ void SessionLogWriterTests::reportsDroppedOutputWithoutBlocking()
     QVERIFY(writer.start(directory.filePath(QStringLiteral("bounded.log"))));
     QTRY_COMPARE(writer.state(), ztermy::logging::SessionLogState::Active);
     changed.clear();
-    const QByteArray oversized(5 * 1024 * 1024, 'x');
+    const QByteArray oversized(qsizetype{5} * 1024 * 1024, 'x');
     append(writer, oversized);
 
     QCOMPARE(writer.droppedBytes(), static_cast<std::uint64_t>(oversized.size()));

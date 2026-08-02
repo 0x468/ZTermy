@@ -53,6 +53,21 @@ std::expected<void, TransferQueueError> TransferQueue::enqueue(TransferTask task
     return {};
 }
 
+std::expected<void, TransferQueueError> TransferQueue::restoreInterrupted(TransferTask task)
+{
+    if (!validTransferTask(task) || task.status != TransferStatus::Failed || !task.retryable
+        || task.errorCode != "interrupted")
+    {
+        return std::unexpected(TransferQueueError::InvalidTask);
+    }
+    if (find(task.id) != nullptr)
+    {
+        return std::unexpected(TransferQueueError::DuplicateTask);
+    }
+    m_tasks.push_back(std::move(task));
+    return {};
+}
+
 std::optional<TransferTask> TransferQueue::takeNext(const std::int64_t startedUtcMs)
 {
     if (runningCount() >= m_concurrencyLimit)

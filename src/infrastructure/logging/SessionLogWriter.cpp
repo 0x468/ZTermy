@@ -4,6 +4,7 @@
 #include <QIODevice>
 
 #include <algorithm>
+#include <exception>
 
 namespace ztermy::logging
 {
@@ -38,7 +39,18 @@ bool SessionLogWriter::start(const QString &path)
     m_state.store(SessionLogState::Starting, std::memory_order_release);
     emit stateChanged();
     m_worker = std::jthread([this, normalized](const std::stop_token &stopToken) {
-        run(normalized, stopToken);
+        try
+        {
+            run(normalized, stopToken);
+        }
+        catch (const std::exception &error)
+        {
+            publishState(SessionLogState::Failed, QString::fromUtf8(error.what()));
+        }
+        catch (...)
+        {
+            publishState(SessionLogState::Failed, QStringLiteral("Session log writer stopped unexpectedly."));
+        }
     });
     return true;
 }
@@ -113,7 +125,7 @@ std::uint64_t SessionLogWriter::droppedBytes() const noexcept
     return m_droppedBytes.load(std::memory_order_acquire);
 }
 
-void SessionLogWriter::run(QString path, const std::stop_token &stopToken) noexcept
+void SessionLogWriter::run(const QString &path, const std::stop_token &stopToken)
 {
     QFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate))

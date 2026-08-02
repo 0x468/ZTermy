@@ -198,9 +198,9 @@ void SshTerminalSession::stop() noexcept
     }
 }
 
-void SshTerminalSession::setOutputSink(std::shared_ptr<terminal::TerminalOutputSink> sink)
+void SshTerminalSession::setOutputSink(const std::shared_ptr<terminal::TerminalOutputSink> &sink)
 {
-    m_outputSink = std::move(sink);
+    m_outputSink = sink;
 }
 
 void SshTerminalSession::confirmHostKey(const bool remember)

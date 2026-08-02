@@ -1,5 +1,7 @@
 #include "application/sftp/TransferManager.h"
 
+#include "infrastructure/sftp/TransferRecoveryStore.h"
+
 #include <QDateTime>
 #include <QMetaObject>
 
@@ -114,6 +116,37 @@ TransferManager::enqueue(TransferTask task, TransferRequestProvider requestProvi
 TransferTasksPtr TransferManager::snapshot() const
 {
     return std::make_shared<const std::vector<TransferTask>>(m_queue.tasks());
+}
+
+void TransferManager::enableRecovery(QString path, TransferRecoveryRequestProviderFactory requestProviderFactory)
+{
+    m_recoveryStore = std::make_unique<TransferRecoveryStore>(std::move(path));
+    m_recoveryRequestProviderFactory = std::move(requestProviderFactory);
+    auto recovered = m_recoveryStore->load();
+    if (!recovered)
+    {
+        emit recoveryError(QStringLiteral("recovery-load-failed"));
+        return;
+    }
+    if (!m_recoveryRequestProviderFactory)
+    {
+        emit recoveryError(QStringLiteral("recovery-load-failed"));
+        return;
+    }
+    for (TransferTask &task : *recovered)
+    {
+        const std::string id = task.id;
+        auto restored = m_queue.restoreInterrupted(std::move(task));
+        if (!restored)
+        {
+            emit recoveryError(QStringLiteral("recovery-load-failed"));
+            continue;
+        }
+        const TransferTask *restoredTask = m_queue.find(id);
+        Q_ASSERT(restoredTask != nullptr);
+        m_work.emplace(id, WorkSpec{.requestProvider = m_recoveryRequestProviderFactory(restoredTask->endpointId)});
+    }
+    publishSnapshot();
 }
 
 void TransferManager::cancel(const QString &taskIdentifier)
@@ -347,7 +380,7 @@ void TransferManager::handleProgress(const std::string &id, const std::uint64_t 
 {
     if (m_queue.updateProgress(id, transferredBytes, totalBytes, bytesPerSecond))
     {
-        publishSnapshot();
+        publishSnapshot(false);
     }
 }
 
@@ -413,9 +446,31 @@ void TransferManager::handleResult(const std::string &id, TransferExecutionResul
     schedule();
 }
 
-void TransferManager::publishSnapshot()
+void TransferManager::publishSnapshot(const bool persist)
 {
+    if (persist)
+    {
+        persistRecovery();
+    }
     emit tasksChanged(snapshot());
+}
+
+void TransferManager::persistRecovery()
+{
+    if (!m_recoveryStore)
+    {
+        return;
+    }
+    if (!m_recoveryStore->save(m_queue.tasks()))
+    {
+        if (!m_recoveryWriteFailed)
+        {
+            m_recoveryWriteFailed = true;
+            emit recoveryError(QStringLiteral("recovery-save-failed"));
+        }
+        return;
+    }
+    m_recoveryWriteFailed = false;
 }
 
 QString TransferManager::qTaskId(const std::string_view identifier)
