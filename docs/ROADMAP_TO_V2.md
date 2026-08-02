@@ -1,11 +1,15 @@
 # Roadmap to V2
 
+Status: V2 implementation candidate produced from `4c92a89` on 2026-08-02;
+owner acceptance remains deferred
+
 ## Purpose
 
-This roadmap continues the Windows 11-first native ztermy product from the
-active V1.6 file-transfer milestone to V2. It is an execution plan rather than
-a promise to copy every feature of a reference product. NetCatty, Windows
-Terminal, Termius, Tabby, and other clients remain behavioral references only.
+This roadmap records the completed path from the Windows 11-first native
+ztermy V1.6 file-transfer milestone to the V2 implementation candidate. It is
+an execution record rather than a promise to copy every feature of a reference
+product. NetCatty, Windows Terminal, Termius, Tabby, and other clients remain
+behavioral references only.
 
 The owner is temporarily unavailable for interactive acceptance. Development
 may continue through automated gates, but items in
@@ -114,4 +118,3 @@ Each milestone closes only when:
 6. any unperformed runtime validation is recorded in the deferred acceptance
    ledger with exact steps and expected outcomes;
 7. changes are committed with Conventional Commits.
-
