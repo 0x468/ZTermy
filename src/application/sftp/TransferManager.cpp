@@ -411,23 +411,24 @@ void TransferManager::handleResult(const std::string &id, TransferExecutionResul
         case TransferExecutionResultKind::Completed:
         case TransferExecutionResultKind::Skipped:
         {
-            const auto updated = m_queue.updateProgress(id, result.transferredBytes, task->totalBytes, 0);
+            [[maybe_unused]] const auto updated =
+                m_queue.updateProgress(id, result.transferredBytes, task->totalBytes, 0);
             Q_ASSERT(updated.has_value());
-            const auto completed = m_queue.complete(id, now);
+            [[maybe_unused]] const auto completed = m_queue.complete(id, now);
             Q_ASSERT(completed.has_value());
             m_work.erase(id);
             break;
         }
         case TransferExecutionResultKind::Cancelled:
         {
-            const auto cancelled = m_queue.cancel(id, now);
+            [[maybe_unused]] const auto cancelled = m_queue.cancel(id, now);
             Q_ASSERT(cancelled.has_value());
             m_work.erase(id);
             break;
         }
         case TransferExecutionResultKind::NeedsAttention:
         {
-            const auto attention = m_queue.needsAttention(id, "file-conflict");
+            [[maybe_unused]] const auto attention = m_queue.needsAttention(id, "file-conflict");
             Q_ASSERT(attention.has_value());
             if (result.conflict)
             {
@@ -437,7 +438,7 @@ void TransferManager::handleResult(const std::string &id, TransferExecutionResul
         }
         case TransferExecutionResultKind::Failed:
         {
-            const auto failed = m_queue.fail(id, executionErrorCode(result), true, now);
+            [[maybe_unused]] const auto failed = m_queue.fail(id, executionErrorCode(result), true, now);
             Q_ASSERT(failed.has_value());
             break;
         }

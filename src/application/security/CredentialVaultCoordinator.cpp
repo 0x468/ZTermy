@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <ranges>
 #include <utility>
 #include <vector>
 
@@ -126,10 +127,10 @@ CredentialVaultCoordinator::migrate(const CredentialStorage target, const bool r
     written.reserve(keys->size());
     const auto rollback = [&targetVault, &backups, &written] {
         bool complete = true;
-        for (auto iterator = written.rbegin(); iterator != written.rend(); ++iterator)
+        for (const CredentialKey &writtenKey : std::views::reverse(written))
         {
-            const auto backup = std::ranges::find_if(backups, [&iterator](const TargetBackup &candidate) {
-                return candidate.key == *iterator;
+            const auto backup = std::ranges::find_if(backups, [&writtenKey](const TargetBackup &candidate) {
+                return candidate.key == writtenKey;
             });
             if (backup != backups.end() && backup->secret)
             {
@@ -140,7 +141,7 @@ CredentialVaultCoordinator::migrate(const CredentialStorage target, const bool r
             }
             else
             {
-                const auto removed = targetVault.remove(*iterator);
+                const auto removed = targetVault.remove(writtenKey);
                 complete = complete && (removed.has_value() || removed.error() == CredentialVaultError::NotFound);
             }
         }
@@ -233,10 +234,10 @@ std::expected<std::size_t, CredentialVaultError> CredentialVaultCoordinator::rem
     removedKeys.reserve(keys->size());
     const auto rollback = [&selectedVault, &backups, &removedKeys] {
         bool complete = true;
-        for (auto iterator = removedKeys.rbegin(); iterator != removedKeys.rend(); ++iterator)
+        for (const CredentialKey &removedKey : std::views::reverse(removedKeys))
         {
-            const auto backup = std::ranges::find_if(backups, [&iterator](const TargetBackup &candidate) {
-                return candidate.key == *iterator;
+            const auto backup = std::ranges::find_if(backups, [&removedKey](const TargetBackup &candidate) {
+                return candidate.key == removedKey;
             });
             if (backup == backups.end() || !backup->secret)
             {

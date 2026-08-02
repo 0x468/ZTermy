@@ -1624,8 +1624,8 @@ bool AppController::moveQuickCommand(const QString &id, const int targetIndex)
         return false;
     }
 
-    const std::size_t sourceIndex = static_cast<std::size_t>(std::distance(candidate.begin(), existing));
-    const std::size_t boundedTarget =
+    const auto sourceIndex = static_cast<std::size_t>(std::distance(candidate.begin(), existing));
+    const auto boundedTarget =
         static_cast<std::size_t>(std::clamp(targetIndex, 0, static_cast<int>(candidate.size() - 1U)));
     if (sourceIndex == boundedTarget)
     {
