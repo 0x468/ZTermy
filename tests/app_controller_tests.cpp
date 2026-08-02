@@ -98,6 +98,7 @@ private slots:
     void saveAndConnectPersistsBeforeConnectionOutcome();
     void rejectsIncompleteConnections();
     void persistsApplicationSettings();
+    void managesActionShortcutsAndDispatchContext();
     void managesMultipleLocalTerminalTabs();
     void persistsQuickCommandsAndPerTabWorkbenchState();
     void loadsRecentProfilesAndParsesQuickTargets();
@@ -559,6 +560,79 @@ void AppControllerTests::persistsApplicationSettings()
     QCOMPARE(reloaded.terminalFontFamily(), QStringLiteral("Cascadia Mono"));
     QCOMPARE(reloaded.terminalBackgroundOpacity(), 1.0);
     QCOMPARE(reloaded.languagePreference(), QStringLiteral("system"));
+}
+
+void AppControllerTests::managesActionShortcutsAndDispatchContext()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString profilesPath = directory.filePath(QStringLiteral("profiles.json"));
+    const QString knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json"));
+    const QString settingsPath = directory.filePath(QStringLiteral("settings.json"));
+    const auto sessionState = std::make_shared<FakeLocalSessionState>();
+    const auto factory = [sessionState] {
+        return std::make_unique<FakeLocalTerminalSession>(sessionState);
+    };
+
+    ztermy::AppController controller(profilesPath, knownHostsPath, settingsPath, factory);
+    QSignalSpy registryChanged(&controller, &ztermy::AppController::actionRegistryChanged);
+    QSignalSpy actionRequested(&controller, &ztermy::AppController::actionRequested);
+
+    const auto findAction = [&controller] {
+        for (const QVariant &entry : controller.actions())
+        {
+            const QVariantMap action = entry.toMap();
+            if (action.value(QStringLiteral("id")) == QStringLiteral("terminal.find"))
+            {
+                return action;
+            }
+        }
+        return QVariantMap{};
+    };
+
+    QVERIFY(!findAction().value(QStringLiteral("enabled")).toBool());
+    QVERIFY(!controller.triggerAction(QStringLiteral("terminal.find")));
+    QVERIFY(controller.triggerAction(QStringLiteral("application.hosts")));
+    QCOMPARE(actionRequested.count(), 1);
+    QCOMPARE(actionRequested.constFirst().constFirst().toString(), QStringLiteral("application.hosts"));
+
+    const QVariantMap conflict =
+        controller.setActionShortcut(QStringLiteral("terminal.find"), QStringLiteral("Ctrl+Shift+P"));
+    QVERIFY(!conflict.value(QStringLiteral("valid")).toBool());
+    QVERIFY(!conflict.value(QStringLiteral("error")).toString().isEmpty());
+
+    const QVariantMap changed =
+        controller.setActionShortcut(QStringLiteral("terminal.find"), QStringLiteral("Ctrl+Alt+F"));
+    QVERIFY(changed.value(QStringLiteral("valid")).toBool());
+    QCOMPARE(findAction().value(QStringLiteral("shortcut")).toString(), QStringLiteral("Ctrl+Alt+F"));
+    QVERIFY(registryChanged.count() >= 1);
+
+    QVERIFY(!controller.startLocalTerminal().isEmpty());
+    QVERIFY(findAction().value(QStringLiteral("enabled")).toBool());
+    QVERIFY(controller.triggerAction(QStringLiteral("terminal.find")));
+    QCOMPARE(actionRequested.constLast().constFirst().toString(), QStringLiteral("terminal.find"));
+
+    ztermy::AppController reloaded(profilesPath, knownHostsPath, settingsPath, factory);
+    QVariantMap reloadedFind;
+    for (const QVariant &entry : reloaded.actions())
+    {
+        const QVariantMap action = entry.toMap();
+        if (action.value(QStringLiteral("id")) == QStringLiteral("terminal.find"))
+        {
+            reloadedFind = action;
+            break;
+        }
+    }
+    QCOMPARE(reloadedFind.value(QStringLiteral("shortcut")).toString(), QStringLiteral("Ctrl+Alt+F"));
+    QVERIFY(reloaded.resetActionShortcut(QStringLiteral("terminal.find")));
+    for (const QVariant &entry : reloaded.actions())
+    {
+        const QVariantMap action = entry.toMap();
+        if (action.value(QStringLiteral("id")) == QStringLiteral("terminal.find"))
+        {
+            QCOMPARE(action.value(QStringLiteral("shortcut")).toString(), QStringLiteral("Ctrl+Shift+F"));
+        }
+    }
 }
 
 void AppControllerTests::managesMultipleLocalTerminalTabs()

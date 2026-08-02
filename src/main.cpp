@@ -557,6 +557,8 @@ struct ResizeHitRuntimeCase
     const bool settingsCaptured = captureLayout(window, outputDirectory, capturePrefix + QStringLiteral("-settings"));
     bool securityCaptured = false;
     bool securityMatches = false;
+    bool shortcutsCaptured = false;
+    bool shortcutsMatch = false;
     if (settingsPane != nullptr)
     {
         settingsPane->setProperty("currentCategory", QStringLiteral("security"));
@@ -567,6 +569,18 @@ struct ResizeHitRuntimeCase
         securityMatches = credentialStorage != nullptr && portablePassword != nullptr
                           && credentialStorage->property("visible").toBool()
                           && portablePassword->property("visible").toBool();
+        settingsPane->setProperty("currentCategory", QStringLiteral("shortcuts"));
+        processWindowEventsFor(std::chrono::milliseconds{200});
+        auto *shortcutSearch = rootObject->findChild<QObject *>(QStringLiteral("shortcutSearch"));
+        shortcutsCaptured = captureLayout(window, outputDirectory, capturePrefix + QStringLiteral("-shortcuts"));
+        shortcutsMatch = shortcutSearch != nullptr && shortcutSearch->property("visible").toBool();
+        if (!shortcutsMatch)
+        {
+            qCWarning(applicationLog) << "Shortcuts layout lookup failed"
+                                      << "search=" << (shortcutSearch != nullptr) << "searchVisible="
+                                      << (shortcutSearch != nullptr && shortcutSearch->property("visible").toBool())
+                                      << "category=" << settingsPane->property("currentCategory").toString();
+        }
         settingsPane->setProperty("currentCategory", QStringLiteral("appearance"));
     }
 
@@ -594,16 +608,17 @@ struct ResizeHitRuntimeCase
                            << "theme=" << themeName << "size=" << size << "compact=" << compact
                            << "hostPaneWidth=" << hostPaneWidth << "hostContentWidth=" << hostContentWidth
                            << "hostMatches=" << hostMatches << "settingsMatch=" << settingsMatch
-                           << "securityMatches=" << securityMatches;
-    return hostMatches && settingsMatch && securityMatches && hostCaptured && settingsCaptured && securityCaptured;
+                           << "securityMatches=" << securityMatches << "shortcutsMatch=" << shortcutsMatch;
+    return hostMatches && settingsMatch && securityMatches && shortcutsMatch && hostCaptured && settingsCaptured
+           && securityCaptured && shortcutsCaptured;
 }
 
-[[nodiscard]] bool applyUiLayoutSmokeTheme(ztermy::AppController &controller, const QString &theme)
+[[nodiscard]] bool applyUiLayoutSmokeTheme(ztermy::AppController &controller, const QString &theme,
+                                           const QString &language)
 {
     return controller.saveApplicationSettings(theme, 1.0, QStringLiteral("acrylic"), QStringLiteral("ztermy"),
                                               QStringLiteral("#22C55E"), {}, QStringLiteral("Cascadia Mono"), 14, false,
-                                              true, 1.0, QStringLiteral("terminal"), true, false, true,
-                                              QStringLiteral("en"));
+                                              true, 1.0, QStringLiteral("terminal"), true, false, true, language);
 }
 
 [[nodiscard]] bool runUiLayoutRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller,
@@ -615,7 +630,8 @@ struct ResizeHitRuntimeCase
         verifyUiLayoutBreakpoint(window, QSize{500, 360}, true, QStringLiteral("dark"), outputDirectory);
     const bool darkRegularPassed =
         verifyUiLayoutBreakpoint(window, QSize{1120, 800}, false, QStringLiteral("dark"), outputDirectory);
-    if (!darkCompactPassed || !darkRegularPassed || !applyUiLayoutSmokeTheme(controller, QStringLiteral("light")))
+    if (!darkCompactPassed || !darkRegularPassed
+        || !applyUiLayoutSmokeTheme(controller, QStringLiteral("light"), QStringLiteral("en")))
     {
         return false;
     }
@@ -625,8 +641,53 @@ struct ResizeHitRuntimeCase
         verifyUiLayoutBreakpoint(window, QSize{500, 360}, true, QStringLiteral("light"), outputDirectory);
     const bool lightRegularPassed =
         verifyUiLayoutBreakpoint(window, QSize{1120, 800}, false, QStringLiteral("light"), outputDirectory);
-    const bool restoredDark = applyUiLayoutSmokeTheme(controller, QStringLiteral("dark"));
-    return lightCompactPassed && lightRegularPassed && restoredDark;
+    const bool chineseSaved = applyUiLayoutSmokeTheme(controller, QStringLiteral("dark"), QStringLiteral("zh_CN"));
+    processWindowEventsFor(std::chrono::milliseconds{250});
+    QQuickItem *rootObject = window.rootObject();
+    auto *settingsPane =
+        rootObject == nullptr ? nullptr : rootObject->findChild<QObject *>(QStringLiteral("settingsPane"));
+    if (rootObject != nullptr)
+    {
+        rootObject->setProperty("currentPage", QStringLiteral("settings"));
+    }
+    if (settingsPane != nullptr)
+    {
+        settingsPane->setProperty("currentCategory", QStringLiteral("shortcuts"));
+    }
+    window.resize(QSize{1120, 800});
+    processWindowEventsFor(std::chrono::milliseconds{250});
+    auto *shortcutSearch =
+        rootObject == nullptr ? nullptr : rootObject->findChild<QObject *>(QStringLiteral("shortcutSearch"));
+    const bool chineseShortcuts =
+        chineseSaved && shortcutSearch != nullptr
+        && shortcutSearch->property("placeholderText").toString() == QStringLiteral("搜索操作和快捷键")
+        && captureLayout(window, outputDirectory, QStringLiteral("zh-cn-regular-shortcuts"));
+
+    auto *commandPalette =
+        rootObject == nullptr ? nullptr : rootObject->findChild<QQuickItem *>(QStringLiteral("commandPalette"));
+    auto *commandPaletteSearch =
+        rootObject == nullptr ? nullptr : rootObject->findChild<QObject *>(QStringLiteral("commandPaletteSearch"));
+    auto *commandPaletteList =
+        rootObject == nullptr ? nullptr : rootObject->findChild<QQuickItem *>(QStringLiteral("commandPaletteList"));
+    const bool paletteOpened =
+        commandPalette != nullptr && QMetaObject::invokeMethod(commandPalette, "open", Qt::DirectConnection);
+    processWindowEventsFor(std::chrono::milliseconds{250});
+    QAccessibleInterface *paletteListInterface =
+        commandPaletteList == nullptr ? nullptr : QAccessible::queryAccessibleInterface(commandPaletteList);
+    const QVariantList localizedActions = controller.actions();
+    const bool chinesePalette =
+        paletteOpened && commandPaletteSearch != nullptr
+        && commandPaletteSearch->property("placeholderText").toString() == QStringLiteral("输入操作名称或快捷键")
+        && paletteListInterface != nullptr
+        && paletteListInterface->text(QAccessible::Name) == QStringLiteral("可用命令") && !localizedActions.isEmpty()
+        && localizedActions.constFirst().toMap().value(QStringLiteral("label")).toString() == QStringLiteral("命令面板")
+        && captureLayout(window, outputDirectory, QStringLiteral("zh-cn-command-palette"));
+    if (commandPalette != nullptr)
+    {
+        static_cast<void>(QMetaObject::invokeMethod(commandPalette, "close", Qt::DirectConnection));
+    }
+    const bool restoredDark = applyUiLayoutSmokeTheme(controller, QStringLiteral("dark"), QStringLiteral("en"));
+    return lightCompactPassed && lightRegularPassed && chineseShortcuts && chinesePalette && restoredDark;
 }
 
 [[nodiscard]] QQuickItem *quickItem(QQuickItem *rootObject, const char *objectName)
@@ -767,7 +828,8 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
     return searchFocused && pickerFocusRestored;
 }
 
-[[nodiscard]] bool verifySettingsTabOrder(ztermy::NativeWindow &window, QQuickItem *rootObject)
+[[nodiscard]] bool verifySettingsTabOrder(ztermy::NativeWindow &window, ztermy::AppController &controller,
+                                          QQuickItem *rootObject)
 {
     const auto verifyOrder = [&window, rootObject](const auto &order) {
         if (!focusItem(window, quickItem(rootObject, order.front()), QString::fromLatin1(order.front())))
@@ -868,7 +930,70 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
     {
         terminalOrder.insert(terminalOrder.begin() + 3, "settingsTerminalLigatures");
     }
-    return verifyOrder(terminalOrder);
+    if (!verifyOrder(terminalOrder))
+    {
+        return false;
+    }
+
+    QQuickItem *shortcutsCategory = quickItem(rootObject, "settingsShortcutsCategory");
+    if (!focusItem(window, shortcutsCategory, QStringLiteral("settingsShortcutsCategory")))
+    {
+        return false;
+    }
+    sendKey(window, Qt::Key_Space);
+    processWindowEventsFor(std::chrono::milliseconds{100});
+    if (settingsPane->property("currentCategory").toString() != QStringLiteral("shortcuts"))
+    {
+        qCWarning(applicationLog) << "Shortcuts settings category did not activate from the keyboard";
+        return false;
+    }
+
+    QQuickItem *shortcutRecorder = visualQuickItem(rootObject, "shortcutRecorder_application.commandPalette");
+    if (!focusItem(window, shortcutRecorder, QStringLiteral("shortcutRecorder_application.commandPalette")))
+    {
+        return false;
+    }
+    sendKey(window, Qt::Key_Space);
+    const bool recordingStarted = settingsPane->property("shortcutRecording").toBool();
+    sendKey(window, Qt::Key_F, Qt::ControlModifier | Qt::ShiftModifier);
+    const bool conflictRejected = settingsPane->property("shortcutRecording").toBool();
+    sendKey(window, Qt::Key_P, Qt::ControlModifier | Qt::AltModifier);
+    const auto commandPaletteShortcut = [&controller]() {
+        const QVariantList actions = controller.actions();
+        for (const QVariant &entry : actions)
+        {
+            const QVariantMap action = entry.toMap();
+            if (action.value(QStringLiteral("id")).toString() == QStringLiteral("application.commandPalette"))
+            {
+                return action.value(QStringLiteral("shortcut")).toString();
+            }
+        }
+        return QString{};
+    };
+    const bool shortcutRecorded = !settingsPane->property("shortcutRecording").toBool()
+                                  && commandPaletteShortcut() == QStringLiteral("Ctrl+Alt+P");
+    const bool shortcutReset = controller.resetActionShortcut(QStringLiteral("application.commandPalette"))
+                               && commandPaletteShortcut() == QStringLiteral("Ctrl+Shift+P");
+    if (!recordingStarted || !conflictRejected || !shortcutRecorded || !shortcutReset)
+    {
+        qCWarning(applicationLog) << "Shortcut recorder keyboard route failed"
+                                  << "recordingStarted=" << recordingStarted << "conflictRejected=" << conflictRejected
+                                  << "shortcutRecorded=" << shortcutRecorded << "shortcutReset=" << shortcutReset
+                                  << "effectiveShortcut=" << commandPaletteShortcut();
+        return false;
+    }
+    if (!focusItem(window, terminalCategory, QStringLiteral("settingsTerminalCategory")))
+    {
+        return false;
+    }
+    sendKey(window, Qt::Key_Space);
+    processWindowEventsFor(std::chrono::milliseconds{100});
+    if (settingsPane->property("currentCategory").toString() != QStringLiteral("terminal"))
+    {
+        qCWarning(applicationLog) << "Terminal settings category was not restored after shortcut recording";
+        return false;
+    }
+    return true;
 }
 
 [[nodiscard]] bool verifyHostEditorTabOrder(ztermy::NativeWindow &window, QQuickItem *rootObject)
@@ -954,6 +1079,7 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
         std::pair{"maximizeCaptionButton", "Maximize"},
         std::pair{"closeCaptionButton", "Close"},
         std::pair{"sideHostsAction", "Hosts"},
+        std::pair{"commandPaletteAction", "Open command palette"},
         std::pair{"settingsShortcutAction", "Open Settings"},
         std::pair{"localMachineAction", "Open local terminal"},
         std::pair{"terminalFindAction", "Find in terminal"},
@@ -964,6 +1090,40 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
         {
             return false;
         }
+    }
+
+    sendKey(window, Qt::Key_P, Qt::ControlModifier | Qt::ShiftModifier);
+    QQuickItem *commandPalette = quickItem(rootObject, "commandPalette");
+    QQuickItem *commandPaletteSearch = quickItem(rootObject, "commandPaletteSearch");
+    QQuickItem *commandPaletteList = quickItem(rootObject, "commandPaletteList");
+    const bool paletteOpened = processWindowEventsUntil(
+        [&window] {
+            return namedFocusItem(window) == QStringLiteral("commandPaletteSearch");
+        },
+        std::chrono::seconds{1});
+    QAccessibleInterface *paletteInterface =
+        commandPalette == nullptr ? nullptr : QAccessible::queryAccessibleInterface(commandPalette);
+    QAccessibleInterface *paletteListInterface =
+        commandPaletteList == nullptr ? nullptr : QAccessible::queryAccessibleInterface(commandPaletteList);
+    const bool paletteAccessible =
+        paletteInterface != nullptr && paletteInterface->role() == QAccessible::Dialog
+        && paletteInterface->text(QAccessible::Name) == QStringLiteral("Command palette")
+        && paletteListInterface != nullptr && paletteListInterface->role() == QAccessible::List
+        && paletteListInterface->text(QAccessible::Name) == QStringLiteral("Available commands");
+    const bool paletteCaptured = captureLayout(window, outputDirectory, QStringLiteral("command-palette"));
+    sendText(window, u"hosts");
+    const bool paletteFiltered = commandPaletteList != nullptr && commandPaletteList->property("count").toInt() > 0;
+    sendKey(window, Qt::Key_Return);
+    const bool paletteExecuted = commandPalette != nullptr && !commandPalette->isVisible()
+                                 && rootObject->property("currentPage").toString() == QStringLiteral("hosts");
+    if (!paletteOpened || !paletteAccessible || !paletteCaptured || !paletteFiltered || !paletteExecuted
+        || commandPaletteSearch == nullptr)
+    {
+        qCWarning(applicationLog) << "Command palette keyboard route failed"
+                                  << "opened=" << paletteOpened << "captured=" << paletteCaptured
+                                  << "accessible=" << paletteAccessible << "filtered=" << paletteFiltered
+                                  << "executed=" << paletteExecuted << "focus=" << namedFocusItem(window);
+        return false;
     }
 
     rootObject->setProperty("currentPage", QStringLiteral("hosts"));
@@ -979,7 +1139,8 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
         || !verifyAccessibleButton(rootObject, "settingsTitleAction", "Activate Settings")
         || !verifyAccessibleButton(rootObject, "settingsTitleCloseAction", "Close Settings")
         || !verifyAccessibleButton(rootObject, "settingsAppearanceCategory", "Appearance settings")
-        || !verifyAccessibleButton(rootObject, "settingsTerminalCategory", "Terminal settings"))
+        || !verifyAccessibleButton(rootObject, "settingsTerminalCategory", "Terminal settings")
+        || !verifyAccessibleButton(rootObject, "settingsShortcutsCategory", "Shortcuts settings"))
     {
         qCWarning(applicationLog) << "Space did not open the singleton Settings work tab";
         return false;
@@ -989,7 +1150,7 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
     {
         return false;
     }
-    if (!verifySettingsTabOrder(window, rootObject))
+    if (!verifySettingsTabOrder(window, controller, rootObject))
     {
         return false;
     }
@@ -999,7 +1160,7 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
     }
     window.resize(QSize{500, 360});
     processWindowEventsFor(std::chrono::milliseconds{150});
-    if (!verifySettingsTabOrder(window, rootObject))
+    if (!verifySettingsTabOrder(window, controller, rootObject))
     {
         return false;
     }
@@ -1426,17 +1587,25 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
     sendKey(window, Qt::Key_F, Qt::ControlModifier);
     const bool controlFindPreservedForTerminal = !rootObject->property("terminalSearchVisible").toBool()
                                                  && namedFocusItem(window) == QStringLiteral("terminalViewport");
+    const QVariantMap unbindFind = controller.setActionShortcut(QStringLiteral("terminal.find"), QString{});
     sendKey(window, Qt::Key_F, Qt::ControlModifier | Qt::ShiftModifier);
-    const bool terminalSearchOpened = rootObject->property("terminalSearchVisible").toBool()
+    const bool unboundFindPreservedForTerminal = unbindFind.value(QStringLiteral("valid")).toBool()
+                                                 && !rootObject->property("terminalSearchVisible").toBool()
+                                                 && namedFocusItem(window) == QStringLiteral("terminalViewport");
+    const bool findShortcutReset = controller.resetActionShortcut(QStringLiteral("terminal.find"));
+    sendKey(window, Qt::Key_F, Qt::ControlModifier | Qt::ShiftModifier);
+    const bool terminalSearchOpened = findShortcutReset && rootObject->property("terminalSearchVisible").toBool()
                                       && namedFocusItem(window) == QStringLiteral("terminalSearchQuery");
     sendKey(window, Qt::Key_Escape);
-    const bool terminalSearchKeyboard = controlFindPreservedForTerminal && terminalSearchOpened
+    const bool terminalSearchKeyboard = controlFindPreservedForTerminal && unboundFindPreservedForTerminal
+                                        && terminalSearchOpened
                                         && !rootObject->property("terminalSearchVisible").toBool()
                                         && namedFocusItem(window) == QStringLiteral("terminalViewport");
     if (!terminalSearchKeyboard)
     {
         qCWarning(applicationLog) << "Terminal search shortcut routing failed"
                                   << "ctrlFPreserved=" << controlFindPreservedForTerminal
+                                  << "unboundCtrlShiftFPreserved=" << unboundFindPreservedForTerminal
                                   << "ctrlShiftFOpened=" << terminalSearchOpened << "focus=" << namedFocusItem(window);
         return false;
     }
@@ -1891,7 +2060,8 @@ int main(int argc, char *argv[])
         qCCritical(applicationLog) << "Could not apply the configured UI language";
         return EXIT_FAILURE;
     }
-    if ((uiLayoutSmoke || uiKeyboardSmoke) && !applyUiLayoutSmokeTheme(appController, QStringLiteral("dark")))
+    if ((uiLayoutSmoke || uiKeyboardSmoke)
+        && !applyUiLayoutSmokeTheme(appController, QStringLiteral("dark"), QStringLiteral("en")))
     {
         qCCritical(applicationLog) << "Could not prepare the UI runtime smoke settings";
         return EXIT_FAILURE;

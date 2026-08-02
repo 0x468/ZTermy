@@ -13,8 +13,9 @@ Rectangle {
     readonly property int titleBarHeight: Theme.titleBarHeight
     readonly property int captionButtonWidth: 46
     readonly property int titleQuickActionWidth: 40
+    readonly property int titleQuickActionsWidth: titleQuickActionWidth * 2
     readonly property int titleSecurityActionWidth: portableVaultNeedsAttention ? 40 : 0
-    readonly property int titleNavigationWidth: Math.min(830, Math.max(310, width - (captionButtonWidth * 3) - titleQuickActionWidth - titleSecurityActionWidth - 96))
+    readonly property int titleNavigationWidth: Math.min(830, Math.max(310, width - (captionButtonWidth * 3) - titleQuickActionsWidth - titleSecurityActionWidth - 96))
     readonly property color backgroundColor: Theme.windowBackground
     readonly property color panelColor: Theme.panelBackground
     readonly property color chromeColor: Theme.chromeBackground
@@ -107,7 +108,7 @@ Rectangle {
     color: root.currentPage === "terminal" ? "transparent" : backgroundColor
 
     function reportTitleBarMetrics() {
-        root.windowChrome.setTitleBarMetrics(titleBarHeight, titleNavigation.width + 8, width - (captionButtonWidth * 3) - titleQuickActionWidth - titleSecurityActionWidth, width - (captionButtonWidth * 2), captionButtonWidth);
+        root.windowChrome.setTitleBarMetrics(titleBarHeight, titleNavigation.width + 8, width - (captionButtonWidth * 3) - titleQuickActionsWidth - titleSecurityActionWidth, width - (captionButtonWidth * 2), captionButtonWidth);
     }
 
     function requestTerminalCommandRun(command) {
@@ -231,6 +232,66 @@ Rectangle {
         terminalViewport.forceActiveFocus();
     }
 
+    function shortcutFor(actionId) {
+        for (let index = 0; index < controller.actions.length; ++index) {
+            if (controller.actions[index].id === actionId) {
+                return controller.actions[index].shortcut;
+            }
+        }
+        return "";
+    }
+
+    function executeAction(actionId) {
+        switch (actionId) {
+        case "application.commandPalette":
+            commandPalette.open();
+            break;
+        case "application.hosts":
+            currentPage = "hosts";
+            break;
+        case "application.settings":
+            openSettingsTab();
+            break;
+        case "terminal.newLocal":
+            startLocalTerminalTab();
+            break;
+        case "tabs.close":
+            closeActiveTerminalTab();
+            break;
+        case "tabs.next":
+            activateRelativeTerminalTab(1);
+            break;
+        case "tabs.previous":
+            activateRelativeTerminalTab(-1);
+            break;
+        case "terminal.find":
+            openTerminalSearch();
+            break;
+        case "terminal.history":
+            currentPage = "terminal";
+            controller.toggleTerminalWorkbench("history");
+            break;
+        case "terminal.scripts":
+            currentPage = "terminal";
+            controller.toggleTerminalWorkbench("scripts");
+            break;
+        case "terminal.composer":
+            currentPage = "terminal";
+            controller.toggleTerminalComposer();
+            break;
+        case "terminal.hideWorkbench":
+            controller.closeTerminalWorkbench();
+            terminalViewport.forceActiveFocus();
+            break;
+        case "terminal.moveWorkbench":
+            controller.moveTerminalWorkbench();
+            break;
+        case "terminal.copyAddress":
+            controller.copyActiveTerminalAddress();
+            break;
+        }
+    }
+
     Binding {
         target: Theme
         property: "preference"
@@ -310,31 +371,24 @@ Rectangle {
         }
     }
 
-    Shortcut {
-        sequence: "Ctrl+Shift+F"
-        onActivated: root.openTerminalSearch()
-    }
+    Repeater {
+        model: root.controller.actions
 
-    Shortcut {
-        sequence: "Ctrl+Shift+T"
-        autoRepeat: false
-        onActivated: root.startLocalTerminalTab()
-    }
+        Item {
+            id: registryShortcutDelegate
 
-    Shortcut {
-        sequence: "Ctrl+Shift+W"
-        autoRepeat: false
-        onActivated: root.closeActiveTerminalTab()
-    }
+            required property var modelData
+            width: 0
+            height: 0
 
-    Shortcut {
-        sequence: "Ctrl+Tab"
-        onActivated: root.activateRelativeTerminalTab(1)
-    }
-
-    Shortcut {
-        sequence: "Ctrl+Shift+Tab"
-        onActivated: root.activateRelativeTerminalTab(-1)
+            Shortcut {
+                sequence: registryShortcutDelegate.modelData.shortcut
+                enabled: registryShortcutDelegate.modelData.shortcut.length > 0 && registryShortcutDelegate.modelData.enabled && !settingsPane.shortcutRecording && !commandPalette.visible
+                autoRepeat: registryShortcutDelegate.modelData.autoRepeat
+                context: Qt.WindowShortcut
+                onActivated: root.controller.triggerAction(registryShortcutDelegate.modelData.id)
+            }
+        }
     }
 
     Connections {
@@ -367,6 +421,10 @@ Rectangle {
 
         function onCredentialVaultChanged() {
             Qt.callLater(root.reportTitleBarMetrics);
+        }
+
+        function onActionRequested(actionId) {
+            root.executeAction(actionId);
         }
     }
 
@@ -669,6 +727,46 @@ Rectangle {
             Rectangle {
                 width: root.titleQuickActionWidth
                 height: titleBar.height
+                color: commandPaletteAction.hovered || commandPaletteAction.activeFocus ? Theme.controlHover : "transparent"
+                border.color: commandPaletteAction.activeFocus ? Theme.focus : "transparent"
+                border.width: commandPaletteAction.activeFocus ? 1 : 0
+
+                Behavior on color {
+                    ColorAnimation {
+                        duration: Theme.motionFast
+                    }
+                }
+
+                AppIcon {
+                    anchors.centerIn: parent
+                    width: 16
+                    height: 16
+                    name: "search"
+                    color: commandPalette.visible ? root.textColor : root.mutedColor
+                }
+
+                KeyboardAction {
+                    id: commandPaletteAction
+
+                    objectName: "commandPaletteAction"
+                    anchors.fill: parent
+                    anchors.margins: 2
+                    accessibleName: qsTr("Open command palette")
+                    onActivated: commandPalette.open()
+                }
+
+                AppToolTip {
+                    visible: commandPaletteAction.hovered
+                    text: {
+                        const shortcut = root.shortcutFor("application.commandPalette");
+                        return shortcut.length > 0 ? qsTr("Command palette") + " · " + shortcut : qsTr("Command palette");
+                    }
+                }
+            }
+
+            Rectangle {
+                width: root.titleQuickActionWidth
+                height: titleBar.height
                 color: settingsShortcutAction.hovered || settingsShortcutAction.activeFocus ? Theme.controlHover : "transparent"
                 border.color: settingsShortcutAction.activeFocus ? Theme.focus : "transparent"
                 border.width: settingsShortcutAction.activeFocus ? 1 : 0
@@ -730,6 +828,13 @@ Rectangle {
                 onActivated: root.windowChrome.closeWindow()
             }
         }
+    }
+
+    CommandPalette {
+        id: commandPalette
+
+        anchors.fill: parent
+        controller: root.controller
     }
 
     RowLayout {

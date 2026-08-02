@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QMap>
 #include <QString>
 
 #include <cstdint>
@@ -73,6 +74,7 @@ struct ApplicationSettings final
     bool confirmMultilinePaste = true;
     CredentialStoragePreference credentialStorage = CredentialStoragePreference::automatic;
     LanguagePreference language = LanguagePreference::system;
+    QMap<QString, QString> shortcutOverrides;
 
     [[nodiscard]] friend bool operator==(const ApplicationSettings &, const ApplicationSettings &) = default;
 };

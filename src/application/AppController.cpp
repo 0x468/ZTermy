@@ -473,6 +473,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
                      &AppController::applyTerminalHistoryTaskResult, Qt::QueuedConnection);
     loadHostProfiles();
     loadApplicationSettings();
+    initializeActionRegistry();
     loadQuickCommands();
 }
 
@@ -516,6 +517,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
                      &AppController::applyTerminalHistoryTaskResult, Qt::QueuedConnection);
     loadHostProfiles();
     loadApplicationSettings();
+    initializeActionRegistry();
     loadQuickCommands();
 }
 
@@ -787,6 +789,11 @@ QVariantList AppController::terminalGlobalHistory() const
     return result;
 }
 
+QVariantList AppController::actions() const
+{
+    return m_actionRegistry.actions(activeTab() != nullptr);
+}
+
 QString AppController::terminalHistoryState() const
 {
     const TerminalTab *tab = activeTab();
@@ -927,6 +934,7 @@ void AppController::retranslateUiState()
     setCredentialOperationError({});
     showActiveTab();
     emit terminalTabsChanged();
+    emit actionRegistryChanged();
 }
 
 QString AppController::credentialStoragePreference() const
@@ -1421,6 +1429,79 @@ void AppController::refreshTerminalHistory()
                                                     readFailed ? historyReadError : QString{});
         }
     });
+}
+
+bool AppController::triggerAction(const QString &actionId)
+{
+    if (!m_actionRegistry.enabled(actionId, activeTab() != nullptr))
+    {
+        return false;
+    }
+    emit actionRequested(actionId);
+    return true;
+}
+
+QVariantMap AppController::setActionShortcut(const QString &actionId, const QString &shortcut)
+{
+    const QMap<QString, QString> previousOverrides = m_actionRegistry.overrides();
+    const actions::ShortcutValidation validation = m_actionRegistry.setShortcut(actionId, shortcut);
+    if (!validation.valid())
+    {
+        return shortcutResult(validation);
+    }
+
+    config::ApplicationSettings updated = m_settings;
+    updated.shortcutOverrides = m_actionRegistry.overrides();
+    if (!m_settingsStore.save(updated))
+    {
+        m_actionRegistry.setOverrides(previousOverrides);
+        return {
+            {QStringLiteral("valid"), false},
+            {QStringLiteral("shortcut"), QString{}},
+            {QStringLiteral("error"), tr("The shortcut could not be saved.")},
+            {QStringLiteral("conflictingActionId"), QString{}},
+        };
+    }
+
+    m_settings = std::move(updated);
+    emit actionRegistryChanged();
+    return shortcutResult(validation);
+}
+
+QVariantMap AppController::setActionShortcutFromKey(const QString &actionId, const int key, const int modifiers)
+{
+    return setActionShortcut(actionId, actions::ActionRegistry::shortcutFromKeyEvent(key, modifiers));
+}
+
+bool AppController::resetActionShortcut(const QString &actionId)
+{
+    if (!m_actionRegistry.contains(actionId))
+    {
+        return false;
+    }
+    return setActionShortcut(actionId, m_actionRegistry.defaultShortcut(actionId))
+        .value(QStringLiteral("valid"))
+        .toBool();
+}
+
+bool AppController::resetAllActionShortcuts()
+{
+    if (m_actionRegistry.overrides().isEmpty())
+    {
+        return true;
+    }
+    const QMap<QString, QString> previousOverrides = m_actionRegistry.overrides();
+    static_cast<void>(m_actionRegistry.resetAllShortcuts());
+    config::ApplicationSettings updated = m_settings;
+    updated.shortcutOverrides.clear();
+    if (!m_settingsStore.save(updated))
+    {
+        m_actionRegistry.setOverrides(previousOverrides);
+        return false;
+    }
+    m_settings = std::move(updated);
+    emit actionRegistryChanged();
+    return true;
 }
 
 void AppController::applyTerminalHistoryTaskResult(const QString &tabId, const quint64 requestId,
@@ -2071,7 +2152,13 @@ bool AppController::resetApplicationSettings()
 {
     config::ApplicationSettings defaults;
     defaults.credentialStorage = m_settings.credentialStorage;
-    return persistApplicationSettings(defaults);
+    if (!persistApplicationSettings(defaults))
+    {
+        return false;
+    }
+    m_actionRegistry.setOverrides(m_settings.shortcutOverrides);
+    emit actionRegistryChanged();
+    return true;
 }
 
 bool AppController::initializePortableCredentialVault(const QString &masterPassword)
@@ -2839,6 +2926,38 @@ void AppController::loadApplicationSettings()
             break;
     }
     m_credentialVaults->select(selected);
+}
+
+void AppController::initializeActionRegistry()
+{
+    m_actionRegistry.setOverrides(m_settings.shortcutOverrides);
+    m_settings.shortcutOverrides = m_actionRegistry.overrides();
+    QObject::connect(this, &AppController::terminalTabsChanged, this, &AppController::actionRegistryChanged);
+    QObject::connect(this, &AppController::activeTerminalTabChanged, this, &AppController::actionRegistryChanged);
+}
+
+QVariantMap AppController::shortcutResult(const actions::ShortcutValidation &validation) const
+{
+    QString conflictingLabel;
+    if (!validation.conflictingActionId.isEmpty())
+    {
+        const QVariantList registeredActions = m_actionRegistry.actions(activeTab() != nullptr);
+        for (const QVariant &entry : registeredActions)
+        {
+            const QVariantMap action = entry.toMap();
+            if (action.value(QStringLiteral("id")).toString() == validation.conflictingActionId)
+            {
+                conflictingLabel = action.value(QStringLiteral("label")).toString();
+                break;
+            }
+        }
+    }
+    return {
+        {QStringLiteral("valid"), validation.valid()},
+        {QStringLiteral("shortcut"), validation.normalized},
+        {QStringLiteral("error"), actions::ActionRegistry::validationMessage(validation.error, conflictingLabel)},
+        {QStringLiteral("conflictingActionId"), validation.conflictingActionId},
+    };
 }
 
 void AppController::loadQuickCommands()

@@ -18,6 +18,7 @@ Rectangle {
     property string uiFontDraft: ""
     property string terminalFontDraft: "Cascadia Mono"
     property real contentReveal: 1.0
+    readonly property bool shortcutRecording: shortcutSettings.recording
     readonly property bool draftDark: themeBox.currentIndex === 1 || (themeBox.currentIndex === 0 && Theme.systemDark)
     readonly property bool adjustableBackdrop: backdropBox.currentIndex === 0 || backdropBox.currentIndex === 1
     readonly property bool customAccentSelected: accentBox.currentIndex === 2
@@ -227,6 +228,8 @@ Rectangle {
             applicationCategory.focusAction();
         } else if (currentCategory === "terminal") {
             terminalCategory.focusAction();
+        } else if (currentCategory === "shortcuts") {
+            shortcutsCategory.focusAction();
         } else if (currentCategory === "security") {
             securityCategory.focusAction();
         } else {
@@ -359,6 +362,17 @@ Rectangle {
             }
 
             CategoryButton {
+                id: shortcutsCategory
+
+                Layout.fillWidth: true
+                title: qsTr("Shortcuts")
+                iconName: "commands"
+                actionObjectName: "settingsShortcutsCategory"
+                selected: pane.currentCategory === "shortcuts"
+                onActivated: pane.selectCategory("shortcuts")
+            }
+
+            CategoryButton {
                 id: securityCategory
 
                 Layout.fillWidth: true
@@ -406,7 +420,7 @@ Rectangle {
             opacity: pane.contentReveal
 
             Text {
-                text: pane.currentCategory === "application" ? qsTr("Application") : pane.currentCategory === "appearance" ? qsTr("Appearance") : pane.currentCategory === "terminal" ? qsTr("Terminal") : qsTr("Security")
+                text: pane.currentCategory === "application" ? qsTr("Application") : pane.currentCategory === "appearance" ? qsTr("Appearance") : pane.currentCategory === "terminal" ? qsTr("Terminal") : pane.currentCategory === "shortcuts" ? qsTr("Shortcuts") : qsTr("Security")
                 color: Theme.text
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.textTitle
@@ -415,11 +429,24 @@ Rectangle {
 
             Text {
                 Layout.fillWidth: true
-                text: pane.currentCategory === "application" ? qsTr("View ztermy version and application information.") : pane.currentCategory === "appearance" ? qsTr("Choose the language, interface font, theme, and Windows backdrop used across ztermy.") : pane.currentCategory === "terminal" ? qsTr("Configure the global terminal font, background, cursor, selection, and paste behavior.") : qsTr("Choose where SSH passwords and key passphrases are stored, unlock the portable vault, or migrate credentials safely.")
+                text: pane.currentCategory === "application" ? qsTr("View ztermy version and application information.") : pane.currentCategory === "appearance" ? qsTr("Choose the language, interface font, theme, and Windows backdrop used across ztermy.") : pane.currentCategory === "terminal" ? qsTr("Configure the global terminal font, background, cursor, selection, and paste behavior.") : pane.currentCategory === "shortcuts" ? qsTr("Search, record, unbind, and reset keyboard shortcuts for registered ztermy actions.") : qsTr("Choose where SSH passwords and key passphrases are stored, unlock the portable vault, or migrate credentials safely.")
                 color: Theme.textMuted
                 wrapMode: Text.WordWrap
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.textBody
+            }
+
+            ShortcutSettings {
+                id: shortcutSettings
+
+                Layout.fillWidth: true
+                visible: pane.currentCategory === "shortcuts"
+                controller: pane.controller
+                onVisibleChanged: {
+                    if (!visible) {
+                        finishRecording();
+                    }
+                }
             }
 
             SectionCard {

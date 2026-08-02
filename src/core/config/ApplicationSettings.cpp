@@ -22,7 +22,9 @@ constexpr qint64 accentSchemaVersion = 4;
 constexpr qint64 credentialStorageSchemaVersion = 5;
 constexpr qint64 localizationSchemaVersion = 6;
 constexpr qint64 fontOptionsSchemaVersion = 7;
-constexpr qint64 currentSchemaVersion = 8;
+constexpr qint64 workbenchSchemaVersion = 8;
+constexpr qint64 shortcutSchemaVersion = 9;
+constexpr qint64 currentSchemaVersion = shortcutSchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::ApplicationSettings;
@@ -167,10 +169,16 @@ template <>
                                           return (value >= '0' && value <= '9') || (value >= 'A' && value <= 'F')
                                                  || (value >= 'a' && value <= 'f');
                                       });
+    const bool validShortcuts =
+        settings.shortcutOverrides.size() <= 128
+        && std::ranges::all_of(settings.shortcutOverrides.asKeyValueRange(), [](const auto &entry) {
+               const auto &[id, shortcut] = entry;
+               return !id.trimmed().isEmpty() && id.size() <= 128 && shortcut.size() <= 128;
+           });
     return settings.backdropOpacity >= 0.0 && settings.backdropOpacity <= 1.0
            && settings.terminalBackgroundOpacity >= 0.0 && settings.terminalBackgroundOpacity <= 1.0
            && uiFontFamily.size() <= 128 && !fontFamily.isEmpty() && fontFamily.size() <= 128
-           && settings.terminalFontSize >= 8 && settings.terminalFontSize <= 32 && validCustomAccent;
+           && settings.terminalFontSize >= 8 && settings.terminalFontSize <= 32 && validCustomAccent && validShortcuts;
 }
 
 [[nodiscard]] std::expected<ApplicationSettings, ApplicationSettingsStoreError> parseSettings(const QJsonObject &root)
@@ -184,7 +192,7 @@ template <>
     if (version != legacySchemaVersion && version != materialSchemaVersion && version != terminalAppearanceSchemaVersion
         && version != accentSchemaVersion && version != credentialStorageSchemaVersion
         && version != localizationSchemaVersion && version != fontOptionsSchemaVersion
-        && version != currentSchemaVersion)
+        && version != workbenchSchemaVersion && version != currentSchemaVersion)
     {
         return std::unexpected(ApplicationSettingsStoreError::unsupportedVersion);
     }
@@ -207,6 +215,7 @@ template <>
     const QJsonValue confirmMultilinePasteValue = root.value(QStringLiteral("confirmMultilinePaste"));
     const QJsonValue credentialStorageValue = root.value(QStringLiteral("credentialStorage"));
     const QJsonValue languageValue = root.value(QStringLiteral("language"));
+    const QJsonValue shortcutOverridesValue = root.value(QStringLiteral("shortcutOverrides"));
 
     if (!themeValue.isString() || !opacityValue.isDouble() || !backdropValue.isString() || !fontFamilyValue.isString()
         || !fontSizeValue.isDouble() || !cursorValue.isString() || !cursorBlinkValue.isBool()
@@ -235,6 +244,10 @@ template <>
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
+    if (version >= shortcutSchemaVersion && !shortcutOverridesValue.isObject())
+    {
+        return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
+    }
     const auto theme = parsePreference<ThemePreference>(themeValue.toString());
     const auto backdrop = parsePreference<BackdropPreference>(backdropValue.toString());
     const auto accent = version >= accentSchemaVersion ? parsePreference<AccentPreference>(accentValue.toString())
@@ -251,6 +264,24 @@ template <>
         || fontSizeValue.toDouble() != static_cast<double>(fontSize))
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
+    }
+
+    QMap<QString, QString> shortcutOverrides;
+    if (version >= shortcutSchemaVersion)
+    {
+        const QJsonObject shortcutObject = shortcutOverridesValue.toObject();
+        if (shortcutObject.size() > 128)
+        {
+            return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
+        }
+        for (auto entry = shortcutObject.constBegin(); entry != shortcutObject.constEnd(); ++entry)
+        {
+            if (!entry.value().isString())
+            {
+                return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
+            }
+            shortcutOverrides.insert(entry.key(), entry.value().toString());
+        }
     }
 
     ApplicationSettings settings{
@@ -272,6 +303,7 @@ template <>
         .confirmMultilinePaste = confirmMultilinePasteValue.toBool(),
         .credentialStorage = *credentialStorage,
         .language = *language,
+        .shortcutOverrides = std::move(shortcutOverrides),
     };
     if (!validSettings(settings))
     {
@@ -340,6 +372,12 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
         return std::unexpected(ApplicationSettingsStoreError::ioError);
     }
 
+    QJsonObject shortcutOverrides;
+    for (auto entry = settings.shortcutOverrides.cbegin(); entry != settings.shortcutOverrides.cend(); ++entry)
+    {
+        shortcutOverrides.insert(entry.key(), entry.value());
+    }
+
     const QJsonObject root{
         {QStringLiteral("version"), currentSchemaVersion},
         {QStringLiteral("theme"), themePreferenceToken(settings.theme)},
@@ -359,6 +397,7 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
         {QStringLiteral("confirmMultilinePaste"), settings.confirmMultilinePaste},
         {QStringLiteral("credentialStorage"), credentialStoragePreferenceToken(settings.credentialStorage)},
         {QStringLiteral("language"), languagePreferenceToken(settings.language)},
+        {QStringLiteral("shortcutOverrides"), shortcutOverrides},
     };
 
     QSaveFile file(m_filePath);

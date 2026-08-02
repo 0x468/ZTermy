@@ -1,5 +1,6 @@
 #pragma once
 
+#include "application/actions/ActionRegistry.h"
 #include "application/security/CredentialVaultCoordinator.h"
 #include "application/ssh/SshTerminalSession.h"
 #include "application/terminal/LocalTerminalSession.h"
@@ -54,6 +55,7 @@ class AppController final : public QObject
     Q_PROPERTY(QString quickCommandOperationError READ quickCommandOperationError NOTIFY quickCommandsChanged)
     Q_PROPERTY(QVariantList terminalHistory READ terminalHistory NOTIFY terminalHistoryChanged)
     Q_PROPERTY(QVariantList terminalGlobalHistory READ terminalGlobalHistory NOTIFY terminalHistoryChanged)
+    Q_PROPERTY(QVariantList actions READ actions NOTIFY actionRegistryChanged)
     Q_PROPERTY(QString terminalHistoryState READ terminalHistoryState NOTIFY terminalHistoryChanged)
     Q_PROPERTY(QString terminalHistoryError READ terminalHistoryError NOTIFY terminalHistoryChanged)
     Q_PROPERTY(QString activeTerminalTabId READ activeTerminalTabId NOTIFY activeTerminalTabChanged)
@@ -120,6 +122,7 @@ public:
     [[nodiscard]] QString quickCommandOperationError() const;
     [[nodiscard]] QVariantList terminalHistory() const;
     [[nodiscard]] QVariantList terminalGlobalHistory() const;
+    [[nodiscard]] QVariantList actions() const;
     [[nodiscard]] QString terminalHistoryState() const;
     [[nodiscard]] QString terminalHistoryError() const;
     [[nodiscard]] QString activeTerminalTabId() const;
@@ -169,6 +172,11 @@ public:
     Q_INVOKABLE bool deleteQuickCommand(const QString &id);
     Q_INVOKABLE bool moveQuickCommand(const QString &id, int targetIndex);
     Q_INVOKABLE void refreshTerminalHistory();
+    Q_INVOKABLE bool triggerAction(const QString &actionId);
+    [[nodiscard]] Q_INVOKABLE QVariantMap setActionShortcut(const QString &actionId, const QString &shortcut);
+    [[nodiscard]] Q_INVOKABLE QVariantMap setActionShortcutFromKey(const QString &actionId, int key, int modifiers);
+    Q_INVOKABLE bool resetActionShortcut(const QString &actionId);
+    Q_INVOKABLE bool resetAllActionShortcuts();
     Q_INVOKABLE bool connectPrivateKey(const QString &host, int port, const QString &username,
                                        const QString &privateKeyPath, const QString &passphrase);
     Q_INVOKABLE bool connectPassword(const QString &host, int port, const QString &username, const QString &password);
@@ -219,6 +227,8 @@ signals:
     void terminalTabsChanged();
     void quickCommandsChanged();
     void terminalHistoryChanged();
+    void actionRegistryChanged();
+    void actionRequested(const QString &actionId);
     void activeTerminalTabChanged();
     void terminalSearchChanged();
     void applicationSettingsChanged();
@@ -288,6 +298,8 @@ private:
     void loadHostProfiles();
     void loadApplicationSettings();
     void loadQuickCommands();
+    void initializeActionRegistry();
+    [[nodiscard]] QVariantMap shortcutResult(const actions::ShortcutValidation &validation) const;
     void applyTerminalHistoryTaskResult(const QString &tabId, quint64 requestId, ShellHistoryEntries entries,
                                         const QString &error);
     void setQuickCommandOperationError(QString message);
@@ -313,6 +325,7 @@ private:
     ssh::SshProfileStore m_profileStore;
     config::ApplicationSettingsStore m_settingsStore;
     config::ApplicationSettings m_settings;
+    actions::ActionRegistry m_actionRegistry;
     workbench::QuickCommandStore m_quickCommandStore;
     std::vector<workbench::QuickCommand> m_quickCommands;
     QString m_quickCommandOperationError;

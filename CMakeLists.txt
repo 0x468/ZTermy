@@ -143,6 +143,15 @@ add_library(ztermy_core_config STATIC
     src/core/config/ApplicationSettings.h
 )
 
+add_library(ztermy_application_actions STATIC
+    src/application/actions/ActionRegistry.cpp
+    src/application/actions/ActionRegistry.h
+)
+
+target_compile_features(ztermy_application_actions PUBLIC cxx_std_23)
+target_include_directories(ztermy_application_actions PUBLIC src)
+target_link_libraries(ztermy_application_actions PUBLIC Qt6::Core Qt6::Gui)
+
 add_library(ztermy_core_diagnostics STATIC
     src/core/diagnostics/LatencyHistogram.cpp
     src/core/diagnostics/LatencyHistogram.h
@@ -413,6 +422,10 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS ConfirmationDialog.qml
 )
 set_source_files_properties(
+    src/ui/qml/CommandPalette.qml
+    PROPERTIES QT_RESOURCE_ALIAS CommandPalette.qml
+)
+set_source_files_properties(
     src/ui/qml/Main.qml
     PROPERTIES QT_RESOURCE_ALIAS Main.qml
 )
@@ -423,6 +436,10 @@ set_source_files_properties(
 set_source_files_properties(
     src/ui/qml/SettingsPane.qml
     PROPERTIES QT_RESOURCE_ALIAS SettingsPane.qml
+)
+set_source_files_properties(
+    src/ui/qml/ShortcutSettings.qml
+    PROPERTIES QT_RESOURCE_ALIAS ShortcutSettings.qml
 )
 set_source_files_properties(
     src/ui/qml/SectionCard.qml
@@ -487,6 +504,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/AppToolTip.qml
         src/ui/qml/CaptionButton.qml
         src/ui/qml/ConfirmationDialog.qml
+        src/ui/qml/CommandPalette.qml
         src/ui/qml/FontPicker.qml
         src/ui/qml/HostConnectionPane.qml
         src/ui/qml/HostKeyPrompt.qml
@@ -494,6 +512,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/Main.qml
         src/ui/qml/SectionCard.qml
         src/ui/qml/SettingsPane.qml
+        src/ui/qml/ShortcutSettings.qml
         src/ui/qml/SideNavigationItem.qml
         src/ui/qml/StatePanel.qml
         src/ui/qml/StatusMessage.qml
@@ -512,6 +531,7 @@ qt_add_translations(ztermy
         ztermy_terminal_session
         ztermy_ssh_session
         ztermy_terminal_ui
+        ztermy_application_actions
     TS_FILES ${ZTERMY_TRANSLATION_FILES}
     RESOURCE_PREFIX "/i18n"
     LUPDATE_OPTIONS -no-obsolete
@@ -564,6 +584,7 @@ if(ZTERMY_STATIC_BUILD)
 endif()
 
 target_link_libraries(ztermy PRIVATE
+    ztermy_application_actions
     ztermy_credential_vault
     ztermy_core_config
     ztermy_ssh_persistence
@@ -864,6 +885,27 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME application-settings COMMAND ztermy_application_settings_tests)
+
+    qt_add_executable(ztermy_action_registry_tests
+        tests/action_registry_tests.cpp
+    )
+
+    target_compile_features(ztermy_action_registry_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_action_registry_tests PRIVATE
+        ztermy_application_actions
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_action_registry_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME action-registry COMMAND ztermy_action_registry_tests)
 
     qt_add_executable(ztermy_quick_command_store_tests
         tests/quick_command_store_tests.cpp
@@ -1319,6 +1361,7 @@ if(BUILD_TESTING)
         _UNICODE
     )
     target_link_libraries(ztermy_app_controller_tests PRIVATE
+        ztermy_application_actions
         ztermy_credential_vault
         ztermy_core_config
         ztermy_ssh_persistence
@@ -1493,6 +1536,7 @@ endif()
 if(BUILD_TESTING)
     add_custom_target(ztermy_test_binaries
         DEPENDS
+            ztermy_action_registry_tests
             ztermy_application_paths_tests
             ztermy_application_settings_tests
             ztermy_localization_manager_tests
