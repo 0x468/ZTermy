@@ -100,7 +100,7 @@ If `build/tools/wix` already contains WiX 4.0.4, omit the install command. The
 MSI is written to:
 
 ```text
-build/msvc-static-release/ztermy-0.1.0-windows-x64.msi
+build/msvc-static-release/ztermy-0.2.0-windows-x64.msi
 ```
 
 Expected:
@@ -111,8 +111,8 @@ Expected:
   the current user's local application data directory.
 - A direct `ztermy` shortcut is authored in the current user's Start menu.
 - ICE validation completes with no errors. CPack currently produces three
-  reviewed warnings: ICE61 for deliberate same-version upgrades during V1
-  testing, ICE69 for its shortcut component referencing the executable
+  reviewed warnings: ICE61 for deliberate same-version release-candidate
+  upgrades, ICE69 for its shortcut component referencing the executable
   component in the same feature, and ICE91 because this package is fixed to
   per-user scope rather than switching through `ALLUSERS`.
 - The contract gate decompiles the MSI below
@@ -141,14 +141,14 @@ cmake --build --preset msvc-static-release --target ztermy_release_bundle
 The authoritative handoff directory is recreated below:
 
 ```text
-build/msvc-static-release/package/release/ztermy-0.1.0-windows-x64
+build/msvc-static-release/package/release/ztermy-0.2.0-windows-x64
 ```
 
 Expected:
 
 - The directory contains exactly the MSI, portable ZIP, `SHA256SUMS.txt`, and
   `release-manifest.json`.
-- `release-manifest.json` reports version `0.1.0`, platform `windows`, and
+- `release-manifest.json` reports version `0.2.0`, platform `windows`, and
   architecture `x64`; both manifests contain the exact SHA-256 values of the
   copied artifacts.
 - Rebuilding removes stale files from the handoff directory.

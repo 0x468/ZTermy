@@ -67,18 +67,20 @@ dotnet tool install --tool-path build/tools/wix wix --version 4.0.4
 cmake --preset msvc-static-release `
   -DZTERMY_WIX_ROOT="$PWD/build/tools/wix"
 cmake --build --preset msvc-static-release `
-  --target ztermy_v1_automated_preflight
+  --target ztermy_v2_automated_preflight
 ```
 
 The authoritative release handoff is recreated below
-`build/msvc-static-release/package/release/ztermy-0.1.0-windows-x64`.
+`build/msvc-static-release/package/release/ztermy-0.2.0-windows-x64`.
 
-The V1 preflight serializes all real-window runtime gates so multiple test
+The V2 preflight serializes all real-window runtime gates so multiple test
 windows never compete for native foreground, DPI, or capture state. It then
 runs formatting with `--dry-run --Werror`, analyzes every project translation
 unit under `src`, `tests`, and `tools` with all clang-tidy diagnostics treated
 as errors, checks all application QML with Qt 6.8 `qmlformat` and `qmllint`,
-and runs the complete CTest suite. Every test executable is an explicit
+and runs the complete non-real-host CTest suite. The opt-in real-host test is
+excluded by name so an inherited environment cannot contact a host during a
+normal release build. Every test executable is an explicit
 dependency, so the target cannot accidentally run stale binaries after a
 source or header change. In the static preset it also creates the portable ZIP
 and creates, validates, decompiles, and inspects the per-user MSI, then

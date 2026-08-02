@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 
 project(
     ztermy
-    VERSION 0.1.0
+    VERSION 0.2.0
     DESCRIPTION "A native Windows SSH terminal"
     LANGUAGES C CXX RC
 )
@@ -2045,6 +2045,7 @@ if(BUILD_TESTING)
     add_custom_target(ztermy_v1_automated_preflight
         COMMAND "${CMAKE_CTEST_COMMAND}"
                 --test-dir "${CMAKE_BINARY_DIR}"
+                -E "^ssh-real-host$"
                 --output-on-failure
         DEPENDS
             ztermy_format_check
@@ -2053,6 +2054,14 @@ if(BUILD_TESTING)
         COMMENT "Running the complete automated V1 preflight"
         USES_TERMINAL
         VERBATIM
+    )
+
+    # Keep the V1 target as a compatible spelling for existing developer
+    # workflows while exposing the product milestone used by current release
+    # documentation. The preflight is safe by construction: real-host tests
+    # remain explicit, separately authorized checks.
+    add_custom_target(ztermy_v2_automated_preflight
+        DEPENDS ztermy_v1_automated_preflight
     )
 
     unset(ZTERMY_V1_PREFLIGHT_DATA_ROOT)
