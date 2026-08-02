@@ -6,25 +6,30 @@ QtObject {
     property string preference: "dark"
     property bool systemDark: true
     property bool animationsEnabled: true
+    property bool highContrast: false
+    property color highContrastBackground: "#000000"
+    property color highContrastText: "#FFFFFF"
+    property color highContrastHighlight: "#1AEBFF"
+    property color highContrastHighlightText: "#000000"
     property string backdropPreference: "acrylic"
     property real backdropOpacity: 1.0
     property string accentPreference: "ztermy"
     property color systemAccent: "#0078D4"
     property color customAccent: "#22C55E"
-    readonly property bool dark: preference === "dark" || (preference === "system" && systemDark)
+    readonly property bool dark: highContrast ? relativeLuminance(highContrastBackground) < 0.5 : preference === "dark" || (preference === "system" && systemDark)
     readonly property bool micaBackdrop: backdropPreference === "mica"
     readonly property bool micaAltBackdrop: backdropPreference === "micaAlt"
     readonly property bool acrylicBackdrop: backdropPreference === "acrylic"
     readonly property bool transparentBackdrop: backdropPreference === "transparent"
-    readonly property bool backdropActive: micaBackdrop || micaAltBackdrop || acrylicBackdrop || transparentBackdrop
+    readonly property bool backdropActive: !highContrast && (micaBackdrop || micaAltBackdrop || acrylicBackdrop || transparentBackdrop)
     readonly property bool adjustableBackdrop: acrylicBackdrop || transparentBackdrop
     readonly property real normalizedBackdropOpacity: Math.max(0.0, Math.min(1.0, backdropOpacity))
 
-    readonly property color windowBackground: backdropActive ? "transparent" : (dark ? "#FF0B0F14" : "#FFF8FAFC")
-    readonly property color panelBackground: withAlpha(dark ? "#111824" : "#F1F5F9", panelAlpha)
-    readonly property color chromeBackground: withAlpha(dark ? "#0F1722" : "#E2E8F0", chromeAlpha)
-    readonly property color contentBackground: withAlpha(dark ? "#0A0E14" : "#FFFFFF", contentAlpha)
-    readonly property color workspaceBackground: withAlpha(dark ? "#0B1017" : "#FFFFFF", workspaceAlpha)
+    readonly property color windowBackground: highContrast ? highContrastBackground : backdropActive ? "transparent" : (dark ? "#FF0B0F14" : "#FFF8FAFC")
+    readonly property color panelBackground: highContrast ? highContrastBackground : withAlpha(dark ? "#111824" : "#F1F5F9", panelAlpha)
+    readonly property color chromeBackground: highContrast ? highContrastBackground : withAlpha(dark ? "#0F1722" : "#E2E8F0", chromeAlpha)
+    readonly property color contentBackground: highContrast ? highContrastBackground : withAlpha(dark ? "#0A0E14" : "#FFFFFF", contentAlpha)
+    readonly property color workspaceBackground: highContrast ? highContrastBackground : withAlpha(dark ? "#0B1017" : "#FFFFFF", workspaceAlpha)
     readonly property real panelAlpha: adjustableBackdrop ? normalizedBackdropOpacity : micaBackdrop ? 0.82 : micaAltBackdrop ? 0.88 : 1.0
     readonly property real chromeAlpha: adjustableBackdrop ? normalizedBackdropOpacity : micaBackdrop ? 0.60 : micaAltBackdrop ? 0.72 : 1.0
     readonly property real contentAlpha: adjustableBackdrop ? normalizedBackdropOpacity : micaBackdrop ? 0.82 : micaAltBackdrop ? 0.88 : 1.0
@@ -40,39 +45,42 @@ QtObject {
     readonly property real fieldAlpha: adjustableBackdrop ? mixAlpha(dark ? 0.84 : 0.96, normalizedBackdropOpacity) : micaBackdrop ? 0.94 : micaAltBackdrop ? 0.97 : 1.0
     readonly property real floatingAlpha: adjustableBackdrop ? mixAlpha(0.94, normalizedBackdropOpacity) : 0.96
 
-    readonly property color raisedBackground: withAlpha(dark ? "#1E293B" : "#E2E8F0", raisedAlpha)
-    readonly property color elevatedBackground: withAlpha(dark ? "#141E2B" : "#F1F5F9", elevatedAlpha)
-    readonly property color controlBackground: withAlpha(dark ? "#172033" : "#E2E8F0", controlAlpha)
-    readonly property color controlDisabled: withAlpha(dark ? "#131B29" : "#E8EDF3", controlAlpha)
-    readonly property color controlPressed: withAlpha(dark ? "#263244" : "#CBD5E1", controlAlpha)
-    readonly property color controlHover: withAlpha(dark ? "#1F2A3A" : "#DCE5EF", controlAlpha)
-    readonly property color fieldBackground: withAlpha(dark ? "#111827" : "#FFFFFF", fieldAlpha)
-    readonly property color floatingBackground: withAlpha(dark ? "#1E293B" : "#FFFFFF", floatingAlpha)
+    readonly property color raisedBackground: highContrast ? highContrastBackground : withAlpha(dark ? "#1E293B" : "#E2E8F0", raisedAlpha)
+    readonly property color elevatedBackground: highContrast ? highContrastBackground : withAlpha(dark ? "#141E2B" : "#F1F5F9", elevatedAlpha)
+    readonly property color controlBackground: highContrast ? highContrastBackground : withAlpha(dark ? "#172033" : "#E2E8F0", controlAlpha)
+    readonly property color controlDisabled: highContrast ? highContrastBackground : withAlpha(dark ? "#131B29" : "#E8EDF3", controlAlpha)
+    // Keep ordinary control labels readable in every Windows high-contrast
+    // palette. System highlight colors are reserved for accent controls and
+    // text selection, where the matching highlight-text color is also used.
+    readonly property color controlPressed: highContrast ? mixColor(highContrastBackground, highContrastText, 0.32) : withAlpha(dark ? "#263244" : "#CBD5E1", controlAlpha)
+    readonly property color controlHover: highContrast ? mixColor(highContrastBackground, highContrastText, 0.18) : withAlpha(dark ? "#1F2A3A" : "#DCE5EF", controlAlpha)
+    readonly property color fieldBackground: highContrast ? highContrastBackground : withAlpha(dark ? "#111827" : "#FFFFFF", fieldAlpha)
+    readonly property color floatingBackground: highContrast ? highContrastBackground : withAlpha(dark ? "#1E293B" : "#FFFFFF", floatingAlpha)
 
-    readonly property color border: dark ? "#263244" : "#CBD5E1"
-    readonly property color borderStrong: dark ? "#334155" : "#94A3B8"
-    readonly property color text: dark ? "#F8FAFC" : "#0F172A"
-    readonly property color textMuted: dark ? "#94A3B8" : "#475569"
-    readonly property color textSoft: dark ? "#CBD5E1" : "#334155"
-    readonly property color textSubtle: dark ? "#64748B" : "#64748B"
+    readonly property color border: highContrast ? highContrastText : dark ? "#263244" : "#CBD5E1"
+    readonly property color borderStrong: highContrast ? highContrastText : dark ? "#334155" : "#94A3B8"
+    readonly property color text: highContrast ? highContrastText : dark ? "#F8FAFC" : "#0F172A"
+    readonly property color textMuted: highContrast ? highContrastText : dark ? "#94A3B8" : "#475569"
+    readonly property color textSoft: highContrast ? highContrastText : dark ? "#CBD5E1" : "#334155"
+    readonly property color textSubtle: highContrast ? highContrastText : dark ? "#64748B" : "#64748B"
 
     readonly property bool ztermyAccent: accentPreference === "ztermy"
     readonly property color accentBase: accentPreference === "system" ? systemAccent : customAccent
-    readonly property color accent: ztermyAccent ? (dark ? "#22C55E" : "#15803D") : accentBase
-    readonly property color accentText: ztermyAccent ? (dark ? "#07130B" : "#FFFFFF") : contrastText(accentBase)
+    readonly property color accent: highContrast ? highContrastHighlight : ztermyAccent ? (dark ? "#22C55E" : "#15803D") : accentBase
+    readonly property color accentText: highContrast ? highContrastHighlightText : ztermyAccent ? (dark ? "#07130B" : "#FFFFFF") : contrastText(accentBase)
     readonly property color accentHover: ztermyAccent ? (dark ? "#4ADE80" : "#166534") : mixColor(accentBase, accentText, 0.14)
     readonly property color accentPressed: ztermyAccent ? (dark ? "#16A34A" : "#14532D") : mixColor(accentBase, "#000000", 0.18)
-    readonly property color focus: ztermyAccent ? (dark ? "#86EFAC" : "#16A34A") : mixColor(accentBase, accentText, 0.34)
-    readonly property color selectedBackground: ztermyAccent ? (dark ? "#173A2B" : "#DCFCE7") : mixColor(accentBase, dark ? "#0B1017" : "#FFFFFF", dark ? 0.72 : 0.84)
-    readonly property color selectedHover: ztermyAccent ? (dark ? "#1F513A" : "#BBF7D0") : mixColor(accentBase, dark ? "#0B1017" : "#FFFFFF", dark ? 0.58 : 0.72)
-    readonly property color successText: dark ? "#86EFAC" : "#15803D"
-    readonly property color danger: dark ? "#EF4444" : "#DC2626"
-    readonly property color dangerText: dark ? "#FCA5A5" : "#B91C1C"
-    readonly property color dangerBorder: dark ? "#7F1D1D" : "#FCA5A5"
-    readonly property color dangerSurface: dark ? "#991B1B" : "#DC2626"
-    readonly property color dangerHover: dark ? "#B91C1C" : "#B91C1C"
-    readonly property color dangerPressed: dark ? "#7F1D1D" : "#991B1B"
-    readonly property color dangerSurfaceText: "#FFFFFF"
+    readonly property color focus: highContrast ? highContrastHighlight : ztermyAccent ? (dark ? "#86EFAC" : "#16A34A") : mixColor(accentBase, accentText, 0.34)
+    readonly property color selectedBackground: highContrast ? mixColor(highContrastBackground, highContrastText, 0.22) : ztermyAccent ? (dark ? "#173A2B" : "#DCFCE7") : mixColor(accentBase, dark ? "#0B1017" : "#FFFFFF", dark ? 0.72 : 0.84)
+    readonly property color selectedHover: highContrast ? mixColor(highContrastBackground, highContrastText, 0.30) : ztermyAccent ? (dark ? "#1F513A" : "#BBF7D0") : mixColor(accentBase, dark ? "#0B1017" : "#FFFFFF", dark ? 0.58 : 0.72)
+    readonly property color successText: highContrast ? highContrastText : dark ? "#86EFAC" : "#15803D"
+    readonly property color danger: highContrast ? highContrastHighlight : dark ? "#EF4444" : "#DC2626"
+    readonly property color dangerText: highContrast ? highContrastText : dark ? "#FCA5A5" : "#B91C1C"
+    readonly property color dangerBorder: highContrast ? highContrastText : dark ? "#7F1D1D" : "#FCA5A5"
+    readonly property color dangerSurface: highContrast ? highContrastHighlight : dark ? "#991B1B" : "#DC2626"
+    readonly property color dangerHover: highContrast ? highContrastHighlight : dark ? "#B91C1C" : "#B91C1C"
+    readonly property color dangerPressed: highContrast ? highContrastHighlight : dark ? "#7F1D1D" : "#991B1B"
+    readonly property color dangerSurfaceText: highContrast ? highContrastHighlightText : "#FFFFFF"
     readonly property color closeHover: "#C42B1C"
     readonly property color modalScrim: "#99000000"
 

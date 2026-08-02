@@ -2107,9 +2107,16 @@ int main(int argc, char *argv[])
     appController.attachTerminal(terminalItem);
     if (QCoreApplication::arguments().contains(QStringLiteral("--smoke-test")))
     {
-        QCoreApplication::processEvents();
+        QTimer::singleShot(50, &window, &QWindow::close);
+        window.show();
+        const int smokeExitCode = application.exec();
         appController.shutdown();
         window.releaseResources();
+        if (smokeExitCode != EXIT_SUCCESS)
+        {
+            qCCritical(applicationLog) << "QML window close smoke test returned" << smokeExitCode;
+            return EXIT_FAILURE;
+        }
         qCInfo(applicationLog) << "QML and native-window smoke test completed";
         return EXIT_SUCCESS;
     }

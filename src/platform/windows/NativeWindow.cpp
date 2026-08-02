@@ -75,6 +75,10 @@ namespace ztermy
 NativeWindow::NativeWindow(QWindow *parent) : QQuickView(parent)
 {
     (void)m_animationPreference.update(windowing::queryClientAreaAnimationsEnabled());
+    if (const auto highContrast = windowing::queryHighContrastState())
+    {
+        m_highContrastState = *highContrast;
+    }
     if (const auto accent = windowing::querySystemAccentColor())
     {
         updateSystemAccentColor(*accent);
@@ -140,7 +144,34 @@ QColor NativeWindow::systemAccentColor() const noexcept
 
 bool NativeWindow::animationsEnabled() const noexcept
 {
-    return m_animationPreference.enabled();
+    return m_animationPreference.enabled() && !m_highContrastState.enabled;
+}
+
+bool NativeWindow::highContrast() const noexcept
+{
+    return m_highContrastState.enabled;
+}
+
+QColor NativeWindow::highContrastBackground() const noexcept
+{
+    return {m_highContrastState.background.red, m_highContrastState.background.green,
+            m_highContrastState.background.blue};
+}
+
+QColor NativeWindow::highContrastText() const noexcept
+{
+    return {m_highContrastState.text.red, m_highContrastState.text.green, m_highContrastState.text.blue};
+}
+
+QColor NativeWindow::highContrastHighlight() const noexcept
+{
+    return {m_highContrastState.highlight.red, m_highContrastState.highlight.green, m_highContrastState.highlight.blue};
+}
+
+QColor NativeWindow::highContrastHighlightText() const noexcept
+{
+    return {m_highContrastState.highlightText.red, m_highContrastState.highlightText.green,
+            m_highContrastState.highlightText.blue};
 }
 
 bool NativeWindow::maximizedClientMatchesWorkArea() const noexcept
@@ -329,6 +360,7 @@ bool NativeWindow::nativeEvent(const QByteArray &eventType, void *message, qintp
 
         case WM_SETTINGCHANGE:
             refreshAnimationsEnabled();
+            refreshHighContrast();
             if (const auto accent = windowing::querySystemAccentColor())
             {
                 updateSystemAccentColor(*accent);
@@ -641,15 +673,15 @@ bool NativeWindow::applyBackdrop()
     const BOOL darkMode = m_darkMode ? TRUE : FALSE;
     const int cornerPreference = kDwmWindowCornerRound;
     int backdropType = kDwmSystemBackdropNone;
-    if (m_backdropPreference == QStringLiteral("mica"))
+    if (!m_highContrastState.enabled && m_backdropPreference == QStringLiteral("mica"))
     {
         backdropType = kDwmSystemBackdropMainWindow;
     }
-    else if (m_backdropPreference == QStringLiteral("acrylic"))
+    else if (!m_highContrastState.enabled && m_backdropPreference == QStringLiteral("acrylic"))
     {
         backdropType = kDwmSystemBackdropTransientWindow;
     }
-    else if (m_backdropPreference == QStringLiteral("micaAlt"))
+    else if (!m_highContrastState.enabled && m_backdropPreference == QStringLiteral("micaAlt"))
     {
         backdropType = kDwmSystemBackdropTabbedWindow;
     }
@@ -695,6 +727,24 @@ void NativeWindow::refreshAnimationsEnabled()
                           << "enabled=" << m_animationPreference.enabled();
         emit animationsEnabledChanged();
     }
+}
+
+void NativeWindow::refreshHighContrast()
+{
+    const auto updated = windowing::queryHighContrastState();
+    if (!updated || *updated == m_highContrastState)
+    {
+        return;
+    }
+    const bool animationsChanged = updated->enabled != m_highContrastState.enabled;
+    m_highContrastState = *updated;
+    qCInfo(windowLog) << "Windows high-contrast state changed" << "enabled=" << m_highContrastState.enabled;
+    emit highContrastChanged();
+    if (animationsChanged)
+    {
+        emit animationsEnabledChanged();
+    }
+    (void)applyBackdrop();
 }
 
 void NativeWindow::updateSystemAccentColor(const windowing::RgbColor color)

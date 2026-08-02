@@ -194,6 +194,7 @@ private slots:
     void exposesLockedCredentialsAsNeedsAttention();
     void resumesExplicitConflictDecision();
     void restoresInterruptedTransferForExplicitRetry();
+    void destructionCancelsInFlightWorkers();
 };
 
 void TransferManagerTests::initTestCase()
@@ -230,6 +231,24 @@ void TransferManagerTests::enforcesConnectionLimitAndBackfillsAfterCancellation(
                                  && manager.snapshot()->at(2).status == ztermy::sftp::TransferStatus::Completed,
                              5000);
     QCOMPARE(state->maximumActiveClients.load(), 2);
+}
+
+void TransferManagerTests::destructionCancelsInFlightWorkers()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString source = directory.filePath(QStringLiteral("source.txt"));
+    QVERIFY(writeLocal(source));
+    const auto state = std::make_shared<ManagerFakeState>();
+    state->holdWrites = true;
+
+    {
+        ztermy::sftp::TransferManager manager(2, clientFactory(state));
+        QVERIFY(manager.enqueue(uploadTask("shutdown", source), requestProvider()));
+        QTRY_COMPARE(state->activeClients.load(), 1);
+    }
+
+    QTRY_COMPARE(state->activeClients.load(), 0);
 }
 
 void TransferManagerTests::exposesLockedCredentialsAsNeedsAttention()

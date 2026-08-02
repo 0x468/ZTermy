@@ -354,6 +354,36 @@ Rectangle {
 
     Binding {
         target: Theme
+        property: "highContrast"
+        value: root.windowChrome.highContrast
+    }
+
+    Binding {
+        target: Theme
+        property: "highContrastBackground"
+        value: root.windowChrome.highContrastBackground
+    }
+
+    Binding {
+        target: Theme
+        property: "highContrastText"
+        value: root.windowChrome.highContrastText
+    }
+
+    Binding {
+        target: Theme
+        property: "highContrastHighlight"
+        value: root.windowChrome.highContrastHighlight
+    }
+
+    Binding {
+        target: Theme
+        property: "highContrastHighlightText"
+        value: root.windowChrome.highContrastHighlightText
+    }
+
+    Binding {
+        target: Theme
         property: "backdropPreference"
         value: root.appearancePreviewActive ? root.previewBackdropPreference : root.controller.backdropPreference
     }
@@ -501,6 +531,10 @@ Rectangle {
             } else {
                 Qt.callLater(root.applyWindowAppearance);
             }
+        }
+
+        function onHighContrastChanged() {
+            Qt.callLater(root.applyWindowAppearance);
         }
     }
 

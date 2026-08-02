@@ -27,6 +27,7 @@ private slots:
     void reportsOpenFailureWithoutCreatingAFile();
     void ignoresOutputWhileIdle();
     void reportsDroppedOutputWithoutBlocking();
+    void restartsWithoutLeavingWorkerThreads();
 };
 
 void SessionLogWriterTests::writesOutputAsynchronouslyAndFlushesOnStop()
@@ -94,6 +95,27 @@ void SessionLogWriterTests::reportsDroppedOutputWithoutBlocking()
     QCOMPARE(writer.droppedBytes(), static_cast<std::uint64_t>(oversized.size()));
     QTRY_VERIFY(changed.count() >= 1);
     writer.stop();
+}
+
+void SessionLogWriterTests::restartsWithoutLeavingWorkerThreads()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ztermy::logging::SessionLogWriter writer;
+
+    for (int iteration = 0; iteration < 25; ++iteration)
+    {
+        const QString path = directory.filePath(QStringLiteral("cycle-%1.log").arg(iteration));
+        QVERIFY(writer.start(path));
+        QTRY_COMPARE(writer.state(), ztermy::logging::SessionLogState::Active);
+        append(writer, QByteArrayLiteral("cycle\r\n"));
+        writer.stop();
+        QCOMPARE(writer.state(), ztermy::logging::SessionLogState::Idle);
+
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.readAll(), QByteArrayLiteral("cycle\r\n"));
+    }
 }
 
 QTEST_MAIN(SessionLogWriterTests)

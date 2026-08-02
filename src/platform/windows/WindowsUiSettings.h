@@ -6,10 +6,10 @@
 namespace ztermy::windowing
 {
 
-class ClientAreaAnimationPreference final
+class SystemBooleanPreference final
 {
 public:
-    explicit constexpr ClientAreaAnimationPreference(const bool enabled = true) noexcept : m_enabled(enabled) {}
+    explicit constexpr SystemBooleanPreference(const bool enabled) noexcept : m_enabled(enabled) {}
 
     [[nodiscard]] constexpr bool enabled() const noexcept { return m_enabled; }
 
@@ -24,8 +24,10 @@ public:
     }
 
 private:
-    bool m_enabled = true;
+    bool m_enabled = false;
 };
+
+using ClientAreaAnimationPreference = SystemBooleanPreference;
 
 struct RgbColor final
 {
@@ -36,7 +38,19 @@ struct RgbColor final
     friend bool operator==(const RgbColor &, const RgbColor &) = default;
 };
 
+struct HighContrastState final
+{
+    bool enabled = false;
+    RgbColor background{};
+    RgbColor text{};
+    RgbColor highlight{};
+    RgbColor highlightText{};
+
+    friend bool operator==(const HighContrastState &, const HighContrastState &) = default;
+};
+
 [[nodiscard]] std::optional<bool> queryClientAreaAnimationsEnabled() noexcept;
+[[nodiscard]] std::optional<HighContrastState> queryHighContrastState() noexcept;
 [[nodiscard]] constexpr RgbColor decodeColorizationArgb(const std::uint32_t argb) noexcept
 {
     return {

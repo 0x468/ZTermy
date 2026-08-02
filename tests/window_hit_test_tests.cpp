@@ -14,6 +14,7 @@ private slots:
     void constrainsMaximizedClientToWorkArea();
     void scalesMinimumTrackSizeForDpi();
     void tracksClientAreaAnimationPreference();
+    void tracksHighContrastPreference();
     void decodesWindowsColorizationArgb();
 };
 
@@ -115,7 +116,7 @@ void WindowHitTestTests::scalesMinimumTrackSizeForDpi()
 
 void WindowHitTestTests::tracksClientAreaAnimationPreference()
 {
-    ztermy::windowing::ClientAreaAnimationPreference preference;
+    ztermy::windowing::ClientAreaAnimationPreference preference(true);
     QVERIFY(preference.enabled());
 
     QVERIFY(!preference.update(std::nullopt));
@@ -129,6 +130,18 @@ void WindowHitTestTests::tracksClientAreaAnimationPreference()
 
     QVERIFY(preference.update(true));
     QVERIFY(preference.enabled());
+}
+
+void WindowHitTestTests::tracksHighContrastPreference()
+{
+    ztermy::windowing::SystemBooleanPreference preference(false);
+    QVERIFY(!preference.enabled());
+    QVERIFY(preference.update(true));
+    QVERIFY(preference.enabled());
+    QVERIFY(!preference.update(true));
+    QVERIFY(!preference.update(std::nullopt));
+    QVERIFY(preference.update(false));
+    QVERIFY(!preference.enabled());
 }
 
 void WindowHitTestTests::decodesWindowsColorizationArgb()

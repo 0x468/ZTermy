@@ -181,6 +181,43 @@ Status: `PENDING`
    journal, and each failure presents a localized corrective action without
    exposing sensitive data.
 
+## V1.9 release-candidate accessibility and lifetime
+
+Status: `PENDING`
+
+1. In Windows Settings, enable a high-contrast theme while ztermy is open, then
+   switch among at least two Windows contrast themes and finally turn the mode
+   off.
+   Expected: every ztermy surface immediately becomes opaque and uses the chosen
+   Windows background, text, highlight, and highlight-text colors; Acrylic,
+   Transparent, Mica, and Mica Alt are suspended; animations stop; visible focus
+   remains clear. Turning high contrast off restores the saved appearance
+   without changing Settings.
+2. With high contrast enabled, operate Hosts, the profile editor, Settings,
+   command palette, local terminal, terminal search, history/scripts/composer,
+   SFTP, transfer center, tooltips, menus, confirmations, and empty/error states
+   using keyboard only and Narrator.
+   Expected: no text disappears into a selected/hovered surface, borders and
+   focus are distinguishable, accessible names describe icon-only controls, and
+   modal focus returns to the invoking control.
+3. Repeat the complete route in English and Simplified Chinese at 100%, 125%,
+   150%, 175%, and 200% DPI, including narrow width and maximized/Snap layouts.
+   Expected: labels and translated dialogs fit or elide intentionally; hit
+   targets, terminal cell geometry, resize cursors, and Snap Layout hover align
+   with rendered pixels.
+4. Open and close ztermy repeatedly with no terminal, a local terminal, a live
+   SSH terminal, an active session log, open SFTP, and queued/running transfers.
+   Expected: the window and process exit promptly; no invisible `ztermy.exe`,
+   `pwsh.exe`, CRT assertion, heap dialog, lost recovery entry, or truncated
+   flushed log remains. Interrupted transfers reappear only as explicit Retry
+   items on the next start.
+5. Upgrade an installed build and replace a portable build while retaining their
+   respective data directories, then uninstall the MSI.
+   Expected: supported settings/profile/workspace/recovery data migrates without
+   auto-connect or command execution; installed binaries and shortcuts are
+   removed; user profiles, logs, and credentials are retained by design and are
+   documented rather than silently deleted.
+
 ## Evidence template
 
 ```text

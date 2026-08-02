@@ -19,6 +19,11 @@ class NativeWindow final : public QQuickView
     Q_PROPERTY(bool systemDarkMode READ systemDarkMode NOTIFY systemDarkModeChanged)
     Q_PROPERTY(QColor systemAccentColor READ systemAccentColor NOTIFY systemAccentColorChanged)
     Q_PROPERTY(bool animationsEnabled READ animationsEnabled NOTIFY animationsEnabledChanged)
+    Q_PROPERTY(bool highContrast READ highContrast NOTIFY highContrastChanged)
+    Q_PROPERTY(QColor highContrastBackground READ highContrastBackground NOTIFY highContrastChanged)
+    Q_PROPERTY(QColor highContrastText READ highContrastText NOTIFY highContrastChanged)
+    Q_PROPERTY(QColor highContrastHighlight READ highContrastHighlight NOTIFY highContrastChanged)
+    Q_PROPERTY(QColor highContrastHighlightText READ highContrastHighlightText NOTIFY highContrastChanged)
 
 public:
     explicit NativeWindow(QWindow *parent = nullptr);
@@ -31,6 +36,11 @@ public:
     [[nodiscard]] bool systemDarkMode() const noexcept;
     [[nodiscard]] QColor systemAccentColor() const noexcept;
     [[nodiscard]] bool animationsEnabled() const noexcept;
+    [[nodiscard]] bool highContrast() const noexcept;
+    [[nodiscard]] QColor highContrastBackground() const noexcept;
+    [[nodiscard]] QColor highContrastText() const noexcept;
+    [[nodiscard]] QColor highContrastHighlight() const noexcept;
+    [[nodiscard]] QColor highContrastHighlightText() const noexcept;
     [[nodiscard]] bool maximizedClientMatchesWorkArea() const noexcept;
 
     Q_INVOKABLE void minimizeWindow();
@@ -47,6 +57,7 @@ signals:
     void systemDarkModeChanged();
     void systemAccentColorChanged();
     void animationsEnabledChanged();
+    void highContrastChanged();
 
 protected:
     bool event(QEvent *event) override;
@@ -63,6 +74,7 @@ private:
     void configureNativeWindow();
     [[nodiscard]] bool applyBackdrop();
     void refreshAnimationsEnabled();
+    void refreshHighContrast();
     void updateSystemAccentColor(windowing::RgbColor color);
     void setMaximizeButtonHovered(bool hovered);
     void setMaximizeButtonPressed(bool pressed);
@@ -77,7 +89,8 @@ private:
     QString m_backdropPreference = QStringLiteral("acrylic");
     bool m_darkMode = true;
     QColor m_systemAccentColor = QColor(QStringLiteral("#0078D4"));
-    windowing::ClientAreaAnimationPreference m_animationPreference;
+    windowing::ClientAreaAnimationPreference m_animationPreference{true};
+    windowing::HighContrastState m_highContrastState;
     HWND m_windowHandle = nullptr;
     WNDPROC m_originalWindowProcedure = nullptr;
 };
