@@ -34,6 +34,18 @@ bool validProfileWorkspaceState(const ProfileWorkspaceState &state) noexcept
     return std::ranges::all_of(state.recentRemotePaths, validRemotePath);
 }
 
+bool validWorkspaceState(const WorkspaceState &state) noexcept
+{
+    if (state.collapsedHostSections.size() > maximumCollapsedHostSections
+        || !std::ranges::all_of(state.profiles, validProfileWorkspaceState))
+    {
+        return false;
+    }
+    return std::ranges::all_of(state.collapsedHostSections, [](const std::string_view section) {
+        return !section.empty() && section.size() <= 512 && section.find('\0') == std::string_view::npos;
+    });
+}
+
 ProfileWorkspaceState *findProfileWorkspaceState(WorkspaceState &state, const std::string_view profileId)
 {
     const auto found = std::ranges::find(state.profiles, profileId, &ProfileWorkspaceState::profileId);

@@ -94,6 +94,19 @@ Item {
             spacing: 3
 
             BrowserToolButton {
+                enabled: browser.controller.activeSftpHomePath.length > 0 && browser.controller.activeSftpState !== "loading"
+                onClicked: browser.controller.navigateSftpHome()
+                Accessible.name: qsTr("Home folder")
+                contentItem: AppIcon {
+                    name: "home"
+                    color: parent.enabled ? Theme.textSoft : Theme.textSubtle
+                }
+                AppToolTip {
+                    text: qsTr("Home folder")
+                }
+            }
+
+            BrowserToolButton {
                 enabled: browser.controller.activeSftpPath !== "/" && browser.controller.activeSftpState !== "loading"
                 onClicked: browser.controller.navigateSftpParent()
                 Accessible.name: qsTr("Parent folder")
@@ -212,8 +225,49 @@ Item {
 
         StatusMessage {
             Layout.fillWidth: true
+            visible: browser.controller.activeSftpState === "ready" && browser.controller.activeSftpError.length > 0
             kind: "error"
             text: browser.controller.activeSftpError
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 28
+            visible: browser.controller.activeSftpState === "ready" && fileList.count > 0
+            color: Theme.controlBackground
+            radius: Theme.radiusSmall
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 34
+                anchors.rightMargin: 10
+                spacing: 8
+
+                Text {
+                    Layout.fillWidth: true
+                    text: qsTr("Name")
+                    color: Theme.textMuted
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.textCompact
+                    font.weight: Font.DemiBold
+                }
+                Text {
+                    Layout.preferredWidth: 82
+                    visible: browser.width >= 430
+                    text: qsTr("Modified")
+                    color: Theme.textMuted
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.textCompact
+                }
+                Text {
+                    Layout.preferredWidth: 62
+                    text: qsTr("Size")
+                    color: Theme.textMuted
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.textCompact
+                    horizontalAlignment: Text.AlignRight
+                }
+            }
         }
 
         ListView {
@@ -235,10 +289,12 @@ Item {
                 required property string remotePath
                 required property string entryType
                 required property var size
+                required property var modifiedUtcSeconds
                 required property bool selected
                 required property int index
 
                 readonly property bool isDirectory: entryType === "directory"
+                readonly property bool isParent: name === ".."
 
                 width: ListView.view.width
                 height: 42
@@ -255,10 +311,10 @@ Item {
                             browser.controller.navigateSftpDirectory(remotePath);
                         }
                         event.accepted = true;
-                    } else if (event.key === Qt.Key_F2) {
+                    } else if (event.key === Qt.Key_F2 && !isParent) {
                         browser.beginRename(remotePath, name);
                         event.accepted = true;
-                    } else if (event.key === Qt.Key_Delete) {
+                    } else if (event.key === Qt.Key_Delete && !isParent) {
                         browser.requestDelete(remotePath, name, isDirectory, fileDelegate);
                         event.accepted = true;
                     }
@@ -277,31 +333,36 @@ Item {
                         color: fileDelegate.isDirectory ? Theme.accent : Theme.textMuted
                     }
 
-                    ColumnLayout {
+                    Text {
                         Layout.fillWidth: true
-                        spacing: 1
+                        text: fileDelegate.name
+                        color: Theme.text
+                        elide: Text.ElideRight
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textBody
+                    }
 
-                        Text {
-                            Layout.fillWidth: true
-                            text: fileDelegate.name
-                            color: Theme.text
-                            elide: Text.ElideRight
-                            font.family: Theme.uiFont
-                            font.pixelSize: Theme.textBody
-                        }
+                    Text {
+                        Layout.preferredWidth: 82
+                        visible: browser.width >= 430
+                        text: fileDelegate.modifiedUtcSeconds ? Qt.formatDateTime(new Date(Number(fileDelegate.modifiedUtcSeconds) * 1000), "MM-dd HH:mm") : "—"
+                        color: Theme.textSubtle
+                        elide: Text.ElideRight
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textCompact
+                    }
 
-                        Text {
-                            Layout.fillWidth: true
-                            text: fileDelegate.isDirectory ? qsTr("Folder") : browser.formatSize(fileDelegate.size)
-                            color: Theme.textSubtle
-                            elide: Text.ElideRight
-                            font.family: Theme.uiFont
-                            font.pixelSize: Theme.textCompact
-                        }
+                    Text {
+                        Layout.preferredWidth: 62
+                        text: fileDelegate.isDirectory ? "—" : browser.formatSize(fileDelegate.size)
+                        color: Theme.textSubtle
+                        horizontalAlignment: Text.AlignRight
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textCompact
                     }
 
                     Row {
-                        visible: fileHover.hovered || fileDelegate.activeFocus || fileDelegate.ListView.isCurrentItem
+                        visible: !fileDelegate.isParent && (fileHover.hovered || fileDelegate.activeFocus || fileDelegate.ListView.isCurrentItem)
                         spacing: 1
 
                         BrowserToolButton {

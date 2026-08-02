@@ -69,6 +69,7 @@ std::error_code SftpSession::start(ssh::SshConnectionRequest request)
         m_awaitingHostKey = false;
     }
 
+    m_workerFinished.store(false);
     m_worker = std::jthread([this, request = std::move(request)](const std::stop_token &stopToken) mutable {
         try
         {
@@ -82,17 +83,28 @@ std::error_code SftpSession::start(ssh::SshConnectionRequest request)
             postConnectionFailure(ssh::SshFailureKind::ProtocolError);
             postPhase(ssh::SshConnectionPhase::Failed);
         }
+        m_workerFinished.store(true);
+        postWorkerFinished();
     });
     return {};
+}
+
+void SftpSession::requestStop() noexcept
+{
+    if (!m_worker.joinable())
+    {
+        return;
+    }
+    m_worker.request_stop();
+    m_commandAvailable.notify_all();
+    m_hostKeyAvailable.notify_all();
 }
 
 void SftpSession::stop() noexcept
 {
     if (m_worker.joinable())
     {
-        m_worker.request_stop();
-        m_commandAvailable.notify_all();
-        m_hostKeyAvailable.notify_all();
+        requestStop();
         m_worker.join();
     }
     {
@@ -108,6 +120,11 @@ void SftpSession::stop() noexcept
 bool SftpSession::running() const noexcept
 {
     return m_running.load();
+}
+
+bool SftpSession::workerFinished() const noexcept
+{
+    return m_workerFinished.load();
 }
 
 void SftpSession::confirmHostKey(const bool remember)
@@ -235,9 +252,21 @@ void SftpSession::run(ssh::SshConnectionRequest &request, const std::stop_token 
         return;
     }
 
+    auto homeDirectory = (*client)->canonicalizePath(".", stopToken);
+    if (!homeDirectory)
+    {
+        if (homeDirectory.error().kind != ssh::SshTransportErrorKind::Cancelled)
+        {
+            postConnectionFailure(ssh::SshFailureKind::ProtocolError);
+            postPhase(ssh::SshConnectionPhase::Failed);
+        }
+        return;
+    }
+
     m_running.store(true);
     postRunning(true);
     postPhase(ssh::SshConnectionPhase::Connected);
+    postHomeDirectory(QString::fromUtf8(homeDirectory->data(), static_cast<qsizetype>(homeDirectory->size())));
 
     while (!stopToken.stop_requested())
     {
@@ -339,6 +368,42 @@ void SftpSession::postRunning(const bool running)
 void SftpSession::deliverRunning(const bool running)
 {
     emit runningChanged(running);
+}
+
+void SftpSession::postWorkerFinished()
+{
+    if (QThread::currentThread() == thread())
+    {
+        deliverWorkerFinished();
+        return;
+    }
+    if (!QMetaObject::invokeMethod(this, "deliverWorkerFinished", Qt::QueuedConnection))
+    {
+        qWarning("SFTP worker completion could not be queued to its owner thread");
+    }
+}
+
+void SftpSession::deliverWorkerFinished()
+{
+    emit workerFinishedChanged();
+}
+
+void SftpSession::postHomeDirectory(const QString &remotePath)
+{
+    if (QThread::currentThread() == thread())
+    {
+        deliverHomeDirectory(remotePath);
+        return;
+    }
+    if (!QMetaObject::invokeMethod(this, "deliverHomeDirectory", Qt::QueuedConnection, Q_ARG(QString, remotePath)))
+    {
+        qWarning("SFTP home directory could not be queued to its owner thread");
+    }
+}
+
+void SftpSession::deliverHomeDirectory(const QString &remotePath)
+{
+    emit homeDirectoryReady(remotePath);
 }
 
 void SftpSession::postPhase(const ssh::SshConnectionPhase phase)

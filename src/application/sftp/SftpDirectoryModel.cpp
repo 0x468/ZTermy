@@ -116,11 +116,26 @@ int SftpDirectoryModel::selectedCount() const noexcept
     return static_cast<int>(m_selectedPaths.size());
 }
 
-void SftpDirectoryModel::setEntries(const DirectoryListingPtr &entries)
+void SftpDirectoryModel::setEntries(const DirectoryListingPtr &entries, const QString &remotePath)
 {
     beginResetModel();
     m_entries = entries ? *entries : DirectoryListing{};
+    const QByteArray pathBytes = remotePath.toUtf8();
+    const auto normalizedPath =
+        normalizeRemotePath(std::string_view(pathBytes.constData(), static_cast<std::size_t>(pathBytes.size())));
+    if (normalizedPath && *normalizedPath != "/")
+    {
+        m_entries.insert(m_entries.begin(), DirectoryEntry{
+                                                .name = "..",
+                                                .remotePath = parentRemotePath(*normalizedPath),
+                                                .type = EntryType::Directory,
+                                            });
+    }
     std::ranges::sort(m_entries, [](const DirectoryEntry &left, const DirectoryEntry &right) {
+        if (left.name == ".." || right.name == "..")
+        {
+            return left.name == ".." && right.name != "..";
+        }
         const int leftRank = typeRank(left.type);
         const int rightRank = typeRank(right.type);
         if (leftRank != rightRank)
@@ -232,7 +247,8 @@ const DirectoryEntry *SftpDirectoryModel::visibleEntry(const int row) const noex
 
 bool SftpDirectoryModel::matchesFilter(const DirectoryEntry &item) const
 {
-    return m_filterText.isEmpty() || qString(item.name).contains(m_filterText, Qt::CaseInsensitive);
+    return item.name == ".." || m_filterText.isEmpty()
+           || qString(item.name).contains(m_filterText, Qt::CaseInsensitive);
 }
 
 QString SftpDirectoryModel::qString(const std::string_view text)

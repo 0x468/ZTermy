@@ -45,6 +45,8 @@ public:
                                                                          std::string_view reasonCode);
     [[nodiscard]] std::expected<void, TransferQueueError> cancel(std::string_view taskId, std::int64_t finishedUtcMs);
     [[nodiscard]] std::expected<void, TransferQueueError> retry(std::string_view taskId);
+    [[nodiscard]] std::expected<void, TransferQueueError> dismiss(std::string_view taskId);
+    [[nodiscard]] std::size_t dismissFinished();
 
 private:
     [[nodiscard]] TransferTask *findMutable(std::string_view taskId) noexcept;

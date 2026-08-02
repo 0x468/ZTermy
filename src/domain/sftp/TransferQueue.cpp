@@ -24,7 +24,7 @@ std::size_t TransferQueue::concurrencyLimit() const noexcept
 std::size_t TransferQueue::runningCount() const noexcept
 {
     return static_cast<std::size_t>(std::ranges::count_if(m_tasks, [](const TransferTask &task) {
-        return task.status == TransferStatus::Running;
+        return task.status == TransferStatus::Running || task.status == TransferStatus::Cancelling;
     }));
 }
 
@@ -195,13 +195,18 @@ std::expected<void, TransferQueueError> TransferQueue::cancel(const std::string_
     {
         return std::unexpected(TransferQueueError::TaskNotFound);
     }
-    auto changed = transition(*task, TransferStatus::Cancelled);
+    const TransferStatus destination =
+        task->status == TransferStatus::Running ? TransferStatus::Cancelling : TransferStatus::Cancelled;
+    auto changed = transition(*task, destination);
     if (!changed)
     {
         return changed;
     }
     task->bytesPerSecond = 0;
-    task->finishedUtcMs = finishedUtcMs;
+    if (destination == TransferStatus::Cancelled)
+    {
+        task->finishedUtcMs = finishedUtcMs;
+    }
     return {};
 }
 
@@ -227,6 +232,30 @@ std::expected<void, TransferQueueError> TransferQueue::retry(const std::string_v
     task->finishedUtcMs.reset();
     task->errorCode.clear();
     return {};
+}
+
+std::expected<void, TransferQueueError> TransferQueue::dismiss(const std::string_view taskId)
+{
+    const auto position = std::ranges::find(m_tasks, taskId, &TransferTask::id);
+    if (position == m_tasks.end())
+    {
+        return std::unexpected(TransferQueueError::TaskNotFound);
+    }
+    if (position->status != TransferStatus::Completed && position->status != TransferStatus::Failed
+        && position->status != TransferStatus::Cancelled)
+    {
+        return std::unexpected(TransferQueueError::InvalidTransition);
+    }
+    m_tasks.erase(position);
+    return {};
+}
+
+std::size_t TransferQueue::dismissFinished()
+{
+    return std::erase_if(m_tasks, [](const TransferTask &task) {
+        return task.status == TransferStatus::Completed || task.status == TransferStatus::Failed
+               || task.status == TransferStatus::Cancelled;
+    });
 }
 
 TransferTask *TransferQueue::findMutable(const std::string_view taskId) noexcept

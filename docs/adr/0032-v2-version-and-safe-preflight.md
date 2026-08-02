@@ -18,9 +18,10 @@ developer variables.
 
 ## Decision
 
-- V2 uses project version `0.2.0`. `project(VERSION)` remains the single source
-  for PE metadata, runtime version text, MSI identity, archive names, and
-  manifests.
+- V2 starts at project version `0.2.0` and every V2 candidate or maintenance
+  release remains in the `0.2.x` line. V3 is the first milestone allowed to
+  use `0.3.0`. `project(VERSION)` remains the single source for PE metadata,
+  runtime version text, MSI identity, archive names, and manifests.
 - Historical V1 evidence retains its `0.1.0` paths and hashes.
 - The release preflight excludes `ssh-real-host` by exact test name. Real-host
   password, private-key, SFTP, and transfer checks remain separately invoked,
@@ -35,5 +36,7 @@ developer variables.
   clearly distinguishing the product version from V1.
 - A normal CI or developer release command cannot contact a real SSH host even
   if opt-in environment variables are present.
-- `0.2.0` communicates ongoing personal-project evolution; it does not promise
-  a public SDK or cross-platform compatibility contract.
+- The `0.2.x` line communicates ongoing V2 personal-project evolution; it does
+  not promise a public SDK or cross-platform compatibility contract.
+- Candidate repairs increment the patch component only when a new immutable
+  artifact is cut; development commits do not opportunistically claim `0.3.0`.

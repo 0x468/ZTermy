@@ -11,6 +11,7 @@ class WorkspaceStateStoreTests final : public QObject
 private slots:
     void missingFileLoadsEmptyState();
     void savesAndLoadsVersionedNonSecretState();
+    void migratesVersionOneWithoutHostCollapseState();
     void rejectsMalformedDuplicateAndInvalidState();
 };
 
@@ -40,6 +41,7 @@ void WorkspaceStateStoreTests::savesAndLoadsVersionedNonSecretState()
         .workbenchWidth = 640.0,
         .composerHeight = 160.0,
     });
+    expected.collapsedHostSections = {"recent", "group:Lab"};
 
     QVERIFY(store.save(expected).has_value());
     const auto loaded = store.load();
@@ -52,6 +54,24 @@ void WorkspaceStateStoreTests::savesAndLoadsVersionedNonSecretState()
     QVERIFY(payload.contains("schemaVersion"));
     QVERIFY(!payload.contains("password"));
     QVERIFY(!payload.contains("secret"));
+}
+
+void WorkspaceStateStoreTests::migratesVersionOneWithoutHostCollapseState()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("workspace.json"));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(
+        R"({"schemaVersion":1,"profiles":[{"profileId":"host","lastRemotePath":"/","recentRemotePaths":[],"workbenchPage":"history","workbenchSide":"left","workbenchWidth":520,"composerHeight":132}]})");
+    file.close();
+
+    const ztermy::workbench::WorkspaceStateStore store(path);
+    const auto loaded = store.load();
+    QVERIFY(loaded.has_value());
+    QCOMPARE(loaded->profiles.size(), std::size_t{1});
+    QVERIFY(loaded->collapsedHostSections.empty());
 }
 
 void WorkspaceStateStoreTests::rejectsMalformedDuplicateAndInvalidState()

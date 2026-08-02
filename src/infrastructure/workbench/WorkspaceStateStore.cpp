@@ -17,7 +17,7 @@ namespace ztermy::workbench
 namespace
 {
 
-constexpr int currentSchemaVersion = 1;
+constexpr int currentSchemaVersion = 2;
 
 QString text(const std::string &value)
 {
@@ -113,7 +113,8 @@ std::expected<WorkspaceState, WorkspaceStateStoreError> WorkspaceStateStore::loa
         return std::unexpected(WorkspaceStateStoreError::InvalidDocument);
     }
     const QJsonObject root = document.object();
-    if (root.value(QStringLiteral("schemaVersion")).toInt(-1) != currentSchemaVersion)
+    const int schemaVersion = root.value(QStringLiteral("schemaVersion")).toInt(-1);
+    if (schemaVersion != 1 && schemaVersion != currentSchemaVersion)
     {
         return std::unexpected(WorkspaceStateStoreError::UnsupportedVersion);
     }
@@ -134,12 +135,29 @@ std::expected<WorkspaceState, WorkspaceStateStoreError> WorkspaceStateStore::loa
         }
         state.profiles.push_back(std::move(*profile));
     }
-    return state;
+    if (schemaVersion >= 2)
+    {
+        const QJsonValue collapsedValue = root.value(QStringLiteral("collapsedHostSections"));
+        if (!collapsedValue.isArray())
+        {
+            return std::unexpected(WorkspaceStateStoreError::InvalidDocument);
+        }
+        for (const QJsonValue section : collapsedValue.toArray())
+        {
+            if (!section.isString())
+            {
+                return std::unexpected(WorkspaceStateStoreError::InvalidDocument);
+            }
+            state.collapsedHostSections.push_back(bytes(section.toString()));
+        }
+    }
+    return validWorkspaceState(state) ? std::expected<WorkspaceState, WorkspaceStateStoreError>{std::move(state)}
+                                      : std::unexpected(WorkspaceStateStoreError::InvalidDocument);
 }
 
 std::expected<void, WorkspaceStateStoreError> WorkspaceStateStore::save(const WorkspaceState &state) const
 {
-    if (!std::ranges::all_of(state.profiles, validProfileWorkspaceState))
+    if (!validWorkspaceState(state))
     {
         return std::unexpected(WorkspaceStateStoreError::InvalidDocument);
     }
@@ -153,13 +171,19 @@ std::expected<void, WorkspaceStateStoreError> WorkspaceStateStore::save(const Wo
     {
         profiles.push_back(serializeProfile(profile));
     }
+    QJsonArray collapsedSections;
+    for (const std::string &section : state.collapsedHostSections)
+    {
+        collapsedSections.push_back(text(section));
+    }
     QSaveFile file(m_filePath);
     if (!file.open(QIODevice::WriteOnly))
     {
         return std::unexpected(WorkspaceStateStoreError::Io);
     }
     const QByteArray payload = QJsonDocument(QJsonObject{{QStringLiteral("schemaVersion"), currentSchemaVersion},
-                                                         {QStringLiteral("profiles"), profiles}})
+                                                         {QStringLiteral("profiles"), profiles},
+                                                         {QStringLiteral("collapsedHostSections"), collapsedSections}})
                                    .toJson(QJsonDocument::Indented);
     if (file.write(payload) != payload.size() || !file.commit())
     {

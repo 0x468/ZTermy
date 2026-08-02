@@ -10,6 +10,14 @@ Popup {
     required property var controller
     property string conflictTaskId: ""
     property var conflict: ({})
+    readonly property bool hasFinishedTasks: {
+        for (const task of controller.transferTasks) {
+            if (task.status === "completed" || task.status === "failed" || task.status === "cancelled") {
+                return true;
+            }
+        }
+        return false;
+    }
 
     width: 440
     height: Math.min(520, Math.max(170, contentColumn.implicitHeight + topPadding + bottomPadding))
@@ -36,7 +44,9 @@ Popup {
         case "queued":
             return qsTr("Queued");
         case "running":
-            return task.totalBytes > 0 ? qsTr("%1 of %2").arg(formatBytes(task.transferredBytes)).arg(formatBytes(task.totalBytes)) : qsTr("Transferring");
+            return task.totalBytes > 0 ? qsTr("%1% · %2 of %3").arg(Math.min(100, Math.floor(task.transferredBytes * 100 / task.totalBytes))).arg(formatBytes(task.transferredBytes)).arg(formatBytes(task.totalBytes)) : qsTr("Transferring");
+        case "cancelling":
+            return qsTr("Cancelling…");
         case "needs-attention":
             return task.errorMessage || qsTr("Needs attention");
         case "completed":
@@ -93,6 +103,31 @@ Popup {
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.textCompact
             }
+
+            ToolButton {
+                id: clearFinishedButton
+
+                visible: center.hasFinishedTasks
+                implicitWidth: 28
+                implicitHeight: 28
+                hoverEnabled: true
+                focusPolicy: Qt.StrongFocus
+                onClicked: center.controller.clearFinishedTransfers()
+                Accessible.name: qsTr("Clear finished transfers")
+                contentItem: AppIcon {
+                    name: "trash"
+                    color: Theme.textMuted
+                }
+                background: Rectangle {
+                    radius: Theme.radiusSmall
+                    color: clearFinishedButton.hovered ? Theme.controlHover : "transparent"
+                    border.color: clearFinishedButton.activeFocus ? Theme.focus : "transparent"
+                    border.width: clearFinishedButton.activeFocus ? 2 : 0
+                }
+                AppToolTip {
+                    text: qsTr("Clear finished transfers")
+                }
+            }
         }
 
         ListView {
@@ -116,6 +151,7 @@ Popup {
 
                 readonly property bool cancellable: modelData.status === "queued" || modelData.status === "running"
                 readonly property bool retryable: modelData.retryable && (modelData.status === "failed" || modelData.status === "needs-attention")
+                readonly property bool dismissible: modelData.status === "completed" || modelData.status === "failed" || modelData.status === "cancelled"
 
                 width: ListView.view.width
                 height: 72
@@ -165,7 +201,7 @@ Popup {
                         ProgressBar {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 3
-                            visible: taskDelegate.modelData.status === "running"
+                            visible: taskDelegate.modelData.status === "running" || taskDelegate.modelData.status === "cancelling"
                             from: 0
                             to: Math.max(1, taskDelegate.modelData.totalBytes)
                             value: taskDelegate.modelData.transferredBytes
@@ -223,10 +259,31 @@ Popup {
                             text: qsTr("Cancel")
                         }
                     }
-                }
 
-                TapHandler {
-                    onTapped: transferList.currentIndex = taskDelegate.index
+                    ToolButton {
+                        id: dismissButton
+
+                        visible: taskDelegate.dismissible
+                        Layout.preferredWidth: visible ? 30 : 0
+                        Layout.preferredHeight: 30
+                        hoverEnabled: true
+                        focusPolicy: Qt.StrongFocus
+                        onClicked: center.controller.dismissTransfer(taskDelegate.modelData.id)
+                        Accessible.name: qsTr("Remove %1 from transfer history").arg(taskDelegate.modelData.displayName)
+                        contentItem: AppIcon {
+                            name: "close"
+                            color: Theme.textSoft
+                        }
+                        background: Rectangle {
+                            radius: width / 2
+                            color: dismissButton.down ? Theme.controlPressed : dismissButton.hovered ? Theme.controlHover : "transparent"
+                            border.color: dismissButton.activeFocus ? Theme.focus : "transparent"
+                            border.width: dismissButton.activeFocus ? 2 : 0
+                        }
+                        AppToolTip {
+                            text: qsTr("Remove")
+                        }
+                    }
                 }
                 HoverHandler {
                     id: taskHover

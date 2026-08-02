@@ -54,6 +54,8 @@ public:
 public slots:
     void cancel(const QString &taskId);
     void retry(const QString &taskId);
+    void dismiss(const QString &taskId);
+    void dismissFinished();
     void resolveConflict(const QString &taskId, ztermy::sftp::ConflictAction action,
                          const QString &renamedDestinationPath = {});
     void confirmHostKey(const QString &taskId, bool remember);

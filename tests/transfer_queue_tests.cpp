@@ -28,6 +28,8 @@ private slots:
     void schedulesFifoWithinConcurrencyLimit();
     void validatesMonotonicProgressAndCompletion();
     void supportsFailureAttentionCancellationAndRetry();
+    void keepsRunningCancellationActiveUntilWorkerFinishes();
+    void dismissesOnlyFinishedTransfers();
     void restoresOnlyExplicitInterruptedTasks();
 };
 
@@ -97,6 +99,35 @@ void TransferQueueTests::supportsFailureAttentionCancellationAndRetry()
     QVERIFY(queue.cancel("cancelled", 3));
     QCOMPARE(queue.find("cancelled")->status, ztermy::sftp::TransferStatus::Cancelled);
     QCOMPARE(queue.retry("cancelled").error(), ztermy::sftp::TransferQueueError::InvalidTransition);
+}
+
+void TransferQueueTests::keepsRunningCancellationActiveUntilWorkerFinishes()
+{
+    ztermy::sftp::TransferQueue queue;
+    QVERIFY(queue.enqueue(task("running")));
+    QVERIFY(queue.takeNext(1).has_value());
+
+    QVERIFY(queue.cancel("running", 2));
+    QCOMPARE(queue.find("running")->status, ztermy::sftp::TransferStatus::Cancelling);
+    QCOMPARE(queue.runningCount(), std::size_t{1});
+
+    QVERIFY(queue.cancel("running", 3));
+    QCOMPARE(queue.find("running")->status, ztermy::sftp::TransferStatus::Cancelled);
+    QCOMPARE(queue.runningCount(), std::size_t{0});
+}
+
+void TransferQueueTests::dismissesOnlyFinishedTransfers()
+{
+    ztermy::sftp::TransferQueue queue;
+    QVERIFY(queue.enqueue(task("queued")));
+    QVERIFY(queue.enqueue(task("done")));
+    QVERIFY(queue.takeNext(1).has_value());
+    QVERIFY(queue.complete("queued", 2));
+
+    QVERIFY(queue.dismiss("queued"));
+    QVERIFY(queue.find("queued") == nullptr);
+    QCOMPARE(queue.dismiss("done").error(), ztermy::sftp::TransferQueueError::InvalidTransition);
+    QCOMPARE(queue.dismissFinished(), std::size_t{0});
 }
 
 void TransferQueueTests::restoresOnlyExplicitInterruptedTasks()

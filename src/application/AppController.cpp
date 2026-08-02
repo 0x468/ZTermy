@@ -15,6 +15,7 @@
 #include <QSet>
 #include <QStandardPaths>
 #include <QThreadPool>
+#include <QTimer>
 #include <QUrl>
 #include <QUuid>
 #include <QVariantMap>
@@ -31,6 +32,8 @@ Q_LOGGING_CATEGORY(appControllerLog, "ztermy.application.controller")
 
 namespace
 {
+
+constexpr std::size_t maximumRecentHostProfiles = 6;
 
 [[nodiscard]] QString applicationDataFile(const QString &fileName)
 {
@@ -343,6 +346,8 @@ void logCredentialRollbackResult(std::expected<void, ztermy::security::Credentia
             return QStringLiteral("queued");
         case TransferStatus::Running:
             return QStringLiteral("running");
+        case TransferStatus::Cancelling:
+            return QStringLiteral("cancelling");
         case TransferStatus::NeedsAttention:
             return QStringLiteral("needs-attention");
         case TransferStatus::Completed:
@@ -769,9 +774,9 @@ QVariantList AppController::recentHostProfiles() const
     std::ranges::sort(recent, std::greater{}, [](const ssh::SshProfile *profile) {
         return *profile->lastConnectedUtcMs;
     });
-    if (recent.size() > 6U)
+    if (recent.size() > maximumRecentHostProfiles)
     {
-        recent.resize(6U);
+        recent.resize(maximumRecentHostProfiles);
     }
 
     QVariantList result;
@@ -781,6 +786,34 @@ QVariantList AppController::recentHostProfiles() const
         result.append(profileVariantMap(*profile, profileHasStoredCredential(*profile, availableKeys)));
     }
     return result;
+}
+
+QStringList AppController::hostProfileGroups() const
+{
+    QStringList groups;
+    for (const ssh::SshProfile &profile : m_profiles)
+    {
+        const QString group = utf8QString(profile.group).trimmed();
+        if (!group.isEmpty() && !groups.contains(group, Qt::CaseInsensitive))
+        {
+            groups.push_back(group);
+        }
+    }
+    std::ranges::sort(groups, [](const QString &left, const QString &right) {
+        return QString::localeAwareCompare(left, right) < 0;
+    });
+    return groups;
+}
+
+QStringList AppController::collapsedHostSections() const
+{
+    QStringList sections;
+    sections.reserve(static_cast<qsizetype>(m_workspaceState.collapsedHostSections.size()));
+    for (const std::string &section : m_workspaceState.collapsedHostSections)
+    {
+        sections.push_back(utf8QString(section));
+    }
+    return sections;
 }
 
 QVariantList AppController::terminalTabs() const
@@ -968,6 +1001,12 @@ QString AppController::activeSftpPath() const
     return tab == nullptr ? QStringLiteral("/") : tab->sftpPath;
 }
 
+QString AppController::activeSftpHomePath() const
+{
+    const TerminalTab *tab = activeTab();
+    return tab == nullptr ? QString{} : tab->sftpHomePath;
+}
+
 QVariantList AppController::recentSftpPaths() const
 {
     const TerminalTab *tab = activeTab();
@@ -1012,7 +1051,7 @@ int AppController::activeTransferCount() const noexcept
     return static_cast<int>(std::ranges::count_if(m_transferTasks, [](const QVariant &value) {
         const QString status = value.toMap().value(QStringLiteral("status")).toString();
         return status == QLatin1StringView("queued") || status == QLatin1StringView("running")
-               || status == QLatin1StringView("needs-attention");
+               || status == QLatin1StringView("cancelling") || status == QLatin1StringView("needs-attention");
     }));
 }
 
@@ -1269,6 +1308,7 @@ bool AppController::closeTerminalTab(const QString &id)
     {
         (*position)->sessionLog->stop();
     }
+    stopSftpSession(**position);
     m_tabs.erase(position);
     emit terminalTabsChanged();
 
@@ -1805,6 +1845,17 @@ bool AppController::navigateSftpDirectory(const QString &remotePath)
     return true;
 }
 
+bool AppController::navigateSftpHome()
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || tab->sftpSession == nullptr || tab->sftpHomePath.isEmpty())
+    {
+        return false;
+    }
+    requestSftpDirectory(*tab, tab->sftpHomePath);
+    return true;
+}
+
 bool AppController::navigateSftpParent()
 {
     TerminalTab *tab = activeTab();
@@ -1938,6 +1989,22 @@ void AppController::retryTransfer(const QString &taskId)
     if (m_transferManager != nullptr)
     {
         m_transferManager->retry(taskId);
+    }
+}
+
+void AppController::dismissTransfer(const QString &taskId)
+{
+    if (m_transferManager != nullptr)
+    {
+        m_transferManager->dismiss(taskId);
+    }
+}
+
+void AppController::clearFinishedTransfers()
+{
+    if (m_transferManager != nullptr)
+    {
+        m_transferManager->dismissFinished();
     }
 }
 
@@ -2416,13 +2483,47 @@ void AppController::stopSftpSession(TerminalTab &tab)
 {
     if (tab.sftpSession != nullptr)
     {
-        tab.sftpSession->stop();
-        tab.sftpSession.reset();
+        deferSftpSessionStop(std::move(tab.sftpSession));
     }
     tab.sftpModel.reset();
     tab.sftpState = QStringLiteral("idle");
     tab.sftpError.clear();
+    tab.sftpHomePath.clear();
+    tab.sftpHasListing = false;
     ++tab.sftpGeneration;
+}
+
+void AppController::deferSftpSessionStop(std::unique_ptr<sftp::SftpSession> session)
+{
+    if (session == nullptr)
+    {
+        return;
+    }
+
+    sftp::SftpSession *sessionPointer = session.get();
+    QObject::connect(sessionPointer, &sftp::SftpSession::workerFinishedChanged, this, [this, sessionPointer] {
+        reapStoppedSftpSession(sessionPointer);
+    });
+    m_stoppingSftpSessions.push_back(std::move(session));
+    sessionPointer->requestStop();
+    if (sessionPointer->workerFinished())
+    {
+        reapStoppedSftpSession(sessionPointer);
+    }
+}
+
+void AppController::reapStoppedSftpSession(sftp::SftpSession *session)
+{
+    QTimer::singleShot(0, this, [this, session] {
+        const auto position =
+            std::ranges::find(m_stoppingSftpSessions, session, [](const std::unique_ptr<sftp::SftpSession> &candidate) {
+                return candidate.get();
+            });
+        if (position != m_stoppingSftpSessions.end() && (*position)->workerFinished())
+        {
+            m_stoppingSftpSessions.erase(position);
+        }
+    });
 }
 
 void AppController::requestSftpDirectory(TerminalTab &tab, const QString &remotePath)
@@ -2736,6 +2837,63 @@ bool AppController::deleteHostProfile(const QString &id)
     m_profiles = std::move(updated);
     setCredentialOperationError({});
     emit hostProfilesChanged();
+    return true;
+}
+
+bool AppController::clearRecentHostProfiles()
+{
+    std::vector<ssh::SshProfile> updated = m_profiles;
+    bool changed = false;
+    for (ssh::SshProfile &profile : updated)
+    {
+        changed = profile.lastConnectedUtcMs.has_value() || changed;
+        profile.lastConnectedUtcMs.reset();
+    }
+    if (!changed)
+    {
+        return true;
+    }
+    if (!m_profileStore.save(updated))
+    {
+        return false;
+    }
+    m_profiles = std::move(updated);
+    emit hostProfilesChanged();
+    return true;
+}
+
+bool AppController::setHostSectionCollapsed(const QString &sectionId, const bool collapsed)
+{
+    const std::string section = utf8String(sectionId.trimmed());
+    if (section.empty() || section.size() > 512 || section.find('\0') != std::string::npos)
+    {
+        return false;
+    }
+
+    workbench::WorkspaceState candidate = m_workspaceState;
+    const auto existing = std::ranges::find(candidate.collapsedHostSections, section);
+    if (collapsed)
+    {
+        if (existing != candidate.collapsedHostSections.end())
+        {
+            return true;
+        }
+        candidate.collapsedHostSections.push_back(section);
+    }
+    else
+    {
+        if (existing == candidate.collapsedHostSections.end())
+        {
+            return true;
+        }
+        candidate.collapsedHostSections.erase(existing);
+    }
+    if (!m_workspaceStateStore.save(candidate))
+    {
+        return false;
+    }
+    m_workspaceState = std::move(candidate);
+    emit hostWorkspaceChanged();
     return true;
 }
 
@@ -3475,16 +3633,24 @@ void AppController::connectSftpTabSignals(TerminalTab &tab)
                          {
                              return;
                          }
-                         if (running)
-                         {
-                             requestSftpDirectory(*updated, updated->sftpPath);
-                         }
-                         else if (updated->sftpState != QStringLiteral("error"))
+                         if (!running && updated->sftpState != QStringLiteral("error"))
                          {
                              updated->sftpState = QStringLiteral("idle");
                              emit sftpChanged();
                          }
                      });
+    QObject::connect(
+        tab.sftpSession.get(), &sftp::SftpSession::homeDirectoryReady, this, [this, tabId](const QString &homePath) {
+            TerminalTab *updated = findTab(tabId);
+            if (updated == nullptr || updated->sftpSession == nullptr)
+            {
+                return;
+            }
+            updated->sftpHomePath = homePath;
+            const QString requestedPath =
+                !updated->sftpHasListing && updated->sftpPath == QStringLiteral("/") ? homePath : updated->sftpPath;
+            requestSftpDirectory(*updated, requestedPath);
+        });
     QObject::connect(tab.sftpSession.get(), &sftp::SftpSession::directoryReady, this,
                      [this, tabId](const quint64 requestId, const quint64 generation, const QString &remotePath,
                                    const sftp::DirectoryListingPtr &entries) {
@@ -3498,7 +3664,8 @@ void AppController::connectSftpTabSignals(TerminalTab &tab)
                          updated->sftpRequestedPath = remotePath;
                          updated->sftpState = QStringLiteral("ready");
                          updated->sftpError.clear();
-                         updated->sftpModel->setEntries(entries);
+                         updated->sftpHasListing = true;
+                         updated->sftpModel->setEntries(entries, remotePath);
                          persistWorkspaceState(*updated, true);
                          if (m_activeTabId == tabId)
                          {
@@ -3523,7 +3690,7 @@ void AppController::connectSftpTabSignals(TerminalTab &tab)
             }
             if (operation == sftp::SftpOperationKind::ListDirectory)
             {
-                updated->sftpState = QStringLiteral("error");
+                updated->sftpState = updated->sftpHasListing ? QStringLiteral("ready") : QStringLiteral("error");
                 updated->sftpError = tr("The remote directory could not be loaded.");
             }
             else

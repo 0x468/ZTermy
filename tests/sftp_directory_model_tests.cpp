@@ -17,6 +17,7 @@ private slots:
     void sortsDirectoriesAndFiltersHiddenEntries();
     void filtersNamesCaseInsensitively();
     void tracksSelectionAndClearsItOnRefresh();
+    void exposesParentDirectoryOutsideRoot();
 };
 
 ztermy::sftp::DirectoryListingPtr listing()
@@ -84,6 +85,21 @@ void SftpDirectoryModelTests::tracksSelectionAndClearsItOnRefresh()
     model.setEntries(listing());
     QCOMPARE(model.selectedCount(), 0);
     QVERIFY(model.selectedPaths().isEmpty());
+}
+
+void SftpDirectoryModelTests::exposesParentDirectoryOutsideRoot()
+{
+    ztermy::sftp::SftpDirectoryModel model;
+    model.setEntries(listing(), QStringLiteral("/home/tester/work"));
+
+    QCOMPARE(model.entry(0).value(QStringLiteral("name")).toString(), QStringLiteral(".."));
+    QCOMPARE(model.entry(0).value(QStringLiteral("remotePath")).toString(), QStringLiteral("/home/tester"));
+    model.setFilterText(QStringLiteral("no-match"));
+    QCOMPARE(model.rowCount(), 1);
+
+    model.setFilterText({});
+    model.setEntries(listing(), QStringLiteral("/"));
+    QCOMPARE(model.entry(0).value(QStringLiteral("name")).toString(), QStringLiteral("Alpha"));
 }
 
 } // namespace

@@ -150,8 +150,11 @@ bool canTransition(const TransferStatus from, const TransferStatus to) noexcept
             return to == TransferStatus::Running || to == TransferStatus::NeedsAttention
                    || to == TransferStatus::Cancelled;
         case TransferStatus::Running:
-            return to == TransferStatus::NeedsAttention || to == TransferStatus::Completed
-                   || to == TransferStatus::Failed || to == TransferStatus::Cancelled;
+            return to == TransferStatus::Cancelling || to == TransferStatus::NeedsAttention
+                   || to == TransferStatus::Completed || to == TransferStatus::Failed
+                   || to == TransferStatus::Cancelled;
+        case TransferStatus::Cancelling:
+            return to == TransferStatus::Completed || to == TransferStatus::Failed || to == TransferStatus::Cancelled;
         case TransferStatus::NeedsAttention:
             return to == TransferStatus::Queued || to == TransferStatus::Cancelled;
         case TransferStatus::Failed:

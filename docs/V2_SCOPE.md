@@ -30,9 +30,12 @@ serial-specific UI are not part of ztermy.
 
 ## Completion rule
 
-Implementation reaches a **V2 candidate** when all automated gates pass for
-version `0.2.0` and the remaining physical, real-host, accessibility, and
+Implementation reaches a **V2 candidate** when all automated gates pass for a
+version in the `0.2.x` line and the remaining physical, real-host, accessibility, and
 installer checks are recorded precisely. It becomes an **accepted V2 release**
 only after the owner performs or explicitly waives those checks against the
 immutable candidate hashes. Pending evidence is not a software failure, but it
 must never be reported as tested.
+
+V2 maintenance and candidate builds stay on `0.2.x`. The project changes to
+`0.3.0` only when the separately scoped V3 milestone begins.

@@ -55,6 +55,7 @@ enum class TransferStatus : std::uint8_t
 {
     Queued,
     Running,
+    Cancelling,
     NeedsAttention,
     Completed,
     Failed,

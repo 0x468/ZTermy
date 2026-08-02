@@ -51,6 +51,12 @@ public:
         }
     }
 
+    std::expected<std::string, ztermy::ssh::SshTransportError> canonicalizePath(const std::string_view remotePath,
+                                                                                const std::stop_token &) override
+    {
+        return std::string(remotePath);
+    }
+
     ~ManagerFakeClient() override
     {
         m_state->activeClients.fetch_sub(1);

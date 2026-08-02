@@ -411,6 +411,7 @@ void AppControllerTests::loadsRecentProfilesAndParsesQuickTargets()
         ztermy::ssh::SshProfile{
             .id = "older",
             .name = "Older host",
+            .group = "Lab",
             .host = "older.example.test",
             .username = "alice",
             .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
@@ -420,6 +421,7 @@ void AppControllerTests::loadsRecentProfilesAndParsesQuickTargets()
         ztermy::ssh::SshProfile{
             .id = "newer",
             .name = "Newer host",
+            .group = "Work",
             .host = "newer.example.test",
             .username = "bob",
             .authentication = ztermy::ssh::SshAuthenticationMethod::Password,
@@ -428,6 +430,7 @@ void AppControllerTests::loadsRecentProfilesAndParsesQuickTargets()
         ztermy::ssh::SshProfile{
             .id = "never",
             .name = "Never connected",
+            .group = "lab",
             .host = "never.example.test",
             .username = "carol",
             .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
@@ -443,6 +446,7 @@ void AppControllerTests::loadsRecentProfilesAndParsesQuickTargets()
     QCOMPARE(recent.at(0).toMap().value(QStringLiteral("id")).toString(), QStringLiteral("newer"));
     QCOMPARE(recent.at(1).toMap().value(QStringLiteral("id")).toString(), QStringLiteral("older"));
     QCOMPARE(recent.at(0).toMap().value(QStringLiteral("lastConnectedUtcMs")).toLongLong(), 2000);
+    QCOMPARE(controller.hostProfileGroups(), QStringList({QStringLiteral("Lab"), QStringLiteral("Work")}));
 
     const QVariantMap parsed = controller.parseQuickConnectTarget(QStringLiteral("dora@[2001:db8::1]:2222"));
     QVERIFY(parsed.value(QStringLiteral("valid")).toBool());
@@ -461,6 +465,13 @@ void AppControllerTests::loadsRecentProfilesAndParsesQuickTargets()
              QStringLiteral("newer"));
     QVERIFY(controller.duplicateHostProfile(QStringLiteral("newer")));
     QCOMPARE(controller.recentHostProfiles().size(), 2);
+    QVERIFY(controller.setHostSectionCollapsed(QStringLiteral("recent"), true));
+    QVERIFY(controller.setHostSectionCollapsed(QStringLiteral("group:Lab"), true));
+    QCOMPARE(controller.collapsedHostSections(), QStringList({QStringLiteral("recent"), QStringLiteral("group:Lab")}));
+    QVERIFY(controller.setHostSectionCollapsed(QStringLiteral("recent"), false));
+    QCOMPARE(controller.collapsedHostSections(), QStringList({QStringLiteral("group:Lab")}));
+    QVERIFY(controller.clearRecentHostProfiles());
+    QVERIFY(controller.recentHostProfiles().isEmpty());
 
     std::vector<ztermy::ssh::SshProfile> cappedProfiles;
     cappedProfiles.reserve(8);

@@ -32,6 +32,12 @@ class FakeSftpClient final : public ztermy::sftp::SftpClient
 public:
     explicit FakeSftpClient(std::shared_ptr<FakeState> state) : m_state(std::move(state)) {}
 
+    std::expected<std::string, ztermy::ssh::SshTransportError> canonicalizePath(const std::string_view remotePath,
+                                                                                const std::stop_token &) override
+    {
+        return remotePath == "." ? std::string("/home/tester") : std::string(remotePath);
+    }
+
     std::expected<std::vector<ztermy::sftp::DirectoryEntry>, ztermy::ssh::SshTransportError>
     listDirectory(const std::string_view remotePath, const std::stop_token &stopToken) override
     {
@@ -157,6 +163,8 @@ private slots:
     void rejectsInvalidConnectionRequests();
     void suppressesStaleDirectoryResults();
     void serializesMutatingOperations();
+    void stopsOutstandingDirectoryRequestsWithoutBlockingCaller();
+    void survivesRepeatedStartAndDeferredStop();
 };
 
 void SftpSessionTests::initTestCase()
@@ -218,6 +226,41 @@ void SftpSessionTests::serializesMutatingOperations()
     QCOMPARE(state->created, std::vector<std::string>{"/work"});
     QCOMPARE(state->renamed, (std::vector<std::pair<std::string, std::string>>{{"/work", "/renamed"}}));
     QCOMPARE(state->removed, (std::vector<std::pair<std::string, bool>>{{"/renamed", true}}));
+}
+
+void SftpSessionTests::stopsOutstandingDirectoryRequestsWithoutBlockingCaller()
+{
+    const auto state = std::make_shared<FakeState>();
+    ztermy::sftp::SftpSession session(fakeFactory(state));
+    QSignalSpy finishedSpy(&session, &ztermy::sftp::SftpSession::workerFinishedChanged);
+
+    QVERIFY(!session.start(validRequest()));
+    QTRY_VERIFY(session.running());
+    session.requestDirectory(1, 1, QStringLiteral("/slow"));
+    QTRY_VERIFY(state->slowListEntered.load());
+
+    session.requestStop();
+    QTRY_COMPARE(finishedSpy.count(), 1);
+    QVERIFY(session.workerFinished());
+    QTRY_VERIFY(!session.running());
+}
+
+void SftpSessionTests::survivesRepeatedStartAndDeferredStop()
+{
+    for (int iteration = 0; iteration < 25; ++iteration)
+    {
+        const auto state = std::make_shared<FakeState>();
+        ztermy::sftp::SftpSession session(fakeFactory(state));
+        QSignalSpy finishedSpy(&session, &ztermy::sftp::SftpSession::workerFinishedChanged);
+
+        QVERIFY(!session.start(validRequest()));
+        QTRY_VERIFY(session.running());
+        session.requestDirectory(1, 1, QStringLiteral("/slow"));
+        QTRY_VERIFY(state->slowListEntered.load());
+        session.requestStop();
+        QTRY_COMPARE(finishedSpy.count(), 1);
+        QVERIFY(session.workerFinished());
+    }
 }
 
 } // namespace

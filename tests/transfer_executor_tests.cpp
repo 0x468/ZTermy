@@ -25,6 +25,12 @@ ztermy::ssh::SshTransportError invalidState()
 class MemorySftpClient final : public ztermy::sftp::SftpClient
 {
 public:
+    std::expected<std::string, ztermy::ssh::SshTransportError> canonicalizePath(const std::string_view remotePath,
+                                                                                const std::stop_token &) override
+    {
+        return std::string(remotePath);
+    }
+
     std::map<std::string, std::vector<char>> files;
     std::vector<std::string> removedPaths;
 

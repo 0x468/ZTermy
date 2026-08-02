@@ -68,7 +68,7 @@ constexpr qsizetype maximumRecoveredTasks = 100;
 [[nodiscard]] bool recoverable(const TransferTask &task)
 {
     return task.status == TransferStatus::Queued || task.status == TransferStatus::Running
-           || task.status == TransferStatus::NeedsAttention
+           || task.status == TransferStatus::Cancelling || task.status == TransferStatus::NeedsAttention
            || (task.status == TransferStatus::Failed && task.retryable && task.errorCode == "interrupted");
 }
 

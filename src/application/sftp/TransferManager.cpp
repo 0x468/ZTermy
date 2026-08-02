@@ -180,6 +180,27 @@ void TransferManager::retry(const QString &taskIdentifier)
     }
 }
 
+void TransferManager::dismiss(const QString &taskIdentifier)
+{
+    const std::string id = taskId(taskIdentifier);
+    if (m_queue.dismiss(id))
+    {
+        m_work.erase(id);
+        publishSnapshot();
+    }
+}
+
+void TransferManager::dismissFinished()
+{
+    if (m_queue.dismissFinished() > 0)
+    {
+        std::erase_if(m_work, [this](const auto &item) {
+            return m_queue.find(item.first) == nullptr;
+        });
+        publishSnapshot();
+    }
+}
+
 void TransferManager::resolveConflict(const QString &taskIdentifier, const ConflictAction action,
                                       const QString &renamedDestinationPath)
 {
@@ -399,7 +420,7 @@ void TransferManager::handleResult(const std::string &id, TransferExecutionResul
 {
     m_workers.erase(id);
     const TransferTask *task = m_queue.find(id);
-    if (task == nullptr || task->status != TransferStatus::Running)
+    if (task == nullptr || (task->status != TransferStatus::Running && task->status != TransferStatus::Cancelling))
     {
         schedule();
         return;

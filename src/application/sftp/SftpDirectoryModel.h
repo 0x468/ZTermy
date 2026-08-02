@@ -47,7 +47,7 @@ public:
     void setFilterText(const QString &text);
     [[nodiscard]] int selectedCount() const noexcept;
 
-    void setEntries(const DirectoryListingPtr &entries);
+    void setEntries(const DirectoryListingPtr &entries, const QString &remotePath = {});
     [[nodiscard]] Q_INVOKABLE QVariantMap entry(int row) const;
     Q_INVOKABLE bool setSelected(int row, bool selected);
     Q_INVOKABLE void clearSelection();

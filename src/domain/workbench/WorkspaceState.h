@@ -24,13 +24,16 @@ struct ProfileWorkspaceState final
 struct WorkspaceState final
 {
     std::vector<ProfileWorkspaceState> profiles;
+    std::vector<std::string> collapsedHostSections;
 
     [[nodiscard]] friend bool operator==(const WorkspaceState &, const WorkspaceState &) = default;
 };
 
 inline constexpr std::size_t maximumRecentRemotePaths = 12;
+inline constexpr std::size_t maximumCollapsedHostSections = 256;
 
 [[nodiscard]] bool validProfileWorkspaceState(const ProfileWorkspaceState &state) noexcept;
+[[nodiscard]] bool validWorkspaceState(const WorkspaceState &state) noexcept;
 [[nodiscard]] ProfileWorkspaceState *findProfileWorkspaceState(WorkspaceState &state, std::string_view profileId);
 [[nodiscard]] const ProfileWorkspaceState *findProfileWorkspaceState(const WorkspaceState &state,
                                                                      std::string_view profileId);

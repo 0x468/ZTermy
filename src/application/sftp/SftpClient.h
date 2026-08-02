@@ -25,6 +25,8 @@ public:
     SftpClient(const SftpClient &) = delete;
     SftpClient &operator=(const SftpClient &) = delete;
 
+    [[nodiscard]] virtual std::expected<std::string, ssh::SshTransportError>
+    canonicalizePath(std::string_view remotePath, const std::stop_token &stopToken) = 0;
     [[nodiscard]] virtual std::expected<std::vector<DirectoryEntry>, ssh::SshTransportError>
     listDirectory(std::string_view remotePath, const std::stop_token &stopToken) = 0;
     [[nodiscard]] virtual std::expected<std::optional<DirectoryEntry>, ssh::SshTransportError>

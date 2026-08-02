@@ -68,6 +68,14 @@ Rectangle {
         return Qt.formatDateTime(new Date(Number(timestamp)), "yyyy-MM-dd HH:mm");
     }
 
+    function sectionCollapsed(sectionId) {
+        return searchField.text.trim().length === 0 && controller.collapsedHostSections.indexOf(sectionId) >= 0;
+    }
+
+    function toggleSection(sectionId) {
+        controller.setHostSectionCollapsed(sectionId, !sectionCollapsed(sectionId));
+    }
+
     function openQuickConnect(sourceItem) {
         const parsed = controller.parseQuickConnectTarget(quickConnectTarget.text);
         if (!parsed.valid) {
@@ -476,14 +484,82 @@ Rectangle {
                 visible: pane.controller.recentHostProfiles.length > 0
                 spacing: 8
 
-                Text {
+                RowLayout {
                     Layout.fillWidth: true
-                    text: qsTr("RECENT CONNECTIONS")
-                    color: pane.mutedColor
-                    font.family: Theme.uiFont
-                    font.pixelSize: 11
-                    font.weight: Font.DemiBold
-                    font.letterSpacing: 0.6
+                    spacing: Theme.spacingControl
+
+                    ToolButton {
+                        id: recentSectionToggle
+
+                        Layout.fillWidth: true
+                        implicitHeight: 28
+                        hoverEnabled: true
+                        focusPolicy: Qt.StrongFocus
+                        Accessible.name: pane.sectionCollapsed("recent") ? qsTr("Expand recent connections") : qsTr("Collapse recent connections")
+                        onClicked: pane.toggleSection("recent")
+
+                        contentItem: RowLayout {
+                            spacing: 6
+
+                            AppIcon {
+                                Layout.preferredWidth: 14
+                                Layout.preferredHeight: 14
+                                name: "chevron-down"
+                                color: pane.mutedColor
+                                rotation: pane.sectionCollapsed("recent") ? -90 : 0
+                                Behavior on rotation {
+                                    NumberAnimation {
+                                        duration: Theme.motionFast
+                                    }
+                                }
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: qsTr("RECENT CONNECTIONS")
+                                color: pane.mutedColor
+                                font.family: Theme.uiFont
+                                font.pixelSize: 11
+                                font.weight: Font.DemiBold
+                                font.letterSpacing: 0.6
+                            }
+                            Text {
+                                text: pane.controller.recentHostProfiles.length
+                                color: pane.mutedColor
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.textLabel
+                            }
+                        }
+                        background: Rectangle {
+                            radius: Theme.radiusSmall
+                            color: recentSectionToggle.hovered ? Theme.controlHover : "transparent"
+                            border.color: recentSectionToggle.activeFocus ? Theme.focus : "transparent"
+                            border.width: recentSectionToggle.activeFocus ? 2 : 0
+                        }
+                    }
+
+                    ToolButton {
+                        id: clearRecentButton
+
+                        implicitWidth: 28
+                        implicitHeight: 28
+                        hoverEnabled: true
+                        focusPolicy: Qt.StrongFocus
+                        Accessible.name: qsTr("Clear recent connections")
+                        onClicked: pane.controller.clearRecentHostProfiles()
+                        contentItem: AppIcon {
+                            name: "trash"
+                            color: clearRecentButton.hovered || clearRecentButton.activeFocus ? Theme.text : pane.mutedColor
+                        }
+                        background: Rectangle {
+                            radius: Theme.radiusSmall
+                            color: clearRecentButton.hovered ? Theme.controlHover : "transparent"
+                            border.color: clearRecentButton.activeFocus ? Theme.focus : "transparent"
+                            border.width: clearRecentButton.activeFocus ? 2 : 0
+                        }
+                        AppToolTip {
+                            text: qsTr("Clear recent connections")
+                        }
+                    }
                 }
 
                 Flow {
@@ -494,7 +570,8 @@ Rectangle {
 
                     objectName: "recentConnectionsFlow"
                     Layout.fillWidth: true
-                    Layout.preferredHeight: childrenRect.height
+                    Layout.preferredHeight: visible ? childrenRect.height : 0
+                    visible: !pane.sectionCollapsed("recent")
                     spacing: Theme.spacingRelated
 
                     Repeater {
@@ -600,14 +677,52 @@ Rectangle {
                     Layout.fillWidth: true
                     spacing: 8
 
-                    Text {
+                    ToolButton {
+                        id: groupSectionToggle
+
                         Layout.fillWidth: true
-                        text: profileGroup.modelData.name
-                        color: pane.mutedColor
-                        font.family: Theme.uiFont
-                        font.pixelSize: 11
-                        font.weight: Font.DemiBold
-                        font.letterSpacing: 0.6
+                        implicitHeight: 28
+                        hoverEnabled: true
+                        focusPolicy: Qt.StrongFocus
+                        Accessible.name: pane.sectionCollapsed("group:" + profileGroup.modelData.name) ? qsTr("Expand %1").arg(profileGroup.modelData.name) : qsTr("Collapse %1").arg(profileGroup.modelData.name)
+                        onClicked: pane.toggleSection("group:" + profileGroup.modelData.name)
+
+                        contentItem: RowLayout {
+                            spacing: 6
+                            AppIcon {
+                                Layout.preferredWidth: 14
+                                Layout.preferredHeight: 14
+                                name: "chevron-down"
+                                color: pane.mutedColor
+                                rotation: pane.sectionCollapsed("group:" + profileGroup.modelData.name) ? -90 : 0
+                                Behavior on rotation {
+                                    NumberAnimation {
+                                        duration: Theme.motionFast
+                                    }
+                                }
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: profileGroup.modelData.name
+                                color: pane.mutedColor
+                                font.family: Theme.uiFont
+                                font.pixelSize: 11
+                                font.weight: Font.DemiBold
+                                font.letterSpacing: 0.6
+                            }
+                            Text {
+                                text: profileGroup.modelData.profiles.length
+                                color: pane.mutedColor
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.textLabel
+                            }
+                        }
+                        background: Rectangle {
+                            radius: Theme.radiusSmall
+                            color: groupSectionToggle.hovered ? Theme.controlHover : "transparent"
+                            border.color: groupSectionToggle.activeFocus ? Theme.focus : "transparent"
+                            border.width: groupSectionToggle.activeFocus ? 2 : 0
+                        }
                     }
 
                     Flow {
@@ -617,7 +732,8 @@ Rectangle {
                         readonly property real cardWidth: Math.max(0, (width - (spacing * (columns - 1))) / columns)
 
                         Layout.fillWidth: true
-                        Layout.preferredHeight: childrenRect.height
+                        Layout.preferredHeight: visible ? childrenRect.height : 0
+                        visible: !pane.sectionCollapsed("group:" + profileGroup.modelData.name)
                         spacing: Theme.spacingRelated
 
                         Repeater {
@@ -972,13 +1088,13 @@ Rectangle {
                                     text: qsTr("Group")
                                     color: pane.textColor
                                 }
-                                AppTextField {
+                                EditableSuggestionField {
                                     id: groupField
                                     objectName: "hostGroup"
                                     Layout.fillWidth: true
+                                    model: pane.controller.hostProfileGroups
                                     placeholderText: qsTr("Personal, Work, Lab…")
                                     accessibleName: qsTr("SSH profile group")
-                                    selectByMouse: true
                                 }
 
                                 Label {

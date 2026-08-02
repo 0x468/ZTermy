@@ -119,6 +119,9 @@ public:
     [[nodiscard]] std::expected<void, SshTransportError> openSftp(WindowsTcpSocket &socket,
                                                                   std::chrono::milliseconds timeout,
                                                                   const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] std::expected<std::string, SshTransportError>
+    canonicalizeSftpPath(WindowsTcpSocket &socket, std::string_view remotePath, std::chrono::milliseconds timeout,
+                         const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] std::expected<std::vector<sftp::DirectoryEntry>, SshTransportError>
     listSftpDirectory(WindowsTcpSocket &socket, std::string_view remotePath, std::chrono::milliseconds timeout,
                       const std::stop_token &stopToken = {}) noexcept;

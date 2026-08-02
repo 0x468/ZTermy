@@ -441,6 +441,10 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS AppTextField.qml
 )
 set_source_files_properties(
+    src/ui/qml/EditableSuggestionField.qml
+    PROPERTIES QT_RESOURCE_ALIAS EditableSuggestionField.qml
+)
+set_source_files_properties(
     src/ui/qml/AppCheckBox.qml
     PROPERTIES QT_RESOURCE_ALIAS AppCheckBox.qml
 )
@@ -581,6 +585,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/AppSwitch.qml
         src/ui/qml/AppTextField.qml
         src/ui/qml/AppToolTip.qml
+        src/ui/qml/EditableSuggestionField.qml
         src/ui/qml/CaptionButton.qml
         src/ui/qml/ConfirmationDialog.qml
         src/ui/qml/CommandPalette.qml

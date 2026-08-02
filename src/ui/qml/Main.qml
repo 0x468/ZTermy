@@ -140,6 +140,9 @@ Rectangle {
         if (activeTerminalTab.logState === "active" || activeTerminalTab.logState === "starting") {
             controller.stopTerminalLog();
         } else {
+            const safeTitle = (activeTerminalTab.title || "session").replace(/[\\/:*?"<>|]/g, "-");
+            const timestamp = Qt.formatDateTime(new Date(), "yyyy-MM-ddThh-mm-ss");
+            sessionLogDialog.currentFile = safeTitle + "_" + timestamp + ".log";
             sessionLogDialog.open();
         }
     }
@@ -1217,47 +1220,26 @@ Rectangle {
                             }
 
                             TerminalToolbarButton {
-                                id: historyToolbarButton
+                                id: sftpToolbarButton
 
-                                objectName: "terminalHistoryAction"
+                                objectName: "terminalSftpAction"
                                 Layout.preferredWidth: 28
                                 Layout.preferredHeight: 22
                                 checkable: true
-                                checked: root.activeTerminalTab !== null && root.activeTerminalTab.workbenchOpen && root.activeTerminalTab.workbenchPage === "history"
+                                checked: root.activeTerminalTab !== null && root.activeTerminalTab.workbenchOpen && root.activeTerminalTab.workbenchPage === "sftp"
                                 selected: checked
-                                enabled: root.activeTerminalTab !== null
-                                onClicked: root.controller.toggleTerminalWorkbench("history")
+                                enabled: root.activeTerminalTab !== null && root.activeTerminalTab.kind === "ssh" && root.activeTerminalTab.connectionState === "connected"
+                                onClicked: root.controller.toggleTerminalWorkbench("sftp")
                                 Keys.onReturnPressed: click()
                                 Keys.onEnterPressed: click()
-                                Accessible.name: qsTr("Command history")
+                                Accessible.name: qsTr("Open SFTP")
                                 contentItem: AppIcon {
-                                    name: "history"
-                                    color: historyToolbarButton.checked ? Theme.accent : root.mutedColor
+                                    name: "folder"
+                                    color: sftpToolbarButton.checked ? Theme.accent : root.mutedColor
                                 }
-                            }
-
-                            TerminalToolbarButton {
-                                id: scriptsToolbarButton
-
-                                objectName: "terminalScriptsAction"
-                                Layout.preferredWidth: 28
-                                Layout.preferredHeight: 22
-                                checkable: true
-                                checked: root.activeTerminalTab !== null && root.activeTerminalTab.workbenchOpen && root.activeTerminalTab.workbenchPage === "scripts"
-                                selected: checked
-                                enabled: root.activeTerminalTab !== null
-                                onClicked: root.controller.toggleTerminalWorkbench("scripts")
-                                Keys.onReturnPressed: click()
-                                Keys.onEnterPressed: click()
-                                Accessible.name: qsTr("Scripts")
-                                contentItem: AppIcon {
-                                    name: "commands"
-                                    color: scriptsToolbarButton.checked ? Theme.accent : root.mutedColor
-                                }
-
                                 AppToolTip {
-                                    visible: scriptsToolbarButton.hovered
-                                    text: qsTr("Scripts")
+                                    visible: sftpToolbarButton.hovered
+                                    text: qsTr("Open SFTP")
                                 }
                             }
 
@@ -1295,6 +1277,25 @@ Rectangle {
                             }
 
                             TerminalToolbarButton {
+                                id: terminalFindButton
+
+                                objectName: "terminalFindAction"
+                                Layout.preferredWidth: 28
+                                Layout.preferredHeight: 22
+                                enabled: root.activeTerminalTab !== null
+                                onClicked: root.openTerminalSearch()
+                                Accessible.name: qsTr("Find in terminal")
+                                contentItem: AppIcon {
+                                    name: "search"
+                                    color: root.mutedColor
+                                }
+                                AppToolTip {
+                                    visible: terminalFindButton.hovered
+                                    text: qsTr("Find in terminal")
+                                }
+                            }
+
+                            TerminalToolbarButton {
                                 id: sessionLogToolbarButton
 
                                 Layout.preferredWidth: 28
@@ -1309,43 +1310,33 @@ Rectangle {
                                     name: "save"
                                     color: root.activeTerminalTab !== null && root.activeTerminalTab.logDroppedBytes > 0 ? Theme.warning : sessionLogToolbarButton.checked ? Theme.accent : root.mutedColor
                                 }
-
                                 AppToolTip {
                                     visible: sessionLogToolbarButton.hovered
                                     text: root.activeTerminalTab !== null && root.activeTerminalTab.logDroppedBytes > 0 ? qsTr("Session log is incomplete: %1 byte(s) were dropped.").arg(root.activeTerminalTab.logDroppedBytes) : sessionLogToolbarButton.checked ? qsTr("Stop session log") : qsTr("Start session log")
                                 }
                             }
 
-                            Rectangle {
-                                Layout.alignment: Qt.AlignVCenter
-                                Layout.preferredWidth: 30
+                            TerminalToolbarButton {
+                                id: scriptsToolbarButton
+
+                                objectName: "terminalScriptsAction"
+                                Layout.preferredWidth: 28
                                 Layout.preferredHeight: 22
-                                radius: Theme.radiusSmall
-                                color: terminalFindAction.hovered || terminalFindAction.activeFocus ? Theme.controlHover : "transparent"
-                                border.color: terminalFindAction.activeFocus ? Theme.focus : "transparent"
-                                border.width: terminalFindAction.activeFocus ? 1 : 0
-
-                                Behavior on color {
-                                    ColorAnimation {
-                                        duration: Theme.motionFast
-                                    }
+                                checkable: true
+                                checked: root.activeTerminalTab !== null && root.activeTerminalTab.workbenchOpen && root.activeTerminalTab.workbenchPage === "scripts"
+                                selected: checked
+                                enabled: root.activeTerminalTab !== null
+                                onClicked: root.controller.toggleTerminalWorkbench("scripts")
+                                Keys.onReturnPressed: click()
+                                Keys.onEnterPressed: click()
+                                Accessible.name: qsTr("Scripts")
+                                contentItem: AppIcon {
+                                    name: "commands"
+                                    color: scriptsToolbarButton.checked ? Theme.accent : root.mutedColor
                                 }
-
-                                AppIcon {
-                                    anchors.centerIn: parent
-                                    width: 14
-                                    height: 14
-                                    name: "search"
-                                    color: root.mutedColor
-                                }
-
-                                KeyboardAction {
-                                    id: terminalFindAction
-
-                                    objectName: "terminalFindAction"
-                                    anchors.fill: parent
-                                    accessibleName: qsTr("Find in terminal")
-                                    onActivated: root.openTerminalSearch()
+                                AppToolTip {
+                                    visible: scriptsToolbarButton.hovered
+                                    text: qsTr("Scripts")
                                 }
                             }
 
@@ -1375,18 +1366,6 @@ Rectangle {
                                     AppMenuItem {
                                         text: qsTr("Command history")
                                         onTriggered: root.controller.toggleTerminalWorkbench("history")
-                                    }
-
-                                    AppMenuItem {
-                                        text: qsTr("Scripts")
-                                        onTriggered: root.controller.toggleTerminalWorkbench("scripts")
-                                    }
-
-                                    AppMenuSeparator {}
-
-                                    AppMenuItem {
-                                        text: root.activeTerminalTab !== null && (root.activeTerminalTab.logState === "active" || root.activeTerminalTab.logState === "starting") ? qsTr("Stop session log") : qsTr("Start session log")
-                                        onTriggered: root.toggleSessionLog()
                                     }
 
                                     AppMenuItem {

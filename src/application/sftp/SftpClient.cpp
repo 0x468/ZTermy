@@ -26,6 +26,12 @@ public:
         }
     }
 
+    [[nodiscard]] std::expected<std::string, ssh::SshTransportError>
+    canonicalizePath(const std::string_view remotePath, const std::stop_token &stopToken) noexcept override
+    {
+        return m_connection.session->canonicalizeSftpPath(m_connection.socket, remotePath, operationTimeout, stopToken);
+    }
+
     [[nodiscard]] std::expected<std::vector<DirectoryEntry>, ssh::SshTransportError>
     listDirectory(const std::string_view remotePath, const std::stop_token &stopToken) noexcept override
     {

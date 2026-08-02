@@ -974,6 +974,54 @@ Libssh2Session::listSftpDirectory(WindowsTcpSocket &socket, const std::string_vi
     }
 }
 
+std::expected<std::string, SshTransportError>
+Libssh2Session::canonicalizeSftpPath(WindowsTcpSocket &socket, const std::string_view remotePath,
+                                     const std::chrono::milliseconds timeout, const std::stop_token &stopToken) noexcept
+{
+    if (remotePath.empty() || remotePath.find('\0') != std::string_view::npos)
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
+    }
+    if (m_session == nullptr || m_sftp == nullptr || m_sftpFile != nullptr || !socket.valid())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
+    }
+    if (timeout <= std::chrono::milliseconds::zero())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::TimedOut});
+    }
+
+    auto *session = static_cast<LIBSSH2_SESSION *>(m_session);
+    auto *sftpHandle = static_cast<LIBSSH2_SFTP *>(m_sftp);
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    std::array<char, 4096> resolved{};
+    while (true)
+    {
+        const int result =
+            libssh2_sftp_symlink_ex(sftpHandle, remotePath.data(), static_cast<unsigned int>(remotePath.size()),
+                                    resolved.data(), static_cast<unsigned int>(resolved.size()), LIBSSH2_SFTP_REALPATH);
+        if (result > 0)
+        {
+            auto normalized =
+                sftp::normalizeRemotePath(std::string_view(resolved.data(), static_cast<std::size_t>(result)));
+            if (!normalized)
+            {
+                return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::ProtocolError});
+            }
+            return std::move(*normalized);
+        }
+        if (result != LIBSSH2_ERROR_EAGAIN)
+        {
+            return std::unexpected(mapSftpError(session, sftpHandle, result));
+        }
+        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        if (!ready)
+        {
+            return std::unexpected(ready.error());
+        }
+    }
+}
+
 std::expected<void, SshTransportError> Libssh2Session::createSftpDirectory(WindowsTcpSocket &socket,
                                                                            const std::string_view remotePath,
                                                                            const std::chrono::milliseconds timeout,

@@ -43,8 +43,10 @@ public:
     SftpSession &operator=(const SftpSession &) = delete;
 
     [[nodiscard]] std::error_code start(ssh::SshConnectionRequest request);
+    void requestStop() noexcept;
     void stop() noexcept;
     [[nodiscard]] bool running() const noexcept;
+    [[nodiscard]] bool workerFinished() const noexcept;
 
 public slots:
     void confirmHostKey(bool remember);
@@ -56,6 +58,8 @@ public slots:
 
 signals:
     void runningChanged(bool running);
+    void workerFinishedChanged();
+    void homeDirectoryReady(const QString &remotePath);
     void sshPhaseChanged(ztermy::ssh::SshConnectionPhase phase);
     void connectionFailed(ztermy::ssh::SshFailureKind failure);
     void hostKeyConfirmationRequired(const QString &algorithm, const QString &fingerprint);
@@ -68,6 +72,8 @@ signals:
 
 private slots:
     void deliverRunning(bool running);
+    void deliverWorkerFinished();
+    void deliverHomeDirectory(const QString &remotePath);
     void deliverPhase(ztermy::ssh::SshConnectionPhase phase);
     void deliverConnectionFailure(ztermy::ssh::SshFailureKind failure);
     void deliverHostKeyConfirmation(const QString &algorithm, const QString &fingerprint);
@@ -109,6 +115,8 @@ private:
     void enqueue(Command command);
     [[nodiscard]] bool isCurrentDirectoryRequest(quint64 requestId, quint64 generation) const noexcept;
     void postRunning(bool running);
+    void postWorkerFinished();
+    void postHomeDirectory(const QString &remotePath);
     void postPhase(ssh::SshConnectionPhase phase);
     void postConnectionFailure(ssh::SshFailureKind failure);
     void postHostKeyConfirmation(const QString &algorithm, const QString &fingerprint);
@@ -120,6 +128,7 @@ private:
     SftpClientFactory m_clientFactory;
     std::jthread m_worker;
     std::atomic_bool m_running = false;
+    std::atomic_bool m_workerFinished = true;
 
     mutable std::mutex m_commandMutex;
     std::condition_variable_any m_commandAvailable;

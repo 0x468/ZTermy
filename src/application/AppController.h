@@ -17,6 +17,7 @@
 #include <QMetaType>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 #include <QVariantList>
 #include <QVariantMap>
 
@@ -55,6 +56,8 @@ class AppController final : public QObject
     Q_PROPERTY(QString defaultPrivateKeyPath READ defaultPrivateKeyPath CONSTANT)
     Q_PROPERTY(QVariantList hostProfiles READ hostProfiles NOTIFY hostProfilesChanged)
     Q_PROPERTY(QVariantList recentHostProfiles READ recentHostProfiles NOTIFY hostProfilesChanged)
+    Q_PROPERTY(QStringList hostProfileGroups READ hostProfileGroups NOTIFY hostProfilesChanged)
+    Q_PROPERTY(QStringList collapsedHostSections READ collapsedHostSections NOTIFY hostWorkspaceChanged)
     Q_PROPERTY(QVariantList terminalTabs READ terminalTabs NOTIFY terminalTabsChanged)
     Q_PROPERTY(QVariantList quickCommands READ quickCommands NOTIFY quickCommandsChanged)
     Q_PROPERTY(QString quickCommandOperationError READ quickCommandOperationError NOTIFY quickCommandsChanged)
@@ -65,6 +68,7 @@ class AppController final : public QObject
     Q_PROPERTY(QString terminalHistoryError READ terminalHistoryError NOTIFY terminalHistoryChanged)
     Q_PROPERTY(QObject *activeSftpDirectoryModel READ activeSftpDirectoryModel NOTIFY sftpChanged)
     Q_PROPERTY(QString activeSftpPath READ activeSftpPath NOTIFY sftpChanged)
+    Q_PROPERTY(QString activeSftpHomePath READ activeSftpHomePath NOTIFY sftpChanged)
     Q_PROPERTY(QVariantList recentSftpPaths READ recentSftpPaths NOTIFY sftpChanged)
     Q_PROPERTY(QString activeSftpState READ activeSftpState NOTIFY sftpChanged)
     Q_PROPERTY(QString activeSftpError READ activeSftpError NOTIFY sftpChanged)
@@ -129,6 +133,8 @@ public:
     [[nodiscard]] QString defaultPrivateKeyPath() const;
     [[nodiscard]] QVariantList hostProfiles() const;
     [[nodiscard]] QVariantList recentHostProfiles() const;
+    [[nodiscard]] QStringList hostProfileGroups() const;
+    [[nodiscard]] QStringList collapsedHostSections() const;
     [[nodiscard]] QVariantList terminalTabs() const;
     [[nodiscard]] QVariantList quickCommands() const;
     [[nodiscard]] QString quickCommandOperationError() const;
@@ -139,6 +145,7 @@ public:
     [[nodiscard]] QString terminalHistoryError() const;
     [[nodiscard]] QObject *activeSftpDirectoryModel() const noexcept;
     [[nodiscard]] QString activeSftpPath() const;
+    [[nodiscard]] QString activeSftpHomePath() const;
     [[nodiscard]] QVariantList recentSftpPaths() const;
     [[nodiscard]] QString activeSftpState() const;
     [[nodiscard]] QString activeSftpError() const;
@@ -197,6 +204,7 @@ public:
     Q_INVOKABLE void refreshTerminalHistory();
     Q_INVOKABLE void refreshSftpDirectory();
     Q_INVOKABLE bool navigateSftpDirectory(const QString &remotePath);
+    Q_INVOKABLE bool navigateSftpHome();
     Q_INVOKABLE bool navigateSftpParent();
     Q_INVOKABLE bool createSftpDirectory(const QString &name);
     Q_INVOKABLE bool renameSftpEntry(const QString &remotePath, const QString &newName);
@@ -205,6 +213,8 @@ public:
     Q_INVOKABLE bool enqueueSftpUpload(const QString &localFileUrl);
     Q_INVOKABLE void cancelTransfer(const QString &taskId);
     Q_INVOKABLE void retryTransfer(const QString &taskId);
+    Q_INVOKABLE void dismissTransfer(const QString &taskId);
+    Q_INVOKABLE void clearFinishedTransfers();
     Q_INVOKABLE void resolveTransferConflict(const QString &taskId, const QString &action,
                                              const QString &renamedDestinationPath = {});
     Q_INVOKABLE bool triggerAction(const QString &actionId);
@@ -230,6 +240,8 @@ public:
                                                const QString &group, const QString &secret, bool rememberCredential);
     Q_INVOKABLE bool duplicateHostProfile(const QString &id);
     Q_INVOKABLE bool deleteHostProfile(const QString &id);
+    Q_INVOKABLE bool clearRecentHostProfiles();
+    Q_INVOKABLE bool setHostSectionCollapsed(const QString &sectionId, bool collapsed);
     Q_INVOKABLE bool forgetHostCredential(const QString &id);
     Q_INVOKABLE bool saveHostCredential(const QString &id, const QString &secret);
     [[nodiscard]] Q_INVOKABLE QString readHostCredential(const QString &id);
@@ -259,6 +271,7 @@ signals:
     void sshActiveChanged();
     void hostKeyPromptChanged();
     void hostProfilesChanged();
+    void hostWorkspaceChanged();
     void terminalTabsChanged();
     void quickCommandsChanged();
     void terminalHistoryChanged();
@@ -311,8 +324,10 @@ private:
         QString historyError;
         QString sftpPath = QStringLiteral("/");
         QString sftpRequestedPath = QStringLiteral("/");
+        QString sftpHomePath;
         QString sftpState = QStringLiteral("idle");
         QString sftpError;
+        bool sftpHasListing = false;
         std::vector<workbench::ShellHistoryEntry> history;
         std::vector<workbench::ShellHistoryEntry> capturedHistory;
         QByteArray inputHistoryBuffer;
@@ -370,6 +385,8 @@ private:
     void initializeTransferManager();
     void applyTransferSnapshot(const sftp::TransferTasksPtr &tasks);
     void stopSftpSession(TerminalTab &tab);
+    void deferSftpSessionStop(std::unique_ptr<sftp::SftpSession> session);
+    void reapStoppedSftpSession(sftp::SftpSession *session);
     void requestSftpDirectory(TerminalTab &tab, const QString &remotePath);
     void applyWorkspaceState(TerminalTab &tab) const;
     void persistWorkspaceState(const TerminalTab &tab, bool recordRemotePath = false);
@@ -401,6 +418,7 @@ private:
     QString m_knownHostsPath;
     std::vector<ssh::SshProfile> m_profiles;
     std::vector<std::unique_ptr<TerminalTab>> m_tabs;
+    std::vector<std::unique_ptr<sftp::SftpSession>> m_stoppingSftpSessions;
     QString m_activeTabId;
     QString m_hostKeyTabId;
     QString m_hostKeyAlgorithm;
