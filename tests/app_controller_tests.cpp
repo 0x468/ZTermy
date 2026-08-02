@@ -19,6 +19,8 @@ struct FakeLocalSessionState final
 {
     int starts = 0;
     int stops = 0;
+    QList<QByteArray> inputs;
+    QList<QByteArray> pastes;
 };
 
 class FakeLocalTerminalSession final : public ztermy::terminal::LocalTerminalSessionBackend
@@ -46,8 +48,8 @@ public:
         emit runningChanged(false);
     }
 
-    void queueInput(const QByteArray &) override {}
-    void queuePaste(const QByteArray &) override {}
+    void queueInput(const QByteArray &bytes) override { m_state->inputs.append(bytes); }
+    void queuePaste(const QByteArray &bytes) override { m_state->pastes.append(bytes); }
     void requestResize(quint16, quint16, quint32, quint32) override {}
     void requestScroll(int) override {}
     void requestSelection(quint16, quint16, quint16, quint16, bool) override {}
@@ -97,6 +99,7 @@ private slots:
     void rejectsIncompleteConnections();
     void persistsApplicationSettings();
     void managesMultipleLocalTerminalTabs();
+    void persistsQuickCommandsAndPerTabWorkbenchState();
     void loadsRecentProfilesAndParsesQuickTargets();
 };
 
@@ -574,6 +577,38 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
     QVERIFY(!first.isEmpty());
     QCOMPARE(controller.terminalTabs().size(), 1);
     QCOMPARE(controller.activeTerminalTabId(), first);
+    QVERIFY(!controller.terminalTabs().constFirst().toMap().value(QStringLiteral("workbenchOpen")).toBool());
+    QCOMPARE(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("workbenchPage")).toString(),
+             QStringLiteral("history"));
+    QCOMPARE(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("workbenchSide")).toString(),
+             QStringLiteral("left"));
+    QCOMPARE(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("workbenchWidth")).toDouble(), 520.0);
+    QVERIFY(!controller.terminalTabs().constFirst().toMap().value(QStringLiteral("composerOpen")).toBool());
+    QCOMPARE(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("composerHeight")).toDouble(), 132.0);
+    QVERIFY(controller.toggleTerminalWorkbench(QStringLiteral("history")));
+    controller.setTerminalWorkbenchWidth(700.0);
+    controller.moveTerminalWorkbench();
+    controller.toggleTerminalComposer();
+    controller.setTerminalComposerHeight(240.0);
+    QVERIFY(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("workbenchOpen")).toBool());
+    QCOMPARE(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("workbenchSide")).toString(),
+             QStringLiteral("right"));
+    QCOMPARE(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("workbenchWidth")).toDouble(), 700.0);
+    QVERIFY(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("composerOpen")).toBool());
+    QCOMPARE(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("composerHeight")).toDouble(), 240.0);
+    QVERIFY(controller.insertTerminalCommand(QStringLiteral("Get-Date")));
+    QCOMPARE(sessionState->pastes.constLast(), QByteArray("Get-Date"));
+    QVERIFY(controller.runTerminalCommand(QStringLiteral("Get-Date")));
+    QCOMPARE(sessionState->inputs.constLast(), QByteArray("Get-Date\r"));
+    const QVariantList firstTabHistory = controller.terminalHistory();
+    QVERIFY(!firstTabHistory.isEmpty());
+    QCOMPARE(firstTabHistory.constFirst().toMap().value(QStringLiteral("command")).toString(),
+             QStringLiteral("Get-Date"));
+    QVERIFY(controller.runTerminalCommand(QStringLiteral("Write-Output one\r\nWrite-Output two")));
+    QCOMPARE(sessionState->inputs.constLast(), QByteArray("Write-Output one\rWrite-Output two\r"));
+    QVERIFY(!controller.runTerminalCommand(QStringLiteral("  \n  ")));
+    QVERIFY(!controller.runTerminalCommand(QString::fromLatin1("echo\x1b[2J")));
+    QVERIFY(!controller.insertTerminalCommand(QString(65537, QLatin1Char('x'))));
     QCOMPARE(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("kind")).toString(),
              QStringLiteral("local"));
     QVERIFY(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("running")).toBool());
@@ -591,9 +626,28 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
     QVERIFY(second != first);
     QCOMPARE(controller.terminalTabs().size(), 2);
     QCOMPARE(controller.activeTerminalTabId(), second);
+    QVERIFY(!controller.terminalTabs().at(1).toMap().value(QStringLiteral("workbenchOpen")).toBool());
+    QVERIFY(controller.toggleTerminalWorkbench(QStringLiteral("scripts")));
+    QCOMPARE(controller.terminalTabs().at(1).toMap().value(QStringLiteral("workbenchPage")).toString(),
+             QStringLiteral("scripts"));
+    QVERIFY(controller.runTerminalCommand(QStringLiteral("Write-Output second-tab")));
+    const QVariantList globalHistory = controller.terminalGlobalHistory();
+    QVERIFY(globalHistory.size() >= 3);
+    const QVariantMap newestGlobalEntry = globalHistory.constFirst().toMap();
+    QCOMPARE(newestGlobalEntry.value(QStringLiteral("command")).toString(), QStringLiteral("Write-Output second-tab"));
+    QCOMPARE(newestGlobalEntry.value(QStringLiteral("sourceId")).toString(), second);
+    QVERIFY(!newestGlobalEntry.value(QStringLiteral("sourceLabel")).toString().isEmpty());
 
     QVERIFY(controller.activateTerminalTab(first));
     QCOMPARE(controller.activeTerminalTabId(), first);
+    QVERIFY(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("workbenchOpen")).toBool());
+    QCOMPARE(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("workbenchSide")).toString(),
+             QStringLiteral("right"));
+    QCOMPARE(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("workbenchWidth")).toDouble(), 700.0);
+    QVERIFY(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("composerOpen")).toBool());
+    QCOMPARE(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("composerHeight")).toDouble(), 240.0);
+    controller.closeTerminalWorkbench();
+    QVERIFY(!controller.terminalTabs().constFirst().toMap().value(QStringLiteral("workbenchOpen")).toBool());
     QVERIFY(!controller.activateTerminalTab(QStringLiteral("missing")));
 
     QVERIFY(controller.closeTerminalTab(first));
@@ -607,6 +661,46 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
     QCOMPARE(sessionState->stops, 2);
     QVERIFY(tabsChanged.count() >= 4);
     QVERIFY(activeChanged.count() >= 4);
+}
+
+void AppControllerTests::persistsQuickCommandsAndPerTabWorkbenchState()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString profilesPath = directory.filePath(QStringLiteral("profiles.json"));
+
+    QString firstId;
+    {
+        ztermy::AppController controller(profilesPath);
+        QSignalSpy changes(&controller, &ztermy::AppController::quickCommandsChanged);
+        QVERIFY(controller.quickCommands().isEmpty());
+        QVERIFY(controller.saveQuickCommand({}, QStringLiteral("List services"), QStringLiteral("systemctl --failed"),
+                                            QStringLiteral("Failed services"), QStringLiteral("posix")));
+        QVERIFY(controller.saveQuickCommand({}, QStringLiteral("PowerShell version"),
+                                            QStringLiteral("$PSVersionTable.PSVersion"), {},
+                                            QStringLiteral("powershell")));
+        QCOMPARE(controller.quickCommands().size(), 2);
+        firstId = controller.quickCommands().constFirst().toMap().value(QStringLiteral("id")).toString();
+        QVERIFY(!firstId.isEmpty());
+        QVERIFY(controller.saveQuickCommand(firstId, QStringLiteral("List failed services"),
+                                            QStringLiteral("systemctl --failed\r\n"), QStringLiteral("Updated"),
+                                            QStringLiteral("posix")));
+        QCOMPARE(controller.quickCommands().constFirst().toMap().value(QStringLiteral("command")).toString(),
+                 QStringLiteral("systemctl --failed\n"));
+        QVERIFY(controller.moveQuickCommand(firstId, 1));
+        QCOMPARE(controller.quickCommands().constLast().toMap().value(QStringLiteral("id")).toString(), firstId);
+        QVERIFY(changes.count() >= 4);
+
+        QVERIFY(!controller.saveQuickCommand({}, QStringLiteral("Unsafe"), QStringLiteral("echo\x1b[2J"), {},
+                                             QStringLiteral("any")));
+        QVERIFY(!controller.quickCommandOperationError().isEmpty());
+    }
+
+    ztermy::AppController reloaded(profilesPath);
+    QCOMPARE(reloaded.quickCommands().size(), 2);
+    QCOMPARE(reloaded.quickCommands().constLast().toMap().value(QStringLiteral("id")).toString(), firstId);
+    QVERIFY(reloaded.deleteQuickCommand(firstId));
+    QCOMPARE(reloaded.quickCommands().size(), 1);
 }
 
 QTEST_GUILESS_MAIN(AppControllerTests)

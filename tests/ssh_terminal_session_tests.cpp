@@ -226,6 +226,7 @@ private slots:
     void doesNotExposeCredentialsInStatusOrLogs();
     void ignoresTerminalInteractionWhileDisconnected();
     void connectsAfterExplicitHostKeyConfirmation();
+    void readsRemoteShellHistoryOnRealHost();
     void reportsAuthenticationRejectionOnRealHost();
     void reportsRemoteCloseOnRealHost();
     void authenticatesWithInteractivePasswordOnRealHost();
@@ -582,6 +583,55 @@ void SshTerminalSessionTests::connectsAfterExplicitHostKeyConfirmation()
         15s);
     QCOMPARE(confirmationSpy.count(), 0);
     QTRY_VERIFY_WITH_TIMEOUT(snapshotSpy.count() > 0, 5s);
+    session.stop();
+}
+
+void SshTerminalSessionTests::readsRemoteShellHistoryOnRealHost()
+{
+    const QByteArray host = qgetenv("ZTERMY_TEST_SSH_HOST");
+    const QByteArray username = qgetenv("ZTERMY_TEST_SSH_USERNAME");
+    const QByteArray privateKey = qgetenv("ZTERMY_TEST_SSH_PRIVATE_KEY");
+    const QByteArray expectedFingerprint = qgetenv("ZTERMY_TEST_SSH_EXPECTED_FINGERPRINT");
+    if (host.isEmpty() || username.isEmpty() || privateKey.isEmpty() || expectedFingerprint.isEmpty())
+    {
+        QSKIP("Set the real-host private-key gate variables to run the remote history test");
+    }
+
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+
+    ztermy::ssh::SshTerminalSession session;
+    QSignalSpy confirmationSpy(&session, &ztermy::ssh::SshTerminalSession::hostKeyConfirmationRequired);
+    QSignalSpy runningSpy(&session, &ztermy::ssh::SshTerminalSession::runningChanged);
+    QSignalSpy historySpy(&session, &ztermy::ssh::SshTerminalSession::shellHistoryReady);
+    ztermy::ssh::SshConnectionRequest request{
+        .host = QString::fromUtf8(host),
+        .port = 22,
+        .username = QString::fromUtf8(username),
+        .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
+        .privateKeyPath = QString::fromUtf8(privateKey),
+        .knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json")),
+    };
+
+    QVERIFY(!session.start(std::move(request), {.columns = 80, .rows = 24}));
+    QTRY_COMPARE_WITH_TIMEOUT(confirmationSpy.count(), 1, 10s);
+    QCOMPARE(confirmationSpy.constFirst().at(1).toString(), QString::fromLatin1(expectedFingerprint));
+    session.confirmHostKey(true);
+    QTRY_VERIFY_WITH_TIMEOUT(std::ranges::any_of(runningSpy,
+                                                 [](const QList<QVariant> &arguments) {
+                                                     return !arguments.isEmpty() && arguments.constFirst().toBool();
+                                                 }),
+                             20s);
+
+    constexpr quint64 requestId = 42;
+    session.requestShellHistory(requestId);
+    QTRY_COMPARE_WITH_TIMEOUT(historySpy.count(), 1, 15s);
+    const QList<QVariant> result = historySpy.takeFirst();
+    QCOMPARE(result.at(0).toULongLong(), requestId);
+    QVERIFY2(result.at(3).toString().isEmpty(), qPrintable(result.at(3).toString()));
+    const QString shell = result.at(1).toString();
+    QVERIFY(shell == QStringLiteral("bash") || shell == QStringLiteral("zsh") || shell == QStringLiteral("fish"));
+    QVERIFY(result.at(2).toByteArray().size() <= qsizetype{2} * 1024 * 1024);
     session.stop();
 }
 

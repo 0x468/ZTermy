@@ -10,6 +10,7 @@
 #include <memory>
 #include <span>
 #include <stop_token>
+#include <string>
 #include <string_view>
 
 namespace ztermy::ssh
@@ -35,6 +36,20 @@ struct SshTransportError final
     int nativeCode = 0;
 
     [[nodiscard]] friend bool operator==(const SshTransportError &, const SshTransportError &) = default;
+};
+
+enum class AuxiliaryCommandProgress : std::uint8_t
+{
+    Pending,
+    Output,
+    Completed,
+};
+
+struct AuxiliaryCommandPollResult final
+{
+    AuxiliaryCommandProgress progress = AuxiliaryCommandProgress::Pending;
+    std::size_t bytesRead = 0;
+    int exitStatus = 0;
 };
 
 class Libssh2Session final
@@ -87,12 +102,34 @@ public:
                                                                        const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] bool terminalOpen() const noexcept;
 
+    // Auxiliary exec channels are advanced one non-blocking step at a time so
+    // callers can interleave background queries with the interactive PTY.
+    [[nodiscard]] std::expected<void, SshTransportError> startAuxiliaryCommand(std::string_view command) noexcept;
+    [[nodiscard]] std::expected<AuxiliaryCommandPollResult, SshTransportError>
+    pollAuxiliaryCommand(std::span<char> output) noexcept;
+    void cancelAuxiliaryCommand() noexcept;
+    [[nodiscard]] bool auxiliaryCommandActive() const noexcept;
+
 private:
+    enum class AuxiliaryCommandPhase : std::uint8_t
+    {
+        Idle,
+        Opening,
+        Requesting,
+        Reading,
+        Closing,
+        Freeing,
+    };
+
     Libssh2Session(std::unique_ptr<Libssh2Runtime> runtime, void *session) noexcept;
 
     std::unique_ptr<Libssh2Runtime> m_runtime;
     void *m_session = nullptr;
     void *m_terminalChannel = nullptr;
+    void *m_auxiliaryChannel = nullptr;
+    std::string m_auxiliaryCommand;
+    AuxiliaryCommandPhase m_auxiliaryPhase = AuxiliaryCommandPhase::Idle;
+    int m_auxiliaryExitStatus = 0;
     bool m_handshakeComplete = false;
     bool m_hostKeyVerified = false;
     bool m_authenticated = false;

@@ -5,6 +5,7 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <limits>
 #include <new>
@@ -240,6 +241,10 @@ Libssh2Session::Libssh2Session(std::unique_ptr<Libssh2Runtime> runtime, void *se
 
 Libssh2Session::~Libssh2Session()
 {
+    if (m_auxiliaryChannel != nullptr)
+    {
+        libssh2_channel_free(static_cast<LIBSSH2_CHANNEL *>(m_auxiliaryChannel));
+    }
     if (m_terminalChannel != nullptr)
     {
         libssh2_channel_free(static_cast<LIBSSH2_CHANNEL *>(m_terminalChannel));
@@ -745,6 +750,176 @@ std::expected<void, SshTransportError> Libssh2Session::closeTerminal(WindowsTcpS
 bool Libssh2Session::terminalOpen() const noexcept
 {
     return m_terminalChannel != nullptr;
+}
+
+std::expected<void, SshTransportError> Libssh2Session::startAuxiliaryCommand(const std::string_view command) noexcept
+{
+    constexpr std::size_t maximumCommandBytes = std::size_t{16} * 1024;
+    if (command.empty() || command.size() > maximumCommandBytes || command.find('\0') != std::string_view::npos)
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
+    }
+    if (m_session == nullptr || !m_authenticated || m_auxiliaryPhase != AuxiliaryCommandPhase::Idle
+        || m_auxiliaryChannel != nullptr)
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
+    }
+
+    try
+    {
+        m_auxiliaryCommand.assign(command);
+    }
+    catch (const std::bad_alloc &)
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InitializationFailed});
+    }
+    m_auxiliaryExitStatus = 0;
+    m_auxiliaryPhase = AuxiliaryCommandPhase::Opening;
+    return {};
+}
+
+std::expected<AuxiliaryCommandPollResult, SshTransportError>
+Libssh2Session::pollAuxiliaryCommand(const std::span<char> output) noexcept
+{
+    if (output.empty())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
+    }
+    if (m_session == nullptr || m_auxiliaryPhase == AuxiliaryCommandPhase::Idle)
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
+    }
+
+    auto *session = static_cast<LIBSSH2_SESSION *>(m_session);
+    if (m_auxiliaryPhase == AuxiliaryCommandPhase::Opening)
+    {
+        LIBSSH2_CHANNEL *channel = libssh2_channel_open_session(session);
+        if (channel == nullptr)
+        {
+            const int error = libssh2_session_last_errno(session);
+            if (error == LIBSSH2_ERROR_EAGAIN)
+            {
+                return AuxiliaryCommandPollResult{};
+            }
+            m_auxiliaryCommand.clear();
+            m_auxiliaryPhase = AuxiliaryCommandPhase::Idle;
+            return std::unexpected(mapChannelError(error));
+        }
+        m_auxiliaryChannel = channel;
+        m_auxiliaryPhase = AuxiliaryCommandPhase::Requesting;
+    }
+
+    auto *channel = static_cast<LIBSSH2_CHANNEL *>(m_auxiliaryChannel);
+    if (channel == nullptr)
+    {
+        m_auxiliaryCommand.clear();
+        m_auxiliaryPhase = AuxiliaryCommandPhase::Idle;
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
+    }
+
+    if (m_auxiliaryPhase == AuxiliaryCommandPhase::Requesting)
+    {
+        const int result = libssh2_channel_process_startup(channel, "exec", 4U, m_auxiliaryCommand.data(),
+                                                           static_cast<unsigned int>(m_auxiliaryCommand.size()));
+        if (result == LIBSSH2_ERROR_EAGAIN)
+        {
+            return AuxiliaryCommandPollResult{};
+        }
+        if (result != 0)
+        {
+            m_auxiliaryPhase = AuxiliaryCommandPhase::Closing;
+            return std::unexpected(mapChannelError(result));
+        }
+        m_auxiliaryCommand.clear();
+        m_auxiliaryPhase = AuxiliaryCommandPhase::Reading;
+    }
+
+    if (m_auxiliaryPhase == AuxiliaryCommandPhase::Reading)
+    {
+        const auto read = libssh2_channel_read(channel, output.data(), output.size());
+        if (read > 0)
+        {
+            return AuxiliaryCommandPollResult{
+                .progress = AuxiliaryCommandProgress::Output,
+                .bytesRead = static_cast<std::size_t>(read),
+            };
+        }
+        if (read < 0 && read != LIBSSH2_ERROR_EAGAIN)
+        {
+            m_auxiliaryPhase = AuxiliaryCommandPhase::Closing;
+            return std::unexpected(mapChannelError(static_cast<int>(read)));
+        }
+
+        // Auxiliary diagnostics are deliberately discarded: commands are
+        // fixed by ztermy and raw remote output must not enter application logs.
+        std::array<char, 4096> errorBuffer{};
+        const auto errorRead = libssh2_channel_read_stderr(channel, errorBuffer.data(), errorBuffer.size());
+        if (errorRead < 0 && errorRead != LIBSSH2_ERROR_EAGAIN)
+        {
+            m_auxiliaryPhase = AuxiliaryCommandPhase::Closing;
+            return std::unexpected(mapChannelError(static_cast<int>(errorRead)));
+        }
+        if (libssh2_channel_eof(channel) == 0)
+        {
+            return AuxiliaryCommandPollResult{};
+        }
+        m_auxiliaryPhase = AuxiliaryCommandPhase::Closing;
+    }
+
+    if (m_auxiliaryPhase == AuxiliaryCommandPhase::Closing)
+    {
+        const int result = libssh2_channel_close(channel);
+        if (result == LIBSSH2_ERROR_EAGAIN)
+        {
+            return AuxiliaryCommandPollResult{};
+        }
+        m_auxiliaryExitStatus = libssh2_channel_get_exit_status(channel);
+        m_auxiliaryPhase = AuxiliaryCommandPhase::Freeing;
+        if (result != 0)
+        {
+            return std::unexpected(mapChannelError(result));
+        }
+    }
+
+    const int freeResult = libssh2_channel_free(channel);
+    if (freeResult == LIBSSH2_ERROR_EAGAIN)
+    {
+        return AuxiliaryCommandPollResult{};
+    }
+    if (freeResult != 0)
+    {
+        return std::unexpected(mapChannelError(freeResult));
+    }
+
+    const int exitStatus = m_auxiliaryExitStatus;
+    m_auxiliaryChannel = nullptr;
+    m_auxiliaryCommand.clear();
+    m_auxiliaryPhase = AuxiliaryCommandPhase::Idle;
+    m_auxiliaryExitStatus = 0;
+    return AuxiliaryCommandPollResult{
+        .progress = AuxiliaryCommandProgress::Completed,
+        .exitStatus = exitStatus,
+    };
+}
+
+void Libssh2Session::cancelAuxiliaryCommand() noexcept
+{
+    if (m_auxiliaryPhase == AuxiliaryCommandPhase::Opening && m_auxiliaryChannel == nullptr)
+    {
+        m_auxiliaryCommand.clear();
+        m_auxiliaryPhase = AuxiliaryCommandPhase::Idle;
+        return;
+    }
+    if (m_auxiliaryPhase == AuxiliaryCommandPhase::Requesting || m_auxiliaryPhase == AuxiliaryCommandPhase::Reading)
+    {
+        m_auxiliaryCommand.clear();
+        m_auxiliaryPhase = AuxiliaryCommandPhase::Closing;
+    }
+}
+
+bool Libssh2Session::auxiliaryCommandActive() const noexcept
+{
+    return m_auxiliaryPhase != AuxiliaryCommandPhase::Idle;
 }
 
 } // namespace ztermy::ssh

@@ -1458,6 +1458,148 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
         return false;
     }
 
+    const auto activeTerminalState = [&controller]() {
+        const QVariantList tabs = controller.terminalTabs();
+        return tabs.isEmpty() ? QVariantMap{} : tabs.constFirst().toMap();
+    };
+    QQuickItem *terminalHistoryAction = quickItem(rootObject, "terminalHistoryAction");
+    if (!focusItem(window, terminalHistoryAction, QStringLiteral("terminalHistoryAction")))
+    {
+        return false;
+    }
+    sendKey(window, Qt::Key_Return);
+    QQuickItem *terminalWorkbench = quickItem(rootObject, "terminalWorkbench");
+    const bool historyWorkbenchOpened = processWindowEventsUntil(
+        [&] {
+            const QVariantMap state = activeTerminalState();
+            return terminalWorkbench != nullptr && terminalWorkbench->isVisible()
+                   && state.value(QStringLiteral("workbenchOpen")).toBool()
+                   && state.value(QStringLiteral("workbenchPage")).toString() == QStringLiteral("history")
+                   && state.value(QStringLiteral("workbenchSide")).toString() == QStringLiteral("left");
+        },
+        std::chrono::seconds{1});
+    QQuickItem *moveTerminalWorkbenchButton = quickItem(rootObject, "moveTerminalWorkbenchButton");
+    if (!historyWorkbenchOpened
+        || !focusItem(window, moveTerminalWorkbenchButton, QStringLiteral("moveTerminalWorkbenchButton")))
+    {
+        const QVariantMap state = activeTerminalState();
+        qCWarning(applicationLog) << "Terminal history workbench did not open through its keyboard action"
+                                  << "historyActionFound=" << (terminalHistoryAction != nullptr)
+                                  << "workbenchFound=" << (terminalWorkbench != nullptr) << "workbenchVisible="
+                                  << (terminalWorkbench != nullptr && terminalWorkbench->isVisible())
+                                  << "workbenchOpen=" << state.value(QStringLiteral("workbenchOpen")).toBool()
+                                  << "workbenchPage=" << state.value(QStringLiteral("workbenchPage")).toString()
+                                  << "workbenchSide=" << state.value(QStringLiteral("workbenchSide")).toString()
+                                  << "moveButtonFound=" << (moveTerminalWorkbenchButton != nullptr)
+                                  << "focus=" << namedFocusItem(window);
+        return false;
+    }
+    sendKey(window, Qt::Key_Return);
+    const bool workbenchMovedRight = processWindowEventsUntil(
+        [&] {
+            return activeTerminalState().value(QStringLiteral("workbenchSide")).toString() == QStringLiteral("right");
+        },
+        std::chrono::seconds{1});
+    QQuickItem *terminalWorkbenchResizeHandle = quickItem(rootObject, "terminalWorkbenchResizeHandle");
+    QQuickItem *closeTerminalWorkbenchButton = quickItem(rootObject, "closeTerminalWorkbenchButton");
+    if (!workbenchMovedRight || terminalWorkbenchResizeHandle == nullptr || terminalWorkbenchResizeHandle->width() > 8.0
+        || qAbs(terminalWorkbenchResizeHandle->x()) > 0.01
+        || !focusItem(window, closeTerminalWorkbenchButton, QStringLiteral("closeTerminalWorkbenchButton")))
+    {
+        qCWarning(applicationLog)
+            << "Terminal workbench did not move with a bounded right-side resize handle"
+            << "handleFound=" << (terminalWorkbenchResizeHandle != nullptr) << "handleWidth="
+            << (terminalWorkbenchResizeHandle == nullptr ? -1.0 : terminalWorkbenchResizeHandle->width())
+            << "handleX=" << (terminalWorkbenchResizeHandle == nullptr ? -1.0 : terminalWorkbenchResizeHandle->x());
+        return false;
+    }
+    sendKey(window, Qt::Key_Return);
+    const bool workbenchClosed = processWindowEventsUntil(
+        [&] {
+            return !activeTerminalState().value(QStringLiteral("workbenchOpen")).toBool()
+                   && namedFocusItem(window) == QStringLiteral("terminalViewport");
+        },
+        std::chrono::seconds{1});
+
+    QQuickItem *terminalScriptsAction = quickItem(rootObject, "terminalScriptsAction");
+    if (!workbenchClosed || !focusItem(window, terminalScriptsAction, QStringLiteral("terminalScriptsAction")))
+    {
+        qCWarning(applicationLog) << "Terminal workbench close did not restore terminal focus";
+        return false;
+    }
+    sendKey(window, Qt::Key_Return);
+    const bool scriptsWorkbenchOpened = processWindowEventsUntil(
+        [&] {
+            const QVariantMap state = activeTerminalState();
+            return state.value(QStringLiteral("workbenchOpen")).toBool()
+                   && state.value(QStringLiteral("workbenchPage")).toString() == QStringLiteral("scripts");
+        },
+        std::chrono::seconds{1});
+    if (!scriptsWorkbenchOpened
+        || !focusItem(window, closeTerminalWorkbenchButton, QStringLiteral("closeTerminalWorkbenchButton")))
+    {
+        qCWarning(applicationLog) << "Scripts workbench did not open through its keyboard action";
+        return false;
+    }
+    sendKey(window, Qt::Key_Return);
+    const bool scriptsWorkbenchClosed = processWindowEventsUntil(
+        [&] {
+            return !activeTerminalState().value(QStringLiteral("workbenchOpen")).toBool()
+                   && namedFocusItem(window) == QStringLiteral("terminalViewport");
+        },
+        std::chrono::seconds{1});
+
+    QQuickItem *terminalComposerAction = quickItem(rootObject, "terminalComposerAction");
+    if (!scriptsWorkbenchClosed || !focusItem(window, terminalComposerAction, QStringLiteral("terminalComposerAction")))
+    {
+        qCWarning(applicationLog) << "Scripts workbench close did not restore terminal focus";
+        return false;
+    }
+    sendKey(window, Qt::Key_Return);
+    const bool composerOpened = processWindowEventsUntil(
+        [&] {
+            return activeTerminalState().value(QStringLiteral("composerOpen")).toBool()
+                   && namedFocusItem(window) == QStringLiteral("terminalComposerInput");
+        },
+        std::chrono::seconds{1});
+    QQuickItem *terminalComposerInput = quickItem(rootObject, "terminalComposerInput");
+    const bool composerLineBreak =
+        composerOpened && terminalComposerInput != nullptr
+        && terminalComposerInput->setProperty("text", QStringLiteral("Write-Output first line"));
+    if (composerLineBreak)
+    {
+        sendKey(window, Qt::Key_Return, Qt::ShiftModifier);
+    }
+    const bool composerShiftEnter =
+        composerLineBreak && terminalComposerInput->property("text").toString().contains(QLatin1Char('\n'));
+    const bool composerCommandPrepared =
+        composerShiftEnter
+        && terminalComposerInput->setProperty("text", QStringLiteral("Write-Output ztermy-composer-smoke"));
+    if (composerCommandPrepared)
+    {
+        sendKey(window, Qt::Key_Return);
+    }
+    const QVariantList composerHistory = controller.terminalHistory();
+    const bool composerEnter = composerCommandPrepared && terminalComposerInput->property("text").toString().isEmpty()
+                               && !composerHistory.isEmpty()
+                               && composerHistory.constFirst().toMap().value(QStringLiteral("command")).toString()
+                                      == QStringLiteral("Write-Output ztermy-composer-smoke");
+    sendKey(window, Qt::Key_Escape);
+    const bool composerKeyboard = composerOpened && composerShiftEnter && composerEnter
+                                  && processWindowEventsUntil(
+                                      [&] {
+                                          return !activeTerminalState().value(QStringLiteral("composerOpen")).toBool()
+                                                 && namedFocusItem(window) == QStringLiteral("terminalViewport");
+                                      },
+                                      std::chrono::seconds{1});
+    if (!composerKeyboard)
+    {
+        qCWarning(applicationLog) << "Terminal Composer keyboard focus route failed"
+                                  << "opened=" << composerOpened << "shiftEnter=" << composerShiftEnter
+                                  << "enter=" << composerEnter << "focus=" << namedFocusItem(window);
+        return false;
+    }
+
     while (controller.terminalTabs().size() < 8)
     {
         if (controller.startLocalTerminal().isEmpty())

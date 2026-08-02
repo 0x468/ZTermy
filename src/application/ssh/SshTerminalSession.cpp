@@ -26,6 +26,11 @@ Q_LOGGING_CATEGORY(sshSessionLog, "ztermy.ssh.session")
 namespace
 {
 
+constexpr std::string_view remoteShellHistoryCommand =
+    R"(sh -c 'kind=unknown; path=; shell_name=${SHELL##*/}; case "$shell_name" in bash) kind=bash; path=${HISTFILE:-$HOME/.bash_history} ;; zsh) kind=zsh; path=${ZDOTDIR:-$HOME}/.zsh_history ;; fish) kind=fish; path=${XDG_DATA_HOME:-$HOME/.local/share}/fish/fish_history ;; esac; printf "ZTERMY-HISTORY/1 %s\n" "$kind"; if [ -n "$path" ]; then tail -c 2097152 "$path" 2>/dev/null || true; fi')";
+constexpr qsizetype maximumRemoteHistoryBytes = qsizetype{2} * 1024 * 1024 + 256;
+constexpr std::string_view remoteHistoryMarker = "ZTERMY-HISTORY/1 ";
+
 [[nodiscard]] bool validRequest(const ztermy::ssh::SshConnectionRequest &request) noexcept
 {
     if (request.host.trimmed().isEmpty() || request.port == 0 || request.username.isEmpty()
@@ -441,6 +446,17 @@ void SshTerminalSession::clearSearch()
     signalCommandWake();
 }
 
+void SshTerminalSession::requestShellHistory(const quint64 requestId)
+{
+    if (requestId == 0 || !m_running.load())
+    {
+        return;
+    }
+    std::scoped_lock lock(m_commandMutex);
+    m_commands.emplace_back(HistoryCommand{.requestId = requestId});
+    signalCommandWake();
+}
+
 void SshTerminalSession::run(SshConnectionRequest &request, const terminal::TerminalGeometry geometry,
                              const std::stop_token &stopToken)
 {
@@ -612,6 +628,28 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     publishSnapshot();
 
     std::array<char, std::size_t{64} * 1024U> readBuffer{};
+    std::array<char, std::size_t{64} * 1024U> auxiliaryBuffer{};
+    std::optional<quint64> activeHistoryRequest;
+    std::optional<quint64> pendingHistoryRequest;
+    QByteArray remoteHistoryOutput;
+    QString remoteHistoryError;
+    std::chrono::steady_clock::time_point remoteHistoryDeadline{};
+    bool suppressHistoryResult = false;
+
+    const auto beginHistoryRequest = [&](const quint64 requestId) {
+        auto started = (*session)->startAuxiliaryCommand(remoteShellHistoryCommand);
+        if (!started)
+        {
+            postShellHistory(requestId, {}, {}, tr("Remote shell history could not be started."));
+            return;
+        }
+        activeHistoryRequest = requestId;
+        remoteHistoryOutput.clear();
+        remoteHistoryError.clear();
+        remoteHistoryDeadline = std::chrono::steady_clock::now() + 8s;
+        suppressHistoryResult = false;
+    };
+
     while (!stopToken.stop_requested())
     {
         std::deque<Command> commands;
@@ -747,6 +785,17 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                 continue;
             }
 
+            if (const auto *history = std::get_if<HistoryCommand>(&command))
+            {
+                pendingHistoryRequest = history->requestId;
+                if (activeHistoryRequest)
+                {
+                    suppressHistoryResult = true;
+                    (*session)->cancelAuxiliaryCommand();
+                }
+                continue;
+            }
+
             const auto requested = std::get<terminal::TerminalGeometry>(command);
             auto resized = (*session)->resizeTerminal(*socket, requested.columns, requested.rows, 5s, stopToken);
             if (!resized)
@@ -761,6 +810,85 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                 return;
             }
             publishSnapshot();
+        }
+
+        if (!activeHistoryRequest && pendingHistoryRequest && !(*session)->auxiliaryCommandActive())
+        {
+            const quint64 requestId = *pendingHistoryRequest;
+            pendingHistoryRequest.reset();
+            beginHistoryRequest(requestId);
+        }
+
+        if (activeHistoryRequest)
+        {
+            if (remoteHistoryError.isEmpty() && std::chrono::steady_clock::now() >= remoteHistoryDeadline)
+            {
+                remoteHistoryError = tr("Remote shell history timed out.");
+                (*session)->cancelAuxiliaryCommand();
+            }
+
+            auto polled = (*session)->pollAuxiliaryCommand(auxiliaryBuffer);
+            if (!polled)
+            {
+                if (remoteHistoryError.isEmpty())
+                {
+                    remoteHistoryError = tr("Remote shell history could not be read.");
+                }
+                (*session)->cancelAuxiliaryCommand();
+            }
+            else if (polled->progress == AuxiliaryCommandProgress::Output)
+            {
+                const auto bytesRead = static_cast<qsizetype>(polled->bytesRead);
+                if (bytesRead > maximumRemoteHistoryBytes - remoteHistoryOutput.size())
+                {
+                    remoteHistoryError = tr("Remote shell history exceeded the safety limit.");
+                    (*session)->cancelAuxiliaryCommand();
+                }
+                else
+                {
+                    remoteHistoryOutput.append(auxiliaryBuffer.data(), bytesRead);
+                }
+            }
+            else if (polled->progress == AuxiliaryCommandProgress::Completed)
+            {
+                const quint64 requestId = *activeHistoryRequest;
+                QString shell;
+                QByteArray contents;
+                if (remoteHistoryError.isEmpty() && polled->exitStatus != 0)
+                {
+                    remoteHistoryError = tr("Remote shell history command failed.");
+                }
+                if (remoteHistoryError.isEmpty())
+                {
+                    const qsizetype newline = remoteHistoryOutput.indexOf('\n');
+                    const QByteArray marker(remoteHistoryMarker.data(),
+                                            static_cast<qsizetype>(remoteHistoryMarker.size()));
+                    if (newline < marker.size() || !remoteHistoryOutput.startsWith(marker))
+                    {
+                        remoteHistoryError = tr("Remote shell history returned an invalid response.");
+                    }
+                    else
+                    {
+                        shell = QString::fromLatin1(remoteHistoryOutput.sliced(marker.size(), newline - marker.size()));
+                        contents = remoteHistoryOutput.sliced(newline + 1);
+                        if (shell != QStringLiteral("bash") && shell != QStringLiteral("zsh")
+                            && shell != QStringLiteral("fish"))
+                        {
+                            shell.clear();
+                            contents.clear();
+                            remoteHistoryError = tr("This remote shell is not supported yet.");
+                        }
+                    }
+                }
+                if (!suppressHistoryResult)
+                {
+                    postShellHistory(requestId, shell, contents, remoteHistoryError);
+                }
+                activeHistoryRequest.reset();
+                remoteHistoryOutput.clear();
+                remoteHistoryError.clear();
+                suppressHistoryResult = false;
+            }
         }
 
         auto read = (*session)->readTerminal(*socket, readBuffer, 25ms, stopToken, m_commandWakeEvent.nativeHandle());
@@ -963,6 +1091,21 @@ void SshTerminalSession::postSearchResult(const QString &query, const quint32 cu
     }
 }
 
+void SshTerminalSession::postShellHistory(const quint64 requestId, const QString &shell, const QByteArray &contents,
+                                          const QString &error)
+{
+    if (QThread::currentThread() == thread())
+    {
+        deliverShellHistory(requestId, shell, contents, error);
+        return;
+    }
+    if (!QMetaObject::invokeMethod(this, "deliverShellHistory", Qt::QueuedConnection, Q_ARG(quint64, requestId),
+                                   Q_ARG(QString, shell), Q_ARG(QByteArray, contents), Q_ARG(QString, error)))
+    {
+        qCWarning(sshSessionLog) << "SSH shell-history result could not be queued to its owner thread";
+    }
+}
+
 void SshTerminalSession::finishWorker(const QString &status, const SshConnectionPhase phase)
 {
     logMetrics();
@@ -1013,6 +1156,12 @@ void SshTerminalSession::deliverSearchResult(const QString &query, const quint32
                                              const bool wrapped)
 {
     emit searchResultReady(query, current, total, wrapped);
+}
+
+void SshTerminalSession::deliverShellHistory(const quint64 requestId, const QString &shell, const QByteArray &contents,
+                                             const QString &error)
+{
+    emit shellHistoryReady(requestId, shell, contents, error);
 }
 
 void SshTerminalSession::signalCommandWake() noexcept

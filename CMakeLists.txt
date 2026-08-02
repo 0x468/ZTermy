@@ -223,6 +223,30 @@ add_library(ztermy_ssh_persistence STATIC
     src/infrastructure/ssh/SshProfileStore.h
 )
 
+add_library(ztermy_workbench_domain STATIC
+    src/domain/workbench/QuickCommand.cpp
+    src/domain/workbench/QuickCommand.h
+    src/domain/workbench/ShellHistory.cpp
+    src/domain/workbench/ShellHistory.h
+)
+
+add_library(ztermy_workbench_persistence STATIC
+    src/infrastructure/workbench/PowerShellHistoryReader.cpp
+    src/infrastructure/workbench/PowerShellHistoryReader.h
+    src/infrastructure/workbench/QuickCommandStore.cpp
+    src/infrastructure/workbench/QuickCommandStore.h
+)
+
+target_compile_features(ztermy_workbench_domain PUBLIC cxx_std_23)
+target_include_directories(ztermy_workbench_domain PUBLIC src)
+
+target_compile_features(ztermy_workbench_persistence PUBLIC cxx_std_23)
+target_include_directories(ztermy_workbench_persistence PUBLIC src)
+target_link_libraries(ztermy_workbench_persistence
+    PUBLIC ztermy_workbench_domain
+    PRIVATE Qt6::Core
+)
+
 target_compile_features(ztermy_ssh_domain PUBLIC cxx_std_23)
 target_include_directories(ztermy_ssh_domain PUBLIC src)
 
@@ -353,6 +377,18 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS AppIcon.qml
 )
 set_source_files_properties(
+    src/ui/qml/AppMenu.qml
+    PROPERTIES QT_RESOURCE_ALIAS AppMenu.qml
+)
+set_source_files_properties(
+    src/ui/qml/AppMenuItem.qml
+    PROPERTIES QT_RESOURCE_ALIAS AppMenuItem.qml
+)
+set_source_files_properties(
+    src/ui/qml/AppMenuSeparator.qml
+    PROPERTIES QT_RESOURCE_ALIAS AppMenuSeparator.qml
+)
+set_source_files_properties(
     src/ui/qml/AppSlider.qml
     PROPERTIES QT_RESOURCE_ALIAS AppSlider.qml
 )
@@ -363,6 +399,10 @@ set_source_files_properties(
 set_source_files_properties(
     src/ui/qml/AppSwitch.qml
     PROPERTIES QT_RESOURCE_ALIAS AppSwitch.qml
+)
+set_source_files_properties(
+    src/ui/qml/AppToolTip.qml
+    PROPERTIES QT_RESOURCE_ALIAS AppToolTip.qml
 )
 set_source_files_properties(
     src/ui/qml/CaptionButton.qml
@@ -418,6 +458,14 @@ set_source_files_properties(
     src/ui/qml/TerminalTabAction.qml
     PROPERTIES QT_RESOURCE_ALIAS TerminalTabAction.qml
 )
+set_source_files_properties(
+    src/ui/qml/TerminalWorkbench.qml
+    PROPERTIES QT_RESOURCE_ALIAS TerminalWorkbench.qml
+)
+set_source_files_properties(
+    src/ui/qml/TerminalComposer.qml
+    PROPERTIES QT_RESOURCE_ALIAS TerminalComposer.qml
+)
 
 qt_add_qml_module(ztermy
     URI Ztermy
@@ -429,10 +477,14 @@ qt_add_qml_module(ztermy
         src/ui/qml/AppCheckBox.qml
         src/ui/qml/AppComboBox.qml
         src/ui/qml/AppIcon.qml
+        src/ui/qml/AppMenu.qml
+        src/ui/qml/AppMenuItem.qml
+        src/ui/qml/AppMenuSeparator.qml
         src/ui/qml/AppSlider.qml
         src/ui/qml/AppSpinBox.qml
         src/ui/qml/AppSwitch.qml
         src/ui/qml/AppTextField.qml
+        src/ui/qml/AppToolTip.qml
         src/ui/qml/CaptionButton.qml
         src/ui/qml/ConfirmationDialog.qml
         src/ui/qml/FontPicker.qml
@@ -446,6 +498,8 @@ qt_add_qml_module(ztermy
         src/ui/qml/StatePanel.qml
         src/ui/qml/StatusMessage.qml
         src/ui/qml/TerminalTabAction.qml
+        src/ui/qml/TerminalComposer.qml
+        src/ui/qml/TerminalWorkbench.qml
         src/ui/qml/Theme.qml
 )
 
@@ -517,6 +571,7 @@ target_link_libraries(ztermy PRIVATE
     ztermy_terminal_session
     ztermy_terminal_transport
     ztermy_terminal_ui
+    ztermy_workbench_persistence
     Qt6::Core
     Qt6::Gui
     Qt6::Quick
@@ -809,6 +864,48 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME application-settings COMMAND ztermy_application_settings_tests)
+
+    qt_add_executable(ztermy_quick_command_store_tests
+        tests/quick_command_store_tests.cpp
+    )
+
+    target_compile_features(ztermy_quick_command_store_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_quick_command_store_tests PRIVATE
+        ztermy_workbench_persistence
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_quick_command_store_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME quick-command-store COMMAND ztermy_quick_command_store_tests)
+
+    qt_add_executable(ztermy_workbench_domain_tests
+        tests/workbench_domain_tests.cpp
+    )
+
+    target_compile_features(ztermy_workbench_domain_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_workbench_domain_tests PRIVATE
+        ztermy_workbench_domain
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_workbench_domain_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME workbench-domain COMMAND ztermy_workbench_domain_tests)
 
     qt_add_executable(ztermy_localization_manager_tests
         tests/localization_manager_tests.cpp
@@ -1228,6 +1325,7 @@ if(BUILD_TESTING)
         ztermy_ssh_session
         ztermy_terminal_session
         ztermy_terminal_ui
+        ztermy_workbench_persistence
         Qt6::Test
     )
 

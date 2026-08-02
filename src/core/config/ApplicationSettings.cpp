@@ -21,7 +21,8 @@ constexpr qint64 terminalAppearanceSchemaVersion = 3;
 constexpr qint64 accentSchemaVersion = 4;
 constexpr qint64 credentialStorageSchemaVersion = 5;
 constexpr qint64 localizationSchemaVersion = 6;
-constexpr qint64 currentSchemaVersion = 7;
+constexpr qint64 fontOptionsSchemaVersion = 7;
+constexpr qint64 currentSchemaVersion = 8;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::ApplicationSettings;
@@ -182,7 +183,8 @@ template <>
     const qint64 version = versionValue.toInteger();
     if (version != legacySchemaVersion && version != materialSchemaVersion && version != terminalAppearanceSchemaVersion
         && version != accentSchemaVersion && version != credentialStorageSchemaVersion
-        && version != localizationSchemaVersion && version != currentSchemaVersion)
+        && version != localizationSchemaVersion && version != fontOptionsSchemaVersion
+        && version != currentSchemaVersion)
     {
         return std::unexpected(ApplicationSettingsStoreError::unsupportedVersion);
     }
@@ -228,12 +230,11 @@ template <>
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
-    if (version == currentSchemaVersion
+    if (version >= fontOptionsSchemaVersion
         && (!uiFontFamilyValue.isString() || !showAllTerminalFontsValue.isBool() || !terminalLigaturesValue.isBool()))
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
-
     const auto theme = parsePreference<ThemePreference>(themeValue.toString());
     const auto backdrop = parsePreference<BackdropPreference>(backdropValue.toString());
     const auto accent = version >= accentSchemaVersion ? parsePreference<AccentPreference>(accentValue.toString())
@@ -258,11 +259,11 @@ template <>
         .backdrop = *backdrop,
         .accent = *accent,
         .customAccent = version >= accentSchemaVersion ? customAccentValue.toString() : QStringLiteral("#22C55E"),
-        .uiFontFamily = version == currentSchemaVersion ? uiFontFamilyValue.toString() : QString{},
+        .uiFontFamily = version >= fontOptionsSchemaVersion ? uiFontFamilyValue.toString() : QString{},
         .terminalFontFamily = fontFamilyValue.toString(),
         .terminalFontSize = static_cast<int>(fontSize),
-        .showAllTerminalFonts = version == currentSchemaVersion && showAllTerminalFontsValue.toBool(),
-        .terminalLigatures = version != currentSchemaVersion || terminalLigaturesValue.toBool(),
+        .showAllTerminalFonts = version >= fontOptionsSchemaVersion && showAllTerminalFontsValue.toBool(),
+        .terminalLigatures = version < fontOptionsSchemaVersion || terminalLigaturesValue.toBool(),
         .terminalBackgroundOpacity =
             version >= terminalAppearanceSchemaVersion ? terminalBackgroundOpacityValue.toDouble() : 1.0,
         .cursor = *cursor,

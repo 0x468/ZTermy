@@ -6,7 +6,10 @@
 #include "core/config/ApplicationPaths.h"
 #include "core/config/ApplicationSettings.h"
 #include "infrastructure/ssh/SshProfileStore.h"
+#include "infrastructure/workbench/PowerShellHistoryReader.h"
+#include "infrastructure/workbench/QuickCommandStore.h"
 
+#include <QMetaType>
 #include <QObject>
 #include <QString>
 #include <QVariantList>
@@ -26,6 +29,15 @@ class TerminalItem;
 namespace ztermy
 {
 
+using ShellHistoryEntries = std::vector<workbench::ShellHistoryEntry>;
+
+} // namespace ztermy
+
+Q_DECLARE_METATYPE(ztermy::ShellHistoryEntries)
+
+namespace ztermy
+{
+
 class AppController final : public QObject
 {
     Q_OBJECT
@@ -38,6 +50,12 @@ class AppController final : public QObject
     Q_PROPERTY(QVariantList hostProfiles READ hostProfiles NOTIFY hostProfilesChanged)
     Q_PROPERTY(QVariantList recentHostProfiles READ recentHostProfiles NOTIFY hostProfilesChanged)
     Q_PROPERTY(QVariantList terminalTabs READ terminalTabs NOTIFY terminalTabsChanged)
+    Q_PROPERTY(QVariantList quickCommands READ quickCommands NOTIFY quickCommandsChanged)
+    Q_PROPERTY(QString quickCommandOperationError READ quickCommandOperationError NOTIFY quickCommandsChanged)
+    Q_PROPERTY(QVariantList terminalHistory READ terminalHistory NOTIFY terminalHistoryChanged)
+    Q_PROPERTY(QVariantList terminalGlobalHistory READ terminalGlobalHistory NOTIFY terminalHistoryChanged)
+    Q_PROPERTY(QString terminalHistoryState READ terminalHistoryState NOTIFY terminalHistoryChanged)
+    Q_PROPERTY(QString terminalHistoryError READ terminalHistoryError NOTIFY terminalHistoryChanged)
     Q_PROPERTY(QString activeTerminalTabId READ activeTerminalTabId NOTIFY activeTerminalTabChanged)
     Q_PROPERTY(QString terminalSearchQuery READ terminalSearchQuery NOTIFY terminalSearchChanged)
     Q_PROPERTY(int terminalSearchCurrent READ terminalSearchCurrent NOTIFY terminalSearchChanged)
@@ -98,6 +116,12 @@ public:
     [[nodiscard]] QVariantList hostProfiles() const;
     [[nodiscard]] QVariantList recentHostProfiles() const;
     [[nodiscard]] QVariantList terminalTabs() const;
+    [[nodiscard]] QVariantList quickCommands() const;
+    [[nodiscard]] QString quickCommandOperationError() const;
+    [[nodiscard]] QVariantList terminalHistory() const;
+    [[nodiscard]] QVariantList terminalGlobalHistory() const;
+    [[nodiscard]] QString terminalHistoryState() const;
+    [[nodiscard]] QString terminalHistoryError() const;
     [[nodiscard]] QString activeTerminalTabId() const;
     [[nodiscard]] QString terminalSearchQuery() const;
     [[nodiscard]] int terminalSearchCurrent() const noexcept;
@@ -131,6 +155,20 @@ public:
     Q_INVOKABLE bool closeTerminalTab(const QString &id);
     Q_INVOKABLE void searchTerminal(const QString &query, bool backwards, bool caseSensitive);
     Q_INVOKABLE void clearTerminalSearch();
+    Q_INVOKABLE bool toggleTerminalWorkbench(const QString &page);
+    Q_INVOKABLE void closeTerminalWorkbench();
+    Q_INVOKABLE void setTerminalWorkbenchWidth(qreal width);
+    Q_INVOKABLE void moveTerminalWorkbench();
+    Q_INVOKABLE void toggleTerminalComposer();
+    Q_INVOKABLE void setTerminalComposerHeight(qreal height);
+    Q_INVOKABLE bool copyActiveTerminalAddress();
+    Q_INVOKABLE bool insertTerminalCommand(const QString &command);
+    Q_INVOKABLE bool runTerminalCommand(const QString &command);
+    Q_INVOKABLE bool saveQuickCommand(const QString &id, const QString &name, const QString &command,
+                                      const QString &description, const QString &shellScope);
+    Q_INVOKABLE bool deleteQuickCommand(const QString &id);
+    Q_INVOKABLE bool moveQuickCommand(const QString &id, int targetIndex);
+    Q_INVOKABLE void refreshTerminalHistory();
     Q_INVOKABLE bool connectPrivateKey(const QString &host, int port, const QString &username,
                                        const QString &privateKeyPath, const QString &passphrase);
     Q_INVOKABLE bool connectPassword(const QString &host, int port, const QString &username, const QString &password);
@@ -179,12 +217,17 @@ signals:
     void hostKeyPromptChanged();
     void hostProfilesChanged();
     void terminalTabsChanged();
+    void quickCommandsChanged();
+    void terminalHistoryChanged();
     void activeTerminalTabChanged();
     void terminalSearchChanged();
     void applicationSettingsChanged();
     void credentialVaultChanged();
 
 private:
+    Q_SIGNAL void terminalHistoryTaskCompleted(const QString &tabId, quint64 requestId, ShellHistoryEntries entries,
+                                               const QString &error);
+
     enum class TerminalTabKind : std::uint8_t
     {
         Local,
@@ -204,9 +247,24 @@ private:
         std::unique_ptr<ssh::SshTerminalSession> ssh;
         QString searchQuery;
         QString sourceProfileId;
+        QString identity;
+        QString address;
         std::uint32_t searchCurrent = 0;
         std::uint32_t searchTotal = 0;
         bool searchCaseSensitive = false;
+        QString workbenchPage = QStringLiteral("history");
+        QString workbenchSide = QStringLiteral("left");
+        QString historyState = QStringLiteral("idle");
+        QString historyError;
+        std::vector<workbench::ShellHistoryEntry> history;
+        std::vector<workbench::ShellHistoryEntry> capturedHistory;
+        QByteArray inputHistoryBuffer;
+        bool inputHistoryBufferReliable = true;
+        std::uint64_t historyRequestId = 0;
+        qreal workbenchWidth = 520.0;
+        qreal composerHeight = 132.0;
+        bool workbenchOpen = false;
+        bool composerOpen = false;
         bool running = false;
         bool recentConnectionRecorded = false;
     };
@@ -216,6 +274,10 @@ private:
     void connectSshTabSignals(TerminalTab &tab);
     void queueInput(const QByteArray &bytes);
     void queuePaste(const QByteArray &bytes);
+    void dispatchInput(TerminalTab &tab, const QByteArray &bytes);
+    void dispatchPaste(TerminalTab &tab, const QByteArray &bytes);
+    void observeTerminalInput(TerminalTab &tab, const QByteArray &bytes);
+    void appendCapturedHistory(TerminalTab &tab, const QString &command);
     void requestResize(quint16 columns, quint16 rows, quint32 cellWidthPixels, quint32 cellHeightPixels);
     void requestScroll(int rows);
     void requestSelection(quint16 startColumn, quint16 startRow, quint16 endColumn, quint16 endRow, bool rectangular);
@@ -225,6 +287,10 @@ private:
     void clearHostKeyPrompt();
     void loadHostProfiles();
     void loadApplicationSettings();
+    void loadQuickCommands();
+    void applyTerminalHistoryTaskResult(const QString &tabId, quint64 requestId, ShellHistoryEntries entries,
+                                        const QString &error);
+    void setQuickCommandOperationError(QString message);
     [[nodiscard]] bool persistApplicationSettings(const config::ApplicationSettings &settings);
     [[nodiscard]] bool saveHostProfileInternal(const QString &id, const QString &name, const QString &host, int port,
                                                const QString &username, const QString &authentication,
@@ -247,6 +313,9 @@ private:
     ssh::SshProfileStore m_profileStore;
     config::ApplicationSettingsStore m_settingsStore;
     config::ApplicationSettings m_settings;
+    workbench::QuickCommandStore m_quickCommandStore;
+    std::vector<workbench::QuickCommand> m_quickCommands;
+    QString m_quickCommandOperationError;
     std::unique_ptr<security::CredentialVaultCoordinator> m_credentialVaults;
     security::CredentialStorage m_defaultCredentialStorage = security::CredentialStorage::Session;
     QString m_credentialOperationError;

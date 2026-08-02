@@ -731,9 +731,11 @@ Rectangle {
                         Layout.fillWidth: true
                         text: qsTr("Show all installed fonts")
                         accessibleName: text
-                        ToolTip.visible: hovered
-                        ToolTip.delay: 500
-                        ToolTip.text: qsTr("By default, only monospaced fonts suitable for a terminal grid are shown.")
+
+                        AppToolTip {
+                            delay: 500
+                            text: qsTr("By default, only monospaced fonts suitable for a terminal grid are shown.")
+                        }
                     }
 
                     Text {

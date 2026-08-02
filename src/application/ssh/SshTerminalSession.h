@@ -70,6 +70,7 @@ public slots:
     void copySelection();
     void search(const QString &query, bool backwards, bool caseSensitive);
     void clearSearch();
+    void requestShellHistory(quint64 requestId);
 
 signals:
     void snapshotReady(ztermy::terminal::TerminalSnapshotPtr snapshot);
@@ -81,6 +82,7 @@ signals:
     void hostKeyConfirmationRequired(const QString &algorithm, const QString &fingerprint);
     void hostKeyChanged(const QString &algorithm, const QString &fingerprint);
     void searchResultReady(const QString &query, quint32 current, quint32 total, bool wrapped);
+    void shellHistoryReady(quint64 requestId, const QString &shell, const QByteArray &contents, const QString &error);
 
 private slots:
     void deliverLatestSnapshot();
@@ -92,6 +94,7 @@ private slots:
     void deliverHostKeyChange(const QString &algorithm, const QString &fingerprint);
     void deliverClipboardText(const QString &text);
     void deliverSearchResult(const QString &query, quint32 current, quint32 total, bool wrapped);
+    void deliverShellHistory(quint64 requestId, const QString &shell, const QByteArray &contents, const QString &error);
 
 private:
     struct InputCommand final
@@ -123,6 +126,10 @@ private:
     struct ClearSearchCommand final
     {
     };
+    struct HistoryCommand final
+    {
+        quint64 requestId = 0;
+    };
 
     enum class HostKeyDecision : std::uint8_t
     {
@@ -133,7 +140,7 @@ private:
     };
 
     using Command = std::variant<InputCommand, PasteCommand, terminal::TerminalGeometry, ScrollCommand,
-                                 SelectionCommand, CopyCommand, SearchCommand, ClearSearchCommand>;
+                                 SelectionCommand, CopyCommand, SearchCommand, ClearSearchCommand, HistoryCommand>;
 
     void queueByteCommand(Command command, std::size_t byteCount);
     void run(SshConnectionRequest &request, terminal::TerminalGeometry geometry, const std::stop_token &stopToken);
@@ -146,6 +153,7 @@ private:
     void postHostKeyChange(const QString &algorithm, const QString &fingerprint);
     void postClipboardText(const QString &text);
     void postSearchResult(const QString &query, quint32 current, quint32 total, bool wrapped);
+    void postShellHistory(quint64 requestId, const QString &shell, const QByteArray &contents, const QString &error);
     void finishWorker(const QString &status, SshConnectionPhase phase);
     void signalCommandWake() noexcept;
     void resetMetrics() noexcept;

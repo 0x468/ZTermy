@@ -27,6 +27,7 @@ private slots:
     void migratesTerminalAppearanceSchemaWithDefaultAccent();
     void migratesCredentialSchemaWithSystemLanguage();
     void migratesLocalizationSchemaWithFontDefaults();
+    void migratesFontOptionsSchema();
     void rejectsMalformedUnsupportedAndIncompleteDocuments();
     void rejectsOutOfRangeValues();
     void createsMissingParentDirectory();
@@ -106,7 +107,7 @@ void ApplicationSettingsTests::migratesLegacyWindowOpacityAndNoneBackdrop()
     QFile saved(path);
     QVERIFY(saved.open(QIODevice::ReadOnly));
     const QByteArray persisted = saved.readAll();
-    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 7")));
+    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 8")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdropOpacity\": 0.75")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdrop\": \"transparent\"")));
     QVERIFY(!persisted.contains(QByteArrayLiteral("windowOpacity")));
@@ -230,6 +231,39 @@ void ApplicationSettingsTests::migratesLocalizationSchemaWithFontDefaults()
     QVERIFY(loaded->terminalLigatures);
 }
 
+void ApplicationSettingsTests::migratesFontOptionsSchema()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("settings.json"));
+    const ztermy::config::ApplicationSettingsStore store(path);
+
+    QVERIFY(writeFile(path, QByteArrayLiteral(R"({
+        "version": 7,
+        "theme": "dark",
+        "backdropOpacity": 1.0,
+        "backdrop": "acrylic",
+        "accent": "ztermy",
+        "customAccent": "#22C55E",
+        "uiFontFamily": "",
+        "terminalFontFamily": "Cascadia Mono",
+        "terminalFontSize": 14,
+        "showAllTerminalFonts": false,
+        "terminalLigatures": true,
+        "terminalBackgroundOpacity": 1.0,
+        "cursor": "terminal",
+        "cursorBlink": true,
+        "copyOnSelect": false,
+        "confirmMultilinePaste": true,
+        "credentialStorage": "system",
+        "language": "system"
+    })")));
+
+    const auto loaded = store.load();
+    QVERIFY(loaded);
+    QCOMPARE(loaded->terminalFontFamily, QStringLiteral("Cascadia Mono"));
+}
+
 void ApplicationSettingsTests::rejectsMalformedUnsupportedAndIncompleteDocuments()
 {
     QTemporaryDir directory;
@@ -242,7 +276,7 @@ void ApplicationSettingsTests::rejectsMalformedUnsupportedAndIncompleteDocuments
     QVERIFY(!malformed);
     QCOMPARE(malformed.error(), ztermy::config::ApplicationSettingsStoreError::invalidFormat);
 
-    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":8})")));
+    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":9})")));
     const auto unsupported = store.load();
     QVERIFY(!unsupported);
     QCOMPARE(unsupported.error(), ztermy::config::ApplicationSettingsStoreError::unsupportedVersion);
@@ -251,6 +285,29 @@ void ApplicationSettingsTests::rejectsMalformedUnsupportedAndIncompleteDocuments
     const auto incomplete = store.load();
     QVERIFY(!incomplete);
     QCOMPARE(incomplete.error(), ztermy::config::ApplicationSettingsStoreError::invalidFormat);
+
+    QVERIFY(writeFile(path, QByteArrayLiteral(R"({
+        "version": 8,
+        "theme": "dark",
+        "backdropOpacity": 1.0,
+        "backdrop": "acrylic",
+        "accent": "ztermy",
+        "customAccent": "#22C55E",
+        "uiFontFamily": "",
+        "terminalFontFamily": "Cascadia Mono",
+        "terminalFontSize": 14,
+        "showAllTerminalFonts": false,
+        "terminalLigatures": true,
+        "terminalBackgroundOpacity": 1.0,
+        "cursor": "terminal",
+        "cursorBlink": true,
+        "copyOnSelect": false,
+        "confirmMultilinePaste": true,
+        "language": "system"
+    })")));
+    const auto incompleteCurrent = store.load();
+    QVERIFY(!incompleteCurrent);
+    QCOMPARE(incompleteCurrent.error(), ztermy::config::ApplicationSettingsStoreError::invalidFormat);
 }
 
 void ApplicationSettingsTests::rejectsOutOfRangeValues()

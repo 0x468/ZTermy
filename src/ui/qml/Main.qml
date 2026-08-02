@@ -52,12 +52,71 @@ Rectangle {
     readonly property bool activeSshFailure: activeTerminalTab !== null && activeTerminalTab.kind === "ssh" && activeTerminalTab.failed
     readonly property bool activeSshConnecting: activeTerminalTab !== null && activeTerminalTab.kind === "ssh" && activeTerminalTab.connecting
     readonly property bool activeSshDisconnected: activeTerminalTab !== null && activeTerminalTab.kind === "ssh" && activeTerminalTab.remoteClosed
+    readonly property string activeTerminalWorkbenchSide: activeTerminalTab !== null ? activeTerminalTab.workbenchSide : "left"
+    readonly property real activeTerminalWorkbenchWidth: activeTerminalTab !== null && activeTerminalTab.workbenchOpen ? Math.min(activeTerminalTab.workbenchWidth, Math.max(0, terminalBody.width - 240)) : 0
+    readonly property real activeTerminalComposerHeight: activeTerminalTab !== null && activeTerminalTab.composerOpen ? Math.min(activeTerminalTab.composerHeight, Math.max(0, terminalBody.height - 120)) : 0
     readonly property bool portableVaultNeedsAttention: controller.effectiveCredentialStorage === "portable" && (!controller.portableVaultInitialized || controller.portableVaultLocked)
+
+    component TerminalToolbarButton: ToolButton {
+        id: control
+
+        property bool selected: false
+
+        hoverEnabled: true
+        focusPolicy: Qt.StrongFocus
+
+        background: Item {
+            Rectangle {
+                anchors.centerIn: parent
+                width: Math.min(parent.width, parent.height)
+                height: width
+                radius: width / 2
+                color: control.down ? Theme.controlPressed : control.hovered ? Theme.controlHover : "transparent"
+                border.color: control.activeFocus ? Theme.focus : "transparent"
+                border.width: control.activeFocus ? 2 : 0
+
+                Behavior on color {
+                    ColorAnimation {
+                        duration: Theme.motionFast
+                    }
+                }
+            }
+
+            Rectangle {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: parent.bottom
+                width: control.selected ? 10 : 0
+                height: 2
+                radius: 1
+                color: Theme.accent
+
+                Behavior on width {
+                    NumberAnimation {
+                        duration: Theme.motionFast
+                        easing.type: Easing.OutCubic
+                    }
+                }
+            }
+        }
+
+        HoverHandler {
+            cursorShape: control.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+        }
+    }
 
     color: root.currentPage === "terminal" ? "transparent" : backgroundColor
 
     function reportTitleBarMetrics() {
         root.windowChrome.setTitleBarMetrics(titleBarHeight, titleNavigation.width + 8, width - (captionButtonWidth * 3) - titleQuickActionWidth - titleSecurityActionWidth, width - (captionButtonWidth * 2), captionButtonWidth);
+    }
+
+    function requestTerminalCommandRun(command) {
+        if (!command || command.trim().length === 0) {
+            return;
+        }
+        if (controller.runTerminalCommand(command)) {
+            terminalViewport.forceActiveFocus();
+        }
     }
 
     function requestPortableVaultAccess(sourceItem) {
@@ -802,13 +861,32 @@ Rectangle {
 
                             Text {
                                 Layout.alignment: Qt.AlignVCenter
-                                Layout.maximumWidth: 220
-                                text: root.activeTerminalTab ? root.activeTerminalTab.title : qsTr("Terminal")
+                                Layout.maximumWidth: 250
+                                text: root.activeTerminalTab ? root.activeTerminalTab.identity : qsTr("Terminal")
                                 color: root.textColor
                                 elide: Text.ElideRight
                                 font.family: Theme.uiFont
                                 font.pixelSize: Theme.textCompact
                                 font.weight: Font.DemiBold
+                            }
+
+                            TerminalToolbarButton {
+                                id: copyAddressButton
+
+                                Layout.preferredWidth: 24
+                                Layout.preferredHeight: 22
+                                visible: root.activeTerminalTab !== null && root.activeTerminalTab.address.length > 0
+                                onClicked: root.controller.copyActiveTerminalAddress()
+                                Accessible.name: qsTr("Copy host address")
+                                contentItem: AppIcon {
+                                    name: "copy"
+                                    color: root.mutedColor
+                                }
+
+                                AppToolTip {
+                                    visible: copyAddressButton.hovered
+                                    text: qsTr("Copy host address")
+                                }
                             }
 
                             Rectangle {
@@ -837,24 +915,87 @@ Rectangle {
                                 visible: !terminalSessionStatus.visible
                             }
 
-                            Text {
-                                Layout.alignment: Qt.AlignVCenter
-                                text: "UTF-8"
-                                color: Theme.textSubtle
-                                font.family: Theme.uiFont
-                                font.pixelSize: Theme.textCompact
+                            TerminalToolbarButton {
+                                id: historyToolbarButton
+
+                                objectName: "terminalHistoryAction"
+                                Layout.preferredWidth: 28
+                                Layout.preferredHeight: 22
+                                checkable: true
+                                checked: root.activeTerminalTab !== null && root.activeTerminalTab.workbenchOpen && root.activeTerminalTab.workbenchPage === "history"
+                                selected: checked
+                                enabled: root.activeTerminalTab !== null
+                                onClicked: root.controller.toggleTerminalWorkbench("history")
+                                Keys.onReturnPressed: click()
+                                Keys.onEnterPressed: click()
+                                Accessible.name: qsTr("Command history")
+                                contentItem: AppIcon {
+                                    name: "history"
+                                    color: historyToolbarButton.checked ? Theme.accent : root.mutedColor
+                                }
+                            }
+
+                            TerminalToolbarButton {
+                                id: scriptsToolbarButton
+
+                                objectName: "terminalScriptsAction"
+                                Layout.preferredWidth: 28
+                                Layout.preferredHeight: 22
+                                checkable: true
+                                checked: root.activeTerminalTab !== null && root.activeTerminalTab.workbenchOpen && root.activeTerminalTab.workbenchPage === "scripts"
+                                selected: checked
+                                enabled: root.activeTerminalTab !== null
+                                onClicked: root.controller.toggleTerminalWorkbench("scripts")
+                                Keys.onReturnPressed: click()
+                                Keys.onEnterPressed: click()
+                                Accessible.name: qsTr("Scripts")
+                                contentItem: AppIcon {
+                                    name: "commands"
+                                    color: scriptsToolbarButton.checked ? Theme.accent : root.mutedColor
+                                }
+
+                                AppToolTip {
+                                    visible: scriptsToolbarButton.hovered
+                                    text: qsTr("Scripts")
+                                }
+                            }
+
+                            TerminalToolbarButton {
+                                id: composerToolbarButton
+
+                                objectName: "terminalComposerAction"
+                                Layout.preferredWidth: 28
+                                Layout.preferredHeight: 22
+                                checkable: true
+                                checked: root.activeTerminalTab !== null && root.activeTerminalTab.composerOpen
+                                selected: checked
+                                enabled: root.activeTerminalTab !== null
+                                onClicked: {
+                                    const opening = root.activeTerminalTab !== null && !root.activeTerminalTab.composerOpen;
+                                    root.controller.toggleTerminalComposer();
+                                    if (opening) {
+                                        terminalComposer.focusEditor();
+                                    } else {
+                                        terminalViewport.forceActiveFocus();
+                                    }
+                                }
+                                Keys.onReturnPressed: click()
+                                Keys.onEnterPressed: click()
+                                Accessible.name: qsTr("Command composer")
+                                contentItem: AppIcon {
+                                    name: "compose"
+                                    color: composerToolbarButton.checked ? Theme.accent : root.mutedColor
+                                }
+
+                                AppToolTip {
+                                    visible: composerToolbarButton.hovered
+                                    text: qsTr("Command composer")
+                                }
                             }
 
                             Rectangle {
                                 Layout.alignment: Qt.AlignVCenter
-                                Layout.preferredWidth: 1
-                                Layout.preferredHeight: 12
-                                color: root.borderColor
-                            }
-
-                            Rectangle {
-                                Layout.alignment: Qt.AlignVCenter
-                                Layout.preferredWidth: 66
+                                Layout.preferredWidth: 30
                                 Layout.preferredHeight: 22
                                 radius: Theme.radiusSmall
                                 color: terminalFindAction.hovered || terminalFindAction.activeFocus ? Theme.controlHover : "transparent"
@@ -867,23 +1008,12 @@ Rectangle {
                                     }
                                 }
 
-                                Row {
+                                AppIcon {
                                     anchors.centerIn: parent
-                                    spacing: 5
-
-                                    AppIcon {
-                                        width: 13
-                                        height: 13
-                                        name: "search"
-                                        color: root.mutedColor
-                                    }
-
-                                    Text {
-                                        text: qsTr("Find")
-                                        color: root.mutedColor
-                                        font.family: Theme.uiFont
-                                        font.pixelSize: Theme.textCompact
-                                    }
+                                    width: 14
+                                    height: 14
+                                    name: "search"
+                                    color: root.mutedColor
                                 }
 
                                 KeyboardAction {
@@ -895,10 +1025,54 @@ Rectangle {
                                     onActivated: root.openTerminalSearch()
                                 }
                             }
+
+                            TerminalToolbarButton {
+                                id: terminalMoreButton
+
+                                Layout.preferredWidth: 28
+                                Layout.preferredHeight: 22
+                                enabled: root.activeTerminalTab !== null
+                                onClicked: terminalMoreMenu.open()
+                                Accessible.name: qsTr("More terminal actions")
+                                contentItem: AppIcon {
+                                    name: "more"
+                                    color: root.mutedColor
+                                }
+
+                                AppToolTip {
+                                    visible: terminalMoreButton.hovered && !terminalMoreMenu.visible
+                                    text: qsTr("More terminal actions")
+                                }
+
+                                AppMenu {
+                                    id: terminalMoreMenu
+
+                                    y: terminalMoreButton.height
+
+                                    AppMenuItem {
+                                        text: qsTr("Command history")
+                                        onTriggered: root.controller.toggleTerminalWorkbench("history")
+                                    }
+
+                                    AppMenuItem {
+                                        text: qsTr("Scripts")
+                                        onTriggered: root.controller.toggleTerminalWorkbench("scripts")
+                                    }
+
+                                    AppMenuSeparator {}
+
+                                    AppMenuItem {
+                                        text: qsTr("Terminal settings")
+                                        onTriggered: root.openSettingsTab()
+                                    }
+                                }
+                            }
                         }
                     }
 
                     Rectangle {
+                        id: terminalBody
+
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         color: "transparent"
@@ -907,6 +1081,9 @@ Rectangle {
                             id: terminalViewport
                             objectName: "terminalViewport"
                             anchors.fill: parent
+                            anchors.leftMargin: root.activeTerminalWorkbenchSide === "left" ? root.activeTerminalWorkbenchWidth : 0
+                            anchors.rightMargin: root.activeTerminalWorkbenchSide === "right" ? root.activeTerminalWorkbenchWidth : 0
+                            anchors.bottomMargin: root.activeTerminalComposerHeight
                             focus: true
                             fontFamily: root.controller.terminalFontFamily
                             fontPixelSize: root.controller.terminalFontSize
@@ -922,6 +1099,27 @@ Rectangle {
                                 root.pendingPasteLineCount = lineCount;
                                 multilinePasteDialog.openFrom(terminalViewport);
                             }
+
+                            Behavior on anchors.rightMargin {
+                                NumberAnimation {
+                                    duration: Theme.animationsEnabled ? Theme.motionMedium : 0
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
+
+                            Behavior on anchors.leftMargin {
+                                NumberAnimation {
+                                    duration: Theme.animationsEnabled ? Theme.motionMedium : 0
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
+
+                            Behavior on anchors.bottomMargin {
+                                NumberAnimation {
+                                    duration: Theme.animationsEnabled ? Theme.motionMedium : 0
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
                         }
 
                         Item {
@@ -931,8 +1129,8 @@ Rectangle {
                             anchors.right: parent.right
                             anchors.bottom: parent.bottom
                             anchors.topMargin: 8
-                            anchors.rightMargin: 9
-                            anchors.bottomMargin: 8
+                            anchors.rightMargin: (root.activeTerminalWorkbenchSide === "right" ? root.activeTerminalWorkbenchWidth : 0) + 9
+                            anchors.bottomMargin: root.activeTerminalComposerHeight + 8
                             width: 16
                             visible: terminalViewport.scrollbarVisible && root.activeTerminalTab !== null
                             enabled: visible
@@ -997,6 +1195,7 @@ Rectangle {
                             anchors.top: parent.top
                             anchors.right: parent.right
                             anchors.margins: 12
+                            anchors.rightMargin: (root.activeTerminalWorkbenchSide === "right" ? root.activeTerminalWorkbenchWidth : 0) + 12
                             width: 420
                             height: 42
                             radius: 8
@@ -1109,6 +1308,62 @@ Rectangle {
                                     onClicked: root.closeTerminalSearch()
                                     Accessible.name: qsTr("Close terminal search")
                                 }
+                            }
+                        }
+
+                        TerminalComposer {
+                            id: terminalComposer
+
+                            objectName: "terminalComposer"
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            anchors.leftMargin: root.activeTerminalWorkbenchSide === "left" ? root.activeTerminalWorkbenchWidth : 0
+                            anchors.rightMargin: root.activeTerminalWorkbenchSide === "right" ? root.activeTerminalWorkbenchWidth : 0
+                            height: root.activeTerminalComposerHeight
+                            visible: root.activeTerminalTab !== null && root.activeTerminalTab.composerOpen
+                            z: 14
+                            controller: root.controller
+                            activeTab: root.activeTerminalTab
+                            panelHeight: root.activeTerminalTab !== null ? root.activeTerminalTab.composerHeight : 132
+                            onHeightRequested: height => root.controller.setTerminalComposerHeight(height)
+                            onCloseRequested: {
+                                root.controller.toggleTerminalComposer();
+                                terminalViewport.forceActiveFocus();
+                            }
+
+                            Behavior on height {
+                                NumberAnimation {
+                                    duration: Theme.animationsEnabled ? Theme.motionMedium : 0
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
+                        }
+
+                        TerminalWorkbench {
+                            id: terminalWorkbench
+
+                            objectName: "terminalWorkbench"
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            width: root.activeTerminalWorkbenchWidth
+                            x: root.activeTerminalWorkbenchSide === "left" ? 0 : parent.width - width
+                            visible: root.activeTerminalTab !== null && root.activeTerminalTab.workbenchOpen
+                            z: 15
+                            controller: root.controller
+                            activeTab: root.activeTerminalTab
+                            panelSide: root.activeTerminalWorkbenchSide
+                            panelWidth: root.activeTerminalTab !== null ? root.activeTerminalTab.workbenchWidth : 520
+                            onPanelWidthRequested: width => root.controller.setTerminalWorkbenchWidth(width)
+                            onInsertRequested: command => {
+                                if (root.controller.insertTerminalCommand(command)) {
+                                    terminalViewport.forceActiveFocus();
+                                }
+                            }
+                            onRunRequested: command => root.requestTerminalCommandRun(command)
+                            onCloseRequested: {
+                                root.controller.closeTerminalWorkbench();
+                                terminalViewport.forceActiveFocus();
                             }
                         }
 

@@ -44,6 +44,30 @@ ConPTY or SSH channel
 Input travels directly from the focused terminal item to its session writer.
 It must not wait for output, persistence, logging, or a UI snapshot.
 
+## Terminal workbench data flow
+
+```text
+terminal toolbar or workbench page
+  -> AppController named action
+  -> active terminal-tab state
+  -> ShellHistoryProvider or QuickCommandStore
+  -> immutable QML-facing view model
+
+Run or Insert
+  -> explicit user action
+  -> active session input queue
+  -> terminal paste encoding or exact command + carriage return
+```
+
+Remote history uses an auxiliary exec channel on the active authenticated SSH
+session. The session worker alone touches libssh2. It pumps auxiliary-channel
+state between bounded terminal-I/O iterations so history refresh cannot block
+interactive input. Parsed remote history is per-session memory, never automatic
+persistent history. Commands captured reliably from open terminal tabs are
+aggregated into an in-memory global view and disappear with those tabs. Code
+snippets are a separate versioned global store and contain only text the user
+explicitly saves in the Scripts surface.
+
 ## Threading rules
 
 - The GUI thread owns QObject/QML-facing state.

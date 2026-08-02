@@ -9,13 +9,19 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QLoggingCategory>
+#include <QMetaObject>
+#include <QPointer>
+#include <QSet>
 #include <QStandardPaths>
+#include <QThreadPool>
 #include <QUuid>
 #include <QVariantMap>
 
 #include <algorithm>
 #include <functional>
+#include <new>
 #include <optional>
+#include <string_view>
 #include <system_error>
 
 Q_LOGGING_CATEGORY(appControllerLog, "ztermy.application.controller")
@@ -43,6 +49,11 @@ namespace
     return QFileInfo(profileStorePath).dir().filePath(QStringLiteral("credentials.zvlt"));
 }
 
+[[nodiscard]] QString siblingQuickCommandsFile(const QString &settingsPath)
+{
+    return QFileInfo(settingsPath).dir().filePath(QStringLiteral("quick_commands.json"));
+}
+
 [[nodiscard]] std::string utf8String(const QString &value)
 {
     const QByteArray bytes = value.toUtf8();
@@ -52,6 +63,114 @@ namespace
 [[nodiscard]] QString utf8QString(const std::string &value)
 {
     return QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size()));
+}
+
+[[nodiscard]] std::optional<ztermy::workbench::ShellScope> quickCommandShellScope(const QString &value)
+{
+    if (value == QStringLiteral("any"))
+    {
+        return ztermy::workbench::ShellScope::any;
+    }
+    if (value == QStringLiteral("posix"))
+    {
+        return ztermy::workbench::ShellScope::posix;
+    }
+    if (value == QStringLiteral("powershell"))
+    {
+        return ztermy::workbench::ShellScope::powershell;
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] QString quickCommandShellScopeToken(const ztermy::workbench::ShellScope value)
+{
+    switch (value)
+    {
+        case ztermy::workbench::ShellScope::posix:
+            return QStringLiteral("posix");
+        case ztermy::workbench::ShellScope::powershell:
+            return QStringLiteral("powershell");
+        case ztermy::workbench::ShellScope::any:
+        default:
+            return QStringLiteral("any");
+    }
+}
+
+[[nodiscard]] QString shellKindToken(const ztermy::workbench::ShellKind value)
+{
+    switch (value)
+    {
+        case ztermy::workbench::ShellKind::bash:
+            return QStringLiteral("bash");
+        case ztermy::workbench::ShellKind::zsh:
+            return QStringLiteral("zsh");
+        case ztermy::workbench::ShellKind::fish:
+            return QStringLiteral("fish");
+        case ztermy::workbench::ShellKind::powershell:
+            return QStringLiteral("powershell");
+        case ztermy::workbench::ShellKind::unknown:
+        default:
+            return QStringLiteral("unknown");
+    }
+}
+
+[[nodiscard]] QString normalizedQuickCommandText(QString value)
+{
+    value.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
+    value.replace(QLatin1Char('\r'), QLatin1Char('\n'));
+    return value;
+}
+
+[[nodiscard]] bool validTerminalCommand(const QString &command)
+{
+    constexpr qsizetype maximumCommandCharacters = qsizetype{64} * 1024;
+    if (command.trimmed().isEmpty() || command.size() > maximumCommandCharacters)
+    {
+        return false;
+    }
+    return std::ranges::none_of(command, [](const QChar character) {
+        const ushort value = character.unicode();
+        return (value < 0x20U && value != '\t' && value != '\n' && value != '\r') || value == 0x7FU;
+    });
+}
+
+constexpr std::size_t maximumHistoryEntries = 1000;
+constexpr qsizetype maximumPendingHistoryBytes = qsizetype{64} * 1024;
+
+void removeLastUtf8CodePoint(QByteArray &value)
+{
+    if (value.isEmpty())
+    {
+        return;
+    }
+    qsizetype index = value.size() - 1;
+    while (index > 0 && (static_cast<unsigned char>(value.at(index)) & 0xC0U) == 0x80U)
+    {
+        --index;
+    }
+    value.truncate(index);
+}
+
+[[nodiscard]] QVariantMap terminalHistoryValue(const ztermy::workbench::ShellHistoryEntry &entry,
+                                               const QString &sourceLabel = {}, const QString &sourceId = {})
+{
+    QVariantMap value{
+        {QStringLiteral("command"), utf8QString(entry.command)},
+        {QStringLiteral("shell"), shellKindToken(entry.shell)},
+    };
+    if (entry.timestampUtcSeconds)
+    {
+        value.insert(QStringLiteral("timestampUtcMs"), *entry.timestampUtcSeconds * 1000);
+    }
+    if (!sourceLabel.isEmpty())
+    {
+        value.insert(QStringLiteral("sourceLabel"), sourceLabel);
+    }
+    if (!sourceId.isEmpty())
+    {
+        value.insert(QStringLiteral("sourceId"), sourceId);
+    }
+    return value;
 }
 
 [[nodiscard]] bool profileHasStoredCredential(const ztermy::ssh::SshProfile &profile,
@@ -337,6 +456,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
       m_profileStore(std::move(profileStorePath)),
       m_settingsStore(settingsPath.isEmpty() ? siblingSettingsFile(m_profileStore.filePath())
                                              : std::move(settingsPath)),
+      m_quickCommandStore(siblingQuickCommandsFile(m_settingsStore.filePath())),
       m_credentialVaults(std::make_unique<security::CredentialVaultCoordinator>(
           siblingCredentialsFile(m_profileStore.filePath()), security::CredentialStorage::Session)),
       m_knownHostsPath(std::move(knownHostsPath))
@@ -348,8 +468,12 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
         };
     }
     Q_ASSERT(m_localSessionFactory);
+    qRegisterMetaType<ShellHistoryEntries>();
+    QObject::connect(this, &AppController::terminalHistoryTaskCompleted, this,
+                     &AppController::applyTerminalHistoryTaskResult, Qt::QueuedConnection);
     loadHostProfiles();
     loadApplicationSettings();
+    loadQuickCommands();
 }
 
 AppController::AppController(QString profileStorePath, QString knownHostsPath, QString settingsPath,
@@ -372,6 +496,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
       m_profileStore(std::move(profileStorePath)),
       m_settingsStore(settingsPath.isEmpty() ? siblingSettingsFile(m_profileStore.filePath())
                                              : std::move(settingsPath)),
+      m_quickCommandStore(siblingQuickCommandsFile(m_settingsStore.filePath())),
       m_credentialVaults(std::make_unique<security::CredentialVaultCoordinator>(
           credentialsPath.isEmpty() ? siblingCredentialsFile(m_profileStore.filePath()) : std::move(credentialsPath),
           defaultCredentialStorage(storageMode))),
@@ -386,8 +511,12 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     }
     Q_ASSERT(m_localSessionFactory);
     Q_ASSERT(m_credentialVaults);
+    qRegisterMetaType<ShellHistoryEntries>();
+    QObject::connect(this, &AppController::terminalHistoryTaskCompleted, this,
+                     &AppController::applyTerminalHistoryTaskResult, Qt::QueuedConnection);
     loadHostProfiles();
     loadApplicationSettings();
+    loadQuickCommands();
 }
 
 AppController::~AppController()
@@ -521,6 +650,8 @@ QVariantList AppController::terminalTabs() const
             {QStringLiteral("kind"),
              tab->kind == TerminalTabKind::Local ? QStringLiteral("local") : QStringLiteral("ssh")},
             {QStringLiteral("status"), tab->status},
+            {QStringLiteral("identity"), tab->identity.isEmpty() ? tab->title : tab->identity},
+            {QStringLiteral("address"), tab->address},
             {QStringLiteral("running"), tab->running},
             {QStringLiteral("connecting"), tab->kind == TerminalTabKind::Ssh
                                                && tab->sshPhase != ssh::SshConnectionPhase::Disconnected
@@ -533,9 +664,139 @@ QVariantList AppController::terminalTabs() const
             {QStringLiteral("remoteClosed"), tab->kind == TerminalTabKind::Ssh
                                                  && tab->sshPhase == ssh::SshConnectionPhase::Failed
                                                  && tab->sshFailure == ssh::SshFailureKind::RemoteClosed},
+            {QStringLiteral("workbenchOpen"), tab->workbenchOpen},
+            {QStringLiteral("workbenchPage"), tab->workbenchPage},
+            {QStringLiteral("workbenchSide"), tab->workbenchSide},
+            {QStringLiteral("workbenchWidth"), tab->workbenchWidth},
+            {QStringLiteral("composerOpen"), tab->composerOpen},
+            {QStringLiteral("composerHeight"), tab->composerHeight},
         });
     }
     return result;
+}
+
+QVariantList AppController::quickCommands() const
+{
+    QVariantList result;
+    result.reserve(static_cast<qsizetype>(m_quickCommands.size()));
+    for (const workbench::QuickCommand &quickCommand : m_quickCommands)
+    {
+        result.append(QVariantMap{
+            {QStringLiteral("id"), utf8QString(quickCommand.id)},
+            {QStringLiteral("name"), utf8QString(quickCommand.name)},
+            {QStringLiteral("command"), utf8QString(quickCommand.command)},
+            {QStringLiteral("description"), utf8QString(quickCommand.description)},
+            {QStringLiteral("shell"), quickCommandShellScopeToken(quickCommand.shellScope)},
+            {QStringLiteral("createdUtcMs"), quickCommand.createdUtcMs},
+            {QStringLiteral("modifiedUtcMs"), quickCommand.modifiedUtcMs},
+        });
+    }
+    return result;
+}
+
+QString AppController::quickCommandOperationError() const
+{
+    return m_quickCommandOperationError;
+}
+
+QVariantList AppController::terminalHistory() const
+{
+    const TerminalTab *tab = activeTab();
+    if (tab == nullptr)
+    {
+        return {};
+    }
+
+    QVariantList result;
+    result.reserve(
+        static_cast<qsizetype>(std::min(maximumHistoryEntries, tab->capturedHistory.size() + tab->history.size())));
+    QSet<QString> seen;
+    const auto appendEntries = [&result, &seen](const std::vector<workbench::ShellHistoryEntry> &entries) {
+        for (const workbench::ShellHistoryEntry &entry : entries)
+        {
+            const QString command = utf8QString(entry.command);
+            if (seen.contains(command))
+            {
+                continue;
+            }
+            seen.insert(command);
+            result.append(terminalHistoryValue(entry));
+            if (result.size() >= static_cast<qsizetype>(maximumHistoryEntries))
+            {
+                break;
+            }
+        }
+    };
+    appendEntries(tab->capturedHistory);
+    if (result.size() < static_cast<qsizetype>(maximumHistoryEntries))
+    {
+        appendEntries(tab->history);
+    }
+    return result;
+}
+
+QVariantList AppController::terminalGlobalHistory() const
+{
+    QVariantList result;
+    result.reserve(static_cast<qsizetype>(maximumHistoryEntries));
+    QSet<QString> seen;
+
+    const auto appendTab = [&result, &seen](const TerminalTab &tab) {
+        const QString sourceId = !tab.sourceProfileId.isEmpty() ? tab.sourceProfileId : tab.id;
+        const QString sourceLabel = !tab.title.isEmpty() ? tab.title : tab.identity;
+        const auto appendEntries = [&](const std::vector<workbench::ShellHistoryEntry> &entries) {
+            for (const workbench::ShellHistoryEntry &entry : entries)
+            {
+                const QString command = utf8QString(entry.command);
+                const QString key = sourceId + QChar{u'\0'} + command;
+                if (seen.contains(key))
+                {
+                    continue;
+                }
+                seen.insert(key);
+                result.append(terminalHistoryValue(entry, sourceLabel, sourceId));
+                if (result.size() >= static_cast<qsizetype>(maximumHistoryEntries))
+                {
+                    break;
+                }
+            }
+        };
+        appendEntries(tab.capturedHistory);
+        if (result.size() < static_cast<qsizetype>(maximumHistoryEntries))
+        {
+            appendEntries(tab.history);
+        }
+    };
+
+    const TerminalTab *active = activeTab();
+    if (active != nullptr)
+    {
+        appendTab(*active);
+    }
+    for (const std::unique_ptr<TerminalTab> &tab : m_tabs)
+    {
+        if (result.size() >= static_cast<qsizetype>(maximumHistoryEntries))
+        {
+            break;
+        }
+        if (tab && tab.get() != active)
+        {
+            appendTab(*tab);
+        }
+    }
+    return result;
+}
+
+QString AppController::terminalHistoryState() const
+{
+    const TerminalTab *tab = activeTab();
+    return tab == nullptr ? QStringLiteral("idle") : tab->historyState;
+}
+
+QString AppController::terminalHistoryError() const
+{
+    const TerminalTab *tab = activeTab();
+    return tab == nullptr ? QString{} : tab->historyError;
 }
 
 QString AppController::activeTerminalTabId() const
@@ -754,6 +1015,7 @@ bool AppController::activateTerminalTab(const QString &id)
     emit activeTerminalTabChanged();
     emit sshActiveChanged();
     emit terminalSearchChanged();
+    emit terminalHistoryChanged();
     showActiveTab();
     return true;
 }
@@ -793,6 +1055,7 @@ bool AppController::closeTerminalTab(const QString &id)
             emit activeTerminalTabChanged();
             emit sshActiveChanged();
             emit terminalSearchChanged();
+            emit terminalHistoryChanged();
             showActiveTab();
         }
         else
@@ -850,6 +1113,337 @@ void AppController::clearTerminalSearch()
         tab->local->clearSearch();
     }
     emit terminalSearchChanged();
+}
+
+bool AppController::toggleTerminalWorkbench(const QString &page)
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || (page != QStringLiteral("history") && page != QStringLiteral("scripts")))
+    {
+        return false;
+    }
+
+    if (tab->workbenchOpen && tab->workbenchPage == page)
+    {
+        tab->workbenchOpen = false;
+    }
+    else
+    {
+        tab->workbenchPage = page;
+        tab->workbenchOpen = true;
+    }
+    emit terminalTabsChanged();
+    return true;
+}
+
+void AppController::closeTerminalWorkbench()
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || !tab->workbenchOpen)
+    {
+        return;
+    }
+    tab->workbenchOpen = false;
+    emit terminalTabsChanged();
+}
+
+void AppController::setTerminalWorkbenchWidth(const qreal width)
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr)
+    {
+        return;
+    }
+    const qreal bounded = std::clamp(width, qreal{320.0}, qreal{800.0});
+    if (qFuzzyCompare(tab->workbenchWidth, bounded))
+    {
+        return;
+    }
+    tab->workbenchWidth = bounded;
+    emit terminalTabsChanged();
+}
+
+void AppController::moveTerminalWorkbench()
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr)
+    {
+        return;
+    }
+    tab->workbenchSide =
+        tab->workbenchSide == QStringLiteral("left") ? QStringLiteral("right") : QStringLiteral("left");
+    emit terminalTabsChanged();
+}
+
+void AppController::toggleTerminalComposer()
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr)
+    {
+        return;
+    }
+    tab->composerOpen = !tab->composerOpen;
+    emit terminalTabsChanged();
+}
+
+void AppController::setTerminalComposerHeight(const qreal height)
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr)
+    {
+        return;
+    }
+    const qreal bounded = std::clamp(height, qreal{104.0}, qreal{360.0});
+    if (qFuzzyCompare(tab->composerHeight, bounded))
+    {
+        return;
+    }
+    tab->composerHeight = bounded;
+    emit terminalTabsChanged();
+}
+
+bool AppController::copyActiveTerminalAddress()
+{
+    const TerminalTab *tab = activeTab();
+    if (tab == nullptr || tab->address.isEmpty() || m_terminal == nullptr)
+    {
+        return false;
+    }
+    m_terminal->setClipboardText(tab->address);
+    return true;
+}
+
+bool AppController::insertTerminalCommand(const QString &command)
+{
+    const TerminalTab *tab = activeTab();
+    if (tab == nullptr || !tab->running || !validTerminalCommand(command))
+    {
+        return false;
+    }
+    queuePaste(normalizedQuickCommandText(command).toUtf8());
+    return true;
+}
+
+bool AppController::runTerminalCommand(const QString &command)
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || !tab->running || !validTerminalCommand(command))
+    {
+        return false;
+    }
+    QString normalized = normalizedQuickCommandText(command);
+    QByteArray bytes = normalized.toUtf8();
+    bytes.replace('\n', '\r');
+    if (bytes.isEmpty() || bytes.back() != '\r')
+    {
+        bytes.append('\r');
+    }
+    appendCapturedHistory(*tab, normalized);
+    tab->inputHistoryBuffer.clear();
+    tab->inputHistoryBufferReliable = true;
+    dispatchInput(*tab, bytes);
+    return true;
+}
+
+bool AppController::saveQuickCommand(const QString &id, const QString &name, const QString &command,
+                                     const QString &description, const QString &shellScope)
+{
+    const QString normalizedName = name.trimmed();
+    const QString normalizedCommand = normalizedQuickCommandText(command);
+    const QString normalizedDescription = description.trimmed();
+    const auto parsedShellScope = quickCommandShellScope(shellScope);
+    if (normalizedName.isEmpty() || normalizedCommand.trimmed().isEmpty() || !parsedShellScope)
+    {
+        setQuickCommandOperationError(tr("Enter a name and command, then choose a valid shell scope."));
+        return false;
+    }
+
+    std::vector<workbench::QuickCommand> candidate = m_quickCommands;
+    const std::int64_t now = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
+    workbench::QuickCommand quickCommand{
+        .id = id.isEmpty() ? QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString() : utf8String(id),
+        .name = utf8String(normalizedName),
+        .command = utf8String(normalizedCommand),
+        .description = utf8String(normalizedDescription),
+        .shellScope = *parsedShellScope,
+        .createdUtcMs = now,
+        .modifiedUtcMs = now,
+    };
+
+    if (id.isEmpty())
+    {
+        candidate.push_back(std::move(quickCommand));
+    }
+    else
+    {
+        const auto existing = std::ranges::find(candidate, quickCommand.id, &workbench::QuickCommand::id);
+        if (existing == candidate.end())
+        {
+            setQuickCommandOperationError(tr("The quick command no longer exists."));
+            return false;
+        }
+        quickCommand.createdUtcMs = existing->createdUtcMs;
+        *existing = std::move(quickCommand);
+    }
+
+    if (!m_quickCommandStore.save(candidate))
+    {
+        qCWarning(appControllerLog) << "Unable to persist quick commands";
+        setQuickCommandOperationError(tr("The quick command could not be saved."));
+        return false;
+    }
+    m_quickCommands = std::move(candidate);
+    m_quickCommandOperationError.clear();
+    emit quickCommandsChanged();
+    return true;
+}
+
+bool AppController::deleteQuickCommand(const QString &id)
+{
+    std::vector<workbench::QuickCommand> candidate = m_quickCommands;
+    const std::string commandId = utf8String(id);
+    const auto existing = std::ranges::find(candidate, commandId, &workbench::QuickCommand::id);
+    if (existing == candidate.end())
+    {
+        setQuickCommandOperationError(tr("The quick command no longer exists."));
+        return false;
+    }
+    candidate.erase(existing);
+    if (!m_quickCommandStore.save(candidate))
+    {
+        qCWarning(appControllerLog) << "Unable to persist quick command deletion";
+        setQuickCommandOperationError(tr("The quick command could not be deleted."));
+        return false;
+    }
+    m_quickCommands = std::move(candidate);
+    m_quickCommandOperationError.clear();
+    emit quickCommandsChanged();
+    return true;
+}
+
+bool AppController::moveQuickCommand(const QString &id, const int targetIndex)
+{
+    if (m_quickCommands.empty())
+    {
+        return false;
+    }
+    std::vector<workbench::QuickCommand> candidate = m_quickCommands;
+    const std::string commandId = utf8String(id);
+    const auto existing = std::ranges::find(candidate, commandId, &workbench::QuickCommand::id);
+    if (existing == candidate.end())
+    {
+        setQuickCommandOperationError(tr("The quick command no longer exists."));
+        return false;
+    }
+
+    const std::size_t sourceIndex = static_cast<std::size_t>(std::distance(candidate.begin(), existing));
+    const std::size_t boundedTarget =
+        static_cast<std::size_t>(std::clamp(targetIndex, 0, static_cast<int>(candidate.size() - 1U)));
+    if (sourceIndex == boundedTarget)
+    {
+        return true;
+    }
+    workbench::QuickCommand moved = std::move(candidate[sourceIndex]);
+    candidate.erase(candidate.begin() + static_cast<std::ptrdiff_t>(sourceIndex));
+    candidate.insert(candidate.begin() + static_cast<std::ptrdiff_t>(boundedTarget), std::move(moved));
+    if (!m_quickCommandStore.save(candidate))
+    {
+        qCWarning(appControllerLog) << "Unable to persist quick command order";
+        setQuickCommandOperationError(tr("The quick command order could not be saved."));
+        return false;
+    }
+    m_quickCommands = std::move(candidate);
+    m_quickCommandOperationError.clear();
+    emit quickCommandsChanged();
+    return true;
+}
+
+void AppController::refreshTerminalHistory()
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr)
+    {
+        return;
+    }
+    if (tab->kind == TerminalTabKind::Ssh)
+    {
+        if (tab->ssh == nullptr || !tab->running)
+        {
+            tab->historyState = QStringLiteral("error");
+            tab->historyError = tr("Connect the SSH terminal before reading remote history.");
+            emit terminalHistoryChanged();
+            return;
+        }
+        tab->historyState = QStringLiteral("loading");
+        tab->historyError.clear();
+        const std::uint64_t requestId = ++tab->historyRequestId;
+        emit terminalHistoryChanged();
+        tab->ssh->requestShellHistory(requestId);
+        return;
+    }
+
+    const QString historyPath = workbench::defaultPowerShellHistoryPath();
+    if (historyPath.isEmpty())
+    {
+        tab->historyState = QStringLiteral("error");
+        tab->historyError = tr("The PowerShell history location is unavailable.");
+        emit terminalHistoryChanged();
+        return;
+    }
+
+    tab->historyState = QStringLiteral("loading");
+    tab->historyError.clear();
+    const QString tabId = tab->id;
+    const std::uint64_t requestId = ++tab->historyRequestId;
+    const QString historyReadError = tr("PowerShell history could not be read.");
+    emit terminalHistoryChanged();
+
+    const QPointer<AppController> self(this);
+    QThreadPool::globalInstance()->start([self, historyPath, tabId, requestId, historyReadError] {
+        std::vector<workbench::ShellHistoryEntry> entries;
+        bool readFailed = true;
+        try
+        {
+            auto result = workbench::readPowerShellHistory(historyPath);
+            if (result)
+            {
+                entries = std::move(*result);
+                readFailed = false;
+            }
+        }
+        catch (const std::bad_alloc &)
+        {
+            readFailed = true;
+        }
+        if (self)
+        {
+            emit self->terminalHistoryTaskCompleted(tabId, requestId, std::move(entries),
+                                                    readFailed ? historyReadError : QString{});
+        }
+    });
+}
+
+void AppController::applyTerminalHistoryTaskResult(const QString &tabId, const quint64 requestId,
+                                                   ShellHistoryEntries entries, const QString &error)
+{
+    TerminalTab *target = findTab(tabId);
+    if (target == nullptr || target->historyRequestId != requestId)
+    {
+        return;
+    }
+    if (!error.isEmpty())
+    {
+        target->history.clear();
+        target->historyState = QStringLiteral("error");
+        target->historyError = error;
+    }
+    else
+    {
+        target->history = std::move(entries);
+        target->historyState = QStringLiteral("ready");
+        target->historyError.clear();
+    }
+    emit terminalHistoryChanged();
 }
 
 bool AppController::connectPrivateKey(const QString &host, const int port, const QString &username,
@@ -915,6 +1509,8 @@ bool AppController::startSshConnection(ssh::SshConnectionRequest request, QStrin
     auto tab = std::make_unique<TerminalTab>();
     tab->id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     tab->title = QStringLiteral("%1@%2").arg(request.username, request.host);
+    tab->identity = QStringLiteral("%1@%2:%3").arg(request.username, request.host).arg(request.port);
+    tab->address = request.host;
     tab->status = tr("Starting SSH connection...");
     tab->kind = TerminalTabKind::Ssh;
     tab->sourceProfileId = std::move(sourceProfileId);
@@ -1826,6 +2422,72 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
                              emit terminalSearchChanged();
                          }
                      });
+    QObject::connect(
+        tab.ssh.get(), &ssh::SshTerminalSession::shellHistoryReady, this,
+        [this, tabId](const quint64 requestId, const QString &shell, const QByteArray &contents, const QString &error) {
+            TerminalTab *updated = findTab(tabId);
+            if (updated == nullptr || updated->historyRequestId != requestId)
+            {
+                return;
+            }
+            if (!error.isEmpty())
+            {
+                updated->history.clear();
+                updated->historyState = QStringLiteral("error");
+                updated->historyError = error;
+                if (m_activeTabId == tabId)
+                {
+                    emit terminalHistoryChanged();
+                }
+                return;
+            }
+            constexpr qsizetype maximumHistoryBytes = qsizetype{2} * 1024 * 1024;
+            if (contents.size() > maximumHistoryBytes)
+            {
+                updated->history.clear();
+                updated->historyState = QStringLiteral("error");
+                updated->historyError = tr("Remote shell history exceeded the safety limit.");
+                if (m_activeTabId == tabId)
+                {
+                    emit terminalHistoryChanged();
+                }
+                return;
+            }
+
+            const QPointer<AppController> self(this);
+            QThreadPool::globalInstance()->start([self, tabId, requestId, shell, contents] {
+                std::vector<workbench::ShellHistoryEntry> parsed;
+                QString parseError;
+                try
+                {
+                    const std::string_view source(contents.constData(), static_cast<std::size_t>(contents.size()));
+                    if (shell == QStringLiteral("bash"))
+                    {
+                        parsed = workbench::parseBashHistory(source);
+                    }
+                    else if (shell == QStringLiteral("zsh"))
+                    {
+                        parsed = workbench::parseZshHistory(source);
+                    }
+                    else if (shell == QStringLiteral("fish"))
+                    {
+                        parsed = workbench::parseFishHistory(source);
+                    }
+                    else
+                    {
+                        parseError = AppController::tr("This remote shell is not supported yet.");
+                    }
+                }
+                catch (const std::bad_alloc &)
+                {
+                    parseError = AppController::tr("Remote shell history could not be parsed.");
+                }
+                if (self)
+                {
+                    emit self->terminalHistoryTaskCompleted(tabId, requestId, std::move(parsed), parseError);
+                }
+            });
+        });
     QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::hostKeyConfirmationRequired, this,
                      [this, tabId](const QString &algorithm, const QString &fingerprint) {
                          m_hostKeyTabId = tabId;
@@ -1886,27 +2548,124 @@ void AppController::connectTerminalSignals()
 void AppController::queueInput(const QByteArray &bytes)
 {
     TerminalTab *tab = activeTab();
-    if (tab != nullptr && tab->ssh)
+    if (tab == nullptr || bytes.isEmpty())
     {
-        tab->ssh->queueInput(bytes);
+        return;
     }
-    else if (tab != nullptr && tab->local)
-    {
-        tab->local->queueInput(bytes);
-    }
+    observeTerminalInput(*tab, bytes);
+    dispatchInput(*tab, bytes);
 }
 
 void AppController::queuePaste(const QByteArray &bytes)
 {
     TerminalTab *tab = activeTab();
-    if (tab != nullptr && tab->ssh)
+    if (tab == nullptr || bytes.isEmpty())
     {
-        tab->ssh->queuePaste(bytes);
+        return;
     }
-    else if (tab != nullptr && tab->local)
+    observeTerminalInput(*tab, bytes);
+    dispatchPaste(*tab, bytes);
+}
+
+void AppController::dispatchInput(TerminalTab &tab, const QByteArray &bytes)
+{
+    if (tab.ssh)
     {
-        tab->local->queuePaste(bytes);
+        tab.ssh->queueInput(bytes);
     }
+    else if (tab.local)
+    {
+        tab.local->queueInput(bytes);
+    }
+}
+
+void AppController::dispatchPaste(TerminalTab &tab, const QByteArray &bytes)
+{
+    if (tab.ssh)
+    {
+        tab.ssh->queuePaste(bytes);
+    }
+    else if (tab.local)
+    {
+        tab.local->queuePaste(bytes);
+    }
+}
+
+void AppController::observeTerminalInput(TerminalTab &tab, const QByteArray &bytes)
+{
+    for (const char character : bytes)
+    {
+        const auto value = static_cast<unsigned char>(character);
+        if (character == '\r' || character == '\n')
+        {
+            if (tab.inputHistoryBufferReliable)
+            {
+                appendCapturedHistory(tab, QString::fromUtf8(tab.inputHistoryBuffer));
+            }
+            tab.inputHistoryBuffer.clear();
+            tab.inputHistoryBufferReliable = true;
+            continue;
+        }
+        if (value == 0x08U || value == 0x7FU)
+        {
+            if (tab.inputHistoryBufferReliable)
+            {
+                removeLastUtf8CodePoint(tab.inputHistoryBuffer);
+            }
+            continue;
+        }
+        if (value == 0x15U || value == 0x03U)
+        {
+            tab.inputHistoryBuffer.clear();
+            tab.inputHistoryBufferReliable = true;
+            continue;
+        }
+        if (value < 0x20U)
+        {
+            tab.inputHistoryBufferReliable = false;
+            continue;
+        }
+        if (tab.inputHistoryBufferReliable)
+        {
+            tab.inputHistoryBuffer.append(character);
+            if (tab.inputHistoryBuffer.size() > maximumPendingHistoryBytes)
+            {
+                tab.inputHistoryBuffer.clear();
+                tab.inputHistoryBufferReliable = false;
+            }
+        }
+    }
+}
+
+void AppController::appendCapturedHistory(TerminalTab &tab, const QString &command)
+{
+    const QString normalized = normalizedQuickCommandText(command).trimmed();
+    if (!validTerminalCommand(normalized))
+    {
+        return;
+    }
+
+    const workbench::ShellKind shell =
+        tab.kind == TerminalTabKind::Local
+            ? workbench::ShellKind::powershell
+            : (!tab.history.empty() ? tab.history.front().shell : workbench::ShellKind::unknown);
+    const std::int64_t timestamp = QDateTime::currentSecsSinceEpoch();
+    if (!tab.capturedHistory.empty() && utf8QString(tab.capturedHistory.front().command) == normalized)
+    {
+        tab.capturedHistory.front().timestampUtcSeconds = timestamp;
+    }
+    else
+    {
+        tab.capturedHistory.insert(tab.capturedHistory.begin(),
+                                   workbench::ShellHistoryEntry{.command = utf8String(normalized),
+                                                                .shell = shell,
+                                                                .timestampUtcSeconds = timestamp});
+        if (tab.capturedHistory.size() > maximumHistoryEntries)
+        {
+            tab.capturedHistory.resize(maximumHistoryEntries);
+        }
+    }
+    emit terminalHistoryChanged();
 }
 
 void AppController::requestScroll(const int rows)
@@ -2082,6 +2841,18 @@ void AppController::loadApplicationSettings()
     m_credentialVaults->select(selected);
 }
 
+void AppController::loadQuickCommands()
+{
+    auto quickCommands = m_quickCommandStore.load();
+    if (!quickCommands)
+    {
+        qCWarning(appControllerLog) << "Unable to load quick commands; starting with an empty command list";
+        setQuickCommandOperationError(tr("Saved quick commands could not be loaded."));
+        return;
+    }
+    m_quickCommands = std::move(*quickCommands);
+}
+
 bool AppController::persistApplicationSettings(const config::ApplicationSettings &settings)
 {
     if (!m_settingsStore.save(settings))
@@ -2106,6 +2877,16 @@ void AppController::setCredentialOperationError(QString message)
     }
     m_credentialOperationError = std::move(message);
     emit credentialVaultChanged();
+}
+
+void AppController::setQuickCommandOperationError(QString message)
+{
+    if (m_quickCommandOperationError == message)
+    {
+        return;
+    }
+    m_quickCommandOperationError = std::move(message);
+    emit quickCommandsChanged();
 }
 
 } // namespace ztermy

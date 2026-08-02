@@ -27,6 +27,30 @@ Item {
             return "M 8 4.5 A 3.5 3.5 0 1 0 8 11.5 A 3.5 3.5 0 1 0 8 4.5 M 8 1.5 L 8 3 M 8 13 L 8 14.5 M 1.5 8 L 3 8 M 13 8 L 14.5 8 M 3.4 3.4 L 4.45 4.45 M 11.55 11.55 L 12.6 12.6 M 12.6 3.4 L 11.55 4.45 M 4.45 11.55 L 3.4 12.6";
         case "terminal":
             return "M 2.5 3.5 L 13.5 3.5 L 13.5 12.5 L 2.5 12.5 Z M 4.5 6 L 7 8 L 4.5 10 M 8 10 L 11 10";
+        case "history":
+            return "M 3.1 4.4 A 6 6 0 1 1 2.5 9.6 M 2.1 3.1 L 2.8 5.4 L 5.1 4.7 M 8 4.7 L 8 8 L 10.4 9.5";
+        case "commands":
+            return "M 2.5 3.5 L 13.5 3.5 L 13.5 12.5 L 2.5 12.5 Z M 4.5 6 L 6.8 8 L 4.5 10 M 8 10 L 11 10";
+        case "edit":
+            return "M 3 11.8 L 3.8 8.9 L 10.7 2 L 14 5.3 L 7.1 12.2 L 4.2 13 Z M 9.6 3.1 L 12.9 6.4";
+        case "trash":
+            return "M 3 4.5 L 13 4.5 M 6 2.5 L 10 2.5 M 4.5 4.5 L 5.2 13.5 L 10.8 13.5 L 11.5 4.5 M 6.8 7 L 6.8 11 M 9.2 7 L 9.2 11";
+        case "search":
+            return "M 7 2.5 A 4.5 4.5 0 1 0 7 11.5 A 4.5 4.5 0 1 0 7 2.5 M 10.3 10.3 L 14 14";
+        case "copy":
+            return "M 5.5 5.5 L 13.5 5.5 L 13.5 13.5 L 5.5 13.5 Z M 2.5 10.5 L 2.5 2.5 L 10.5 2.5";
+        case "compose":
+            return "M 3 3.5 L 13 3.5 L 13 12.5 L 3 12.5 Z M 5 6 L 11 6 M 5 8.5 L 9 8.5";
+        case "play":
+            return "M 5 3 L 12.5 8 L 5 13 Z";
+        case "save":
+            return "M 3 2.5 L 11.5 2.5 L 13.5 4.5 L 13.5 13.5 L 2.5 13.5 L 2.5 2.5 Z M 5 2.5 L 5 6 L 11 6 L 11 2.5 M 5 13.5 L 5 9 L 11 9 L 11 13.5";
+        case "refresh":
+            return "M 12.5 5 A 5 5 0 1 0 13 10 M 12.5 2.5 L 12.5 5 L 10 5";
+        case "swap-horizontal":
+            return "M 2.5 5 L 12 5 M 9.5 2.5 L 12 5 L 9.5 7.5 M 13.5 11 L 4 11 M 6.5 8.5 L 4 11 L 6.5 13.5";
+        case "more":
+            return "M 3 8 A 1 1 0 1 0 3 8.1 M 8 8 A 1 1 0 1 0 8 8.1 M 13 8 A 1 1 0 1 0 13 8.1";
         case "check":
             return "M 3.5 8 L 6.5 11 L 12.5 4.5";
         case "eye":
