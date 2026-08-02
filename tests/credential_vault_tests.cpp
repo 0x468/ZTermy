@@ -10,9 +10,11 @@
 #include <QUuid>
 
 #include <algorithm>
+#include <atomic>
 #include <cstddef>
 #include <memory>
 #include <string_view>
+#include <thread>
 
 namespace
 {
@@ -105,6 +107,7 @@ class CredentialVaultTests final : public QObject
 
 private slots:
     void memoryVaultStoresReplacesAndRemovesSecrets();
+    void memoryVaultSerializesConcurrentReadsAndWrites();
     void portableVaultRequiresStrongMasterPassword();
     void portableVaultPersistsAndAuthenticates();
     void portableVaultUsesFreshNonceForEveryRewrite();
@@ -146,6 +149,40 @@ void CredentialVaultTests::memoryVaultStoresReplacesAndRemovesSecrets()
                              static_cast<qsizetype>(ztermy::security::MaximumCredentialSecretSize + 1U), 'x')));
     QVERIFY(!oversized);
     QCOMPARE(oversized.error(), ztermy::security::CredentialVaultError::SecretTooLarge);
+}
+
+void CredentialVaultTests::memoryVaultSerializesConcurrentReadsAndWrites()
+{
+    ztermy::security::InMemoryCredentialVault vault;
+    const auto key = passwordKey();
+    QVERIFY(vault.store(key, sensitive("initial")));
+    std::atomic_int failures = 0;
+
+    std::jthread writer([&vault, &key, &failures] {
+        for (int index = 0; index < 200; ++index)
+        {
+            const QByteArray value = index % 2 == 0 ? QByteArrayLiteral("alpha") : QByteArrayLiteral("beta");
+            if (!vault.store(key, ztermy::security::SensitiveByteArray(QByteArray(value))))
+            {
+                ++failures;
+            }
+        }
+    });
+    std::jthread reader([&vault, &key, &failures] {
+        for (int index = 0; index < 400; ++index)
+        {
+            auto value = vault.read(key);
+            if (!value || value->empty())
+            {
+                ++failures;
+            }
+        }
+    });
+    writer.join();
+    reader.join();
+
+    QCOMPARE(failures.load(), 0);
+    QVERIFY(vault.read(key));
 }
 
 void CredentialVaultTests::portableVaultRequiresStrongMasterPassword()

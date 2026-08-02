@@ -136,7 +136,7 @@ Rectangle {
     focus: visible
     Keys.onEscapePressed: closeRequested()
     Accessible.role: Accessible.Pane
-    Accessible.name: currentPage === "history" ? qsTr("Command history") : qsTr("Scripts")
+    Accessible.name: currentPage === "sftp" ? qsTr("SFTP file browser") : currentPage === "history" ? qsTr("Command history") : qsTr("Scripts")
     onVisibleChanged: {
         if (visible && currentPage === "history" && controller.terminalHistoryState === "idle") {
             controller.refreshTerminalHistory();
@@ -240,6 +240,27 @@ Rectangle {
                 spacing: 4
 
                 WorkbenchToolButton {
+                    id: sftpPageButton
+
+                    Layout.alignment: Qt.AlignVCenter
+                    Layout.preferredWidth: 32
+                    Layout.preferredHeight: 32
+                    checkable: true
+                    checked: workbench.currentPage === "sftp"
+                    selected: checked
+                    onClicked: workbench.controller.toggleTerminalWorkbench("sftp")
+                    Accessible.name: qsTr("SFTP file browser")
+                    contentItem: AppIcon {
+                        name: "folder"
+                        color: sftpPageButton.checked ? Theme.accent : Theme.textSoft
+                    }
+
+                    AppToolTip {
+                        text: qsTr("SFTP files")
+                    }
+                }
+
+                WorkbenchToolButton {
                     id: historyPageButton
 
                     Layout.alignment: Qt.AlignVCenter
@@ -312,6 +333,13 @@ Rectangle {
             ColumnLayout {
                 anchors.fill: parent
                 spacing: 0
+
+                SftpBrowser {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    visible: workbench.currentPage === "sftp"
+                    controller: workbench.controller
+                }
 
                 Item {
                     Layout.fillWidth: true

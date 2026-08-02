@@ -21,6 +21,7 @@ private slots:
     void observesUnknownHostBeforeAuthentication();
     void authenticatesWithExplicitPrivateKey();
     void opensAndClosesTerminalWithExplicitPrivateKey();
+    void listsSftpDirectoryWithExplicitPrivateKey();
 };
 
 namespace
@@ -231,6 +232,10 @@ void SshRealHostTests::opensAndClosesTerminalWithExplicitPrivateKey()
     QVERIFY(open);
     QVERIFY((*session)->terminalOpen());
 
+    auto blockedSftp = (*session)->openSftp(*socket, 1s);
+    QVERIFY(!blockedSftp);
+    QCOMPARE(blockedSftp.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidState);
+
     auto resize = (*session)->resizeTerminal(*socket, 100, 30, 5s);
     QVERIFY(resize);
 
@@ -238,6 +243,80 @@ void SshRealHostTests::opensAndClosesTerminalWithExplicitPrivateKey()
     QVERIFY(close);
     QVERIFY(!(*session)->terminalOpen());
     qInfo("SSH terminal channel opened, resized, and closed");
+}
+
+void SshRealHostTests::listsSftpDirectoryWithExplicitPrivateKey()
+{
+    const QByteArray hostValue = qgetenv("ZTERMY_TEST_SSH_HOST");
+    const QByteArray usernameValue = qgetenv("ZTERMY_TEST_SSH_USERNAME");
+    const QByteArray privateKeyValue = qgetenv("ZTERMY_TEST_SSH_PRIVATE_KEY");
+    const QByteArray expectedFingerprint = qgetenv("ZTERMY_TEST_SSH_EXPECTED_FINGERPRINT");
+    if (hostValue.isEmpty() || usernameValue.isEmpty() || privateKeyValue.isEmpty() || expectedFingerprint.isEmpty())
+    {
+        QSKIP("Set the host, username, private-key path, and expected fingerprint to run the SFTP gate");
+    }
+
+    const std::uint16_t port = configuredPort();
+    const std::string host(hostValue.constData(), static_cast<std::size_t>(hostValue.size()));
+    auto socket = ztermy::ssh::WindowsTcpSocket::connect(host, port, 5s);
+    QVERIFY(socket);
+
+    auto session = ztermy::ssh::Libssh2Session::create();
+    QVERIFY(session);
+    QVERIFY((*session)->handshake(*socket, 5s));
+
+    auto hostKey = (*session)->hostKey();
+    QVERIFY(hostKey);
+    const QByteArray actualFingerprint = QByteArray::fromStdString(ztermy::ssh::sha256Fingerprint(*hostKey));
+    if (actualFingerprint != expectedFingerprint)
+    {
+        QFAIL(qPrintable(
+            QStringLiteral("Host fingerprint mismatch; observed %1").arg(QString::fromLatin1(actualFingerprint))));
+    }
+
+    const ztermy::ssh::SshEndpoint endpoint{.host = host, .port = port};
+    const std::vector knownHosts{ztermy::ssh::KnownHostEntry{
+        .endpoint = endpoint,
+        .algorithm = hostKey->algorithm,
+        .encodedKey = hostKey->encodedKey,
+    }};
+    auto trust = (*session)->verifyHostKey(endpoint, knownHosts);
+    QVERIFY(trust);
+    QCOMPARE(*trust, ztermy::ssh::HostKeyTrust::Trusted);
+
+    const std::string username(usernameValue.constData(), static_cast<std::size_t>(usernameValue.size()));
+    const std::string privateKey(privateKeyValue.constData(), static_cast<std::size_t>(privateKeyValue.size()));
+    QVERIFY((*session)->authenticateWithPrivateKeyFile(*socket, username, privateKey, {}, 10s));
+    QVERIFY((*session)->openSftp(*socket, 10s));
+    QVERIFY((*session)->sftpOpen());
+
+    auto blockedTerminal = (*session)->openTerminal(*socket, 80, 24, "xterm-256color", 1s);
+    QVERIFY(!blockedTerminal);
+    QCOMPARE(blockedTerminal.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidState);
+
+    const QByteArray configuredPath = qgetenv("ZTERMY_TEST_SFTP_PATH");
+    const std::string remotePath =
+        configuredPath.isEmpty()
+            ? std::string{"/"}
+            : std::string(configuredPath.constData(), static_cast<std::size_t>(configuredPath.size()));
+    auto entries = (*session)->listSftpDirectory(*socket, remotePath, 10s);
+    if (!entries)
+    {
+        QFAIL(qPrintable(QStringLiteral("SFTP listing failed: kind=%1 libssh2=%2 protocol=%3")
+                             .arg(static_cast<int>(entries.error().kind))
+                             .arg(entries.error().libssh2Code)
+                             .arg(entries.error().nativeCode)));
+    }
+    for (const auto &entry : *entries)
+    {
+        QVERIFY(entry.name != ".");
+        QVERIFY(entry.name != "..");
+        QVERIFY(entry.remotePath.starts_with('/'));
+    }
+
+    QVERIFY((*session)->closeSftp(*socket, 5s));
+    QVERIFY(!(*session)->sftpOpen());
+    qInfo() << "SFTP directory listed with" << entries->size() << "entries";
 }
 
 QTEST_GUILESS_MAIN(SshRealHostTests)

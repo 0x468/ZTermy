@@ -13,7 +13,7 @@ Rectangle {
     readonly property int titleBarHeight: Theme.titleBarHeight
     readonly property int captionButtonWidth: 46
     readonly property int titleQuickActionWidth: 40
-    readonly property int titleQuickActionsWidth: titleQuickActionWidth * 2
+    readonly property int titleQuickActionsWidth: titleQuickActionWidth * 3
     readonly property int titleSecurityActionWidth: portableVaultNeedsAttention ? 40 : 0
     readonly property int titleNavigationWidth: Math.min(830, Math.max(310, width - (captionButtonWidth * 3) - titleQuickActionsWidth - titleSecurityActionWidth - 96))
     readonly property color backgroundColor: Theme.windowBackground
@@ -274,6 +274,10 @@ Rectangle {
         case "terminal.scripts":
             currentPage = "terminal";
             controller.toggleTerminalWorkbench("scripts");
+            break;
+        case "terminal.sftp":
+            currentPage = "terminal";
+            controller.toggleTerminalWorkbench("sftp");
             break;
         case "terminal.composer":
             currentPage = "terminal";
@@ -727,6 +731,60 @@ Rectangle {
             Rectangle {
                 width: root.titleQuickActionWidth
                 height: titleBar.height
+                color: transferCenterAction.hovered || transferCenterAction.activeFocus ? Theme.controlHover : "transparent"
+                border.color: transferCenterAction.activeFocus ? Theme.focus : "transparent"
+                border.width: transferCenterAction.activeFocus ? 1 : 0
+
+                AppIcon {
+                    anchors.centerIn: parent
+                    width: 16
+                    height: 16
+                    name: "transfer"
+                    color: transferCenter.visible ? root.textColor : root.mutedColor
+                }
+
+                Rectangle {
+                    anchors.right: parent.right
+                    anchors.rightMargin: 6
+                    anchors.top: parent.top
+                    anchors.topMargin: 5
+                    visible: root.controller.activeTransferCount > 0
+                    width: Math.max(12, transferCountText.implicitWidth + 4)
+                    height: 12
+                    radius: 6
+                    color: Theme.accent
+
+                    Text {
+                        id: transferCountText
+
+                        anchors.centerIn: parent
+                        text: root.controller.activeTransferCount > 9 ? "9+" : root.controller.activeTransferCount
+                        color: Theme.accentText
+                        font.family: Theme.uiFont
+                        font.pixelSize: 8
+                        font.weight: Font.Bold
+                    }
+                }
+
+                KeyboardAction {
+                    id: transferCenterAction
+
+                    objectName: "transferCenterAction"
+                    anchors.fill: parent
+                    anchors.margins: 2
+                    accessibleName: qsTr("Open file transfers")
+                    onActivated: transferCenter.visible ? transferCenter.close() : transferCenter.open()
+                }
+
+                AppToolTip {
+                    visible: transferCenterAction.hovered
+                    text: qsTr("File transfers")
+                }
+            }
+
+            Rectangle {
+                width: root.titleQuickActionWidth
+                height: titleBar.height
                 color: commandPaletteAction.hovered || commandPaletteAction.activeFocus ? Theme.controlHover : "transparent"
                 border.color: commandPaletteAction.activeFocus ? Theme.focus : "transparent"
                 border.width: commandPaletteAction.activeFocus ? 1 : 0
@@ -834,6 +892,14 @@ Rectangle {
         id: commandPalette
 
         anchors.fill: parent
+        controller: root.controller
+    }
+
+    TransferCenter {
+        id: transferCenter
+
+        x: Math.max(8, root.width - root.captionButtonWidth * 3 - width - 8)
+        y: root.titleBarHeight + 6
         controller: root.controller
     }
 

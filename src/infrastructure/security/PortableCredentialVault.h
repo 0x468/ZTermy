@@ -6,6 +6,7 @@
 #include <QString>
 
 #include <expected>
+#include <mutex>
 #include <span>
 #include <string_view>
 #include <vector>
@@ -57,6 +58,7 @@ private:
     writeRecords(std::span<const Record> records, std::string_view key, const QByteArray &salt) const;
 
     QString m_filePath;
+    mutable std::recursive_mutex m_mutex;
     QByteArray m_salt;
     SensitiveByteArray m_key;
 };

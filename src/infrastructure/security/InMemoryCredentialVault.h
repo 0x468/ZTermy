@@ -3,6 +3,7 @@
 #include "core/security/CredentialVault.h"
 
 #include <map>
+#include <mutex>
 #include <utility>
 
 namespace ztermy::security
@@ -24,6 +25,7 @@ public:
 
 private:
     using MapKey = std::pair<std::string, CredentialKind>;
+    mutable std::mutex m_mutex;
     std::map<MapKey, QByteArray> m_secrets;
 };
 

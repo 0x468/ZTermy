@@ -1,9 +1,9 @@
 #pragma once
 
+#include "application/ssh/SshConnectionBootstrap.h"
+#include "application/ssh/SshConnectionRequest.h"
 #include "core/diagnostics/LatencyHistogram.h"
-#include "core/security/SensitiveByteArray.h"
 #include "domain/ssh/SshConnectionState.h"
-#include "domain/ssh/SshProfile.h"
 #include "domain/terminal/TerminalEngine.h"
 #include "infrastructure/ssh/WindowsTcpSocket.h"
 
@@ -29,17 +29,6 @@ class GhosttyTerminalEngine;
 
 namespace ztermy::ssh
 {
-
-struct SshConnectionRequest final
-{
-    QString host;
-    std::uint16_t port = 22;
-    QString username;
-    SshAuthenticationMethod authentication = SshAuthenticationMethod::PrivateKey;
-    QString privateKeyPath;
-    security::SensitiveByteArray secret;
-    QString knownHostsPath;
-};
 
 [[nodiscard]] QString sshFailureStatus(SshFailureKind failure);
 
@@ -131,14 +120,6 @@ private:
         quint64 requestId = 0;
     };
 
-    enum class HostKeyDecision : std::uint8_t
-    {
-        Pending,
-        AcceptOnce,
-        AcceptAndRemember,
-        Reject,
-    };
-
     using Command = std::variant<InputCommand, PasteCommand, terminal::TerminalGeometry, ScrollCommand,
                                  SelectionCommand, CopyCommand, SearchCommand, ClearSearchCommand, HistoryCommand>;
 
@@ -171,7 +152,7 @@ private:
 
     std::mutex m_hostKeyMutex;
     std::condition_variable_any m_hostKeyAvailable;
-    HostKeyDecision m_hostKeyDecision = HostKeyDecision::Pending;
+    std::optional<UnknownHostKeyDecision> m_hostKeyDecision;
     bool m_awaitingHostKey = false;
 
     std::mutex m_snapshotMutex;

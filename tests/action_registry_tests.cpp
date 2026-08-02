@@ -45,6 +45,11 @@ void ActionRegistryTests::exposesStableMetadataAndContext()
     QVERIFY(!terminalFind.value(QStringLiteral("enabled")).toBool());
     QVERIFY(
         actionById(registry.actions(true), QStringLiteral("terminal.find")).value(QStringLiteral("enabled")).toBool());
+
+    const QVariantMap sftp = actionById(registry.actions(true), QStringLiteral("terminal.sftp"));
+    QCOMPARE(sftp.value(QStringLiteral("category")).toString(), QStringLiteral("terminal"));
+    QVERIFY(sftp.value(QStringLiteral("paletteVisible")).toBool());
+    QVERIFY(sftp.value(QStringLiteral("shortcut")).toString().isEmpty());
 }
 
 void ActionRegistryTests::normalizesOverridesAndSupportsUnbind()

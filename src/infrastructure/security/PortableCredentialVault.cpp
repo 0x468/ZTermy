@@ -262,26 +262,31 @@ PortableCredentialVault::PortableCredentialVault(QString filePath) : m_filePath(
 
 PortableCredentialVault::~PortableCredentialVault()
 {
+    const std::scoped_lock guard(m_mutex);
     lock();
 }
 
 const QString &PortableCredentialVault::filePath() const noexcept
 {
+    const std::scoped_lock guard(m_mutex);
     return m_filePath;
 }
 
 bool PortableCredentialVault::initialized() const noexcept
 {
+    const std::scoped_lock guard(m_mutex);
     return !m_filePath.isEmpty() && QFileInfo::exists(m_filePath);
 }
 
 bool PortableCredentialVault::locked() const noexcept
 {
+    const std::scoped_lock guard(m_mutex);
     return m_key.empty();
 }
 
 std::expected<void, CredentialVaultError> PortableCredentialVault::initialize(SensitiveByteArray masterPassword)
 {
+    const std::scoped_lock guard(m_mutex);
     if (m_filePath.isEmpty())
     {
         return std::unexpected(CredentialVaultError::IoError);
@@ -312,6 +317,7 @@ std::expected<void, CredentialVaultError> PortableCredentialVault::initialize(Se
 
 std::expected<void, CredentialVaultError> PortableCredentialVault::unlock(SensitiveByteArray masterPassword)
 {
+    const std::scoped_lock guard(m_mutex);
     auto envelope = loadEnvelope();
     if (!envelope)
     {
@@ -335,6 +341,7 @@ std::expected<void, CredentialVaultError> PortableCredentialVault::unlock(Sensit
 std::expected<void, CredentialVaultError>
 PortableCredentialVault::changeMasterPassword(SensitiveByteArray masterPassword)
 {
+    const std::scoped_lock guard(m_mutex);
     if (locked())
     {
         return std::unexpected(CredentialVaultError::Locked);
@@ -365,6 +372,7 @@ PortableCredentialVault::changeMasterPassword(SensitiveByteArray masterPassword)
 
 void PortableCredentialVault::lock() noexcept
 {
+    const std::scoped_lock guard(m_mutex);
     clearBytes(m_salt);
     m_key.clear();
 }
@@ -382,6 +390,7 @@ bool PortableCredentialVault::persistent() const noexcept
 std::expected<void, CredentialVaultError> PortableCredentialVault::store(const CredentialKey &key,
                                                                          SensitiveByteArray secret)
 {
+    const std::scoped_lock guard(m_mutex);
     if (!validCredentialKey(key))
     {
         return std::unexpected(CredentialVaultError::InvalidKey);
@@ -419,6 +428,7 @@ std::expected<void, CredentialVaultError> PortableCredentialVault::store(const C
 
 std::expected<SensitiveByteArray, CredentialVaultError> PortableCredentialVault::read(const CredentialKey &key) const
 {
+    const std::scoped_lock guard(m_mutex);
     if (!validCredentialKey(key))
     {
         return std::unexpected(CredentialVaultError::InvalidKey);
@@ -445,6 +455,7 @@ std::expected<SensitiveByteArray, CredentialVaultError> PortableCredentialVault:
 
 std::expected<void, CredentialVaultError> PortableCredentialVault::remove(const CredentialKey &key)
 {
+    const std::scoped_lock guard(m_mutex);
     if (!validCredentialKey(key))
     {
         return std::unexpected(CredentialVaultError::InvalidKey);
@@ -471,6 +482,7 @@ std::expected<void, CredentialVaultError> PortableCredentialVault::remove(const 
 
 std::expected<std::vector<CredentialKey>, CredentialVaultError> PortableCredentialVault::listKeys() const
 {
+    const std::scoped_lock guard(m_mutex);
     if (locked())
     {
         return std::unexpected(CredentialVaultError::Locked);

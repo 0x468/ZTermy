@@ -31,73 +31,6 @@ constexpr std::string_view remoteShellHistoryCommand =
 constexpr qsizetype maximumRemoteHistoryBytes = qsizetype{2} * 1024 * 1024 + 256;
 constexpr std::string_view remoteHistoryMarker = "ZTERMY-HISTORY/1 ";
 
-[[nodiscard]] bool validRequest(const ztermy::ssh::SshConnectionRequest &request) noexcept
-{
-    if (request.host.trimmed().isEmpty() || request.port == 0 || request.username.isEmpty()
-        || request.knownHostsPath.isEmpty())
-    {
-        return false;
-    }
-    switch (request.authentication)
-    {
-        case ztermy::ssh::SshAuthenticationMethod::PrivateKey:
-            return !request.privateKeyPath.isEmpty();
-        case ztermy::ssh::SshAuthenticationMethod::Password:
-            return request.privateKeyPath.isEmpty() && !request.secret.empty();
-    }
-    return false;
-}
-
-[[nodiscard]] ztermy::ssh::SshFailureKind mapTcpFailure(const ztermy::ssh::TcpConnectErrorKind kind) noexcept
-{
-    using ztermy::ssh::SshFailureKind;
-    using ztermy::ssh::TcpConnectErrorKind;
-
-    switch (kind)
-    {
-        case TcpConnectErrorKind::NameResolutionFailed:
-            return SshFailureKind::NameResolutionFailed;
-        case TcpConnectErrorKind::ConnectionRefused:
-            return SshFailureKind::ConnectionRefused;
-        case TcpConnectErrorKind::TimedOut:
-            return SshFailureKind::TimedOut;
-        case TcpConnectErrorKind::Cancelled:
-            return SshFailureKind::Cancelled;
-        case TcpConnectErrorKind::InvalidEndpoint:
-        case TcpConnectErrorKind::NetworkUnreachable:
-        case TcpConnectErrorKind::SystemError:
-            return SshFailureKind::TransportError;
-    }
-    return SshFailureKind::TransportError;
-}
-
-[[nodiscard]] ztermy::ssh::SshFailureKind mapTransportFailure(const ztermy::ssh::SshTransportError &error,
-                                                              const bool openingChannel = false) noexcept
-{
-    using ztermy::ssh::SshFailureKind;
-    using ztermy::ssh::SshTransportErrorKind;
-
-    switch (error.kind)
-    {
-        case SshTransportErrorKind::TimedOut:
-            return SshFailureKind::TimedOut;
-        case SshTransportErrorKind::Cancelled:
-            return SshFailureKind::Cancelled;
-        case SshTransportErrorKind::AuthenticationRejected:
-            return SshFailureKind::AuthenticationRejected;
-        case SshTransportErrorKind::AuthenticationUnavailable:
-            return SshFailureKind::AuthenticationUnavailable;
-        case SshTransportErrorKind::ConnectionLost:
-            return SshFailureKind::RemoteClosed;
-        case SshTransportErrorKind::InitializationFailed:
-        case SshTransportErrorKind::InvalidArgument:
-        case SshTransportErrorKind::InvalidState:
-        case SshTransportErrorKind::ProtocolError:
-            return openingChannel ? SshFailureKind::ChannelOpenFailed : SshFailureKind::ProtocolError;
-    }
-    return SshFailureKind::ProtocolError;
-}
-
 [[nodiscard]] QString failureStatus(const ztermy::ssh::SshFailureKind failure)
 {
     using ztermy::ssh::SshFailureKind;
@@ -194,7 +127,7 @@ diagnostics::LatencySummary SshTerminalSession::inputQueueLatencySummary() const
 std::error_code SshTerminalSession::start(SshConnectionRequest request, const terminal::TerminalGeometry geometry)
 {
     stop();
-    if (!validRequest(request) || !geometry.valid())
+    if (!validSshConnectionRequest(request) || !geometry.valid())
     {
         return std::make_error_code(std::errc::invalid_argument);
     }
@@ -218,7 +151,7 @@ std::error_code SshTerminalSession::start(SshConnectionRequest request, const te
     }
     {
         std::scoped_lock lock(m_hostKeyMutex);
-        m_hostKeyDecision = HostKeyDecision::Pending;
+        m_hostKeyDecision.reset();
         m_awaitingHostKey = false;
     }
     postPhase(SshConnectionPhase::Resolving);
@@ -269,11 +202,11 @@ void SshTerminalSession::confirmHostKey(const bool remember)
 {
     {
         std::scoped_lock lock(m_hostKeyMutex);
-        if (!m_awaitingHostKey || m_hostKeyDecision != HostKeyDecision::Pending)
+        if (!m_awaitingHostKey || m_hostKeyDecision.has_value())
         {
             return;
         }
-        m_hostKeyDecision = remember ? HostKeyDecision::AcceptAndRemember : HostKeyDecision::AcceptOnce;
+        m_hostKeyDecision = remember ? UnknownHostKeyDecision::AcceptAndRemember : UnknownHostKeyDecision::AcceptOnce;
     }
     m_hostKeyAvailable.notify_all();
 }
@@ -282,11 +215,11 @@ void SshTerminalSession::rejectHostKey()
 {
     {
         std::scoped_lock lock(m_hostKeyMutex);
-        if (!m_awaitingHostKey || m_hostKeyDecision != HostKeyDecision::Pending)
+        if (!m_awaitingHostKey || m_hostKeyDecision.has_value())
         {
             return;
         }
-        m_hostKeyDecision = HostKeyDecision::Reject;
+        m_hostKeyDecision = UnknownHostKeyDecision::Reject;
     }
     m_hostKeyAvailable.notify_all();
 }
@@ -468,154 +401,78 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     };
 
     startState(state);
-    advanceState(state, SshConnectionPhase::Connecting);
-    postPhase(state.phase());
-    postStatus(tr("Connecting to SSH host"));
+    const SshConnectionCallbacks callbacks{
+        .phaseChanged =
+            [this, &state](const SshConnectionPhase phase) {
+                advanceState(state, phase);
+                postPhase(state.phase());
+                switch (phase)
+                {
+                    case SshConnectionPhase::Connecting:
+                        postStatus(tr("Connecting to SSH host"));
+                        break;
+                    case SshConnectionPhase::Handshaking:
+                        postStatus(tr("Negotiating SSH connection"));
+                        break;
+                    case SshConnectionPhase::VerifyingHostKey:
+                        postStatus(tr("Verifying SSH host key"));
+                        break;
+                    case SshConnectionPhase::AwaitingHostKeyConfirmation:
+                        postStatus(tr("SSH host key confirmation required"));
+                        break;
+                    case SshConnectionPhase::Authenticating:
+                        postStatus(tr("Authenticating SSH session"));
+                        break;
+                    case SshConnectionPhase::Disconnected:
+                    case SshConnectionPhase::Resolving:
+                    case SshConnectionPhase::OpeningChannel:
+                    case SshConnectionPhase::Connected:
+                    case SshConnectionPhase::Closing:
+                    case SshConnectionPhase::Failed:
+                        break;
+                }
+            },
+        .confirmUnknownHostKey = [this, &stopToken](const QString &algorithm,
+                                                    const QString &fingerprint) -> UnknownHostKeyDecision {
+            {
+                std::scoped_lock lock(m_hostKeyMutex);
+                m_hostKeyDecision.reset();
+                m_awaitingHostKey = true;
+            }
+            postHostKeyConfirmation(algorithm, fingerprint);
 
-    const QByteArray hostUtf8 = request.host.trimmed().toUtf8();
-    const std::string host(hostUtf8.constData(), static_cast<std::size_t>(hostUtf8.size()));
-    auto socket = WindowsTcpSocket::connect(host, request.port, 10s, stopToken);
-    if (!socket)
-    {
-        const SshFailureKind failure = mapTcpFailure(socket.error().kind);
-        finishFailure(failure);
-        return;
-    }
-
-    auto session = Libssh2Session::create();
-    if (!session)
-    {
-        finishFailure(SshFailureKind::ProtocolError);
-        return;
-    }
-
-    advanceState(state, SshConnectionPhase::Handshaking);
-    postPhase(state.phase());
-    postStatus(tr("Negotiating SSH connection"));
-    auto handshake = (*session)->handshake(*socket, 10s, stopToken);
-    if (!handshake)
-    {
-        const SshFailureKind failure = mapTransportFailure(handshake.error());
-        finishFailure(failure);
-        return;
-    }
-
-    advanceState(state, SshConnectionPhase::VerifyingHostKey);
-    postPhase(state.phase());
-    postStatus(tr("Verifying SSH host key"));
-    auto hostKey = (*session)->hostKey();
-    const KnownHostsStore knownHostsStore(request.knownHostsPath);
-    auto knownHosts = knownHostsStore.load();
-    if (!hostKey || !knownHosts)
-    {
-        finishFailure(SshFailureKind::HostKeyInvalid);
-        return;
-    }
-
-    const SshEndpoint endpoint{.host = host, .port = request.port};
-    auto trust = (*session)->verifyHostKey(endpoint, *knownHosts);
-    if (!trust)
-    {
-        finishFailure(SshFailureKind::HostKeyInvalid);
-        return;
-    }
-
-    const QString algorithm = QString::fromUtf8(hostKeyAlgorithmName(hostKey->algorithm));
-    const QString fingerprint = QString::fromStdString(sha256Fingerprint(*hostKey));
-    if (*trust == HostKeyTrust::Changed)
-    {
-        postHostKeyChange(algorithm, fingerprint);
-        finishFailure(SshFailureKind::HostKeyChanged);
-        return;
-    }
-
-    if (*trust == HostKeyTrust::Unknown)
-    {
-        advanceState(state, SshConnectionPhase::AwaitingHostKeyConfirmation);
-        postPhase(state.phase());
-        postStatus(tr("SSH host key confirmation required"));
-        {
-            std::scoped_lock lock(m_hostKeyMutex);
-            m_awaitingHostKey = true;
-        }
-        postHostKeyConfirmation(algorithm, fingerprint);
-
-        HostKeyDecision decision = HostKeyDecision::Pending;
-        {
             std::unique_lock lock(m_hostKeyMutex);
-            if (!m_hostKeyAvailable.wait(lock, stopToken, [this] {
-                    return m_hostKeyDecision != HostKeyDecision::Pending;
-                }))
-            {
-                decision = HostKeyDecision::Reject;
-            }
-            else
-            {
-                decision = m_hostKeyDecision;
-            }
+            const bool decided = m_hostKeyAvailable.wait(lock, stopToken, [this] {
+                return m_hostKeyDecision.has_value();
+            });
             m_awaitingHostKey = false;
-        }
-        if (decision == HostKeyDecision::Reject)
-        {
-            const SshFailureKind failure =
-                stopToken.stop_requested() ? SshFailureKind::Cancelled : SshFailureKind::HostKeyInvalid;
-            finishFailure(failure);
-            return;
-        }
+            return decided ? *m_hostKeyDecision : UnknownHostKeyDecision::Reject;
+        },
+        .hostKeyChanged =
+            [this](const QString &algorithm, const QString &fingerprint) {
+                postHostKeyChange(algorithm, fingerprint);
+            },
+    };
 
-        knownHosts->push_back(KnownHostEntry{
-            .endpoint = endpoint,
-            .algorithm = hostKey->algorithm,
-            .encodedKey = hostKey->encodedKey,
-        });
-        if (decision == HostKeyDecision::AcceptAndRemember && !knownHostsStore.save(*knownHosts))
-        {
-            finishFailure(SshFailureKind::HostKeyInvalid, tr("SSH host key could not be saved"));
-            return;
-        }
-        trust = (*session)->verifyHostKey(endpoint, *knownHosts);
-        if (!trust || *trust != HostKeyTrust::Trusted)
-        {
-            finishFailure(SshFailureKind::HostKeyInvalid);
-            return;
-        }
-    }
-
-    advanceState(state, SshConnectionPhase::Authenticating);
-    postPhase(state.phase());
-    postStatus(tr("Authenticating SSH session"));
-    const QByteArray usernameUtf8 = request.username.toUtf8();
-    const QByteArray privateKeyPathUtf8 = request.privateKeyPath.toUtf8();
-    const std::string username(usernameUtf8.constData(), static_cast<std::size_t>(usernameUtf8.size()));
-    const std::string privateKeyPath(privateKeyPathUtf8.constData(),
-                                     static_cast<std::size_t>(privateKeyPathUtf8.size()));
-    std::expected<void, SshTransportError> authentication;
-    switch (request.authentication)
+    auto connection = establishAuthenticatedSshConnection(request, callbacks, stopToken);
+    if (!connection)
     {
-        case SshAuthenticationMethod::PrivateKey:
-            authentication = (*session)->authenticateWithPrivateKeyFile(*socket, username, privateKeyPath,
-                                                                        request.secret.view(), 15s, stopToken);
-            break;
-        case SshAuthenticationMethod::Password:
-            authentication =
-                (*session)->authenticateWithPassword(*socket, username, request.secret.view(), 15s, stopToken);
-            break;
-    }
-    request.secret.clear();
-    if (!authentication)
-    {
-        const SshFailureKind failure = mapTransportFailure(authentication.error());
-        finishFailure(failure);
+        const QString status = connection.error().reason == SshBootstrapErrorReason::KnownHostsSaveFailed
+                                   ? tr("SSH host key could not be saved")
+                                   : QString{};
+        finishFailure(connection.error().failure, status);
         return;
     }
+    auto socket = std::move(connection->socket);
+    auto session = std::move(connection->session);
 
     advanceState(state, SshConnectionPhase::OpeningChannel);
     postPhase(state.phase());
     postStatus(tr("Opening SSH terminal"));
-    auto open = (*session)->openTerminal(*socket, geometry.columns, geometry.rows, "xterm-256color", 10s, stopToken);
+    auto open = session->openTerminal(socket, geometry.columns, geometry.rows, "xterm-256color", 10s, stopToken);
     if (!open)
     {
-        const SshFailureKind failure = mapTransportFailure(open.error(), true);
+        const SshFailureKind failure = sshFailureFromTransport(open.error(), true);
         finishFailure(failure);
         return;
     }
@@ -637,7 +494,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     bool suppressHistoryResult = false;
 
     const auto beginHistoryRequest = [&](const quint64 requestId) {
-        auto started = (*session)->startAuxiliaryCommand(remoteShellHistoryCommand);
+        auto started = session->startAuxiliaryCommand(remoteShellHistoryCommand);
         if (!started)
         {
             postShellHistory(requestId, {}, {}, tr("Remote shell history could not be started."));
@@ -679,10 +536,10 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                 publishSnapshot();
 
                 const auto bytes = std::span(input->bytes.constData(), static_cast<std::size_t>(input->bytes.size()));
-                auto written = (*session)->writeTerminal(*socket, bytes, 10s, stopToken);
+                auto written = session->writeTerminal(socket, bytes, 10s, stopToken);
                 if (!written)
                 {
-                    const SshFailureKind failure = mapTransportFailure(written.error());
+                    const SshFailureKind failure = sshFailureFromTransport(written.error());
                     finishFailure(failure);
                     return;
                 }
@@ -710,10 +567,10 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                 publishSnapshot();
 
                 const auto encodedBytes = std::span(reinterpret_cast<const char *>(encoded->data()), encoded->size());
-                auto written = (*session)->writeTerminal(*socket, encodedBytes, 10s, stopToken);
+                auto written = session->writeTerminal(socket, encodedBytes, 10s, stopToken);
                 if (!written)
                 {
-                    const SshFailureKind failure = mapTransportFailure(written.error());
+                    const SshFailureKind failure = sshFailureFromTransport(written.error());
                     finishFailure(failure);
                     return;
                 }
@@ -791,16 +648,16 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                 if (activeHistoryRequest)
                 {
                     suppressHistoryResult = true;
-                    (*session)->cancelAuxiliaryCommand();
+                    session->cancelAuxiliaryCommand();
                 }
                 continue;
             }
 
             const auto requested = std::get<terminal::TerminalGeometry>(command);
-            auto resized = (*session)->resizeTerminal(*socket, requested.columns, requested.rows, 5s, stopToken);
+            auto resized = session->resizeTerminal(socket, requested.columns, requested.rows, 5s, stopToken);
             if (!resized)
             {
-                const SshFailureKind failure = mapTransportFailure(resized.error());
+                const SshFailureKind failure = sshFailureFromTransport(resized.error());
                 finishFailure(failure);
                 return;
             }
@@ -812,7 +669,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
             publishSnapshot();
         }
 
-        if (!activeHistoryRequest && pendingHistoryRequest && !(*session)->auxiliaryCommandActive())
+        if (!activeHistoryRequest && pendingHistoryRequest && !session->auxiliaryCommandActive())
         {
             const quint64 requestId = *pendingHistoryRequest;
             pendingHistoryRequest.reset();
@@ -824,17 +681,17 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
             if (remoteHistoryError.isEmpty() && std::chrono::steady_clock::now() >= remoteHistoryDeadline)
             {
                 remoteHistoryError = tr("Remote shell history timed out.");
-                (*session)->cancelAuxiliaryCommand();
+                session->cancelAuxiliaryCommand();
             }
 
-            auto polled = (*session)->pollAuxiliaryCommand(auxiliaryBuffer);
+            auto polled = session->pollAuxiliaryCommand(auxiliaryBuffer);
             if (!polled)
             {
                 if (remoteHistoryError.isEmpty())
                 {
                     remoteHistoryError = tr("Remote shell history could not be read.");
                 }
-                (*session)->cancelAuxiliaryCommand();
+                session->cancelAuxiliaryCommand();
             }
             else if (polled->progress == AuxiliaryCommandProgress::Output)
             {
@@ -842,7 +699,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                 if (bytesRead > maximumRemoteHistoryBytes - remoteHistoryOutput.size())
                 {
                     remoteHistoryError = tr("Remote shell history exceeded the safety limit.");
-                    (*session)->cancelAuxiliaryCommand();
+                    session->cancelAuxiliaryCommand();
                 }
                 else
                 {
@@ -891,7 +748,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
             }
         }
 
-        auto read = (*session)->readTerminal(*socket, readBuffer, 25ms, stopToken, m_commandWakeEvent.nativeHandle());
+        auto read = session->readTerminal(socket, readBuffer, 25ms, stopToken, m_commandWakeEvent.nativeHandle());
         if (!read)
         {
             if (read.error().kind == SshTransportErrorKind::TimedOut)
@@ -906,7 +763,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
             {
                 continue;
             }
-            const SshFailureKind failure = mapTransportFailure(read.error());
+            const SshFailureKind failure = sshFailureFromTransport(read.error());
             finishFailure(failure);
             return;
         }
@@ -927,9 +784,9 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
 
     requestClose(state);
     postPhase(state.phase());
-    if ((*session)->terminalOpen())
+    if (session->terminalOpen())
     {
-        const auto close = (*session)->closeTerminal(*socket, 2s);
+        const auto close = session->closeTerminal(socket, 2s);
         if (!close)
         {
             postStatus(tr("SSH terminal closed without a complete channel shutdown"));

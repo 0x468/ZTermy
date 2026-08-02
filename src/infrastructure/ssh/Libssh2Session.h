@@ -1,5 +1,6 @@
 #pragma once
 
+#include "domain/sftp/SftpTypes.h"
 #include "domain/ssh/SshHostKey.h"
 #include "infrastructure/ssh/Libssh2Runtime.h"
 #include "infrastructure/ssh/WindowsTcpSocket.h"
@@ -12,6 +13,7 @@
 #include <stop_token>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace ztermy::ssh
 {
@@ -50,6 +52,18 @@ struct AuxiliaryCommandPollResult final
     AuxiliaryCommandProgress progress = AuxiliaryCommandProgress::Pending;
     std::size_t bytesRead = 0;
     int exitStatus = 0;
+};
+
+enum class SftpWriteDisposition : std::uint8_t
+{
+    CreateNew,
+    Replace,
+};
+
+enum class SftpRenameDisposition : std::uint8_t
+{
+    NoReplace,
+    ReplaceAtomically,
 };
 
 class Libssh2Session final
@@ -102,6 +116,48 @@ public:
                                                                        const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] bool terminalOpen() const noexcept;
 
+    [[nodiscard]] std::expected<void, SshTransportError> openSftp(WindowsTcpSocket &socket,
+                                                                  std::chrono::milliseconds timeout,
+                                                                  const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] std::expected<std::vector<sftp::DirectoryEntry>, SshTransportError>
+    listSftpDirectory(WindowsTcpSocket &socket, std::string_view remotePath, std::chrono::milliseconds timeout,
+                      const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] std::expected<void, SshTransportError>
+    createSftpDirectory(WindowsTcpSocket &socket, std::string_view remotePath, std::chrono::milliseconds timeout,
+                        const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] std::expected<void, SshTransportError>
+    renameSftpEntry(WindowsTcpSocket &socket, std::string_view sourcePath, std::string_view destinationPath,
+                    SftpRenameDisposition disposition, std::chrono::milliseconds timeout,
+                    const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] std::expected<void, SshTransportError> removeSftpFile(WindowsTcpSocket &socket,
+                                                                        std::string_view remotePath,
+                                                                        std::chrono::milliseconds timeout,
+                                                                        const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] std::expected<void, SshTransportError>
+    removeSftpDirectory(WindowsTcpSocket &socket, std::string_view remotePath, std::chrono::milliseconds timeout,
+                        const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] std::expected<void, SshTransportError>
+    openSftpFileForRead(WindowsTcpSocket &socket, std::string_view remotePath, std::chrono::milliseconds timeout,
+                        const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] std::expected<void, SshTransportError>
+    openSftpFileForWrite(WindowsTcpSocket &socket, std::string_view remotePath, SftpWriteDisposition disposition,
+                         std::chrono::milliseconds timeout, const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] std::expected<std::size_t, SshTransportError>
+    readSftpFile(WindowsTcpSocket &socket, std::span<char> output, std::chrono::milliseconds timeout,
+                 const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] std::expected<void, SshTransportError> writeSftpFile(WindowsTcpSocket &socket,
+                                                                       std::span<const char> input,
+                                                                       std::chrono::milliseconds timeout,
+                                                                       const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] std::expected<void, SshTransportError> closeSftpFile(WindowsTcpSocket &socket,
+                                                                       std::chrono::milliseconds timeout,
+                                                                       const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] bool sftpFileOpen() const noexcept;
+    [[nodiscard]] std::expected<void, SshTransportError> closeSftp(WindowsTcpSocket &socket,
+                                                                   std::chrono::milliseconds timeout,
+                                                                   const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] bool sftpOpen() const noexcept;
+
     // Auxiliary exec channels are advanced one non-blocking step at a time so
     // callers can interleave background queries with the interactive PTY.
     [[nodiscard]] std::expected<void, SshTransportError> startAuxiliaryCommand(std::string_view command) noexcept;
@@ -127,6 +183,8 @@ private:
     void *m_session = nullptr;
     void *m_terminalChannel = nullptr;
     void *m_auxiliaryChannel = nullptr;
+    void *m_sftp = nullptr;
+    void *m_sftpFile = nullptr;
     std::string m_auxiliaryCommand;
     AuxiliaryCommandPhase m_auxiliaryPhase = AuxiliaryCommandPhase::Idle;
     int m_auxiliaryExitStatus = 0;

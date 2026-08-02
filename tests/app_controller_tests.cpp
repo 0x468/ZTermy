@@ -6,6 +6,7 @@
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QUrl>
 #include <QUuid>
 #include <QVariantMap>
 
@@ -651,6 +652,14 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
     QVERIFY(!first.isEmpty());
     QCOMPARE(controller.terminalTabs().size(), 1);
     QCOMPARE(controller.activeTerminalTabId(), first);
+    QVERIFY(controller.transferTasks().isEmpty());
+    QCOMPARE(controller.activeTransferCount(), 0);
+    QVERIFY(!controller.toggleTerminalWorkbench(QStringLiteral("sftp")));
+    QVERIFY(!controller.enqueueSftpUpload(
+        QUrl::fromLocalFile(directory.filePath(QStringLiteral("upload.txt"))).toString()));
+    QVERIFY(!controller.enqueueSftpDownload(
+        QStringLiteral("/remote.txt"), QUrl::fromLocalFile(directory.filePath(QStringLiteral("remote.txt"))).toString(),
+        1));
     QVERIFY(!controller.terminalTabs().constFirst().toMap().value(QStringLiteral("workbenchOpen")).toBool());
     QCOMPARE(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("workbenchPage")).toString(),
              QStringLiteral("history"));

@@ -2,6 +2,8 @@
 
 #include "application/actions/ActionRegistry.h"
 #include "application/security/CredentialVaultCoordinator.h"
+#include "application/sftp/SftpDirectoryModel.h"
+#include "application/sftp/TransferManager.h"
 #include "application/ssh/SshTerminalSession.h"
 #include "application/terminal/LocalTerminalSession.h"
 #include "core/config/ApplicationPaths.h"
@@ -18,6 +20,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <functional>
 #include <memory>
 #include <vector>
@@ -58,6 +61,12 @@ class AppController final : public QObject
     Q_PROPERTY(QVariantList actions READ actions NOTIFY actionRegistryChanged)
     Q_PROPERTY(QString terminalHistoryState READ terminalHistoryState NOTIFY terminalHistoryChanged)
     Q_PROPERTY(QString terminalHistoryError READ terminalHistoryError NOTIFY terminalHistoryChanged)
+    Q_PROPERTY(QObject *activeSftpDirectoryModel READ activeSftpDirectoryModel NOTIFY sftpChanged)
+    Q_PROPERTY(QString activeSftpPath READ activeSftpPath NOTIFY sftpChanged)
+    Q_PROPERTY(QString activeSftpState READ activeSftpState NOTIFY sftpChanged)
+    Q_PROPERTY(QString activeSftpError READ activeSftpError NOTIFY sftpChanged)
+    Q_PROPERTY(QVariantList transferTasks READ transferTasks NOTIFY transferTasksChanged)
+    Q_PROPERTY(int activeTransferCount READ activeTransferCount NOTIFY transferTasksChanged)
     Q_PROPERTY(QString activeTerminalTabId READ activeTerminalTabId NOTIFY activeTerminalTabChanged)
     Q_PROPERTY(QString terminalSearchQuery READ terminalSearchQuery NOTIFY terminalSearchChanged)
     Q_PROPERTY(int terminalSearchCurrent READ terminalSearchCurrent NOTIFY terminalSearchChanged)
@@ -125,6 +134,12 @@ public:
     [[nodiscard]] QVariantList actions() const;
     [[nodiscard]] QString terminalHistoryState() const;
     [[nodiscard]] QString terminalHistoryError() const;
+    [[nodiscard]] QObject *activeSftpDirectoryModel() const noexcept;
+    [[nodiscard]] QString activeSftpPath() const;
+    [[nodiscard]] QString activeSftpState() const;
+    [[nodiscard]] QString activeSftpError() const;
+    [[nodiscard]] QVariantList transferTasks() const;
+    [[nodiscard]] int activeTransferCount() const noexcept;
     [[nodiscard]] QString activeTerminalTabId() const;
     [[nodiscard]] QString terminalSearchQuery() const;
     [[nodiscard]] int terminalSearchCurrent() const noexcept;
@@ -172,6 +187,18 @@ public:
     Q_INVOKABLE bool deleteQuickCommand(const QString &id);
     Q_INVOKABLE bool moveQuickCommand(const QString &id, int targetIndex);
     Q_INVOKABLE void refreshTerminalHistory();
+    Q_INVOKABLE void refreshSftpDirectory();
+    Q_INVOKABLE bool navigateSftpDirectory(const QString &remotePath);
+    Q_INVOKABLE bool navigateSftpParent();
+    Q_INVOKABLE bool createSftpDirectory(const QString &name);
+    Q_INVOKABLE bool renameSftpEntry(const QString &remotePath, const QString &newName);
+    Q_INVOKABLE bool removeSftpEntry(const QString &remotePath, bool directory);
+    Q_INVOKABLE bool enqueueSftpDownload(const QString &remotePath, const QString &localFileUrl, qulonglong totalBytes);
+    Q_INVOKABLE bool enqueueSftpUpload(const QString &localFileUrl);
+    Q_INVOKABLE void cancelTransfer(const QString &taskId);
+    Q_INVOKABLE void retryTransfer(const QString &taskId);
+    Q_INVOKABLE void resolveTransferConflict(const QString &taskId, const QString &action,
+                                             const QString &renamedDestinationPath = {});
     Q_INVOKABLE bool triggerAction(const QString &actionId);
     [[nodiscard]] Q_INVOKABLE QVariantMap setActionShortcut(const QString &actionId, const QString &shortcut);
     [[nodiscard]] Q_INVOKABLE QVariantMap setActionShortcutFromKey(const QString &actionId, int key, int modifiers);
@@ -227,6 +254,9 @@ signals:
     void terminalTabsChanged();
     void quickCommandsChanged();
     void terminalHistoryChanged();
+    void sftpChanged();
+    void transferTasksChanged();
+    void transferConflictRequested(const QString &taskId, const QVariantMap &conflict);
     void actionRegistryChanged();
     void actionRequested(const QString &actionId);
     void activeTerminalTabChanged();
@@ -255,6 +285,8 @@ private:
         terminal::TerminalSnapshotPtr snapshot;
         std::unique_ptr<terminal::LocalTerminalSessionBackend> local;
         std::unique_ptr<ssh::SshTerminalSession> ssh;
+        std::unique_ptr<sftp::SftpSession> sftpSession;
+        std::unique_ptr<sftp::SftpDirectoryModel> sftpModel;
         QString searchQuery;
         QString sourceProfileId;
         QString identity;
@@ -266,11 +298,17 @@ private:
         QString workbenchSide = QStringLiteral("left");
         QString historyState = QStringLiteral("idle");
         QString historyError;
+        QString sftpPath = QStringLiteral("/");
+        QString sftpRequestedPath = QStringLiteral("/");
+        QString sftpState = QStringLiteral("idle");
+        QString sftpError;
         std::vector<workbench::ShellHistoryEntry> history;
         std::vector<workbench::ShellHistoryEntry> capturedHistory;
         QByteArray inputHistoryBuffer;
         bool inputHistoryBufferReliable = true;
         std::uint64_t historyRequestId = 0;
+        std::uint64_t sftpRequestId = 0;
+        std::uint64_t sftpGeneration = 0;
         qreal workbenchWidth = 520.0;
         qreal composerHeight = 132.0;
         bool workbenchOpen = false;
@@ -282,6 +320,7 @@ private:
     void connectTerminalSignals();
     void connectLocalTabSignals(TerminalTab &tab);
     void connectSshTabSignals(TerminalTab &tab);
+    void connectSftpTabSignals(TerminalTab &tab);
     void queueInput(const QByteArray &bytes);
     void queuePaste(const QByteArray &bytes);
     void dispatchInput(TerminalTab &tab, const QByteArray &bytes);
@@ -311,6 +350,14 @@ private:
                                                bool manageCredential);
     void setCredentialOperationError(QString message);
     [[nodiscard]] bool startSshConnection(ssh::SshConnectionRequest request, QString sourceProfileId = {});
+    [[nodiscard]] bool startSftpSession(TerminalTab &tab);
+    [[nodiscard]] std::expected<ssh::SshConnectionRequest, sftp::TransferCredentialError>
+    sftpConnectionRequest(const TerminalTab &tab);
+    [[nodiscard]] sftp::TransferRequestProvider transferRequestProvider(const QString &profileId);
+    void initializeTransferManager();
+    void applyTransferSnapshot(const sftp::TransferTasksPtr &tasks);
+    void stopSftpSession(TerminalTab &tab);
+    void requestSftpDirectory(TerminalTab &tab, const QString &remotePath);
     void recordRecentConnection(TerminalTab &tab);
     [[nodiscard]] TerminalTab *activeTab();
     [[nodiscard]] const TerminalTab *activeTab() const;
@@ -330,6 +377,8 @@ private:
     std::vector<workbench::QuickCommand> m_quickCommands;
     QString m_quickCommandOperationError;
     std::unique_ptr<security::CredentialVaultCoordinator> m_credentialVaults;
+    std::unique_ptr<sftp::TransferManager> m_transferManager;
+    QVariantList m_transferTasks;
     security::CredentialStorage m_defaultCredentialStorage = security::CredentialStorage::Session;
     QString m_credentialOperationError;
     QString m_knownHostsPath;
@@ -342,6 +391,8 @@ private:
     std::uint32_t m_nextLocalTabNumber = 1;
     bool m_hostKeyPromptVisible = false;
     bool m_hostKeyChangedWarning = false;
+    bool m_hostKeyForSftp = false;
+    QString m_hostKeyTransferTaskId;
 };
 
 } // namespace ztermy

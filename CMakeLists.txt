@@ -225,6 +225,13 @@ add_library(ztermy_ssh_domain STATIC
     src/domain/ssh/SshTarget.h
 )
 
+add_library(ztermy_sftp_domain STATIC
+    src/domain/sftp/SftpTypes.cpp
+    src/domain/sftp/SftpTypes.h
+    src/domain/sftp/TransferQueue.cpp
+    src/domain/sftp/TransferQueue.h
+)
+
 add_library(ztermy_ssh_persistence STATIC
     src/infrastructure/ssh/KnownHostsStore.cpp
     src/infrastructure/ssh/KnownHostsStore.h
@@ -259,6 +266,9 @@ target_link_libraries(ztermy_workbench_persistence
 target_compile_features(ztermy_ssh_domain PUBLIC cxx_std_23)
 target_include_directories(ztermy_ssh_domain PUBLIC src)
 
+target_compile_features(ztermy_sftp_domain PUBLIC cxx_std_23)
+target_include_directories(ztermy_sftp_domain PUBLIC src)
+
 target_compile_features(ztermy_ssh_persistence PUBLIC cxx_std_23)
 target_include_directories(ztermy_ssh_persistence PUBLIC src)
 target_link_libraries(ztermy_ssh_persistence
@@ -270,6 +280,7 @@ target_compile_features(ztermy_ssh_transport PUBLIC cxx_std_23)
 target_include_directories(ztermy_ssh_transport PUBLIC src)
 target_link_libraries(ztermy_ssh_transport
     PUBLIC
+        ztermy_sftp_domain
         ztermy_ssh_domain
     PRIVATE
         libssh2::libssh2_static
@@ -296,6 +307,26 @@ add_library(ztermy_ssh_session STATIC
     src/application/ssh/SshTerminalSession.h
 )
 
+add_library(ztermy_ssh_connection STATIC
+    src/application/ssh/SshConnectionBootstrap.cpp
+    src/application/ssh/SshConnectionBootstrap.h
+    src/application/ssh/SshConnectionRequest.cpp
+    src/application/ssh/SshConnectionRequest.h
+)
+
+add_library(ztermy_sftp_session STATIC
+    src/application/sftp/SftpClient.cpp
+    src/application/sftp/SftpClient.h
+    src/application/sftp/SftpDirectoryModel.cpp
+    src/application/sftp/SftpDirectoryModel.h
+    src/application/sftp/SftpSession.cpp
+    src/application/sftp/SftpSession.h
+    src/application/sftp/TransferExecutor.cpp
+    src/application/sftp/TransferExecutor.h
+    src/application/sftp/TransferManager.cpp
+    src/application/sftp/TransferManager.h
+)
+
 target_compile_features(ztermy_terminal_session PUBLIC cxx_std_23)
 target_include_directories(ztermy_terminal_session PUBLIC src)
 target_compile_definitions(ztermy_terminal_session PRIVATE
@@ -315,9 +346,29 @@ target_link_libraries(ztermy_terminal_session
 
 target_compile_features(ztermy_ssh_session PUBLIC cxx_std_23)
 target_include_directories(ztermy_ssh_session PUBLIC src)
+target_compile_features(ztermy_ssh_connection PUBLIC cxx_std_23)
+target_include_directories(ztermy_ssh_connection PUBLIC src)
+target_link_libraries(ztermy_ssh_connection
+    PUBLIC
+        ztermy_ssh_domain
+        Qt6::Core
+    PRIVATE
+        ztermy_ssh_persistence
+        ztermy_ssh_transport
+)
+target_compile_features(ztermy_sftp_session PUBLIC cxx_std_23)
+target_include_directories(ztermy_sftp_session PUBLIC src)
+target_link_libraries(ztermy_sftp_session
+    PUBLIC
+        ztermy_sftp_domain
+        ztermy_ssh_connection
+        ztermy_ssh_transport
+        Qt6::Core
+)
 target_link_libraries(ztermy_ssh_session
     PUBLIC
         ztermy_core_diagnostics
+        ztermy_ssh_connection
         ztermy_ssh_domain
         ztermy_terminal_engine
         Qt6::Core
@@ -438,6 +489,10 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS SettingsPane.qml
 )
 set_source_files_properties(
+    src/ui/qml/SftpBrowser.qml
+    PROPERTIES QT_RESOURCE_ALIAS SftpBrowser.qml
+)
+set_source_files_properties(
     src/ui/qml/ShortcutSettings.qml
     PROPERTIES QT_RESOURCE_ALIAS ShortcutSettings.qml
 )
@@ -483,6 +538,10 @@ set_source_files_properties(
     src/ui/qml/TerminalComposer.qml
     PROPERTIES QT_RESOURCE_ALIAS TerminalComposer.qml
 )
+set_source_files_properties(
+    src/ui/qml/TransferCenter.qml
+    PROPERTIES QT_RESOURCE_ALIAS TransferCenter.qml
+)
 
 qt_add_qml_module(ztermy
     URI Ztermy
@@ -512,6 +571,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/Main.qml
         src/ui/qml/SectionCard.qml
         src/ui/qml/SettingsPane.qml
+        src/ui/qml/SftpBrowser.qml
         src/ui/qml/ShortcutSettings.qml
         src/ui/qml/SideNavigationItem.qml
         src/ui/qml/StatePanel.qml
@@ -519,6 +579,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/TerminalTabAction.qml
         src/ui/qml/TerminalComposer.qml
         src/ui/qml/TerminalWorkbench.qml
+        src/ui/qml/TransferCenter.qml
         src/ui/qml/Theme.qml
 )
 
@@ -589,6 +650,7 @@ target_link_libraries(ztermy PRIVATE
     ztermy_core_config
     ztermy_ssh_persistence
     ztermy_ssh_session
+    ztermy_sftp_session
     ztermy_terminal_session
     ztermy_terminal_transport
     ztermy_terminal_ui
@@ -906,6 +968,132 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME action-registry COMMAND ztermy_action_registry_tests)
+
+    qt_add_executable(ztermy_sftp_types_tests
+        tests/sftp_types_tests.cpp
+    )
+
+    target_compile_features(ztermy_sftp_types_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_sftp_types_tests PRIVATE
+        ztermy_sftp_domain
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_sftp_types_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME sftp-types COMMAND ztermy_sftp_types_tests)
+
+    qt_add_executable(ztermy_transfer_queue_tests
+        tests/transfer_queue_tests.cpp
+    )
+
+    target_compile_features(ztermy_transfer_queue_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_transfer_queue_tests PRIVATE
+        ztermy_sftp_domain
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_transfer_queue_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME transfer-queue COMMAND ztermy_transfer_queue_tests)
+
+    qt_add_executable(ztermy_sftp_session_tests
+        tests/sftp_session_tests.cpp
+    )
+
+    target_compile_features(ztermy_sftp_session_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_sftp_session_tests PRIVATE
+        ztermy_sftp_session
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_sftp_session_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME sftp-session COMMAND ztermy_sftp_session_tests)
+
+    qt_add_executable(ztermy_sftp_directory_model_tests
+        tests/sftp_directory_model_tests.cpp
+    )
+
+    target_compile_features(ztermy_sftp_directory_model_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_sftp_directory_model_tests PRIVATE
+        ztermy_sftp_session
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_sftp_directory_model_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME sftp-directory-model COMMAND ztermy_sftp_directory_model_tests)
+
+    qt_add_executable(ztermy_transfer_executor_tests
+        tests/transfer_executor_tests.cpp
+    )
+
+    target_compile_features(ztermy_transfer_executor_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_transfer_executor_tests PRIVATE
+        ztermy_sftp_session
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_transfer_executor_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME transfer-executor COMMAND ztermy_transfer_executor_tests)
+
+    qt_add_executable(ztermy_transfer_manager_tests
+        tests/transfer_manager_tests.cpp
+    )
+
+    target_compile_features(ztermy_transfer_manager_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_transfer_manager_tests PRIVATE
+        ztermy_sftp_session
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_transfer_manager_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME transfer-manager COMMAND ztermy_transfer_manager_tests)
 
     qt_add_executable(ztermy_quick_command_store_tests
         tests/quick_command_store_tests.cpp
@@ -1254,6 +1442,27 @@ if(BUILD_TESTING)
 
     add_test(NAME ssh-handshake COMMAND ztermy_ssh_handshake_tests)
 
+    qt_add_executable(ztermy_ssh_connection_bootstrap_tests
+        tests/ssh_connection_bootstrap_tests.cpp
+    )
+
+    target_compile_features(ztermy_ssh_connection_bootstrap_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ssh_connection_bootstrap_tests PRIVATE
+        ztermy_ssh_connection
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ssh_connection_bootstrap_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ssh-connection-bootstrap COMMAND ztermy_ssh_connection_bootstrap_tests)
+
     qt_add_executable(ztermy_ssh_real_host_tests
         tests/ssh_real_host_tests.cpp
     )
@@ -1366,6 +1575,7 @@ if(BUILD_TESTING)
         ztermy_core_config
         ztermy_ssh_persistence
         ztermy_ssh_session
+        ztermy_sftp_session
         ztermy_terminal_session
         ztermy_terminal_ui
         ztermy_workbench_persistence
@@ -1551,8 +1761,15 @@ if(BUILD_TESTING)
             ztermy_ssh_target_tests
             ztermy_windows_tcp_socket_tests
             ztermy_ssh_handshake_tests
+            ztermy_ssh_connection_bootstrap_tests
             ztermy_ssh_real_host_tests
             ztermy_ssh_terminal_session_tests
+            ztermy_sftp_types_tests
+            ztermy_transfer_queue_tests
+            ztermy_sftp_session_tests
+            ztermy_sftp_directory_model_tests
+            ztermy_transfer_executor_tests
+            ztermy_transfer_manager_tests
             ztermy_terminal_engine_tests
             ztermy_local_terminal_session_tests
             ztermy_app_controller_tests

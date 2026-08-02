@@ -25,6 +25,7 @@ namespace ztermy::security
 
 InMemoryCredentialVault::~InMemoryCredentialVault()
 {
+    const std::scoped_lock lock(m_mutex);
     for (auto &[key, secret] : m_secrets)
     {
         static_cast<void>(key);
@@ -45,6 +46,7 @@ bool InMemoryCredentialVault::persistent() const noexcept
 std::expected<void, CredentialVaultError> InMemoryCredentialVault::store(const CredentialKey &key,
                                                                          SensitiveByteArray secret)
 {
+    const std::scoped_lock lock(m_mutex);
     if (!validCredentialKey(key))
     {
         return std::unexpected(CredentialVaultError::InvalidKey);
@@ -75,6 +77,7 @@ std::expected<void, CredentialVaultError> InMemoryCredentialVault::store(const C
 
 std::expected<SensitiveByteArray, CredentialVaultError> InMemoryCredentialVault::read(const CredentialKey &key) const
 {
+    const std::scoped_lock lock(m_mutex);
     if (!validCredentialKey(key))
     {
         return std::unexpected(CredentialVaultError::InvalidKey);
@@ -89,6 +92,7 @@ std::expected<SensitiveByteArray, CredentialVaultError> InMemoryCredentialVault:
 
 std::expected<void, CredentialVaultError> InMemoryCredentialVault::remove(const CredentialKey &key)
 {
+    const std::scoped_lock lock(m_mutex);
     if (!validCredentialKey(key))
     {
         return std::unexpected(CredentialVaultError::InvalidKey);
@@ -105,6 +109,7 @@ std::expected<void, CredentialVaultError> InMemoryCredentialVault::remove(const 
 
 std::expected<std::vector<CredentialKey>, CredentialVaultError> InMemoryCredentialVault::listKeys() const
 {
+    const std::scoped_lock lock(m_mutex);
     std::vector<CredentialKey> keys;
     keys.reserve(m_secrets.size());
     for (const auto &[key, secret] : m_secrets)

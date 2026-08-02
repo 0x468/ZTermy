@@ -14,6 +14,7 @@
 #include <QSet>
 #include <QStandardPaths>
 #include <QThreadPool>
+#include <QUrl>
 #include <QUuid>
 #include <QVariantMap>
 
@@ -321,6 +322,47 @@ void logCredentialRollbackResult(std::expected<void, ztermy::security::Credentia
                : ztermy::security::CredentialKind::PrivateKeyPassphrase;
 }
 
+[[nodiscard]] QString transferStatusToken(const ztermy::sftp::TransferStatus status)
+{
+    using ztermy::sftp::TransferStatus;
+    switch (status)
+    {
+        case TransferStatus::Queued:
+            return QStringLiteral("queued");
+        case TransferStatus::Running:
+            return QStringLiteral("running");
+        case TransferStatus::NeedsAttention:
+            return QStringLiteral("needs-attention");
+        case TransferStatus::Completed:
+            return QStringLiteral("completed");
+        case TransferStatus::Failed:
+            return QStringLiteral("failed");
+        case TransferStatus::Cancelled:
+            return QStringLiteral("cancelled");
+    }
+    return QStringLiteral("failed");
+}
+
+[[nodiscard]] QVariantMap transferTaskValue(const ztermy::sftp::TransferTask &task)
+{
+    return {
+        {QStringLiteral("id"), utf8QString(task.id)},
+        {QStringLiteral("endpointId"), utf8QString(task.endpointId)},
+        {QStringLiteral("displayName"), utf8QString(task.displayName)},
+        {QStringLiteral("sourcePath"), utf8QString(task.sourcePath)},
+        {QStringLiteral("destinationPath"), utf8QString(task.destinationPath)},
+        {QStringLiteral("direction"), task.direction == ztermy::sftp::TransferDirection::Download
+                                          ? QStringLiteral("download")
+                                          : QStringLiteral("upload")},
+        {QStringLiteral("status"), transferStatusToken(task.status)},
+        {QStringLiteral("totalBytes"), QVariant::fromValue<qulonglong>(task.totalBytes)},
+        {QStringLiteral("transferredBytes"), QVariant::fromValue<qulonglong>(task.transferredBytes)},
+        {QStringLiteral("bytesPerSecond"), QVariant::fromValue<qulonglong>(task.bytesPerSecond)},
+        {QStringLiteral("errorCode"), utf8QString(task.errorCode)},
+        {QStringLiteral("retryable"), task.retryable},
+    };
+}
+
 [[nodiscard]] QString quickConnectError(const ztermy::ssh::SshTargetError error)
 {
     using enum ztermy::ssh::SshTargetError;
@@ -474,6 +516,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     loadHostProfiles();
     loadApplicationSettings();
     initializeActionRegistry();
+    initializeTransferManager();
     loadQuickCommands();
 }
 
@@ -806,6 +849,44 @@ QString AppController::terminalHistoryError() const
     return tab == nullptr ? QString{} : tab->historyError;
 }
 
+QObject *AppController::activeSftpDirectoryModel() const noexcept
+{
+    const TerminalTab *tab = activeTab();
+    return tab == nullptr ? nullptr : tab->sftpModel.get();
+}
+
+QString AppController::activeSftpPath() const
+{
+    const TerminalTab *tab = activeTab();
+    return tab == nullptr ? QStringLiteral("/") : tab->sftpPath;
+}
+
+QString AppController::activeSftpState() const
+{
+    const TerminalTab *tab = activeTab();
+    return tab == nullptr ? QStringLiteral("idle") : tab->sftpState;
+}
+
+QString AppController::activeSftpError() const
+{
+    const TerminalTab *tab = activeTab();
+    return tab == nullptr ? QString{} : tab->sftpError;
+}
+
+QVariantList AppController::transferTasks() const
+{
+    return m_transferTasks;
+}
+
+int AppController::activeTransferCount() const noexcept
+{
+    return static_cast<int>(std::ranges::count_if(m_transferTasks, [](const QVariant &value) {
+        const QString status = value.toMap().value(QStringLiteral("status")).toString();
+        return status == QLatin1StringView("queued") || status == QLatin1StringView("running")
+               || status == QLatin1StringView("needs-attention");
+    }));
+}
+
 QString AppController::activeTerminalTabId() const
 {
     return m_activeTabId;
@@ -1024,6 +1105,7 @@ bool AppController::activateTerminalTab(const QString &id)
     emit sshActiveChanged();
     emit terminalSearchChanged();
     emit terminalHistoryChanged();
+    emit sftpChanged();
     showActiveTab();
     return true;
 }
@@ -1064,6 +1146,7 @@ bool AppController::closeTerminalTab(const QString &id)
             emit sshActiveChanged();
             emit terminalSearchChanged();
             emit terminalHistoryChanged();
+            emit sftpChanged();
             showActiveTab();
         }
         else
@@ -1126,7 +1209,13 @@ void AppController::clearTerminalSearch()
 bool AppController::toggleTerminalWorkbench(const QString &page)
 {
     TerminalTab *tab = activeTab();
-    if (tab == nullptr || (page != QStringLiteral("history") && page != QStringLiteral("scripts")))
+    if (tab == nullptr
+        || (page != QStringLiteral("history") && page != QStringLiteral("scripts") && page != QStringLiteral("sftp")))
+    {
+        return false;
+    }
+    if (page == QStringLiteral("sftp")
+        && (tab->kind != TerminalTabKind::Ssh || tab->sshPhase != ssh::SshConnectionPhase::Connected))
     {
         return false;
     }
@@ -1134,13 +1223,26 @@ bool AppController::toggleTerminalWorkbench(const QString &page)
     if (tab->workbenchOpen && tab->workbenchPage == page)
     {
         tab->workbenchOpen = false;
+        if (page == QStringLiteral("sftp"))
+        {
+            stopSftpSession(*tab);
+        }
     }
     else
     {
+        if (tab->workbenchOpen && tab->workbenchPage == QStringLiteral("sftp"))
+        {
+            stopSftpSession(*tab);
+        }
         tab->workbenchPage = page;
         tab->workbenchOpen = true;
+        if (page == QStringLiteral("sftp"))
+        {
+            (void)startSftpSession(*tab);
+        }
     }
     emit terminalTabsChanged();
+    emit sftpChanged();
     return true;
 }
 
@@ -1152,7 +1254,12 @@ void AppController::closeTerminalWorkbench()
         return;
     }
     tab->workbenchOpen = false;
+    if (tab->workbenchPage == QStringLiteral("sftp"))
+    {
+        stopSftpSession(*tab);
+    }
     emit terminalTabsChanged();
+    emit sftpChanged();
 }
 
 void AppController::setTerminalWorkbenchWidth(const qreal width)
@@ -1431,6 +1538,191 @@ void AppController::refreshTerminalHistory()
     });
 }
 
+void AppController::refreshSftpDirectory()
+{
+    TerminalTab *tab = activeTab();
+    if (tab != nullptr && tab->sftpSession == nullptr && tab->workbenchPage == QStringLiteral("sftp"))
+    {
+        (void)startSftpSession(*tab);
+        return;
+    }
+    if (tab != nullptr && tab->sftpSession != nullptr)
+    {
+        requestSftpDirectory(*tab, tab->sftpPath);
+    }
+}
+
+bool AppController::navigateSftpDirectory(const QString &remotePath)
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || tab->sftpSession == nullptr)
+    {
+        return false;
+    }
+    const auto normalized = sftp::normalizeRemotePath(utf8String(remotePath));
+    if (!normalized)
+    {
+        return false;
+    }
+    requestSftpDirectory(*tab, utf8QString(*normalized));
+    return true;
+}
+
+bool AppController::navigateSftpParent()
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || tab->sftpSession == nullptr)
+    {
+        return false;
+    }
+    requestSftpDirectory(*tab, utf8QString(sftp::parentRemotePath(utf8String(tab->sftpPath))));
+    return true;
+}
+
+bool AppController::createSftpDirectory(const QString &name)
+{
+    TerminalTab *tab = activeTab();
+    const std::string remoteName = utf8String(name.trimmed());
+    if (tab == nullptr || tab->sftpSession == nullptr || !sftp::validRemoteName(remoteName))
+    {
+        return false;
+    }
+    const auto path = sftp::joinRemotePath(utf8String(tab->sftpPath), remoteName);
+    if (!path)
+    {
+        return false;
+    }
+    tab->sftpSession->requestCreateDirectory(++tab->sftpRequestId, utf8QString(*path));
+    return true;
+}
+
+bool AppController::renameSftpEntry(const QString &remotePath, const QString &newName)
+{
+    TerminalTab *tab = activeTab();
+    const std::string source = utf8String(remotePath);
+    const std::string replacement = utf8String(newName.trimmed());
+    if (tab == nullptr || tab->sftpSession == nullptr || !sftp::validRemoteName(replacement))
+    {
+        return false;
+    }
+    const auto destination = sftp::joinRemotePath(sftp::parentRemotePath(source), replacement);
+    if (!destination)
+    {
+        return false;
+    }
+    tab->sftpSession->requestRenameEntry(++tab->sftpRequestId, remotePath, utf8QString(*destination));
+    return true;
+}
+
+bool AppController::removeSftpEntry(const QString &remotePath, const bool directory)
+{
+    TerminalTab *tab = activeTab();
+    const auto normalized = sftp::normalizeRemotePath(utf8String(remotePath));
+    if (tab == nullptr || tab->sftpSession == nullptr || !normalized || *normalized == "/")
+    {
+        return false;
+    }
+    tab->sftpSession->requestRemoveEntry(++tab->sftpRequestId, utf8QString(*normalized), directory);
+    return true;
+}
+
+bool AppController::enqueueSftpDownload(const QString &remotePath, const QString &localFileUrl,
+                                        const qulonglong totalBytes)
+{
+    const TerminalTab *tab = activeTab();
+    if (tab == nullptr || tab->kind != TerminalTabKind::Ssh || tab->sourceProfileId.isEmpty()
+        || m_transferManager == nullptr)
+    {
+        return false;
+    }
+    const auto normalized = sftp::normalizeRemotePath(utf8String(remotePath));
+    const QString localPath = QUrl(localFileUrl).isLocalFile() ? QUrl(localFileUrl).toLocalFile() : localFileUrl;
+    if (!normalized || localPath.trimmed().isEmpty())
+    {
+        return false;
+    }
+    const QFileInfo destination(localPath);
+    sftp::TransferTask task{
+        .id = utf8String(QUuid::createUuid().toString(QUuid::WithoutBraces)),
+        .endpointId = utf8String(tab->sourceProfileId),
+        .displayName = utf8String(QFileInfo(utf8QString(*normalized)).fileName()),
+        .sourcePath = *normalized,
+        .destinationPath = utf8String(destination.absoluteFilePath()),
+        .direction = sftp::TransferDirection::Download,
+        .totalBytes = totalBytes,
+    };
+    const auto queued = m_transferManager->enqueue(std::move(task), transferRequestProvider(tab->sourceProfileId), {});
+    return queued.has_value();
+}
+
+bool AppController::enqueueSftpUpload(const QString &localFileUrl)
+{
+    const TerminalTab *tab = activeTab();
+    if (tab == nullptr || tab->kind != TerminalTabKind::Ssh || tab->sourceProfileId.isEmpty()
+        || m_transferManager == nullptr)
+    {
+        return false;
+    }
+    const QUrl localUrl(localFileUrl);
+    const QString localPath = localUrl.isLocalFile() ? localUrl.toLocalFile() : localFileUrl;
+    const QFileInfo source(localPath);
+    if (!source.exists() || !source.isFile())
+    {
+        return false;
+    }
+    const auto remotePath = sftp::joinRemotePath(utf8String(tab->sftpPath), utf8String(source.fileName()));
+    if (!remotePath)
+    {
+        return false;
+    }
+    sftp::TransferTask task{
+        .id = utf8String(QUuid::createUuid().toString(QUuid::WithoutBraces)),
+        .endpointId = utf8String(tab->sourceProfileId),
+        .displayName = utf8String(source.fileName()),
+        .sourcePath = utf8String(source.absoluteFilePath()),
+        .destinationPath = *remotePath,
+        .direction = sftp::TransferDirection::Upload,
+        .totalBytes = static_cast<std::uint64_t>(source.size()),
+    };
+    const auto queued = m_transferManager->enqueue(std::move(task), transferRequestProvider(tab->sourceProfileId), {});
+    return queued.has_value();
+}
+
+void AppController::cancelTransfer(const QString &taskId)
+{
+    if (m_transferManager != nullptr)
+    {
+        m_transferManager->cancel(taskId);
+    }
+}
+
+void AppController::retryTransfer(const QString &taskId)
+{
+    if (m_transferManager != nullptr)
+    {
+        m_transferManager->retry(taskId);
+    }
+}
+
+void AppController::resolveTransferConflict(const QString &taskId, const QString &action,
+                                            const QString &renamedDestinationPath)
+{
+    if (m_transferManager == nullptr)
+    {
+        return;
+    }
+    const QString token = action.trimmed().toLower();
+    const auto decision = token == QLatin1StringView("skip")      ? std::optional{sftp::ConflictAction::Skip}
+                          : token == QLatin1StringView("replace") ? std::optional{sftp::ConflictAction::Replace}
+                          : token == QLatin1StringView("rename")  ? std::optional{sftp::ConflictAction::Rename}
+                          : token == QLatin1StringView("cancel")  ? std::optional{sftp::ConflictAction::Cancel}
+                                                                  : std::nullopt;
+    if (decision)
+    {
+        m_transferManager->resolveConflict(taskId, *decision, renamedDestinationPath);
+    }
+}
+
 bool AppController::triggerAction(const QString &actionId)
 {
     if (!m_actionRegistry.enabled(actionId, activeTab() != nullptr))
@@ -1619,6 +1911,235 @@ bool AppController::startSshConnection(ssh::SshConnectionRequest request, QStrin
         m_terminal->requestCurrentSize();
     }
     return true;
+}
+
+std::expected<ssh::SshConnectionRequest, sftp::TransferCredentialError>
+AppController::sftpConnectionRequest(const TerminalTab &tab)
+{
+    if (tab.sourceProfileId.isEmpty())
+    {
+        return std::unexpected(sftp::TransferCredentialError::Unavailable);
+    }
+    const std::string profileId = utf8String(tab.sourceProfileId);
+    const auto profile = std::ranges::find(m_profiles, profileId, &ssh::SshProfile::id);
+    if (profile == m_profiles.end())
+    {
+        return std::unexpected(sftp::TransferCredentialError::Unavailable);
+    }
+
+    security::SensitiveByteArray secret;
+    if (profile->credentialReference)
+    {
+        auto stored = m_credentialVaults->active().read(
+            {.profileId = *profile->credentialReference, .kind = credentialKind(*profile)});
+        if (!stored)
+        {
+            return std::unexpected(stored.error() == security::CredentialVaultError::Locked
+                                       ? sftp::TransferCredentialError::Locked
+                                       : sftp::TransferCredentialError::Unavailable);
+        }
+        secret = std::move(*stored);
+    }
+    if ((profile->authentication == ssh::SshAuthenticationMethod::Password || profile->privateKeyPassphraseRequired)
+        && secret.empty())
+    {
+        return std::unexpected(sftp::TransferCredentialError::Unavailable);
+    }
+    return ssh::SshConnectionRequest{
+        .host = utf8QString(profile->host),
+        .port = profile->port,
+        .username = utf8QString(profile->username),
+        .authentication = profile->authentication,
+        .privateKeyPath = utf8QString(profile->privateKeyPath),
+        .secret = std::move(secret),
+        .knownHostsPath = m_knownHostsPath,
+    };
+}
+
+sftp::TransferRequestProvider AppController::transferRequestProvider(const QString &profileId)
+{
+    const std::string id = utf8String(profileId);
+    const auto found = std::ranges::find(m_profiles, id, &ssh::SshProfile::id);
+    if (found == m_profiles.end() || m_credentialVaults == nullptr)
+    {
+        return []() -> std::expected<ssh::SshConnectionRequest, sftp::TransferCredentialError> {
+            return std::unexpected(sftp::TransferCredentialError::Unavailable);
+        };
+    }
+    ssh::SshProfile profile = *found;
+    security::CredentialVault *vault = &m_credentialVaults->active();
+    QString knownHostsPath = m_knownHostsPath;
+    return [profile = std::move(profile), vault, knownHostsPath = std::move(knownHostsPath)]() noexcept
+               -> std::expected<ssh::SshConnectionRequest, sftp::TransferCredentialError> {
+        try
+        {
+            security::SensitiveByteArray secret;
+            if (profile.credentialReference)
+            {
+                auto stored = vault->read({.profileId = *profile.credentialReference, .kind = credentialKind(profile)});
+                if (!stored)
+                {
+                    return std::unexpected(stored.error() == security::CredentialVaultError::Locked
+                                               ? sftp::TransferCredentialError::Locked
+                                               : sftp::TransferCredentialError::Unavailable);
+                }
+                secret = std::move(*stored);
+            }
+            if ((profile.authentication == ssh::SshAuthenticationMethod::Password
+                 || profile.privateKeyPassphraseRequired)
+                && secret.empty())
+            {
+                return std::unexpected(sftp::TransferCredentialError::Unavailable);
+            }
+            return ssh::SshConnectionRequest{
+                .host = utf8QString(profile.host),
+                .port = profile.port,
+                .username = utf8QString(profile.username),
+                .authentication = profile.authentication,
+                .privateKeyPath = utf8QString(profile.privateKeyPath),
+                .secret = std::move(secret),
+                .knownHostsPath = knownHostsPath,
+            };
+        }
+        catch (...)
+        {
+            return std::unexpected(sftp::TransferCredentialError::Unavailable);
+        }
+    };
+}
+
+void AppController::initializeTransferManager()
+{
+    m_transferManager = std::make_unique<sftp::TransferManager>();
+    QObject::connect(m_transferManager.get(), &sftp::TransferManager::tasksChanged, this,
+                     &AppController::applyTransferSnapshot);
+    QObject::connect(
+        m_transferManager.get(), &sftp::TransferManager::conflictRequired, this,
+        [this](const QString &taskId, const sftp::FileConflictPtr &conflict) {
+            if (!conflict)
+            {
+                return;
+            }
+            emit transferConflictRequested(
+                taskId,
+                QVariantMap{
+                    {QStringLiteral("sourcePath"), utf8QString(conflict->sourcePath)},
+                    {QStringLiteral("destinationPath"), utf8QString(conflict->destinationPath)},
+                    {QStringLiteral("destinationExists"), true},
+                    {QStringLiteral("destinationDirectory"), conflict->destinationType == sftp::EntryType::Directory},
+                    {QStringLiteral("sourceSize"), QVariant::fromValue<qulonglong>(conflict->sourceSize)},
+                    {QStringLiteral("destinationSize"), QVariant::fromValue<qulonglong>(conflict->destinationSize)},
+                });
+        });
+    QObject::connect(m_transferManager.get(), &sftp::TransferManager::hostKeyConfirmationRequired, this,
+                     [this](const QString &taskId, const QString &algorithm, const QString &fingerprint) {
+                         if (m_hostKeyPromptVisible)
+                         {
+                             m_transferManager->rejectHostKey(taskId);
+                             return;
+                         }
+                         m_hostKeyTransferTaskId = taskId;
+                         m_hostKeyTabId.clear();
+                         m_hostKeyForSftp = false;
+                         m_hostKeyChangedWarning = false;
+                         m_hostKeyAlgorithm = algorithm;
+                         m_hostKeyFingerprint = fingerprint;
+                         m_hostKeyPromptVisible = true;
+                         emit hostKeyPromptChanged();
+                     });
+    QObject::connect(m_transferManager.get(), &sftp::TransferManager::hostKeyChanged, this,
+                     [this](const QString &taskId, const QString &algorithm, const QString &fingerprint) {
+                         if (m_hostKeyPromptVisible)
+                         {
+                             return;
+                         }
+                         m_hostKeyTransferTaskId = taskId;
+                         m_hostKeyTabId.clear();
+                         m_hostKeyForSftp = false;
+                         m_hostKeyChangedWarning = true;
+                         m_hostKeyAlgorithm = algorithm;
+                         m_hostKeyFingerprint = fingerprint;
+                         m_hostKeyPromptVisible = true;
+                         emit hostKeyPromptChanged();
+                     });
+}
+
+void AppController::applyTransferSnapshot(const sftp::TransferTasksPtr &tasks)
+{
+    QVariantList values;
+    if (tasks)
+    {
+        values.reserve(static_cast<qsizetype>(tasks->size()));
+        for (const sftp::TransferTask &task : *tasks)
+        {
+            values.push_back(transferTaskValue(task));
+        }
+    }
+    m_transferTasks = std::move(values);
+    emit transferTasksChanged();
+}
+
+bool AppController::startSftpSession(TerminalTab &tab)
+{
+    if (tab.sftpSession != nullptr)
+    {
+        return true;
+    }
+    tab.sftpModel = std::make_unique<sftp::SftpDirectoryModel>();
+    auto request = sftpConnectionRequest(tab);
+    if (!request)
+    {
+        tab.sftpState = QStringLiteral("error");
+        tab.sftpError = request.error() == sftp::TransferCredentialError::Locked
+                            ? tr("Unlock the credential vault to browse remote files.")
+                            : tr("This SSH session needs a saved credential before remote files can be opened.");
+        emit sftpChanged();
+        return false;
+    }
+
+    tab.sftpSession = std::make_unique<sftp::SftpSession>();
+    connectSftpTabSignals(tab);
+    tab.sftpState = QStringLiteral("connecting");
+    tab.sftpError.clear();
+    emit sftpChanged();
+    const std::error_code error = tab.sftpSession->start(std::move(*request));
+    if (error)
+    {
+        tab.sftpSession.reset();
+        tab.sftpState = QStringLiteral("error");
+        tab.sftpError = tr("The SFTP session could not be started.");
+        emit sftpChanged();
+        return false;
+    }
+    return true;
+}
+
+void AppController::stopSftpSession(TerminalTab &tab)
+{
+    if (tab.sftpSession != nullptr)
+    {
+        tab.sftpSession->stop();
+        tab.sftpSession.reset();
+    }
+    tab.sftpModel.reset();
+    tab.sftpState = QStringLiteral("idle");
+    tab.sftpError.clear();
+    ++tab.sftpGeneration;
+}
+
+void AppController::requestSftpDirectory(TerminalTab &tab, const QString &remotePath)
+{
+    if (tab.sftpSession == nullptr)
+    {
+        return;
+    }
+    tab.sftpRequestedPath = remotePath;
+    tab.sftpState = QStringLiteral("loading");
+    tab.sftpError.clear();
+    const std::uint64_t requestId = ++tab.sftpRequestId;
+    const std::uint64_t generation = ++tab.sftpGeneration;
+    emit sftpChanged();
+    tab.sftpSession->requestDirectory(requestId, generation, remotePath);
 }
 
 bool AppController::saveHostProfile(const QString &id, const QString &name, const QString &host, const int port,
@@ -2347,8 +2868,18 @@ void AppController::acceptHostKey(const bool remember)
         return;
     }
     TerminalTab *tab = findTab(m_hostKeyTabId);
+    const bool forSftp = m_hostKeyForSftp;
+    const QString transferTaskId = m_hostKeyTransferTaskId;
     clearHostKeyPrompt();
-    if (tab != nullptr && tab->ssh)
+    if (!transferTaskId.isEmpty() && m_transferManager != nullptr)
+    {
+        m_transferManager->confirmHostKey(transferTaskId, remember);
+    }
+    else if (tab != nullptr && forSftp && tab->sftpSession)
+    {
+        tab->sftpSession->confirmHostKey(remember);
+    }
+    else if (tab != nullptr && tab->ssh)
     {
         tab->ssh->confirmHostKey(remember);
     }
@@ -2361,8 +2892,18 @@ void AppController::rejectHostKey()
         return;
     }
     TerminalTab *tab = findTab(m_hostKeyTabId);
+    const bool forSftp = m_hostKeyForSftp;
+    const QString transferTaskId = m_hostKeyTransferTaskId;
     clearHostKeyPrompt();
-    if (tab != nullptr && tab->ssh)
+    if (!transferTaskId.isEmpty() && m_transferManager != nullptr)
+    {
+        m_transferManager->rejectHostKey(transferTaskId);
+    }
+    else if (tab != nullptr && forSftp && tab->sftpSession)
+    {
+        tab->sftpSession->rejectHostKey();
+    }
+    else if (tab != nullptr && tab->ssh)
     {
         tab->ssh->rejectHostKey();
     }
@@ -2578,18 +3119,119 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
     QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::hostKeyConfirmationRequired, this,
                      [this, tabId](const QString &algorithm, const QString &fingerprint) {
                          m_hostKeyTabId = tabId;
+                         m_hostKeyForSftp = false;
                          activateTerminalTab(tabId);
                          setHostKeyPrompt(algorithm, fingerprint, false);
                      });
     QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::hostKeyChanged, this,
                      [this, tabId](const QString &algorithm, const QString &fingerprint) {
                          m_hostKeyTabId = tabId;
+                         m_hostKeyForSftp = false;
                          activateTerminalTab(tabId);
                          setHostKeyPrompt(algorithm, fingerprint, true);
                          if (m_terminal != nullptr)
                          {
                              m_terminal->setStatusText(tr("SSH host key changed; connection blocked"));
                          }
+                     });
+}
+
+void AppController::connectSftpTabSignals(TerminalTab &tab)
+{
+    const QString tabId = tab.id;
+    QObject::connect(tab.sftpSession.get(), &sftp::SftpSession::runningChanged, this,
+                     [this, tabId](const bool running) {
+                         TerminalTab *updated = findTab(tabId);
+                         if (updated == nullptr || updated->sftpSession == nullptr)
+                         {
+                             return;
+                         }
+                         if (running)
+                         {
+                             requestSftpDirectory(*updated, updated->sftpPath);
+                         }
+                         else if (updated->sftpState != QStringLiteral("error"))
+                         {
+                             updated->sftpState = QStringLiteral("idle");
+                             emit sftpChanged();
+                         }
+                     });
+    QObject::connect(tab.sftpSession.get(), &sftp::SftpSession::directoryReady, this,
+                     [this, tabId](const quint64 requestId, const quint64 generation, const QString &remotePath,
+                                   const sftp::DirectoryListingPtr &entries) {
+                         TerminalTab *updated = findTab(tabId);
+                         if (updated == nullptr || updated->sftpModel == nullptr || requestId != updated->sftpRequestId
+                             || generation != updated->sftpGeneration)
+                         {
+                             return;
+                         }
+                         updated->sftpPath = remotePath;
+                         updated->sftpRequestedPath = remotePath;
+                         updated->sftpState = QStringLiteral("ready");
+                         updated->sftpError.clear();
+                         updated->sftpModel->setEntries(entries);
+                         if (m_activeTabId == tabId)
+                         {
+                             emit sftpChanged();
+                         }
+                     });
+    QObject::connect(tab.sftpSession.get(), &sftp::SftpSession::operationSucceeded, this,
+                     [this, tabId](const quint64, const sftp::SftpOperationKind) {
+                         TerminalTab *updated = findTab(tabId);
+                         if (updated != nullptr && updated->sftpSession != nullptr)
+                         {
+                             requestSftpDirectory(*updated, updated->sftpPath);
+                         }
+                     });
+    QObject::connect(
+        tab.sftpSession.get(), &sftp::SftpSession::operationFailed, this,
+        [this, tabId](const quint64, const sftp::SftpOperationKind operation, const ssh::SshTransportErrorKind) {
+            TerminalTab *updated = findTab(tabId);
+            if (updated == nullptr)
+            {
+                return;
+            }
+            if (operation == sftp::SftpOperationKind::ListDirectory)
+            {
+                updated->sftpState = QStringLiteral("error");
+                updated->sftpError = tr("The remote directory could not be loaded.");
+            }
+            else
+            {
+                updated->sftpError = tr("The remote file operation failed.");
+            }
+            if (m_activeTabId == tabId)
+            {
+                emit sftpChanged();
+            }
+        });
+    QObject::connect(tab.sftpSession.get(), &sftp::SftpSession::connectionFailed, this,
+                     [this, tabId](const ssh::SshFailureKind) {
+                         TerminalTab *updated = findTab(tabId);
+                         if (updated == nullptr)
+                         {
+                             return;
+                         }
+                         updated->sftpState = QStringLiteral("error");
+                         updated->sftpError = tr("The SFTP connection failed.");
+                         if (m_activeTabId == tabId)
+                         {
+                             emit sftpChanged();
+                         }
+                     });
+    QObject::connect(tab.sftpSession.get(), &sftp::SftpSession::hostKeyConfirmationRequired, this,
+                     [this, tabId](const QString &algorithm, const QString &fingerprint) {
+                         m_hostKeyTabId = tabId;
+                         m_hostKeyForSftp = true;
+                         activateTerminalTab(tabId);
+                         setHostKeyPrompt(algorithm, fingerprint, false);
+                     });
+    QObject::connect(tab.sftpSession.get(), &sftp::SftpSession::hostKeyChanged, this,
+                     [this, tabId](const QString &algorithm, const QString &fingerprint) {
+                         m_hostKeyTabId = tabId;
+                         m_hostKeyForSftp = true;
+                         activateTerminalTab(tabId);
+                         setHostKeyPrompt(algorithm, fingerprint, true);
                      });
 }
 
@@ -2877,13 +3519,15 @@ void AppController::setHostKeyPrompt(QString algorithm, QString fingerprint, con
 
 void AppController::clearHostKeyPrompt()
 {
-    if (!m_hostKeyPromptVisible && m_hostKeyTabId.isEmpty() && m_hostKeyAlgorithm.isEmpty()
-        && m_hostKeyFingerprint.isEmpty())
+    if (!m_hostKeyPromptVisible && m_hostKeyTabId.isEmpty() && m_hostKeyTransferTaskId.isEmpty()
+        && m_hostKeyAlgorithm.isEmpty() && m_hostKeyFingerprint.isEmpty())
     {
         return;
     }
     m_hostKeyPromptVisible = false;
     m_hostKeyChangedWarning = false;
+    m_hostKeyForSftp = false;
+    m_hostKeyTransferTaskId.clear();
     m_hostKeyTabId.clear();
     m_hostKeyAlgorithm.clear();
     m_hostKeyFingerprint.clear();
