@@ -153,6 +153,11 @@ void LocalTerminalSession::stop() noexcept
     }
 }
 
+void LocalTerminalSession::setOutputSink(std::shared_ptr<TerminalOutputSink> sink)
+{
+    m_outputSink = std::move(sink);
+}
+
 void LocalTerminalSession::queueInput(const QByteArray &bytes)
 {
     if (bytes.isEmpty() || !m_running.load())
@@ -341,6 +346,11 @@ void LocalTerminalSession::readLoop(const std::stop_token &stopToken)
             break;
         }
         m_readBytes.fetch_add(*readResult, std::memory_order_relaxed);
+
+        if (m_outputSink)
+        {
+            m_outputSink->append(std::span(buffer).first(*readResult));
+        }
 
         {
             std::scoped_lock lock(m_engineMutex);

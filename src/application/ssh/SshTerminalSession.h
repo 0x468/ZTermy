@@ -5,6 +5,7 @@
 #include "core/diagnostics/LatencyHistogram.h"
 #include "domain/ssh/SshConnectionState.h"
 #include "domain/terminal/TerminalEngine.h"
+#include "domain/terminal/TerminalOutputSink.h"
 #include "infrastructure/ssh/WindowsTcpSocket.h"
 
 #include <QByteArray>
@@ -45,6 +46,7 @@ public:
 
     [[nodiscard]] std::error_code start(SshConnectionRequest request, terminal::TerminalGeometry geometry);
     void stop() noexcept;
+    void setOutputSink(std::shared_ptr<terminal::TerminalOutputSink> sink);
     [[nodiscard]] diagnostics::LatencySummary inputQueueLatencySummary() const noexcept;
 
 public slots:
@@ -143,6 +145,7 @@ private:
     static constexpr std::size_t maximumQueuedInputBytes = std::size_t{1024} * 1024;
 
     std::unique_ptr<terminal::GhosttyTerminalEngine> m_engine;
+    std::shared_ptr<terminal::TerminalOutputSink> m_outputSink;
     std::jthread m_worker;
 
     std::mutex m_commandMutex;

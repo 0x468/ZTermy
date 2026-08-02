@@ -2,6 +2,7 @@
 
 #include "core/diagnostics/LatencyHistogram.h"
 #include "domain/terminal/TerminalEngine.h"
+#include "domain/terminal/TerminalOutputSink.h"
 
 #include <QByteArray>
 #include <QObject>
@@ -38,6 +39,7 @@ public:
 
     [[nodiscard]] virtual std::error_code start(TerminalGeometry geometry) = 0;
     virtual void stop() noexcept = 0;
+    virtual void setOutputSink(std::shared_ptr<TerminalOutputSink>) {}
 
 public slots:
     virtual void queueInput(const QByteArray &bytes) = 0;
@@ -72,6 +74,7 @@ public:
 
     [[nodiscard]] std::error_code start(TerminalGeometry geometry) override;
     void stop() noexcept override;
+    void setOutputSink(std::shared_ptr<TerminalOutputSink> sink) override;
     [[nodiscard]] diagnostics::LatencySummary inputQueueLatencySummary() const noexcept;
     [[nodiscard]] diagnostics::LatencySummary takeInputQueueLatencySummary() noexcept;
 
@@ -136,6 +139,7 @@ private:
 
     std::unique_ptr<ConPtyProcess> m_process;
     std::unique_ptr<GhosttyTerminalEngine> m_engine;
+    std::shared_ptr<TerminalOutputSink> m_outputSink;
     std::jthread m_readThread;
     std::jthread m_writeThread;
 

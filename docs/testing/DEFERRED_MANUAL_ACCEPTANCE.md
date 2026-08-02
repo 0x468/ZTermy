@@ -135,6 +135,39 @@ toasts, duration metadata, and the transfer action remain keyboard accessible,
 localized in English and Simplified Chinese, readable in both themes, and usable
 at 100–200% DPI.
 
+## V1.8 session logging and script-library interchange
+
+Status: `PENDING`
+
+1. Open a local terminal, choose Start session log, select a writable `.log`
+   path, run commands that produce ASCII, CJK, color, and full-screen output,
+   then stop logging and close the tab.
+   Expected: the toolbar shows active state without stealing focus; stopping and
+   tab close flush all queued bytes; the file contains raw terminal output and
+   escape sequences but no separately captured keystroke or paste events.
+2. Repeat session logging on a real SSH profile and end the remote shell while
+   logging is active.
+   Expected: disconnect and tab cleanup do not hang, crash, or truncate already
+   queued output. Treat the transcript as sensitive because shell echo can
+   include typed commands.
+3. Select an unwritable destination, remove write access while logging, and—on
+   suitably slow removable storage—produce sustained output faster than it can
+   be written.
+   Expected: start/write failures are visible and localized; terminal rendering
+   remains responsive; queue exhaustion changes the save icon to warning color
+   and its tooltip reports a non-zero dropped-byte count.
+4. Export a script library, inspect its JSON, import it into a clean data mode,
+   then import it again into the same library.
+   Expected: names, commands, descriptions, shell scopes, and timestamps survive;
+   no secret or history data appears; import never runs a command; identifier
+   collisions create unique additional entries without overwriting existing
+   scripts.
+5. Operate session logging and script import/export from the command palette,
+   toolbar, more menu, and keyboard-only navigation in English and Simplified
+   Chinese, light and dark themes, and 100–200% DPI.
+   Expected: focus returns predictably after file dialogs, accessible names are
+   meaningful, labels fit, and no control is clipped or pointer-only.
+
 ## Evidence template
 
 ```text

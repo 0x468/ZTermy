@@ -37,6 +37,8 @@ Rectangle {
     signal panelWidthRequested(real width)
     signal insertRequested(string command)
     signal runRequested(string command, var sourceItem)
+    signal importLibraryRequested
+    signal exportLibraryRequested
     signal closeRequested
 
     component WorkbenchToolButton: ToolButton {
@@ -617,6 +619,36 @@ Rectangle {
                             color: Theme.textSubtle
                             font.family: Theme.uiFont
                             font.pixelSize: Theme.textCompact
+                        }
+
+                        WorkbenchToolButton {
+                            id: scriptLibraryMenuButton
+
+                            Layout.preferredWidth: 28
+                            Layout.preferredHeight: 26
+                            onClicked: scriptLibraryMenu.open()
+                            Accessible.name: qsTr("Script library actions")
+                            contentItem: AppIcon {
+                                name: "more"
+                                color: Theme.textSoft
+                            }
+
+                            AppMenu {
+                                id: scriptLibraryMenu
+
+                                y: scriptLibraryMenuButton.height
+
+                                AppMenuItem {
+                                    text: qsTr("Import library")
+                                    onTriggered: workbench.importLibraryRequested()
+                                }
+
+                                AppMenuItem {
+                                    text: qsTr("Export library")
+                                    enabled: workbench.controller.quickCommands.length > 0
+                                    onTriggered: workbench.exportLibraryRequested()
+                                }
+                            }
                         }
                     }
 

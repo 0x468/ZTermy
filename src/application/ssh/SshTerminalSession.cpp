@@ -198,6 +198,11 @@ void SshTerminalSession::stop() noexcept
     }
 }
 
+void SshTerminalSession::setOutputSink(std::shared_ptr<terminal::TerminalOutputSink> sink)
+{
+    m_outputSink = std::move(sink);
+}
+
 void SshTerminalSession::confirmHostKey(const bool remember)
 {
     {
@@ -774,6 +779,10 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
         }
 
         const auto bytes = std::as_bytes(std::span(readBuffer).first(*read));
+        if (m_outputSink)
+        {
+            m_outputSink->append(bytes);
+        }
         if (const std::error_code error = m_engine->feed(bytes))
         {
             finishFailure(SshFailureKind::ProtocolError, tr("SSH terminal parser failed"));

@@ -11,7 +11,10 @@
 #include <algorithm>
 #include <cstdint>
 #include <exception>
+#include <memory>
+#include <mutex>
 #include <numeric>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -34,6 +37,26 @@ namespace
     return text;
 }
 
+class MemoryOutputSink final : public ztermy::terminal::TerminalOutputSink
+{
+public:
+    void append(const std::span<const std::byte> bytes) noexcept override
+    {
+        std::scoped_lock lock(m_mutex);
+        m_bytes.append(reinterpret_cast<const char *>(bytes.data()), static_cast<qsizetype>(bytes.size()));
+    }
+
+    [[nodiscard]] bool contains(const QByteArray &needle) const
+    {
+        std::scoped_lock lock(m_mutex);
+        return m_bytes.contains(needle);
+    }
+
+private:
+    mutable std::mutex m_mutex;
+    QByteArray m_bytes;
+};
+
 class LocalTerminalSessionTests final : public QObject
 {
     Q_OBJECT
@@ -51,6 +74,8 @@ void LocalTerminalSessionTests::runsPowerShellAndStopsPromptly()
     try
     {
         ztermy::terminal::LocalTerminalSession session;
+        const auto output = std::make_shared<MemoryOutputSink>();
+        session.setOutputSink(output);
         ztermy::terminal::TerminalSnapshotPtr latestSnapshot;
         connect(&session, &ztermy::terminal::LocalTerminalSession::snapshotReady, this,
                 [&latestSnapshot](ztermy::terminal::TerminalSnapshotPtr snapshot) {
@@ -69,6 +94,7 @@ void LocalTerminalSessionTests::runsPowerShellAndStopsPromptly()
 
         QTRY_VERIFY_WITH_TIMEOUT(
             latestSnapshot && snapshotText(*latestSnapshot).find(U"ZTERMY_SESSION_OK") != std::u32string::npos, 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(output->contains(QByteArrayLiteral("ZTERMY_SESSION_OK")), 5000);
 
         QElapsedTimer timer;
         timer.start();

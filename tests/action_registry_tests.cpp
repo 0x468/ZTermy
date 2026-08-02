@@ -45,6 +45,10 @@ void ActionRegistryTests::exposesStableMetadataAndContext()
     QVERIFY(transfers.value(QStringLiteral("enabled")).toBool());
     QVERIFY(transfers.value(QStringLiteral("paletteVisible")).toBool());
 
+    const QVariantMap importScripts = actionById(registry.actions(false), QStringLiteral("scripts.import"));
+    QCOMPARE(importScripts.value(QStringLiteral("category")).toString(), QStringLiteral("scripts"));
+    QVERIFY(importScripts.value(QStringLiteral("enabled")).toBool());
+
     const QVariantMap terminalFind = actionById(registry.actions(false), QStringLiteral("terminal.find"));
     QVERIFY(!terminalFind.value(QStringLiteral("enabled")).toBool());
     QVERIFY(
@@ -54,6 +58,10 @@ void ActionRegistryTests::exposesStableMetadataAndContext()
     QCOMPARE(sftp.value(QStringLiteral("category")).toString(), QStringLiteral("terminal"));
     QVERIFY(sftp.value(QStringLiteral("paletteVisible")).toBool());
     QVERIFY(sftp.value(QStringLiteral("shortcut")).toString().isEmpty());
+
+    const QVariantMap sessionLog = actionById(registry.actions(true), QStringLiteral("terminal.sessionLog"));
+    QVERIFY(sessionLog.value(QStringLiteral("enabled")).toBool());
+    QVERIFY(sessionLog.value(QStringLiteral("paletteVisible")).toBool());
 }
 
 void ActionRegistryTests::normalizesOverridesAndSupportsUnbind()

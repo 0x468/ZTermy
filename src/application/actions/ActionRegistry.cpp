@@ -75,6 +75,26 @@ constexpr std::array actions{
         .autoRepeat = false,
     },
     ActionDescriptor{
+        .id = "scripts.import",
+        .category = "scripts",
+        .label = QT_TRANSLATE_NOOP("ActionRegistry", "Import script library"),
+        .description = QT_TRANSLATE_NOOP("ActionRegistry", "Merge a ztermy script library from JSON."),
+        .defaultShortcut = "",
+        .terminalRequired = false,
+        .paletteVisible = true,
+        .autoRepeat = false,
+    },
+    ActionDescriptor{
+        .id = "scripts.export",
+        .category = "scripts",
+        .label = QT_TRANSLATE_NOOP("ActionRegistry", "Export script library"),
+        .description = QT_TRANSLATE_NOOP("ActionRegistry", "Export all ztermy scripts and metadata to JSON."),
+        .defaultShortcut = "",
+        .terminalRequired = false,
+        .paletteVisible = true,
+        .autoRepeat = false,
+    },
+    ActionDescriptor{
         .id = "tabs.close",
         .category = "tabs",
         .label = QT_TRANSLATE_NOOP("ActionRegistry", "Close terminal tab"),
@@ -155,6 +175,16 @@ constexpr std::array actions{
         .autoRepeat = false,
     },
     ActionDescriptor{
+        .id = "terminal.sessionLog",
+        .category = "terminal",
+        .label = QT_TRANSLATE_NOOP("ActionRegistry", "Toggle session log"),
+        .description = QT_TRANSLATE_NOOP("ActionRegistry", "Start or stop recording terminal output to a file."),
+        .defaultShortcut = "",
+        .terminalRequired = true,
+        .paletteVisible = true,
+        .autoRepeat = false,
+    },
+    ActionDescriptor{
         .id = "terminal.hideWorkbench",
         .category = "terminal",
         .label = QT_TRANSLATE_NOOP("ActionRegistry", "Hide terminal side panel"),
@@ -210,6 +240,10 @@ constexpr std::array actions{
     if (token == QLatin1StringView("terminal"))
     {
         return translated(QT_TRANSLATE_NOOP("ActionRegistry", "Terminal"));
+    }
+    if (token == QLatin1StringView("scripts"))
+    {
+        return translated(QT_TRANSLATE_NOOP("ActionRegistry", "Scripts"));
     }
     return translated(QT_TRANSLATE_NOOP("ActionRegistry", "Application"));
 }

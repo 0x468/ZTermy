@@ -3,6 +3,7 @@
 #include "infrastructure/ssh/SshProfileStore.h"
 #include "platform/windows/WindowsCredentialVault.h"
 
+#include <QSet>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -102,6 +103,7 @@ private slots:
     void managesActionShortcutsAndDispatchContext();
     void managesMultipleLocalTerminalTabs();
     void persistsQuickCommandsAndPerTabWorkbenchState();
+    void importsAndExportsScriptLibraryWithoutOverwritingIds();
     void loadsRecentProfilesAndParsesQuickTargets();
 };
 
@@ -784,6 +786,39 @@ void AppControllerTests::persistsQuickCommandsAndPerTabWorkbenchState()
     QCOMPARE(reloaded.quickCommands().constLast().toMap().value(QStringLiteral("id")).toString(), firstId);
     QVERIFY(reloaded.deleteQuickCommand(firstId));
     QCOMPARE(reloaded.quickCommands().size(), 1);
+}
+
+void AppControllerTests::importsAndExportsScriptLibraryWithoutOverwritingIds()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString sourceProfiles = directory.filePath(QStringLiteral("source/profiles.json"));
+    const QString targetProfiles = directory.filePath(QStringLiteral("target/profiles.json"));
+    const QString libraryPath = directory.filePath(QStringLiteral("library.json"));
+    const QString libraryUrl = QUrl::fromLocalFile(libraryPath).toString();
+
+    ztermy::AppController source(sourceProfiles);
+    QVERIFY(source.saveQuickCommand({}, QStringLiteral("Disk usage"), QStringLiteral("df -h"),
+                                    QStringLiteral("Show mounted filesystems"), QStringLiteral("posix")));
+    QVERIFY(source.saveQuickCommand({}, QStringLiteral("Processes"), QStringLiteral("Get-Process"), {},
+                                    QStringLiteral("powershell")));
+    QVERIFY(source.exportQuickCommands(libraryUrl));
+
+    QVERIFY(source.importQuickCommands(libraryUrl));
+    QCOMPARE(source.quickCommands().size(), 4);
+    QSet<QString> sourceIds;
+    for (const QVariant &value : source.quickCommands())
+    {
+        sourceIds.insert(value.toMap().value(QStringLiteral("id")).toString());
+    }
+    QCOMPARE(sourceIds.size(), 4);
+
+    ztermy::AppController target(targetProfiles);
+    QVERIFY(target.importQuickCommands(libraryUrl));
+    QCOMPARE(target.quickCommands().size(), 2);
+    QCOMPARE(target.quickCommands().constFirst().toMap().value(QStringLiteral("name")).toString(),
+             QStringLiteral("Disk usage"));
+    QVERIFY(target.quickCommandOperationError().isEmpty());
 }
 
 QTEST_GUILESS_MAIN(AppControllerTests)

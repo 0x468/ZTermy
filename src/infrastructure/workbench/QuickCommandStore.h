@@ -12,6 +12,8 @@
 namespace ztermy::workbench
 {
 
+inline constexpr qsizetype maximumQuickCommandCount = 1000;
+
 enum class QuickCommandStoreError : std::uint8_t
 {
     invalidPath,

@@ -55,151 +55,186 @@
     </message>
     <message>
         <location filename="../src/application/actions/ActionRegistry.cpp" line="80"/>
+        <source>Import script library</source>
+        <translation>导入脚本库</translation>
+    </message>
+    <message>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="81"/>
+        <source>Merge a ztermy script library from JSON.</source>
+        <translation>从 JSON 合并 ztermy 脚本库。</translation>
+    </message>
+    <message>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="90"/>
+        <source>Export script library</source>
+        <translation>导出脚本库</translation>
+    </message>
+    <message>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="91"/>
+        <source>Export all ztermy scripts and metadata to JSON.</source>
+        <translation>将所有 ztermy 脚本及元数据导出为 JSON。</translation>
+    </message>
+    <message>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="100"/>
         <source>Close terminal tab</source>
         <translation>关闭终端标签页</translation>
     </message>
     <message>
-        <location filename="../src/application/actions/ActionRegistry.cpp" line="81"/>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="101"/>
         <source>Close the active terminal tab.</source>
         <translation>关闭当前终端标签页。</translation>
     </message>
     <message>
-        <location filename="../src/application/actions/ActionRegistry.cpp" line="90"/>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="110"/>
         <source>Next terminal tab</source>
         <translation>下一个终端标签页</translation>
     </message>
     <message>
-        <location filename="../src/application/actions/ActionRegistry.cpp" line="91"/>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="111"/>
         <source>Activate the next open terminal tab.</source>
         <translation>切换到下一个打开的终端标签页。</translation>
     </message>
     <message>
-        <location filename="../src/application/actions/ActionRegistry.cpp" line="100"/>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="120"/>
         <source>Previous terminal tab</source>
         <translation>上一个终端标签页</translation>
     </message>
     <message>
-        <location filename="../src/application/actions/ActionRegistry.cpp" line="101"/>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="121"/>
         <source>Activate the previous open terminal tab.</source>
         <translation>切换到上一个打开的终端标签页。</translation>
     </message>
     <message>
-        <location filename="../src/application/actions/ActionRegistry.cpp" line="110"/>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="130"/>
         <source>Find in terminal</source>
         <translation>在终端中查找</translation>
     </message>
     <message>
-        <location filename="../src/application/actions/ActionRegistry.cpp" line="111"/>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="131"/>
         <source>Search the active terminal buffer.</source>
         <translation>搜索当前终端缓冲区。</translation>
     </message>
     <message>
-        <location filename="../src/application/actions/ActionRegistry.cpp" line="120"/>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="140"/>
         <source>Show command history</source>
         <translation>显示命令历史</translation>
     </message>
     <message>
-        <location filename="../src/application/actions/ActionRegistry.cpp" line="121"/>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="141"/>
         <source>Open the active terminal&apos;s command history panel.</source>
         <translation>打开当前终端的命令历史面板。</translation>
     </message>
     <message>
-        <location filename="../src/application/actions/ActionRegistry.cpp" line="130"/>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="150"/>
         <source>Show scripts</source>
         <translation>显示脚本</translation>
     </message>
     <message>
-        <location filename="../src/application/actions/ActionRegistry.cpp" line="131"/>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="151"/>
         <source>Open the reusable scripts panel.</source>
         <translation>打开可复用脚本面板。</translation>
     </message>
     <message>
-        <location filename="../src/application/actions/ActionRegistry.cpp" line="140"/>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="160"/>
         <source>Show SFTP files</source>
         <translation>显示 SFTP 文件</translation>
     </message>
     <message>
-        <location filename="../src/application/actions/ActionRegistry.cpp" line="141"/>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="161"/>
         <source>Open the active SSH terminal&apos;s remote file browser.</source>
         <translation>打开当前 SSH 终端的远程文件浏览器。</translation>
     </message>
     <message>
-        <location filename="../src/application/actions/ActionRegistry.cpp" line="150"/>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="170"/>
         <source>Toggle command composer</source>
         <translation>切换命令撰写栏</translation>
     </message>
     <message>
-        <location filename="../src/application/actions/ActionRegistry.cpp" line="151"/>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="171"/>
         <source>Show or hide the active terminal&apos;s command composer.</source>
         <translation>显示或隐藏当前终端的命令撰写栏。</translation>
     </message>
     <message>
-        <location filename="../src/application/actions/ActionRegistry.cpp" line="160"/>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="180"/>
+        <source>Toggle session log</source>
+        <translation>切换会话日志</translation>
+    </message>
+    <message>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="181"/>
+        <source>Start or stop recording terminal output to a file.</source>
+        <translation>开始或停止将终端输出记录到文件。</translation>
+    </message>
+    <message>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="190"/>
         <source>Hide terminal side panel</source>
         <translation>隐藏终端侧栏</translation>
     </message>
     <message>
-        <location filename="../src/application/actions/ActionRegistry.cpp" line="161"/>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="191"/>
         <source>Close the active terminal&apos;s side panel.</source>
         <translation>关闭当前终端的侧边面板。</translation>
     </message>
     <message>
-        <location filename="../src/application/actions/ActionRegistry.cpp" line="170"/>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="200"/>
         <source>Move terminal side panel</source>
         <translation>移动终端侧栏</translation>
     </message>
     <message>
-        <location filename="../src/application/actions/ActionRegistry.cpp" line="172"/>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="202"/>
         <source>Move the active terminal panel between the left and right sides.</source>
         <translation>在左侧和右侧之间移动当前终端面板。</translation>
     </message>
     <message>
-        <location filename="../src/application/actions/ActionRegistry.cpp" line="181"/>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="211"/>
         <source>Copy host address</source>
         <translation>复制主机地址</translation>
     </message>
     <message>
-        <location filename="../src/application/actions/ActionRegistry.cpp" line="182"/>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="212"/>
         <source>Copy the active SSH host address to the clipboard.</source>
         <translation>将当前 SSH 主机地址复制到剪贴板。</translation>
     </message>
     <message>
-        <location filename="../src/application/actions/ActionRegistry.cpp" line="208"/>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="238"/>
         <source>Tabs</source>
         <translation>标签页</translation>
     </message>
     <message>
-        <location filename="../src/application/actions/ActionRegistry.cpp" line="212"/>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="242"/>
         <source>Terminal</source>
         <translation>终端</translation>
     </message>
     <message>
-        <location filename="../src/application/actions/ActionRegistry.cpp" line="214"/>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="246"/>
+        <source>Scripts</source>
+        <translation>脚本</translation>
+    </message>
+    <message>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="248"/>
         <source>Application</source>
         <translation>应用</translation>
     </message>
     <message>
-        <location filename="../src/application/actions/ActionRegistry.cpp" line="448"/>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="482"/>
         <source>This action is no longer available.</source>
         <translation>此操作已不可用。</translation>
     </message>
     <message>
-        <location filename="../src/application/actions/ActionRegistry.cpp" line="450"/>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="484"/>
         <source>Press a valid key combination.</source>
         <translation>请输入有效的按键组合。</translation>
     </message>
     <message>
-        <location filename="../src/application/actions/ActionRegistry.cpp" line="452"/>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="486"/>
         <source>Multi-step shortcuts are not supported yet.</source>
         <translation>暂不支持多段快捷键。</translation>
     </message>
     <message>
-        <location filename="../src/application/actions/ActionRegistry.cpp" line="454"/>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="488"/>
         <source>Use Ctrl or Alt with printable keys so terminal input remains available.</source>
         <translation>请将 Ctrl 或 Alt 与可打印字符组合使用，以免占用终端输入。</translation>
     </message>
     <message>
-        <location filename="../src/application/actions/ActionRegistry.cpp" line="457"/>
+        <location filename="../src/application/actions/ActionRegistry.cpp" line="491"/>
         <source>This shortcut is already assigned to %1.</source>
         <translation>此快捷键已分配给“%1”。</translation>
     </message>
@@ -287,28 +322,28 @@
         <translation>凭据操作失败。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="379"/>
+        <location filename="../src/application/AppController.cpp" line="396"/>
         <source>Enter a username before @.</source>
         <translation>请在 @ 前输入用户名。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="381"/>
+        <location filename="../src/application/AppController.cpp" line="398"/>
         <source>Enter a host after @.</source>
         <translation>请在 @ 后输入主机。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="383"/>
+        <location filename="../src/application/AppController.cpp" line="400"/>
         <source>Port must be a number from 1 to 65535.</source>
         <translation>端口必须是 1 到 65535 之间的数字。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="385"/>
+        <location filename="../src/application/AppController.cpp" line="402"/>
         <source>Wrap an IPv6 host in brackets, for example user@[::1]:22.</source>
         <translation>请用方括号包住 IPv6 主机，例如 user@[::1]:22。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="388"/>
-        <location filename="../src/application/AppController.cpp" line="390"/>
+        <location filename="../src/application/AppController.cpp" line="405"/>
+        <location filename="../src/application/AppController.cpp" line="407"/>
         <source>Use user@host or user@host:port.</source>
         <translation>请使用 user@host 或 user@host:port。</translation>
     </message>
@@ -1095,332 +1130,384 @@
 <context>
     <name>Main</name>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="561"/>
-        <location filename="../src/ui/qml/Main.qml" line="575"/>
-        <location filename="../src/ui/qml/Main.qml" line="975"/>
+        <location filename="../src/ui/qml/Main.qml" line="582"/>
+        <location filename="../src/ui/qml/Main.qml" line="596"/>
+        <location filename="../src/ui/qml/Main.qml" line="1025"/>
         <source>Hosts</source>
         <translation>主机</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="586"/>
+        <location filename="../src/ui/qml/Main.qml" line="607"/>
         <source>Settings</source>
         <translation>设置</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="700"/>
+        <location filename="../src/ui/qml/Main.qml" line="721"/>
         <source>New local terminal</source>
         <translation>新建本地终端</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="754"/>
+        <location filename="../src/ui/qml/Main.qml" line="775"/>
         <source>Portable vault locked; unlock</source>
         <translation>便携保险库已锁定；点击解锁</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="754"/>
+        <location filename="../src/ui/qml/Main.qml" line="775"/>
         <source>Portable vault not configured; open Security settings</source>
         <translation>便携保险库未配置；打开安全设置</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="803"/>
+        <location filename="../src/ui/qml/Main.qml" line="824"/>
         <source>Open file transfers</source>
         <translation>打开文件传输</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="809"/>
+        <location filename="../src/ui/qml/Main.qml" line="830"/>
         <source>File transfers</source>
         <translation>文件传输</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="840"/>
+        <location filename="../src/ui/qml/Main.qml" line="861"/>
         <source>Open command palette</source>
         <translation>打开命令面板</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="848"/>
+        <location filename="../src/ui/qml/Main.qml" line="869"/>
         <source>Command palette</source>
         <translation>命令面板</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="880"/>
+        <location filename="../src/ui/qml/Main.qml" line="901"/>
         <source>Open Settings</source>
         <translation>打开设置</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="891"/>
+        <location filename="../src/ui/qml/Main.qml" line="912"/>
         <source>Minimize</source>
         <translation>最小化</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="901"/>
+        <location filename="../src/ui/qml/Main.qml" line="922"/>
         <source>Restore</source>
         <translation>还原</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="901"/>
+        <location filename="../src/ui/qml/Main.qml" line="922"/>
         <source>Maximize</source>
         <translation>最大化</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="913"/>
+        <location filename="../src/ui/qml/Main.qml" line="934"/>
         <source>Close</source>
         <translation>关闭</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1000"/>
+        <location filename="../src/ui/qml/Main.qml" line="966"/>
+        <source>Save session log</source>
+        <translation>保存会话日志</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/Main.qml" line="968"/>
+        <source>Terminal logs (*.log)</source>
+        <translation>终端日志 (*.log)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/Main.qml" line="968"/>
+        <location filename="../src/ui/qml/Main.qml" line="978"/>
+        <location filename="../src/ui/qml/Main.qml" line="987"/>
+        <source>All files (*)</source>
+        <translation>所有文件 (*)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/Main.qml" line="976"/>
+        <source>Import script library</source>
+        <translation>导入脚本库</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/Main.qml" line="978"/>
+        <location filename="../src/ui/qml/Main.qml" line="987"/>
+        <source>ztermy script libraries (*.json)</source>
+        <translation>ztermy 脚本库 (*.json)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/Main.qml" line="985"/>
+        <source>Export script library</source>
+        <translation>导出脚本库</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/Main.qml" line="1050"/>
         <source>Local machine</source>
         <translation>本地计算机</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1007"/>
+        <location filename="../src/ui/qml/Main.qml" line="1057"/>
         <source>Windows 11 · ready</source>
         <translation>Windows 11 · 就绪</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1020"/>
+        <location filename="../src/ui/qml/Main.qml" line="1070"/>
         <source>Open local terminal</source>
         <translation>打开本地终端</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1072"/>
+        <location filename="../src/ui/qml/Main.qml" line="1122"/>
         <source>Terminal</source>
         <translation>终端</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1087"/>
-        <location filename="../src/ui/qml/Main.qml" line="1095"/>
+        <location filename="../src/ui/qml/Main.qml" line="1137"/>
+        <location filename="../src/ui/qml/Main.qml" line="1145"/>
         <source>Copy host address</source>
         <translation>复制主机地址</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1123"/>
+        <location filename="../src/ui/qml/Main.qml" line="1173"/>
         <source>Connected %1</source>
         <translation>已连接 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1148"/>
-        <location filename="../src/ui/qml/Main.qml" line="1270"/>
+        <location filename="../src/ui/qml/Main.qml" line="1198"/>
+        <location filename="../src/ui/qml/Main.qml" line="1342"/>
         <source>Command history</source>
         <translation>命令历史</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1168"/>
-        <location filename="../src/ui/qml/Main.qml" line="1176"/>
-        <location filename="../src/ui/qml/Main.qml" line="1275"/>
+        <location filename="../src/ui/qml/Main.qml" line="1218"/>
+        <location filename="../src/ui/qml/Main.qml" line="1226"/>
+        <location filename="../src/ui/qml/Main.qml" line="1347"/>
         <source>Scripts</source>
         <translation>脚本</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1201"/>
-        <location filename="../src/ui/qml/Main.qml" line="1209"/>
+        <location filename="../src/ui/qml/Main.qml" line="1251"/>
+        <location filename="../src/ui/qml/Main.qml" line="1259"/>
         <source>Command composer</source>
         <translation>命令撰写栏</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1241"/>
-        <location filename="../src/ui/qml/Main.qml" line="1437"/>
+        <location filename="../src/ui/qml/Main.qml" line="1273"/>
+        <location filename="../src/ui/qml/Main.qml" line="1281"/>
+        <location filename="../src/ui/qml/Main.qml" line="1354"/>
+        <source>Stop session log</source>
+        <translation>停止会话日志</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/Main.qml" line="1273"/>
+        <location filename="../src/ui/qml/Main.qml" line="1281"/>
+        <location filename="../src/ui/qml/Main.qml" line="1354"/>
+        <source>Start session log</source>
+        <translation>开始会话日志</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/Main.qml" line="1281"/>
+        <source>Session log is incomplete: %1 byte(s) were dropped.</source>
+        <translation>会话日志不完整：已丢弃 %1 字节。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/Main.qml" line="1313"/>
+        <location filename="../src/ui/qml/Main.qml" line="1514"/>
         <source>Find in terminal</source>
         <translation>在终端中查找</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1253"/>
-        <location filename="../src/ui/qml/Main.qml" line="1261"/>
+        <location filename="../src/ui/qml/Main.qml" line="1325"/>
+        <location filename="../src/ui/qml/Main.qml" line="1333"/>
         <source>More terminal actions</source>
         <translation>更多终端操作</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1282"/>
+        <location filename="../src/ui/qml/Main.qml" line="1359"/>
         <source>Terminal settings</source>
         <translation>终端设置</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1438"/>
+        <location filename="../src/ui/qml/Main.qml" line="1515"/>
         <source>Terminal search query</source>
         <translation>终端搜索内容</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1475"/>
+        <location filename="../src/ui/qml/Main.qml" line="1552"/>
         <source>Match case</source>
         <translation>区分大小写</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1504"/>
+        <location filename="../src/ui/qml/Main.qml" line="1581"/>
         <source>Previous match</source>
         <translation>上一个匹配项</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1515"/>
+        <location filename="../src/ui/qml/Main.qml" line="1592"/>
         <source>Next match</source>
         <translation>下一个匹配项</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1526"/>
+        <location filename="../src/ui/qml/Main.qml" line="1603"/>
         <source>Close terminal search</source>
         <translation>关闭终端搜索</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1597"/>
+        <location filename="../src/ui/qml/Main.qml" line="1676"/>
         <source>No terminal sessions</source>
         <translation>没有终端会话</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1598"/>
+        <location filename="../src/ui/qml/Main.qml" line="1677"/>
         <source>Open a local PowerShell session or choose an SSH host from the Hosts workspace.</source>
         <translation>打开本地 PowerShell 会话，或从主机工作区选择 SSH 主机。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1603"/>
+        <location filename="../src/ui/qml/Main.qml" line="1682"/>
         <source>New terminal</source>
         <translation>新建终端</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1604"/>
+        <location filename="../src/ui/qml/Main.qml" line="1683"/>
         <source>Open a new local terminal</source>
         <translation>打开新的本地终端</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1610"/>
+        <location filename="../src/ui/qml/Main.qml" line="1689"/>
         <source>Browse hosts</source>
         <translation>浏览主机</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1611"/>
+        <location filename="../src/ui/qml/Main.qml" line="1690"/>
         <source>Browse saved SSH hosts</source>
         <translation>浏览已保存的 SSH 主机</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1622"/>
+        <location filename="../src/ui/qml/Main.qml" line="1701"/>
         <source>Connecting to SSH host</source>
         <translation>正在连接 SSH 主机</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1624"/>
+        <location filename="../src/ui/qml/Main.qml" line="1703"/>
         <source>Connection setup runs outside the interface thread. You can close this tab to cancel.</source>
         <translation>连接设置在界面线程之外执行。你可以关闭此标签页来取消。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1627"/>
+        <location filename="../src/ui/qml/Main.qml" line="1706"/>
         <source>Cancel connection</source>
         <translation>取消连接</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1628"/>
+        <location filename="../src/ui/qml/Main.qml" line="1707"/>
         <source>Cancel SSH connection and close tab</source>
         <translation>取消 SSH 连接并关闭标签页</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1643"/>
+        <location filename="../src/ui/qml/Main.qml" line="1722"/>
         <source>SSH session ended</source>
         <translation>SSH 会话已结束</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1645"/>
+        <location filename="../src/ui/qml/Main.qml" line="1724"/>
         <source>The remote host closed the terminal connection. Credentials are not retained for automatic reconnection.</source>
         <translation>远程主机关闭了终端连接。不会保留凭据用于自动重连。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1648"/>
-        <location filename="../src/ui/qml/Main.qml" line="1676"/>
+        <location filename="../src/ui/qml/Main.qml" line="1727"/>
+        <location filename="../src/ui/qml/Main.qml" line="1755"/>
         <source>Close tab</source>
         <translation>关闭标签页</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1649"/>
+        <location filename="../src/ui/qml/Main.qml" line="1728"/>
         <source>Close ended SSH terminal tab</source>
         <translation>关闭已结束的 SSH 终端标签页</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1658"/>
-        <location filename="../src/ui/qml/Main.qml" line="1686"/>
+        <location filename="../src/ui/qml/Main.qml" line="1737"/>
+        <location filename="../src/ui/qml/Main.qml" line="1765"/>
         <source>Review host</source>
         <translation>检查主机</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1659"/>
-        <location filename="../src/ui/qml/Main.qml" line="1687"/>
+        <location filename="../src/ui/qml/Main.qml" line="1738"/>
+        <location filename="../src/ui/qml/Main.qml" line="1766"/>
         <source>Return to SSH host profiles</source>
         <translation>返回 SSH 主机配置</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1671"/>
+        <location filename="../src/ui/qml/Main.qml" line="1750"/>
         <source>SSH session unavailable</source>
         <translation>SSH 会话不可用</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1673"/>
+        <location filename="../src/ui/qml/Main.qml" line="1752"/>
         <source>Review the host and authentication settings before starting a new connection. Credentials are not retained for retry.</source>
         <translation>开始新连接前，请检查主机和身份验证设置。重试时不会保留凭据。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1677"/>
+        <location filename="../src/ui/qml/Main.qml" line="1756"/>
         <source>Close failed SSH terminal tab</source>
         <translation>关闭连接失败的 SSH 终端标签页</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1774"/>
-        <location filename="../src/ui/qml/Main.qml" line="1838"/>
+        <location filename="../src/ui/qml/Main.qml" line="1853"/>
+        <location filename="../src/ui/qml/Main.qml" line="1917"/>
         <source>Unlock portable credential vault</source>
         <translation>解锁便携凭据保险库</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1777"/>
+        <location filename="../src/ui/qml/Main.qml" line="1856"/>
         <source>Unlock portable vault</source>
         <translation>解锁便携保险库</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1786"/>
+        <location filename="../src/ui/qml/Main.qml" line="1865"/>
         <source>Unlock saved SSH passwords and private-key passphrases for this ztermy session. The master password is never stored.</source>
         <translation>解锁本次 ztermy 会话中保存的 SSH 密码和私钥口令。主密码永远不会被保存。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1798"/>
+        <location filename="../src/ui/qml/Main.qml" line="1877"/>
         <source>Master password (minimum 8 characters)</source>
         <translation>主密码（至少 8 个字符）</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1800"/>
+        <location filename="../src/ui/qml/Main.qml" line="1879"/>
         <source>Portable vault master password</source>
         <translation>便携保险库主密码</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1816"/>
+        <location filename="../src/ui/qml/Main.qml" line="1895"/>
         <source>Open Security</source>
         <translation>打开安全设置</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1817"/>
+        <location filename="../src/ui/qml/Main.qml" line="1896"/>
         <source>Open credential Security settings</source>
         <translation>打开凭据安全设置</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1829"/>
+        <location filename="../src/ui/qml/Main.qml" line="1908"/>
         <source>Not now</source>
         <translation>暂不</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1830"/>
+        <location filename="../src/ui/qml/Main.qml" line="1909"/>
         <source>Keep portable vault locked</source>
         <translation>保持便携保险库锁定</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1837"/>
+        <location filename="../src/ui/qml/Main.qml" line="1916"/>
         <source>Unlock</source>
         <translation>解锁</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1857"/>
+        <location filename="../src/ui/qml/Main.qml" line="1936"/>
         <source>Paste multiple lines?</source>
         <translation>粘贴多行？</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/ui/qml/Main.qml" line="1858"/>
+        <location filename="../src/ui/qml/Main.qml" line="1937"/>
         <source>The clipboard contains %n line(s). Pasting may execute commands immediately in the active terminal.</source>
         <translation>
             <numerusform>剪贴板包含 %n 行内容。粘贴后可能会立即在当前终端中执行命令。</numerusform>
         </translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1859"/>
+        <location filename="../src/ui/qml/Main.qml" line="1938"/>
         <source>Paste</source>
         <translation>粘贴</translation>
     </message>
@@ -2444,81 +2531,81 @@
 <context>
     <name>SshTerminalSession</name>
     <message>
-        <location filename="../src/application/AppController.cpp" line="403"/>
+        <location filename="../src/application/AppController.cpp" line="420"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="41"/>
         <source>SSH host name resolution failed</source>
         <translation>SSH 主机名解析失败</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="405"/>
+        <location filename="../src/application/AppController.cpp" line="422"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="43"/>
         <source>SSH connection was refused</source>
         <translation>SSH 连接被拒绝</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="407"/>
+        <location filename="../src/application/AppController.cpp" line="424"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="45"/>
         <source>SSH operation timed out</source>
         <translation>SSH 操作超时</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="409"/>
+        <location filename="../src/application/AppController.cpp" line="426"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="47"/>
         <source>SSH transport failed</source>
         <translation>SSH 传输失败</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="411"/>
+        <location filename="../src/application/AppController.cpp" line="428"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="49"/>
         <source>SSH host key changed</source>
         <translation>SSH 主机密钥已更改</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="413"/>
+        <location filename="../src/application/AppController.cpp" line="430"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="51"/>
         <source>SSH host key could not be verified</source>
         <translation>无法验证 SSH 主机密钥</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="415"/>
+        <location filename="../src/application/AppController.cpp" line="432"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="53"/>
         <source>SSH authentication was rejected</source>
         <translation>SSH 身份验证被拒绝</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="417"/>
+        <location filename="../src/application/AppController.cpp" line="434"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="55"/>
         <source>SSH authentication method is unavailable</source>
         <translation>SSH 身份验证方式不可用</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="419"/>
+        <location filename="../src/application/AppController.cpp" line="436"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="57"/>
         <source>SSH terminal channel could not be opened</source>
         <translation>无法打开 SSH 终端通道</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="421"/>
+        <location filename="../src/application/AppController.cpp" line="438"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="59"/>
         <source>SSH remote host closed the connection</source>
         <translation>SSH 远程主机关闭了连接</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="423"/>
+        <location filename="../src/application/AppController.cpp" line="440"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="61"/>
         <source>SSH connection cancelled</source>
         <translation>SSH 连接已取消</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="425"/>
+        <location filename="../src/application/AppController.cpp" line="442"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="63"/>
         <source>SSH protocol error</source>
         <translation>SSH 协议错误</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="398"/>
-        <location filename="../src/application/AppController.cpp" line="427"/>
-        <location filename="../src/application/AppController.cpp" line="458"/>
+        <location filename="../src/application/AppController.cpp" line="415"/>
+        <location filename="../src/application/AppController.cpp" line="444"/>
+        <location filename="../src/application/AppController.cpp" line="475"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="65"/>
         <source>SSH connection failed</source>
         <translation>SSH 连接失败</translation>
@@ -2588,323 +2675,338 @@
 <context>
     <name>TerminalWorkbench</name>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="139"/>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="273"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="141"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="275"/>
         <source>Command history</source>
         <translation>命令历史</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="139"/>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="290"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="141"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="292"/>
         <source>Scripts</source>
         <translation>脚本</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="139"/>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="252"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="141"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="254"/>
         <source>SFTP file browser</source>
         <translation>SFTP 文件浏览器</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="259"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="261"/>
         <source>SFTP files</source>
         <translation>SFTP 文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="307"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="309"/>
         <source>Move terminal workbench right</source>
         <translation>将终端工作台移到右侧</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="307"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="309"/>
         <source>Move terminal workbench left</source>
         <translation>将终端工作台移到左侧</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="320"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="322"/>
         <source>Close terminal workbench</source>
         <translation>关闭终端工作台</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="363"/>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="364"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="365"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="366"/>
         <source>Search command history</source>
         <translation>搜索命令历史</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="374"/>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="577"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="376"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="579"/>
         <source>Refresh command history</source>
         <translation>刷新命令历史</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="397"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="399"/>
         <source>Current profile</source>
         <translation>当前主机</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="398"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="400"/>
         <source>Current profile history</source>
         <translation>当前主机历史</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="404"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="406"/>
         <source>Global</source>
         <translation>全局</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="405"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="407"/>
         <source>Global command history</source>
         <translation>全局命令历史</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="414"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="416"/>
         <source>%n command(s)</source>
         <translation>
             <numerusform>%n 条命令</numerusform>
         </translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="511"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="513"/>
         <source>Run history command</source>
         <translation>运行历史命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="518"/>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="892"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="520"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="924"/>
         <source>Run</source>
         <translation>运行</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="526"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="528"/>
         <source>Insert history command</source>
         <translation>插入历史命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="533"/>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="907"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="535"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="939"/>
         <source>Insert</source>
         <translation>插入</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="541"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="543"/>
         <source>Save history command</source>
         <translation>保存历史命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="548"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="550"/>
         <source>Save as code snippet</source>
         <translation>保存为代码片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="604"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="606"/>
         <source>Code snippets</source>
         <translation>代码片段</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="616"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="618"/>
         <source>%n item(s)</source>
         <translation>
             <numerusform>%n 项</numerusform>
         </translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="632"/>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="633"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="630"/>
+        <source>Script library actions</source>
+        <translation>脚本库操作</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="642"/>
+        <source>Import library</source>
+        <translation>导入脚本库</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="647"/>
+        <source>Export library</source>
+        <translation>导出脚本库</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="664"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="665"/>
         <source>Search scripts and code snippets</source>
         <translation>搜索脚本和代码片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="640"/>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="966"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="672"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="998"/>
         <source>New code snippet</source>
         <translation>新建代码片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="670"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="702"/>
         <source>Snippet name</source>
         <translation>片段名称</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="671"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="703"/>
         <source>Code snippet name</source>
         <translation>代码片段名称</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="682"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="714"/>
         <source>Command or multiline shell text</source>
         <translation>命令或多行 Shell 文本</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="690"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="722"/>
         <source>Code snippet command</source>
         <translation>代码片段命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="705"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="737"/>
         <source>Code snippet description</source>
         <translation>代码片段说明</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="714"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="746"/>
         <source>Code snippet shell scope</source>
         <translation>代码片段 Shell 范围</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="850"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="882"/>
         <source>Move code snippet up</source>
         <translation>上移代码片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="868"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="900"/>
         <source>Move code snippet down</source>
         <translation>下移代码片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="885"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="917"/>
         <source>Run code snippet</source>
         <translation>运行代码片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="900"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="932"/>
         <source>Insert code snippet</source>
         <translation>插入代码片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="915"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="947"/>
         <source>Edit code snippet</source>
         <translation>编辑代码片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="922"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="954"/>
         <source>Edit</source>
         <translation>编辑</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="932"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="964"/>
         <source>Delete code snippet</source>
         <translation>删除代码片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="962"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="994"/>
         <source>No matching scripts</source>
         <translation>没有匹配的脚本</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="962"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="994"/>
         <source>No code snippets</source>
         <translation>没有代码片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="963"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="995"/>
         <source>Code snippets are the lightweight building blocks of the scripts library.</source>
         <translation>代码片段是脚本库的轻量构建单元。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="967"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="999"/>
         <source>Create the first code snippet</source>
         <translation>创建第一个代码片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="979"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="1011"/>
         <source>Delete code snippet?</source>
         <translation>删除代码片段？</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="571"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="573"/>
         <source>Loading history</source>
         <translation>正在加载历史记录</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="571"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="573"/>
         <source>No matching history</source>
         <translation>没有匹配的历史记录</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="571"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="573"/>
         <source>No command history</source>
         <translation>没有命令历史</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="571"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="573"/>
         <source>No global command history</source>
         <translation>没有全局命令历史</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="572"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="574"/>
         <source>Reading a bounded snapshot outside the interface thread.</source>
         <translation>正在界面线程之外读取有大小限制的快照。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="572"/>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="963"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="574"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="995"/>
         <source>Try a different search term.</source>
         <translation>请尝试其他搜索词。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="572"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="574"/>
         <source>History is read from the active shell and remains in memory for this tab.</source>
         <translation>历史记录从当前 Shell 读取，并仅保留在此标签页的内存中。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="572"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="574"/>
         <source>Commands from open terminal sessions appear here without being written to disk.</source>
         <translation>已打开终端会话中的命令会显示在这里，但不会写入磁盘。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="575"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="577"/>
         <source>Refresh history</source>
         <translation>刷新历史记录</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="704"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="736"/>
         <source>Description (optional)</source>
         <translation>说明（可选）</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="713"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="745"/>
         <source>Any shell</source>
         <translation>任意 Shell</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="713"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="745"/>
         <source>POSIX shell</source>
         <translation>POSIX Shell</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="713"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="745"/>
         <source>PowerShell</source>
         <translation>PowerShell</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="725"/>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="982"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="757"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="1014"/>
         <source>Cancel</source>
         <translation>取消</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="730"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="762"/>
         <source>Save</source>
         <translation>保存</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="857"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="889"/>
         <source>Move up</source>
         <translation>上移</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="875"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="907"/>
         <source>Move down</source>
         <translation>下移</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="980"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="1012"/>
         <source>%1 will be removed from every terminal.</source>
         <translation>将从所有终端中移除“%1”。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="939"/>
-        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="981"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="971"/>
+        <location filename="../src/ui/qml/TerminalWorkbench.qml" line="1013"/>
         <source>Delete</source>
         <translation>删除</translation>
     </message>
@@ -3065,206 +3167,237 @@
 <context>
     <name>ztermy::AppController</name>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1087"/>
-        <location filename="../src/application/AppController.cpp" line="1916"/>
+        <location filename="../src/application/AppController.cpp" line="1110"/>
+        <location filename="../src/application/AppController.cpp" line="2043"/>
         <source>The maximum of 32 terminal tabs is already open</source>
         <translation>已达到最多 32 个终端标签页的限制</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1094"/>
+        <location filename="../src/application/AppController.cpp" line="1117"/>
         <source>PowerShell %1</source>
         <translation>PowerShell %1</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1095"/>
+        <location filename="../src/application/AppController.cpp" line="1118"/>
         <source>Starting local terminal...</source>
         <translation>正在启动本地终端…</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1116"/>
+        <location filename="../src/application/AppController.cpp" line="1141"/>
         <source>Unable to start local terminal: %1</source>
         <translation>无法启动本地终端：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1411"/>
+        <location filename="../src/application/AppController.cpp" line="1442"/>
+        <source>Session log could not be started.</source>
+        <translation>无法启动会话日志。</translation>
+    </message>
+    <message>
+        <location filename="../src/application/AppController.cpp" line="1474"/>
         <source>Enter a name and command, then choose a valid shell scope.</source>
         <translation>请输入名称和命令，然后选择有效的 Shell 适用范围。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1436"/>
-        <location filename="../src/application/AppController.cpp" line="1462"/>
-        <location filename="../src/application/AppController.cpp" line="1489"/>
+        <location filename="../src/application/AppController.cpp" line="1499"/>
+        <location filename="../src/application/AppController.cpp" line="1525"/>
+        <location filename="../src/application/AppController.cpp" line="1552"/>
         <source>The quick command no longer exists.</source>
         <translation>该快捷命令已不存在。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1446"/>
+        <location filename="../src/application/AppController.cpp" line="1509"/>
         <source>The quick command could not be saved.</source>
         <translation>无法保存快捷命令。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1469"/>
+        <location filename="../src/application/AppController.cpp" line="1532"/>
         <source>The quick command could not be deleted.</source>
         <translation>无法删除快捷命令。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1506"/>
+        <location filename="../src/application/AppController.cpp" line="1569"/>
         <source>The quick command order could not be saved.</source>
         <translation>无法保存快捷命令顺序。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1527"/>
+        <location filename="../src/application/AppController.cpp" line="1584"/>
+        <location filename="../src/application/AppController.cpp" line="1591"/>
+        <source>The script library could not be imported.</source>
+        <translation>无法导入脚本库。</translation>
+    </message>
+    <message>
+        <location filename="../src/application/AppController.cpp" line="1596"/>
+        <source>The imported script library exceeds the 1000 item limit.</source>
+        <translation>导入的脚本库超过 1000 项限制。</translation>
+    </message>
+    <message>
+        <location filename="../src/application/AppController.cpp" line="1620"/>
+        <source>The imported script library could not be saved.</source>
+        <translation>无法保存导入的脚本库。</translation>
+    </message>
+    <message>
+        <location filename="../src/application/AppController.cpp" line="1635"/>
+        <source>The script library could not be exported.</source>
+        <translation>无法导出脚本库。</translation>
+    </message>
+    <message>
+        <location filename="../src/application/AppController.cpp" line="1654"/>
         <source>Connect the SSH terminal before reading remote history.</source>
         <translation>请先连接 SSH 终端，再读取远程历史记录。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1543"/>
+        <location filename="../src/application/AppController.cpp" line="1670"/>
         <source>The PowerShell history location is unavailable.</source>
         <translation>PowerShell 历史记录位置不可用。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1552"/>
+        <location filename="../src/application/AppController.cpp" line="1679"/>
         <source>PowerShell history could not be read.</source>
         <translation>无法读取 PowerShell 历史记录。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1792"/>
+        <location filename="../src/application/AppController.cpp" line="1919"/>
         <source>The shortcut could not be saved.</source>
         <translation>无法保存快捷键。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1869"/>
+        <location filename="../src/application/AppController.cpp" line="1996"/>
         <source>Complete the SSH host, port, username, and private-key fields</source>
         <translation>请填写 SSH 主机、端口、用户名和私钥字段</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1893"/>
+        <location filename="../src/application/AppController.cpp" line="2020"/>
         <source>Complete the SSH host, port, username, and password fields</source>
         <translation>请填写 SSH 主机、端口、用户名和密码字段</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1926"/>
+        <location filename="../src/application/AppController.cpp" line="2053"/>
         <source>Starting SSH connection...</source>
         <translation>正在启动 SSH 连接…</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="2140"/>
+        <location filename="../src/application/AppController.cpp" line="2269"/>
         <source>Download complete</source>
         <translation>下载完成</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="2140"/>
+        <location filename="../src/application/AppController.cpp" line="2269"/>
         <source>Upload complete</source>
         <translation>上传完成</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="2145"/>
+        <location filename="../src/application/AppController.cpp" line="2274"/>
         <source>File transfer failed</source>
         <translation>文件传输失败</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="2149"/>
+        <location filename="../src/application/AppController.cpp" line="2278"/>
         <source>File transfer cancelled</source>
         <translation>文件传输已取消</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="2176"/>
+        <location filename="../src/application/AppController.cpp" line="2305"/>
         <source>Unlock the credential vault to browse remote files.</source>
         <translation>解锁凭据保险库后才能浏览远程文件。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="2177"/>
+        <location filename="../src/application/AppController.cpp" line="2306"/>
         <source>This SSH session needs a saved credential before remote files can be opened.</source>
         <translation>此 SSH 会话需要已保存的凭据才能打开远程文件。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="2192"/>
+        <location filename="../src/application/AppController.cpp" line="2321"/>
         <source>The SFTP session could not be started.</source>
         <translation>无法启动 SFTP 会话。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="2265"/>
+        <location filename="../src/application/AppController.cpp" line="2394"/>
         <source>The profile was saved, but the connection could not be started.</source>
         <translation>配置已保存，但无法启动连接。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="2339"/>
+        <location filename="../src/application/AppController.cpp" line="2468"/>
         <source>Create the portable credential vault in Settings &gt; Security before saving a secret.</source>
         <translation>保存凭据前，请先在“设置 &gt; 安全”中创建便携凭据保险库。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="2591"/>
+        <location filename="../src/application/AppController.cpp" line="2720"/>
         <source>This host profile has no saved credential.</source>
         <translation>此主机配置没有已保存的凭据。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="2632"/>
+        <location filename="../src/application/AppController.cpp" line="2761"/>
         <source>Enter the credential required by this host.</source>
         <translation>请输入此主机所需的凭据。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="2822"/>
-        <location filename="../src/application/AppController.cpp" line="2927"/>
+        <location filename="../src/application/AppController.cpp" line="2951"/>
+        <location filename="../src/application/AppController.cpp" line="3056"/>
         <source>Choose system, portable, or session credential storage.</source>
         <translation>请选择系统、便携或仅会话凭据存储。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="2843"/>
+        <location filename="../src/application/AppController.cpp" line="2972"/>
         <source>Credentials were copied, but the storage preference could not be saved. The old store remains active.</source>
         <translation>凭据已复制，但无法保存存储偏好。原存储仍处于活动状态。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="2854"/>
+        <location filename="../src/application/AppController.cpp" line="2983"/>
         <source>Migration succeeded, but credentials remain in the previous store.</source>
         <translation>迁移成功，但凭据仍保留在原存储中。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="2912"/>
+        <location filename="../src/application/AppController.cpp" line="3041"/>
         <source>Credentials were restored because host profiles could not be updated.</source>
         <translation>由于无法更新主机配置，凭据已恢复。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="3168"/>
+        <location filename="../src/application/AppController.cpp" line="3135"/>
+        <source>Session log failed: %1</source>
+        <translation>会话日志失败：%1</translation>
+    </message>
+    <message>
+        <location filename="../src/application/AppController.cpp" line="3319"/>
         <source>Remote shell history exceeded the safety limit.</source>
         <translation>远程 Shell 历史记录超过安全限制。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="3197"/>
+        <location filename="../src/application/AppController.cpp" line="3348"/>
         <source>This remote shell is not supported yet.</source>
         <translation>暂不支持此远程 Shell。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="3202"/>
+        <location filename="../src/application/AppController.cpp" line="3353"/>
         <source>Remote shell history could not be parsed.</source>
         <translation>无法解析远程 Shell 历史记录。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="3225"/>
+        <location filename="../src/application/AppController.cpp" line="3376"/>
         <source>SSH host key changed; connection blocked</source>
         <translation>SSH 主机密钥已更改；连接已阻止</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="3289"/>
+        <location filename="../src/application/AppController.cpp" line="3440"/>
         <source>The remote directory could not be loaded.</source>
         <translation>无法加载远程目录。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="3293"/>
+        <location filename="../src/application/AppController.cpp" line="3444"/>
         <source>The remote file operation failed.</source>
         <translation>远程文件操作失败。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="3308"/>
+        <location filename="../src/application/AppController.cpp" line="3459"/>
         <source>The SFTP connection failed.</source>
         <translation>SFTP 连接失败。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="3595"/>
+        <location filename="../src/application/AppController.cpp" line="3746"/>
         <source>No terminal session</source>
         <translation>没有终端会话</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="3705"/>
+        <location filename="../src/application/AppController.cpp" line="3856"/>
         <source>Saved quick commands could not be loaded.</source>
         <translation>无法加载已保存的快捷命令。</translation>
     </message>
@@ -3272,7 +3405,7 @@
 <context>
     <name>ztermy::ssh::SshTerminalSession</name>
     <message>
-        <location filename="../src/application/AppController.cpp" line="437"/>
+        <location filename="../src/application/AppController.cpp" line="454"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="158"/>
         <source>Resolving SSH host</source>
         <translation>正在解析 SSH 主机</translation>
@@ -3283,151 +3416,151 @@
         <translation>SSH 工作线程意外失败</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="251"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="256"/>
         <source>SSH input queue is full</source>
         <translation>SSH 输入队列已满</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="439"/>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="412"/>
+        <location filename="../src/application/AppController.cpp" line="456"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="417"/>
         <source>Connecting to SSH host</source>
         <translation>正在连接 SSH 主机</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="441"/>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="415"/>
+        <location filename="../src/application/AppController.cpp" line="458"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="420"/>
         <source>Negotiating SSH connection</source>
         <translation>正在协商 SSH 连接</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="443"/>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="418"/>
+        <location filename="../src/application/AppController.cpp" line="460"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="423"/>
         <source>Verifying SSH host key</source>
         <translation>正在验证 SSH 主机密钥</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="445"/>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="421"/>
+        <location filename="../src/application/AppController.cpp" line="462"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="426"/>
         <source>SSH host key confirmation required</source>
         <translation>需要确认 SSH 主机密钥</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="461"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="466"/>
         <source>SSH host key could not be saved</source>
         <translation>无法保存 SSH 主机密钥</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="447"/>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="424"/>
+        <location filename="../src/application/AppController.cpp" line="464"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="429"/>
         <source>Authenticating SSH session</source>
         <translation>正在验证 SSH 会话身份</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="449"/>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="471"/>
+        <location filename="../src/application/AppController.cpp" line="466"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="476"/>
         <source>Opening SSH terminal</source>
         <translation>正在打开 SSH 终端</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="451"/>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="482"/>
+        <location filename="../src/application/AppController.cpp" line="468"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="487"/>
         <source>SSH terminal connected</source>
         <translation>SSH 终端已连接</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="500"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="505"/>
         <source>Remote shell history could not be started.</source>
         <translation>无法启动远程 Shell 历史记录读取。</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="519"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="524"/>
         <source>SSH command wake event failed</source>
         <translation>SSH 命令唤醒事件失败</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="533"/>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="555"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="538"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="560"/>
         <source>SSH terminal selection clear failed: %1</source>
         <translation>清除 SSH 终端选区失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="564"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="569"/>
         <source>SSH terminal paste failed: %1</source>
         <translation>SSH 终端粘贴失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="591"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="596"/>
         <source>SSH terminal selection failed: %1</source>
         <translation>SSH 终端选择失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="604"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="609"/>
         <source>SSH terminal copy failed: %1</source>
         <translation>SSH 终端复制失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="623"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="628"/>
         <source>SSH terminal search failed: %1</source>
         <translation>SSH 终端搜索失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="637"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="642"/>
         <source>SSH terminal search clear failed: %1</source>
         <translation>清除 SSH 终端搜索失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="666"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="671"/>
         <source>SSH terminal state resize failed</source>
         <translation>调整 SSH 终端状态大小失败</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="683"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="688"/>
         <source>Remote shell history timed out.</source>
         <translation>读取远程 Shell 历史记录超时。</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="692"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="697"/>
         <source>Remote shell history could not be read.</source>
         <translation>无法读取远程 Shell 历史记录。</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="701"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="706"/>
         <source>Remote shell history exceeded the safety limit.</source>
         <translation>远程 Shell 历史记录超过安全限制。</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="716"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="721"/>
         <source>Remote shell history command failed.</source>
         <translation>远程 Shell 历史记录命令执行失败。</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="725"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="730"/>
         <source>Remote shell history returned an invalid response.</source>
         <translation>远程 Shell 历史记录返回了无效响应。</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="736"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="741"/>
         <source>This remote shell is not supported yet.</source>
         <translation>暂不支持此远程 Shell。</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="779"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="788"/>
         <source>SSH terminal parser failed</source>
         <translation>SSH 终端解析器失败</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="792"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="801"/>
         <source>SSH terminal closed without a complete channel shutdown</source>
         <translation>SSH 终端已关闭，但通道未完整关闭</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="456"/>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="796"/>
+        <location filename="../src/application/AppController.cpp" line="473"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="805"/>
         <source>SSH terminal disconnected</source>
         <translation>SSH 终端已断开连接</translation>
     </message>
     <message>
-        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="804"/>
+        <location filename="../src/application/ssh/SshTerminalSession.cpp" line="813"/>
         <source>SSH terminal snapshot failed</source>
         <translation>SSH 终端快照失败</translation>
     </message>
@@ -3435,7 +3568,7 @@
 <context>
     <name>ztermy::terminal::LocalTerminalSession</name>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1040"/>
+        <location filename="../src/application/AppController.cpp" line="1063"/>
         <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="74"/>
         <source>Local PowerShell connected</source>
         <translation>本地 PowerShell 已连接</translation>
@@ -3461,75 +3594,75 @@
         <translation>终端写入线程遇到未知错误</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1042"/>
+        <location filename="../src/application/AppController.cpp" line="1065"/>
         <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="151"/>
         <source>Local terminal stopped</source>
         <translation>本地终端已停止</translation>
     </message>
     <message>
-        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="335"/>
+        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="340"/>
         <source>Terminal read failed: %1</source>
         <translation>终端读取失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="350"/>
+        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="360"/>
         <source>Terminal parser failed: %1</source>
         <translation>终端解析器失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="359"/>
+        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="369"/>
         <source>Local shell exited</source>
         <translation>本地 Shell 已退出</translation>
     </message>
     <message>
-        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="402"/>
-        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="431"/>
+        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="412"/>
+        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="441"/>
         <source>Terminal selection clear failed: %1</source>
         <translation>清除终端选区失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="410"/>
-        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="441"/>
+        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="420"/>
+        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="451"/>
         <source>Terminal write failed: %1</source>
         <translation>终端写入失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="435"/>
+        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="445"/>
         <source>Terminal paste failed: %1</source>
         <translation>终端粘贴失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="466"/>
+        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="476"/>
         <source>Terminal selection failed: %1</source>
         <translation>终端选择失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="482"/>
+        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="492"/>
         <source>Terminal copy failed: %1</source>
         <translation>终端复制失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="503"/>
+        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="513"/>
         <source>Terminal search failed: %1</source>
         <translation>终端搜索失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="520"/>
+        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="530"/>
         <source>Terminal search clear failed: %1</source>
         <translation>清除终端搜索失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="531"/>
+        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="541"/>
         <source>Terminal resize failed: %1</source>
         <translation>调整终端大小失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="538"/>
+        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="548"/>
         <source>Terminal state resize failed: %1</source>
         <translation>调整终端状态大小失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="556"/>
+        <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="566"/>
         <source>Terminal snapshot failed: %1</source>
         <translation>终端快照失败：%1</translation>
     </message>

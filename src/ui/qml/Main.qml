@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 
 Rectangle {
@@ -132,6 +133,17 @@ Rectangle {
         portableVaultUnlockDialog.open();
     }
 
+    function toggleSessionLog() {
+        if (activeTerminalTab === null) {
+            return;
+        }
+        if (activeTerminalTab.logState === "active" || activeTerminalTab.logState === "starting") {
+            controller.stopTerminalLog();
+        } else {
+            sessionLogDialog.open();
+        }
+    }
+
     function presentStartupVaultPrompt() {
         if (startupVaultPromptPresented || controller.effectiveCredentialStorage !== "portable" || !controller.portableVaultInitialized || !controller.portableVaultLocked) {
             return;
@@ -256,6 +268,12 @@ Rectangle {
         case "application.transfers":
             transferCenter.open();
             break;
+        case "scripts.import":
+            scriptImportDialog.open();
+            break;
+        case "scripts.export":
+            scriptExportDialog.open();
+            break;
         case "terminal.newLocal":
             startLocalTerminalTab();
             break;
@@ -286,6 +304,9 @@ Rectangle {
         case "terminal.composer":
             currentPage = "terminal";
             controller.toggleTerminalComposer();
+            break;
+        case "terminal.sessionLog":
+            toggleSessionLog();
             break;
         case "terminal.hideWorkbench":
             controller.closeTerminalWorkbench();
@@ -939,6 +960,35 @@ Rectangle {
         z: 100
     }
 
+    FileDialog {
+        id: sessionLogDialog
+
+        title: qsTr("Save session log")
+        fileMode: FileDialog.SaveFile
+        nameFilters: [qsTr("Terminal logs (*.log)"), qsTr("All files (*)")]
+        defaultSuffix: "log"
+        onAccepted: root.controller.startTerminalLog(selectedFile.toString())
+    }
+
+    FileDialog {
+        id: scriptImportDialog
+
+        title: qsTr("Import script library")
+        fileMode: FileDialog.OpenFile
+        nameFilters: [qsTr("ztermy script libraries (*.json)"), qsTr("All files (*)")]
+        onAccepted: root.controller.importQuickCommands(selectedFile.toString())
+    }
+
+    FileDialog {
+        id: scriptExportDialog
+
+        title: qsTr("Export script library")
+        fileMode: FileDialog.SaveFile
+        nameFilters: [qsTr("ztermy script libraries (*.json)"), qsTr("All files (*)")]
+        defaultSuffix: "json"
+        onAccepted: root.controller.exportQuickCommands(selectedFile.toString())
+    }
+
     RowLayout {
         anchors.top: titleBar.bottom
         anchors.left: parent.left
@@ -1210,6 +1260,28 @@ Rectangle {
                                 }
                             }
 
+                            TerminalToolbarButton {
+                                id: sessionLogToolbarButton
+
+                                Layout.preferredWidth: 28
+                                Layout.preferredHeight: 22
+                                checkable: true
+                                checked: root.activeTerminalTab !== null && (root.activeTerminalTab.logState === "active" || root.activeTerminalTab.logState === "starting")
+                                selected: checked
+                                enabled: root.activeTerminalTab !== null
+                                onClicked: root.toggleSessionLog()
+                                Accessible.name: checked ? qsTr("Stop session log") : qsTr("Start session log")
+                                contentItem: AppIcon {
+                                    name: "save"
+                                    color: root.activeTerminalTab !== null && root.activeTerminalTab.logDroppedBytes > 0 ? Theme.warning : sessionLogToolbarButton.checked ? Theme.accent : root.mutedColor
+                                }
+
+                                AppToolTip {
+                                    visible: sessionLogToolbarButton.hovered
+                                    text: root.activeTerminalTab !== null && root.activeTerminalTab.logDroppedBytes > 0 ? qsTr("Session log is incomplete: %1 byte(s) were dropped.").arg(root.activeTerminalTab.logDroppedBytes) : sessionLogToolbarButton.checked ? qsTr("Stop session log") : qsTr("Start session log")
+                                }
+                            }
+
                             Rectangle {
                                 Layout.alignment: Qt.AlignVCenter
                                 Layout.preferredWidth: 30
@@ -1277,6 +1349,11 @@ Rectangle {
                                     }
 
                                     AppMenuSeparator {}
+
+                                    AppMenuItem {
+                                        text: root.activeTerminalTab !== null && (root.activeTerminalTab.logState === "active" || root.activeTerminalTab.logState === "starting") ? qsTr("Stop session log") : qsTr("Start session log")
+                                        onTriggered: root.toggleSessionLog()
+                                    }
 
                                     AppMenuItem {
                                         text: qsTr("Terminal settings")
@@ -1578,6 +1655,8 @@ Rectangle {
                                 }
                             }
                             onRunRequested: command => root.requestTerminalCommandRun(command)
+                            onImportLibraryRequested: scriptImportDialog.open()
+                            onExportLibraryRequested: scriptExportDialog.open()
                             onCloseRequested: {
                                 root.controller.closeTerminalWorkbench();
                                 terminalViewport.forceActiveFocus();

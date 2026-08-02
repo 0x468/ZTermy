@@ -350,6 +350,23 @@ void logCredentialRollbackResult(std::expected<void, ztermy::security::Credentia
     return QStringLiteral("failed");
 }
 
+[[nodiscard]] QString sessionLogStateToken(const ztermy::logging::SessionLogState state)
+{
+    using ztermy::logging::SessionLogState;
+    switch (state)
+    {
+        case SessionLogState::Idle:
+            return QStringLiteral("idle");
+        case SessionLogState::Starting:
+            return QStringLiteral("starting");
+        case SessionLogState::Active:
+            return QStringLiteral("active");
+        case SessionLogState::Failed:
+            return QStringLiteral("failed");
+    }
+    return QStringLiteral("failed");
+}
+
 [[nodiscard]] QVariantMap transferTaskValue(const ztermy::sftp::TransferTask &task)
 {
     return {
@@ -710,6 +727,12 @@ QVariantList AppController::terminalTabs() const
             {QStringLiteral("identity"), tab->identity.isEmpty() ? tab->title : tab->identity},
             {QStringLiteral("address"), tab->address},
             {QStringLiteral("connectedUtcMs"), tab->connectedUtcMs},
+            {QStringLiteral("logState"),
+             tab->sessionLog ? sessionLogStateToken(tab->sessionLog->state()) : QStringLiteral("idle")},
+            {QStringLiteral("logPath"), tab->sessionLog ? tab->sessionLog->path() : QString{}},
+            {QStringLiteral("logError"), tab->sessionLog ? tab->sessionLog->errorString() : QString{}},
+            {QStringLiteral("logDroppedBytes"),
+             QVariant::fromValue<qulonglong>(tab->sessionLog ? tab->sessionLog->droppedBytes() : 0)},
             {QStringLiteral("running"), tab->running},
             {QStringLiteral("connecting"), tab->kind == TerminalTabKind::Ssh
                                                && tab->sshPhase != ssh::SshConnectionPhase::Disconnected
@@ -1099,6 +1122,8 @@ QString AppController::startLocalTerminal()
     {
         return {};
     }
+    initializeSessionLog(*tab);
+    tab->local->setOutputSink(tab->sessionLog);
     QString tabId = tab->id;
     connectLocalTabSignals(*tab);
     m_tabs.push_back(std::move(tab));
@@ -1168,6 +1193,10 @@ bool AppController::closeTerminalTab(const QString &id)
     if ((*position)->ssh)
     {
         (*position)->ssh->stop();
+    }
+    if ((*position)->sessionLog)
+    {
+        (*position)->sessionLog->stop();
     }
     m_tabs.erase(position);
     emit terminalTabsChanged();
@@ -1399,6 +1428,40 @@ bool AppController::runTerminalCommand(const QString &command)
     return true;
 }
 
+bool AppController::startTerminalLog(const QString &localFileUrl)
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || tab->sessionLog == nullptr)
+    {
+        return false;
+    }
+    const QUrl url(localFileUrl);
+    const QString path = url.isLocalFile() ? url.toLocalFile() : localFileUrl;
+    if (!tab->sessionLog->start(path))
+    {
+        tab->status = tr("Session log could not be started.");
+        if (m_terminal != nullptr)
+        {
+            m_terminal->setStatusText(tab->status);
+        }
+        emit terminalTabsChanged();
+        return false;
+    }
+    emit terminalTabsChanged();
+    return true;
+}
+
+void AppController::stopTerminalLog()
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || tab->sessionLog == nullptr)
+    {
+        return;
+    }
+    tab->sessionLog->stop();
+    emit terminalTabsChanged();
+}
+
 bool AppController::saveQuickCommand(const QString &id, const QString &name, const QString &command,
                                      const QString &description, const QString &shellScope)
 {
@@ -1509,6 +1572,70 @@ bool AppController::moveQuickCommand(const QString &id, const int targetIndex)
     m_quickCommands = std::move(candidate);
     m_quickCommandOperationError.clear();
     emit quickCommandsChanged();
+    return true;
+}
+
+bool AppController::importQuickCommands(const QString &localFileUrl)
+{
+    const QUrl url(localFileUrl);
+    const QString path = url.isLocalFile() ? url.toLocalFile() : localFileUrl;
+    if (!QFileInfo(path).isFile())
+    {
+        setQuickCommandOperationError(tr("The script library could not be imported."));
+        return false;
+    }
+    workbench::QuickCommandStore source(path);
+    auto imported = source.load();
+    if (!imported)
+    {
+        setQuickCommandOperationError(tr("The script library could not be imported."));
+        return false;
+    }
+    if (m_quickCommands.size() + imported->size() > static_cast<std::size_t>(workbench::maximumQuickCommandCount))
+    {
+        setQuickCommandOperationError(tr("The imported script library exceeds the 1000 item limit."));
+        return false;
+    }
+
+    std::vector<workbench::QuickCommand> candidate = m_quickCommands;
+    QSet<QString> ids;
+    ids.reserve(static_cast<qsizetype>(candidate.size() + imported->size()));
+    for (const workbench::QuickCommand &quickCommand : candidate)
+    {
+        ids.insert(utf8QString(quickCommand.id));
+    }
+    for (workbench::QuickCommand &quickCommand : *imported)
+    {
+        QString id = utf8QString(quickCommand.id);
+        if (ids.contains(id))
+        {
+            id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+            quickCommand.id = utf8String(id);
+        }
+        ids.insert(id);
+        candidate.push_back(std::move(quickCommand));
+    }
+    if (!m_quickCommandStore.save(candidate))
+    {
+        setQuickCommandOperationError(tr("The imported script library could not be saved."));
+        return false;
+    }
+    m_quickCommands = std::move(candidate);
+    setQuickCommandOperationError({});
+    return true;
+}
+
+bool AppController::exportQuickCommands(const QString &localFileUrl)
+{
+    const QUrl url(localFileUrl);
+    const QString path = url.isLocalFile() ? url.toLocalFile() : localFileUrl;
+    const workbench::QuickCommandStore destination(path);
+    if (!destination.save(m_quickCommands))
+    {
+        setQuickCommandOperationError(tr("The script library could not be exported."));
+        return false;
+    }
+    setQuickCommandOperationError({});
     return true;
 }
 
@@ -1930,6 +2057,8 @@ bool AppController::startSshConnection(ssh::SshConnectionRequest request, QStrin
     tab->sshPhase = ssh::SshConnectionPhase::Resolving;
     tab->ssh = std::make_unique<ssh::SshTerminalSession>();
     const QString tabId = tab->id;
+    initializeSessionLog(*tab);
+    tab->ssh->setOutputSink(tab->sessionLog);
     connectSshTabSignals(*tab);
     m_tabs.push_back(std::move(tab));
     emit terminalTabsChanged();
@@ -2989,6 +3118,28 @@ void AppController::rejectHostKey()
     {
         tab->ssh->rejectHostKey();
     }
+}
+
+void AppController::initializeSessionLog(TerminalTab &tab)
+{
+    tab.sessionLog = std::make_shared<logging::SessionLogWriter>();
+    const QString tabId = tab.id;
+    QObject::connect(tab.sessionLog.get(), &logging::SessionLogWriter::stateChanged, this, [this, tabId] {
+        TerminalTab *updated = findTab(tabId);
+        if (updated == nullptr || updated->sessionLog == nullptr)
+        {
+            return;
+        }
+        if (updated->sessionLog->state() == logging::SessionLogState::Failed)
+        {
+            updated->status = tr("Session log failed: %1").arg(updated->sessionLog->errorString());
+            if (m_terminal != nullptr && m_activeTabId == tabId)
+            {
+                m_terminal->setStatusText(updated->status);
+            }
+        }
+        emit terminalTabsChanged();
+    });
 }
 
 void AppController::connectLocalTabSignals(TerminalTab &tab)

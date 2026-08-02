@@ -20,7 +20,6 @@ namespace
 
 constexpr qint64 currentSchemaVersion = 1;
 constexpr qint64 maximumFileSize = qint64{8} * 1024 * 1024;
-constexpr qsizetype maximumQuickCommandCount = 1000;
 
 [[nodiscard]] std::optional<ztermy::workbench::ShellScope> parseShellScope(const QString &value)
 {

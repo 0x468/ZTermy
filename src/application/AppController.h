@@ -8,6 +8,7 @@
 #include "application/terminal/LocalTerminalSession.h"
 #include "core/config/ApplicationPaths.h"
 #include "core/config/ApplicationSettings.h"
+#include "infrastructure/logging/SessionLogWriter.h"
 #include "infrastructure/ssh/SshProfileStore.h"
 #include "infrastructure/workbench/PowerShellHistoryReader.h"
 #include "infrastructure/workbench/QuickCommandStore.h"
@@ -185,10 +186,14 @@ public:
     Q_INVOKABLE bool copyActiveTerminalAddress();
     Q_INVOKABLE bool insertTerminalCommand(const QString &command);
     Q_INVOKABLE bool runTerminalCommand(const QString &command);
+    Q_INVOKABLE bool startTerminalLog(const QString &localFileUrl);
+    Q_INVOKABLE void stopTerminalLog();
     Q_INVOKABLE bool saveQuickCommand(const QString &id, const QString &name, const QString &command,
                                       const QString &description, const QString &shellScope);
     Q_INVOKABLE bool deleteQuickCommand(const QString &id);
     Q_INVOKABLE bool moveQuickCommand(const QString &id, int targetIndex);
+    Q_INVOKABLE bool importQuickCommands(const QString &localFileUrl);
+    Q_INVOKABLE bool exportQuickCommands(const QString &localFileUrl);
     Q_INVOKABLE void refreshTerminalHistory();
     Q_INVOKABLE void refreshSftpDirectory();
     Q_INVOKABLE bool navigateSftpDirectory(const QString &remotePath);
@@ -291,6 +296,7 @@ private:
         std::unique_ptr<ssh::SshTerminalSession> ssh;
         std::unique_ptr<sftp::SftpSession> sftpSession;
         std::unique_ptr<sftp::SftpDirectoryModel> sftpModel;
+        std::shared_ptr<logging::SessionLogWriter> sessionLog;
         QString searchQuery;
         QString sourceProfileId;
         QString identity;
@@ -326,6 +332,7 @@ private:
     void connectLocalTabSignals(TerminalTab &tab);
     void connectSshTabSignals(TerminalTab &tab);
     void connectSftpTabSignals(TerminalTab &tab);
+    void initializeSessionLog(TerminalTab &tab);
     void queueInput(const QByteArray &bytes);
     void queuePaste(const QByteArray &bytes);
     void dispatchInput(TerminalTab &tab, const QByteArray &bytes);

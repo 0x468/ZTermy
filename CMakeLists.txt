@@ -295,7 +295,17 @@ add_library(ztermy_terminal_engine STATIC
     src/domain/terminal/GhosttyTerminalEngine.cpp
     src/domain/terminal/GhosttyTerminalEngine.h
     src/domain/terminal/TerminalEngine.h
+    src/domain/terminal/TerminalOutputSink.h
 )
+
+add_library(ztermy_session_logging STATIC
+    src/infrastructure/logging/SessionLogWriter.cpp
+    src/infrastructure/logging/SessionLogWriter.h
+)
+
+target_compile_features(ztermy_session_logging PUBLIC cxx_std_23)
+target_include_directories(ztermy_session_logging PUBLIC src)
+target_link_libraries(ztermy_session_logging PUBLIC Qt6::Core)
 
 target_compile_features(ztermy_terminal_engine PUBLIC cxx_std_23)
 target_include_directories(ztermy_terminal_engine PUBLIC src)
@@ -660,6 +670,7 @@ target_link_libraries(ztermy PRIVATE
     ztermy_ssh_persistence
     ztermy_ssh_session
     ztermy_sftp_session
+    ztermy_session_logging
     ztermy_terminal_session
     ztermy_terminal_transport
     ztermy_terminal_ui
@@ -862,6 +873,13 @@ if(MSVC)
         /Zc:__cplusplus
     )
 
+    target_compile_options(ztermy_session_logging PRIVATE
+        /permissive-
+        /utf-8
+        /W4
+        /Zc:__cplusplus
+    )
+
     target_compile_options(ztermy_ssh_transport PRIVATE
         /permissive-
         /utf-8
@@ -935,6 +953,27 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME application-paths COMMAND ztermy_application_paths_tests)
+
+    qt_add_executable(ztermy_session_log_writer_tests
+        tests/session_log_writer_tests.cpp
+    )
+
+    target_compile_features(ztermy_session_log_writer_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_session_log_writer_tests PRIVATE
+        ztermy_session_logging
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_session_log_writer_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME session-log-writer COMMAND ztermy_session_log_writer_tests)
 
     qt_add_executable(ztermy_application_settings_tests
         tests/application_settings_tests.cpp
@@ -1606,6 +1645,7 @@ if(BUILD_TESTING)
         ztermy_ssh_persistence
         ztermy_ssh_session
         ztermy_sftp_session
+        ztermy_session_logging
         ztermy_terminal_session
         ztermy_terminal_ui
         ztermy_workbench_persistence
@@ -1795,6 +1835,7 @@ if(BUILD_TESTING)
             ztermy_ssh_real_host_tests
             ztermy_ssh_terminal_session_tests
             ztermy_sftp_types_tests
+            ztermy_session_log_writer_tests
             ztermy_transfer_queue_tests
             ztermy_sftp_session_tests
             ztermy_sftp_directory_model_tests
