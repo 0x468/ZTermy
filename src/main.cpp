@@ -1177,6 +1177,7 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
         || !rootObject->property("settingsTabOpen").toBool()
         || !verifyAccessibleButton(rootObject, "settingsTitleAction", "Activate Settings")
         || !verifyAccessibleButton(rootObject, "settingsTitleCloseAction", "Close Settings")
+        || !verifyAccessibleButton(rootObject, "settingsApplicationCategory", "Application settings")
         || !verifyAccessibleButton(rootObject, "settingsAppearanceCategory", "Appearance settings")
         || !verifyAccessibleButton(rootObject, "settingsTerminalCategory", "Terminal settings")
         || !verifyAccessibleButton(rootObject, "settingsShortcutsCategory", "Shortcuts settings"))
@@ -1184,6 +1185,20 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
         qCWarning(applicationLog) << "Space did not open the singleton Settings work tab";
         return false;
     }
+
+    auto *settingsPane = rootObject->findChild<QObject *>(QStringLiteral("settingsPane"));
+    if (settingsPane == nullptr
+        || settingsPane->property("currentCategory").toString() != QStringLiteral("application"))
+    {
+        qCWarning(applicationLog) << "Settings did not open on the Application category";
+        return false;
+    }
+    QQuickItem *appearanceCategory = quickItem(rootObject, "settingsAppearanceCategory");
+    if (!focusItem(window, appearanceCategory, QStringLiteral("settingsAppearanceCategory")))
+    {
+        return false;
+    }
+    sendKey(window, Qt::Key_Space);
 
     if (!verifyFontPickerKeyboard(window, rootObject, "settingsUiFont", "settingsUiFontSearch"))
     {
@@ -1221,7 +1236,6 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
         return false;
     }
 
-    QQuickItem *appearanceCategory = quickItem(rootObject, "settingsAppearanceCategory");
     if (!focusItem(window, appearanceCategory, QStringLiteral("settingsAppearanceCategory")))
     {
         return false;
@@ -1249,7 +1263,6 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
 
     if (!opacity->isVisible() || !opacity->isEnabled())
     {
-        auto *settingsPane = rootObject->findChild<QObject *>(QStringLiteral("settingsPane"));
         qCWarning(applicationLog) << "Window opacity control unexpectedly unavailable"
                                   << "category="
                                   << (settingsPane == nullptr ? QStringLiteral("<missing>")
