@@ -1445,6 +1445,26 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
     }
     QQuickItem *hostAddress = quickItem(rootObject, "hostAddress");
     QQuickItem *hostName = quickItem(rootObject, "hostName");
+    QQuickItem *hostGroup = quickItem(rootObject, "hostGroup");
+    const bool groupSelectionInvoked =
+        hostGroup != nullptr && hostGroup->property("count").toInt() > 0
+        && QMetaObject::invokeMethod(hostGroup, "activated", Qt::DirectConnection, Q_ARG(int, 0));
+    processWindowEventsFor(std::chrono::milliseconds{50});
+    const bool groupSelectionApplied =
+        groupSelectionInvoked && hostGroup->property("text").toString() == QStringLiteral("Test fixtures");
+    if (!groupSelectionApplied)
+    {
+        qCWarning(applicationLog) << "Selecting a profile group did not populate the editable field"
+                                  << "invoked=" << groupSelectionInvoked << "text="
+                                  << (hostGroup == nullptr ? QStringLiteral("<missing>")
+                                                           : hostGroup->property("text").toString());
+        return false;
+    }
+    if (!controller.deleteHostProfile(QStringLiteral("ui-layout-smoke-profile")))
+    {
+        qCWarning(applicationLog) << "Could not remove the profile-group selection fixture";
+        return false;
+    }
     constexpr auto generatedName = u"selection.example.test";
     if (!focusItem(window, hostAddress, QStringLiteral("hostAddress")))
     {
@@ -2115,7 +2135,7 @@ int main(int argc, char *argv[])
         qCCritical(applicationLog) << "Could not prepare the UI runtime smoke settings";
         return EXIT_FAILURE;
     }
-    if (uiLayoutSmoke
+    if ((uiLayoutSmoke || uiKeyboardSmoke)
         && !appController.saveHostProfile(QStringLiteral("ui-layout-smoke-profile"), QStringLiteral("Layout test host"),
                                           QStringLiteral("192.0.2.10"), 22, QStringLiteral("developer"),
                                           QStringLiteral("private-key"), QStringLiteral("C:/test/id_ed25519"), false,

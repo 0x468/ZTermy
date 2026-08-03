@@ -98,6 +98,7 @@ private slots:
     void installedControllerPersistsCredentialAcrossRestart();
     void portableControllerPersistsCredentialAcrossRestart();
     void saveAndConnectPersistsBeforeConnectionOutcome();
+    void usesContextualSshTabTitles();
     void rejectsIncompleteConnections();
     void persistsApplicationSettings();
     void managesActionShortcutsAndDispatchContext();
@@ -386,6 +387,32 @@ void AppControllerTests::saveAndConnectPersistsBeforeConnectionOutcome()
                              5000);
     QCOMPARE(controller.hostProfiles().front().toMap().value(QStringLiteral("credentialStored")).toBool(), true);
     controller.shutdown();
+}
+
+void AppControllerTests::usesContextualSshTabTitles()
+{
+    QTemporaryDir savedDirectory;
+    QVERIFY(savedDirectory.isValid());
+    ztermy::AppController savedController(savedDirectory.filePath(QStringLiteral("profiles.json")));
+
+    QVERIFY(savedController.saveAndConnectHostProfile(
+        {}, QStringLiteral("Production gateway"), QStringLiteral("127.0.0.1"), 1, QStringLiteral("saved-user"),
+        QStringLiteral("password"), {}, false, QStringLiteral("Tests"), QStringLiteral("pre-auth-secret"), false));
+    QVERIFY(!savedController.terminalTabs().isEmpty());
+    QCOMPARE(savedController.terminalTabs().constFirst().toMap().value(QStringLiteral("title")).toString(),
+             QStringLiteral("Production gateway"));
+    savedController.shutdown();
+
+    QTemporaryDir quickDirectory;
+    QVERIFY(quickDirectory.isValid());
+    ztermy::AppController quickController(quickDirectory.filePath(QStringLiteral("profiles.json")));
+
+    QVERIFY(quickController.connectQuick(QStringLiteral("quick-user@127.0.0.1:1"), QStringLiteral("password"), {},
+                                         false, QStringLiteral("pre-auth-secret"), false, {}, {}));
+    QVERIFY(!quickController.terminalTabs().isEmpty());
+    QCOMPARE(quickController.terminalTabs().constFirst().toMap().value(QStringLiteral("title")).toString(),
+             QStringLiteral("quick-user@127.0.0.1"));
+    quickController.shutdown();
 }
 
 void AppControllerTests::rejectsIncompleteConnections()

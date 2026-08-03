@@ -52,8 +52,11 @@ ComboBox {
         }
     }
     onActivated: index => {
-        editText = textAt(index);
+        const selectedText = textAt(index);
         currentIndex = -1;
+        text = selectedText;
+        editText = selectedText;
+        input.cursorPosition = selectedText.length;
     }
 
     Keys.onPressed: event => {

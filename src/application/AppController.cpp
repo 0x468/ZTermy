@@ -2187,7 +2187,12 @@ bool AppController::startSshConnection(ssh::SshConnectionRequest request, QStrin
 
     auto tab = std::make_unique<TerminalTab>();
     tab->id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    tab->title = QStringLiteral("%1@%2").arg(request.username, request.host);
+    const QString fallbackTitle = QStringLiteral("%1@%2").arg(request.username, request.host);
+    const std::string profileId = utf8String(sourceProfileId.trimmed());
+    const auto sourceProfile = std::ranges::find(m_profiles, profileId, &ssh::SshProfile::id);
+    const QString profileName =
+        sourceProfile == m_profiles.end() ? QString{} : utf8QString(sourceProfile->name).trimmed();
+    tab->title = profileName.isEmpty() ? fallbackTitle : profileName;
     tab->identity = QStringLiteral("%1@%2:%3").arg(request.username, request.host).arg(request.port);
     tab->address = request.host;
     tab->status = tr("Starting SSH connection...");
