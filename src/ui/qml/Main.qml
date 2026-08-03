@@ -1228,7 +1228,7 @@ Rectangle {
                                 checkable: true
                                 checked: root.activeTerminalTab !== null && root.activeTerminalTab.workbenchOpen && root.activeTerminalTab.workbenchPage === "sftp"
                                 selected: checked
-                                enabled: root.activeTerminalTab !== null && root.activeTerminalTab.kind === "ssh" && root.activeTerminalTab.connectionState === "connected"
+                                enabled: root.activeTerminalTab !== null && root.activeTerminalTab.connected
                                 onClicked: root.controller.toggleTerminalWorkbench("sftp")
                                 Keys.onReturnPressed: click()
                                 Keys.onEnterPressed: click()

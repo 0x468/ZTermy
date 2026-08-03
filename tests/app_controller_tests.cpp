@@ -665,6 +665,7 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
     QVERIFY(!first.isEmpty());
     QCOMPARE(controller.terminalTabs().size(), 1);
     QCOMPARE(controller.activeTerminalTabId(), first);
+    QVERIFY(!controller.terminalTabs().constFirst().toMap().value(QStringLiteral("connected")).toBool());
     QVERIFY(controller.transferTasks().isEmpty());
     QCOMPARE(controller.activeTransferCount(), 0);
     QVERIFY(!controller.toggleTerminalWorkbench(QStringLiteral("sftp")));

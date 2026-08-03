@@ -838,6 +838,8 @@ QVariantList AppController::terminalTabs() const
             {QStringLiteral("logDroppedBytes"),
              QVariant::fromValue<qulonglong>(tab->sessionLog ? tab->sessionLog->droppedBytes() : 0)},
             {QStringLiteral("running"), tab->running},
+            {QStringLiteral("connected"),
+             tab->kind == TerminalTabKind::Ssh && tab->sshPhase == ssh::SshConnectionPhase::Connected},
             {QStringLiteral("connecting"), tab->kind == TerminalTabKind::Ssh
                                                && tab->sshPhase != ssh::SshConnectionPhase::Disconnected
                                                && tab->sshPhase != ssh::SshConnectionPhase::Connected

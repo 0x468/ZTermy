@@ -10,6 +10,7 @@ ComboBox {
     property string placeholderText: ""
     property string text: ""
     property bool completing: false
+    property bool suppressNextCompletion: false
 
     editable: true
     hoverEnabled: true
@@ -43,9 +44,6 @@ ComboBox {
     onEditTextChanged: {
         if (text !== editText) {
             text = editText;
-        }
-        if (activeFocus || input.activeFocus) {
-            Qt.callLater(completeFromPrefix);
         }
     }
     onTextChanged: {
@@ -86,7 +84,21 @@ ComboBox {
         font.pixelSize: Theme.textBody
         background: null
         Accessible.name: control.accessibleName.length > 0 ? control.accessibleName : control.placeholderText
-        onTextEdited: control.editText = text
+        Keys.onPressed: event => {
+            if (event.key === Qt.Key_Backspace || event.key === Qt.Key_Delete) {
+                control.suppressNextCompletion = true;
+                Qt.callLater(() => control.suppressNextCompletion = false);
+            }
+            event.accepted = false;
+        }
+        onTextEdited: {
+            control.editText = text;
+            if (control.suppressNextCompletion) {
+                control.suppressNextCompletion = false;
+            } else {
+                Qt.callLater(control.completeFromPrefix);
+            }
+        }
     }
 
     indicator: AppIcon {

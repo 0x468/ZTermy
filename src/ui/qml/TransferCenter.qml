@@ -243,7 +243,9 @@ Popup {
                         Layout.preferredHeight: 30
                         hoverEnabled: true
                         focusPolicy: Qt.StrongFocus
-                        onClicked: center.controller.cancelTransfer(taskDelegate.modelData.id)
+                        // Progress snapshots can replace this delegate before a mouse release.
+                        // Request cancellation on press so the active worker always receives it.
+                        onPressed: center.controller.cancelTransfer(taskDelegate.modelData.id)
                         Accessible.name: qsTr("Cancel %1").arg(taskDelegate.modelData.displayName)
                         contentItem: AppIcon {
                             name: "close"
