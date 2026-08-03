@@ -574,13 +574,17 @@ struct ResizeHitRuntimeCase
         settingsPane->setProperty("currentCategory", QStringLiteral("application"));
         processWindowEventsFor(std::chrono::milliseconds{500});
         auto *brandLockup = rootObject->findChild<QObject *>(QStringLiteral("settingsApplicationBrandLockup"));
+        auto *releaseIdentity = rootObject->findChild<QObject *>(QStringLiteral("settingsReleaseIdentityCard"));
         auto *buildInfo = rootObject->findChild<QObject *>(QStringLiteral("settingsApplicationBuildInfo"));
         applicationCaptured = captureLayout(window, outputDirectory, capturePrefix + QStringLiteral("-application"));
-        applicationMatches = brandLockup != nullptr && brandLockup->property("visible").toBool()
-                             && brandLockup->property("width").toReal() > 0.0
-                             && brandLockup->property("height").toReal() > 0.0 && buildInfo != nullptr
-                             && buildInfo->property("visible").toBool()
-                             && buildInfo->property("text").toString().contains(QCoreApplication::applicationVersion());
+        applicationMatches =
+            brandLockup != nullptr && brandLockup->property("visible").toBool()
+            && brandLockup->property("width").toReal() > 0.0 && brandLockup->property("height").toReal() > 0.0
+            && releaseIdentity != nullptr && releaseIdentity->property("visible").toBool()
+            && releaseIdentity->property("codename").toString() == QStringLiteral("此")
+            && releaseIdentity->property("verse").toString() == QStringLiteral("天长地久有时尽，此恨绵绵无绝期。")
+            && buildInfo != nullptr && buildInfo->property("visible").toBool()
+            && buildInfo->property("text").toString().contains(QCoreApplication::applicationVersion());
         settingsPane->setProperty("currentCategory", QStringLiteral("security"));
         processWindowEventsFor(std::chrono::milliseconds{200});
         auto *credentialStorage = rootObject->findChild<QObject *>(QStringLiteral("settingsCredentialStorage"));

@@ -13,7 +13,7 @@ Rectangle {
     property bool loadingDraft: false
     property string statusMessage: ""
     property bool statusIsError: false
-    property string currentCategory: "appearance"
+    property string currentCategory: "application"
     property string languageDraft: "system"
     property string uiFontDraft: ""
     property string terminalFontDraft: "Cascadia Mono"
@@ -511,9 +511,8 @@ Rectangle {
                         }
 
                         Text {
-                            objectName: "settingsApplicationBuildInfo"
                             Layout.fillWidth: true
-                            text: qsTr("Version %1 · Windows 11 · Native Qt 6 · C++23").arg(Qt.application.version)
+                            text: qsTr("Windows 11 · Native Qt 6 · C++23")
                             color: Theme.textSubtle
                             wrapMode: Text.WordWrap
                             font.family: Theme.uiFont
@@ -521,6 +520,16 @@ Rectangle {
                         }
                     }
                 }
+            }
+
+            ReleaseIdentityCard {
+                objectName: "settingsReleaseIdentityCard"
+                Layout.fillWidth: true
+                visible: pane.currentCategory === "application"
+                compact: pane.compactLayout
+                codename: "此"
+                version: Qt.application.version
+                verse: "天长地久有时尽，此恨绵绵无绝期。"
             }
 
             SectionCard {

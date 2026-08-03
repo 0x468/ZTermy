@@ -634,6 +634,10 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS ShortcutSettings.qml
 )
 set_source_files_properties(
+    src/ui/qml/ReleaseIdentityCard.qml
+    PROPERTIES QT_RESOURCE_ALIAS ReleaseIdentityCard.qml
+)
+set_source_files_properties(
     src/ui/qml/SectionCard.qml
     PROPERTIES QT_RESOURCE_ALIAS SectionCard.qml
 )
@@ -712,6 +716,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/HostKeyPrompt.qml
         src/ui/qml/KeyboardAction.qml
         src/ui/qml/Main.qml
+        src/ui/qml/ReleaseIdentityCard.qml
         src/ui/qml/SectionCard.qml
         src/ui/qml/SettingsPane.qml
         src/ui/qml/SftpBrowser.qml
