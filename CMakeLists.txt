@@ -82,7 +82,7 @@ endfunction()
 
 ztermy_add_libssh2()
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui LinguistTools Quick QuickControls2)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui LinguistTools Quick QuickControls2 Svg)
 
 get_target_property(ZTERMY_QT_CORE_TARGET_TYPE Qt6::Core TYPE)
 if(ZTERMY_STATIC_BUILD AND NOT ZTERMY_QT_CORE_TARGET_TYPE STREQUAL "STATIC_LIBRARY")
@@ -107,23 +107,48 @@ configure_file(
     @ONLY
 )
 
-add_executable(ztermy_windows_icon_generator
+qt_add_executable(ztermy_windows_icon_generator
     tools/WindowsIconGenerator.cpp
 )
 target_compile_features(ztermy_windows_icon_generator PRIVATE cxx_std_23)
+target_link_libraries(ztermy_windows_icon_generator PRIVATE Qt6::Core Qt6::Gui Qt6::Svg)
 set_target_properties(ztermy_windows_icon_generator PROPERTIES
     AUTOMOC OFF
     AUTOUIC OFF
+    WIN32_EXECUTABLE FALSE
 )
 
+set(ZTERMY_BRANDING_SOURCE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/resources/branding")
+set(ZTERMY_APP_ICON_SOURCE "${ZTERMY_BRANDING_SOURCE_DIRECTORY}/ztermy-app-icon.svg")
+set(ZTERMY_APP_ICON_SMALL_SOURCE "${ZTERMY_BRANDING_SOURCE_DIRECTORY}/ztermy-app-icon-small.svg")
+set(ZTERMY_GENERATED_BRANDING_DIRECTORY "${ZTERMY_GENERATED_DIRECTORY}/branding")
 set(ZTERMY_WINDOWS_ICON_PATH "${ZTERMY_GENERATED_DIRECTORY}/ztermy.ico")
+set(ZTERMY_BRANDING_PNG_PATHS)
+foreach(icon_size 16 20 24 32 40 48 64 128 256)
+    list(APPEND ZTERMY_BRANDING_PNG_PATHS
+        "${ZTERMY_GENERATED_BRANDING_DIRECTORY}/ztermy-${icon_size}.png"
+    )
+endforeach()
 add_custom_command(
-    OUTPUT "${ZTERMY_WINDOWS_ICON_PATH}"
+    OUTPUT
+        "${ZTERMY_WINDOWS_ICON_PATH}"
+        ${ZTERMY_BRANDING_PNG_PATHS}
     COMMAND "$<TARGET_FILE:ztermy_windows_icon_generator>"
+            "${ZTERMY_APP_ICON_SOURCE}"
+            "${ZTERMY_APP_ICON_SMALL_SOURCE}"
             "${ZTERMY_WINDOWS_ICON_PATH}"
-    DEPENDS ztermy_windows_icon_generator
-    COMMENT "Generating the deterministic ztermy Windows icon"
+            "${ZTERMY_GENERATED_BRANDING_DIRECTORY}"
+    DEPENDS
+        ztermy_windows_icon_generator
+        "${ZTERMY_APP_ICON_SOURCE}"
+        "${ZTERMY_APP_ICON_SMALL_SOURCE}"
+    COMMENT "Generating ztermy PNG and Windows ICO branding assets from SVG masters"
     VERBATIM
+)
+add_custom_target(ztermy_branding_assets
+    DEPENDS
+        "${ZTERMY_WINDOWS_ICON_PATH}"
+        ${ZTERMY_BRANDING_PNG_PATHS}
 )
 
 configure_file(
@@ -407,7 +432,21 @@ target_link_libraries(ztermy_terminal_ui
         ztermy_terminal_engine
         Qt6::Core
         Qt6::Gui
+    Qt6::Quick
+)
+
+add_library(ztermy_icon_rendering STATIC
+    src/ui/icons/SvgIconImageProvider.cpp
+    src/ui/icons/SvgIconImageProvider.h
+)
+target_compile_features(ztermy_icon_rendering PUBLIC cxx_std_23)
+target_include_directories(ztermy_icon_rendering PUBLIC src)
+target_link_libraries(ztermy_icon_rendering
+    PUBLIC
+        Qt6::Core
+        Qt6::Gui
         Qt6::Quick
+        Qt6::Svg
 )
 
 qt_add_executable(ztermy WIN32
@@ -430,6 +469,80 @@ qt_add_executable(ztermy WIN32
     src/platform/windows/WindowsUiSettings.h
     resources/windows/ztermy.manifest
     "${ZTERMY_GENERATED_DIRECTORY}/ztermy.rc"
+)
+add_dependencies(ztermy ztermy_branding_assets)
+
+set_source_files_properties(
+    resources/branding/ztermy-app-icon.svg
+    PROPERTIES QT_RESOURCE_ALIAS app-icon.svg
+)
+set_source_files_properties(
+    resources/branding/ztermy-app-icon-small.svg
+    PROPERTIES QT_RESOURCE_ALIAS app-icon-small.svg
+)
+set_source_files_properties(
+    resources/branding/ztermy-lockup-horizontal.svg
+    PROPERTIES QT_RESOURCE_ALIAS lockup-horizontal.svg
+)
+set_source_files_properties(
+    resources/branding/ztermy-lockup-about.svg
+    PROPERTIES QT_RESOURCE_ALIAS lockup-about.svg
+)
+qt_add_resources(ztermy ztermy_branding
+    PREFIX "/ztermy/branding"
+    FILES
+        resources/branding/ztermy-app-icon.svg
+        resources/branding/ztermy-app-icon-small.svg
+        resources/branding/ztermy-lockup-horizontal.svg
+        resources/branding/ztermy-lockup-about.svg
+)
+
+set(ZTERMY_INTERFACE_ICON_FILES
+    resources/icons/appearance.svg
+    resources/icons/application.svg
+    resources/icons/check.svg
+    resources/icons/chevron-down.svg
+    resources/icons/chevron-up.svg
+    resources/icons/close.svg
+    resources/icons/commands.svg
+    resources/icons/compose.svg
+    resources/icons/copy.svg
+    resources/icons/download.svg
+    resources/icons/edit.svg
+    resources/icons/eye-off.svg
+    resources/icons/eye.svg
+    resources/icons/file.svg
+    resources/icons/folder.svg
+    resources/icons/history.svg
+    resources/icons/home.svg
+    resources/icons/hosts.svg
+    resources/icons/lock.svg
+    resources/icons/more.svg
+    resources/icons/new-folder.svg
+    resources/icons/play.svg
+    resources/icons/plus.svg
+    resources/icons/refresh.svg
+    resources/icons/save.svg
+    resources/icons/search.svg
+    resources/icons/security.svg
+    resources/icons/settings.svg
+    resources/icons/shortcuts.svg
+    resources/icons/swap-horizontal.svg
+    resources/icons/terminal.svg
+    resources/icons/transfer.svg
+    resources/icons/trash.svg
+    resources/icons/upload.svg
+)
+foreach(icon_file IN LISTS ZTERMY_INTERFACE_ICON_FILES)
+    get_filename_component(icon_filename "${icon_file}" NAME)
+    set_source_files_properties(
+        "${icon_file}"
+        PROPERTIES QT_RESOURCE_ALIAS "${icon_filename}"
+    )
+endforeach()
+qt_add_resources(ztermy ztermy_interface_icons
+    PREFIX "/ztermy/icons"
+    FILES ${ZTERMY_INTERFACE_ICON_FILES}
 )
 
 set_source_files_properties(
@@ -455,6 +568,10 @@ set_source_files_properties(
 set_source_files_properties(
     src/ui/qml/AppIcon.qml
     PROPERTIES QT_RESOURCE_ALIAS AppIcon.qml
+)
+set_source_files_properties(
+    src/ui/qml/BrandIcon.qml
+    PROPERTIES QT_RESOURCE_ALIAS BrandIcon.qml
 )
 set_source_files_properties(
     src/ui/qml/AppMenu.qml
@@ -577,6 +694,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/AppCheckBox.qml
         src/ui/qml/AppComboBox.qml
         src/ui/qml/AppIcon.qml
+        src/ui/qml/BrandIcon.qml
         src/ui/qml/AppMenu.qml
         src/ui/qml/AppMenuItem.qml
         src/ui/qml/AppMenuSeparator.qml
@@ -681,11 +799,13 @@ target_link_libraries(ztermy PRIVATE
     ztermy_terminal_session
     ztermy_terminal_transport
     ztermy_terminal_ui
+    ztermy_icon_rendering
     ztermy_workbench_persistence
     Qt6::Core
     Qt6::Gui
     Qt6::Quick
     Qt6::QuickControls2
+    Qt6::Svg
     dbghelp
     dwmapi
 )
@@ -1712,6 +1832,28 @@ if(BUILD_TESTING)
 
     add_test(NAME terminal-item COMMAND ztermy_terminal_item_tests)
 
+    qt_add_executable(ztermy_svg_icon_image_provider_tests
+        tests/svg_icon_image_provider_tests.cpp
+    )
+    target_compile_features(ztermy_svg_icon_image_provider_tests PRIVATE cxx_std_23)
+    target_compile_definitions(ztermy_svg_icon_image_provider_tests PRIVATE
+        ZTERMY_TEST_BRANDING_DIRECTORY="${CMAKE_CURRENT_SOURCE_DIR}/resources/branding"
+        ZTERMY_TEST_ICON_DIRECTORY="${CMAKE_CURRENT_SOURCE_DIR}/resources/icons"
+    )
+    target_link_libraries(ztermy_svg_icon_image_provider_tests PRIVATE
+        ztermy_icon_rendering
+        Qt6::Test
+    )
+    if(MSVC)
+        target_compile_options(ztermy_svg_icon_image_provider_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+    add_test(NAME svg-icon-image-provider COMMAND ztermy_svg_icon_image_provider_tests)
+
     qt_add_executable(ztermy_windows_executable_metadata_tests
         tests/windows_executable_metadata_tests.cpp
     )
@@ -1842,6 +1984,21 @@ if(ZTERMY_STATIC_BUILD)
 endif()
 
 if(BUILD_TESTING)
+    add_test(
+        NAME interface-icon-assets
+        COMMAND "${CMAKE_COMMAND}"
+                "-DZTERMY_ICON_DIRECTORY=${CMAKE_CURRENT_SOURCE_DIR}/resources/icons"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyInterfaceIcons.cmake"
+    )
+
+    add_test(
+        NAME branding-assets
+        COMMAND "${CMAKE_COMMAND}"
+                "-DZTERMY_WINDOWS_ICON=${ZTERMY_WINDOWS_ICON_PATH}"
+                "-DZTERMY_BRANDING_PNG_DIRECTORY=${ZTERMY_GENERATED_BRANDING_DIRECTORY}"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyBrandingAssets.cmake"
+    )
+
     add_custom_target(ztermy_test_binaries
         DEPENDS
             ztermy_action_registry_tests
@@ -1876,6 +2033,7 @@ if(BUILD_TESTING)
             ztermy_app_controller_tests
             ztermy_terminal_item_tests
             ztermy_font_catalog_tests
+            ztermy_svg_icon_image_provider_tests
             ztermy_windows_executable_metadata_tests
     )
 endif()

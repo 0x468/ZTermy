@@ -35,7 +35,6 @@ CheckBox {
             visible: control.checked
             name: "check"
             color: Theme.accentText
-            strokeWidth: 1.8
         }
     }
 

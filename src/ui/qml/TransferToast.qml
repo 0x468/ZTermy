@@ -79,7 +79,6 @@ Popup {
             Layout.alignment: Qt.AlignTop
             name: root.kind === "success" ? "check" : root.kind === "error" ? "close" : "transfer"
             color: root.statusColor
-            strokeWidth: 1.8
         }
 
         ColumnLayout {

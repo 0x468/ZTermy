@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>ztermy Icon Lab</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="hero">
+    <div class="brand-lockup" aria-label="ztermy Icon Lab">
+      <span class="brand-mark" aria-hidden="true">&gt;_</span>
+      <div>
+        <p class="eyebrow">ZTERMY DESIGN SYSTEM</p>
+        <h1>Icon Lab</h1>
+      </div>
+    </div>
+    <div class="hero-copy">
+      <p>用于挑选 ztermy 品牌符号和整套桌面端图标语言。所有候选均为项目自有 SVG 草案，不会直接修改生产 QML。</p>
+      <div class="hero-stats" aria-label="图标画廊统计">
+        <span><strong id="conceptCount">0</strong> 品牌概念</span>
+        <span><strong id="iconCount">0</strong> 功能图标</span>
+        <span><strong>3</strong> 笔触风格</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="control-deck" aria-label="画廊控制">
+      <label class="search-field">
+        <span class="sr-only">搜索图标</span>
+        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="M12.5 12.5 17 17"/></svg>
+        <input id="searchInput" type="search" placeholder="搜索名称、用途或关键词…" autocomplete="off">
+        <kbd>/</kbd>
+      </label>
+
+      <div class="control-row">
+        <div class="segmented" id="familyControl" aria-label="图标笔触风格">
+          <button type="button" data-family="rounded" aria-pressed="true">Rounded</button>
+          <button type="button" data-family="compact" aria-pressed="false">Compact</button>
+          <button type="button" data-family="precision" aria-pressed="false">Precision</button>
+        </div>
+
+        <label class="select-control">尺寸
+          <select id="sizeSelect">
+            <option value="16">16 px</option>
+            <option value="20" selected>20 px</option>
+            <option value="24">24 px</option>
+            <option value="32">32 px</option>
+          </select>
+        </label>
+
+        <button class="quiet-button" id="themeButton" type="button" aria-label="切换浅色或深色主题">
+          <span id="themeLabel">浅色预览</span>
+        </button>
+
+        <button class="primary-button" id="exportButton" type="button">
+          导出选择 <span class="count-badge" id="selectedCount">0</span>
+        </button>
+      </div>
+
+      <nav class="category-list" id="categoryList" aria-label="图标分类"></nav>
+    </section>
+
+    <section class="lockup-section" id="lockupSection">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">HORIZONTAL LOCKUP</p>
+          <h2>横向品牌标识布局</h2>
+        </div>
+        <p>已采用“折带 Z · 内嵌提示符”。这里分别检查主页面、标题栏与关于页面的对齐规则。</p>
+      </div>
+      <div class="lockup-showcase">
+        <div class="lockup-toolbar">
+          <div class="segmented" id="lockupContextControl" aria-label="横向品牌标识使用场景">
+            <button type="button" data-lockup-context="main" aria-pressed="true">主页面</button>
+            <button type="button" data-lockup-context="titlebar" aria-pressed="false">标题栏</button>
+            <button type="button" data-lockup-context="about" aria-pressed="false">关于页面</button>
+          </div>
+          <span class="draft-note"><span aria-hidden="true"></span>品牌基线 · 已确认</span>
+        </div>
+        <button class="lockup-canvas" id="lockupCanvas" type="button" aria-label="放大横向品牌标识预览"></button>
+        <div class="lockup-specs" id="lockupSpecs" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <section class="arrow-review-section" id="arrowReviewSection">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">ARROW GEOMETRY PASS</p>
+          <h2>环形箭头修订</h2>
+        </div>
+        <p>圆弧端点、箭头折角和视觉中心已统一到同一套 20×20 网格；点击可放大比较三种笔触。</p>
+      </div>
+      <div class="arrow-review-grid" id="arrowReviewGrid"></div>
+    </section>
+
+    <section class="brand-section" id="brandSection">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">BRAND EXPLORATION</p>
+          <h2>App Icon 与 Symbol 概念</h2>
+        </div>
+        <p>“折带 Z · 内嵌提示符”已确认为品牌基线；其余方案保留作设计过程记录。</p>
+      </div>
+      <div class="brand-grid" id="brandGrid"></div>
+    </section>
+
+    <section class="icon-section" id="iconSection">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">SYSTEM GLYPHS</p>
+          <h2 id="galleryTitle">全部功能图标</h2>
+        </div>
+        <p id="resultSummary" aria-live="polite"></p>
+      </div>
+      <div class="icon-grid" id="iconGrid"></div>
+      <div class="empty-state" id="emptyState" hidden>
+        <div class="empty-glyph">⌁</div>
+        <h3>没有匹配的图标</h3>
+        <p>尝试清空搜索或切换分类。</p>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="previewDialog" class="preview-dialog">
+    <form method="dialog" class="dialog-shell">
+      <button class="dialog-close" value="cancel" aria-label="关闭预览">×</button>
+      <div class="dialog-heading">
+        <p class="eyebrow" id="dialogCategory"></p>
+        <h2 id="dialogTitle"></h2>
+        <p id="dialogDescription"></p>
+      </div>
+      <div class="comparison-grid" id="comparisonGrid"></div>
+      <div class="size-strip" id="sizeStrip"></div>
+      <div class="dialog-actions">
+        <button class="quiet-button" id="copySvgButton" type="button">复制当前 SVG</button>
+        <button class="primary-button" id="selectDialogButton" type="button">加入候选</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="lockupDialog" class="preview-dialog lockup-dialog">
+    <form method="dialog" class="dialog-shell">
+      <button class="dialog-close" value="cancel" aria-label="关闭横向品牌标识预览">×</button>
+      <div class="dialog-heading">
+        <p class="eyebrow">HORIZONTAL LOCKUP</p>
+        <h2 id="lockupDialogTitle">主页面横幅</h2>
+        <p>横向构图、蓝色渐变与品牌图标已经确认；主页面与关于页面采用不同的垂直居中规则。</p>
+      </div>
+      <div class="lockup-dialog-stage" id="lockupDialogPreview"></div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="icons.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

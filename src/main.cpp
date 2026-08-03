@@ -5,6 +5,7 @@
 #include "core/logging/Logging.h"
 #include "platform/windows/CrashDiagnostics.h"
 #include "platform/windows/NativeWindow.h"
+#include "ui/icons/SvgIconImageProvider.h"
 #include "ui/terminal/TerminalItem.h"
 #include "ztermy_version.h"
 
@@ -14,9 +15,11 @@
 #include <QEventLoop>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QIcon>
 #include <QImage>
 #include <QLoggingCategory>
 #include <QMetaType>
+#include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickStyle>
 #include <QQuickWindow>
@@ -31,6 +34,7 @@
 #include <array>
 #include <chrono>
 #include <cstdlib>
+#include <memory>
 #include <utility>
 
 Q_LOGGING_CATEGORY(applicationLog, "ztermy.application")
@@ -508,6 +512,10 @@ struct ResizeHitRuntimeCase
 [[nodiscard]] bool captureLayout(ztermy::NativeWindow &window, const QString &outputDirectory, const QString &name)
 {
     const QString path = QDir(outputDirectory).filePath(name + QStringLiteral(".png"));
+    window.requestUpdate();
+    processWindowEventsFor(std::chrono::milliseconds{50});
+    static_cast<void>(window.grabWindow());
+    processWindowEventsFor(std::chrono::milliseconds{50});
     const bool saved = window.grabWindow().save(path);
     qCInfo(applicationLog) << "UI layout capture" << path << "saved=" << saved;
     return saved;
@@ -555,12 +563,24 @@ struct ResizeHitRuntimeCase
     auto *appearanceGrid = rootObject->findChild<QObject *>(QStringLiteral("settingsAppearanceGrid"));
     auto *terminalGrid = rootObject->findChild<QObject *>(QStringLiteral("settingsTerminalGrid"));
     const bool settingsCaptured = captureLayout(window, outputDirectory, capturePrefix + QStringLiteral("-settings"));
+    bool applicationCaptured = false;
+    bool applicationMatches = false;
     bool securityCaptured = false;
     bool securityMatches = false;
     bool shortcutsCaptured = false;
     bool shortcutsMatch = false;
     if (settingsPane != nullptr)
     {
+        settingsPane->setProperty("currentCategory", QStringLiteral("application"));
+        processWindowEventsFor(std::chrono::milliseconds{500});
+        auto *brandLockup = rootObject->findChild<QObject *>(QStringLiteral("settingsApplicationBrandLockup"));
+        auto *buildInfo = rootObject->findChild<QObject *>(QStringLiteral("settingsApplicationBuildInfo"));
+        applicationCaptured = captureLayout(window, outputDirectory, capturePrefix + QStringLiteral("-application"));
+        applicationMatches = brandLockup != nullptr && brandLockup->property("visible").toBool()
+                             && brandLockup->property("width").toReal() > 0.0
+                             && brandLockup->property("height").toReal() > 0.0 && buildInfo != nullptr
+                             && buildInfo->property("visible").toBool()
+                             && buildInfo->property("text").toString().contains(QCoreApplication::applicationVersion());
         settingsPane->setProperty("currentCategory", QStringLiteral("security"));
         processWindowEventsFor(std::chrono::milliseconds{200});
         auto *credentialStorage = rootObject->findChild<QObject *>(QStringLiteral("settingsCredentialStorage"));
@@ -608,9 +628,10 @@ struct ResizeHitRuntimeCase
                            << "theme=" << themeName << "size=" << size << "compact=" << compact
                            << "hostPaneWidth=" << hostPaneWidth << "hostContentWidth=" << hostContentWidth
                            << "hostMatches=" << hostMatches << "settingsMatch=" << settingsMatch
-                           << "securityMatches=" << securityMatches << "shortcutsMatch=" << shortcutsMatch;
-    return hostMatches && settingsMatch && securityMatches && shortcutsMatch && hostCaptured && settingsCaptured
-           && securityCaptured && shortcutsCaptured;
+                           << "applicationMatches=" << applicationMatches << "securityMatches=" << securityMatches
+                           << "shortcutsMatch=" << shortcutsMatch;
+    return hostMatches && settingsMatch && applicationMatches && securityMatches && shortcutsMatch && hostCaptured
+           && settingsCaptured && applicationCaptured && securityCaptured && shortcutsCaptured;
 }
 
 [[nodiscard]] bool applyUiLayoutSmokeTheme(ztermy::AppController &controller, const QString &theme,
@@ -626,6 +647,19 @@ struct ResizeHitRuntimeCase
 {
     window.show();
     processWindowEventsFor(std::chrono::milliseconds{250});
+    QQuickItem *initialRootObject = window.rootObject();
+    auto *titleBrandIcon = initialRootObject == nullptr
+                               ? nullptr
+                               : initialRootObject->findChild<QQuickItem *>(QStringLiteral("titleBrandIcon"));
+    const QVariant titleBrandTile = titleBrandIcon == nullptr ? QVariant{} : titleBrandIcon->property("tileColor");
+    const QVariant titleBrandRibbon = titleBrandIcon == nullptr ? QVariant{} : titleBrandIcon->property("ribbonColor");
+    const QVariant titleBrandPrompt = titleBrandIcon == nullptr ? QVariant{} : titleBrandIcon->property("promptColor");
+    const qreal titleBrandPromptStroke =
+        titleBrandIcon == nullptr ? 0.0 : titleBrandIcon->property("promptStrokeWidth").toReal();
+    const bool titleBrandPalettePassed = titleBrandIcon != nullptr && titleBrandTile.isValid()
+                                         && titleBrandRibbon.isValid() && titleBrandPrompt.isValid()
+                                         && titleBrandTile != titleBrandRibbon && titleBrandPrompt != titleBrandRibbon
+                                         && titleBrandPromptStroke >= 0.8;
     const bool darkCompactPassed =
         verifyUiLayoutBreakpoint(window, QSize{500, 360}, true, QStringLiteral("dark"), outputDirectory);
     const bool darkRegularPassed =
@@ -687,7 +721,8 @@ struct ResizeHitRuntimeCase
         static_cast<void>(QMetaObject::invokeMethod(commandPalette, "close", Qt::DirectConnection));
     }
     const bool restoredDark = applyUiLayoutSmokeTheme(controller, QStringLiteral("dark"), QStringLiteral("en"));
-    return lightCompactPassed && lightRegularPassed && chineseShortcuts && chinesePalette && restoredDark;
+    return titleBrandPalettePassed && lightCompactPassed && lightRegularPassed && chineseShortcuts && chinesePalette
+           && restoredDark;
 }
 
 [[nodiscard]] QQuickItem *quickItem(QQuickItem *rootObject, const char *objectName)
@@ -2022,6 +2057,13 @@ int main(int argc, char *argv[])
     QGuiApplication::setApplicationName(QStringLiteral("ztermy"));
     QGuiApplication::setApplicationVersion(QStringLiteral(ZTERMY_VERSION_STRING));
     QGuiApplication::setOrganizationName(QStringLiteral("ztermy"));
+    const QIcon applicationIcon(QStringLiteral(":/ztermy/branding/app-icon.svg"));
+    if (applicationIcon.isNull() || applicationIcon.pixmap(QSize{32, 32}).isNull())
+    {
+        qCritical() << "Could not load the embedded ztermy application icon";
+        return EXIT_FAILURE;
+    }
+    QGuiApplication::setWindowIcon(applicationIcon);
 
     const QString executableDirectory = QCoreApplication::applicationDirPath();
     const auto paths = ztermy::config::resolveApplicationPaths(
@@ -2084,6 +2126,10 @@ int main(int argc, char *argv[])
     }
 
     ztermy::NativeWindow window;
+    auto iconImageProvider = std::make_unique<ztermy::ui::SvgIconImageProvider>();
+    window.engine()->addImageProvider(QStringLiteral("ztermy-icons"), iconImageProvider.release());
+    auto brandImageProvider = std::make_unique<ztermy::ui::SvgIconImageProvider>(QStringLiteral(":/ztermy/branding"));
+    window.engine()->addImageProvider(QStringLiteral("ztermy-brand"), brandImageProvider.release());
     QVariantMap initialProperties;
     initialProperties.insert(QStringLiteral("controller"), QVariant::fromValue(static_cast<QObject *>(&appController)));
     initialProperties.insert(QStringLiteral("fontCatalog"), QVariant::fromValue(static_cast<QObject *>(&fontCatalog)));

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="420" viewBox="0 0 1400 420" role="img" aria-labelledby="title desc">
+  <title id="title">ztermy about page brand card</title>
+  <desc id="desc">The ztermy ribbon Z icon beside a centered three-line brand group.</desc>
+  <defs>
+    <linearGradient id="ribbon" x1="4" y1="4" x2="15" y2="15" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7DE7FF"/>
+      <stop offset="1" stop-color="#3C89FF"/>
+    </linearGradient>
+  </defs>
+  <rect width="1400" height="420" fill="#EAF0F7"/>
+  <rect x="54" y="42" width="1292" height="336" rx="38" fill="#FFFFFF" stroke="#D9E3EE"/>
+  <g transform="translate(116.2222 70.2222) scale(13.7778)">
+    <rect x="1" y="1" width="18" height="18" rx="4.2" fill="#102544"/>
+    <path d="M5.55 4.85H15.85L14.45 6.75H9.75L6.75 13.25H15.55L14.15 15.15H4.15L7.15 8.65H11.55L12.95 6.75H4.75Z" fill="url(#ribbon)"/>
+    <path d="M9.2 9.85 10.5 11 9.2 12.15M11.2 12.15H13.2" fill="none" stroke="#E9F7FF" stroke-linecap="round" stroke-linejoin="round" stroke-width=".64"/>
+  </g>
+  <text x="860" y="182" text-anchor="middle" font-family="Segoe UI Variable Display, Segoe UI, Arial, sans-serif" font-size="122" font-weight="700">
+    <tspan fill="#2AA8FF">Z</tspan><tspan fill="#0F172A">termy</tspan>
+  </text>
+  <text x="860" y="248" text-anchor="middle" font-family="Segoe UI Variable Text, Segoe UI, Arial, sans-serif" font-size="31" font-weight="600" letter-spacing="9" fill="#64748B">SSH TERMINAL</text>
+  <text x="860" y="307" text-anchor="middle" font-family="Segoe UI Variable Text, Segoe UI, Arial, sans-serif" font-size="22" fill="#94A3B8">Native · Focused · Windows 11 first</text>
+</svg>

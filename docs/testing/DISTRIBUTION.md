@@ -1,5 +1,42 @@
 # Distribution manual verification
 
+## Verify branding assets
+
+Build the generated Windows assets from either configured preset:
+
+```powershell
+cmake --build --preset msvc-dynamic-debug --target ztermy_branding_assets
+ctest --test-dir build/msvc-dynamic-debug -R "^(branding-assets|windows-executable-metadata|qml-native-window-smoke)$" --output-on-failure
+```
+
+The editable SVG masters live below `resources/branding`. Generated files are
+written only below the active build tree:
+
+```text
+generated/ztermy.ico
+generated/branding/ztermy-16.png
+generated/branding/ztermy-20.png
+generated/branding/ztermy-24.png
+generated/branding/ztermy-32.png
+generated/branding/ztermy-40.png
+generated/branding/ztermy-48.png
+generated/branding/ztermy-64.png
+generated/branding/ztermy-128.png
+generated/branding/ztermy-256.png
+```
+
+Expected:
+
+- The title bar, taskbar, Alt+Tab view, executable, portable package, MSI, Start
+  menu shortcut, and Installed Apps entry use the same Ribbon Z identity.
+- The 16 px and 20 px layers omit the inset prompt for legibility. Layers from
+  24 px through 256 px retain the subtle `>_` terminal detail.
+- Rounded corners, ribbon geometry, and gradient direction match the SVG source
+  of truth; no placeholder green prompt icon remains.
+- Windows can cache icons from previous builds or shortcuts. If only a pinned
+  shortcut is stale, unpin and pin it again before treating that as an asset
+  generation failure.
+
 ## Build and smoke-test the dynamic developer deployment
 
 Start an x64 Visual Studio developer shell and use the dynamic RelWithDebInfo

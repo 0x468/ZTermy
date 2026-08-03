@@ -25,6 +25,7 @@ Rectangle {
 
         Text {
             Layout.fillWidth: true
+            visible: control.heading.length > 0
             text: control.heading
             color: Theme.text
             wrapMode: Text.WordWrap

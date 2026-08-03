@@ -571,21 +571,15 @@ Rectangle {
                 height: titleNavigation.height
                 color: "transparent"
 
-                Rectangle {
+                BrandIcon {
+                    objectName: "titleBrandIcon"
                     anchors.centerIn: parent
-                    width: 22
-                    height: 22
-                    radius: 6
-                    color: root.accentColor
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: ">_"
-                        color: Theme.accentText
-                        font.family: Theme.terminalFont
-                        font.pixelSize: Theme.textCompact
-                        font.weight: Font.Bold
-                    }
+                    width: 24
+                    height: 24
+                    tileColor: root.accentColor
+                    ribbonColor: Theme.accentText
+                    promptColor: Theme.contrastText(ribbonColor)
+                    promptStrokeWidth: 0.86
                 }
             }
 

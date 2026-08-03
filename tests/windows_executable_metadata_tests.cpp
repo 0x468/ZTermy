@@ -5,13 +5,23 @@
 
 #include <windows.h>
 
+#include <array>
 #include <cstddef>
+#include <cstdint>
 #include <vector>
 
 namespace
 {
 
 constexpr WORD applicationIconResourceId = 101;
+constexpr std::size_t iconGroupHeaderBytes = 6;
+constexpr std::size_t iconGroupEntryBytes = 14;
+
+[[nodiscard]] std::uint16_t readLittleEndianWord(const std::byte *bytes, const std::size_t offset)
+{
+    return static_cast<std::uint16_t>(std::to_integer<std::uint8_t>(bytes[offset]))
+           | static_cast<std::uint16_t>(std::to_integer<std::uint8_t>(bytes[offset + 1U]) << 8U);
+}
 
 [[nodiscard]] QString executablePath()
 {
@@ -94,6 +104,34 @@ void WindowsExecutableMetadataTests::embedsApplicationIcon()
     const auto icon = static_cast<HICON>(
         LoadImageW(module, MAKEINTRESOURCEW(applicationIconResourceId), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE));
     QVERIFY(icon != nullptr);
+
+    const HRSRC groupResource = FindResourceW(module, MAKEINTRESOURCEW(applicationIconResourceId), RT_GROUP_ICON);
+    QVERIFY(groupResource != nullptr);
+    const DWORD groupByteCount = SizeofResource(module, groupResource);
+    const HGLOBAL groupHandle = LoadResource(module, groupResource);
+    const auto *groupBytes = static_cast<const std::byte *>(LockResource(groupHandle));
+    QVERIFY(groupHandle != nullptr);
+    QVERIFY(groupBytes != nullptr);
+    QVERIFY(groupByteCount >= iconGroupHeaderBytes);
+    QCOMPARE(readLittleEndianWord(groupBytes, 0), static_cast<std::uint16_t>(0));
+    QCOMPARE(readLittleEndianWord(groupBytes, 2), static_cast<std::uint16_t>(1));
+    const std::uint16_t iconCount = readLittleEndianWord(groupBytes, 4);
+    QCOMPARE(iconCount, static_cast<std::uint16_t>(9));
+    QVERIFY(groupByteCount >= iconGroupHeaderBytes + (iconGroupEntryBytes * iconCount));
+
+    constexpr std::array<int, 9> expectedSizes{16, 20, 24, 32, 40, 48, 64, 128, 256};
+    for (std::size_t index = 0; index < expectedSizes.size(); ++index)
+    {
+        const std::size_t entryOffset = iconGroupHeaderBytes + (iconGroupEntryBytes * index);
+        const int width = std::to_integer<std::uint8_t>(groupBytes[entryOffset]) == 0
+                              ? 256
+                              : std::to_integer<std::uint8_t>(groupBytes[entryOffset]);
+        const int height = std::to_integer<std::uint8_t>(groupBytes[entryOffset + 1U]) == 0
+                               ? 256
+                               : std::to_integer<std::uint8_t>(groupBytes[entryOffset + 1U]);
+        QCOMPARE(width, expectedSizes[index]);
+        QCOMPARE(height, expectedSizes[index]);
+    }
 
     QVERIFY(DestroyIcon(icon) != FALSE);
     QVERIFY(FreeLibrary(module) != FALSE);

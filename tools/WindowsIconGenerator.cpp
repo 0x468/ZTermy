@@ -1,28 +1,31 @@
-#include <algorithm>
+#include <QBuffer>
+#include <QCoreApplication>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QImage>
+#include <QPainter>
+#include <QStringList>
+#include <QSvgRenderer>
+
 #include <array>
-#include <cmath>
 #include <cstdint>
 #include <exception>
-#include <filesystem>
-#include <fstream>
 #include <iostream>
+#include <limits>
+#include <stdexcept>
+#include <utility>
 #include <vector>
 
 namespace
 {
 
-struct Color final
-{
-    std::uint8_t blue;
-    std::uint8_t green;
-    std::uint8_t red;
-    std::uint8_t alpha;
-};
+constexpr std::array<std::uint32_t, 9> iconSizes{16, 20, 24, 32, 40, 48, 64, 128, 256};
 
 struct IconImage final
 {
     std::uint32_t size;
-    std::vector<Color> pixels;
+    QByteArray png;
 };
 
 void appendByte(std::vector<std::uint8_t> &bytes, const std::uint8_t value)
@@ -42,141 +45,82 @@ void appendDword(std::vector<std::uint8_t> &bytes, const std::uint32_t value)
     appendWord(bytes, static_cast<std::uint16_t>((value >> 16U) & 0xffffU));
 }
 
-[[nodiscard]] double distanceToSegment(const double x, const double y, const double x1, const double y1,
-                                       const double x2, const double y2)
+[[nodiscard]] QImage renderSvg(const QString &path, const std::uint32_t size)
 {
-    const double deltaX = x2 - x1;
-    const double deltaY = y2 - y1;
-    const double lengthSquared = (deltaX * deltaX) + (deltaY * deltaY);
-    const double projection = std::clamp((((x - x1) * deltaX) + ((y - y1) * deltaY)) / lengthSquared, 0.0, 1.0);
-    const double nearestX = x1 + (projection * deltaX);
-    const double nearestY = y1 + (projection * deltaY);
-    return std::hypot(x - nearestX, y - nearestY);
-}
-
-[[nodiscard]] bool insideRoundedSquare(const double x, const double y, const double size)
-{
-    const double inset = size * 0.04;
-    const double radius = size * 0.24;
-    const double center = size / 2.0;
-    const double halfInnerSize = center - inset;
-    const double cornerX = std::max(std::abs(x - center) - (halfInnerSize - radius), 0.0);
-    const double cornerY = std::max(std::abs(y - center) - (halfInnerSize - radius), 0.0);
-    return std::hypot(cornerX, cornerY) <= radius;
-}
-
-[[nodiscard]] bool insideTerminalGlyph(const double x, const double y, const double size)
-{
-    const double stroke = std::max(0.8, size * 0.043);
-    const bool chevron = distanceToSegment(x, y, size * 0.29, size * 0.34, size * 0.47, size * 0.50) <= stroke
-                         || distanceToSegment(x, y, size * 0.47, size * 0.50, size * 0.29, size * 0.66) <= stroke;
-    const bool underscore = distanceToSegment(x, y, size * 0.53, size * 0.66, size * 0.75, size * 0.66) <= stroke;
-    return chevron || underscore;
-}
-
-[[nodiscard]] IconImage renderIcon(const std::uint32_t size)
-{
-    constexpr std::uint32_t samplesPerAxis = 4;
-    constexpr std::uint32_t samplesPerPixel = samplesPerAxis * samplesPerAxis;
-    constexpr Color accent{.blue = 0x5e, .green = 0xc5, .red = 0x22, .alpha = 0xff};
-    constexpr Color glyph{.blue = 0x0b, .green = 0x13, .red = 0x07, .alpha = 0xff};
-
-    IconImage image{.size = size, .pixels = {}};
-    image.pixels.reserve(static_cast<std::size_t>(size) * size);
-    for (std::uint32_t y = 0; y < size; ++y)
+    QSvgRenderer renderer(path);
+    if (!renderer.isValid())
     {
-        for (std::uint32_t x = 0; x < size; ++x)
-        {
-            std::uint32_t backgroundCoverage = 0;
-            std::uint32_t glyphCoverage = 0;
-            for (std::uint32_t sampleY = 0; sampleY < samplesPerAxis; ++sampleY)
-            {
-                for (std::uint32_t sampleX = 0; sampleX < samplesPerAxis; ++sampleX)
-                {
-                    const double samplePositionX =
-                        static_cast<double>(x) + ((static_cast<double>(sampleX) + 0.5) / samplesPerAxis);
-                    const double samplePositionY =
-                        static_cast<double>(y) + ((static_cast<double>(sampleY) + 0.5) / samplesPerAxis);
-                    if (insideRoundedSquare(samplePositionX, samplePositionY, static_cast<double>(size)))
-                    {
-                        ++backgroundCoverage;
-                        if (insideTerminalGlyph(samplePositionX, samplePositionY, static_cast<double>(size)))
-                        {
-                            ++glyphCoverage;
-                        }
-                    }
-                }
-            }
+        throw std::runtime_error(QStringLiteral("could not load SVG source: %1").arg(path).toStdString());
+    }
 
-            const std::uint32_t accentCoverage = backgroundCoverage - glyphCoverage;
-            const auto mixChannel = [accentCoverage, glyphCoverage](const std::uint8_t accentChannel,
-                                                                    const std::uint8_t glyphChannel) {
-                const std::uint32_t value = (accentCoverage * accentChannel) + (glyphCoverage * glyphChannel);
-                return static_cast<std::uint8_t>(value / samplesPerPixel);
-            };
-            image.pixels.push_back(Color{
-                .blue = mixChannel(accent.blue, glyph.blue),
-                .green = mixChannel(accent.green, glyph.green),
-                .red = mixChannel(accent.red, glyph.red),
-                .alpha = static_cast<std::uint8_t>((backgroundCoverage * 0xffU) / samplesPerPixel),
-            });
-        }
+    QImage image(static_cast<int>(size), static_cast<int>(size), QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    renderer.render(&painter);
+    if (!painter.end())
+    {
+        throw std::runtime_error(QStringLiteral("could not render SVG source: %1").arg(path).toStdString());
     }
     return image;
 }
 
-[[nodiscard]] std::uint32_t imageByteCount(const std::uint32_t size)
+[[nodiscard]] QByteArray encodePng(const QImage &image)
 {
-    constexpr std::uint32_t bitmapInfoHeaderBytes = 40;
-    const std::uint32_t colorBytes = size * size * 4U;
-    const std::uint32_t maskRowBytes = ((size + 31U) / 32U) * 4U;
-    return bitmapInfoHeaderBytes + colorBytes + (maskRowBytes * size);
-}
-
-void appendImage(std::vector<std::uint8_t> &bytes, const IconImage &image)
-{
-    const std::uint32_t colorBytes = image.size * image.size * 4U;
-    const std::uint32_t maskRowBytes = ((image.size + 31U) / 32U) * 4U;
-
-    appendDword(bytes, 40);
-    appendDword(bytes, image.size);
-    appendDword(bytes, image.size * 2U);
-    appendWord(bytes, 1);
-    appendWord(bytes, 32);
-    appendDword(bytes, 0);
-    appendDword(bytes, colorBytes);
-    appendDword(bytes, 0);
-    appendDword(bytes, 0);
-    appendDword(bytes, 0);
-    appendDword(bytes, 0);
-
-    for (std::uint32_t y = image.size; y > 0; --y)
+    QByteArray png;
+    QBuffer buffer(&png);
+    if (!buffer.open(QIODevice::WriteOnly) || !image.save(&buffer, "PNG"))
     {
-        const std::size_t rowOffset = static_cast<std::size_t>(y - 1U) * image.size;
-        for (std::uint32_t x = 0; x < image.size; ++x)
-        {
-            const Color &color = image.pixels[rowOffset + x];
-            appendByte(bytes, color.blue);
-            appendByte(bytes, color.green);
-            appendByte(bytes, color.red);
-            appendByte(bytes, color.alpha);
-        }
+        throw std::runtime_error("could not encode PNG icon layer");
     }
-    bytes.insert(bytes.end(), static_cast<std::size_t>(maskRowBytes) * image.size, 0);
+    return png;
 }
 
-[[nodiscard]] std::vector<std::uint8_t> createIcon()
+void writeFile(const QString &path, const QByteArray &contents)
 {
-    constexpr std::array<std::uint32_t, 7> sizes{16, 20, 24, 32, 48, 64, 256};
-    constexpr std::uint32_t directoryHeaderBytes = 6;
-    constexpr std::uint32_t directoryEntryBytes = 16;
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate) || file.write(contents) != contents.size())
+    {
+        throw std::runtime_error(QStringLiteral("could not write %1").arg(path).toStdString());
+    }
+}
+
+void writeFile(const QString &path, const std::vector<std::uint8_t> &contents)
+{
+    QFile file(path);
+    const auto byteCount = static_cast<qint64>(contents.size());
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)
+        || file.write(reinterpret_cast<const char *>(contents.data()), byteCount) != byteCount)
+    {
+        throw std::runtime_error(QStringLiteral("could not write %1").arg(path).toStdString());
+    }
+}
+
+[[nodiscard]] std::vector<IconImage> renderIconLayers(const QString &fullSource, const QString &smallSource,
+                                                      const QString &pngDirectory)
+{
+    if (!QDir().mkpath(pngDirectory))
+    {
+        throw std::runtime_error(QStringLiteral("could not create %1").arg(pngDirectory).toStdString());
+    }
 
     std::vector<IconImage> images;
-    images.reserve(sizes.size());
-    for (const std::uint32_t size : sizes)
+    images.reserve(iconSizes.size());
+    for (const std::uint32_t size : iconSizes)
     {
-        images.push_back(renderIcon(size));
+        const QString &source = size <= 20U ? smallSource : fullSource;
+        IconImage image{.size = size, .png = encodePng(renderSvg(source, size))};
+        writeFile(QDir(pngDirectory).filePath(QStringLiteral("ztermy-%1.png").arg(size)), image.png);
+        images.push_back(std::move(image));
     }
+    return images;
+}
+
+[[nodiscard]] std::vector<std::uint8_t> createIcon(const std::vector<IconImage> &images)
+{
+    constexpr std::uint32_t directoryHeaderBytes = 6;
+    constexpr std::uint32_t directoryEntryBytes = 16;
 
     std::vector<std::uint8_t> bytes;
     appendWord(bytes, 0);
@@ -187,20 +131,28 @@ void appendImage(std::vector<std::uint8_t> &bytes, const IconImage &image)
         directoryHeaderBytes + (directoryEntryBytes * static_cast<std::uint32_t>(images.size()));
     for (const IconImage &image : images)
     {
+        if (image.png.size() < 0 || std::cmp_greater(image.png.size(), std::numeric_limits<std::uint32_t>::max()))
+        {
+            throw std::runtime_error("PNG icon layer is too large for an ICO directory entry");
+        }
+        const auto imageByteCount = static_cast<std::uint32_t>(image.png.size());
         appendByte(bytes, image.size == 256U ? 0 : static_cast<std::uint8_t>(image.size));
         appendByte(bytes, image.size == 256U ? 0 : static_cast<std::uint8_t>(image.size));
         appendByte(bytes, 0);
         appendByte(bytes, 0);
         appendWord(bytes, 1);
         appendWord(bytes, 32);
-        appendDword(bytes, imageByteCount(image.size));
+        appendDword(bytes, imageByteCount);
         appendDword(bytes, imageOffset);
-        imageOffset += imageByteCount(image.size);
+        imageOffset += imageByteCount;
     }
 
     for (const IconImage &image : images)
     {
-        appendImage(bytes, image);
+        for (const char byte : image.png)
+        {
+            appendByte(bytes, static_cast<std::uint8_t>(static_cast<unsigned char>(byte)));
+        }
     }
     return bytes;
 }
@@ -208,38 +160,42 @@ void appendImage(std::vector<std::uint8_t> &bytes, const IconImage &image)
 } // namespace
 
 // The helper catches both standard and non-standard exceptions at the process
-// boundary. clang-tidy does not model that catch-all for filesystem calls in a
-// main function.
+// boundary. clang-tidy does not model that catch-all for Qt file operations in
+// a main function.
 // NOLINTNEXTLINE(bugprone-exception-escape)
-int main(const int argc, const char *const argv[]) noexcept
+int main(int argc, char *argv[]) noexcept
 {
-    if (argc != 2)
+    QCoreApplication application(argc, argv);
+    const QStringList arguments = QCoreApplication::arguments();
+    if (arguments.size() != 5)
     {
-        std::cerr << "usage: ztermy_windows_icon_generator <output.ico>\n";
+        std::cerr << "usage: ztermy_windows_icon_generator <full.svg> <small.svg> <output.ico> <png-directory>\n";
         return 1;
     }
 
     try
     {
-        const std::filesystem::path outputPath{argv[1]};
-        std::filesystem::create_directories(outputPath.parent_path());
-        const std::vector<std::uint8_t> bytes = createIcon();
-        std::ofstream output(outputPath, std::ios::binary | std::ios::trunc);
-        output.write(reinterpret_cast<const char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
-        if (!output)
+        const QString &fullSource = arguments.at(1);
+        const QString &smallSource = arguments.at(2);
+        const QString &outputPath = arguments.at(3);
+        const QString &pngDirectory = arguments.at(4);
+        const QFileInfo outputInfo(outputPath);
+        if (!QDir().mkpath(outputInfo.absolutePath()))
         {
-            std::cerr << "could not write " << outputPath << '\n';
-            return 1;
+            throw std::runtime_error(
+                QStringLiteral("could not create %1").arg(outputInfo.absolutePath()).toStdString());
         }
+        const std::vector<IconImage> images = renderIconLayers(fullSource, smallSource, pngDirectory);
+        writeFile(outputPath, createIcon(images));
     }
     catch (const std::exception &error)
     {
-        std::cerr << "could not generate the Windows icon: " << error.what() << '\n';
+        std::cerr << "could not generate ztermy branding assets: " << error.what() << '\n';
         return 1;
     }
     catch (...)
     {
-        std::cerr << "could not generate the Windows icon: unknown failure\n";
+        std::cerr << "could not generate ztermy branding assets: unknown failure\n";
         return 1;
     }
     return 0;

@@ -333,7 +333,7 @@ Rectangle {
 
                 Layout.fillWidth: true
                 title: qsTr("Application")
-                iconName: "settings"
+                iconName: "application"
                 actionObjectName: "settingsApplicationCategory"
                 selected: pane.currentCategory === "application"
                 onActivated: pane.selectCategory("application")
@@ -366,7 +366,7 @@ Rectangle {
 
                 Layout.fillWidth: true
                 title: qsTr("Shortcuts")
-                iconName: "commands"
+                iconName: "shortcuts"
                 actionObjectName: "settingsShortcutsCategory"
                 selected: pane.currentCategory === "shortcuts"
                 onActivated: pane.selectCategory("shortcuts")
@@ -377,7 +377,7 @@ Rectangle {
 
                 Layout.fillWidth: true
                 title: qsTr("Security")
-                iconName: "settings"
+                iconName: "security"
                 actionObjectName: "settingsSecurityCategory"
                 selected: pane.currentCategory === "security"
                 onActivated: pane.selectCategory("security")
@@ -429,7 +429,8 @@ Rectangle {
 
             Text {
                 Layout.fillWidth: true
-                text: pane.currentCategory === "application" ? qsTr("View ztermy version and application information.") : pane.currentCategory === "appearance" ? qsTr("Choose the language, interface font, theme, and Windows backdrop used across ztermy.") : pane.currentCategory === "terminal" ? qsTr("Configure the global terminal font, background, cursor, selection, and paste behavior.") : pane.currentCategory === "shortcuts" ? qsTr("Search, record, unbind, and reset keyboard shortcuts for registered ztermy actions.") : qsTr("Choose where SSH passwords and key passphrases are stored, unlock the portable vault, or migrate credentials safely.")
+                visible: pane.currentCategory !== "application"
+                text: pane.currentCategory === "appearance" ? qsTr("Choose the language, interface font, theme, and Windows backdrop used across ztermy.") : pane.currentCategory === "terminal" ? qsTr("Configure the global terminal font, background, cursor, selection, and paste behavior.") : pane.currentCategory === "shortcuts" ? qsTr("Search, record, unbind, and reset keyboard shortcuts for registered ztermy actions.") : qsTr("Choose where SSH passwords and key passphrases are stored, unlock the portable vault, or migrate credentials safely.")
                 color: Theme.textMuted
                 wrapMode: Text.WordWrap
                 font.family: Theme.uiFont
@@ -452,58 +453,72 @@ Rectangle {
             SectionCard {
                 Layout.fillWidth: true
                 visible: pane.currentCategory === "application"
-                heading: qsTr("About ztermy")
 
-                GridLayout {
+                RowLayout {
+                    objectName: "settingsApplicationBrandLockup"
                     Layout.fillWidth: true
-                    columns: pane.compactLayout ? 1 : 2
-                    columnSpacing: 18
-                    rowSpacing: 12
+                    Layout.minimumHeight: pane.compactLayout ? 116 : 188
+                    spacing: pane.compactLayout ? 16 : 36
+                    Accessible.name: qsTr("ztermy SSH Terminal")
+                    Accessible.role: Accessible.Graphic
 
-                    Label {
-                        text: qsTr("Application")
-                        color: Theme.text
-                    }
-                    Text {
-                        Layout.fillWidth: true
-                        text: qsTr("ztermy")
-                        color: Theme.textSoft
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.textBody
-                    }
-
-                    Label {
-                        text: qsTr("Version")
-                        color: Theme.text
-                    }
-                    Text {
-                        Layout.fillWidth: true
-                        text: Qt.application.version
-                        color: Theme.textSoft
-                        font.family: Theme.terminalFont
-                        font.pixelSize: Theme.textBody
+                    Image {
+                        Layout.preferredWidth: pane.compactLayout ? 92 : 168
+                        Layout.preferredHeight: pane.compactLayout ? 92 : 168
+                        Layout.alignment: Qt.AlignVCenter
+                        source: "image://ztermy-brand/app-icon/" + (Theme.dark ? "000001" : "000002") + "/" + (pane.compactLayout ? "compact" : "regular")
+                        sourceSize.width: pane.compactLayout ? 184 : 336
+                        sourceSize.height: pane.compactLayout ? 184 : 336
+                        fillMode: Image.PreserveAspectFit
+                        asynchronous: false
+                        cache: false
+                        smooth: true
+                        mipmap: true
                     }
 
-                    Label {
-                        text: qsTr("Platform")
-                        color: Theme.text
-                    }
-                    Text {
+                    ColumnLayout {
                         Layout.fillWidth: true
-                        text: qsTr("Windows 11 · native Qt 6 · C++23")
-                        color: Theme.textSoft
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.textBody
-                    }
+                        Layout.alignment: Qt.AlignVCenter
+                        spacing: pane.compactLayout ? 3 : 8
 
-                    Text {
-                        Layout.columnSpan: parent.columns
-                        Layout.fillWidth: true
-                        text: qsTr("A personal native SSH terminal. NetCatty and other terminals are product references; ztermy uses its own C++ and Qt implementation.")
-                        color: Theme.textMuted
-                        wrapMode: Text.WordWrap
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.textLabel
+                        Row {
+                            spacing: 0
+
+                            Text {
+                                text: qsTr("Z")
+                                color: "#2AA8FF"
+                                font.family: Theme.uiFont
+                                font.pixelSize: pane.compactLayout ? 38 : 72
+                                font.weight: Font.Bold
+                            }
+
+                            Text {
+                                text: qsTr("termy")
+                                color: Theme.text
+                                font.family: Theme.uiFont
+                                font.pixelSize: pane.compactLayout ? 38 : 72
+                                font.weight: Font.Bold
+                            }
+                        }
+
+                        Text {
+                            text: qsTr("SSH TERMINAL")
+                            color: Theme.textMuted
+                            font.family: Theme.uiFont
+                            font.pixelSize: pane.compactLayout ? 11 : 18
+                            font.letterSpacing: pane.compactLayout ? 3 : 6
+                            font.weight: Font.DemiBold
+                        }
+
+                        Text {
+                            objectName: "settingsApplicationBuildInfo"
+                            Layout.fillWidth: true
+                            text: qsTr("Version %1 · Windows 11 · Native Qt 6 · C++23").arg(Qt.application.version)
+                            color: Theme.textSubtle
+                            wrapMode: Text.WordWrap
+                            font.family: Theme.uiFont
+                            font.pixelSize: pane.compactLayout ? Theme.textCompact : Theme.textLabel
+                        }
                     }
                 }
             }
