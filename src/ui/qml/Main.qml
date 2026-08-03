@@ -1284,6 +1284,8 @@ Rectangle {
                                 Layout.preferredHeight: 22
                                 enabled: root.activeTerminalTab !== null
                                 onClicked: root.openTerminalSearch()
+                                Keys.onReturnPressed: click()
+                                Keys.onEnterPressed: click()
                                 Accessible.name: qsTr("Find in terminal")
                                 contentItem: AppIcon {
                                     name: "search"
@@ -1342,11 +1344,14 @@ Rectangle {
 
                             TerminalToolbarButton {
                                 id: terminalMoreButton
+                                objectName: "terminalMoreAction"
 
                                 Layout.preferredWidth: 28
                                 Layout.preferredHeight: 22
                                 enabled: root.activeTerminalTab !== null
                                 onClicked: terminalMoreMenu.open()
+                                Keys.onReturnPressed: click()
+                                Keys.onEnterPressed: click()
                                 Accessible.name: qsTr("More terminal actions")
                                 contentItem: AppIcon {
                                     name: "more"
@@ -1364,6 +1369,7 @@ Rectangle {
                                     y: terminalMoreButton.height
 
                                     AppMenuItem {
+                                        objectName: "terminalHistoryMenuAction"
                                         text: qsTr("Command history")
                                         onTriggered: root.controller.toggleTerminalWorkbench("history")
                                     }

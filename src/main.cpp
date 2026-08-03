@@ -1631,8 +1631,14 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
         const QVariantList tabs = controller.terminalTabs();
         return tabs.isEmpty() ? QVariantMap{} : tabs.constFirst().toMap();
     };
-    QQuickItem *terminalHistoryAction = quickItem(rootObject, "terminalHistoryAction");
-    if (!focusItem(window, terminalHistoryAction, QStringLiteral("terminalHistoryAction")))
+    QQuickItem *terminalMoreAction = quickItem(rootObject, "terminalMoreAction");
+    if (!focusItem(window, terminalMoreAction, QStringLiteral("terminalMoreAction")))
+    {
+        return false;
+    }
+    sendKey(window, Qt::Key_Return);
+    QQuickItem *terminalHistoryMenuAction = quickItem(rootObject, "terminalHistoryMenuAction");
+    if (!focusItem(window, terminalHistoryMenuAction, QStringLiteral("terminalHistoryMenuAction")))
     {
         return false;
     }
@@ -1653,7 +1659,8 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
     {
         const QVariantMap state = activeTerminalState();
         qCWarning(applicationLog) << "Terminal history workbench did not open through its keyboard action"
-                                  << "historyActionFound=" << (terminalHistoryAction != nullptr)
+                                  << "moreActionFound=" << (terminalMoreAction != nullptr)
+                                  << "historyMenuActionFound=" << (terminalHistoryMenuAction != nullptr)
                                   << "workbenchFound=" << (terminalWorkbench != nullptr) << "workbenchVisible="
                                   << (terminalWorkbench != nullptr && terminalWorkbench->isVisible())
                                   << "workbenchOpen=" << state.value(QStringLiteral("workbenchOpen")).toBool()
