@@ -1,7 +1,7 @@
 # Roadmap to V2
 
-Status: V2 implementation candidate produced from `4c92a89` on 2026-08-02;
-owner acceptance remains deferred
+Status: completed; V2 `0.2.0` accepted from binary source `8f8fccf` on
+2026-08-03
 
 ## Purpose
 
@@ -11,10 +11,10 @@ an execution record rather than a promise to copy every feature of a reference
 product. NetCatty, Windows Terminal, Termius, Tabby, and other clients remain
 behavioral references only.
 
-The owner is temporarily unavailable for interactive acceptance. Development
-may continue through automated gates, but items in
-`docs/testing/DEFERRED_MANUAL_ACCEPTANCE.md` remain release-blocking evidence
-and must not be silently treated as passed.
+The final record is
+[`docs/testing/V2_RC_8F8FCCF.md`](testing/V2_RC_8F8FCCF.md). Retained items in
+`docs/testing/DEFERRED_MANUAL_ACCEPTANCE.md` remain an explicit regression
+matrix and must not be silently described as tested.
 
 ## Invariants through V2
 

@@ -1,5 +1,9 @@
 # V2: stable personal native SSH workspace
 
+Status: accepted as the personal/private `0.2.0` baseline on 2026-08-03.
+The immutable source, automated evidence, owner acceptance, and artifact hashes
+are recorded in [testing/V2_RC_8F8FCCF.md](testing/V2_RC_8F8FCCF.md).
+
 V2 consolidates the completed V1.1–V1.9 milestones into one supported Windows
 11-first product contract. It is an integration and release-readiness milestone,
 not another broad feature expansion.
@@ -39,3 +43,6 @@ must never be reported as tested.
 
 V2 maintenance and candidate builds stay on `0.2.x`. The project changes to
 `0.3.0` only when the separately scoped V3 milestone begins.
+
+Compatible follow-up work is ordered in
+[POST_V2_ROADMAP.md](POST_V2_ROADMAP.md).

@@ -127,6 +127,15 @@ requires one static `ztermy.exe` payload under the per-user LocalAppData
 directory plus the direct Start-menu shortcut. It rejects `portable.flag`, Qt
 or OpenSSL DLLs, PDBs, and Ghostty development payloads.
 
+WiX ICE validation calls the Windows Installer service. On the current
+development machine a non-elevated WiX process can report `WIX0217` and exit
+217 even while `msiserver` is Running. Run the static preflight from an
+elevated x64 MSVC environment when that exact service-access error occurs.
+This elevation is a development-time validation requirement only; the
+generated per-user MSI remains installable without elevation. Do not suppress
+ICE validation or treat the repeated service-access text as hundreds of MSI
+schema failures.
+
 ## libghostty-vt
 
 The terminal engine adapter builds `libghostty-vt` from the exact Ghostty

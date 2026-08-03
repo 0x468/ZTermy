@@ -2,17 +2,15 @@
 
 ## Status and rules
 
-The owner is temporarily unable to perform interactive validation. This file is
-the authoritative ledger for runtime evidence that automation cannot honestly
-replace. An item remains `PENDING` until the owner (or an explicitly authorized
-operator) records the date, build/commit, environment, and result.
+V2 `0.2.0` was accepted on 2026-08-03 as a personal/private daily-use baseline.
+This file is retained as the authoritative regression matrix for runtime and
+environment evidence that automation cannot honestly replace. `PENDING` means
+only that the exact listed matrix has not been recorded against the immutable
+V2 artifacts; it must not be rewritten as `PASS` without evidence.
 
-Current restrictions:
-
-- do not use Computer Use until the owner explicitly allows it;
-- do not operate NetCatty or ztermy through GUI automation;
-- do not connect to the real SSH test host unless the owner explicitly allows it;
-- command-line builds and synthetic/unit tests are allowed.
+Real-host credentials and GUI control still require the owner's current
+authorization. Secrets, terminal input, and private-key contents must never be
+recorded in this ledger.
 
 ## V1.6 SFTP browser
 
