@@ -22,6 +22,10 @@ developer variables.
   release remains in the `0.2.x` line. V3 is the first milestone allowed to
   use `0.3.0`. `project(VERSION)` remains the single source for PE metadata,
   runtime version text, MSI identity, archive names, and manifests.
+- A release codename and its verse belong to the `x.y` product line. Patch
+  releases keep that identity unchanged; the owner chooses a new codename and
+  verse only when the minor component changes. Therefore every `0.2.z` release
+  uses the V2 codename `此` and its approved verse.
 - Historical V1 evidence retains its `0.1.0` paths and hashes.
 - The release preflight excludes `ssh-real-host` by exact test name. Real-host
   password, private-key, SFTP, and transfer checks remain separately invoked,
@@ -40,3 +44,5 @@ developer variables.
   not promise a public SDK or cross-platform compatibility contract.
 - Candidate repairs increment the patch component only when a new immutable
   artifact is cut; development commits do not opportunistically claim `0.3.0`.
+- Patch maintenance does not create artificial branding churn or require a new
+  release-identity card for every repair build.

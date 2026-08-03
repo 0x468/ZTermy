@@ -98,6 +98,22 @@ cmake --build --preset msvc-dynamic-debug --target ztermy_clang_tidy_check
 cmake --build --preset msvc-dynamic-debug --target ztermy_qml_quality_check
 ```
 
+`ztermy_clang_tidy_check` analyzes every translation unit on every invocation,
+but Ninja schedules independent files through a bounded pool instead of one
+long-lived sequential clang-tidy process. The default is half the detected
+physical cores capped at four, limiting the typical analysis working set to
+roughly four gigabytes. Override it at configure time when the machine has a
+different CPU/RAM balance:
+
+```powershell
+cmake --preset msvc-dynamic-debug -DZTERMY_CLANG_TIDY_JOBS=6
+```
+
+Use `1` to reproduce the original sequential behavior. This setting changes
+only scheduling: diagnostics, `--warnings-as-errors=*`, the compilation
+database, and the complete source set remain identical. Real-window release
+gates still wait for analysis to finish and continue to run serially.
+
 The checked source set is discovered from `src`, `tests`, and `tools` during
 CMake generation. The compilation database for the active preset remains the
 source of truth for clang-tidy compiler flags and include paths. The QML format

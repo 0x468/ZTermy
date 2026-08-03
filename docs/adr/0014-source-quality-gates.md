@@ -27,7 +27,8 @@ machine. CMake exposes:
   and `tests` with the repository format and `--Werror`;
 - `ztermy_clang_tidy_check`, which reads the active preset's
   `compile_commands.json`, analyzes every available project translation unit,
-  and treats every enabled diagnostic as an error;
+  treats every enabled diagnostic as an error, and dispatches one analysis
+  process per translation unit through a bounded Ninja job pool;
 - `ztermy_qml_format_check`, which formats isolated copies with Qt's
   `qmlformat` and compares their SHA-256 values with all source QML files;
 - `ztermy_qml_quality_check`, which combines the QML format gate with Qt's
@@ -43,10 +44,18 @@ is Windows 11/MSVC-only for V1 and consistently uses `#pragma once`; other
 portability diagnostics remain enabled. A diagnostic may be suppressed only
 at the narrowest justified location with an explanatory comment.
 
+`ZTERMY_CLANG_TIDY_JOBS` controls the analysis pool. Its default is half the
+detected physical cores, capped at four because an MSVC/Qt translation unit can
+consume close to one gigabyte while clang-tidy parses it. Setting the value to
+one restores sequential execution for memory-constrained machines. Every run
+still analyzes the complete source set; the pool changes scheduling only and
+does not introduce timestamp-based or changed-file skipping.
+
 Static distribution work and test compilation must complete before any
 real-window gate starts. QML and C++ quality checks also complete before those
-gates. The seven window gates are multiple commands in one Ninja console job
-so they cannot overlap each other or clang-tidy.
+gates. The runtime preflight depends explicitly on the completed clang-tidy
+aggregate, and its seven window commands remain one Ninja console job, so
+performance evidence cannot overlap analysis or another test window.
 
 ## Consequences
 
@@ -56,6 +65,8 @@ so they cannot overlap each other or clang-tidy.
   preflights remain required before V1 sign-off.
 - Static analysis increases preflight duration but cannot silently pass with
   stale tests or an incomplete header filter.
+- Independent translation units use bounded parallelism, improving host CPU
+  utilization without multiplying memory use without limit.
 - New C++ files below `src` or `tests` enter the quality source set after CMake
   regenerates.
 - New QML files in the application module must pass both `qmlformat` and

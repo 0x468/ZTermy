@@ -2046,6 +2046,35 @@ endif()
 find_program(ZTERMY_CLANG_FORMAT_EXECUTABLE NAMES clang-format REQUIRED)
 find_program(ZTERMY_CLANG_TIDY_EXECUTABLE NAMES clang-tidy REQUIRED)
 
+cmake_host_system_information(
+    RESULT ZTERMY_PHYSICAL_CORE_COUNT
+    QUERY NUMBER_OF_PHYSICAL_CORES
+)
+if(NOT ZTERMY_PHYSICAL_CORE_COUNT MATCHES "^[1-9][0-9]*$")
+    set(ZTERMY_PHYSICAL_CORE_COUNT 2)
+endif()
+math(EXPR ZTERMY_CLANG_TIDY_DEFAULT_JOBS
+    "(${ZTERMY_PHYSICAL_CORE_COUNT} + 1) / 2"
+)
+if(ZTERMY_CLANG_TIDY_DEFAULT_JOBS GREATER 4)
+    set(ZTERMY_CLANG_TIDY_DEFAULT_JOBS 4)
+endif()
+set(
+    ZTERMY_CLANG_TIDY_JOBS
+    "${ZTERMY_CLANG_TIDY_DEFAULT_JOBS}"
+    CACHE STRING
+    "Maximum concurrent clang-tidy translation units"
+)
+if(NOT ZTERMY_CLANG_TIDY_JOBS MATCHES "^[1-9][0-9]*$")
+    message(FATAL_ERROR
+        "ZTERMY_CLANG_TIDY_JOBS must be a positive integer; found: "
+        "${ZTERMY_CLANG_TIDY_JOBS}"
+    )
+endif()
+set_property(GLOBAL APPEND PROPERTY JOB_POOLS
+    "ztermy_clang_tidy_pool=${ZTERMY_CLANG_TIDY_JOBS}"
+)
+
 execute_process(
     COMMAND "${ZTERMY_CLANG_FORMAT_EXECUTABLE}" --version
     RESULT_VARIABLE ZTERMY_CLANG_FORMAT_VERSION_RESULT
@@ -2120,17 +2149,43 @@ add_custom_target(ztermy_format_check
     VERBATIM
 )
 
+add_custom_target(ztermy_clang_tidy_prerequisites)
+add_dependencies(ztermy_clang_tidy_prerequisites ztermy)
+if(BUILD_TESTING)
+    add_dependencies(ztermy_clang_tidy_prerequisites ztermy_test_binaries)
+endif()
+
+set(ZTERMY_CLANG_TIDY_TARGETS)
+set(ZTERMY_CLANG_TIDY_INDEX 0)
+foreach(tidy_source IN LISTS ZTERMY_TIDY_SOURCES)
+    math(EXPR ZTERMY_CLANG_TIDY_INDEX "${ZTERMY_CLANG_TIDY_INDEX} + 1")
+    set(tidy_target "ztermy_clang_tidy_tu_${ZTERMY_CLANG_TIDY_INDEX}")
+    file(RELATIVE_PATH tidy_source_display
+        "${CMAKE_CURRENT_SOURCE_DIR}"
+        "${tidy_source}"
+    )
+    add_custom_target(${tidy_target}
+        COMMAND "${ZTERMY_CLANG_TIDY_EXECUTABLE}"
+                -p "${CMAKE_BINARY_DIR}"
+                --warnings-as-errors=*
+                --quiet
+                "${tidy_source}"
+        COMMENT "clang-tidy ${tidy_source_display}"
+        JOB_POOL ztermy_clang_tidy_pool
+        VERBATIM
+    )
+    add_dependencies(${tidy_target} ztermy_clang_tidy_prerequisites)
+    list(APPEND ZTERMY_CLANG_TIDY_TARGETS ${tidy_target})
+endforeach()
+
 add_custom_target(ztermy_clang_tidy_check
-    COMMAND "${ZTERMY_CLANG_TIDY_EXECUTABLE}"
-            -p "${CMAKE_BINARY_DIR}"
-            --warnings-as-errors=*
-            --quiet
-            ${ZTERMY_TIDY_SOURCES}
-    DEPENDS ztermy
-    COMMENT "Running clang-tidy with all diagnostics treated as errors"
-    USES_TERMINAL
-    VERBATIM
+    DEPENDS ${ZTERMY_CLANG_TIDY_TARGETS}
 )
+
+unset(ZTERMY_CLANG_TIDY_DEFAULT_JOBS)
+unset(ZTERMY_CLANG_TIDY_INDEX)
+unset(ZTERMY_CLANG_TIDY_TARGETS)
+unset(ZTERMY_PHYSICAL_CORE_COUNT)
 
 if(NOT TARGET Qt6::qmlformat)
     message(FATAL_ERROR "Qt6::qmlformat is required for the QML formatting gate")
@@ -2159,8 +2214,6 @@ add_custom_target(ztermy_qml_quality_check
 )
 
 if(BUILD_TESTING)
-    add_dependencies(ztermy_clang_tidy_check ztermy_test_binaries)
-
     set(ZTERMY_V1_PREFLIGHT_PREREQUISITES
         ztermy_test_binaries
         ztermy_qml_quality_check
@@ -2204,7 +2257,9 @@ if(BUILD_TESTING)
         COMMAND "$<TARGET_FILE:ztermy>"
                 --terminal-render-smoke
                 --data-dir "${ZTERMY_V1_PREFLIGHT_DATA_ROOT}/terminal-render"
-        DEPENDS ztermy_v1_preflight_prerequisites
+        DEPENDS
+            ztermy_v1_preflight_prerequisites
+            ztermy_clang_tidy_check
         COMMENT "Running all seven real-window V1 gates serially"
         USES_TERMINAL
         VERBATIM

@@ -8,6 +8,10 @@ Daily-use stabilization and compatible feature work remain on `0.2.x`.
 `0.3.0` is reserved for an explicitly approved V3 scope; it is not the next
 automatic version after this release.
 
+Release codenames follow the `x.y` line rather than individual patch builds.
+All `0.2.z` releases retain the codename `此` and its approved verse; a new
+codename is selected only when the minor version changes.
+
 ## V2.1 — daily-use stabilization (`0.2.1`)
 
 - use `0.2.0` as the daily driver and prioritize reproducible crashes, hangs,
