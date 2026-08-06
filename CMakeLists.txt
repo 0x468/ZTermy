@@ -530,6 +530,7 @@ set(ZTERMY_INTERFACE_ICON_FILES
     resources/icons/home.svg
     resources/icons/hosts.svg
     resources/icons/lock.svg
+    resources/icons/minus.svg
     resources/icons/more.svg
     resources/icons/new-folder.svg
     resources/icons/play.svg

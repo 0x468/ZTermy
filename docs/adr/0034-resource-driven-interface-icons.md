@@ -27,6 +27,9 @@ live effect layer per icon would add unstable API or rendering overhead.
   for every button.
 - Treat the checked-in SVG files as the production source of truth. The web
   gallery remains a review tool and does not execute in the application.
+- Use resource icons for icon-only actions and control indicators instead of
+  font glyphs or one-off QML geometry, so stroke weight and alignment remain
+  stable across UI fonts, themes, and display scaling.
 
 ## Consequences
 

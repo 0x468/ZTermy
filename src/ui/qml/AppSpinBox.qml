@@ -49,10 +49,11 @@ SpinBox {
         implicitWidth: 34
         color: control.down.pressed ? Theme.controlPressed : control.down.hovered ? Theme.controlHover : "transparent"
 
-        Rectangle {
+        AppIcon {
             anchors.centerIn: parent
-            width: 12
-            height: 1.5
+            width: 14
+            height: 14
+            name: "minus"
             color: control.enabled ? Theme.text : Theme.textSubtle
         }
     }

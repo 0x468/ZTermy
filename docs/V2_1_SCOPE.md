@@ -1,6 +1,6 @@
 # V2.1 daily-use stabilization
 
-Status: in progress on the `0.2.1` line
+Status: release candidate finalized on the `0.2.1` line
 
 ## Release identity
 
@@ -38,3 +38,29 @@ logs, and releases worker-owning services while the controller is still alive.
 The path is idempotent, rejects new transfer work after stopping begins, and
 preserves incomplete transfers as `interrupted` entries for explicit retry on
 the next launch.
+
+## Release-candidate scope
+
+The remaining `0.2.1` candidate work is limited to interface visual
+consistency and automated release finalization. Real-host lifecycle acceptance
+and additional installer or portable-package diagnostics are not release
+blockers for this maintenance line.
+
+Icon-only controls and compact indicators use the shared resource-driven SVG
+system, preserving dynamic theme colors, high-DPI rendering, keyboard focus,
+and accessible names without depending on UI-font glyph metrics.
+
+## Release-candidate evidence
+
+- C++ and QML formatting, `qmllint`, and the full 95-step `clang-tidy` target
+  pass on the static Release configuration.
+- All 41 automated tests that do not contact a real SSH host pass.
+- All seven real-window runtime gates pass, including dark and light themes,
+  compact and regular layouts, keyboard interaction, terminal rendering, and
+  100%, 125%, 150%, and 200% DPI runs.
+- The portable ZIP and per-user MSI are assembled into the release directory
+  with matching SHA-256 and JSON manifests.
+- WiX ICE contract validation remains unavailable on this workstation because
+  the Windows Installer service cannot be accessed. Artifact generation and
+  independent release-manifest verification pass; the existing environment
+  limitation is accepted for this candidate and is not expanded in V2.1.

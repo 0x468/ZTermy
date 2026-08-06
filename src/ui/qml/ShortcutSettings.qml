@@ -159,13 +159,9 @@ ColumnLayout {
                         const result = pane.controller.setActionShortcut(row.actionData.id, "");
                         pane.validationError = result.valid ? "" : result.error;
                     }
-                    contentItem: Text {
-                        text: "×"
+                    contentItem: AppIcon {
+                        name: "close"
                         color: clearAction.enabled ? Theme.textMuted : Theme.textSubtle
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                        font.family: Theme.uiFont
-                        font.pixelSize: 18
                     }
                     background: Rectangle {
                         radius: 15
