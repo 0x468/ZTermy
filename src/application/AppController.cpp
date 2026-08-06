@@ -691,7 +691,29 @@ void AppController::attachTerminal(ui::TerminalItem *terminal)
 
 void AppController::shutdown() noexcept
 {
+    if (m_shutdownStarted)
+    {
+        return;
+    }
+    m_shutdownStarted = true;
     clearHostKeyPrompt();
+
+    if (m_transferManager)
+    {
+        m_transferManager->requestStop();
+    }
+    for (const auto &tab : m_tabs)
+    {
+        if (tab->sftpSession)
+        {
+            tab->sftpSession->requestStop();
+        }
+    }
+    for (const auto &session : m_stoppingSftpSessions)
+    {
+        session->requestStop();
+    }
+
     for (const auto &tab : m_tabs)
     {
         if (tab->local)
@@ -702,8 +724,19 @@ void AppController::shutdown() noexcept
         {
             tab->ssh->stop();
         }
+        if (tab->sessionLog)
+        {
+            tab->sessionLog->stop();
+        }
+    }
+    if (m_transferManager)
+    {
+        m_transferManager->shutdown();
+        m_transferManager.reset();
     }
     m_tabs.clear();
+    m_stoppingSftpSessions.clear();
+    m_transferTasks.clear();
     m_activeTabId.clear();
     if (m_terminal != nullptr)
     {

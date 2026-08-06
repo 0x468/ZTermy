@@ -103,6 +103,7 @@ private slots:
     void persistsApplicationSettings();
     void managesActionShortcutsAndDispatchContext();
     void managesMultipleLocalTerminalTabs();
+    void orderlyShutdownStopsAllLocalTabsOnce();
     void persistsQuickCommandsAndPerTabWorkbenchState();
     void importsAndExportsScriptLibraryWithoutOverwritingIds();
     void loadsRecentProfilesAndParsesQuickTargets();
@@ -785,6 +786,30 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
     QCOMPARE(sessionState->stops, 2);
     QVERIFY(tabsChanged.count() >= 4);
     QVERIFY(activeChanged.count() >= 4);
+}
+
+void AppControllerTests::orderlyShutdownStopsAllLocalTabsOnce()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const auto sessionState = std::make_shared<FakeLocalSessionState>();
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
+                                     directory.filePath(QStringLiteral("known_hosts.json")), [sessionState] {
+                                         return std::make_unique<FakeLocalTerminalSession>(sessionState);
+                                     });
+
+    QVERIFY(!controller.startLocalTerminal().isEmpty());
+    QVERIFY(!controller.startLocalTerminal().isEmpty());
+    QCOMPARE(sessionState->starts, 2);
+
+    controller.shutdown();
+    QCOMPARE(sessionState->stops, 2);
+    QVERIFY(controller.terminalTabs().isEmpty());
+    QVERIFY(controller.activeTerminalTabId().isEmpty());
+    QVERIFY(controller.transferTasks().isEmpty());
+
+    controller.shutdown();
+    QCOMPARE(sessionState->stops, 2);
 }
 
 void AppControllerTests::persistsQuickCommandsAndPerTabWorkbenchState()

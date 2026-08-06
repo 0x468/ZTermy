@@ -29,3 +29,12 @@ profiles, credentials, terminal data, or command history.
 
 Crash dumps are deliberately excluded because a dump can contain process memory.
 The owner must review and choose a dump explicitly before sharing it.
+
+## Second slice: orderly session and transfer shutdown
+
+Application shutdown now requests cancellation across all transfer and SFTP
+workers before waiting for any one owner, explicitly flushes per-tab session
+logs, and releases worker-owning services while the controller is still alive.
+The path is idempotent, rejects new transfer work after stopping begins, and
+preserves incomplete transfers as `interrupted` entries for explicit retry on
+the next launch.

@@ -50,6 +50,8 @@ public:
     enqueue(TransferTask task, TransferRequestProvider requestProvider, TransferExecutionOptions options = {});
     [[nodiscard]] TransferTasksPtr snapshot() const;
     void enableRecovery(QString path, TransferRecoveryRequestProviderFactory requestProviderFactory);
+    void requestStop() noexcept;
+    void shutdown() noexcept;
 
 public slots:
     void cancel(const QString &taskId);
@@ -121,6 +123,8 @@ private:
     std::unique_ptr<class TransferRecoveryStore> m_recoveryStore;
     TransferRecoveryRequestProviderFactory m_recoveryRequestProviderFactory;
     bool m_recoveryWriteFailed = false;
+    bool m_stopRequested = false;
+    bool m_shutdownComplete = false;
 };
 
 } // namespace ztermy::sftp

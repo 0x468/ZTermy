@@ -85,19 +85,41 @@ TransferManager::TransferManager(const std::size_t concurrencyLimit, SftpClientF
 
 TransferManager::~TransferManager()
 {
+    requestStop();
+    m_workers.clear();
+}
+
+void TransferManager::requestStop() noexcept
+{
+    if (m_stopRequested)
+    {
+        return;
+    }
+    m_stopRequested = true;
     for (auto &[id, worker] : m_workers)
     {
         (void)id;
         worker.thread.request_stop();
         worker.context->hostKeyAvailable.notify_all();
     }
+}
+
+void TransferManager::shutdown() noexcept
+{
+    if (m_shutdownComplete)
+    {
+        return;
+    }
+    requestStop();
     m_workers.clear();
+    persistRecovery();
+    m_shutdownComplete = true;
 }
 
 std::expected<void, TransferQueueError>
 TransferManager::enqueue(TransferTask task, TransferRequestProvider requestProvider, TransferExecutionOptions options)
 {
-    if (!requestProvider)
+    if (m_stopRequested || !requestProvider)
     {
         return std::unexpected(TransferQueueError::InvalidTask);
     }
@@ -120,6 +142,10 @@ TransferTasksPtr TransferManager::snapshot() const
 
 void TransferManager::enableRecovery(QString path, TransferRecoveryRequestProviderFactory requestProviderFactory)
 {
+    if (m_stopRequested)
+    {
+        return;
+    }
     m_recoveryStore = std::make_unique<TransferRecoveryStore>(std::move(path));
     m_recoveryRequestProviderFactory = std::move(requestProviderFactory);
     auto recovered = m_recoveryStore->load();
@@ -258,6 +284,10 @@ void TransferManager::rejectHostKey(const QString &taskIdentifier)
 
 void TransferManager::schedule()
 {
+    if (m_stopRequested)
+    {
+        return;
+    }
     while (m_queue.runningCount() < m_queue.concurrencyLimit())
     {
         auto next = m_queue.takeNext(QDateTime::currentMSecsSinceEpoch());
@@ -370,29 +400,49 @@ void TransferManager::startWorker(const TransferTask &task, const WorkSpec &spec
 
 void TransferManager::deliverCredentialError(const QString &taskIdValue, const TransferCredentialError error)
 {
+    if (m_stopRequested)
+    {
+        return;
+    }
     handleCredentialError(taskId(taskIdValue), error);
 }
 
 void TransferManager::deliverHostKeyConfirmation(const QString &taskIdValue, const QString &algorithm,
                                                  const QString &fingerprint)
 {
+    if (m_stopRequested)
+    {
+        return;
+    }
     emit hostKeyConfirmationRequired(taskIdValue, algorithm, fingerprint);
 }
 
 void TransferManager::deliverHostKeyChange(const QString &taskIdValue, const QString &algorithm,
                                            const QString &fingerprint)
 {
+    if (m_stopRequested)
+    {
+        return;
+    }
     emit hostKeyChanged(taskIdValue, algorithm, fingerprint);
 }
 
 void TransferManager::deliverProgress(const QString &taskIdValue, const qulonglong transferredBytes,
                                       const qulonglong totalBytes, const qulonglong bytesPerSecond)
 {
+    if (m_stopRequested)
+    {
+        return;
+    }
     handleProgress(taskId(taskIdValue), transferredBytes, totalBytes, bytesPerSecond);
 }
 
 void TransferManager::deliverResult(const QString &taskIdValue, TransferExecutionResult result)
 {
+    if (m_stopRequested)
+    {
+        return;
+    }
     handleResult(taskId(taskIdValue), std::move(result));
 }
 

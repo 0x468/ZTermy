@@ -427,6 +427,7 @@ private:
     bool m_hostKeyPromptVisible = false;
     bool m_hostKeyChangedWarning = false;
     bool m_hostKeyForSftp = false;
+    bool m_shutdownStarted = false;
     QString m_hostKeyTransferTaskId;
 };
 

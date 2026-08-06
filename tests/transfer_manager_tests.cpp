@@ -200,6 +200,7 @@ private slots:
     void exposesLockedCredentialsAsNeedsAttention();
     void resumesExplicitConflictDecision();
     void restoresInterruptedTransferForExplicitRetry();
+    void orderlyShutdownPreservesInterruptedTransferForRetry();
     void destructionCancelsInFlightWorkers();
 };
 
@@ -255,6 +256,40 @@ void TransferManagerTests::destructionCancelsInFlightWorkers()
     }
 
     QTRY_COMPARE(state->activeClients.load(), 0);
+}
+
+void TransferManagerTests::orderlyShutdownPreservesInterruptedTransferForRetry()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString source = directory.filePath(QStringLiteral("source.txt"));
+    QVERIFY(writeLocal(source));
+    const QString recoveryPath = directory.filePath(QStringLiteral("transfer_recovery.json"));
+    const auto state = std::make_shared<ManagerFakeState>();
+    state->holdWrites = true;
+
+    ztermy::sftp::TransferManager manager(1, clientFactory(state));
+    manager.enableRecovery(recoveryPath, [](const std::string &) {
+        return requestProvider();
+    });
+    QVERIFY(manager.enqueue(uploadTask("orderly-shutdown", source), requestProvider()));
+    QTRY_COMPARE(state->activeClients.load(), 1);
+
+    manager.requestStop();
+    manager.shutdown();
+    manager.shutdown();
+    QCOMPARE(state->activeClients.load(), 0);
+    const auto rejected = manager.enqueue(uploadTask("late", source), requestProvider());
+    QVERIFY(!rejected);
+    QCOMPARE(rejected.error(), ztermy::sftp::TransferQueueError::InvalidTask);
+
+    ztermy::sftp::TransferRecoveryStore store(recoveryPath);
+    const auto interrupted = store.load();
+    QVERIFY(interrupted.has_value());
+    QCOMPARE(interrupted->size(), std::size_t{1});
+    QCOMPARE(interrupted->front().id, std::string("orderly-shutdown"));
+    QCOMPARE(interrupted->front().status, ztermy::sftp::TransferStatus::Failed);
+    QCOMPARE(interrupted->front().errorCode, std::string("interrupted"));
 }
 
 void TransferManagerTests::exposesLockedCredentialsAsNeedsAttention()
