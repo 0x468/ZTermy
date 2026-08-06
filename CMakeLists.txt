@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 
 project(
     ztermy
-    VERSION 0.2.0
+    VERSION 0.2.1
     DESCRIPTION "A native Windows SSH terminal"
     LANGUAGES C CXX RC
 )
@@ -180,6 +180,19 @@ target_link_libraries(ztermy_application_actions PUBLIC Qt6::Core Qt6::Gui)
 add_library(ztermy_core_diagnostics STATIC
     src/core/diagnostics/LatencyHistogram.cpp
     src/core/diagnostics/LatencyHistogram.h
+)
+
+add_library(ztermy_application_diagnostics STATIC
+    src/application/diagnostics/DiagnosticReporter.cpp
+    src/application/diagnostics/DiagnosticReporter.h
+)
+target_compile_features(ztermy_application_diagnostics PUBLIC cxx_std_23)
+target_include_directories(ztermy_application_diagnostics PUBLIC src)
+target_link_libraries(ztermy_application_diagnostics
+    PUBLIC
+        ztermy_core_config
+        Qt6::Core
+        Qt6::Gui
 )
 
 add_library(ztermy_credential_vault STATIC
@@ -742,6 +755,7 @@ qt_add_translations(ztermy
         ztermy_ssh_session
         ztermy_terminal_ui
         ztermy_application_actions
+        ztermy_application_diagnostics
     TS_FILES ${ZTERMY_TRANSLATION_FILES}
     RESOURCE_PREFIX "/i18n"
     LUPDATE_OPTIONS -no-obsolete
@@ -795,6 +809,7 @@ endif()
 
 target_link_libraries(ztermy PRIVATE
     ztermy_application_actions
+    ztermy_application_diagnostics
     ztermy_credential_vault
     ztermy_core_config
     ztermy_ssh_persistence
@@ -977,6 +992,13 @@ if(MSVC)
         /Zc:__cplusplus
     )
 
+    target_compile_options(ztermy_application_diagnostics PRIVATE
+        /permissive-
+        /utf-8
+        /W4
+        /Zc:__cplusplus
+    )
+
     target_compile_options(ztermy_core_config PRIVATE
         /permissive-
         /utf-8
@@ -1064,6 +1086,24 @@ endif()
 
 if(BUILD_TESTING)
     find_package(Qt6 6.8 REQUIRED COMPONENTS Network Test)
+
+    qt_add_executable(ztermy_diagnostic_reporter_tests
+        tests/diagnostic_reporter_tests.cpp
+    )
+    target_compile_features(ztermy_diagnostic_reporter_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_diagnostic_reporter_tests PRIVATE
+        ztermy_application_diagnostics
+        Qt6::Test
+    )
+    if(MSVC)
+        target_compile_options(ztermy_diagnostic_reporter_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+    add_test(NAME diagnostic-reporter COMMAND ztermy_diagnostic_reporter_tests)
 
     qt_add_executable(ztermy_application_paths_tests
         tests/application_paths_tests.cpp
@@ -2007,6 +2047,7 @@ if(BUILD_TESTING)
     add_custom_target(ztermy_test_binaries
         DEPENDS
             ztermy_action_registry_tests
+            ztermy_diagnostic_reporter_tests
             ztermy_application_paths_tests
             ztermy_application_settings_tests
             ztermy_localization_manager_tests

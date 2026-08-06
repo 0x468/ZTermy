@@ -9,6 +9,7 @@ Rectangle {
     id: root
 
     required property var controller
+    required property var diagnostics
     required property var fontCatalog
     required property var windowChrome
     readonly property int titleBarHeight: Theme.titleBarHeight
@@ -1818,6 +1819,7 @@ Rectangle {
                 anchors.fill: parent
                 visible: root.currentPage === "settings"
                 controller: root.controller
+                diagnostics: root.diagnostics
                 fontCatalog: root.fontCatalog
                 onAppearancePreviewEnded: root.endWindowAppearancePreview()
                 onAppearancePreviewRequested: (theme, opacity, backdrop, accent, customAccent) => {

@@ -1,6 +1,7 @@
 #include "application/AppController.h"
 #include "application/FontCatalog.h"
 #include "application/LocalizationManager.h"
+#include "application/diagnostics/DiagnosticReporter.h"
 #include "core/config/ApplicationPaths.h"
 #include "core/logging/Logging.h"
 #include "platform/windows/CrashDiagnostics.h"
@@ -575,6 +576,7 @@ struct ResizeHitRuntimeCase
         processWindowEventsFor(std::chrono::milliseconds{500});
         auto *brandLockup = rootObject->findChild<QObject *>(QStringLiteral("settingsApplicationBrandLockup"));
         auto *releaseIdentity = rootObject->findChild<QObject *>(QStringLiteral("settingsReleaseIdentityCard"));
+        auto *diagnosticsCard = rootObject->findChild<QObject *>(QStringLiteral("settingsDiagnosticsCard"));
         auto *buildInfo = rootObject->findChild<QObject *>(QStringLiteral("settingsApplicationBuildInfo"));
         applicationCaptured = captureLayout(window, outputDirectory, capturePrefix + QStringLiteral("-application"));
         applicationMatches =
@@ -583,7 +585,9 @@ struct ResizeHitRuntimeCase
             && releaseIdentity != nullptr && releaseIdentity->property("visible").toBool()
             && releaseIdentity->property("codename").toString() == QStringLiteral("此")
             && releaseIdentity->property("verse").toString() == QStringLiteral("天长地久有时尽，此恨绵绵无绝期。")
-            && buildInfo != nullptr && buildInfo->property("visible").toBool()
+            && diagnosticsCard != nullptr && diagnosticsCard->property("visible").toBool()
+            && diagnosticsCard->property("width").toReal() > 0.0 && buildInfo != nullptr
+            && buildInfo->property("visible").toBool()
             && buildInfo->property("text").toString().contains(QCoreApplication::applicationVersion());
         settingsPane->setProperty("currentCategory", QStringLiteral("security"));
         processWindowEventsFor(std::chrono::milliseconds{200});
@@ -2121,6 +2125,7 @@ int main(int argc, char *argv[])
 
     ztermy::logging::initialize(paths->logsDirectory);
     ztermy::diagnostics::initialize(paths->crashDirectory);
+    ztermy::diagnostics::DiagnosticReporter diagnosticReporter(*paths);
     qInfo().noquote() << "storageMode=" << ztermy::config::storageModeName(paths->mode)
                       << "dataDirectory=" << paths->dataDirectory;
     QQuickStyle::setStyle(QStringLiteral("Basic"));
@@ -2170,6 +2175,8 @@ int main(int argc, char *argv[])
     QVariantMap initialProperties;
     initialProperties.insert(QStringLiteral("controller"), QVariant::fromValue(static_cast<QObject *>(&appController)));
     initialProperties.insert(QStringLiteral("fontCatalog"), QVariant::fromValue(static_cast<QObject *>(&fontCatalog)));
+    initialProperties.insert(QStringLiteral("diagnostics"),
+                             QVariant::fromValue(static_cast<QObject *>(&diagnosticReporter)));
     if (!window.load(initialProperties))
     {
         return EXIT_FAILURE;

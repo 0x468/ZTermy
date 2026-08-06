@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 
 Rectangle {
@@ -9,6 +10,7 @@ Rectangle {
 
     objectName: "settingsPane"
     required property var controller
+    required property var diagnostics
     required property var fontCatalog
     property bool loadingDraft: false
     property string statusMessage: ""
@@ -530,6 +532,79 @@ Rectangle {
                 codename: "此"
                 version: Qt.application.version
                 verse: "天长地久有时尽，此恨绵绵无绝期。"
+            }
+
+            SectionCard {
+                objectName: "settingsDiagnosticsCard"
+                Layout.fillWidth: true
+                visible: pane.currentCategory === "application"
+                heading: qsTr("Diagnostics")
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacingControl
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("Export a privacy-safe environment summary for troubleshooting. Log text, crash dumps, host profiles, credentials, command history, and terminal content are never included.")
+                        color: Theme.textMuted
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textBody
+                    }
+
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: pane.compactLayout ? 1 : 3
+                        columnSpacing: Theme.spacingControl
+                        rowSpacing: Theme.spacingControl
+
+                        ActionButton {
+                            objectName: "settingsExportDiagnostics"
+                            Layout.fillWidth: true
+                            text: qsTr("Export diagnostic report")
+                            accessibleName: text
+                            iconName: "save"
+                            variant: "primary"
+                            onClicked: diagnosticReportDialog.open()
+                        }
+
+                        ActionButton {
+                            objectName: "settingsOpenLogsDirectory"
+                            Layout.fillWidth: true
+                            text: qsTr("Open logs folder")
+                            accessibleName: text
+                            iconName: "folder"
+                            onClicked: {
+                                const opened = pane.diagnostics.openLogsDirectory();
+                                pane.statusIsError = !opened;
+                                pane.statusMessage = opened ? qsTr("Logs folder opened.") : pane.diagnostics.lastError;
+                            }
+                        }
+
+                        ActionButton {
+                            objectName: "settingsOpenCrashDirectory"
+                            Layout.fillWidth: true
+                            text: qsTr("Open crash reports")
+                            accessibleName: text
+                            iconName: "folder"
+                            onClicked: {
+                                const opened = pane.diagnostics.openCrashDirectory();
+                                pane.statusIsError = !opened;
+                                pane.statusMessage = opened ? qsTr("Crash reports folder opened.") : pane.diagnostics.lastError;
+                            }
+                        }
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("Crash dumps may contain in-memory terminal or credential data. Review them before sharing; ztermy never adds them to the exported report.")
+                        color: Theme.dangerText
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
+                    }
+                }
             }
 
             SectionCard {
@@ -1215,6 +1290,20 @@ Rectangle {
         acceptText: qsTr("Migrate and remove")
         destructive: pane.credentialStorageToken() === "session"
         onAccepted: pane.performCredentialMigration()
+    }
+
+    FileDialog {
+        id: diagnosticReportDialog
+
+        title: qsTr("Export diagnostic report")
+        fileMode: FileDialog.SaveFile
+        nameFilters: [qsTr("Diagnostic reports (*.json)"), qsTr("All files (*)")]
+        defaultSuffix: "json"
+        onAccepted: {
+            const exported = pane.diagnostics.exportReport(selectedFile);
+            pane.statusIsError = !exported;
+            pane.statusMessage = exported ? qsTr("Diagnostic report exported.") : pane.diagnostics.lastError;
+        }
     }
 
     ConfirmationDialog {
