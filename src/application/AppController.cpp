@@ -81,6 +81,31 @@ constexpr std::size_t maximumRecentHostProfiles = 6;
     return QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size()));
 }
 
+[[nodiscard]] QString normalizedTerminalWorkingDirectory(const std::string &value)
+{
+    if (value.empty() || value.size() > 4096 || value.find('\0') != std::string::npos)
+    {
+        return {};
+    }
+    const QByteArray encoded(value.data(), static_cast<qsizetype>(value.size()));
+    QString path;
+    if (encoded.startsWith("file://"))
+    {
+        const QUrl url = QUrl::fromEncoded(encoded, QUrl::StrictMode);
+        if (!url.isValid() || url.scheme() != QStringLiteral("file"))
+        {
+            return {};
+        }
+        path = url.path(QUrl::FullyDecoded);
+    }
+    else
+    {
+        path = QString::fromUtf8(encoded);
+    }
+    const auto normalized = ztermy::sftp::normalizeRemotePath(utf8String(path));
+    return normalized ? utf8QString(*normalized) : QString{};
+}
+
 [[nodiscard]] std::optional<ztermy::workbench::ShellScope> quickCommandShellScope(const QString &value)
 {
     if (value == QStringLiteral("any"))
@@ -1110,6 +1135,24 @@ QString AppController::activeSftpError() const
     return tab == nullptr ? QString{} : tab->sftpError;
 }
 
+QString AppController::activeSftpViewMode() const
+{
+    const TerminalTab *tab = activeTab();
+    return tab == nullptr ? QStringLiteral("list") : tab->sftpViewMode;
+}
+
+bool AppController::activeSftpFollowTerminalDirectory() const noexcept
+{
+    const TerminalTab *tab = activeTab();
+    return tab != nullptr && tab->followTerminalDirectory;
+}
+
+QString AppController::activeTerminalWorkingDirectory() const
+{
+    const TerminalTab *tab = activeTab();
+    return tab == nullptr ? QString{} : tab->terminalWorkingDirectory;
+}
+
 QVariantList AppController::transferTasks() const
 {
     return m_transferTasks;
@@ -1978,6 +2021,60 @@ bool AppController::toggleActiveSftpBookmark()
     return true;
 }
 
+bool AppController::setSftpViewMode(const QString &mode)
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || (mode != QStringLiteral("list") && mode != QStringLiteral("tree")))
+    {
+        return false;
+    }
+    if (tab->sftpViewMode == mode)
+    {
+        return true;
+    }
+    tab->sftpViewMode = mode;
+    if (tab->sftpModel != nullptr)
+    {
+        tab->sftpModel->setViewMode(mode);
+    }
+    persistWorkspaceState(*tab);
+    emit sftpChanged();
+    return true;
+}
+
+bool AppController::navigateSftpToTerminalDirectory()
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || tab->sftpSession == nullptr || tab->terminalWorkingDirectory.isEmpty())
+    {
+        return false;
+    }
+    requestSftpDirectory(*tab, tab->terminalWorkingDirectory);
+    return true;
+}
+
+bool AppController::setSftpFollowTerminalDirectory(const bool enabled)
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || (enabled && tab->kind != TerminalTabKind::Ssh))
+    {
+        return false;
+    }
+    if (tab->followTerminalDirectory == enabled)
+    {
+        return true;
+    }
+    tab->followTerminalDirectory = enabled;
+    persistWorkspaceState(*tab);
+    emit sftpChanged();
+    if (enabled && tab->sftpSession != nullptr && !tab->terminalWorkingDirectory.isEmpty()
+        && tab->terminalWorkingDirectory != tab->sftpPath)
+    {
+        requestSftpDirectory(*tab, tab->terminalWorkingDirectory);
+    }
+    return true;
+}
+
 bool AppController::createSftpDirectory(const QString &name)
 {
     TerminalTab *tab = activeTab();
@@ -2585,6 +2682,18 @@ bool AppController::startSftpSession(TerminalTab &tab)
     }
     tab.sftpModel = std::make_unique<sftp::SftpDirectoryModel>();
     tab.sftpModel->setShowHidden(m_settings.sftpShowHiddenFiles);
+    tab.sftpModel->setViewMode(tab.sftpViewMode);
+    const QString tabId = tab.id;
+    QObject::connect(tab.sftpModel.get(), &sftp::SftpDirectoryModel::treeDirectoryRequested, this,
+                     [this, tabId](const QString &remotePath) {
+                         TerminalTab *updated = findTab(tabId);
+                         if (updated == nullptr || updated->sftpSession == nullptr)
+                         {
+                             return;
+                         }
+                         updated->sftpSession->requestTreeDirectory(++updated->sftpTreeRequestId,
+                                                                    updated->sftpGeneration, remotePath);
+                     });
     auto request = sftpConnectionRequest(tab);
     if (!request)
     {
@@ -3601,9 +3710,23 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
                              return;
                          }
                          updated->snapshot = snapshot;
+                         const QString workingDirectory =
+                             snapshot ? normalizedTerminalWorkingDirectory(snapshot->workingDirectory) : QString{};
+                         const bool workingDirectoryChanged = updated->terminalWorkingDirectory != workingDirectory;
+                         updated->terminalWorkingDirectory = workingDirectory;
                          if (m_terminal != nullptr && m_activeTabId == tabId)
                          {
                              m_terminal->setSnapshot(snapshot);
+                         }
+                         if (workingDirectoryChanged && updated->followTerminalDirectory
+                             && updated->sftpSession != nullptr && updated->sftpState == QStringLiteral("ready")
+                             && !workingDirectory.isEmpty() && workingDirectory != updated->sftpPath)
+                         {
+                             requestSftpDirectory(*updated, workingDirectory);
+                         }
+                         else if (workingDirectoryChanged && m_activeTabId == tabId)
+                         {
+                             emit sftpChanged();
                          }
                      });
     QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::statusChanged, this,
@@ -3808,6 +3931,28 @@ void AppController::connectSftpTabSignals(TerminalTab &tab)
                          {
                              emit sftpChanged();
                          }
+                     });
+    QObject::connect(tab.sftpSession.get(), &sftp::SftpSession::treeDirectoryReady, this,
+                     [this, tabId](const quint64, const quint64 generation, const QString &remotePath,
+                                   const sftp::DirectoryListingPtr &entries) {
+                         TerminalTab *updated = findTab(tabId);
+                         if (updated == nullptr || updated->sftpModel == nullptr
+                             || generation != updated->sftpGeneration)
+                         {
+                             return;
+                         }
+                         updated->sftpModel->applyTreeEntries(remotePath, entries);
+                     });
+    QObject::connect(tab.sftpSession.get(), &sftp::SftpSession::treeDirectoryFailed, this,
+                     [this, tabId](const quint64, const quint64 generation, const QString &remotePath,
+                                   const ssh::SshTransportErrorKind) {
+                         TerminalTab *updated = findTab(tabId);
+                         if (updated == nullptr || updated->sftpModel == nullptr
+                             || generation != updated->sftpGeneration)
+                         {
+                             return;
+                         }
+                         updated->sftpModel->applyTreeError(remotePath, tr("This folder could not be expanded."));
                      });
     QObject::connect(tab.sftpSession.get(), &sftp::SftpSession::operationSucceeded, this,
                      [this, tabId](const quint64, const sftp::SftpOperationKind) {
@@ -4277,6 +4422,8 @@ void AppController::applyWorkspaceState(TerminalTab &tab) const
     tab.sftpRequestedPath = tab.sftpPath;
     tab.workbenchPage = utf8QString(state->workbenchPage);
     tab.workbenchSide = utf8QString(state->workbenchSide);
+    tab.sftpViewMode = utf8QString(state->sftpViewMode);
+    tab.followTerminalDirectory = state->followTerminalDirectory;
     tab.workbenchWidth = state->workbenchWidth;
     tab.composerHeight = state->composerHeight;
 }
@@ -4296,6 +4443,8 @@ void AppController::persistWorkspaceState(const TerminalTab &tab, const bool sho
     }
     state.workbenchPage = utf8String(tab.workbenchPage);
     state.workbenchSide = utf8String(tab.workbenchSide);
+    state.sftpViewMode = utf8String(tab.sftpViewMode);
+    state.followTerminalDirectory = tab.followTerminalDirectory;
     state.workbenchWidth = tab.workbenchWidth;
     state.composerHeight = tab.composerHeight;
     if (!m_workspaceStateStore.save(candidate))

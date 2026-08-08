@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 
 project(
     ztermy
-    VERSION 0.2.3
+    VERSION 0.2.4
     DESCRIPTION "A native Windows SSH terminal"
     LANGUAGES C CXX RC
 )
@@ -516,6 +516,7 @@ set(ZTERMY_INTERFACE_ICON_FILES
     resources/icons/application.svg
     resources/icons/check.svg
     resources/icons/chevron-down.svg
+    resources/icons/chevron-right.svg
     resources/icons/chevron-up.svg
     resources/icons/close.svg
     resources/icons/commands.svg
@@ -527,10 +528,13 @@ set(ZTERMY_INTERFACE_ICON_FILES
     resources/icons/eye.svg
     resources/icons/file.svg
     resources/icons/folder.svg
+    resources/icons/follow.svg
     resources/icons/history.svg
     resources/icons/home.svg
     resources/icons/hosts.svg
     resources/icons/lock.svg
+    resources/icons/list.svg
+    resources/icons/locate.svg
     resources/icons/minus.svg
     resources/icons/more.svg
     resources/icons/new-folder.svg
@@ -546,6 +550,7 @@ set(ZTERMY_INTERFACE_ICON_FILES
     resources/icons/swap-horizontal.svg
     resources/icons/terminal.svg
     resources/icons/transfer.svg
+    resources/icons/tree.svg
     resources/icons/trash.svg
     resources/icons/upload.svg
 )

@@ -53,6 +53,7 @@ public slots:
     void confirmHostKey(bool remember);
     void rejectHostKey();
     void requestDirectory(quint64 requestId, quint64 generation, const QString &remotePath);
+    void requestTreeDirectory(quint64 requestId, quint64 generation, const QString &remotePath);
     void requestCreateDirectory(quint64 requestId, const QString &remotePath);
     void requestCreateFile(quint64 requestId, const QString &remotePath);
     void requestRenameEntry(quint64 requestId, const QString &sourcePath, const QString &destinationPath);
@@ -68,6 +69,10 @@ signals:
     void hostKeyChanged(const QString &algorithm, const QString &fingerprint);
     void directoryReady(quint64 requestId, quint64 generation, const QString &remotePath,
                         ztermy::sftp::DirectoryListingPtr entries);
+    void treeDirectoryReady(quint64 requestId, quint64 generation, const QString &remotePath,
+                            ztermy::sftp::DirectoryListingPtr entries);
+    void treeDirectoryFailed(quint64 requestId, quint64 generation, const QString &remotePath,
+                             ztermy::ssh::SshTransportErrorKind error);
     void operationSucceeded(quint64 requestId, ztermy::sftp::SftpOperationKind operation);
     void operationFailed(quint64 requestId, ztermy::sftp::SftpOperationKind operation,
                          ztermy::ssh::SshTransportErrorKind error);
@@ -82,6 +87,10 @@ private slots:
     void deliverHostKeyChange(const QString &algorithm, const QString &fingerprint);
     void deliverDirectory(quint64 requestId, quint64 generation, const QString &remotePath,
                           ztermy::sftp::DirectoryListingPtr entries);
+    void deliverTreeDirectory(quint64 requestId, quint64 generation, const QString &remotePath,
+                              ztermy::sftp::DirectoryListingPtr entries);
+    void deliverTreeDirectoryFailure(quint64 requestId, quint64 generation, const QString &remotePath,
+                                     ztermy::ssh::SshTransportErrorKind error);
     void deliverOperationSucceeded(quint64 requestId, ztermy::sftp::SftpOperationKind operation);
     void deliverOperationFailed(quint64 requestId, ztermy::sftp::SftpOperationKind operation,
                                 ztermy::ssh::SshTransportErrorKind error);
@@ -96,6 +105,12 @@ private:
     struct CreateDirectoryCommand final
     {
         quint64 requestId = 0;
+        std::string remotePath;
+    };
+    struct ListTreeDirectoryCommand final
+    {
+        quint64 requestId = 0;
+        quint64 generation = 0;
         std::string remotePath;
     };
     struct CreateFileCommand final
@@ -115,8 +130,8 @@ private:
         std::string remotePath;
         bool directory = false;
     };
-    using Command = std::variant<ListDirectoryCommand, CreateDirectoryCommand, CreateFileCommand, RenameEntryCommand,
-                                 RemoveEntryCommand>;
+    using Command = std::variant<ListDirectoryCommand, ListTreeDirectoryCommand, CreateDirectoryCommand,
+                                 CreateFileCommand, RenameEntryCommand, RemoveEntryCommand>;
 
     void run(ssh::SshConnectionRequest &request, const std::stop_token &stopToken);
     void processCommand(SftpClient &client, Command command, const std::stop_token &stopToken);
@@ -130,6 +145,10 @@ private:
     void postHostKeyConfirmation(const QString &algorithm, const QString &fingerprint);
     void postHostKeyChange(const QString &algorithm, const QString &fingerprint);
     void postDirectory(quint64 requestId, quint64 generation, const QString &remotePath, DirectoryListingPtr entries);
+    void postTreeDirectory(quint64 requestId, quint64 generation, const QString &remotePath,
+                           DirectoryListingPtr entries);
+    void postTreeDirectoryFailure(quint64 requestId, quint64 generation, const QString &remotePath,
+                                  ssh::SshTransportErrorKind error);
     void postOperationSucceeded(quint64 requestId, SftpOperationKind operation);
     void postOperationFailed(quint64 requestId, SftpOperationKind operation, ssh::SshTransportErrorKind error);
 

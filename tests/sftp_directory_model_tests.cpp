@@ -20,6 +20,7 @@ private slots:
     void tracksSelectionAndClearsItOnRefresh();
     void exposesParentDirectoryOutsideRoot();
     void handlesLargeDirectoryWithinBudget();
+    void expandsTreeDirectoriesLazilyAndSurfacesErrors();
 };
 
 ztermy::sftp::DirectoryListingPtr listing()
@@ -43,6 +44,49 @@ ztermy::sftp::DirectoryListingPtr listing()
             .type = ztermy::sftp::EntryType::Directory,
         },
     });
+}
+
+void SftpDirectoryModelTests::expandsTreeDirectoriesLazilyAndSurfacesErrors()
+{
+    ztermy::sftp::SftpDirectoryModel model;
+    model.setViewMode(QStringLiteral("tree"));
+    QSignalSpy requestSpy(&model, &ztermy::sftp::SftpDirectoryModel::treeDirectoryRequested);
+    model.setEntries(listing(), QStringLiteral("/"));
+
+    QCOMPARE(model.viewMode(), QStringLiteral("tree"));
+    QCOMPARE(model.rowCount(), 2);
+    QVERIFY(model.data(model.index(0), ztermy::sftp::SftpDirectoryModel::ExpandableRole).toBool());
+    QVERIFY(model.toggleExpanded(0));
+    QCOMPARE(requestSpy.count(), 1);
+    QCOMPARE(requestSpy.front().front().toString(), QStringLiteral("/Alpha"));
+    QVERIFY(model.data(model.index(0), ztermy::sftp::SftpDirectoryModel::LoadingRole).toBool());
+
+    const auto children = std::make_shared<const ztermy::sftp::DirectoryListing>(ztermy::sftp::DirectoryListing{
+        ztermy::sftp::DirectoryEntry{.name = "nested",
+                                     .remotePath = "/Alpha/nested",
+                                     .type = ztermy::sftp::EntryType::Directory},
+        ztermy::sftp::DirectoryEntry{.name = "readme.txt",
+                                     .remotePath = "/Alpha/readme.txt",
+                                     .type = ztermy::sftp::EntryType::RegularFile,
+                                     .size = 7},
+    });
+    model.applyTreeEntries(QStringLiteral("/Alpha"), children);
+    QCOMPARE(model.rowCount(), 4);
+    QCOMPARE(model.data(model.index(1), ztermy::sftp::SftpDirectoryModel::DepthRole).toInt(), 1);
+    QCOMPARE(model.entry(2).value(QStringLiteral("remotePath")).toString(), QStringLiteral("/Alpha/readme.txt"));
+
+    QVERIFY(model.toggleExpanded(1));
+    QCOMPARE(requestSpy.count(), 2);
+    model.applyTreeError(QStringLiteral("/Alpha/nested"), QStringLiteral("denied"));
+    QCOMPARE(model.data(model.index(1), ztermy::sftp::SftpDirectoryModel::LoadErrorRole).toString(),
+             QStringLiteral("denied"));
+    QVERIFY(!model.data(model.index(1), ztermy::sftp::SftpDirectoryModel::LoadingRole).toBool());
+
+    QVERIFY(model.toggleExpanded(0));
+    QCOMPARE(model.rowCount(), 2);
+    QVERIFY(model.toggleExpanded(0));
+    QCOMPARE(model.rowCount(), 4);
+    QCOMPARE(requestSpy.count(), 2);
 }
 
 void SftpDirectoryModelTests::sortsDirectoriesAndFiltersHiddenEntries()

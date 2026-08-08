@@ -174,6 +174,17 @@ void SftpSession::requestDirectory(const quint64 requestId, const quint64 genera
     m_commandAvailable.notify_all();
 }
 
+void SftpSession::requestTreeDirectory(const quint64 requestId, const quint64 generation, const QString &remotePath)
+{
+    auto path = normalizedPath(remotePath);
+    if (!path)
+    {
+        postTreeDirectoryFailure(requestId, generation, remotePath, ssh::SshTransportErrorKind::InvalidArgument);
+        return;
+    }
+    enqueue(ListTreeDirectoryCommand{.requestId = requestId, .generation = generation, .remotePath = std::move(*path)});
+}
+
 void SftpSession::requestCreateDirectory(const quint64 requestId, const QString &remotePath)
 {
     auto path = normalizedPath(remotePath);
@@ -327,6 +338,18 @@ void SftpSession::processCommand(SftpClient &client, Command command, const std:
                         QString::fromUtf8(list.remotePath.data(), static_cast<qsizetype>(list.remotePath.size())),
                         std::make_shared<const DirectoryListing>(std::move(*result)));
                 }
+            },
+            [this, &client, &stopToken](const ListTreeDirectoryCommand &list) {
+                auto result = client.listDirectory(list.remotePath, stopToken);
+                const QString path =
+                    QString::fromUtf8(list.remotePath.data(), static_cast<qsizetype>(list.remotePath.size()));
+                if (!result)
+                {
+                    postTreeDirectoryFailure(list.requestId, list.generation, path, result.error().kind);
+                    return;
+                }
+                postTreeDirectory(list.requestId, list.generation, path,
+                                  std::make_shared<const DirectoryListing>(std::move(*result)));
             },
             [this, &client, &stopToken](const CreateDirectoryCommand &create) {
                 auto result = client.createDirectory(create.remotePath, stopToken);
@@ -522,6 +545,50 @@ void SftpSession::deliverDirectory(const quint64 requestId, const quint64 genera
                                    DirectoryListingPtr entries)
 {
     emit directoryReady(requestId, generation, remotePath, std::move(entries));
+}
+
+void SftpSession::postTreeDirectory(const quint64 requestId, const quint64 generation, const QString &remotePath,
+                                    DirectoryListingPtr entries)
+{
+    if (QThread::currentThread() == thread())
+    {
+        deliverTreeDirectory(requestId, generation, remotePath, std::move(entries));
+        return;
+    }
+    if (!QMetaObject::invokeMethod(this, "deliverTreeDirectory", Qt::QueuedConnection, Q_ARG(quint64, requestId),
+                                   Q_ARG(quint64, generation), Q_ARG(QString, remotePath),
+                                   Q_ARG(ztermy::sftp::DirectoryListingPtr, entries)))
+    {
+        qWarning("SFTP tree directory result could not be queued to its owner thread");
+    }
+}
+
+void SftpSession::deliverTreeDirectory(const quint64 requestId, const quint64 generation, const QString &remotePath,
+                                       DirectoryListingPtr entries)
+{
+    emit treeDirectoryReady(requestId, generation, remotePath, std::move(entries));
+}
+
+void SftpSession::postTreeDirectoryFailure(const quint64 requestId, const quint64 generation, const QString &remotePath,
+                                           const ssh::SshTransportErrorKind error)
+{
+    if (QThread::currentThread() == thread())
+    {
+        deliverTreeDirectoryFailure(requestId, generation, remotePath, error);
+        return;
+    }
+    if (!QMetaObject::invokeMethod(this, "deliverTreeDirectoryFailure", Qt::QueuedConnection, Q_ARG(quint64, requestId),
+                                   Q_ARG(quint64, generation), Q_ARG(QString, remotePath),
+                                   Q_ARG(ztermy::ssh::SshTransportErrorKind, error)))
+    {
+        qWarning("SFTP tree directory failure could not be queued to its owner thread");
+    }
+}
+
+void SftpSession::deliverTreeDirectoryFailure(const quint64 requestId, const quint64 generation,
+                                              const QString &remotePath, const ssh::SshTransportErrorKind error)
+{
+    emit treeDirectoryFailed(requestId, generation, remotePath, error);
 }
 
 void SftpSession::postOperationSucceeded(const quint64 requestId, const SftpOperationKind operation)

@@ -16,6 +16,8 @@ struct ProfileWorkspaceState final
     std::vector<std::string> bookmarkedRemotePaths;
     std::string workbenchPage = "history";
     std::string workbenchSide = "left";
+    std::string sftpViewMode = "list";
+    bool followTerminalDirectory = false;
     double workbenchWidth = 520.0;
     double composerHeight = 132.0;
 

@@ -790,6 +790,18 @@ std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot
     }
     result.scrollbar = {.total = scrollbar.total, .offset = scrollbar.offset, .visible = scrollbar.len};
 
+    GhosttyString workingDirectory{};
+    const GhosttyResult workingDirectoryResult =
+        ghostty_terminal_get(m_impl->terminal, GHOSTTY_TERMINAL_DATA_PWD, &workingDirectory);
+    if (workingDirectoryResult == GHOSTTY_SUCCESS && workingDirectory.ptr != nullptr)
+    {
+        result.workingDirectory.assign(reinterpret_cast<const char *>(workingDirectory.ptr), workingDirectory.len);
+    }
+    else if (workingDirectoryResult != GHOSTTY_SUCCESS && workingDirectoryResult != GHOSTTY_NO_VALUE)
+    {
+        return std::unexpected(ghosttyError(workingDirectoryResult));
+    }
+
     bool cursorInViewport = false;
     bool cursorVisible = false;
     ghostty_render_state_get(m_impl->renderState, GHOSTTY_RENDER_STATE_DATA_CURSOR_VIEWPORT_HAS_VALUE,

@@ -17,7 +17,7 @@ namespace ztermy::workbench
 namespace
 {
 
-constexpr int currentSchemaVersion = 3;
+constexpr int currentSchemaVersion = 4;
 
 QString text(const std::string &value)
 {
@@ -49,6 +49,8 @@ QJsonObject serializeProfile(const ProfileWorkspaceState &state)
         {QStringLiteral("bookmarkedRemotePaths"), bookmarks},
         {QStringLiteral("workbenchPage"), text(state.workbenchPage)},
         {QStringLiteral("workbenchSide"), text(state.workbenchSide)},
+        {QStringLiteral("sftpViewMode"), text(state.sftpViewMode)},
+        {QStringLiteral("followTerminalDirectory"), state.followTerminalDirectory},
         {QStringLiteral("workbenchWidth"), state.workbenchWidth},
         {QStringLiteral("composerHeight"), state.composerHeight},
     };
@@ -69,7 +71,10 @@ std::optional<ProfileWorkspaceState> parseProfile(const QJsonValue &value, const
         || !object.value(QStringLiteral("workbenchSide")).isString()
         || !object.value(QStringLiteral("workbenchWidth")).isDouble()
         || !object.value(QStringLiteral("composerHeight")).isDouble()
-        || (schemaVersion >= 3 && !bookmarksValue.isArray()))
+        || (schemaVersion >= 3 && !bookmarksValue.isArray())
+        || (schemaVersion >= 4
+            && (!object.value(QStringLiteral("sftpViewMode")).isString()
+                || !object.value(QStringLiteral("followTerminalDirectory")).isBool())))
     {
         return std::nullopt;
     }
@@ -81,6 +86,11 @@ std::optional<ProfileWorkspaceState> parseProfile(const QJsonValue &value, const
         .workbenchWidth = object.value(QStringLiteral("workbenchWidth")).toDouble(),
         .composerHeight = object.value(QStringLiteral("composerHeight")).toDouble(),
     };
+    if (schemaVersion >= 4)
+    {
+        state.sftpViewMode = bytes(object.value(QStringLiteral("sftpViewMode")).toString());
+        state.followTerminalDirectory = object.value(QStringLiteral("followTerminalDirectory")).toBool();
+    }
     const QJsonArray recent = recentValue.toArray();
     state.recentRemotePaths.reserve(static_cast<std::size_t>(recent.size()));
     for (const QJsonValue path : recent)

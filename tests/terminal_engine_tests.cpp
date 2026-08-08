@@ -30,7 +30,27 @@ private slots:
     void scrollsThroughHistory();
     void searchesAcrossScrollbackAndWrappedLines();
     void encodesPasteForTerminalMode();
+    void exposesShellWorkingDirectorySequences();
 };
+
+void TerminalEngineTests::exposesShellWorkingDirectorySequences()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 20, .rows = 4});
+    QVERIFY(result.has_value());
+    auto &engine = **result;
+
+    constexpr std::string_view osc7 = "\x1b]7;file://host/home/test/My%20Files\x07";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(osc7))));
+    auto snapshot = engine.snapshot();
+    QVERIFY(snapshot.has_value());
+    QCOMPARE(snapshot->workingDirectory, std::string("file://host/home/test/My%20Files"));
+
+    constexpr std::string_view osc1337 = "\x1b]1337;CurrentDir=/srv/project\x07";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(osc1337))));
+    snapshot = engine.snapshot();
+    QVERIFY(snapshot.has_value());
+    QCOMPARE(snapshot->workingDirectory, std::string("/srv/project"));
+}
 
 void TerminalEngineTests::rejectsInvalidGeometry()
 {

@@ -121,6 +121,9 @@ struct TerminalSnapshot
     TerminalDamageKind damage = TerminalDamageKind::full;
     std::vector<std::uint16_t> damagedRows;
     std::vector<TerminalCell> cells;
+    // Raw value emitted by OSC 7 / OSC 9 / OSC 1337. Consumers must
+    // validate and normalize it before treating it as a filesystem path.
+    std::string workingDirectory;
 
     [[nodiscard]] const TerminalCell &cell(const std::uint16_t column, const std::uint16_t row) const
     {

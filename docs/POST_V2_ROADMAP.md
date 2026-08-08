@@ -55,6 +55,19 @@ contracts are complete; tree SFTP, Explorer drag-out, script triggers, remote
 telemetry, and transfer pause/resume remain deferred until their backend
 contracts can be implemented without placeholder UI.
 
+## V2.4 — SFTP navigation continuity (`0.2.4`)
+
+- consume standard terminal current-directory reports without shell command
+  injection or prompt scraping;
+- add explicit locate and opt-in follow-terminal-directory actions;
+- add a real lazily loaded SFTP tree with independent node requests and
+  localized failures;
+- persist list/tree and follow preferences in workspace schema v4.
+
+The frozen boundary and backend contract are recorded in `V2_4_SCOPE.md` and
+ADR 0039. Explorer drag-out, script triggers, telemetry, and resumable transfer
+controls remain deferred.
+
 ## V3 decision gate (`0.3.0`)
 
 V3 starts only after the owner chooses a coherent major direction and records
@@ -63,6 +76,6 @@ file-management workspace, or deeper remote-development workflows. Cloud sync,
 collaboration, AI, serial support, and remote editing remain separate decisions
 and are not implied by V3.
 
-After V2.3 acceptance, daily-use defects may continue on `0.2.x`. The next
+After V2.4 acceptance, daily-use defects may continue on `0.2.x`. The next
 planned feature milestone is chosen at the V3 decision gate rather than by
 automatically incrementing to `0.3.0`.

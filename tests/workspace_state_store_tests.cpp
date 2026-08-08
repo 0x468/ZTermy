@@ -15,6 +15,7 @@ private slots:
     void savesAndLoadsVersionedNonSecretState();
     void migratesVersionOneWithoutHostCollapseState();
     void migratesVersionTwoWithoutSftpBookmarks();
+    void migratesVersionThreeWithoutSftpNavigationPreferences();
     void togglesAndBoundsSftpBookmarks();
     void rejectsMalformedDuplicateAndInvalidState();
 };
@@ -43,6 +44,8 @@ void WorkspaceStateStoreTests::savesAndLoadsVersionedNonSecretState()
         .bookmarkedRemotePaths = {"/srv", "/var/log"},
         .workbenchPage = "sftp",
         .workbenchSide = "right",
+        .sftpViewMode = "tree",
+        .followTerminalDirectory = true,
         .workbenchWidth = 640.0,
         .composerHeight = 160.0,
     });
@@ -59,6 +62,24 @@ void WorkspaceStateStoreTests::savesAndLoadsVersionedNonSecretState()
     QVERIFY(payload.contains("schemaVersion"));
     QVERIFY(!payload.contains("password"));
     QVERIFY(!payload.contains("secret"));
+}
+
+void WorkspaceStateStoreTests::migratesVersionThreeWithoutSftpNavigationPreferences()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("workspace.json"));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(
+        R"({"schemaVersion":3,"profiles":[{"profileId":"host","lastRemotePath":"/srv","recentRemotePaths":["/srv"],"bookmarkedRemotePaths":[],"workbenchPage":"sftp","workbenchSide":"left","workbenchWidth":520,"composerHeight":132}],"collapsedHostSections":[]})");
+    file.close();
+
+    const ztermy::workbench::WorkspaceStateStore store(path);
+    const auto loaded = store.load();
+    QVERIFY(loaded.has_value());
+    QCOMPARE(loaded->profiles.front().sftpViewMode, std::string("list"));
+    QVERIFY(!loaded->profiles.front().followTerminalDirectory);
 }
 
 void WorkspaceStateStoreTests::migratesVersionTwoWithoutSftpBookmarks()

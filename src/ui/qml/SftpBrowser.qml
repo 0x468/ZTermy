@@ -205,6 +205,52 @@ Item {
             }
 
             BrowserToolButton {
+                objectName: "sftpLocateTerminalDirectoryButton"
+                visible: !browser.compactToolbar
+                enabled: browser.controller.activeTerminalWorkingDirectory.length > 0 && browser.controller.activeSftpState !== "loading"
+                onClicked: browser.controller.navigateSftpToTerminalDirectory()
+                Accessible.name: qsTr("Open terminal working directory")
+                contentItem: AppIcon {
+                    name: "locate"
+                    color: parent.enabled ? Theme.textSoft : Theme.textSubtle
+                }
+                AppToolTip {
+                    text: parent.enabled ? qsTr("Open terminal directory: %1").arg(browser.controller.activeTerminalWorkingDirectory) : qsTr("The shell has not reported its working directory")
+                }
+            }
+
+            BrowserToolButton {
+                objectName: "sftpFollowTerminalDirectoryButton"
+                visible: !browser.compactToolbar
+                enabled: browser.controller.activeTerminalWorkingDirectory.length > 0
+                onClicked: browser.controller.setSftpFollowTerminalDirectory(!browser.controller.activeSftpFollowTerminalDirectory)
+                Accessible.name: browser.controller.activeSftpFollowTerminalDirectory ? qsTr("Stop following terminal directory") : qsTr("Follow terminal directory")
+                Accessible.checked: browser.controller.activeSftpFollowTerminalDirectory
+                contentItem: AppIcon {
+                    name: "follow"
+                    color: browser.controller.activeSftpFollowTerminalDirectory ? Theme.accent : parent.enabled ? Theme.textSoft : Theme.textSubtle
+                }
+                AppToolTip {
+                    text: parent.Accessible.name
+                }
+            }
+
+            BrowserToolButton {
+                objectName: "sftpViewModeButton"
+                visible: !browser.compactToolbar
+                enabled: browser.directoryModel !== null
+                onClicked: browser.controller.setSftpViewMode(browser.controller.activeSftpViewMode === "tree" ? "list" : "tree")
+                Accessible.name: browser.controller.activeSftpViewMode === "tree" ? qsTr("Switch to list view") : qsTr("Switch to tree view")
+                contentItem: AppIcon {
+                    name: browser.controller.activeSftpViewMode === "tree" ? "list" : "tree"
+                    color: browser.controller.activeSftpViewMode === "tree" ? Theme.accent : Theme.textSoft
+                }
+                AppToolTip {
+                    text: parent.Accessible.name
+                }
+            }
+
+            BrowserToolButton {
                 objectName: "sftpRefreshButton"
                 visible: !browser.compactToolbar
                 enabled: browser.controller.activeSftpState !== "loading"
@@ -387,6 +433,11 @@ Item {
                 required property var size
                 required property var modifiedUtcSeconds
                 required property bool selected
+                required property int depth
+                required property bool expanded
+                required property bool expandable
+                required property bool loading
+                required property string loadError
                 required property int index
 
                 readonly property bool isDirectory: entryType === "directory"
@@ -400,12 +451,25 @@ Item {
                 focus: ListView.isCurrentItem
                 Accessible.role: Accessible.ListItem
                 Accessible.name: isDirectory ? qsTr("Folder %1").arg(name) : qsTr("File %1, %2").arg(name).arg(browser.formatSize(size))
+                Accessible.description: loadError
 
                 Keys.onPressed: event => {
                     if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                        if (isDirectory) {
+                        if (browser.controller.activeSftpViewMode === "tree" && expandable) {
+                            browser.directoryModel.toggleExpanded(index);
+                        } else if (isDirectory) {
                             browser.controller.navigateSftpDirectory(remotePath);
                         }
+                        event.accepted = true;
+                    } else if (event.key === Qt.Key_Right && expandable && browser.controller.activeSftpViewMode === "tree") {
+                        if (!expanded) {
+                            browser.directoryModel.toggleExpanded(index);
+                        } else if (index + 1 < fileList.count) {
+                            fileList.currentIndex = index + 1;
+                        }
+                        event.accepted = true;
+                    } else if (event.key === Qt.Key_Left && expandable && expanded && browser.controller.activeSftpViewMode === "tree") {
+                        browser.directoryModel.toggleExpanded(index);
                         event.accepted = true;
                     } else if (event.key === Qt.Key_F2 && !isParent) {
                         browser.beginRename(remotePath, name);
@@ -418,9 +482,29 @@ Item {
 
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: 9
+                    anchors.leftMargin: 9 + (browser.controller.activeSftpViewMode === "tree" ? fileDelegate.depth * 18 : 0)
                     anchors.rightMargin: 4
                     spacing: 8
+
+                    BrowserToolButton {
+                        visible: browser.controller.activeSftpViewMode === "tree" && fileDelegate.expandable
+                        Layout.preferredWidth: visible ? 22 : 0
+                        Layout.preferredHeight: 28
+                        onClicked: browser.directoryModel.toggleExpanded(fileDelegate.index)
+                        Accessible.name: fileDelegate.expanded ? qsTr("Collapse %1").arg(fileDelegate.name) : qsTr("Expand %1").arg(fileDelegate.name)
+                        contentItem: AppIcon {
+                            name: fileDelegate.expanded ? "chevron-down" : "chevron-right"
+                            color: fileDelegate.loadError.length > 0 ? Theme.danger : Theme.textSoft
+                        }
+                        AppToolTip {
+                            text: fileDelegate.loadError.length > 0 ? fileDelegate.loadError : parent.Accessible.name
+                        }
+                    }
+
+                    Item {
+                        visible: browser.controller.activeSftpViewMode === "tree" && !fileDelegate.expandable
+                        Layout.preferredWidth: visible ? 22 : 0
+                    }
 
                     AppIcon {
                         Layout.preferredWidth: 17
@@ -669,6 +753,20 @@ Item {
         AppMenuItem {
             text: qsTr("Refresh")
             onTriggered: browser.controller.refreshSftpDirectory()
+        }
+        AppMenuItem {
+            text: qsTr("Open terminal working directory")
+            enabled: browser.controller.activeTerminalWorkingDirectory.length > 0
+            onTriggered: browser.controller.navigateSftpToTerminalDirectory()
+        }
+        AppMenuItem {
+            text: browser.controller.activeSftpFollowTerminalDirectory ? qsTr("Stop following terminal directory") : qsTr("Follow terminal directory")
+            enabled: browser.controller.activeTerminalWorkingDirectory.length > 0
+            onTriggered: browser.controller.setSftpFollowTerminalDirectory(!browser.controller.activeSftpFollowTerminalDirectory)
+        }
+        AppMenuItem {
+            text: browser.controller.activeSftpViewMode === "tree" ? qsTr("List view") : qsTr("Tree view")
+            onTriggered: browser.controller.setSftpViewMode(browser.controller.activeSftpViewMode === "tree" ? "list" : "tree")
         }
         AppMenuItem {
             text: qsTr("Upload files")

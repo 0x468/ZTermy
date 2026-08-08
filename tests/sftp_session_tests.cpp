@@ -160,6 +160,7 @@ private slots:
     void initTestCase();
     void rejectsInvalidConnectionRequests();
     void suppressesStaleDirectoryResults();
+    void deliversIndependentTreeDirectoryResults();
     void serializesMutatingOperations();
     void stopsOutstandingDirectoryRequestsWithoutBlockingCaller();
     void survivesRepeatedStartAndDeferredStop();
@@ -169,6 +170,26 @@ void SftpSessionTests::initTestCase()
 {
     qRegisterMetaType<ztermy::sftp::DirectoryListingPtr>();
     qRegisterMetaType<ztermy::sftp::SftpOperationKind>();
+}
+
+void SftpSessionTests::deliversIndependentTreeDirectoryResults()
+{
+    const auto state = std::make_shared<FakeState>();
+    ztermy::sftp::SftpSession session(fakeFactory(state));
+    QSignalSpy treeSpy(&session, &ztermy::sftp::SftpSession::treeDirectoryReady);
+    QSignalSpy directorySpy(&session, &ztermy::sftp::SftpSession::directoryReady);
+
+    QVERIFY(!session.start(validRequest()));
+    QTRY_VERIFY(session.running());
+    session.requestTreeDirectory(11, 4, QStringLiteral("/one"));
+    session.requestTreeDirectory(12, 4, QStringLiteral("/two"));
+    session.requestDirectory(20, 4, QStringLiteral("/active"));
+
+    QTRY_COMPARE(treeSpy.count(), 2);
+    QTRY_COMPARE(directorySpy.count(), 1);
+    QCOMPARE(treeSpy.at(0).at(2).toString(), QStringLiteral("/one"));
+    QCOMPARE(treeSpy.at(1).at(2).toString(), QStringLiteral("/two"));
+    QCOMPARE(directorySpy.front().at(2).toString(), QStringLiteral("/active"));
 }
 
 void SftpSessionTests::rejectsInvalidConnectionRequests()

@@ -74,6 +74,9 @@ class AppController final : public QObject
     Q_PROPERTY(bool activeSftpPathBookmarked READ activeSftpPathBookmarked NOTIFY sftpChanged)
     Q_PROPERTY(QString activeSftpState READ activeSftpState NOTIFY sftpChanged)
     Q_PROPERTY(QString activeSftpError READ activeSftpError NOTIFY sftpChanged)
+    Q_PROPERTY(QString activeSftpViewMode READ activeSftpViewMode NOTIFY sftpChanged)
+    Q_PROPERTY(bool activeSftpFollowTerminalDirectory READ activeSftpFollowTerminalDirectory NOTIFY sftpChanged)
+    Q_PROPERTY(QString activeTerminalWorkingDirectory READ activeTerminalWorkingDirectory NOTIFY sftpChanged)
     Q_PROPERTY(QVariantList transferTasks READ transferTasks NOTIFY transferTasksChanged)
     Q_PROPERTY(int activeTransferCount READ activeTransferCount NOTIFY transferTasksChanged)
     Q_PROPERTY(QString activeTerminalTabId READ activeTerminalTabId NOTIFY activeTerminalTabChanged)
@@ -155,6 +158,9 @@ public:
     [[nodiscard]] bool activeSftpPathBookmarked() const;
     [[nodiscard]] QString activeSftpState() const;
     [[nodiscard]] QString activeSftpError() const;
+    [[nodiscard]] QString activeSftpViewMode() const;
+    [[nodiscard]] bool activeSftpFollowTerminalDirectory() const noexcept;
+    [[nodiscard]] QString activeTerminalWorkingDirectory() const;
     [[nodiscard]] QVariantList transferTasks() const;
     [[nodiscard]] int activeTransferCount() const noexcept;
     [[nodiscard]] QString activeTerminalTabId() const;
@@ -216,6 +222,9 @@ public:
     Q_INVOKABLE bool navigateSftpHome();
     Q_INVOKABLE bool navigateSftpParent();
     Q_INVOKABLE bool toggleActiveSftpBookmark();
+    Q_INVOKABLE bool setSftpViewMode(const QString &mode);
+    Q_INVOKABLE bool navigateSftpToTerminalDirectory();
+    Q_INVOKABLE bool setSftpFollowTerminalDirectory(bool enabled);
     Q_INVOKABLE bool createSftpDirectory(const QString &name);
     Q_INVOKABLE bool createSftpFile(const QString &name);
     Q_INVOKABLE bool renameSftpEntry(const QString &remotePath, const QString &newName);
@@ -339,6 +348,9 @@ private:
         QString sftpHomePath;
         QString sftpState = QStringLiteral("idle");
         QString sftpError;
+        QString sftpViewMode = QStringLiteral("list");
+        QString terminalWorkingDirectory;
+        bool followTerminalDirectory = false;
         bool sftpHasListing = false;
         std::vector<workbench::ShellHistoryEntry> history;
         std::vector<workbench::ShellHistoryEntry> capturedHistory;
@@ -347,6 +359,7 @@ private:
         std::uint64_t historyRequestId = 0;
         std::uint64_t sftpRequestId = 0;
         std::uint64_t sftpGeneration = 0;
+        std::uint64_t sftpTreeRequestId = 0;
         qreal workbenchWidth = 520.0;
         qreal composerHeight = 132.0;
         bool workbenchOpen = false;
