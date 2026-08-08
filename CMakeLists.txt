@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 
 project(
     ztermy
-    VERSION 0.2.5
+    VERSION 0.2.6
     DESCRIPTION "A native Windows SSH terminal"
     LANGUAGES C CXX RC
 )
@@ -263,6 +263,11 @@ add_library(ztermy_ssh_domain STATIC
     src/domain/ssh/SshTarget.h
 )
 
+add_library(ztermy_remote_telemetry STATIC
+    src/domain/telemetry/RemoteTelemetry.cpp
+    src/domain/telemetry/RemoteTelemetry.h
+)
+
 add_library(ztermy_sftp_domain STATIC
     src/domain/sftp/SftpTypes.cpp
     src/domain/sftp/SftpTypes.h
@@ -307,6 +312,8 @@ target_link_libraries(ztermy_workbench_persistence
 
 target_compile_features(ztermy_ssh_domain PUBLIC cxx_std_23)
 target_include_directories(ztermy_ssh_domain PUBLIC src)
+target_compile_features(ztermy_remote_telemetry PUBLIC cxx_std_23)
+target_include_directories(ztermy_remote_telemetry PUBLIC src)
 
 target_compile_features(ztermy_sftp_domain PUBLIC cxx_std_23)
 target_include_directories(ztermy_sftp_domain PUBLIC src)
@@ -422,6 +429,7 @@ target_link_libraries(ztermy_sftp_session
 target_link_libraries(ztermy_ssh_session
     PUBLIC
         ztermy_core_diagnostics
+        ztermy_remote_telemetry
         ztermy_ssh_connection
         ztermy_ssh_domain
         ztermy_terminal_engine
@@ -520,9 +528,11 @@ set(ZTERMY_INTERFACE_ICON_FILES
     resources/icons/chevron-up.svg
     resources/icons/close.svg
     resources/icons/commands.svg
+    resources/icons/cpu.svg
     resources/icons/compose.svg
     resources/icons/copy.svg
     resources/icons/download.svg
+    resources/icons/disk.svg
     resources/icons/edit.svg
     resources/icons/eye-off.svg
     resources/icons/eye.svg
@@ -534,11 +544,13 @@ set(ZTERMY_INTERFACE_ICON_FILES
     resources/icons/hosts.svg
     resources/icons/lock.svg
     resources/icons/list.svg
+    resources/icons/memory.svg
     resources/icons/locate.svg
     resources/icons/minus.svg
     resources/icons/more.svg
     resources/icons/new-folder.svg
     resources/icons/new-file.svg
+    resources/icons/network.svg
     resources/icons/play.svg
     resources/icons/plus.svg
     resources/icons/refresh.svg
@@ -553,6 +565,7 @@ set(ZTERMY_INTERFACE_ICON_FILES
     resources/icons/tree.svg
     resources/icons/trash.svg
     resources/icons/upload.svg
+    resources/icons/activity.svg
 )
 foreach(icon_file IN LISTS ZTERMY_INTERFACE_ICON_FILES)
     get_filename_component(icon_filename "${icon_file}" NAME)
@@ -693,6 +706,14 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS TerminalTabAction.qml
 )
 set_source_files_properties(
+    src/ui/qml/RemoteTelemetryStrip.qml
+    PROPERTIES QT_RESOURCE_ALIAS RemoteTelemetryStrip.qml
+)
+set_source_files_properties(
+    src/ui/qml/TelemetrySparkline.qml
+    PROPERTIES QT_RESOURCE_ALIAS TelemetrySparkline.qml
+)
+set_source_files_properties(
     src/ui/qml/TerminalWorkbench.qml
     PROPERTIES QT_RESOURCE_ALIAS TerminalWorkbench.qml
 )
@@ -738,6 +759,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/KeyboardAction.qml
         src/ui/qml/Main.qml
         src/ui/qml/ReleaseIdentityCard.qml
+        src/ui/qml/RemoteTelemetryStrip.qml
         src/ui/qml/SectionCard.qml
         src/ui/qml/SettingsPane.qml
         src/ui/qml/SftpBrowser.qml
@@ -746,6 +768,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/StatePanel.qml
         src/ui/qml/StatusMessage.qml
         src/ui/qml/TerminalTabAction.qml
+        src/ui/qml/TelemetrySparkline.qml
         src/ui/qml/TerminalComposer.qml
         src/ui/qml/TerminalWorkbench.qml
         src/ui/qml/TransferCenter.qml
@@ -1084,6 +1107,13 @@ if(MSVC)
         /Zc:__cplusplus
     )
 
+    target_compile_options(ztermy_remote_telemetry PRIVATE
+        /permissive-
+        /utf-8
+        /W4
+        /Zc:__cplusplus
+    )
+
     target_compile_options(ztermy_ssh_persistence PRIVATE
         /permissive-
         /utf-8
@@ -1122,6 +1152,24 @@ endif()
 
 if(BUILD_TESTING)
     find_package(Qt6 6.8 REQUIRED COMPONENTS Network Test)
+
+    qt_add_executable(ztermy_remote_telemetry_tests
+        tests/remote_telemetry_tests.cpp
+    )
+    target_compile_features(ztermy_remote_telemetry_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_remote_telemetry_tests PRIVATE
+        ztermy_remote_telemetry
+        Qt6::Test
+    )
+    if(MSVC)
+        target_compile_options(ztermy_remote_telemetry_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+    add_test(NAME remote-telemetry COMMAND ztermy_remote_telemetry_tests)
 
     qt_add_executable(ztermy_diagnostic_reporter_tests
         tests/diagnostic_reporter_tests.cpp
@@ -2082,6 +2130,7 @@ if(BUILD_TESTING)
 
     add_custom_target(ztermy_test_binaries
         DEPENDS
+            ztermy_remote_telemetry_tests
             ztermy_action_registry_tests
             ztermy_diagnostic_reporter_tests
             ztermy_application_paths_tests

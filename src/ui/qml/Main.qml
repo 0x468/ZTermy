@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
+import QtQuick.Window
 
 Rectangle {
     id: root
@@ -60,6 +61,7 @@ Rectangle {
     readonly property real activeTerminalWorkbenchWidth: activeTerminalTab !== null && activeTerminalTab.workbenchOpen ? Math.min(activeTerminalTab.workbenchWidth, Math.max(0, terminalBody.width - 240)) : 0
     readonly property real activeTerminalComposerHeight: activeTerminalTab !== null && activeTerminalTab.composerOpen ? Math.min(activeTerminalTab.composerHeight, Math.max(0, terminalBody.height - 120)) : 0
     readonly property bool portableVaultNeedsAttention: controller.effectiveCredentialStorage === "portable" && (!controller.portableVaultInitialized || controller.portableVaultLocked)
+    readonly property bool terminalTelemetryVisible: currentPage === "terminal" && visible && root.Window.window !== null && root.Window.window.active
 
     component TerminalToolbarButton: ToolButton {
         id: control
@@ -433,8 +435,10 @@ Rectangle {
     Component.onCompleted: {
         reportTitleBarMetrics();
         applyWindowAppearance();
+        controller.setTerminalTelemetryVisible(terminalTelemetryVisible);
         Qt.callLater(root.presentStartupVaultPrompt);
     }
+    onTerminalTelemetryVisibleChanged: controller.setTerminalTelemetryVisible(terminalTelemetryVisible)
     onWidthChanged: reportTitleBarMetrics()
     onCurrentPageChanged: {
         if (currentPage === "settings") {
@@ -1220,7 +1224,18 @@ Rectangle {
                                 Layout.preferredWidth: 1
                                 Layout.preferredHeight: 12
                                 color: root.borderColor
-                                visible: terminalSessionStatus.visible
+                                visible: terminalSessionStatus.visible || remoteTelemetryStrip.visible
+                            }
+
+                            RemoteTelemetryStrip {
+                                id: remoteTelemetryStrip
+
+                                Layout.alignment: Qt.AlignVCenter
+                                Layout.preferredWidth: implicitWidth
+                                Layout.maximumWidth: Math.max(0, root.width - 690)
+                                visible: root.width >= 760 && root.activeTerminalTab !== null && root.activeTerminalTab.kind === "ssh" && root.activeTerminalTab.connected
+                                controller: root.controller
+                                availableWidth: root.width
                             }
 
                             Text {
@@ -1228,7 +1243,8 @@ Rectangle {
 
                                 Layout.alignment: Qt.AlignVCenter
                                 Layout.fillWidth: true
-                                visible: root.width >= 720
+                                Layout.minimumWidth: 0
+                                visible: root.width >= 1080 || (root.activeTerminalTab !== null && root.activeTerminalTab.kind !== "ssh")
                                 text: terminalViewport.statusText
                                 color: root.mutedColor
                                 elide: Text.ElideRight

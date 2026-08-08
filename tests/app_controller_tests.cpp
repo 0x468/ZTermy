@@ -692,11 +692,17 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
                                      });
     QSignalSpy tabsChanged(&controller, &ztermy::AppController::terminalTabsChanged);
     QSignalSpy activeChanged(&controller, &ztermy::AppController::activeTerminalTabChanged);
+    QCOMPARE(controller.activeRemoteTelemetry().value(QStringLiteral("state")).toString(), QStringLiteral("paused"));
+    QVERIFY(!controller.activeRemoteTelemetry().value(QStringLiteral("available")).toBool());
 
     const QString first = controller.startLocalTerminal();
     QVERIFY(!first.isEmpty());
     QCOMPARE(controller.terminalTabs().size(), 1);
     QCOMPARE(controller.activeTerminalTabId(), first);
+    controller.setTerminalTelemetryVisible(true);
+    controller.refreshRemoteTelemetry();
+    QCOMPARE(controller.activeRemoteTelemetry().value(QStringLiteral("state")).toString(), QStringLiteral("paused"));
+    QVERIFY(!controller.activeRemoteTelemetry().value(QStringLiteral("available")).toBool());
     QVERIFY(!controller.terminalTabs().constFirst().toMap().value(QStringLiteral("connected")).toBool());
     QVERIFY(controller.transferTasks().isEmpty());
     QCOMPARE(controller.activeTransferCount(), 0);

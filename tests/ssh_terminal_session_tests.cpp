@@ -227,6 +227,7 @@ private slots:
     void ignoresTerminalInteractionWhileDisconnected();
     void connectsAfterExplicitHostKeyConfirmation();
     void readsRemoteShellHistoryOnRealHost();
+    void collectsRemoteTelemetryOnRealHost();
     void reportsAuthenticationRejectionOnRealHost();
     void reportsRemoteCloseOnRealHost();
     void authenticatesWithInteractivePasswordOnRealHost();
@@ -632,6 +633,64 @@ void SshTerminalSessionTests::readsRemoteShellHistoryOnRealHost()
     const QString shell = result.at(1).toString();
     QVERIFY(shell == QStringLiteral("bash") || shell == QStringLiteral("zsh") || shell == QStringLiteral("fish"));
     QVERIFY(result.at(2).toByteArray().size() <= qsizetype{2} * 1024 * 1024);
+    session.stop();
+}
+
+void SshTerminalSessionTests::collectsRemoteTelemetryOnRealHost()
+{
+    const QByteArray host = qgetenv("ZTERMY_TEST_SSH_HOST");
+    const QByteArray username = qgetenv("ZTERMY_TEST_SSH_USERNAME");
+    const QByteArray privateKey = qgetenv("ZTERMY_TEST_SSH_PRIVATE_KEY");
+    const QByteArray expectedFingerprint = qgetenv("ZTERMY_TEST_SSH_EXPECTED_FINGERPRINT");
+    if (host.isEmpty() || username.isEmpty() || privateKey.isEmpty() || expectedFingerprint.isEmpty())
+    {
+        QSKIP("Set the real-host private-key gate variables to run remote telemetry");
+    }
+
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ztermy::ssh::SshTerminalSession session;
+    QSignalSpy confirmationSpy(&session, &ztermy::ssh::SshTerminalSession::hostKeyConfirmationRequired);
+    QSignalSpy runningSpy(&session, &ztermy::ssh::SshTerminalSession::runningChanged);
+    QSignalSpy telemetrySpy(&session, &ztermy::ssh::SshTerminalSession::remoteTelemetryReady);
+    QSignalSpy historySpy(&session, &ztermy::ssh::SshTerminalSession::shellHistoryReady);
+    session.setRemoteTelemetryVisible(true);
+
+    ztermy::ssh::SshConnectionRequest request{
+        .host = QString::fromUtf8(host),
+        .port = 22,
+        .username = QString::fromUtf8(username),
+        .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
+        .privateKeyPath = QString::fromUtf8(privateKey),
+        .knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json")),
+    };
+    QVERIFY(!session.start(std::move(request), {.columns = 80, .rows = 24}));
+    QTRY_COMPARE_WITH_TIMEOUT(confirmationSpy.count(), 1, 10s);
+    QCOMPARE(confirmationSpy.constFirst().at(1).toString(), QString::fromLatin1(expectedFingerprint));
+    session.confirmHostKey(true);
+    QTRY_VERIFY_WITH_TIMEOUT(std::ranges::any_of(runningSpy,
+                                                 [](const QList<QVariant> &arguments) {
+                                                     return !arguments.isEmpty() && arguments.constFirst().toBool();
+                                                 }),
+                             20s);
+    QTRY_VERIFY_WITH_TIMEOUT(telemetrySpy.count() >= 1, 10s);
+    const auto first = qvariant_cast<ztermy::telemetry::Sample>(telemetrySpy.constFirst().constFirst());
+    QCOMPARE(first.osName, std::string("Linux"));
+    QVERIFY(first.cpuCoreCount > 0);
+    QVERIFY(first.memory.totalKiB > 0);
+    QVERIFY(!first.disks.empty());
+
+    constexpr quint64 historyRequestId = 73;
+    session.requestShellHistory(historyRequestId);
+    QTRY_COMPARE_WITH_TIMEOUT(historySpy.count(), 1, 15s);
+    QCOMPARE(historySpy.constFirst().at(0).toULongLong(), historyRequestId);
+    QVERIFY2(historySpy.constFirst().at(3).toString().isEmpty(), qPrintable(historySpy.constFirst().at(3).toString()));
+
+    session.setRemoteTelemetryVisible(false);
+    QTest::qWait(150);
+    const qsizetype pausedCount = telemetrySpy.count();
+    QTest::qWait(5500);
+    QCOMPARE(telemetrySpy.count(), pausedCount);
     session.stop();
 }
 

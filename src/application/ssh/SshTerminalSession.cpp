@@ -112,6 +112,7 @@ SshTerminalSession::SshTerminalSession(QObject *parent) : QObject(parent)
 {
     qRegisterMetaType<SshConnectionPhase>();
     qRegisterMetaType<SshFailureKind>();
+    qRegisterMetaType<telemetry::Sample>();
 }
 
 SshTerminalSession::~SshTerminalSession()
@@ -395,6 +396,29 @@ void SshTerminalSession::requestShellHistory(const quint64 requestId)
     signalCommandWake();
 }
 
+void SshTerminalSession::setRemoteTelemetryVisible(const bool visible)
+{
+    m_telemetryRequestedVisible.store(visible);
+    if (!m_running.load())
+    {
+        return;
+    }
+    std::scoped_lock lock(m_commandMutex);
+    m_commands.emplace_back(TelemetryVisibilityCommand{.visible = visible});
+    signalCommandWake();
+}
+
+void SshTerminalSession::refreshRemoteTelemetry()
+{
+    if (!m_running.load())
+    {
+        return;
+    }
+    std::scoped_lock lock(m_commandMutex);
+    m_commands.emplace_back(TelemetryRefreshCommand{});
+    signalCommandWake();
+}
+
 void SshTerminalSession::run(SshConnectionRequest &request, const terminal::TerminalGeometry geometry,
                              const std::stop_token &stopToken)
 {
@@ -497,6 +521,15 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     QString remoteHistoryError;
     std::chrono::steady_clock::time_point remoteHistoryDeadline{};
     bool suppressHistoryResult = false;
+    telemetry::Scheduler telemetryScheduler;
+    telemetry::Accumulator telemetryAccumulator;
+    bool activeTelemetry = false;
+    bool activeTelemetryIncludesDetails = false;
+    QByteArray remoteTelemetryOutput;
+    std::chrono::steady_clock::time_point remoteTelemetryStarted{};
+    std::chrono::steady_clock::time_point remoteTelemetryDeadline{};
+    telemetryScheduler.setVisible(m_telemetryRequestedVisible.load(), std::chrono::steady_clock::now());
+    postRemoteTelemetryState(telemetryScheduler.visible() ? QStringLiteral("loading") : QStringLiteral("paused"));
 
     const auto beginHistoryRequest = [&](const quint64 requestId) {
         auto started = session->startAuxiliaryCommand(remoteShellHistoryCommand);
@@ -655,6 +688,39 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                     suppressHistoryResult = true;
                     session->cancelAuxiliaryCommand();
                 }
+                if (activeTelemetry)
+                {
+                    session->cancelAuxiliaryCommand();
+                    activeTelemetry = false;
+                    remoteTelemetryOutput.clear();
+                    telemetryScheduler.reset(std::chrono::steady_clock::now());
+                }
+                continue;
+            }
+
+            if (const auto *visibility = std::get_if<TelemetryVisibilityCommand>(&command))
+            {
+                if (!visibility->visible && activeTelemetry)
+                {
+                    session->cancelAuxiliaryCommand();
+                    activeTelemetry = false;
+                    remoteTelemetryOutput.clear();
+                }
+                telemetryScheduler.setVisible(visibility->visible, std::chrono::steady_clock::now());
+                postRemoteTelemetryState(visibility->visible ? QStringLiteral("loading") : QStringLiteral("paused"));
+                continue;
+            }
+
+            if (std::holds_alternative<TelemetryRefreshCommand>(command))
+            {
+                if (activeTelemetry)
+                {
+                    session->cancelAuxiliaryCommand();
+                    activeTelemetry = false;
+                    remoteTelemetryOutput.clear();
+                }
+                telemetryScheduler.reset(std::chrono::steady_clock::now());
+                postRemoteTelemetryState(QStringLiteral("loading"));
                 continue;
             }
 
@@ -679,6 +745,30 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
             const quint64 requestId = *pendingHistoryRequest;
             pendingHistoryRequest.reset();
             beginHistoryRequest(requestId);
+        }
+
+        const auto telemetryNow = std::chrono::steady_clock::now();
+        if (!activeHistoryRequest && !pendingHistoryRequest && !activeTelemetry && !session->auxiliaryCommandActive()
+            && telemetryScheduler.due(telemetryNow))
+        {
+            activeTelemetryIncludesDetails = telemetryScheduler.detailsDue(telemetryNow);
+            const std::string_view command = telemetry::linuxRemoteTelemetryCommand(activeTelemetryIncludesDetails);
+            auto started = session->startAuxiliaryCommand(command);
+            if (!started)
+            {
+                telemetryScheduler.markFailed(telemetryNow);
+                postRemoteTelemetryState(telemetryScheduler.suspended() ? QStringLiteral("suspended")
+                                                                        : QStringLiteral("unavailable"));
+            }
+            else
+            {
+                telemetryScheduler.markStarted(telemetryNow);
+                activeTelemetry = true;
+                remoteTelemetryOutput.clear();
+                remoteTelemetryStarted = telemetryNow;
+                remoteTelemetryDeadline = telemetryNow + telemetry::Scheduler::probeTimeout;
+                postRemoteTelemetryState(QStringLiteral("loading"));
+            }
         }
 
         if (activeHistoryRequest)
@@ -750,6 +840,75 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                 remoteHistoryOutput.clear();
                 remoteHistoryError.clear();
                 suppressHistoryResult = false;
+            }
+        }
+
+        if (activeTelemetry)
+        {
+            const auto now = std::chrono::steady_clock::now();
+            if (now >= remoteTelemetryDeadline)
+            {
+                session->cancelAuxiliaryCommand();
+                activeTelemetry = false;
+                remoteTelemetryOutput.clear();
+                telemetryScheduler.markFailed(now);
+                postRemoteTelemetryState(telemetryScheduler.suspended() ? QStringLiteral("suspended")
+                                                                        : QStringLiteral("unavailable"));
+            }
+            else
+            {
+                auto polled = session->pollAuxiliaryCommand(auxiliaryBuffer);
+                if (!polled)
+                {
+                    session->cancelAuxiliaryCommand();
+                    activeTelemetry = false;
+                    remoteTelemetryOutput.clear();
+                    telemetryScheduler.markFailed(now);
+                    postRemoteTelemetryState(telemetryScheduler.suspended() ? QStringLiteral("suspended")
+                                                                            : QStringLiteral("unavailable"));
+                }
+                else if (polled->progress == AuxiliaryCommandProgress::Output)
+                {
+                    const auto bytesRead = static_cast<qsizetype>(polled->bytesRead);
+                    const auto maximumBytes = static_cast<qsizetype>(telemetry::maximumProtocolBytes);
+                    if (bytesRead > maximumBytes - remoteTelemetryOutput.size())
+                    {
+                        session->cancelAuxiliaryCommand();
+                        activeTelemetry = false;
+                        remoteTelemetryOutput.clear();
+                        telemetryScheduler.markFailed(now);
+                        postRemoteTelemetryState(telemetryScheduler.suspended() ? QStringLiteral("suspended")
+                                                                                : QStringLiteral("unavailable"));
+                    }
+                    else
+                    {
+                        remoteTelemetryOutput.append(auxiliaryBuffer.data(), bytesRead);
+                    }
+                }
+                else if (polled->progress == AuxiliaryCommandProgress::Completed)
+                {
+                    activeTelemetry = false;
+                    const auto source = std::string_view(remoteTelemetryOutput.constData(),
+                                                         static_cast<std::size_t>(remoteTelemetryOutput.size()));
+                    auto parsed = telemetry::parseRemoteTelemetry(source);
+                    if (!parsed || polled->exitStatus != 0)
+                    {
+                        telemetryScheduler.markFailed(now);
+                        postRemoteTelemetryState(telemetryScheduler.suspended() ? QStringLiteral("suspended")
+                                                                                : QStringLiteral("unavailable"));
+                    }
+                    else
+                    {
+                        const auto elapsed =
+                            std::chrono::duration_cast<std::chrono::milliseconds>(now - remoteTelemetryStarted).count();
+                        const auto latency = static_cast<std::uint32_t>(std::clamp<std::int64_t>(elapsed, 0, 60'000));
+                        telemetry::Sample sample = telemetryAccumulator.consume(std::move(*parsed), latency, now);
+                        telemetryScheduler.markSucceeded(now, activeTelemetryIncludesDetails);
+                        postRemoteTelemetry(sample);
+                        postRemoteTelemetryState(QStringLiteral("ready"));
+                    }
+                    remoteTelemetryOutput.clear();
+                }
             }
         }
 
@@ -972,6 +1131,33 @@ void SshTerminalSession::postShellHistory(const quint64 requestId, const QString
     }
 }
 
+void SshTerminalSession::postRemoteTelemetry(const telemetry::Sample &sample)
+{
+    if (QThread::currentThread() == thread())
+    {
+        deliverRemoteTelemetry(sample);
+        return;
+    }
+    if (!QMetaObject::invokeMethod(this, "deliverRemoteTelemetry", Qt::QueuedConnection,
+                                   Q_ARG(ztermy::telemetry::Sample, sample)))
+    {
+        qCWarning(sshSessionLog) << "SSH telemetry result could not be queued to its owner thread";
+    }
+}
+
+void SshTerminalSession::postRemoteTelemetryState(const QString &state)
+{
+    if (QThread::currentThread() == thread())
+    {
+        deliverRemoteTelemetryState(state);
+        return;
+    }
+    if (!QMetaObject::invokeMethod(this, "deliverRemoteTelemetryState", Qt::QueuedConnection, Q_ARG(QString, state)))
+    {
+        qCWarning(sshSessionLog) << "SSH telemetry state could not be queued to its owner thread";
+    }
+}
+
 void SshTerminalSession::finishWorker(const QString &status, const SshConnectionPhase phase)
 {
     logMetrics();
@@ -1028,6 +1214,16 @@ void SshTerminalSession::deliverShellHistory(const quint64 requestId, const QStr
                                              const QString &error)
 {
     emit shellHistoryReady(requestId, shell, contents, error);
+}
+
+void SshTerminalSession::deliverRemoteTelemetry(const telemetry::Sample &sample)
+{
+    emit remoteTelemetryReady(sample);
+}
+
+void SshTerminalSession::deliverRemoteTelemetryState(const QString &state)
+{
+    emit remoteTelemetryStateChanged(state);
 }
 
 void SshTerminalSession::signalCommandWake() noexcept

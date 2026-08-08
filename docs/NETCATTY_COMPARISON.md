@@ -1,12 +1,12 @@
 # NetCatty and ztermy product comparison
 
-Status: V2.5 implementation candidate
+Status: V2.6 implementation complete
 
 ## Purpose and evidence
 
 This document prevents reference drift. It compares the locally installed
 NetCatty `1.1.75` runtime, the offered `1.1.76` update, the reference source at
-`D:/tmp/Netcatty`, and the ztermy `0.2.5` candidate. Runtime behavior wins when
+`D:/tmp/Netcatty`, and ztermy `0.2.6`. Runtime behavior wins when
 the installed binary and source snapshot differ.
 
 The source review identified the following reference boundaries:
@@ -33,7 +33,7 @@ dashboard, settings used large presentation cards for ordinary preferences,
 and terminal tools were added one feature at a time without preserving the
 reference action hierarchy. V2.2 corrects those structural problems.
 
-The candidate now aligns with NetCatty on the main task flow and information
+The current release aligns with NetCatty on the main task flow and information
 density, but it is not feature-complete relative to NetCatty. The largest
 remaining gaps are remote system telemetry, advanced SFTP navigation, a true
 script runtime, terminal keyword highlighting/recording/encoding, and richer
@@ -42,7 +42,7 @@ and remote editing are explicitly excluded.
 
 ## Detailed matrix
 
-| Area | NetCatty reference | ztermy 0.2.5 candidate | Decision / remaining gap |
+| Area | NetCatty reference | ztermy 0.2.6 | Decision / remaining gap |
 | --- | --- | --- | --- |
 | Product shell | Persistent work tabs, compact title chrome, global utility actions, and terminal tabs share one task hierarchy. | Hosts, Settings, and terminal sessions share the custom native tab bar; Settings is an on-demand singleton tab. | Aligned in workflow. ztermy retains native Windows caption/Snap behavior and its own brand. |
 | Startup | Opens into the host/vault workflow rather than forcing an unsolicited shell. | Opens Hosts and does not create a local terminal automatically. | Aligned. Session restoration remains later work. |
@@ -50,7 +50,7 @@ and remote editing are explicitly excluded.
 | Host items | Compact recent/grouped entries; item activation connects while management actions are secondary. | Recent and saved entries are compact, grouped, collapsible, persisted, keyboard-activatable, and use secondary edit/more actions. | Main anatomy aligned. Nested groups, tags, bulk organization, and additional protocols are absent. |
 | Host editor | Right-side `HostDetailsPanel` reduces the host-list width; fields are organized as an inspector rather than a modal card. | New/Edit host uses a fixed right inspector and keeps the list visible. Generated profile name, group suggestions, credentials, Escape, and focus restoration are retained. | Main interaction aligned. NetCatty's richer advanced host options are deferred unless an SSH use case justifies them. |
 | Credentials | Vault state is integrated into the connection workflow. | Installed builds use Windows Credential Manager; portable builds use the encrypted portable vault, with visible lock state and unlock entry points. | Deliberate native/security difference. No plaintext fallback. |
-| Terminal identity row | Compact session identity/state on the left; supported host metadata and actions on the right. | Compact identity/state and connected duration on the left; supported terminal actions on the right. | Layout aligned. Remote CPU, memory, disk, network, and latency monitoring is frozen for V2.6. |
+| Terminal identity row | Compact session identity/state on the left; CPU, memory, disk, network, and latency values expose richer hover details. | Compact identity plus bounded Linux CPU, memory, root-disk, network, and auxiliary SSH latency metrics; keyboard/click/hover details show recent trends, cores, processes, mounts, and interfaces. | V2.6 aligned at the product level. ztermy deliberately polls only the visible active tab, gives history priority, and suspends bounded failures; macOS/remote Windows collectors remain later adapters. |
 | Toolbar order | Keyword highlight, SFTP, composer, find, session log, scripts, then overflow; unsupported/less-used actions progressively move into overflow. | SFTP, composer, find, session log, command snippets, and overflow are available without covering the viewport. History is reached through overflow/workbench. | Supported actions converged. Keyword highlighting, directory tracking, recording, encoding, and richer terminal settings remain gaps. |
 | Terminal side panels | File transfer, scripts, history, theme, system information, notes, and AI can occupy a movable terminal-adjacent surface. | SFTP, command history, command snippets, search, and composer use one movable/resizable workbench. | Correct shared-panel model. Theme/system/notes are deferred; AI is excluded. |
 | Command history | Search, current-host/global scope, counts, refresh, and command reuse actions. | Search, current-profile/global scope, counts, refresh, Run, Insert, and Save as snippet are implemented. | Functionally aligned for supported shells. History adapters and large-history performance need broader real-world coverage. |
@@ -84,8 +84,8 @@ The following NetCatty areas do not belong to the current ztermy product scope:
 
 Port forwarding and terminal split panes are not implicitly excluded, but each
 needs a separate product decision and native backend contract before entering a
-milestone. Remote system telemetry has that decision now and is scheduled for
-V2.6 under the bounded auxiliary-channel contract in the roadmap.
+milestone. Remote system telemetry now ships under the bounded auxiliary-channel
+contract in ADR 0041.
 
 ## Acceptance rule going forward
 

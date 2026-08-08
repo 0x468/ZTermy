@@ -4,6 +4,7 @@
 #include "application/ssh/SshConnectionRequest.h"
 #include "core/diagnostics/LatencyHistogram.h"
 #include "domain/ssh/SshConnectionState.h"
+#include "domain/telemetry/RemoteTelemetry.h"
 #include "domain/terminal/TerminalEngine.h"
 #include "domain/terminal/TerminalOutputSink.h"
 #include "infrastructure/ssh/WindowsTcpSocket.h"
@@ -62,6 +63,8 @@ public slots:
     void search(const QString &query, bool backwards, bool caseSensitive);
     void clearSearch();
     void requestShellHistory(quint64 requestId);
+    void setRemoteTelemetryVisible(bool visible);
+    void refreshRemoteTelemetry();
 
 signals:
     void snapshotReady(ztermy::terminal::TerminalSnapshotPtr snapshot);
@@ -74,6 +77,8 @@ signals:
     void hostKeyChanged(const QString &algorithm, const QString &fingerprint);
     void searchResultReady(const QString &query, quint32 current, quint32 total, bool wrapped);
     void shellHistoryReady(quint64 requestId, const QString &shell, const QByteArray &contents, const QString &error);
+    void remoteTelemetryReady(const ztermy::telemetry::Sample &sample);
+    void remoteTelemetryStateChanged(const QString &state);
 
 private slots:
     void deliverLatestSnapshot();
@@ -86,6 +91,8 @@ private slots:
     void deliverClipboardText(const QString &text);
     void deliverSearchResult(const QString &query, quint32 current, quint32 total, bool wrapped);
     void deliverShellHistory(quint64 requestId, const QString &shell, const QByteArray &contents, const QString &error);
+    void deliverRemoteTelemetry(const ztermy::telemetry::Sample &sample);
+    void deliverRemoteTelemetryState(const QString &state);
 
 private:
     struct InputCommand final
@@ -121,9 +128,17 @@ private:
     {
         quint64 requestId = 0;
     };
+    struct TelemetryVisibilityCommand final
+    {
+        bool visible = false;
+    };
+    struct TelemetryRefreshCommand final
+    {
+    };
 
     using Command = std::variant<InputCommand, PasteCommand, terminal::TerminalGeometry, ScrollCommand,
-                                 SelectionCommand, CopyCommand, SearchCommand, ClearSearchCommand, HistoryCommand>;
+                                 SelectionCommand, CopyCommand, SearchCommand, ClearSearchCommand, HistoryCommand,
+                                 TelemetryVisibilityCommand, TelemetryRefreshCommand>;
 
     void queueByteCommand(Command command, std::size_t byteCount);
     void run(SshConnectionRequest &request, terminal::TerminalGeometry geometry, const std::stop_token &stopToken);
@@ -137,6 +152,8 @@ private:
     void postClipboardText(const QString &text);
     void postSearchResult(const QString &query, quint32 current, quint32 total, bool wrapped);
     void postShellHistory(quint64 requestId, const QString &shell, const QByteArray &contents, const QString &error);
+    void postRemoteTelemetry(const telemetry::Sample &sample);
+    void postRemoteTelemetryState(const QString &state);
     void finishWorker(const QString &status, SshConnectionPhase phase);
     void signalCommandWake() noexcept;
     void resetMetrics() noexcept;
@@ -162,9 +179,11 @@ private:
     terminal::TerminalSnapshotPtr m_pendingSnapshot;
     std::atomic_bool m_snapshotDeliveryScheduled = false;
     std::atomic_bool m_running = false;
+    std::atomic_bool m_telemetryRequestedVisible = false;
     diagnostics::LatencyHistogram m_inputQueueLatency;
 };
 
 } // namespace ztermy::ssh
 
 Q_DECLARE_METATYPE(ztermy::ssh::SshConnectionPhase)
+Q_DECLARE_METATYPE(ztermy::telemetry::Sample)

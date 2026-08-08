@@ -23,6 +23,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <expected>
 #include <functional>
 #include <memory>
@@ -80,6 +81,7 @@ class AppController final : public QObject
     Q_PROPERTY(QVariantList transferTasks READ transferTasks NOTIFY transferTasksChanged)
     Q_PROPERTY(int activeTransferCount READ activeTransferCount NOTIFY transferTasksChanged)
     Q_PROPERTY(QString activeTerminalTabId READ activeTerminalTabId NOTIFY activeTerminalTabChanged)
+    Q_PROPERTY(QVariantMap activeRemoteTelemetry READ activeRemoteTelemetry NOTIFY remoteTelemetryChanged)
     Q_PROPERTY(QString terminalSearchQuery READ terminalSearchQuery NOTIFY terminalSearchChanged)
     Q_PROPERTY(int terminalSearchCurrent READ terminalSearchCurrent NOTIFY terminalSearchChanged)
     Q_PROPERTY(int terminalSearchTotal READ terminalSearchTotal NOTIFY terminalSearchChanged)
@@ -164,6 +166,7 @@ public:
     [[nodiscard]] QVariantList transferTasks() const;
     [[nodiscard]] int activeTransferCount() const noexcept;
     [[nodiscard]] QString activeTerminalTabId() const;
+    [[nodiscard]] QVariantMap activeRemoteTelemetry() const;
     [[nodiscard]] QString terminalSearchQuery() const;
     [[nodiscard]] int terminalSearchCurrent() const noexcept;
     [[nodiscard]] int terminalSearchTotal() const noexcept;
@@ -217,6 +220,8 @@ public:
     Q_INVOKABLE bool importQuickCommands(const QString &localFileUrl);
     Q_INVOKABLE bool exportQuickCommands(const QString &localFileUrl);
     Q_INVOKABLE void refreshTerminalHistory();
+    Q_INVOKABLE void setTerminalTelemetryVisible(bool visible);
+    Q_INVOKABLE void refreshRemoteTelemetry();
     Q_INVOKABLE void refreshSftpDirectory();
     Q_INVOKABLE bool navigateSftpDirectory(const QString &remotePath);
     Q_INVOKABLE bool navigateSftpHome();
@@ -304,6 +309,7 @@ signals:
     void actionRequested(const QString &actionId);
     void activeTerminalTabChanged();
     void terminalSearchChanged();
+    void remoteTelemetryChanged();
     void applicationSettingsChanged();
     void credentialVaultChanged();
 
@@ -366,6 +372,9 @@ private:
         bool composerOpen = false;
         bool running = false;
         bool recentConnectionRecorded = false;
+        QString telemetryState = QStringLiteral("paused");
+        std::optional<telemetry::Sample> telemetrySample;
+        std::deque<telemetry::Sample> telemetryHistory;
     };
 
     void connectTerminalSignals();
@@ -421,6 +430,7 @@ private:
     [[nodiscard]] TerminalTab *findTab(const QString &id);
     [[nodiscard]] const TerminalTab *findTab(const QString &id) const;
     void showActiveTab();
+    void updateTelemetryVisibility();
 
     static constexpr std::size_t maximumTerminalTabs = 32;
 
@@ -453,6 +463,7 @@ private:
     bool m_hostKeyChangedWarning = false;
     bool m_hostKeyForSftp = false;
     bool m_shutdownStarted = false;
+    bool m_terminalTelemetryVisible = false;
     QString m_hostKeyTransferTaskId;
 };
 

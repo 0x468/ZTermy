@@ -1172,6 +1172,96 @@ QString AppController::activeTerminalTabId() const
     return m_activeTabId;
 }
 
+QVariantMap AppController::activeRemoteTelemetry() const
+{
+    const TerminalTab *tab = activeTab();
+    QVariantMap result{{QStringLiteral("state"), tab ? tab->telemetryState : QStringLiteral("paused")},
+                       {QStringLiteral("available"), tab != nullptr && tab->telemetrySample.has_value()}};
+    if (tab == nullptr || !tab->telemetrySample)
+    {
+        return result;
+    }
+
+    const telemetry::Sample &sample = *tab->telemetrySample;
+    result.insert(QStringLiteral("os"), QString::fromStdString(sample.osName));
+    result.insert(QStringLiteral("cpuPercent"), sample.cpuPercent.value_or(-1.0));
+    result.insert(QStringLiteral("cpuCores"), static_cast<int>(sample.cpuCoreCount));
+    result.insert(QStringLiteral("memoryUsedKiB"), QVariant::fromValue<qulonglong>(sample.memoryUsedKiB));
+    result.insert(QStringLiteral("memoryTotalKiB"), QVariant::fromValue<qulonglong>(sample.memory.totalKiB));
+    result.insert(QStringLiteral("memoryAvailableKiB"), QVariant::fromValue<qulonglong>(sample.memory.availableKiB));
+    result.insert(QStringLiteral("memoryBuffersKiB"), QVariant::fromValue<qulonglong>(sample.memory.buffersKiB));
+    result.insert(QStringLiteral("memoryCachedKiB"),
+                  QVariant::fromValue<qulonglong>(sample.memory.cachedKiB + sample.memory.reclaimableKiB));
+    result.insert(QStringLiteral("swapUsedKiB"),
+                  QVariant::fromValue<qulonglong>(sample.memory.swapTotalKiB - sample.memory.swapFreeKiB));
+    result.insert(QStringLiteral("swapTotalKiB"), QVariant::fromValue<qulonglong>(sample.memory.swapTotalKiB));
+    result.insert(QStringLiteral("receivedBytesPerSecond"),
+                  QVariant::fromValue<qulonglong>(sample.receivedBytesPerSecond));
+    result.insert(QStringLiteral("transmittedBytesPerSecond"),
+                  QVariant::fromValue<qulonglong>(sample.transmittedBytesPerSecond));
+    result.insert(QStringLiteral("latencyMs"), static_cast<int>(sample.sshProbeLatencyMs));
+
+    QVariantList cores;
+    cores.reserve(static_cast<qsizetype>(sample.corePercents.size()));
+    for (const double value : sample.corePercents)
+    {
+        cores.append(value);
+    }
+    result.insert(QStringLiteral("cores"), cores);
+
+    QVariantList disks;
+    disks.reserve(static_cast<qsizetype>(sample.disks.size()));
+    for (const telemetry::DiskCounters &disk : sample.disks)
+    {
+        disks.append(QVariantMap{{QStringLiteral("mountPoint"), QString::fromStdString(disk.mountPoint)},
+                                 {QStringLiteral("usedKiB"), QVariant::fromValue<qulonglong>(disk.usedKiB)},
+                                 {QStringLiteral("totalKiB"), QVariant::fromValue<qulonglong>(disk.totalKiB)},
+                                 {QStringLiteral("percent"), disk.usedPercent}});
+    }
+    result.insert(QStringLiteral("disks"), disks);
+
+    QVariantList interfaces;
+    interfaces.reserve(static_cast<qsizetype>(sample.interfaces.size()));
+    for (const telemetry::NetworkRate &interface : sample.interfaces)
+    {
+        interfaces.append(QVariantMap{{QStringLiteral("name"), QString::fromStdString(interface.name)},
+                                      {QStringLiteral("receivedBytesPerSecond"),
+                                       QVariant::fromValue<qulonglong>(interface.receivedBytesPerSecond)},
+                                      {QStringLiteral("transmittedBytesPerSecond"),
+                                       QVariant::fromValue<qulonglong>(interface.transmittedBytesPerSecond)}});
+    }
+    result.insert(QStringLiteral("interfaces"), interfaces);
+
+    QVariantList processes;
+    processes.reserve(static_cast<qsizetype>(sample.processes.size()));
+    for (const telemetry::ProcessMemory &process : sample.processes)
+    {
+        processes.append(QVariantMap{{QStringLiteral("pid"), process.pid},
+                                     {QStringLiteral("memoryPercent"), process.memoryPercent},
+                                     {QStringLiteral("command"), QString::fromStdString(process.command)}});
+    }
+    result.insert(QStringLiteral("processes"), processes);
+
+    QVariantList history;
+    history.reserve(static_cast<qsizetype>(tab->telemetryHistory.size()));
+    for (const telemetry::Sample &entry : tab->telemetryHistory)
+    {
+        const auto rootDisk = std::ranges::find(entry.disks, std::string("/"), &telemetry::DiskCounters::mountPoint);
+        history.append(QVariantMap{
+            {QStringLiteral("cpu"), entry.cpuPercent.value_or(-1.0)},
+            {QStringLiteral("memory"), entry.memory.totalKiB > 0 ? 100.0 * static_cast<double>(entry.memoryUsedKiB)
+                                                                       / static_cast<double>(entry.memory.totalKiB)
+                                                                 : 0.0},
+            {QStringLiteral("disk"), rootDisk != entry.disks.end() ? rootDisk->usedPercent : 0.0},
+            {QStringLiteral("received"), QVariant::fromValue<qulonglong>(entry.receivedBytesPerSecond)},
+            {QStringLiteral("transmitted"), QVariant::fromValue<qulonglong>(entry.transmittedBytesPerSecond)},
+            {QStringLiteral("latency"), static_cast<int>(entry.sshProbeLatencyMs)},
+        });
+    }
+    result.insert(QStringLiteral("history"), history);
+    return result;
+}
+
 QString AppController::terminalSearchQuery() const
 {
     const TerminalTab *tab = activeTab();
@@ -1389,11 +1479,14 @@ bool AppController::activateTerminalTab(const QString &id)
     }
     if (m_activeTabId == id)
     {
+        updateTelemetryVisibility();
         showActiveTab();
         return true;
     }
     m_activeTabId = id;
+    updateTelemetryVisibility();
     emit activeTerminalTabChanged();
+    emit remoteTelemetryChanged();
     emit sshActiveChanged();
     emit terminalSearchChanged();
     emit terminalHistoryChanged();
@@ -1440,6 +1533,7 @@ bool AppController::closeTerminalTab(const QString &id)
         {
             m_activeTabId.clear();
             emit activeTerminalTabChanged();
+            emit remoteTelemetryChanged();
             emit sshActiveChanged();
             emit terminalSearchChanged();
             emit terminalHistoryChanged();
@@ -1946,6 +2040,28 @@ void AppController::refreshTerminalHistory()
                                                     readFailed ? historyReadError : QString{});
         }
     });
+}
+
+void AppController::setTerminalTelemetryVisible(const bool visible)
+{
+    if (m_terminalTelemetryVisible == visible)
+    {
+        return;
+    }
+    m_terminalTelemetryVisible = visible;
+    updateTelemetryVisibility();
+}
+
+void AppController::refreshRemoteTelemetry()
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || tab->ssh == nullptr || !tab->running)
+    {
+        return;
+    }
+    tab->telemetryState = QStringLiteral("loading");
+    emit remoteTelemetryChanged();
+    tab->ssh->refreshRemoteTelemetry();
 }
 
 void AppController::refreshSftpDirectory()
@@ -3759,6 +3875,7 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
                 updated->connectedUtcMs = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
             }
             emit terminalTabsChanged();
+            updateTelemetryVisibility();
         }
     });
     QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::phaseChanged, this,
@@ -3863,6 +3980,37 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
                 }
             });
         });
+    QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::remoteTelemetryReady, this,
+                     [this, tabId](const telemetry::Sample &sample) {
+                         TerminalTab *updated = findTab(tabId);
+                         if (updated == nullptr)
+                         {
+                             return;
+                         }
+                         updated->telemetrySample = sample;
+                         updated->telemetryHistory.push_back(sample);
+                         while (updated->telemetryHistory.size() > telemetry::maximumHistorySamples)
+                         {
+                             updated->telemetryHistory.pop_front();
+                         }
+                         if (m_activeTabId == tabId)
+                         {
+                             emit remoteTelemetryChanged();
+                         }
+                     });
+    QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::remoteTelemetryStateChanged, this,
+                     [this, tabId](const QString &state) {
+                         TerminalTab *updated = findTab(tabId);
+                         if (updated == nullptr || updated->telemetryState == state)
+                         {
+                             return;
+                         }
+                         updated->telemetryState = state;
+                         if (m_activeTabId == tabId)
+                         {
+                             emit remoteTelemetryChanged();
+                         }
+                     });
     QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::hostKeyConfirmationRequired, this,
                      [this, tabId](const QString &algorithm, const QString &fingerprint) {
                          m_hostKeyTabId = tabId;
@@ -3881,6 +4029,18 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
                              m_terminal->setStatusText(tr("SSH host key changed; connection blocked"));
                          }
                      });
+}
+
+void AppController::updateTelemetryVisibility()
+{
+    for (const auto &tab : m_tabs)
+    {
+        if (tab->ssh)
+        {
+            tab->ssh->setRemoteTelemetryVisible(m_terminalTelemetryVisible && tab->id == m_activeTabId
+                                                && tab->sshPhase == ssh::SshConnectionPhase::Connected);
+        }
+    }
 }
 
 void AppController::connectSftpTabSignals(TerminalTab &tab)

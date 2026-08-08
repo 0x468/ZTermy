@@ -90,6 +90,10 @@ drag-out remain out of scope.
 
 ## V2.6 — remote system monitoring (`0.2.6`)
 
+Status: completed. The shipped contract is recorded in `V2_6_SCOPE.md`, the
+auxiliary-channel decision in ADR 0041, and the evidence/manual matrix in
+`testing/V2_6_ACCEPTANCE.md`.
+
 - reuse the session's isolated auxiliary SSH exec channel rather than opening
   a second user-visible terminal or parsing prompt output;
 - start with a Linux adapter that samples fixed, read-only commands and virtual
