@@ -70,6 +70,8 @@ class AppController final : public QObject
     Q_PROPERTY(QString activeSftpPath READ activeSftpPath NOTIFY sftpChanged)
     Q_PROPERTY(QString activeSftpHomePath READ activeSftpHomePath NOTIFY sftpChanged)
     Q_PROPERTY(QVariantList recentSftpPaths READ recentSftpPaths NOTIFY sftpChanged)
+    Q_PROPERTY(QVariantList bookmarkedSftpPaths READ bookmarkedSftpPaths NOTIFY sftpChanged)
+    Q_PROPERTY(bool activeSftpPathBookmarked READ activeSftpPathBookmarked NOTIFY sftpChanged)
     Q_PROPERTY(QString activeSftpState READ activeSftpState NOTIFY sftpChanged)
     Q_PROPERTY(QString activeSftpError READ activeSftpError NOTIFY sftpChanged)
     Q_PROPERTY(QVariantList transferTasks READ transferTasks NOTIFY transferTasksChanged)
@@ -149,6 +151,8 @@ public:
     [[nodiscard]] QString activeSftpPath() const;
     [[nodiscard]] QString activeSftpHomePath() const;
     [[nodiscard]] QVariantList recentSftpPaths() const;
+    [[nodiscard]] QVariantList bookmarkedSftpPaths() const;
+    [[nodiscard]] bool activeSftpPathBookmarked() const;
     [[nodiscard]] QString activeSftpState() const;
     [[nodiscard]] QString activeSftpError() const;
     [[nodiscard]] QVariantList transferTasks() const;
@@ -211,7 +215,9 @@ public:
     Q_INVOKABLE bool navigateSftpDirectory(const QString &remotePath);
     Q_INVOKABLE bool navigateSftpHome();
     Q_INVOKABLE bool navigateSftpParent();
+    Q_INVOKABLE bool toggleActiveSftpBookmark();
     Q_INVOKABLE bool createSftpDirectory(const QString &name);
+    Q_INVOKABLE bool createSftpFile(const QString &name);
     Q_INVOKABLE bool renameSftpEntry(const QString &remotePath, const QString &newName);
     Q_INVOKABLE bool removeSftpEntry(const QString &remotePath, bool directory);
     Q_INVOKABLE bool enqueueSftpDownload(const QString &remotePath, const QString &localFileUrl, qulonglong totalBytes);

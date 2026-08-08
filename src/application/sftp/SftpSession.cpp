@@ -185,6 +185,17 @@ void SftpSession::requestCreateDirectory(const quint64 requestId, const QString 
     enqueue(CreateDirectoryCommand{.requestId = requestId, .remotePath = std::move(*path)});
 }
 
+void SftpSession::requestCreateFile(const quint64 requestId, const QString &remotePath)
+{
+    auto path = normalizedPath(remotePath);
+    if (!path || *path == "/")
+    {
+        postOperationFailed(requestId, SftpOperationKind::CreateFile, ssh::SshTransportErrorKind::InvalidArgument);
+        return;
+    }
+    enqueue(CreateFileCommand{.requestId = requestId, .remotePath = std::move(*path)});
+}
+
 void SftpSession::requestRenameEntry(const quint64 requestId, const QString &sourcePath, const QString &destinationPath)
 {
     auto source = normalizedPath(sourcePath);
@@ -321,6 +332,15 @@ void SftpSession::processCommand(SftpClient &client, Command command, const std:
                 auto result = client.createDirectory(create.remotePath, stopToken);
                 result ? postOperationSucceeded(create.requestId, SftpOperationKind::CreateDirectory)
                        : postOperationFailed(create.requestId, SftpOperationKind::CreateDirectory, result.error().kind);
+            },
+            [this, &client, &stopToken](const CreateFileCommand &create) {
+                auto result = client.openFileForWrite(create.remotePath, false, stopToken);
+                if (result)
+                {
+                    result = client.closeFile(stopToken);
+                }
+                result ? postOperationSucceeded(create.requestId, SftpOperationKind::CreateFile)
+                       : postOperationFailed(create.requestId, SftpOperationKind::CreateFile, result.error().kind);
             },
             [this, &client, &stopToken](const RenameEntryCommand &rename) {
                 auto result = client.renameEntry(rename.sourcePath, rename.destinationPath, false, stopToken);

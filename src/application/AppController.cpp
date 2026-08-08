@@ -1064,6 +1064,40 @@ QVariantList AppController::recentSftpPaths() const
     return paths;
 }
 
+QVariantList AppController::bookmarkedSftpPaths() const
+{
+    const TerminalTab *tab = activeTab();
+    if (tab == nullptr || tab->sourceProfileId.isEmpty())
+    {
+        return {};
+    }
+    const workbench::ProfileWorkspaceState *state =
+        workbench::findProfileWorkspaceState(m_workspaceState, utf8String(tab->sourceProfileId));
+    if (state == nullptr)
+    {
+        return {};
+    }
+    QVariantList paths;
+    paths.reserve(static_cast<qsizetype>(state->bookmarkedRemotePaths.size()));
+    for (const std::string &path : state->bookmarkedRemotePaths)
+    {
+        paths.push_back(utf8QString(path));
+    }
+    return paths;
+}
+
+bool AppController::activeSftpPathBookmarked() const
+{
+    const TerminalTab *tab = activeTab();
+    if (tab == nullptr || tab->sourceProfileId.isEmpty())
+    {
+        return false;
+    }
+    const workbench::ProfileWorkspaceState *state =
+        workbench::findProfileWorkspaceState(m_workspaceState, utf8String(tab->sourceProfileId));
+    return state != nullptr && workbench::remotePathBookmarked(*state, utf8String(tab->sftpPath));
+}
+
 QString AppController::activeSftpState() const
 {
     const TerminalTab *tab = activeTab();
@@ -1923,6 +1957,27 @@ bool AppController::navigateSftpParent()
     return true;
 }
 
+bool AppController::toggleActiveSftpBookmark()
+{
+    const TerminalTab *tab = activeTab();
+    if (tab == nullptr || tab->sourceProfileId.isEmpty() || tab->sftpPath.isEmpty())
+    {
+        return false;
+    }
+    workbench::WorkspaceState candidate = m_workspaceState;
+    workbench::ProfileWorkspaceState &state =
+        workbench::ensureProfileWorkspaceState(candidate, utf8String(tab->sourceProfileId));
+    (void)workbench::toggleBookmarkedRemotePath(state, utf8String(tab->sftpPath));
+    if (!m_workspaceStateStore.save(candidate))
+    {
+        qCWarning(appControllerLog) << "Unable to persist SFTP path bookmark";
+        return false;
+    }
+    m_workspaceState = std::move(candidate);
+    emit sftpChanged();
+    return true;
+}
+
 bool AppController::createSftpDirectory(const QString &name)
 {
     TerminalTab *tab = activeTab();
@@ -1937,6 +1992,23 @@ bool AppController::createSftpDirectory(const QString &name)
         return false;
     }
     tab->sftpSession->requestCreateDirectory(++tab->sftpRequestId, utf8QString(*path));
+    return true;
+}
+
+bool AppController::createSftpFile(const QString &name)
+{
+    TerminalTab *tab = activeTab();
+    const std::string remoteName = utf8String(name.trimmed());
+    if (tab == nullptr || tab->sftpSession == nullptr || !sftp::validRemoteName(remoteName))
+    {
+        return false;
+    }
+    const auto path = sftp::joinRemotePath(utf8String(tab->sftpPath), remoteName);
+    if (!path)
+    {
+        return false;
+    }
+    tab->sftpSession->requestCreateFile(++tab->sftpRequestId, utf8QString(*path));
     return true;
 }
 

@@ -23,6 +23,7 @@ enum class SftpOperationKind : std::uint8_t
 {
     ListDirectory,
     CreateDirectory,
+    CreateFile,
     RenameEntry,
     RemoveFile,
     RemoveDirectory,
@@ -53,6 +54,7 @@ public slots:
     void rejectHostKey();
     void requestDirectory(quint64 requestId, quint64 generation, const QString &remotePath);
     void requestCreateDirectory(quint64 requestId, const QString &remotePath);
+    void requestCreateFile(quint64 requestId, const QString &remotePath);
     void requestRenameEntry(quint64 requestId, const QString &sourcePath, const QString &destinationPath);
     void requestRemoveEntry(quint64 requestId, const QString &remotePath, bool directory);
 
@@ -96,6 +98,11 @@ private:
         quint64 requestId = 0;
         std::string remotePath;
     };
+    struct CreateFileCommand final
+    {
+        quint64 requestId = 0;
+        std::string remotePath;
+    };
     struct RenameEntryCommand final
     {
         quint64 requestId = 0;
@@ -108,7 +115,8 @@ private:
         std::string remotePath;
         bool directory = false;
     };
-    using Command = std::variant<ListDirectoryCommand, CreateDirectoryCommand, RenameEntryCommand, RemoveEntryCommand>;
+    using Command = std::variant<ListDirectoryCommand, CreateDirectoryCommand, CreateFileCommand, RenameEntryCommand,
+                                 RemoveEntryCommand>;
 
     void run(ssh::SshConnectionRequest &request, const std::stop_token &stopToken);
     void processCommand(SftpClient &client, Command command, const std::stop_token &stopToken);

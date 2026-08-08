@@ -71,7 +71,7 @@ cmake --build --preset msvc-static-release `
 ```
 
 The current release handoff is recreated below
-`build/msvc-static-release/package/release/ztermy-0.2.2-windows-x64`.
+`build/msvc-static-release/package/release/ztermy-0.2.3-windows-x64`.
 
 The V2 preflight serializes all real-window runtime gates so multiple test
 windows never compete for native foreground, DPI, or capture state. It then

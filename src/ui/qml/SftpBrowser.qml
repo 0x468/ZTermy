@@ -12,6 +12,7 @@ Item {
 
     required property var controller
     readonly property var directoryModel: controller.activeSftpDirectoryModel
+    readonly property bool compactToolbar: width < 520
     property string pendingPath: ""
     property string pendingName: ""
     property bool pendingDirectory: false
@@ -35,8 +36,16 @@ Item {
     }
 
     function beginCreateDirectory() {
-        nameDialog.mode = "create";
+        nameDialog.mode = "createDirectory";
         nameDialog.heading = qsTr("New folder");
+        nameDialogField.text = "";
+        nameDialog.open();
+        Qt.callLater(nameDialogField.forceActiveFocus);
+    }
+
+    function beginCreateFile() {
+        nameDialog.mode = "createFile";
+        nameDialog.heading = qsTr("New file");
         nameDialogField.text = "";
         nameDialog.open();
         Qt.callLater(nameDialogField.forceActiveFocus);
@@ -148,6 +157,26 @@ Item {
             }
 
             BrowserToolButton {
+                objectName: "sftpBookmarkButton"
+                enabled: browser.controller.activeSftpState === "ready" && browser.controller.activeSftpPath.length > 0
+                onClicked: {
+                    if (browser.controller.bookmarkedSftpPaths.length === 0 && !browser.controller.activeSftpPathBookmarked) {
+                        browser.controller.toggleActiveSftpBookmark();
+                    } else {
+                        bookmarksMenu.popup();
+                    }
+                }
+                Accessible.name: browser.controller.activeSftpPathBookmarked ? qsTr("Manage bookmark for current path") : qsTr("Bookmark current path")
+                contentItem: AppIcon {
+                    name: "bookmark"
+                    color: browser.controller.activeSftpPathBookmarked ? Theme.accent : parent.enabled ? Theme.textSoft : Theme.textSubtle
+                }
+                AppToolTip {
+                    text: parent.Accessible.name
+                }
+            }
+
+            BrowserToolButton {
                 objectName: "sftpCopyPathButton"
                 enabled: browser.controller.activeSftpPath.length > 0
                 onClicked: browser.controller.copyActiveSftpPath()
@@ -177,7 +206,7 @@ Item {
 
             BrowserToolButton {
                 objectName: "sftpRefreshButton"
-                visible: browser.width >= 430
+                visible: !browser.compactToolbar
                 enabled: browser.controller.activeSftpState !== "loading"
                 onClicked: browser.controller.refreshSftpDirectory()
                 Accessible.name: qsTr("Refresh folder")
@@ -192,7 +221,7 @@ Item {
 
             BrowserToolButton {
                 objectName: "sftpUploadButton"
-                visible: browser.width >= 430
+                visible: !browser.compactToolbar
                 enabled: browser.controller.activeSftpState === "ready"
                 onClicked: uploadDialog.open()
                 Accessible.name: qsTr("Upload files")
@@ -207,7 +236,7 @@ Item {
 
             BrowserToolButton {
                 objectName: "sftpNewFolderButton"
-                visible: browser.width >= 430
+                visible: !browser.compactToolbar
                 enabled: browser.controller.activeSftpState === "ready"
                 onClicked: browser.beginCreateDirectory()
                 Accessible.name: qsTr("New folder")
@@ -221,8 +250,23 @@ Item {
             }
 
             BrowserToolButton {
+                objectName: "sftpNewFileButton"
+                visible: !browser.compactToolbar
+                enabled: browser.controller.activeSftpState === "ready"
+                onClicked: browser.beginCreateFile()
+                Accessible.name: qsTr("New file")
+                contentItem: AppIcon {
+                    name: "new-file"
+                    color: parent.enabled ? Theme.textSoft : Theme.textSubtle
+                }
+                AppToolTip {
+                    text: qsTr("New file")
+                }
+            }
+
+            BrowserToolButton {
                 objectName: "sftpMoreActionsButton"
-                visible: browser.width < 430
+                visible: browser.compactToolbar
                 enabled: browser.controller.activeSftpState !== "loading"
                 onClicked: browserActionsMenu.popup()
                 Accessible.name: qsTr("More file browser actions")
@@ -303,7 +347,7 @@ Item {
                 }
                 Text {
                     Layout.preferredWidth: 82
-                    visible: browser.width >= 430
+                    visible: !browser.compactToolbar
                     text: qsTr("Modified")
                     color: Theme.textMuted
                     font.family: Theme.uiFont
@@ -396,7 +440,7 @@ Item {
 
                     Text {
                         Layout.preferredWidth: 82
-                        visible: browser.width >= 430
+                        visible: !browser.compactToolbar
                         text: fileDelegate.modifiedUtcSeconds ? Qt.formatDateTime(new Date(Number(fileDelegate.modifiedUtcSeconds) * 1000), "MM-dd HH:mm") : "—"
                         color: Theme.textSubtle
                         elide: Text.ElideRight
@@ -595,6 +639,31 @@ Item {
     }
 
     AppMenu {
+        id: bookmarksMenu
+
+        AppMenuItem {
+            text: browser.controller.activeSftpPathBookmarked ? qsTr("Remove bookmark") : qsTr("Bookmark this path")
+            onTriggered: browser.controller.toggleActiveSftpBookmark()
+        }
+
+        AppMenuSeparator {
+            visible: browser.controller.bookmarkedSftpPaths.length > 0
+        }
+
+        Repeater {
+            model: browser.controller.bookmarkedSftpPaths
+
+            AppMenuItem {
+                required property string modelData
+
+                text: modelData
+                Accessible.name: qsTr("Open bookmarked remote path %1").arg(modelData)
+                onTriggered: browser.controller.navigateSftpDirectory(modelData)
+            }
+        }
+    }
+
+    AppMenu {
         id: browserActionsMenu
 
         AppMenuItem {
@@ -611,12 +680,17 @@ Item {
             enabled: browser.controller.activeSftpState === "ready"
             onTriggered: browser.beginCreateDirectory()
         }
+        AppMenuItem {
+            text: qsTr("New file")
+            enabled: browser.controller.activeSftpState === "ready"
+            onTriggered: browser.beginCreateFile()
+        }
     }
 
     Popup {
         id: nameDialog
 
-        property string mode: "create"
+        property string mode: "createDirectory"
         property string heading: ""
 
         anchors.centerIn: Overlay.overlay
@@ -666,11 +740,11 @@ Item {
                 ActionButton {
                     id: acceptNameButton
 
-                    text: nameDialog.mode === "create" ? qsTr("Create") : qsTr("Rename")
+                    text: nameDialog.mode === "rename" ? qsTr("Rename") : qsTr("Create")
                     variant: "primary"
                     enabled: nameDialogField.text.trim().length > 0
                     onClicked: {
-                        const accepted = nameDialog.mode === "create" ? browser.controller.createSftpDirectory(nameDialogField.text) : browser.controller.renameSftpEntry(browser.pendingPath, nameDialogField.text);
+                        const accepted = nameDialog.mode === "createDirectory" ? browser.controller.createSftpDirectory(nameDialogField.text) : nameDialog.mode === "createFile" ? browser.controller.createSftpFile(nameDialogField.text) : browser.controller.renameSftpEntry(browser.pendingPath, nameDialogField.text);
                         if (accepted) {
                             nameDialog.close();
                         }

@@ -49,6 +49,12 @@ codename is selected only when the minor version changes.
 - finish English/Chinese visual QA and migration/upgrade coverage for all
   supported `0.2.x` data.
 
+The frozen execution boundary is recorded in `V2_3_SCOPE.md`: path bookmarks
+and empty remote-file creation ship because their persistence and transport
+contracts are complete; tree SFTP, Explorer drag-out, script triggers, remote
+telemetry, and transfer pause/resume remain deferred until their backend
+contracts can be implemented without placeholder UI.
+
 ## V3 decision gate (`0.3.0`)
 
 V3 starts only after the owner chooses a coherent major direction and records
@@ -57,6 +63,6 @@ file-management workspace, or deeper remote-development workflows. Cloud sync,
 collaboration, AI, serial support, and remote editing remain separate decisions
 and are not implied by V3.
 
-After V2.2 manual acceptance, the recommended next step is V2.3 compatibility,
-accessibility, measured performance, and deliberately selected productivity
-work, not a premature `0.3.0` bump.
+After V2.3 acceptance, daily-use defects may continue on `0.2.x`. The next
+planned feature milestone is chosen at the V3 decision gate rather than by
+automatically incrementing to `0.3.0`.

@@ -17,7 +17,7 @@ namespace ztermy::workbench
 namespace
 {
 
-constexpr int currentSchemaVersion = 2;
+constexpr int currentSchemaVersion = 3;
 
 QString text(const std::string &value)
 {
@@ -37,10 +37,16 @@ QJsonObject serializeProfile(const ProfileWorkspaceState &state)
     {
         recent.push_back(text(path));
     }
+    QJsonArray bookmarks;
+    for (const std::string &path : state.bookmarkedRemotePaths)
+    {
+        bookmarks.push_back(text(path));
+    }
     return {
         {QStringLiteral("profileId"), text(state.profileId)},
         {QStringLiteral("lastRemotePath"), text(state.lastRemotePath)},
         {QStringLiteral("recentRemotePaths"), recent},
+        {QStringLiteral("bookmarkedRemotePaths"), bookmarks},
         {QStringLiteral("workbenchPage"), text(state.workbenchPage)},
         {QStringLiteral("workbenchSide"), text(state.workbenchSide)},
         {QStringLiteral("workbenchWidth"), state.workbenchWidth},
@@ -48,7 +54,7 @@ QJsonObject serializeProfile(const ProfileWorkspaceState &state)
     };
 }
 
-std::optional<ProfileWorkspaceState> parseProfile(const QJsonValue &value)
+std::optional<ProfileWorkspaceState> parseProfile(const QJsonValue &value, const int schemaVersion)
 {
     if (!value.isObject())
     {
@@ -56,12 +62,14 @@ std::optional<ProfileWorkspaceState> parseProfile(const QJsonValue &value)
     }
     const QJsonObject object = value.toObject();
     const QJsonValue recentValue = object.value(QStringLiteral("recentRemotePaths"));
+    const QJsonValue bookmarksValue = object.value(QStringLiteral("bookmarkedRemotePaths"));
     if (!object.value(QStringLiteral("profileId")).isString()
         || !object.value(QStringLiteral("lastRemotePath")).isString() || !recentValue.isArray()
         || !object.value(QStringLiteral("workbenchPage")).isString()
         || !object.value(QStringLiteral("workbenchSide")).isString()
         || !object.value(QStringLiteral("workbenchWidth")).isDouble()
-        || !object.value(QStringLiteral("composerHeight")).isDouble())
+        || !object.value(QStringLiteral("composerHeight")).isDouble()
+        || (schemaVersion >= 3 && !bookmarksValue.isArray()))
     {
         return std::nullopt;
     }
@@ -82,6 +90,19 @@ std::optional<ProfileWorkspaceState> parseProfile(const QJsonValue &value)
             return std::nullopt;
         }
         state.recentRemotePaths.push_back(bytes(path.toString()));
+    }
+    if (schemaVersion >= 3)
+    {
+        const QJsonArray bookmarks = bookmarksValue.toArray();
+        state.bookmarkedRemotePaths.reserve(static_cast<std::size_t>(bookmarks.size()));
+        for (const QJsonValue path : bookmarks)
+        {
+            if (!path.isString())
+            {
+                return std::nullopt;
+            }
+            state.bookmarkedRemotePaths.push_back(bytes(path.toString()));
+        }
     }
     return validProfileWorkspaceState(state) ? std::optional{std::move(state)} : std::nullopt;
 }
@@ -114,7 +135,7 @@ std::expected<WorkspaceState, WorkspaceStateStoreError> WorkspaceStateStore::loa
     }
     const QJsonObject root = document.object();
     const int schemaVersion = root.value(QStringLiteral("schemaVersion")).toInt(-1);
-    if (schemaVersion != 1 && schemaVersion != currentSchemaVersion)
+    if (schemaVersion < 1 || schemaVersion > currentSchemaVersion)
     {
         return std::unexpected(WorkspaceStateStoreError::UnsupportedVersion);
     }
@@ -128,7 +149,7 @@ std::expected<WorkspaceState, WorkspaceStateStoreError> WorkspaceStateStore::loa
     state.profiles.reserve(static_cast<std::size_t>(profiles.size()));
     for (const QJsonValue value : profiles)
     {
-        auto profile = parseProfile(value);
+        auto profile = parseProfile(value, schemaVersion);
         if (!profile || findProfileWorkspaceState(state, profile->profileId) != nullptr)
         {
             return std::unexpected(WorkspaceStateStoreError::InvalidDocument);

@@ -23,6 +23,7 @@ struct FakeState final
     std::atomic_bool slowListEntered = false;
     std::atomic_bool releaseSlowList = false;
     std::vector<std::string> created;
+    std::vector<std::string> createdFiles;
     std::vector<std::pair<std::string, std::string>> renamed;
     std::vector<std::pair<std::string, bool>> removed;
 };
@@ -101,11 +102,12 @@ public:
             ztermy::ssh::SshTransportError{.kind = ztermy::ssh::SshTransportErrorKind::InvalidState});
     }
 
-    std::expected<void, ztermy::ssh::SshTransportError> openFileForWrite(const std::string_view, const bool,
+    std::expected<void, ztermy::ssh::SshTransportError> openFileForWrite(const std::string_view remotePath, const bool,
                                                                          const std::stop_token &) override
     {
-        return std::unexpected(
-            ztermy::ssh::SshTransportError{.kind = ztermy::ssh::SshTransportErrorKind::InvalidState});
+        std::scoped_lock lock(m_state->mutex);
+        m_state->createdFiles.emplace_back(remotePath);
+        return {};
     }
 
     std::expected<std::size_t, ztermy::ssh::SshTransportError> readFile(const std::span<char>,
@@ -122,11 +124,7 @@ public:
             ztermy::ssh::SshTransportError{.kind = ztermy::ssh::SshTransportErrorKind::InvalidState});
     }
 
-    std::expected<void, ztermy::ssh::SshTransportError> closeFile(const std::stop_token &) override
-    {
-        return std::unexpected(
-            ztermy::ssh::SshTransportError{.kind = ztermy::ssh::SshTransportErrorKind::InvalidState});
-    }
+    std::expected<void, ztermy::ssh::SshTransportError> closeFile(const std::stop_token &) override { return {}; }
 
 private:
     std::shared_ptr<FakeState> m_state;
@@ -218,12 +216,14 @@ void SftpSessionTests::serializesMutatingOperations()
     QVERIFY(!session.start(validRequest()));
     QTRY_VERIFY(session.running());
     session.requestCreateDirectory(10, QStringLiteral("/work"));
-    session.requestRenameEntry(11, QStringLiteral("/work"), QStringLiteral("/renamed"));
-    session.requestRemoveEntry(12, QStringLiteral("/renamed"), true);
+    session.requestCreateFile(11, QStringLiteral("/work/readme.txt"));
+    session.requestRenameEntry(12, QStringLiteral("/work"), QStringLiteral("/renamed"));
+    session.requestRemoveEntry(13, QStringLiteral("/renamed"), true);
 
-    QTRY_COMPARE(successSpy.count(), 3);
+    QTRY_COMPARE(successSpy.count(), 4);
     std::scoped_lock lock(state->mutex);
     QCOMPARE(state->created, std::vector<std::string>{"/work"});
+    QCOMPARE(state->createdFiles, std::vector<std::string>{"/work/readme.txt"});
     QCOMPARE(state->renamed, (std::vector<std::pair<std::string, std::string>>{{"/work", "/renamed"}}));
     QCOMPARE(state->removed, (std::vector<std::pair<std::string, bool>>{{"/renamed", true}}));
 }

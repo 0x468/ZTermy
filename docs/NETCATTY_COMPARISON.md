@@ -1,12 +1,12 @@
 # NetCatty and ztermy product comparison
 
-Status: V2.2 implementation candidate
+Status: V2.3 implementation candidate
 
 ## Purpose and evidence
 
 This document prevents reference drift. It compares the locally installed
 NetCatty `1.1.75` runtime, the offered `1.1.76` update, the reference source at
-`D:/tmp/Netcatty`, and the ztermy `0.2.2` candidate. Runtime behavior wins when
+`D:/tmp/Netcatty`, and the ztermy `0.2.3` candidate. Runtime behavior wins when
 the installed binary and source snapshot differ.
 
 The source review identified the following reference boundaries:
@@ -42,7 +42,7 @@ and remote editing are explicitly excluded.
 
 ## Detailed matrix
 
-| Area | NetCatty reference | ztermy 0.2.2 candidate | Decision / remaining gap |
+| Area | NetCatty reference | ztermy 0.2.3 candidate | Decision / remaining gap |
 | --- | --- | --- | --- |
 | Product shell | Persistent work tabs, compact title chrome, global utility actions, and terminal tabs share one task hierarchy. | Hosts, Settings, and terminal sessions share the custom native tab bar; Settings is an on-demand singleton tab. | Aligned in workflow. ztermy retains native Windows caption/Snap behavior and its own brand. |
 | Startup | Opens into the host/vault workflow rather than forcing an unsolicited shell. | Opens Hosts and does not create a local terminal automatically. | Aligned. Session restoration remains later work. |
@@ -59,8 +59,8 @@ and remote editing are explicitly excluded.
 | Find | Compact terminal search integrated with the toolbar. | Toolbar find with keyboard route and close/focus restoration. | Aligned at core level; advanced match/navigation polish remains possible. |
 | Session logging | Manual logging is a first-class toolbar action with generated session-oriented names and backend state. | Start/stop logging is integrated and produces a generated `.log` path. | Core behavior aligned; export formats and richer log management are later work. |
 | SFTP opening path | Integrated SFTP resolves the remote user's home directory and remains attached to the terminal session. | Opens the remote home directory and shares the terminal workbench. | Aligned; the read-only real-host GUI smoke proves the visible toolbar-to-home-listing path. |
-| SFTP navigation | Home, parent, breadcrumb/editable path, bookmarks, terminal-directory locate/follow, copy path, list/tree modes, filter, hidden files, refresh, overflow, and `..`. | Home, parent, recent paths, editable path, copy path, filter, hidden files, refresh, adaptive overflow, and `..` are implemented. | Partial parity. Bookmarks, terminal CWD locate/follow, tree mode, and persisted richer view state remain gaps. |
-| SFTP file actions | Upload, download, new folder/file, rename, delete, drag/drop, context actions, encoding, and detailed columns/sorting. | Upload, download, new folder, rename, delete, drag upload, name/type/size/time columns, and permission-preserving error state are implemented. | Partial parity. New file, drag download, filename encoding, column customization, directory-first control, and broader keyboard shortcuts remain gaps. |
+| SFTP navigation | Home, parent, breadcrumb/editable path, bookmarks, terminal-directory locate/follow, copy path, list/tree modes, filter, hidden files, refresh, overflow, and `..`. | Home, parent, recent and bookmarked paths, editable path, copy path, filter, hidden files, refresh, adaptive overflow, and `..` are implemented. Bookmarks are per profile and persisted. | Partial parity. Terminal CWD locate/follow, tree mode, and persisted richer view state remain deferred pending complete contracts. |
+| SFTP file actions | Upload, download, new folder/file, rename, delete, drag/drop, context actions, encoding, and detailed columns/sorting. | Upload, download, new folder/file, rename, delete, drag upload, name/type/size/time columns, and permission-preserving error state are implemented. | Partial parity. Drag-out download, filename encoding, column customization, directory-first control, and broader keyboard shortcuts remain gaps. |
 | SFTP errors | Errors remain contextual and do not unnecessarily destroy useful navigation state. | A permission/transport error is shown while retaining the last successful listing and recovery controls. | Corrected from the former full-surface dead end; destructive and permission-error recovery still need manual acceptance. |
 | Transfers | Rich upload/download task rows, aggregate controls, per-task actions, progress, and completed-history management. | Stable progress, cancel, retry, dismiss, and clear-completed are implemented; cancellation is preserved across progress refreshes. | Core daily-use path present. Pause/resume, open target, copy target path, aggregate pause/resume, and drag download require backend contracts and are not faked. |
 | Settings shell | Left category rail and compact right detail surface: Application, Appearance, Terminal, Shortcuts, SFTP, AI, Sync/Cloud, and System. | Application, Appearance, Terminal, Shortcuts, SFTP, and Security use the same compact rail/detail anatomy inside the Settings tab. | Main hierarchy aligned. Security is a ztermy-owned category; empty AI/cloud/system placeholders are intentionally omitted. |
@@ -68,7 +68,7 @@ and remote editing are explicitly excluded.
 | Appearance model | Rich global and in some cases host/profile appearance controls. | Global UI/terminal appearance, accent policy, material, opacity, fonts, and language. | Deliberate global-only policy. Profile-owned appearance is excluded as unnecessary complexity. |
 | Native window | Electron implements custom chrome through its own platform integration. | Qt/C++ implements custom chrome, native resize cursors, Snap Layout hit testing, work-area maximize, DPI, Acrylic/Transparent/Mica/Mica Alt. | ztermy-specific strength; retained as a non-reference requirement. |
 | Terminal engine | xterm.js renderer and Electron/Node session bridges. | One custom Qt Quick `TerminalItem`, C++ terminal state, native ConPTY, libssh2, and Ghostty VT parsing. | Architecture intentionally differs; behavior and latency are the contract. |
-| Accessibility/localization | Web accessibility and localized renderer strings. | Keyboard smoke, focus states, themed tooltips, English/Chinese Qt catalogs, and native scaling are enforced. | Core gates exist. Narrator/high-contrast/manual accessibility depth is V2.3 work. |
+| Accessibility/localization | Web accessibility and localized renderer strings. | Keyboard smoke, focus states, themed tooltips, English/Chinese Qt catalogs, native scaling, Windows high-contrast binding, and a physical Narrator/contrast/mixed-DPI matrix are enforced. | Automated contracts and the V2.3 manual evidence boundary are explicit; assistive-technology speech and physical monitor behavior are never claimed from unit tests alone. |
 
 ## Explicit exclusions
 

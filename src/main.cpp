@@ -2154,14 +2154,27 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
 
     QQuickItem *browser = visualQuickItem(rootObject, "sftpBrowser");
     QQuickItem *pathField = visualQuickItem(rootObject, "sftpPathField");
+    QQuickItem *bookmarkButton = visualQuickItem(rootObject, "sftpBookmarkButton");
     QQuickItem *copyPathButton = visualQuickItem(rootObject, "sftpCopyPathButton");
     QQuickItem *fileList = visualQuickItem(rootObject, "sftpFileList");
     QQuickItem *moreActionsButton = visualQuickItem(rootObject, "sftpMoreActionsButton");
     QQuickItem *refreshButton = visualQuickItem(rootObject, "sftpRefreshButton");
+    QQuickItem *newFileButton = visualQuickItem(rootObject, "sftpNewFileButton");
     if (browser == nullptr || !focusItem(window, pathField, QStringLiteral("sftpPathField"))
-        || !focusItem(window, copyPathButton, QStringLiteral("sftpCopyPathButton")))
+        || !focusItem(window, bookmarkButton, QStringLiteral("sftpBookmarkButton")))
     {
         qCWarning(applicationLog) << "Real-host UI smoke could not traverse the SFTP path controls";
+        return false;
+    }
+    sendKey(window, Qt::Key_Space);
+    const bool pathBookmarked = processWindowEventsUntil(
+        [&] {
+            return controller.activeSftpPathBookmarked() && controller.bookmarkedSftpPaths().contains(currentPath);
+        },
+        std::chrono::seconds{1});
+    if (!pathBookmarked || !focusItem(window, copyPathButton, QStringLiteral("sftpCopyPathButton")))
+    {
+        qCWarning(applicationLog) << "Real-host UI smoke could not use the SFTP bookmark control";
         return false;
     }
     sendKey(window, Qt::Key_Space);
@@ -2178,19 +2191,21 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     controller.setTerminalWorkbenchWidth(360);
     const bool narrowToolbar = processWindowEventsUntil(
         [&] {
-            return browser->width() < 430 && moreActionsButton != nullptr && moreActionsButton->isVisible()
+            return browser->width() < 520 && moreActionsButton != nullptr && moreActionsButton->isVisible()
                    && refreshButton != nullptr && !refreshButton->isVisible();
         },
         std::chrono::seconds{2});
     const bool narrowCaptured =
         narrowToolbar && captureLayout(window, outputDirectory, QStringLiteral("real-host-sftp-narrow"));
-    controller.setTerminalWorkbenchWidth(520);
+    controller.setTerminalWorkbenchWidth(560);
     const bool wideToolbar = processWindowEventsUntil(
         [&] {
-            return browser->width() >= 430 && moreActionsButton != nullptr && !moreActionsButton->isVisible()
-                   && refreshButton != nullptr && refreshButton->isVisible();
+            return browser->width() >= 520 && moreActionsButton != nullptr && !moreActionsButton->isVisible()
+                   && refreshButton != nullptr && refreshButton->isVisible() && newFileButton != nullptr
+                   && newFileButton->isVisible();
         },
         std::chrono::seconds{2});
+    const bool newFileKeyboard = wideToolbar && focusItem(window, newFileButton, QStringLiteral("sftpNewFileButton"));
     const bool wideCaptured =
         wideToolbar && captureLayout(window, outputDirectory, QStringLiteral("real-host-sftp-wide"));
 
@@ -2219,13 +2234,14 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     }
 
     QQuickItem *closeWorkbenchButton = visualQuickItem(rootObject, "closeTerminalWorkbenchButton");
-    if (!pathCopied || !fileListKeyboard || !narrowCaptured || !wideCaptured || !deniedPathPreserved
-        || !deniedPathRecovered
+    if (!pathCopied || !pathBookmarked || !fileListKeyboard || !narrowCaptured || !wideCaptured || !newFileKeyboard
+        || !deniedPathPreserved || !deniedPathRecovered
         || !focusItem(window, closeWorkbenchButton, QStringLiteral("closeTerminalWorkbenchButton")))
     {
         qCWarning(applicationLog) << "Real-host SFTP UI contract failed"
-                                  << "pathCopied=" << pathCopied << "fileListKeyboard=" << fileListKeyboard
-                                  << "narrowToolbar=" << narrowToolbar << "wideToolbar=" << wideToolbar
+                                  << "pathCopied=" << pathCopied << "pathBookmarked=" << pathBookmarked
+                                  << "fileListKeyboard=" << fileListKeyboard << "narrowToolbar=" << narrowToolbar
+                                  << "wideToolbar=" << wideToolbar << "newFileKeyboard=" << newFileKeyboard
                                   << "deniedPathPreserved=" << deniedPathPreserved
                                   << "deniedPathRecovered=" << deniedPathRecovered;
         return false;
@@ -2238,6 +2254,10 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
         },
         std::chrono::seconds{2});
     const QString tabId = activeTabState().value(QStringLiteral("id")).toString();
+    if (controller.activeSftpPathBookmarked())
+    {
+        (void)controller.toggleActiveSftpBookmark();
+    }
     controller.closeTerminalTab(tabId);
     const bool sessionClosed = processWindowEventsUntil(
         [&] {
@@ -2248,8 +2268,9 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
 
     qCInfo(applicationLog) << "Real-host SFTP UI runtime check"
                            << "host=" << host << "rows=" << directoryEntryCount << "home=" << homePath
-                           << "pathCopied=" << pathCopied << "fileListKeyboard=" << fileListKeyboard
-                           << "narrowToolbar=" << narrowToolbar << "wideToolbar=" << wideToolbar
+                           << "pathCopied=" << pathCopied << "pathBookmarked=" << pathBookmarked
+                           << "fileListKeyboard=" << fileListKeyboard << "narrowToolbar=" << narrowToolbar
+                           << "wideToolbar=" << wideToolbar << "newFileKeyboard=" << newFileKeyboard
                            << "deniedPathPreserved=" << deniedPathPreserved
                            << "deniedPathRecovered=" << deniedPathRecovered << "workbenchClosed=" << workbenchClosed
                            << "sessionClosed=" << sessionClosed;

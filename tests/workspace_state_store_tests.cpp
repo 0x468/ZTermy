@@ -4,6 +4,8 @@
 #include <QTemporaryDir>
 #include <QtTest>
 
+#include <string>
+
 class WorkspaceStateStoreTests final : public QObject
 {
     Q_OBJECT
@@ -12,6 +14,8 @@ private slots:
     void missingFileLoadsEmptyState();
     void savesAndLoadsVersionedNonSecretState();
     void migratesVersionOneWithoutHostCollapseState();
+    void migratesVersionTwoWithoutSftpBookmarks();
+    void togglesAndBoundsSftpBookmarks();
     void rejectsMalformedDuplicateAndInvalidState();
 };
 
@@ -36,6 +40,7 @@ void WorkspaceStateStoreTests::savesAndLoadsVersionedNonSecretState()
         .profileId = "host-a",
         .lastRemotePath = "/var/log",
         .recentRemotePaths = {"/var/log", "/etc"},
+        .bookmarkedRemotePaths = {"/srv", "/var/log"},
         .workbenchPage = "sftp",
         .workbenchSide = "right",
         .workbenchWidth = 640.0,
@@ -56,6 +61,24 @@ void WorkspaceStateStoreTests::savesAndLoadsVersionedNonSecretState()
     QVERIFY(!payload.contains("secret"));
 }
 
+void WorkspaceStateStoreTests::migratesVersionTwoWithoutSftpBookmarks()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("workspace.json"));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(
+        R"({"schemaVersion":2,"profiles":[{"profileId":"host","lastRemotePath":"/srv","recentRemotePaths":["/srv"],"workbenchPage":"sftp","workbenchSide":"left","workbenchWidth":520,"composerHeight":132}],"collapsedHostSections":[]})");
+    file.close();
+
+    const ztermy::workbench::WorkspaceStateStore store(path);
+    const auto loaded = store.load();
+    QVERIFY(loaded.has_value());
+    QCOMPARE(loaded->profiles.size(), std::size_t{1});
+    QVERIFY(loaded->profiles.front().bookmarkedRemotePaths.empty());
+}
+
 void WorkspaceStateStoreTests::migratesVersionOneWithoutHostCollapseState()
 {
     QTemporaryDir directory;
@@ -72,6 +95,26 @@ void WorkspaceStateStoreTests::migratesVersionOneWithoutHostCollapseState()
     QVERIFY(loaded.has_value());
     QCOMPARE(loaded->profiles.size(), std::size_t{1});
     QVERIFY(loaded->collapsedHostSections.empty());
+}
+
+void WorkspaceStateStoreTests::togglesAndBoundsSftpBookmarks()
+{
+    ztermy::workbench::ProfileWorkspaceState state{.profileId = "host"};
+    QVERIFY(ztermy::workbench::toggleBookmarkedRemotePath(state, "/home/test"));
+    QVERIFY(ztermy::workbench::remotePathBookmarked(state, "/home/test"));
+    QVERIFY(!ztermy::workbench::toggleBookmarkedRemotePath(state, "/home/test"));
+    QVERIFY(!ztermy::workbench::remotePathBookmarked(state, "/home/test"));
+
+    for (std::size_t index = 0; index <= ztermy::workbench::maximumBookmarkedRemotePaths; ++index)
+    {
+        QVERIFY(ztermy::workbench::toggleBookmarkedRemotePath(state, "/path-" + std::to_string(index)));
+    }
+    QCOMPARE(state.bookmarkedRemotePaths.size(), ztermy::workbench::maximumBookmarkedRemotePaths);
+    QCOMPARE(state.bookmarkedRemotePaths.front(), std::string("/path-32"));
+    QVERIFY(!ztermy::workbench::remotePathBookmarked(state, "/path-0"));
+
+    state.bookmarkedRemotePaths.back() = state.bookmarkedRemotePaths.front();
+    QVERIFY(!ztermy::workbench::validProfileWorkspaceState(state));
 }
 
 void WorkspaceStateStoreTests::rejectsMalformedDuplicateAndInvalidState()

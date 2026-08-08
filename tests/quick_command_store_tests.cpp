@@ -2,6 +2,7 @@
 #include "infrastructure/workbench/PowerShellHistoryReader.h"
 #include "infrastructure/workbench/QuickCommandStore.h"
 
+#include <QElapsedTimer>
 #include <QFile>
 #include <QTemporaryDir>
 #include <QTest>
@@ -43,6 +44,7 @@ private slots:
     void rejectsMalformedUnsupportedAndDuplicateDocuments();
     void rejectsUnsafeOrOversizedCommands();
     void readsBoundedPowerShellHistoryTail();
+    void readsLargePowerShellHistoryWithinBudget();
 };
 
 void QuickCommandStoreTests::missingFileLoadsAsEmpty()
@@ -141,6 +143,42 @@ void QuickCommandStoreTests::readsBoundedPowerShellHistoryTail()
     const auto missing = ztermy::workbench::readPowerShellHistory(directory.filePath(QStringLiteral("missing.txt")));
     QVERIFY(missing);
     QVERIFY(missing->empty());
+}
+
+void QuickCommandStoreTests::readsLargePowerShellHistoryWithinBudget()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("ConsoleHost_history.txt"));
+
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    constexpr qsizetype sourceBytes = qsizetype{8} * 1024 * 1024;
+    constexpr qsizetype blockBytes = qsizetype{64} * 1024;
+    const QByteArray line = QByteArrayLiteral("Get-ChildItem -Force | Select-Object Name,Length\n");
+    QByteArray block;
+    block.reserve(blockBytes);
+    while (block.size() + line.size() <= blockBytes)
+    {
+        block.append(line);
+    }
+    for (qsizetype written = 0; written < sourceBytes; written += block.size())
+    {
+        QVERIFY(file.write(block) == block.size());
+    }
+    file.close();
+
+    QElapsedTimer timer;
+    timer.start();
+    constexpr qint64 maximumReadBytes = qint64{1024} * 1024;
+    const auto entries = ztermy::workbench::readPowerShellHistory(path, 2'000, maximumReadBytes);
+    const qint64 elapsedMs = timer.elapsed();
+
+    QVERIFY(entries);
+    QCOMPARE(entries->size(), std::size_t{2'000});
+    qInfo("V2.3 history budget: %lld ms for an 8 MiB source with a 1 MiB bounded tail",
+          static_cast<long long>(elapsedMs));
+    QVERIFY2(elapsedMs <= 2'000, "Large history tail exceeded the V2.3 2 s Debug budget");
 }
 
 QTEST_GUILESS_MAIN(QuickCommandStoreTests)

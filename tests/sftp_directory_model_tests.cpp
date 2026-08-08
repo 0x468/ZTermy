@@ -1,5 +1,6 @@
 #include "application/sftp/SftpDirectoryModel.h"
 
+#include <QElapsedTimer>
 #include <QSignalSpy>
 #include <QtTest/QTest>
 
@@ -18,6 +19,7 @@ private slots:
     void filtersNamesCaseInsensitively();
     void tracksSelectionAndClearsItOnRefresh();
     void exposesParentDirectoryOutsideRoot();
+    void handlesLargeDirectoryWithinBudget();
 };
 
 ztermy::sftp::DirectoryListingPtr listing()
@@ -100,6 +102,46 @@ void SftpDirectoryModelTests::exposesParentDirectoryOutsideRoot()
     model.setFilterText({});
     model.setEntries(listing(), QStringLiteral("/"));
     QCOMPARE(model.entry(0).value(QStringLiteral("name")).toString(), QStringLiteral("Alpha"));
+}
+
+void SftpDirectoryModelTests::handlesLargeDirectoryWithinBudget()
+{
+    ztermy::sftp::DirectoryListing entries;
+    constexpr std::size_t entryCount = 10'000;
+    entries.reserve(entryCount);
+    for (std::size_t index = 0; index < entryCount; ++index)
+    {
+        const bool directory = index % 8 == 0;
+        const std::string suffix = std::to_string(entryCount - index);
+        const std::string name = directory ? "directory-" + suffix : "artifact-" + suffix + ".log";
+        entries.push_back(ztermy::sftp::DirectoryEntry{
+            .name = name,
+            .remotePath = "/var/data/" + name,
+            .type = directory ? ztermy::sftp::EntryType::Directory : ztermy::sftp::EntryType::RegularFile,
+            .size = index,
+        });
+    }
+
+    ztermy::sftp::SftpDirectoryModel model;
+    const auto listing = std::make_shared<const ztermy::sftp::DirectoryListing>(std::move(entries));
+    QElapsedTimer listingTimer;
+    listingTimer.start();
+    model.setEntries(listing, QStringLiteral("/var/data"));
+    const qint64 listingMs = listingTimer.elapsed();
+
+    QCOMPARE(model.rowCount(), static_cast<int>(entryCount + 1));
+    QCOMPARE(model.entry(0).value(QStringLiteral("name")).toString(), QStringLiteral(".."));
+
+    QElapsedTimer filterTimer;
+    filterTimer.start();
+    model.setFilterText(QStringLiteral("artifact-999"));
+    const qint64 filterMs = filterTimer.elapsed();
+
+    QVERIFY(model.rowCount() > 1);
+    qInfo("V2.3 SFTP budget: %lld ms to sort 10,000 entries; %lld ms to filter", static_cast<long long>(listingMs),
+          static_cast<long long>(filterMs));
+    QVERIFY2(listingMs <= 5'000, "Large SFTP listing exceeded the V2.3 5 s Debug budget");
+    QVERIFY2(filterMs <= 1'000, "Large SFTP filter exceeded the V2.3 1 s Debug budget");
 }
 
 } // namespace

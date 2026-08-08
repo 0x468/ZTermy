@@ -13,6 +13,7 @@ struct ProfileWorkspaceState final
     std::string profileId;
     std::string lastRemotePath = "/";
     std::vector<std::string> recentRemotePaths;
+    std::vector<std::string> bookmarkedRemotePaths;
     std::string workbenchPage = "history";
     std::string workbenchSide = "left";
     double workbenchWidth = 520.0;
@@ -30,6 +31,7 @@ struct WorkspaceState final
 };
 
 inline constexpr std::size_t maximumRecentRemotePaths = 12;
+inline constexpr std::size_t maximumBookmarkedRemotePaths = 32;
 inline constexpr std::size_t maximumCollapsedHostSections = 256;
 
 [[nodiscard]] bool validProfileWorkspaceState(const ProfileWorkspaceState &state) noexcept;
@@ -39,5 +41,7 @@ inline constexpr std::size_t maximumCollapsedHostSections = 256;
                                                                      std::string_view profileId);
 ProfileWorkspaceState &ensureProfileWorkspaceState(WorkspaceState &state, std::string profileId);
 void recordRecentRemotePath(ProfileWorkspaceState &state, std::string remotePath);
+[[nodiscard]] bool remotePathBookmarked(const ProfileWorkspaceState &state, std::string_view remotePath) noexcept;
+[[nodiscard]] bool toggleBookmarkedRemotePath(ProfileWorkspaceState &state, std::string remotePath);
 
 } // namespace ztermy::workbench
