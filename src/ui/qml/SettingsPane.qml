@@ -15,6 +15,7 @@ Rectangle {
     property bool loadingDraft: false
     property string statusMessage: ""
     property bool statusIsError: false
+    property bool statusVisible: false
     property string currentCategory: "application"
     property string languageDraft: "system"
     property string uiFontDraft: ""
@@ -25,7 +26,7 @@ Rectangle {
     readonly property bool adjustableBackdrop: backdropBox.currentIndex === 0 || backdropBox.currentIndex === 1
     readonly property bool customAccentSelected: accentBox.currentIndex === 2
     readonly property bool compactLayout: width < Theme.narrowWindowWidth
-    readonly property int contentInset: compactLayout ? Theme.pageInsetCompact : Theme.pageInset
+    readonly property int contentInset: compactLayout ? 10 : 16
     readonly property bool terminalLigatureAvailable: fontCatalog.supportsLigatures(terminalFontDraft)
     readonly property bool uiFontHasCjk: fontCatalog.supportsCjk(uiFontDraft)
     readonly property var uiFontOptions: systemFontOptions(fontCatalog.allFamilies)
@@ -43,7 +44,7 @@ Rectangle {
         property string actionObjectName: ""
         signal activated
 
-        implicitHeight: 40
+        implicitHeight: 36
         radius: Theme.radiusControl
         color: selected ? Theme.controlBackground : (categoryAction.hovered || categoryAction.activeFocus ? Theme.controlHover : "transparent")
         border.color: categoryAction.activeFocus ? Theme.focus : "transparent"
@@ -72,9 +73,9 @@ Rectangle {
 
         Row {
             anchors.left: parent.left
-            anchors.leftMargin: 16
+            anchors.leftMargin: 12
             anchors.verticalCenter: parent.verticalCenter
-            spacing: 10
+            spacing: 8
 
             AppIcon {
                 width: 16
@@ -87,7 +88,7 @@ Rectangle {
                 text: categoryControl.title
                 color: categoryControl.selected ? Theme.text : Theme.textSoft
                 font.family: Theme.uiFont
-                font.pixelSize: Theme.textBody
+                font.pixelSize: Theme.textLabel
                 font.weight: categoryControl.selected ? Font.DemiBold : Font.Normal
             }
         }
@@ -174,8 +175,18 @@ Rectangle {
     }
 
     function showCredentialResult(success, successMessage) {
-        statusIsError = !success;
-        statusMessage = success ? successMessage : (controller.credentialOperationError.length > 0 ? controller.credentialOperationError : qsTr("The credential operation failed."));
+        presentStatus(success ? successMessage : (controller.credentialOperationError.length > 0 ? controller.credentialOperationError : qsTr("The credential operation failed.")), !success, success);
+    }
+
+    function presentStatus(message, isError, dismissAutomatically) {
+        statusDismissTimer.stop();
+        statusClearTimer.stop();
+        statusMessage = message;
+        statusIsError = isError;
+        statusVisible = message.length > 0;
+        if (statusVisible && dismissAutomatically) {
+            statusDismissTimer.restart();
+        }
     }
 
     function performCredentialMigration() {
@@ -232,6 +243,8 @@ Rectangle {
             terminalCategory.focusAction();
         } else if (currentCategory === "shortcuts") {
             shortcutsCategory.focusAction();
+        } else if (currentCategory === "sftp") {
+            sftpCategory.focusAction();
         } else if (currentCategory === "security") {
             securityCategory.focusAction();
         } else {
@@ -256,6 +269,8 @@ Rectangle {
         cursorBlinkSwitch.checked = controller.cursorBlink;
         copyOnSelectSwitch.checked = controller.copyOnSelect;
         multilinePasteSwitch.checked = controller.confirmMultilinePaste;
+        sftpShowHiddenSwitch.checked = controller.sftpShowHiddenFiles;
+        sftpConfirmDeleteSwitch.checked = controller.sftpConfirmDelete;
         languageDraft = controller.languagePreference;
         credentialStorageBox.currentIndex = credentialStorageIndex(controller.effectiveCredentialStorage);
         credentialCleanupStorageBox.currentIndex = credentialStorageIndex(controller.effectiveCredentialStorage);
@@ -265,13 +280,11 @@ Rectangle {
 
     function applyDraft() {
         if (customAccentSelected && !customAccentField.acceptableInput) {
-            statusIsError = true;
-            statusMessage = qsTr("Custom accent must use the #RRGGBB format.");
+            presentStatus(qsTr("Custom accent must use the #RRGGBB format."), true, false);
             return;
         }
-        const saved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), accentToken(), customAccentField.text, uiFontDraft, terminalFontDraft, fontSizeBox.value, showAllFontsSwitch.checked, ligatureSwitch.checked, terminalOpacitySlider.value, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, multilinePasteSwitch.checked, languageDraft);
-        statusIsError = !saved;
-        statusMessage = saved ? qsTr("Settings saved and applied.") : qsTr("These settings could not be saved. Check the font and numeric ranges.");
+        const saved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), accentToken(), customAccentField.text, uiFontDraft, terminalFontDraft, fontSizeBox.value, showAllFontsSwitch.checked, ligatureSwitch.checked, terminalOpacitySlider.value, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, multilinePasteSwitch.checked, languageDraft, sftpShowHiddenSwitch.checked, sftpConfirmDeleteSwitch.checked);
+        presentStatus(saved ? qsTr("Settings saved and applied.") : qsTr("These settings could not be saved. Check the font and numeric ranges."), !saved, saved);
         if (!saved) {
             loadDraft();
         }
@@ -297,6 +310,25 @@ Rectangle {
         easing.type: Easing.OutCubic
     }
 
+    Timer {
+        id: statusDismissTimer
+
+        interval: 3600
+        repeat: false
+        onTriggered: {
+            pane.statusVisible = false;
+            statusClearTimer.restart();
+        }
+    }
+
+    Timer {
+        id: statusClearTimer
+
+        interval: Theme.animationsEnabled ? Theme.motionMedium : 0
+        repeat: false
+        onTriggered: pane.statusMessage = ""
+    }
+
     Rectangle {
         id: categoryRail
 
@@ -304,7 +336,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        width: pane.compactLayout ? 132 : 196
+        width: pane.compactLayout ? 140 : 208
         color: Theme.panelBackground
 
         Rectangle {
@@ -316,8 +348,8 @@ Rectangle {
 
         ColumnLayout {
             anchors.fill: parent
-            anchors.margins: pane.compactLayout ? 10 : 14
-            spacing: 8
+            anchors.margins: pane.compactLayout ? 8 : 10
+            spacing: 4
 
             Text {
                 Layout.leftMargin: 4
@@ -375,6 +407,17 @@ Rectangle {
             }
 
             CategoryButton {
+                id: sftpCategory
+
+                Layout.fillWidth: true
+                title: qsTr("SFTP")
+                iconName: "folder"
+                actionObjectName: "settingsSftpCategory"
+                selected: pane.currentCategory === "sftp"
+                onActivated: pane.selectCategory("sftp")
+            }
+
+            CategoryButton {
                 id: securityCategory
 
                 Layout.fillWidth: true
@@ -416,27 +459,27 @@ Rectangle {
             id: contentColumn
 
             x: Math.max(pane.contentInset, (scrollView.availableWidth - width) / 2)
-            y: pane.compactLayout ? 24 : 38
-            width: Math.max(0, Math.min(920, scrollView.availableWidth - (pane.contentInset * 2)))
-            spacing: Theme.spacingSection
+            y: pane.compactLayout ? 12 : 16
+            width: Math.max(0, Math.min(1040, scrollView.availableWidth - (pane.contentInset * 2)))
+            spacing: 10
             opacity: pane.contentReveal
 
             Text {
-                text: pane.currentCategory === "application" ? qsTr("Application") : pane.currentCategory === "appearance" ? qsTr("Appearance") : pane.currentCategory === "terminal" ? qsTr("Terminal") : pane.currentCategory === "shortcuts" ? qsTr("Shortcuts") : qsTr("Security")
+                text: pane.currentCategory === "application" ? qsTr("Application") : pane.currentCategory === "appearance" ? qsTr("Appearance") : pane.currentCategory === "terminal" ? qsTr("Terminal") : pane.currentCategory === "shortcuts" ? qsTr("Shortcuts") : pane.currentCategory === "sftp" ? qsTr("SFTP") : qsTr("Security")
                 color: Theme.text
                 font.family: Theme.uiFont
-                font.pixelSize: Theme.textTitle
+                font.pixelSize: 18
                 font.weight: Font.DemiBold
             }
 
             Text {
                 Layout.fillWidth: true
                 visible: pane.currentCategory !== "application"
-                text: pane.currentCategory === "appearance" ? qsTr("Choose the language, interface font, theme, and Windows backdrop used across ztermy.") : pane.currentCategory === "terminal" ? qsTr("Configure the global terminal font, background, cursor, selection, and paste behavior.") : pane.currentCategory === "shortcuts" ? qsTr("Search, record, unbind, and reset keyboard shortcuts for registered ztermy actions.") : qsTr("Choose where SSH passwords and key passphrases are stored, unlock the portable vault, or migrate credentials safely.")
+                text: pane.currentCategory === "appearance" ? qsTr("Choose the language, interface font, theme, and Windows backdrop used across ztermy.") : pane.currentCategory === "terminal" ? qsTr("Configure the global terminal font, background, cursor, selection, and paste behavior.") : pane.currentCategory === "shortcuts" ? qsTr("Search, record, unbind, and reset keyboard shortcuts for registered ztermy actions.") : pane.currentCategory === "sftp" ? qsTr("Choose the defaults applied when an SSH session opens its integrated file browser.") : qsTr("Choose where SSH passwords and key passphrases are stored, unlock the portable vault, or migrate credentials safely.")
                 color: Theme.textMuted
                 wrapMode: Text.WordWrap
                 font.family: Theme.uiFont
-                font.pixelSize: Theme.textBody
+                font.pixelSize: Theme.textLabel
             }
 
             ShortcutSettings {
@@ -577,8 +620,7 @@ Rectangle {
                             iconName: "folder"
                             onClicked: {
                                 const opened = pane.diagnostics.openLogsDirectory();
-                                pane.statusIsError = !opened;
-                                pane.statusMessage = opened ? qsTr("Logs folder opened.") : pane.diagnostics.lastError;
+                                pane.presentStatus(opened ? qsTr("Logs folder opened.") : pane.diagnostics.lastError, !opened, opened);
                             }
                         }
 
@@ -590,8 +632,7 @@ Rectangle {
                             iconName: "folder"
                             onClicked: {
                                 const opened = pane.diagnostics.openCrashDirectory();
-                                pane.statusIsError = !opened;
-                                pane.statusMessage = opened ? qsTr("Crash reports folder opened.") : pane.diagnostics.lastError;
+                                pane.presentStatus(opened ? qsTr("Crash reports folder opened.") : pane.diagnostics.lastError, !opened, opened);
                             }
                         }
                     }
@@ -610,6 +651,7 @@ Rectangle {
             SectionCard {
                 Layout.fillWidth: true
                 visible: pane.currentCategory === "appearance"
+                compact: true
                 heading: qsTr("Language and interface")
 
                 GridLayout {
@@ -676,6 +718,7 @@ Rectangle {
             SectionCard {
                 Layout.fillWidth: true
                 visible: pane.currentCategory === "appearance"
+                compact: true
                 heading: qsTr("Window appearance")
 
                 GridLayout {
@@ -820,6 +863,7 @@ Rectangle {
             SectionCard {
                 Layout.fillWidth: true
                 visible: pane.currentCategory === "terminal"
+                compact: true
                 heading: qsTr("Terminal")
 
                 GridLayout {
@@ -993,7 +1037,59 @@ Rectangle {
 
             SectionCard {
                 Layout.fillWidth: true
+                visible: pane.currentCategory === "sftp"
+                compact: true
+                heading: qsTr("File browser defaults")
+
+                GridLayout {
+                    objectName: "settingsSftpGrid"
+                    Layout.fillWidth: true
+                    columns: pane.compactLayout ? 1 : 2
+                    columnSpacing: 18
+                    rowSpacing: 12
+
+                    Label {
+                        text: qsTr("Directory listing")
+                        color: Theme.text
+                    }
+                    AppSwitch {
+                        id: sftpShowHiddenSwitch
+
+                        objectName: "settingsSftpShowHidden"
+                        Layout.fillWidth: true
+                        text: qsTr("Show hidden files by default")
+                        accessibleName: text
+                    }
+
+                    Label {
+                        text: qsTr("Destructive actions")
+                        color: Theme.text
+                    }
+                    AppSwitch {
+                        id: sftpConfirmDeleteSwitch
+
+                        objectName: "settingsSftpConfirmDelete"
+                        Layout.fillWidth: true
+                        text: qsTr("Confirm before deleting remote files")
+                        accessibleName: text
+                    }
+
+                    Text {
+                        Layout.columnSpan: parent.columns
+                        Layout.fillWidth: true
+                        text: qsTr("These global defaults apply to every integrated SFTP browser. The Hidden button can still change the current session without rewriting the default.")
+                        color: Theme.textMuted
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
+                    }
+                }
+            }
+
+            SectionCard {
+                Layout.fillWidth: true
                 visible: pane.currentCategory === "security"
+                compact: true
                 heading: qsTr("Credential storage")
 
                 ColumnLayout {
@@ -1076,6 +1172,7 @@ Rectangle {
             SectionCard {
                 Layout.fillWidth: true
                 visible: pane.currentCategory === "security"
+                compact: true
                 heading: qsTr("Portable vault")
 
                 ColumnLayout {
@@ -1176,6 +1273,7 @@ Rectangle {
             SectionCard {
                 Layout.fillWidth: true
                 visible: pane.currentCategory === "security"
+                compact: true
                 heading: qsTr("Credential cleanup")
 
                 ColumnLayout {
@@ -1226,14 +1324,24 @@ Rectangle {
             }
 
             StatusMessage {
+                objectName: "settingsStatusMessage"
                 Layout.fillWidth: true
+                visible: pane.statusMessage.length > 0
+                opacity: pane.statusVisible ? 1.0 : 0.0
                 text: pane.statusMessage
                 kind: pane.statusIsError ? "error" : "success"
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: Theme.animationsEnabled ? Theme.motionMedium : 0
+                        easing.type: Easing.InOutCubic
+                    }
+                }
             }
 
             GridLayout {
                 Layout.fillWidth: true
-                visible: pane.currentCategory === "appearance" || pane.currentCategory === "terminal"
+                visible: pane.currentCategory === "appearance" || pane.currentCategory === "terminal" || pane.currentCategory === "sftp"
                 columns: pane.compactLayout ? 1 : 4
                 columnSpacing: Theme.spacingControl
                 rowSpacing: Theme.spacingControl
@@ -1245,8 +1353,7 @@ Rectangle {
                     accessibleName: qsTr("Reset all application settings")
                     onClicked: {
                         const reset = pane.controller.resetApplicationSettings();
-                        pane.statusIsError = !reset;
-                        pane.statusMessage = reset ? qsTr("Default settings restored.") : qsTr("Default settings could not be restored.");
+                        pane.presentStatus(reset ? qsTr("Default settings restored.") : qsTr("Default settings could not be restored."), !reset, reset);
                         pane.loadDraft();
                     }
                 }
@@ -1263,8 +1370,7 @@ Rectangle {
                     accessibleName: qsTr("Discard unsaved setting changes")
                     onClicked: {
                         pane.loadDraft();
-                        pane.statusIsError = false;
-                        pane.statusMessage = qsTr("Unsaved changes discarded.");
+                        pane.presentStatus(qsTr("Unsaved changes discarded."), false, true);
                     }
                 }
 
@@ -1301,8 +1407,7 @@ Rectangle {
         defaultSuffix: "json"
         onAccepted: {
             const exported = pane.diagnostics.exportReport(selectedFile);
-            pane.statusIsError = !exported;
-            pane.statusMessage = exported ? qsTr("Diagnostic report exported.") : pane.diagnostics.lastError;
+            pane.presentStatus(exported ? qsTr("Diagnostic report exported.") : pane.diagnostics.lastError, !exported, exported);
         }
     }
 

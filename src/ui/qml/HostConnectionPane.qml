@@ -28,13 +28,12 @@ Rectangle {
     property var pendingQuickTarget: ({})
     property string quickConnectMessage: ""
     property bool quickConnectMessageIsError: false
-    property string expandedActionsProfileId: ""
     property bool statusIsError: false
     property bool editorExpanded: false
     readonly property bool compactLayout: width < Theme.narrowWindowWidth
-    readonly property int contentInset: compactLayout ? Theme.pageInsetCompact : Theme.pageInset
-    readonly property int profileCardColumns: scrollView.availableWidth < 700 ? 1 : (scrollView.availableWidth < 1050 ? 2 : 3)
-    readonly property var filteredGroups: buildFilteredGroups(controller.hostProfiles, searchField.text)
+    readonly property int contentInset: compactLayout ? 8 : 12
+    readonly property int profileCardColumns: scrollView.availableWidth < 540 ? 1 : (scrollView.availableWidth < 840 ? 2 : (scrollView.availableWidth < 1140 ? 3 : 4))
+    readonly property var filteredGroups: buildFilteredGroups(controller.hostProfiles, quickConnectTarget.text)
     readonly property int filteredProfileCount: {
         let count = 0;
         for (const group of filteredGroups) {
@@ -45,6 +44,7 @@ Rectangle {
 
     signal connectionStarted
     signal securitySettingsRequested
+    signal localTerminalRequested
 
     color: backgroundColor
     palette.base: Theme.raisedBackground
@@ -69,7 +69,7 @@ Rectangle {
     }
 
     function sectionCollapsed(sectionId) {
-        return searchField.text.trim().length === 0 && controller.collapsedHostSections.indexOf(sectionId) >= 0;
+        return quickConnectTarget.text.trim().length === 0 && controller.collapsedHostSections.indexOf(sectionId) >= 0;
     }
 
     function toggleSection(sectionId) {
@@ -354,129 +354,65 @@ Rectangle {
 
             objectName: "hostContentColumn"
             x: Math.max(pane.contentInset, (scrollView.availableWidth - width) / 2)
-            y: pane.compactLayout ? 24 : 38
-            width: Math.max(0, Math.min(1040, scrollView.availableWidth - (pane.contentInset * 2)))
-            spacing: Theme.spacingSection
+            y: pane.contentInset
+            width: Math.max(0, scrollView.availableWidth - (pane.contentInset * 2))
+            spacing: 10
 
-            GridLayout {
+            RowLayout {
+                objectName: "hostCommandRow"
                 Layout.fillWidth: true
-                columns: pane.compactLayout ? 1 : 2
-                columnSpacing: Theme.spacingRelated
-                rowSpacing: Theme.spacingRelated
+                spacing: 6
 
-                ColumnLayout {
+                AppTextField {
+                    id: quickConnectTarget
+
+                    objectName: "quickConnectTarget"
                     Layout.fillWidth: true
-                    spacing: Theme.spacingDense
-
-                    Text {
-                        text: qsTr("Hosts")
-                        color: pane.textColor
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.textTitle
-                        font.weight: Font.DemiBold
+                    compact: true
+                    placeholderText: qsTr("Find a host or enter user@host[:port]")
+                    accessibleName: qsTr("Find a saved host or enter a quick SSH target")
+                    selectByMouse: true
+                    onTextEdited: {
+                        pane.quickConnectMessage = "";
+                        pane.quickConnectMessageIsError = false;
                     }
+                    onAccepted: pane.openQuickConnect(quickConnectTarget)
+                }
 
-                    Text {
-                        Layout.fillWidth: true
-                        text: qsTr("Search, connect, and organize SSH hosts from one workspace.")
-                        color: pane.mutedColor
-                        wrapMode: Text.WordWrap
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.textBody
-                    }
+                ActionButton {
+                    id: quickConnectAction
+
+                    objectName: "quickConnectAction"
+                    text: qsTr("Connect")
+                    accessibleName: qsTr("Configure quick SSH connection")
+                    variant: "primary"
+                    onClicked: pane.openQuickConnect(quickConnectAction)
+                }
+
+                ActionButton {
+                    objectName: "hostLocalTerminal"
+                    visible: !pane.compactLayout
+                    text: qsTr("Terminal")
+                    iconName: "terminal"
+                    accessibleName: qsTr("Open local terminal")
+                    onClicked: pane.localTerminalRequested()
                 }
 
                 ActionButton {
                     id: newHostButton
 
                     objectName: "hostNew"
-                    Layout.fillWidth: pane.compactLayout
-                    Layout.alignment: pane.compactLayout ? Qt.AlignLeft : Qt.AlignRight
                     text: qsTr("New host")
                     iconName: "plus"
                     accessibleName: qsTr("Create a new SSH host profile")
-                    variant: "primary"
                     onClicked: pane.beginNewProfile()
                 }
             }
 
-            SectionCard {
-                objectName: "quickConnectCard"
+            StatusMessage {
                 Layout.fillWidth: true
-                heading: qsTr("Quick connect")
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: Theme.spacingControl
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: qsTr("Connect without creating a saved profile. Use user@host, user@host:port, or user@[IPv6]:port.")
-                        color: pane.mutedColor
-                        wrapMode: Text.WordWrap
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.textLabel
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: Theme.spacingControl
-
-                        AppTextField {
-                            id: quickConnectTarget
-
-                            objectName: "quickConnectTarget"
-                            Layout.fillWidth: true
-                            placeholderText: "user@host[:port]"
-                            accessibleName: qsTr("Quick connect SSH target")
-                            selectByMouse: true
-                            onTextEdited: {
-                                pane.quickConnectMessage = "";
-                                pane.quickConnectMessageIsError = false;
-                            }
-                            onAccepted: pane.openQuickConnect(quickConnectTarget)
-                        }
-
-                        ActionButton {
-                            id: quickConnectAction
-
-                            objectName: "quickConnectAction"
-                            text: qsTr("Connect")
-                            accessibleName: qsTr("Configure quick SSH connection")
-                            variant: "primary"
-                            onClicked: pane.openQuickConnect(quickConnectAction)
-                        }
-                    }
-
-                    StatusMessage {
-                        Layout.fillWidth: true
-                        text: pane.quickConnectMessage
-                        kind: pane.quickConnectMessageIsError ? "error" : "info"
-                    }
-                }
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.topMargin: 8
-                spacing: 10
-
-                AppTextField {
-                    id: searchField
-
-                    objectName: "hostSearch"
-                    Layout.fillWidth: true
-                    placeholderText: qsTr("Search hosts, groups, users, or addresses")
-                    accessibleName: qsTr("Search saved SSH hosts")
-                }
-
-                Text {
-                    visible: !pane.compactLayout
-                    text: qsTr("%n profile(s)", "", pane.filteredProfileCount)
-                    color: pane.mutedColor
-                    font.family: Theme.uiFont
-                    font.pixelSize: Theme.textLabel
-                }
+                text: pane.quickConnectMessage
+                kind: pane.quickConnectMessageIsError ? "error" : "info"
             }
 
             ColumnLayout {
@@ -581,12 +517,18 @@ Rectangle {
                             id: recentProfileCard
 
                             required property var modelData
+                            readonly property string accessibleName: qsTr("Reconnect to %1").arg(modelData.name)
 
                             width: recentProfileFlow.cardWidth
-                            height: 104
+                            height: 68
                             radius: Theme.radiusControl
                             color: recentCardHover.hovered ? Theme.controlHover : pane.raisedColor
-                            border.color: recentCardHover.hovered ? Theme.borderStrong : pane.borderColor
+                            border.color: recentProfileCard.activeFocus ? Theme.focus : recentCardHover.hovered ? Theme.borderStrong : pane.borderColor
+                            activeFocusOnTab: true
+                            Accessible.role: Accessible.Button
+                            Accessible.name: accessibleName
+                            Keys.onReturnPressed: pane.connectSaved(modelData, recentProfileCard)
+                            Keys.onEnterPressed: pane.connectSaved(modelData, recentProfileCard)
 
                             Behavior on color {
                                 ColorAnimation {
@@ -598,13 +540,30 @@ Rectangle {
                                 id: recentCardHover
                             }
 
-                            ColumnLayout {
+                            RowLayout {
                                 anchors.fill: parent
-                                anchors.margins: 12
-                                spacing: 3
+                                anchors.leftMargin: 10
+                                anchors.rightMargin: 9
+                                spacing: 9
 
-                                RowLayout {
+                                Rectangle {
+                                    Layout.preferredWidth: 38
+                                    Layout.preferredHeight: 38
+                                    radius: Theme.radiusControl
+                                    color: Theme.selectedBackground
+
+                                    AppIcon {
+                                        anchors.centerIn: parent
+                                        width: 17
+                                        height: 17
+                                        name: "terminal"
+                                        color: pane.accentColor
+                                    }
+                                }
+
+                                ColumnLayout {
                                     Layout.fillWidth: true
+                                    spacing: 1
 
                                     Text {
                                         Layout.fillWidth: true
@@ -616,34 +575,36 @@ Rectangle {
                                         font.weight: Font.DemiBold
                                     }
 
-                                    ActionButton {
-                                        id: recentConnectButton
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: recentProfileCard.modelData.username + "@" + recentProfileCard.modelData.host + ":" + recentProfileCard.modelData.port
+                                        color: pane.mutedColor
+                                        elide: Text.ElideMiddle
+                                        font.family: Theme.terminalFont
+                                        font.pixelSize: Theme.textCompact
+                                    }
 
-                                        objectName: "recentHostConnectAction"
-                                        text: qsTr("Connect")
-                                        accessibleName: qsTr("Reconnect to %1").arg(recentProfileCard.modelData.name)
-                                        variant: "primary"
-                                        onClicked: pane.connectSaved(recentProfileCard.modelData, recentConnectButton)
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: qsTr("Last connected %1").arg(pane.formatRecentConnection(recentProfileCard.modelData.lastConnectedUtcMs))
+                                        color: Theme.textSubtle
+                                        elide: Text.ElideRight
+                                        font.family: Theme.uiFont
+                                        font.pixelSize: Theme.textCompact
                                     }
                                 }
 
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: recentProfileCard.modelData.username + "@" + recentProfileCard.modelData.host + ":" + recentProfileCard.modelData.port
-                                    color: pane.mutedColor
-                                    elide: Text.ElideMiddle
-                                    font.family: Theme.terminalFont
-                                    font.pixelSize: Theme.textLabel
+                                AppIcon {
+                                    Layout.preferredWidth: 14
+                                    Layout.preferredHeight: 14
+                                    name: "play"
+                                    color: recentCardHover.hovered || recentProfileCard.activeFocus ? pane.accentColor : Theme.textSubtle
                                 }
+                            }
 
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: qsTr("Last connected %1").arg(pane.formatRecentConnection(recentProfileCard.modelData.lastConnectedUtcMs))
-                                    color: Theme.textSubtle
-                                    elide: Text.ElideRight
-                                    font.family: Theme.uiFont
-                                    font.pixelSize: Theme.textCompact
-                                }
+                            TapHandler {
+                                acceptedButtons: Qt.LeftButton
+                                onTapped: pane.connectSaved(recentProfileCard.modelData, recentProfileCard)
                             }
                         }
                     }
@@ -744,13 +705,18 @@ Rectangle {
 
                                 objectName: "savedHostCard"
                                 required property var modelData
-                                readonly property bool actionsExpanded: pane.expandedActionsProfileId === modelData.id
+                                readonly property string accessibleName: qsTr("Connect to %1").arg(modelData.name)
 
                                 width: profileFlow.cardWidth
-                                height: 24 + profileHeaderRow.implicitHeight + profilePrimaryActionsRow.implicitHeight + Theme.spacingControl + (profileActionsReveal.reveal * (profileActionsRow.implicitHeight + Theme.spacingControl))
+                                height: 68
                                 radius: Theme.radiusControl
                                 color: cardHover.hovered ? Theme.controlHover : pane.raisedColor
-                                border.color: cardHover.hovered ? Theme.borderStrong : pane.borderColor
+                                border.color: profileCard.activeFocus ? Theme.focus : cardHover.hovered ? Theme.borderStrong : pane.borderColor
+                                activeFocusOnTab: true
+                                Accessible.role: Accessible.Button
+                                Accessible.name: accessibleName
+                                Keys.onReturnPressed: pane.connectSaved(modelData, profileCard)
+                                Keys.onEnterPressed: pane.connectSaved(modelData, profileCard)
 
                                 Behavior on color {
                                     ColorAnimation {
@@ -758,190 +724,154 @@ Rectangle {
                                     }
                                 }
 
-                                Behavior on height {
-                                    NumberAnimation {
-                                        duration: Theme.motionMedium
-                                        easing.type: Easing.OutCubic
-                                    }
-                                }
-
                                 HoverHandler {
                                     id: cardHover
                                 }
 
-                                ColumnLayout {
-                                    id: profileContent
-
+                                RowLayout {
                                     anchors.fill: parent
-                                    anchors.margins: 12
-                                    spacing: Theme.spacingControl
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 5
+                                    spacing: 9
 
-                                    RowLayout {
-                                        id: profileHeaderRow
+                                    Rectangle {
+                                        Layout.preferredWidth: 38
+                                        Layout.preferredHeight: 38
+                                        radius: Theme.radiusControl
+                                        color: Theme.selectedBackground
 
+                                        AppIcon {
+                                            anchors.centerIn: parent
+                                            width: 17
+                                            height: 17
+                                            name: "terminal"
+                                            color: pane.accentColor
+                                        }
+                                    }
+
+                                    ColumnLayout {
                                         Layout.fillWidth: true
-                                        spacing: Theme.spacingControl
+                                        spacing: 1
 
-                                        Rectangle {
-                                            Layout.preferredWidth: 36
-                                            Layout.preferredHeight: 36
-                                            radius: Theme.radiusControl
-                                            color: Theme.selectedBackground
-
-                                            AppIcon {
-                                                anchors.centerIn: parent
-                                                width: 18
-                                                height: 18
-                                                name: "terminal"
-                                                color: pane.accentColor
-                                            }
-                                        }
-
-                                        ColumnLayout {
+                                        Text {
                                             Layout.fillWidth: true
-                                            spacing: 2
-
-                                            Text {
-                                                Layout.fillWidth: true
-                                                text: profileCard.modelData.name
-                                                color: pane.textColor
-                                                elide: Text.ElideRight
-                                                font.family: Theme.uiFont
-                                                font.pixelSize: Theme.textBody
-                                                font.weight: Font.DemiBold
-                                            }
-
-                                            Text {
-                                                Layout.fillWidth: true
-                                                text: profileCard.modelData.username + "@" + profileCard.modelData.host + ":" + profileCard.modelData.port
-                                                color: pane.mutedColor
-                                                elide: Text.ElideMiddle
-                                                font.family: Theme.terminalFont
-                                                font.pixelSize: Theme.textLabel
-                                            }
+                                            text: profileCard.modelData.name
+                                            color: pane.textColor
+                                            elide: Text.ElideRight
+                                            font.family: Theme.uiFont
+                                            font.pixelSize: Theme.textBody
+                                            font.weight: Font.DemiBold
                                         }
 
-                                        Rectangle {
-                                            Layout.preferredWidth: authenticationLabel.implicitWidth + 16
-                                            Layout.preferredHeight: 24
-                                            radius: 12
-                                            color: Theme.controlBackground
-                                            border.color: Theme.border
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: profileCard.modelData.username + "@" + profileCard.modelData.host + ":" + profileCard.modelData.port
+                                            color: pane.mutedColor
+                                            elide: Text.ElideMiddle
+                                            font.family: Theme.terminalFont
+                                            font.pixelSize: Theme.textCompact
+                                        }
 
-                                            Text {
-                                                id: authenticationLabel
-                                                anchors.centerIn: parent
-                                                text: profileCard.modelData.authentication === "password" ? qsTr("Password") : qsTr("Key")
-                                                color: Theme.textSoft
-                                                font.family: Theme.uiFont
-                                                font.pixelSize: Theme.textLabel
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: profileCard.modelData.authentication === "password" ? qsTr("Password") : qsTr("Private key")
+                                            color: Theme.textSubtle
+                                            elide: Text.ElideRight
+                                            font.family: Theme.uiFont
+                                            font.pixelSize: Theme.textCompact
+                                        }
+                                    }
+
+                                    ToolButton {
+                                        id: editProfileButton
+
+                                        Layout.preferredWidth: 28
+                                        Layout.preferredHeight: 28
+                                        hoverEnabled: true
+                                        focusPolicy: Qt.StrongFocus
+                                        Accessible.name: qsTr("Edit %1").arg(profileCard.modelData.name)
+                                        onClicked: pane.editProfile(profileCard.modelData)
+                                        contentItem: AppIcon {
+                                            name: "edit"
+                                            color: editProfileButton.hovered || editProfileButton.activeFocus ? pane.textColor : Theme.textSubtle
+                                        }
+                                        background: Rectangle {
+                                            radius: width / 2
+                                            color: editProfileButton.down ? Theme.controlPressed : editProfileButton.hovered ? Theme.controlHover : "transparent"
+                                            border.color: editProfileButton.activeFocus ? Theme.focus : "transparent"
+                                        }
+                                    }
+
+                                    ToolButton {
+                                        id: profileMoreButton
+
+                                        objectName: "savedHostMoreAction"
+                                        readonly property bool menuVisible: profileMoreMenu.visible
+                                        Layout.preferredWidth: 28
+                                        Layout.preferredHeight: 28
+                                        hoverEnabled: true
+                                        focusPolicy: Qt.StrongFocus
+                                        Accessible.name: qsTr("More actions for %1").arg(profileCard.modelData.name)
+                                        onClicked: profileMoreMenu.open()
+                                        Keys.onReturnPressed: click()
+                                        Keys.onEnterPressed: click()
+                                        contentItem: AppIcon {
+                                            name: "more"
+                                            color: profileMoreButton.hovered || profileMoreButton.activeFocus || profileMoreMenu.visible ? pane.textColor : Theme.textSubtle
+                                        }
+                                        background: Rectangle {
+                                            radius: width / 2
+                                            color: profileMoreButton.down ? Theme.controlPressed : profileMoreButton.hovered ? Theme.controlHover : "transparent"
+                                            border.color: profileMoreButton.activeFocus ? Theme.focus : "transparent"
+                                        }
+                                    }
+                                }
+
+                                TapHandler {
+                                    acceptedButtons: Qt.LeftButton
+                                    onTapped: pane.connectSaved(profileCard.modelData, profileCard)
+                                }
+
+                                AppMenu {
+                                    id: profileMoreMenu
+
+                                    x: Math.max(0, profileCard.width - width)
+                                    y: profileMoreButton.y + profileMoreButton.height
+
+                                    AppMenuItem {
+                                        text: qsTr("Edit")
+                                        onTriggered: pane.editProfile(profileCard.modelData)
+                                    }
+
+                                    AppMenuItem {
+                                        text: qsTr("Copy")
+                                        onTriggered: {
+                                            if (pane.controller.duplicateHostProfile(profileCard.modelData.id)) {
+                                                pane.showStatus(qsTr("Profile copied without its saved credential."), false);
+                                            } else {
+                                                pane.showStatus(qsTr("The profile could not be copied."), true);
                                             }
                                         }
                                     }
 
-                                    RowLayout {
-                                        id: profilePrimaryActionsRow
-
-                                        Layout.fillWidth: true
-                                        spacing: Theme.spacingControl
-
-                                        Item {
-                                            Layout.fillWidth: true
-                                        }
-
-                                        ActionButton {
-                                            id: connectProfileButton
-
-                                            objectName: "savedHostConnectAction"
-                                            Layout.preferredWidth: 104
-                                            text: qsTr("Connect")
-                                            accessibleName: qsTr("Connect to %1").arg(profileCard.modelData.name)
-                                            variant: "primary"
-                                            onClicked: pane.connectSaved(profileCard.modelData, connectProfileButton)
-                                        }
-
-                                        ActionButton {
-                                            objectName: "savedHostMoreAction"
-                                            text: profileCard.actionsExpanded ? qsTr("Less") : qsTr("More")
-                                            accessibleName: profileCard.actionsExpanded ? qsTr("Hide actions for %1").arg(profileCard.modelData.name) : qsTr("Show actions for %1").arg(profileCard.modelData.name)
-                                            onClicked: pane.expandedActionsProfileId = profileCard.actionsExpanded ? "" : profileCard.modelData.id
+                                    AppMenuItem {
+                                        visible: profileCard.modelData.credentialStored
+                                        text: qsTr("Forget secret")
+                                        onTriggered: {
+                                            pane.pendingForgetId = profileCard.modelData.id;
+                                            pane.pendingForgetName = profileCard.modelData.name;
+                                            forgetCredentialDialog.openFrom(profileMoreButton);
                                         }
                                     }
 
-                                    Item {
-                                        id: profileActionsReveal
+                                    AppMenuSeparator {}
 
-                                        objectName: "savedHostActionsReveal"
-                                        property real reveal: profileCard.actionsExpanded ? 1.0 : 0.0
-
-                                        Layout.fillWidth: true
-                                        Layout.preferredHeight: profileActionsRow.implicitHeight * reveal
-                                        visible: reveal > 0.001
-                                        enabled: profileCard.actionsExpanded
-                                        clip: true
-
-                                        Behavior on reveal {
-                                            NumberAnimation {
-                                                duration: Theme.motionMedium
-                                                easing.type: Easing.OutCubic
-                                            }
-                                        }
-
-                                        RowLayout {
-                                            id: profileActionsRow
-
-                                            anchors.left: parent.left
-                                            anchors.right: parent.right
-                                            anchors.top: parent.top
-                                            opacity: profileActionsReveal.reveal
-                                            spacing: Theme.spacingControl
-
-                                            ActionButton {
-                                                Layout.fillWidth: true
-                                                text: qsTr("Edit")
-                                                accessibleName: qsTr("Edit %1").arg(profileCard.modelData.name)
-                                                onClicked: pane.editProfile(profileCard.modelData)
-                                            }
-
-                                            ActionButton {
-                                                Layout.fillWidth: true
-                                                text: qsTr("Copy")
-                                                accessibleName: qsTr("Copy %1").arg(profileCard.modelData.name)
-                                                onClicked: {
-                                                    if (pane.controller.duplicateHostProfile(profileCard.modelData.id)) {
-                                                        pane.showStatus(qsTr("Profile copied without its saved credential."), false);
-                                                    } else {
-                                                        pane.showStatus(qsTr("The profile could not be copied."), true);
-                                                    }
-                                                }
-                                            }
-
-                                            ActionButton {
-                                                id: deleteProfileButton
-
-                                                Layout.fillWidth: true
-                                                text: qsTr("Delete")
-                                                accessibleName: qsTr("Delete %1").arg(profileCard.modelData.name)
-                                                onClicked: {
-                                                    pane.pendingDeleteId = profileCard.modelData.id;
-                                                    pane.pendingDeleteName = profileCard.modelData.name;
-                                                    deleteDialog.openFrom(deleteProfileButton);
-                                                }
-                                            }
-
-                                            ActionButton {
-                                                id: forgetCredentialButton
-
-                                                Layout.fillWidth: true
-                                                visible: profileCard.modelData.credentialStored
-                                                text: qsTr("Forget secret")
-                                                accessibleName: qsTr("Forget saved credential for %1").arg(profileCard.modelData.name)
-                                                onClicked: {
-                                                    pane.pendingForgetId = profileCard.modelData.id;
-                                                    pane.pendingForgetName = profileCard.modelData.name;
-                                                    forgetCredentialDialog.openFrom(forgetCredentialButton);
-                                                }
-                                            }
+                                    AppMenuItem {
+                                        text: qsTr("Delete")
+                                        onTriggered: {
+                                            pane.pendingDeleteId = profileCard.modelData.id;
+                                            pane.pendingDeleteName = profileCard.modelData.name;
+                                            deleteDialog.openFrom(profileMoreButton);
                                         }
                                     }
                                 }
@@ -959,7 +889,7 @@ Rectangle {
                     id: profileEditor
 
                     property real reveal: pane.editorExpanded ? 1.0 : 0.0
-                    readonly property real targetWidth: pane.compactLayout ? pane.width : Math.min(560, Math.max(440, pane.width * 0.52))
+                    readonly property real targetWidth: pane.compactLayout ? pane.width : Math.min(460, Math.max(400, pane.width * 0.38))
 
                     objectName: "hostDetailPane"
                     parent: pane
@@ -994,10 +924,10 @@ Rectangle {
                         ColumnLayout {
                             id: editorColumn
 
-                            x: 20
-                            y: 20
-                            width: Math.max(0, editorScroll.availableWidth - 40)
-                            spacing: 14
+                            x: 14
+                            y: 12
+                            width: Math.max(0, editorScroll.availableWidth - 28)
+                            spacing: 10
 
                             RowLayout {
                                 Layout.fillWidth: true
@@ -1006,7 +936,7 @@ Rectangle {
                                     text: pane.editingProfileId.length > 0 ? qsTr("Edit profile") : qsTr("New connection")
                                     color: pane.textColor
                                     font.family: Theme.uiFont
-                                    font.pixelSize: 16
+                                    font.pixelSize: 15
                                     font.weight: Font.DemiBold
                                 }
 

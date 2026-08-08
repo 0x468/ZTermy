@@ -546,7 +546,7 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(controller.saveApplicationSettings(
         QStringLiteral("light"), 0.8, QStringLiteral("micaAlt"), QStringLiteral("custom"), QStringLiteral("#3366cc"),
         QStringLiteral("Microsoft YaHei UI"), QStringLiteral("Cascadia Code"), 18, true, false, 0.45,
-        QStringLiteral("bar"), false, true, false, QStringLiteral("zh_CN")));
+        QStringLiteral("bar"), false, true, false, QStringLiteral("zh_CN"), true, false));
     QCOMPARE(settingsChanged.count(), 1);
     QCOMPARE(controller.themePreference(), QStringLiteral("light"));
     QCOMPARE(controller.backdropOpacity(), 0.8);
@@ -563,20 +563,22 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(!controller.cursorBlink());
     QVERIFY(controller.copyOnSelect());
     QVERIFY(!controller.confirmMultilinePaste());
+    QVERIFY(controller.sftpShowHiddenFiles());
+    QVERIFY(!controller.sftpConfirmDelete());
     QCOMPARE(controller.languagePreference(), QStringLiteral("zh_CN"));
 
-    QVERIFY(!controller.saveApplicationSettings(QStringLiteral("unknown"), 0.8, QStringLiteral("mica"),
-                                                QStringLiteral("system"), QStringLiteral("#3366CC"), {},
-                                                QStringLiteral("Cascadia Code"), 18, false, true, 0.45,
-                                                QStringLiteral("bar"), false, true, false, QStringLiteral("zh_CN")));
+    QVERIFY(!controller.saveApplicationSettings(
+        QStringLiteral("unknown"), 0.8, QStringLiteral("mica"), QStringLiteral("system"), QStringLiteral("#3366CC"), {},
+        QStringLiteral("Cascadia Code"), 18, false, true, 0.45, QStringLiteral("bar"), false, true, false,
+        QStringLiteral("zh_CN"), false, true));
     QVERIFY(!controller.saveApplicationSettings(
         QStringLiteral("light"), 0.8, QStringLiteral("mica"), QStringLiteral("system"), QStringLiteral("#3366CC"), {},
         QStringLiteral("Cascadia Code"), 18, false, true, 0.45, QStringLiteral("bar"), false, true, false,
-        QStringLiteral("unsupported")));
-    QVERIFY(!controller.saveApplicationSettings(QStringLiteral("light"), 0.8, QStringLiteral("mica"),
-                                                QStringLiteral("custom"), QStringLiteral("invalid"), {},
-                                                QStringLiteral("Cascadia Code"), 18, false, true, 0.45,
-                                                QStringLiteral("bar"), false, true, false, QStringLiteral("zh_CN")));
+        QStringLiteral("unsupported"), false, true));
+    QVERIFY(!controller.saveApplicationSettings(
+        QStringLiteral("light"), 0.8, QStringLiteral("mica"), QStringLiteral("custom"), QStringLiteral("invalid"), {},
+        QStringLiteral("Cascadia Code"), 18, false, true, 0.45, QStringLiteral("bar"), false, true, false,
+        QStringLiteral("zh_CN"), false, true));
     QCOMPARE(settingsChanged.count(), 1);
 
     ztermy::AppController reloaded(profilesPath, knownHostsPath, settingsPath);
@@ -591,6 +593,8 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(!reloaded.terminalLigatures());
     QCOMPARE(reloaded.terminalBackgroundOpacity(), 0.45);
     QVERIFY(reloaded.copyOnSelect());
+    QVERIFY(reloaded.sftpShowHiddenFiles());
+    QVERIFY(!reloaded.sftpConfirmDelete());
     QCOMPARE(reloaded.languagePreference(), QStringLiteral("zh_CN"));
 
     QVERIFY(reloaded.resetApplicationSettings());

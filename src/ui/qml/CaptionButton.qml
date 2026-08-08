@@ -8,6 +8,20 @@ Item {
     property bool externallyHovered: false
     property bool externallyPressed: false
     property string accessibleName: ""
+    readonly property bool hovered: externallyHovered || mouseArea.containsMouse
+    readonly property bool pressed: externallyPressed || mouseArea.pressed
+    readonly property color surfaceColor: {
+        if (control.kind === "close" && (control.hovered || control.activeFocus)) {
+            return Theme.closeHover;
+        }
+        if (control.pressed) {
+            return Theme.captionPressed;
+        }
+        if (control.hovered || control.activeFocus) {
+            return Theme.captionHover;
+        }
+        return "transparent";
+    }
     signal activated
 
     activeFocusOnTab: true
@@ -18,18 +32,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        color: {
-            if (control.kind === "close" && (mouseArea.containsMouse || control.activeFocus)) {
-                return Theme.closeHover;
-            }
-            if (control.externallyPressed || mouseArea.pressed) {
-                return Theme.controlPressed;
-            }
-            if (control.externallyHovered || mouseArea.containsMouse || control.activeFocus) {
-                return Theme.controlHover;
-            }
-            return "transparent";
-        }
+        color: control.surfaceColor
 
         Behavior on color {
             ColorAnimation {
@@ -57,7 +60,7 @@ Item {
         onPaint: {
             const context = getContext("2d");
             context.reset();
-            context.strokeStyle = control.kind === "close" && (mouseArea.containsMouse || control.activeFocus) ? Theme.dangerSurfaceText : Theme.text;
+            context.strokeStyle = control.kind === "close" && (control.hovered || control.activeFocus) ? Theme.dangerSurfaceText : Theme.text;
             context.lineWidth = 1;
             context.lineCap = "square";
 

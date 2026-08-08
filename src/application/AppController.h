@@ -94,6 +94,8 @@ class AppController final : public QObject
     Q_PROPERTY(bool cursorBlink READ cursorBlink NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool copyOnSelect READ copyOnSelect NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool confirmMultilinePaste READ confirmMultilinePaste NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(bool sftpShowHiddenFiles READ sftpShowHiddenFiles NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(bool sftpConfirmDelete READ sftpConfirmDelete NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString languagePreference READ languagePreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString credentialStoragePreference READ credentialStoragePreference NOTIFY credentialVaultChanged)
     Q_PROPERTY(QString effectiveCredentialStorage READ effectiveCredentialStorage NOTIFY credentialVaultChanged)
@@ -171,6 +173,8 @@ public:
     [[nodiscard]] bool cursorBlink() const noexcept;
     [[nodiscard]] bool copyOnSelect() const noexcept;
     [[nodiscard]] bool confirmMultilinePaste() const noexcept;
+    [[nodiscard]] bool sftpShowHiddenFiles() const noexcept;
+    [[nodiscard]] bool sftpConfirmDelete() const noexcept;
     [[nodiscard]] QString languagePreference() const;
     void retranslateUiState();
     [[nodiscard]] QString credentialStoragePreference() const;
@@ -191,6 +195,7 @@ public:
     Q_INVOKABLE void toggleTerminalComposer();
     Q_INVOKABLE void setTerminalComposerHeight(qreal height);
     Q_INVOKABLE bool copyActiveTerminalAddress();
+    Q_INVOKABLE bool copyActiveSftpPath();
     Q_INVOKABLE bool insertTerminalCommand(const QString &command);
     Q_INVOKABLE bool runTerminalCommand(const QString &command);
     Q_INVOKABLE bool startTerminalLog(const QString &localFileUrl);
@@ -255,7 +260,8 @@ public:
                                              const QString &uiFontFamily, const QString &fontFamily, int fontSize,
                                              bool showAllFonts, bool ligatures, qreal terminalBackgroundOpacity,
                                              const QString &cursor, bool cursorShouldBlink, bool shouldCopyOnSelect,
-                                             bool shouldConfirmMultilinePaste, const QString &language);
+                                             bool shouldConfirmMultilinePaste, const QString &language,
+                                             bool shouldShowHiddenSftpFiles, bool shouldConfirmSftpDelete);
     Q_INVOKABLE bool resetApplicationSettings();
     Q_INVOKABLE bool initializePortableCredentialVault(const QString &masterPassword);
     Q_INVOKABLE bool unlockPortableCredentialVault(const QString &masterPassword);

@@ -24,7 +24,8 @@ constexpr qint64 localizationSchemaVersion = 6;
 constexpr qint64 fontOptionsSchemaVersion = 7;
 constexpr qint64 workbenchSchemaVersion = 8;
 constexpr qint64 shortcutSchemaVersion = 9;
-constexpr qint64 currentSchemaVersion = shortcutSchemaVersion;
+constexpr qint64 sftpSchemaVersion = 10;
+constexpr qint64 currentSchemaVersion = sftpSchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::ApplicationSettings;
@@ -192,7 +193,7 @@ template <>
     if (version != legacySchemaVersion && version != materialSchemaVersion && version != terminalAppearanceSchemaVersion
         && version != accentSchemaVersion && version != credentialStorageSchemaVersion
         && version != localizationSchemaVersion && version != fontOptionsSchemaVersion
-        && version != workbenchSchemaVersion && version != currentSchemaVersion)
+        && version != workbenchSchemaVersion && version != shortcutSchemaVersion && version != currentSchemaVersion)
     {
         return std::unexpected(ApplicationSettingsStoreError::unsupportedVersion);
     }
@@ -213,6 +214,8 @@ template <>
     const QJsonValue cursorBlinkValue = root.value(QStringLiteral("cursorBlink"));
     const QJsonValue copyOnSelectValue = root.value(QStringLiteral("copyOnSelect"));
     const QJsonValue confirmMultilinePasteValue = root.value(QStringLiteral("confirmMultilinePaste"));
+    const QJsonValue sftpShowHiddenFilesValue = root.value(QStringLiteral("sftpShowHiddenFiles"));
+    const QJsonValue sftpConfirmDeleteValue = root.value(QStringLiteral("sftpConfirmDelete"));
     const QJsonValue credentialStorageValue = root.value(QStringLiteral("credentialStorage"));
     const QJsonValue languageValue = root.value(QStringLiteral("language"));
     const QJsonValue shortcutOverridesValue = root.value(QStringLiteral("shortcutOverrides"));
@@ -245,6 +248,10 @@ template <>
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
     if (version >= shortcutSchemaVersion && !shortcutOverridesValue.isObject())
+    {
+        return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
+    }
+    if (version >= sftpSchemaVersion && (!sftpShowHiddenFilesValue.isBool() || !sftpConfirmDeleteValue.isBool()))
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
@@ -301,6 +308,8 @@ template <>
         .cursorBlink = cursorBlinkValue.toBool(),
         .copyOnSelect = copyOnSelectValue.toBool(),
         .confirmMultilinePaste = confirmMultilinePasteValue.toBool(),
+        .sftpShowHiddenFiles = version >= sftpSchemaVersion && sftpShowHiddenFilesValue.toBool(),
+        .sftpConfirmDelete = version < sftpSchemaVersion || sftpConfirmDeleteValue.toBool(),
         .credentialStorage = *credentialStorage,
         .language = *language,
         .shortcutOverrides = std::move(shortcutOverrides),
@@ -395,6 +404,8 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
         {QStringLiteral("cursorBlink"), settings.cursorBlink},
         {QStringLiteral("copyOnSelect"), settings.copyOnSelect},
         {QStringLiteral("confirmMultilinePaste"), settings.confirmMultilinePaste},
+        {QStringLiteral("sftpShowHiddenFiles"), settings.sftpShowHiddenFiles},
+        {QStringLiteral("sftpConfirmDelete"), settings.sftpConfirmDelete},
         {QStringLiteral("credentialStorage"), credentialStoragePreferenceToken(settings.credentialStorage)},
         {QStringLiteral("language"), languagePreferenceToken(settings.language)},
         {QStringLiteral("shortcutOverrides"), shortcutOverrides},

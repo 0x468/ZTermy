@@ -54,6 +54,11 @@ QtObject {
     // text selection, where the matching highlight-text color is also used.
     readonly property color controlPressed: highContrast ? mixColor(highContrastBackground, highContrastText, 0.32) : withAlpha(dark ? "#263244" : "#CBD5E1", controlAlpha)
     readonly property color controlHover: highContrast ? mixColor(highContrastBackground, highContrastText, 0.18) : withAlpha(dark ? "#1F2A3A" : "#DCE5EF", controlAlpha)
+    // Caption buttons sit directly on the chrome surface. The ordinary light
+    // control hover is intentionally subtle on cards and fields, but is too
+    // close to the light chrome tint to remain visible through a backdrop.
+    readonly property color captionPressed: highContrast ? controlPressed : withAlpha(dark ? "#263244" : "#B8C4D3", controlAlpha)
+    readonly property color captionHover: highContrast ? controlHover : withAlpha(dark ? "#1F2A3A" : "#CBD5E1", controlAlpha)
     readonly property color fieldBackground: highContrast ? highContrastBackground : withAlpha(dark ? "#111827" : "#FFFFFF", fieldAlpha)
     readonly property color floatingBackground: highContrast ? highContrastBackground : withAlpha(dark ? "#1E293B" : "#FFFFFF", floatingAlpha)
 

@@ -77,8 +77,8 @@ constexpr std::array actions{
     ActionDescriptor{
         .id = "scripts.import",
         .category = "scripts",
-        .label = QT_TRANSLATE_NOOP("ActionRegistry", "Import script library"),
-        .description = QT_TRANSLATE_NOOP("ActionRegistry", "Merge a ztermy script library from JSON."),
+        .label = QT_TRANSLATE_NOOP("ActionRegistry", "Import command snippet library"),
+        .description = QT_TRANSLATE_NOOP("ActionRegistry", "Merge a ztermy command snippet library from JSON."),
         .defaultShortcut = "",
         .terminalRequired = false,
         .paletteVisible = true,
@@ -87,8 +87,8 @@ constexpr std::array actions{
     ActionDescriptor{
         .id = "scripts.export",
         .category = "scripts",
-        .label = QT_TRANSLATE_NOOP("ActionRegistry", "Export script library"),
-        .description = QT_TRANSLATE_NOOP("ActionRegistry", "Export all ztermy scripts and metadata to JSON."),
+        .label = QT_TRANSLATE_NOOP("ActionRegistry", "Export command snippet library"),
+        .description = QT_TRANSLATE_NOOP("ActionRegistry", "Export all ztermy command snippets and metadata to JSON."),
         .defaultShortcut = "",
         .terminalRequired = false,
         .paletteVisible = true,
@@ -147,8 +147,8 @@ constexpr std::array actions{
     ActionDescriptor{
         .id = "terminal.scripts",
         .category = "terminal",
-        .label = QT_TRANSLATE_NOOP("ActionRegistry", "Show scripts"),
-        .description = QT_TRANSLATE_NOOP("ActionRegistry", "Open the reusable scripts panel."),
+        .label = QT_TRANSLATE_NOOP("ActionRegistry", "Show command snippets"),
+        .description = QT_TRANSLATE_NOOP("ActionRegistry", "Open the reusable command snippets panel."),
         .defaultShortcut = "Ctrl+Shift+S",
         .terminalRequired = true,
         .paletteVisible = true,
@@ -243,7 +243,7 @@ constexpr std::array actions{
     }
     if (token == QLatin1StringView("scripts"))
     {
-        return translated(QT_TRANSLATE_NOOP("ActionRegistry", "Scripts"));
+        return translated(QT_TRANSLATE_NOOP("ActionRegistry", "Command snippets"));
     }
     return translated(QT_TRANSLATE_NOOP("ActionRegistry", "Application"));
 }

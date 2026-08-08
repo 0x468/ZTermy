@@ -9,10 +9,11 @@ Rectangle {
     default property alias contentData: contentLayout.data
     property string heading: ""
     property string description: ""
+    property bool compact: false
 
-    implicitHeight: cardLayout.implicitHeight + 36
-    radius: Theme.radiusPanel
-    color: Theme.elevatedBackground
+    implicitHeight: cardLayout.implicitHeight + (compact ? 20 : 36)
+    radius: compact ? Theme.radiusControl : Theme.radiusPanel
+    color: compact ? Theme.panelBackground : Theme.elevatedBackground
     border.color: Theme.border
     Accessible.name: heading
 
@@ -20,8 +21,8 @@ Rectangle {
         id: cardLayout
 
         anchors.fill: parent
-        anchors.margins: 18
-        spacing: 12
+        anchors.margins: control.compact ? 10 : 18
+        spacing: control.compact ? 8 : 12
 
         Text {
             Layout.fillWidth: true
@@ -30,7 +31,7 @@ Rectangle {
             color: Theme.text
             wrapMode: Text.WordWrap
             font.family: Theme.uiFont
-            font.pixelSize: 16
+            font.pixelSize: control.compact ? Theme.textBody : 16
             font.weight: Font.DemiBold
         }
 
@@ -41,14 +42,14 @@ Rectangle {
             color: Theme.textMuted
             wrapMode: Text.WordWrap
             font.family: Theme.uiFont
-            font.pixelSize: Theme.textBody
+            font.pixelSize: control.compact ? Theme.textLabel : Theme.textBody
         }
 
         ColumnLayout {
             id: contentLayout
 
             Layout.fillWidth: true
-            spacing: 12
+            spacing: control.compact ? 8 : 12
         }
     }
 }

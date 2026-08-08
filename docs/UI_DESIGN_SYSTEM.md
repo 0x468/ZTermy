@@ -102,8 +102,10 @@ Use a four-pixel base rhythm.
 - Control-internal gap: 8 px.
 - Related-control gap: 12 px.
 - Section gap: 16 px.
-- Card inset: 20 px.
-- Page inset: 28 or 32 px.
+- Presentation-card inset: 20 px; use only for About/release identity, bounded
+  state, or security content that genuinely needs an elevated container.
+- Tool-surface inset: 8 or 12 px.
+- Functional-page inset: 12 or 16 px. About may use 28 or 32 px.
 - Small radius: 4 px.
 - Control radius: 8 px.
 - Panel and dialog radius: 12 px.
@@ -111,6 +113,11 @@ Use a four-pixel base rhythm.
   their established horizontal targets and Win32 hit-test behavior.
 
 Terminal cell geometry is independent from application density.
+
+V2.2 adds a density correction: ordinary toolbars and setting rows target
+28-36 px, and regular-width host items target 64-72 px. Hosts, SFTP, history,
+command snippets, and non-Application settings must not use page heroes or
+large cards as their default organization primitive.
 
 ## Component states
 

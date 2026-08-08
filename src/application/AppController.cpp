@@ -1194,6 +1194,16 @@ bool AppController::confirmMultilinePaste() const noexcept
     return m_settings.confirmMultilinePaste;
 }
 
+bool AppController::sftpShowHiddenFiles() const noexcept
+{
+    return m_settings.sftpShowHiddenFiles;
+}
+
+bool AppController::sftpConfirmDelete() const noexcept
+{
+    return m_settings.sftpConfirmDelete;
+}
+
 QString AppController::languagePreference() const
 {
     return config::languagePreferenceToken(m_settings.language);
@@ -1539,6 +1549,17 @@ bool AppController::copyActiveTerminalAddress()
         return false;
     }
     m_terminal->setClipboardText(tab->address);
+    return true;
+}
+
+bool AppController::copyActiveSftpPath()
+{
+    const TerminalTab *tab = activeTab();
+    if (tab == nullptr || tab->sftpPath.isEmpty() || m_terminal == nullptr)
+    {
+        return false;
+    }
+    m_terminal->setClipboardText(tab->sftpPath);
     return true;
 }
 
@@ -2491,6 +2512,7 @@ bool AppController::startSftpSession(TerminalTab &tab)
         return true;
     }
     tab.sftpModel = std::make_unique<sftp::SftpDirectoryModel>();
+    tab.sftpModel->setShowHidden(m_settings.sftpShowHiddenFiles);
     auto request = sftpConnectionRequest(tab);
     if (!request)
     {
@@ -3132,7 +3154,8 @@ bool AppController::saveApplicationSettings(const QString &theme, const qreal ba
                                             const bool showAllFonts, const bool ligatures,
                                             const qreal terminalBackgroundOpacity, const QString &cursor,
                                             const bool cursorShouldBlink, const bool shouldCopyOnSelect,
-                                            const bool shouldConfirmMultilinePaste, const QString &language)
+                                            const bool shouldConfirmMultilinePaste, const QString &language,
+                                            const bool shouldShowHiddenSftpFiles, const bool shouldConfirmSftpDelete)
 {
     const auto parsedTheme = config::parseThemePreference(theme);
     const auto parsedBackdrop = config::parseBackdropPreference(backdrop);
@@ -3160,6 +3183,8 @@ bool AppController::saveApplicationSettings(const QString &theme, const qreal ba
         .cursorBlink = cursorShouldBlink,
         .copyOnSelect = shouldCopyOnSelect,
         .confirmMultilinePaste = shouldConfirmMultilinePaste,
+        .sftpShowHiddenFiles = shouldShowHiddenSftpFiles,
+        .sftpConfirmDelete = shouldConfirmSftpDelete,
         .credentialStorage = m_settings.credentialStorage,
         .language = *parsedLanguage,
     });
@@ -4221,6 +4246,13 @@ bool AppController::persistApplicationSettings(const config::ApplicationSettings
         return true;
     }
     m_settings = settings;
+    for (const auto &tab : m_tabs)
+    {
+        if (tab->sftpModel != nullptr)
+        {
+            tab->sftpModel->setShowHidden(m_settings.sftpShowHiddenFiles);
+        }
+    }
     emit applicationSettingsChanged();
     return true;
 }

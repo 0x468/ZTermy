@@ -138,7 +138,7 @@ Rectangle {
     focus: visible
     Keys.onEscapePressed: closeRequested()
     Accessible.role: Accessible.Pane
-    Accessible.name: currentPage === "sftp" ? qsTr("SFTP file browser") : currentPage === "history" ? qsTr("Command history") : qsTr("Scripts")
+    Accessible.name: currentPage === "sftp" ? qsTr("SFTP file browser") : currentPage === "history" ? qsTr("Command history") : qsTr("Command snippets")
     onVisibleChanged: {
         if (visible && currentPage === "history" && controller.terminalHistoryState === "idle") {
             controller.refreshTerminalHistory();
@@ -232,21 +232,21 @@ Rectangle {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 42
+            Layout.preferredHeight: 34
             color: Theme.chromeBackground
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 8
-                anchors.rightMargin: 7
+                anchors.leftMargin: 5
+                anchors.rightMargin: 4
                 spacing: 4
 
                 WorkbenchToolButton {
                     id: sftpPageButton
 
                     Layout.alignment: Qt.AlignVCenter
-                    Layout.preferredWidth: 32
-                    Layout.preferredHeight: 32
+                    Layout.preferredWidth: 28
+                    Layout.preferredHeight: 28
                     checkable: true
                     checked: workbench.currentPage === "sftp"
                     selected: checked
@@ -266,8 +266,8 @@ Rectangle {
                     id: historyPageButton
 
                     Layout.alignment: Qt.AlignVCenter
-                    Layout.preferredWidth: 32
-                    Layout.preferredHeight: 32
+                    Layout.preferredWidth: 28
+                    Layout.preferredHeight: 28
                     checkable: true
                     checked: workbench.currentPage === "history"
                     selected: checked
@@ -283,13 +283,13 @@ Rectangle {
                     id: quickCommandsPageButton
 
                     Layout.alignment: Qt.AlignVCenter
-                    Layout.preferredWidth: 32
-                    Layout.preferredHeight: 32
+                    Layout.preferredWidth: 28
+                    Layout.preferredHeight: 28
                     checkable: true
                     checked: workbench.currentPage === "scripts"
                     selected: checked
                     onClicked: workbench.controller.toggleTerminalWorkbench("scripts")
-                    Accessible.name: qsTr("Scripts")
+                    Accessible.name: qsTr("Command snippets")
                     contentItem: AppIcon {
                         name: "commands"
                         color: quickCommandsPageButton.checked ? Theme.accent : Theme.textSoft
@@ -303,8 +303,8 @@ Rectangle {
                 WorkbenchToolButton {
                     objectName: "moveTerminalWorkbenchButton"
                     Layout.alignment: Qt.AlignVCenter
-                    Layout.preferredWidth: 32
-                    Layout.preferredHeight: 32
+                    Layout.preferredWidth: 28
+                    Layout.preferredHeight: 28
                     onClicked: workbench.controller.moveTerminalWorkbench()
                     Accessible.name: workbench.panelSide === "left" ? qsTr("Move terminal workbench right") : qsTr("Move terminal workbench left")
                     contentItem: AppIcon {
@@ -316,8 +316,8 @@ Rectangle {
                 WorkbenchToolButton {
                     objectName: "closeTerminalWorkbenchButton"
                     Layout.alignment: Qt.AlignVCenter
-                    Layout.preferredWidth: 32
-                    Layout.preferredHeight: 32
+                    Layout.preferredWidth: 28
+                    Layout.preferredHeight: 28
                     onClicked: workbench.closeRequested()
                     Accessible.name: qsTr("Close terminal workbench")
                     contentItem: AppIcon {
@@ -627,7 +627,7 @@ Rectangle {
                             Layout.preferredWidth: 28
                             Layout.preferredHeight: 26
                             onClicked: scriptLibraryMenu.open()
-                            Accessible.name: qsTr("Script library actions")
+                            Accessible.name: qsTr("Command snippet library actions")
                             contentItem: AppIcon {
                                 name: "more"
                                 color: Theme.textSoft
@@ -661,8 +661,8 @@ Rectangle {
 
                             Layout.fillWidth: true
                             compact: true
-                            placeholderText: qsTr("Search scripts and code snippets")
-                            accessibleName: qsTr("Search scripts and code snippets")
+                            placeholderText: qsTr("Search command snippets")
+                            accessibleName: qsTr("Search command snippets")
                         }
 
                         WorkbenchToolButton {
@@ -991,8 +991,8 @@ Rectangle {
                         visible: workbench.filteredQuickCommands.length === 0 && !commandEditor.visible
                         kind: "empty"
                         centered: true
-                        heading: quickCommandSearch.text.length > 0 ? qsTr("No matching scripts") : qsTr("No code snippets")
-                        description: quickCommandSearch.text.length > 0 ? qsTr("Try a different search term.") : qsTr("Code snippets are the lightweight building blocks of the scripts library.")
+                        heading: quickCommandSearch.text.length > 0 ? qsTr("No matching snippets") : qsTr("No command snippets")
+                        description: quickCommandSearch.text.length > 0 ? qsTr("Try a different search term.") : qsTr("Save reusable commands here, then run or insert them from any terminal.")
 
                         ActionButton {
                             text: qsTr("New code snippet")

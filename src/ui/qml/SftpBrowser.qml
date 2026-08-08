@@ -8,6 +8,8 @@ import QtQuick.Layouts
 Item {
     id: browser
 
+    objectName: "sftpBrowser"
+
     required property var controller
     readonly property var directoryModel: controller.activeSftpDirectoryModel
     property string pendingPath: ""
@@ -53,6 +55,10 @@ Item {
     }
 
     function requestDelete(path, name, directory, sourceItem) {
+        if (!controller.sftpConfirmDelete) {
+            controller.removeSftpEntry(path, directory);
+            return;
+        }
         pendingPath = path;
         pendingName = name;
         pendingDirectory = directory;
@@ -94,6 +100,7 @@ Item {
             spacing: 3
 
             BrowserToolButton {
+                objectName: "sftpHomeButton"
                 enabled: browser.controller.activeSftpHomePath.length > 0 && browser.controller.activeSftpState !== "loading"
                 onClicked: browser.controller.navigateSftpHome()
                 Accessible.name: qsTr("Home folder")
@@ -107,6 +114,7 @@ Item {
             }
 
             BrowserToolButton {
+                objectName: "sftpParentButton"
                 enabled: browser.controller.activeSftpPath !== "/" && browser.controller.activeSftpState !== "loading"
                 onClicked: browser.controller.navigateSftpParent()
                 Accessible.name: qsTr("Parent folder")
@@ -121,6 +129,8 @@ Item {
 
             AppTextField {
                 id: pathField
+
+                objectName: "sftpPathField"
 
                 Layout.fillWidth: true
                 compact: true
@@ -138,6 +148,21 @@ Item {
             }
 
             BrowserToolButton {
+                objectName: "sftpCopyPathButton"
+                enabled: browser.controller.activeSftpPath.length > 0
+                onClicked: browser.controller.copyActiveSftpPath()
+                Accessible.name: qsTr("Copy remote path")
+                contentItem: AppIcon {
+                    name: "copy"
+                    color: parent.enabled ? Theme.textSoft : Theme.textSubtle
+                }
+                AppToolTip {
+                    text: qsTr("Copy path")
+                }
+            }
+
+            BrowserToolButton {
+                objectName: "sftpRecentPathsButton"
                 enabled: browser.controller.recentSftpPaths.length > 0 && browser.controller.activeSftpState !== "loading"
                 onClicked: recentPathsMenu.popup()
                 Accessible.name: qsTr("Recent remote paths")
@@ -151,6 +176,8 @@ Item {
             }
 
             BrowserToolButton {
+                objectName: "sftpRefreshButton"
+                visible: browser.width >= 430
                 enabled: browser.controller.activeSftpState !== "loading"
                 onClicked: browser.controller.refreshSftpDirectory()
                 Accessible.name: qsTr("Refresh folder")
@@ -164,6 +191,8 @@ Item {
             }
 
             BrowserToolButton {
+                objectName: "sftpUploadButton"
+                visible: browser.width >= 430
                 enabled: browser.controller.activeSftpState === "ready"
                 onClicked: uploadDialog.open()
                 Accessible.name: qsTr("Upload files")
@@ -177,6 +206,8 @@ Item {
             }
 
             BrowserToolButton {
+                objectName: "sftpNewFolderButton"
+                visible: browser.width >= 430
                 enabled: browser.controller.activeSftpState === "ready"
                 onClicked: browser.beginCreateDirectory()
                 Accessible.name: qsTr("New folder")
@@ -188,6 +219,21 @@ Item {
                     text: qsTr("New folder")
                 }
             }
+
+            BrowserToolButton {
+                objectName: "sftpMoreActionsButton"
+                visible: browser.width < 430
+                enabled: browser.controller.activeSftpState !== "loading"
+                onClicked: browserActionsMenu.popup()
+                Accessible.name: qsTr("More file browser actions")
+                contentItem: AppIcon {
+                    name: "more"
+                    color: parent.enabled ? Theme.textSoft : Theme.textSubtle
+                }
+                AppToolTip {
+                    text: qsTr("More actions")
+                }
+            }
         }
 
         RowLayout {
@@ -196,6 +242,8 @@ Item {
 
             AppTextField {
                 id: filterField
+
+                objectName: "sftpFilterField"
 
                 Layout.fillWidth: true
                 compact: true
@@ -210,6 +258,8 @@ Item {
 
             AppCheckBox {
                 id: hiddenFiles
+
+                objectName: "sftpHiddenFilesCheckBox"
 
                 text: qsTr("Hidden")
                 checked: browser.directoryModel ? browser.directoryModel.showHidden : false
@@ -272,6 +322,8 @@ Item {
 
         ListView {
             id: fileList
+
+            objectName: "sftpFileList"
 
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -539,6 +591,25 @@ Item {
                 Accessible.name: qsTr("Open recent remote path %1").arg(modelData)
                 onTriggered: browser.controller.navigateSftpDirectory(modelData)
             }
+        }
+    }
+
+    AppMenu {
+        id: browserActionsMenu
+
+        AppMenuItem {
+            text: qsTr("Refresh")
+            onTriggered: browser.controller.refreshSftpDirectory()
+        }
+        AppMenuItem {
+            text: qsTr("Upload files")
+            enabled: browser.controller.activeSftpState === "ready"
+            onTriggered: uploadDialog.open()
+        }
+        AppMenuItem {
+            text: qsTr("New folder")
+            enabled: browser.controller.activeSftpState === "ready"
+            onTriggered: browser.beginCreateDirectory()
         }
     }
 

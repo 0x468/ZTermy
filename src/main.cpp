@@ -10,7 +10,10 @@
 #include "ui/terminal/TerminalItem.h"
 #include "ztermy_version.h"
 
+#include <QAbstractItemModel>
 #include <QAccessible>
+#include <QClipboard>
+#include <QColor>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QEventLoop>
@@ -32,6 +35,7 @@
 
 #include <dwmapi.h>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdlib>
@@ -388,7 +392,8 @@ struct ResizeHitRuntimeCase
             controller.uiFontFamily(), controller.terminalFontFamily(), controller.terminalFontSize(),
             controller.showAllTerminalFonts(), controller.terminalLigatures(), controller.terminalBackgroundOpacity(),
             controller.cursorPreference(), controller.cursorBlink(), controller.copyOnSelect(),
-            controller.confirmMultilinePaste(), controller.languagePreference());
+            controller.confirmMultilinePaste(), controller.languagePreference(), controller.sftpShowHiddenFiles(),
+            controller.sftpConfirmDelete());
     };
     const auto surfaceAlpha = [&window](const char *propertyName) {
         QQuickItem *rootObject = window.rootObject();
@@ -539,23 +544,25 @@ struct ResizeHitRuntimeCase
     auto *hostPane = rootObject->findChild<QObject *>(QStringLiteral("hostConnectionPane"));
     auto *hostContent = rootObject->findChild<QObject *>(QStringLiteral("hostContentColumn"));
     auto *hostEditorGrid = rootObject->findChild<QObject *>(QStringLiteral("hostEditorGrid"));
-    auto *quickConnectCard = rootObject->findChild<QObject *>(QStringLiteral("quickConnectCard"));
+    auto *hostCommandRow = rootObject->findChild<QObject *>(QStringLiteral("hostCommandRow"));
     auto *quickConnectTarget = rootObject->findChild<QObject *>(QStringLiteral("quickConnectTarget"));
     auto *quickConnectAction = rootObject->findChild<QObject *>(QStringLiteral("quickConnectAction"));
+    auto *newHostAction = rootObject->findChild<QObject *>(QStringLiteral("hostNew"));
     const QString breakpointName = compact ? QStringLiteral("compact") : QStringLiteral("regular");
     const QString capturePrefix = themeName + QStringLiteral("-") + breakpointName;
     const bool hostCaptured = captureLayout(window, outputDirectory, capturePrefix + QStringLiteral("-hosts"));
     const qreal hostPaneWidth = hostPane == nullptr ? 0.0 : hostPane->property("width").toReal();
     const qreal hostContentWidth = hostContent == nullptr ? 0.0 : hostContent->property("width").toReal();
     const bool hostMatches =
-        hostPane != nullptr && hostContent != nullptr && hostEditorGrid != nullptr && quickConnectCard != nullptr
-        && quickConnectTarget != nullptr && quickConnectAction != nullptr
-        && hostPane->property("compactLayout").toBool() == compact
-        && hostEditorGrid->property("columns").toInt() == (compact ? 1 : 2)
-        && hostPane->property("profileCardColumns").toInt() == (compact ? 1 : 2) && hostContentWidth > 0.0
-        && hostContentWidth <= hostPaneWidth && quickConnectCard->property("width").toReal() > 0.0
-        && quickConnectCard->property("width").toReal() <= hostContentWidth
-        && quickConnectTarget->property("width").toReal() > 0.0 && quickConnectAction->property("width").toReal() > 0.0;
+        hostPane != nullptr && hostContent != nullptr && hostEditorGrid != nullptr && hostCommandRow != nullptr
+        && quickConnectTarget != nullptr && quickConnectAction != nullptr && newHostAction != nullptr
+        && hostPane->property("compactLayout").toBool() == compact && hostEditorGrid->property("columns").toInt() >= 1
+        && hostEditorGrid->property("columns").toInt() <= 2 && hostPane->property("profileCardColumns").toInt() >= 1
+        && hostPane->property("profileCardColumns").toInt() <= 4 && hostContentWidth > 0.0
+        && hostContentWidth <= hostPaneWidth && hostCommandRow->property("width").toReal() > 0.0
+        && hostCommandRow->property("width").toReal() <= hostContentWidth
+        && quickConnectTarget->property("width").toReal() > 0.0 && quickConnectAction->property("width").toReal() > 0.0
+        && newHostAction->property("width").toReal() > 0.0;
 
     rootObject->setProperty("currentPage", QStringLiteral("settings"));
     processWindowEventsFor(std::chrono::milliseconds{100});
@@ -570,6 +577,8 @@ struct ResizeHitRuntimeCase
     bool securityMatches = false;
     bool shortcutsCaptured = false;
     bool shortcutsMatch = false;
+    bool sftpCaptured = false;
+    bool sftpMatches = false;
     if (settingsPane != nullptr)
     {
         settingsPane->setProperty("currentCategory", QStringLiteral("application"));
@@ -609,6 +618,14 @@ struct ResizeHitRuntimeCase
                                       << (shortcutSearch != nullptr && shortcutSearch->property("visible").toBool())
                                       << "category=" << settingsPane->property("currentCategory").toString();
         }
+        settingsPane->setProperty("currentCategory", QStringLiteral("sftp"));
+        processWindowEventsFor(std::chrono::milliseconds{200});
+        auto *sftpGrid = rootObject->findChild<QObject *>(QStringLiteral("settingsSftpGrid"));
+        auto *sftpShowHidden = rootObject->findChild<QObject *>(QStringLiteral("settingsSftpShowHidden"));
+        auto *sftpConfirmDelete = rootObject->findChild<QObject *>(QStringLiteral("settingsSftpConfirmDelete"));
+        sftpCaptured = captureLayout(window, outputDirectory, capturePrefix + QStringLiteral("-sftp-settings"));
+        sftpMatches = sftpGrid != nullptr && sftpGrid->property("visible").toBool() && sftpShowHidden != nullptr
+                      && sftpConfirmDelete != nullptr;
         settingsPane->setProperty("currentCategory", QStringLiteral("appearance"));
     }
 
@@ -637,9 +654,10 @@ struct ResizeHitRuntimeCase
                            << "hostPaneWidth=" << hostPaneWidth << "hostContentWidth=" << hostContentWidth
                            << "hostMatches=" << hostMatches << "settingsMatch=" << settingsMatch
                            << "applicationMatches=" << applicationMatches << "securityMatches=" << securityMatches
-                           << "shortcutsMatch=" << shortcutsMatch;
-    return hostMatches && settingsMatch && applicationMatches && securityMatches && shortcutsMatch && hostCaptured
-           && settingsCaptured && applicationCaptured && securityCaptured && shortcutsCaptured;
+                           << "shortcutsMatch=" << shortcutsMatch << "sftpMatches=" << sftpMatches;
+    return hostMatches && settingsMatch && applicationMatches && securityMatches && shortcutsMatch && sftpMatches
+           && hostCaptured && settingsCaptured && applicationCaptured && securityCaptured && shortcutsCaptured
+           && sftpCaptured;
 }
 
 [[nodiscard]] bool applyUiLayoutSmokeTheme(ztermy::AppController &controller, const QString &theme,
@@ -647,7 +665,8 @@ struct ResizeHitRuntimeCase
 {
     return controller.saveApplicationSettings(theme, 1.0, QStringLiteral("acrylic"), QStringLiteral("ztermy"),
                                               QStringLiteral("#22C55E"), {}, QStringLiteral("Cascadia Mono"), 14, false,
-                                              true, 1.0, QStringLiteral("terminal"), true, false, true, language);
+                                              true, 1.0, QStringLiteral("terminal"), true, false, true, language, false,
+                                              true);
 }
 
 [[nodiscard]] bool runUiLayoutRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller,
@@ -803,6 +822,15 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
     processWindowEventsFor(std::chrono::milliseconds{80});
 }
 
+void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF itemPosition)
+{
+    static int timestamp = 10'000;
+    const QPointF local = item.mapToScene(itemPosition);
+    const QPointF global = window.mapToGlobal(local.toPoint());
+    qt_handleMouseEvent(&window, local, global, Qt::NoButton, Qt::NoButton, QEvent::MouseMove, {}, timestamp++);
+    processWindowEventsFor(std::chrono::milliseconds{250});
+}
+
 [[nodiscard]] bool focusItem(ztermy::NativeWindow &window, QQuickItem *item, const QString &expectedName)
 {
     if (item == nullptr || !item->isVisible() || !item->isEnabled())
@@ -913,6 +941,26 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
         "settingsOpacity",  "settingsReset",  "settingsDiscard", "settingsApply",
     };
     if (!verifyOrder(appearanceOrder))
+    {
+        return false;
+    }
+
+    QQuickItem *sftpCategory = quickItem(rootObject, "settingsSftpCategory");
+    if (!focusItem(window, sftpCategory, QStringLiteral("settingsSftpCategory")))
+    {
+        return false;
+    }
+    sendKey(window, Qt::Key_Space);
+    processWindowEventsFor(std::chrono::milliseconds{100});
+    if (settingsPane->property("currentCategory").toString() != QStringLiteral("sftp"))
+    {
+        qCWarning(applicationLog) << "SFTP settings category did not activate from the keyboard";
+        return false;
+    }
+    constexpr std::array sftpOrder{
+        "settingsSftpShowHidden", "settingsSftpConfirmDelete", "settingsReset", "settingsDiscard", "settingsApply",
+    };
+    if (!verifyOrder(sftpOrder))
     {
         return false;
     }
@@ -1117,14 +1165,14 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
 
     constexpr std::array accessibleButtons{
         std::pair{"hostsTitleAction", "Hosts"},
-        std::pair{"titleNewTabAction", "New local terminal"},
+        std::pair{"titleNewTabAction", "Open new terminal menu"},
         std::pair{"minimizeCaptionButton", "Minimize"},
         std::pair{"maximizeCaptionButton", "Maximize"},
         std::pair{"closeCaptionButton", "Close"},
         std::pair{"sideHostsAction", "Hosts"},
         std::pair{"commandPaletteAction", "Open command palette"},
         std::pair{"settingsShortcutAction", "Open Settings"},
-        std::pair{"localMachineAction", "Open local terminal"},
+        std::pair{"hostLocalTerminal", "Open local terminal"},
         std::pair{"terminalFindAction", "Find in terminal"},
     };
     for (const auto &[objectName, expectedName] : accessibleButtons)
@@ -1184,7 +1232,8 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
         || !verifyAccessibleButton(rootObject, "settingsApplicationCategory", "Application settings")
         || !verifyAccessibleButton(rootObject, "settingsAppearanceCategory", "Appearance settings")
         || !verifyAccessibleButton(rootObject, "settingsTerminalCategory", "Terminal settings")
-        || !verifyAccessibleButton(rootObject, "settingsShortcutsCategory", "Shortcuts settings"))
+        || !verifyAccessibleButton(rootObject, "settingsShortcutsCategory", "Shortcuts settings")
+        || !verifyAccessibleButton(rootObject, "settingsSftpCategory", "SFTP settings"))
     {
         qCWarning(applicationLog) << "Space did not open the singleton Settings work tab";
         return false;
@@ -1339,13 +1388,25 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
     }
 
     sendKey(window, Qt::Key_Return);
+    QQuickItem *settingsStatusMessage = quickItem(rootObject, "settingsStatusMessage");
     const bool settingsApplied =
         controller.themePreference() == QStringLiteral("light") && qAbs(controller.backdropOpacity() - 0.95) < 0.001
         && controller.accentPreference() == QStringLiteral("system") && controller.terminalFontSize() == 15
-        && !controller.cursorBlink() && controller.copyOnSelect() && !controller.confirmMultilinePaste();
+        && !controller.cursorBlink() && controller.copyOnSelect() && !controller.confirmMultilinePaste()
+        && settingsStatusMessage != nullptr && settingsStatusMessage->isVisible();
     if (!settingsApplied)
     {
         qCWarning(applicationLog) << "Enter did not apply the keyboard-edited settings";
+        return false;
+    }
+    const bool settingsStatusDismissed = processWindowEventsUntil(
+        [settingsStatusMessage] {
+            return settingsStatusMessage != nullptr && !settingsStatusMessage->isVisible();
+        },
+        std::chrono::seconds{5});
+    if (!settingsStatusDismissed)
+    {
+        qCWarning(applicationLog) << "Settings success feedback did not dismiss automatically";
         return false;
     }
 
@@ -1365,17 +1426,14 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
         return false;
     }
     QQuickItem *newHost = quickItem(rootObject, "hostNew");
+    QQuickItem *quickConnectTarget = quickItem(rootObject, "quickConnectTarget");
+    QQuickItem *quickConnectAction = quickItem(rootObject, "quickConnectAction");
+    QQuickItem *localTerminalAction = quickItem(rootObject, "hostLocalTerminal");
     if (!verifyAccessibleButton(rootObject, "hostNew", "Create a new SSH host profile")
         || !verifyAccessibleButton(rootObject, "quickConnectAction", "Configure quick SSH connection")
-        || !focusItem(window, newHost, QStringLiteral("hostNew")))
+        || quickConnectTarget == nullptr || localTerminalAction == nullptr
+        || !focusItem(window, quickConnectTarget, QStringLiteral("quickConnectTarget")))
     {
-        return false;
-    }
-    sendKey(window, Qt::Key_Tab);
-    if (namedFocusItem(window) != QStringLiteral("quickConnectTarget"))
-    {
-        qCWarning(applicationLog) << "Host page Tab order did not reach Quick connect after New host"
-                                  << "actual=" << namedFocusItem(window);
         return false;
     }
     sendKey(window, Qt::Key_Tab);
@@ -1386,15 +1444,20 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
         return false;
     }
     sendKey(window, Qt::Key_Tab);
-    if (namedFocusItem(window) != QStringLiteral("hostSearch"))
+    if (namedFocusItem(window) != QStringLiteral("hostLocalTerminal"))
     {
-        qCWarning(applicationLog) << "Host page Tab order did not reach search after Quick connect"
+        qCWarning(applicationLog) << "Host page Tab order did not reach local terminal after Quick connect"
+                                  << "actual=" << namedFocusItem(window);
+        return false;
+    }
+    sendKey(window, Qt::Key_Tab);
+    if (namedFocusItem(window) != QStringLiteral("hostNew"))
+    {
+        qCWarning(applicationLog) << "Host page Tab order did not reach New host after local terminal"
                                   << "actual=" << namedFocusItem(window);
         return false;
     }
 
-    QQuickItem *quickConnectTarget = quickItem(rootObject, "quickConnectTarget");
-    QQuickItem *quickConnectAction = quickItem(rootObject, "quickConnectAction");
     if (quickConnectTarget == nullptr || quickConnectAction == nullptr
         || !quickConnectTarget->setProperty("text", QStringLiteral("tester@example.invalid:2222"))
         || !focusItem(window, quickConnectAction, QStringLiteral("quickConnectAction")))
@@ -1454,7 +1517,7 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
     const bool editorUsesSplitLayout =
         hostPane != nullptr && hostMasterScroll != nullptr && hostDetailPane != nullptr
         && hostDetailDismissRegion != nullptr && hostDetailPane->isVisible() && hostMasterScroll->width() > 300.0
-        && hostDetailPane->width() >= 440.0
+        && hostDetailPane->width() >= 400.0
         && qAbs(hostMasterScroll->width() + hostDetailPane->width() - hostPane->width()) <= 1.0
         && qAbs(hostDetailDismissRegion->width() - hostMasterScroll->width()) <= 1.0;
     if (!editorOpened || !editorCaptured || !editorUsesSplitLayout || !verifyHostEditorTabOrder(window, rootObject))
@@ -1559,63 +1622,47 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
         QStringLiteral("tester"), QStringLiteral("password"), QString{}, false, QStringLiteral("Tests"));
     processWindowEventsFor(std::chrono::milliseconds{500});
     const QVariantList savedCredentialProfiles = controller.hostProfiles();
-    QQuickItem *savedHostConnectAction = visualQuickItem(rootObject, "savedHostConnectAction");
-    const QString savedHostConnectAccessibleName =
-        savedHostConnectAction == nullptr ? QString{} : savedHostConnectAction->property("accessibleName").toString();
-    const bool savedHostConnectFocused =
-        savedHostConnectAction != nullptr
-        && focusItem(window, savedHostConnectAction, QStringLiteral("savedHostConnectAction"));
+    QQuickItem *savedHostCard = visualQuickItem(rootObject, "savedHostCard");
+    const QString savedHostAccessibleName =
+        savedHostCard == nullptr ? QString{} : savedHostCard->property("accessibleName").toString();
+    const bool savedHostFocused =
+        savedHostCard != nullptr && focusItem(window, savedHostCard, QStringLiteral("savedHostCard"));
     if (!savedCredentialProfileCreated || savedCredentialProfiles.size() != 1
-        || savedHostConnectAccessibleName != QStringLiteral("Connect to Keyboard smoke host")
-        || !savedHostConnectFocused)
+        || savedHostAccessibleName != QStringLiteral("Connect to Keyboard smoke host") || !savedHostFocused)
     {
         qCWarning(applicationLog) << "Saved credential dialog smoke setup failed"
                                   << "created=" << savedCredentialProfileCreated
                                   << "profileCount=" << savedCredentialProfiles.size()
-                                  << "actionFound=" << (savedHostConnectAction != nullptr)
-                                  << "accessibleName=" << savedHostConnectAccessibleName
-                                  << "focused=" << savedHostConnectFocused << "filteredProfileCount="
+                                  << "cardFound=" << (savedHostCard != nullptr)
+                                  << "accessibleName=" << savedHostAccessibleName << "focused=" << savedHostFocused
+                                  << "filteredProfileCount="
                                   << (hostPane == nullptr ? -1 : hostPane->property("filteredProfileCount").toInt())
-                                  << "searchText="
-                                  << (quickItem(rootObject, "hostSearch") == nullptr
-                                          ? QStringLiteral("<missing>")
-                                          : quickItem(rootObject, "hostSearch")->property("text").toString());
+                                  << "commandText=" << quickConnectTarget->property("text").toString();
         return false;
     }
 
-    QQuickItem *savedHostCard = visualQuickItem(rootObject, "savedHostCard");
     QQuickItem *savedHostMoreAction = visualQuickItem(rootObject, "savedHostMoreAction");
-    QQuickItem *savedHostActionsReveal = visualQuickItem(rootObject, "savedHostActionsReveal");
-    const qreal collapsedHostCardHeight = savedHostCard == nullptr ? 0.0 : savedHostCard->height();
-    if (savedHostCard == nullptr || savedHostMoreAction == nullptr || savedHostActionsReveal == nullptr
+    if (savedHostCard == nullptr || savedHostMoreAction == nullptr
         || !focusItem(window, savedHostMoreAction, QStringLiteral("savedHostMoreAction")))
     {
-        qCWarning(applicationLog) << "Saved host action reveal smoke setup failed";
+        qCWarning(applicationLog) << "Saved host menu smoke setup failed"
+                                  << "cardFound=" << (savedHostCard != nullptr)
+                                  << "actionFound=" << (savedHostMoreAction != nullptr) << "actionVisible="
+                                  << (savedHostMoreAction != nullptr && savedHostMoreAction->isVisible())
+                                  << "focus=" << namedFocusItem(window);
         return false;
     }
     sendKey(window, Qt::Key_Return);
-    const bool savedHostActionsExpanded = processWindowEventsUntil(
-        [savedHostActionsReveal, savedHostCard, savedHostMoreAction, collapsedHostCardHeight] {
-            return savedHostActionsReveal->isVisible() && savedHostActionsReveal->height() >= 30.0
-                   && savedHostCard->height() >= collapsedHostCardHeight + 30.0
-                   && savedHostMoreAction->property("accessibleName").toString()
-                          == QStringLiteral("Hide actions for Keyboard smoke host");
+    const bool savedHostMenuOpened = processWindowEventsUntil(
+        [savedHostMoreAction] {
+            return savedHostMoreAction->property("menuVisible").toBool();
         },
         std::chrono::seconds{1});
-    sendKey(window, Qt::Key_Return);
-    const bool savedHostActionsCollapsed = processWindowEventsUntil(
-        [savedHostActionsReveal, savedHostCard, collapsedHostCardHeight] {
-            return !savedHostActionsReveal->isVisible() && savedHostCard->height() <= collapsedHostCardHeight + 1.0;
-        },
-        std::chrono::seconds{1});
-    if (!savedHostActionsExpanded || !savedHostActionsCollapsed
-        || !focusItem(window, savedHostConnectAction, QStringLiteral("savedHostConnectAction")))
+    sendKey(window, Qt::Key_Escape);
+    processWindowEventsFor(std::chrono::milliseconds{100});
+    if (!savedHostMenuOpened || !focusItem(window, savedHostCard, QStringLiteral("savedHostCard")))
     {
-        qCWarning(applicationLog) << "Saved host action reveal layout failed"
-                                  << "expanded=" << savedHostActionsExpanded
-                                  << "collapsed=" << savedHostActionsCollapsed
-                                  << "cardHeight=" << savedHostCard->height()
-                                  << "collapsedHeight=" << collapsedHostCardHeight;
+        qCWarning(applicationLog) << "Saved host compact menu route failed" << "opened=" << savedHostMenuOpened;
         return false;
     }
 
@@ -1625,7 +1672,7 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
     sendKey(window, Qt::Key_Escape);
     processWindowEventsFor(std::chrono::milliseconds{180});
     const bool savedCredentialDialogKeyboard =
-        savedCredentialDialogOpened && namedFocusItem(window) == QStringLiteral("savedHostConnectAction");
+        savedCredentialDialogOpened && namedFocusItem(window) == QStringLiteral("savedHostCard");
     const QString savedCredentialProfileId =
         savedCredentialProfiles.constFirst().toMap().value(QStringLiteral("id")).toString();
     const bool savedCredentialProfileDeleted = controller.deleteHostProfile(savedCredentialProfileId);
@@ -1643,6 +1690,20 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
     QQuickItem *newTabAction = quickItem(rootObject, "titleNewTabAction");
     if (!focusItem(window, newTabAction, QStringLiteral("titleNewTabAction")))
     {
+        return false;
+    }
+    sendKey(window, Qt::Key_Return);
+    QQuickItem *newLocalTerminalMenuAction = nullptr;
+    const bool newTerminalMenuOpened = processWindowEventsUntil(
+        [&] {
+            newLocalTerminalMenuAction = quickItem(rootObject, "newLocalTerminalMenuAction");
+            return newLocalTerminalMenuAction != nullptr && newLocalTerminalMenuAction->isVisible();
+        },
+        std::chrono::seconds{1});
+    if (!newTerminalMenuOpened
+        || !focusItem(window, newLocalTerminalMenuAction, QStringLiteral("newLocalTerminalMenuAction")))
+    {
+        qCWarning(applicationLog) << "New terminal menu did not open from the title-bar add button";
         return false;
     }
     sendKey(window, Qt::Key_Return);
@@ -1694,8 +1755,16 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
     sendKey(window, Qt::Key_Return);
     const bool terminalFindActionOpened = rootObject->property("terminalSearchVisible").toBool()
                                           && namedFocusItem(window) == QStringLiteral("terminalSearchQuery");
-    sendKey(window, Qt::Key_Escape);
-    if (!terminalFindActionOpened || rootObject->property("terminalSearchVisible").toBool()
+    const bool terminalFindCaptured =
+        terminalFindActionOpened && captureLayout(window, outputDirectory, QStringLiteral("terminal-find"));
+    if (!focusItem(window, terminalFindAction, QStringLiteral("terminalFindAction")))
+    {
+        return false;
+    }
+    sendKey(window, Qt::Key_Return);
+    const bool terminalFindActionClosed = !rootObject->property("terminalSearchVisible").toBool()
+                                          && namedFocusItem(window) == QStringLiteral("terminalViewport");
+    if (!terminalFindActionOpened || !terminalFindCaptured || !terminalFindActionClosed
         || namedFocusItem(window) != QStringLiteral("terminalViewport"))
     {
         qCWarning(applicationLog) << "Terminal Find action keyboard routing failed"
@@ -1729,8 +1798,10 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
                    && state.value(QStringLiteral("workbenchSide")).toString() == QStringLiteral("left");
         },
         std::chrono::seconds{1});
+    const bool historyWorkbenchCaptured =
+        historyWorkbenchOpened && captureLayout(window, outputDirectory, QStringLiteral("terminal-history-workbench"));
     QQuickItem *moveTerminalWorkbenchButton = quickItem(rootObject, "moveTerminalWorkbenchButton");
-    if (!historyWorkbenchOpened
+    if (!historyWorkbenchOpened || !historyWorkbenchCaptured
         || !focusItem(window, moveTerminalWorkbenchButton, QStringLiteral("moveTerminalWorkbenchButton")))
     {
         const QVariantMap state = activeTerminalState();
@@ -1787,7 +1858,9 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
                    && state.value(QStringLiteral("workbenchPage")).toString() == QStringLiteral("scripts");
         },
         std::chrono::seconds{1});
-    if (!scriptsWorkbenchOpened
+    const bool snippetsWorkbenchCaptured =
+        scriptsWorkbenchOpened && captureLayout(window, outputDirectory, QStringLiteral("terminal-snippets-workbench"));
+    if (!scriptsWorkbenchOpened || !snippetsWorkbenchCaptured
         || !focusItem(window, closeTerminalWorkbenchButton, QStringLiteral("closeTerminalWorkbenchButton")))
     {
         qCWarning(applicationLog) << "Scripts workbench did not open through its keyboard action";
@@ -1814,6 +1887,8 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
                    && namedFocusItem(window) == QStringLiteral("terminalComposerInput");
         },
         std::chrono::seconds{1});
+    const bool composerCaptured =
+        composerOpened && captureLayout(window, outputDirectory, QStringLiteral("terminal-composer"));
     QQuickItem *terminalComposerInput = quickItem(rootObject, "terminalComposerInput");
     const bool composerLineBreak =
         composerOpened && terminalComposerInput != nullptr
@@ -1837,7 +1912,7 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
                                && composerHistory.constFirst().toMap().value(QStringLiteral("command")).toString()
                                       == QStringLiteral("Write-Output ztermy-composer-smoke");
     sendKey(window, Qt::Key_Escape);
-    const bool composerKeyboard = composerOpened && composerShiftEnter && composerEnter
+    const bool composerKeyboard = composerOpened && composerCaptured && composerShiftEnter && composerEnter
                                   && processWindowEventsUntil(
                                       [&] {
                                           return !activeTerminalState().value(QStringLiteral("composerOpen")).toBool()
@@ -1910,29 +1985,275 @@ void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPoint
     {
         return false;
     }
+    QQuickItem *tabStrip = quickItem(rootObject, "titleTerminalTabs");
+    QQuickItem *newTabContainer = quickItem(rootObject, "titleNewTabContainer");
+    const bool singleTabLayout = tabStrip != nullptr && newTabContainer != nullptr && tabStrip->width() > 0.0
+                                 && qAbs(newTabContainer->x() - (tabStrip->x() + tabStrip->width())) < 0.5;
+    sendMouseMove(window, *hostsAction, QPointF{hostsAction->width() / 2.0, hostsAction->height() / 2.0});
+    const bool titleHoverStable = hostsAction->property("hovered").toBool();
+    QQuickItem *minimizeCaptionButton = quickItem(rootObject, "minimizeCaptionButton");
+    bool lightCaptionHoverVisible = false;
+    if (minimizeCaptionButton != nullptr)
+    {
+        sendMouseMove(window, *minimizeCaptionButton,
+                      QPointF{minimizeCaptionButton->width() / 2.0, minimizeCaptionButton->height() / 2.0});
+        const auto hoverColor = minimizeCaptionButton->property("surfaceColor").value<QColor>();
+        const auto chromeColor = rootObject->property("chromeColor").value<QColor>();
+        const int maximumChannelDelta =
+            std::max({qAbs(hoverColor.red() - chromeColor.red()), qAbs(hoverColor.green() - chromeColor.green()),
+                      qAbs(hoverColor.blue() - chromeColor.blue())});
+        lightCaptionHoverVisible =
+            minimizeCaptionButton->property("hovered").toBool() && hoverColor.alpha() > 0 && maximumChannelDelta >= 16;
+    }
     sendKey(window, Qt::Key_Space);
     const bool navigationPreservedSession = rootObject->property("currentPage").toString() == QStringLiteral("hosts")
                                             && controller.terminalTabs().size() == initialTabCount + 1;
+    rootObject->setProperty("currentPage", QStringLiteral("terminal"));
     while (!controller.terminalTabs().isEmpty())
     {
         controller.closeTerminalTab(
             controller.terminalTabs().constFirst().toMap().value(QStringLiteral("id")).toString());
         processWindowEventsFor(std::chrono::milliseconds{50});
     }
-    QQuickItem *tabStrip = quickItem(rootObject, "titleTerminalTabs");
-    QQuickItem *newTabContainer = quickItem(rootObject, "titleNewTabContainer");
+    processWindowEventsFor(std::chrono::milliseconds{250});
     QQuickItem *hostsContainer = hostsAction->parentItem();
     const bool emptyTabLayout = tabStrip != nullptr && qFuzzyIsNull(tabStrip->width()) && newTabContainer != nullptr
                                 && hostsContainer != nullptr
                                 && qAbs(newTabContainer->x() - (hostsContainer->x() + hostsContainer->width())) < 0.5;
+    const bool lastTabReturnedToHosts = rootObject->property("currentPage").toString() == QStringLiteral("hosts")
+                                        && namedFocusItem(window) == QStringLiteral("hostsTitleAction");
     qCInfo(applicationLog) << "UI keyboard route check"
                            << "settingsTabStops=" << 24 << "hostEditorTabStops=" << 22
                            << "popupKeyboard=" << (popupOpened && popupClosed) << "settingsApplied=" << settingsApplied
                            << "checkboxKeyboard=" << checkboxChanged << "oneTabCreated=" << oneTabCreated
                            << "terminalSearchKeyboard=" << terminalSearchKeyboard << "dialogKeyboard=" << dialogKeyboard
                            << "navigationPreservedSession=" << navigationPreservedSession
-                           << "emptyTabLayout=" << emptyTabLayout;
-    return navigationPreservedSession && emptyTabLayout;
+                           << "singleTabLayout=" << singleTabLayout << "emptyTabLayout=" << emptyTabLayout
+                           << "titleHoverStable=" << titleHoverStable
+                           << "lightCaptionHoverVisible=" << lightCaptionHoverVisible
+                           << "lastTabReturnedToHosts=" << lastTabReturnedToHosts;
+    return navigationPreservedSession && singleTabLayout && emptyTabLayout && titleHoverStable
+           && lightCaptionHoverVisible && lastTabReturnedToHosts;
+}
+
+[[nodiscard]] bool runRealHostUiRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller,
+                                             const QString &outputDirectory)
+{
+    const QString host = QString::fromUtf8(qgetenv("ZTERMY_TEST_SSH_HOST")).trimmed();
+    const QString username = QString::fromUtf8(qgetenv("ZTERMY_TEST_SSH_USERNAME")).trimmed();
+    const QString privateKeyPath = QString::fromUtf8(qgetenv("ZTERMY_TEST_SSH_PRIVATE_KEY")).trimmed();
+    const QString expectedFingerprint = QString::fromUtf8(qgetenv("ZTERMY_TEST_SSH_EXPECTED_FINGERPRINT")).trimmed();
+    const QString deniedSftpPath = QString::fromUtf8(qgetenv("ZTERMY_TEST_SFTP_DENIED_PATH")).trimmed();
+    bool portValid = false;
+    const int configuredPort = QString::fromUtf8(qgetenv("ZTERMY_TEST_SSH_PORT")).toInt(&portValid);
+    const int port = portValid ? configuredPort : 22;
+    if (host.isEmpty() || username.isEmpty() || privateKeyPath.isEmpty() || expectedFingerprint.isEmpty()
+        || !QFileInfo::exists(privateKeyPath) || port <= 0 || port > 65535)
+    {
+        qCWarning(applicationLog) << "Real-host UI smoke requires valid ZTERMY_TEST_SSH_HOST, ZTERMY_TEST_SSH_USERNAME,"
+                                     " ZTERMY_TEST_SSH_PRIVATE_KEY, and ZTERMY_TEST_SSH_EXPECTED_FINGERPRINT values";
+        return false;
+    }
+
+    window.resize(QSize{1120, 800});
+    window.show();
+    window.requestActivate();
+    processWindowEventsFor(std::chrono::milliseconds{250});
+
+    constexpr auto profileId = "real-host-ui-smoke-profile";
+    if (!controller.saveHostProfile(QString::fromLatin1(profileId), QStringLiteral("Real host UI smoke"), host, port,
+                                    username, QStringLiteral("private-key"), privateKeyPath, false,
+                                    QStringLiteral("Runtime smoke"))
+        || !controller.connectHostProfile(QString::fromLatin1(profileId), {}))
+    {
+        qCWarning(applicationLog) << "Real-host UI smoke could not create and connect its isolated profile";
+        return false;
+    }
+
+    const auto activeTabState = [&controller]() -> QVariantMap {
+        const QVariantList tabs = controller.terminalTabs();
+        return tabs.isEmpty() ? QVariantMap{} : tabs.constFirst().toMap();
+    };
+    const bool reachedHostIdentity = processWindowEventsUntil(
+        [&] {
+            return controller.hostKeyPromptVisible() || activeTabState().value(QStringLiteral("running")).toBool();
+        },
+        std::chrono::seconds{10});
+    if (!reachedHostIdentity)
+    {
+        qCWarning(applicationLog) << "Real-host UI smoke did not reach host-key confirmation or a connected session";
+        return false;
+    }
+    if (controller.hostKeyPromptVisible())
+    {
+        if (controller.hostKeyChangedWarning() || controller.hostKeyFingerprint() != expectedFingerprint)
+        {
+            qCWarning(applicationLog) << "Real-host UI smoke rejected an unexpected host identity"
+                                      << "algorithm=" << controller.hostKeyAlgorithm()
+                                      << "fingerprint=" << controller.hostKeyFingerprint();
+            controller.rejectHostKey();
+            return false;
+        }
+        controller.acceptHostKey(true);
+    }
+
+    const bool connected = processWindowEventsUntil(
+        [&] {
+            return activeTabState().value(QStringLiteral("running")).toBool();
+        },
+        std::chrono::seconds{10});
+    QQuickItem *rootObject = window.rootObject();
+    if (rootObject == nullptr || !rootObject->setProperty("currentPage", QStringLiteral("terminal")))
+    {
+        qCWarning(applicationLog) << "Real-host UI smoke could not present the connected terminal workspace";
+        return false;
+    }
+    QQuickItem *sftpAction = nullptr;
+    const bool sftpActionReady = processWindowEventsUntil(
+        [&] {
+            sftpAction = visualQuickItem(rootObject, "terminalSftpAction");
+            return sftpAction != nullptr && sftpAction->isVisible() && sftpAction->isEnabled();
+        },
+        std::chrono::seconds{2});
+    if (!connected || !sftpActionReady || !focusItem(window, sftpAction, QStringLiteral("terminalSftpAction")))
+    {
+        qCWarning(applicationLog) << "Real-host UI smoke could not focus the connected terminal SFTP action"
+                                  << "connected=" << connected;
+        return false;
+    }
+    sendKey(window, Qt::Key_Return);
+
+    bool unexpectedSftpHostIdentity = false;
+    const bool sftpReady = processWindowEventsUntil(
+        [&] {
+            if (controller.hostKeyPromptVisible())
+            {
+                if (controller.hostKeyChangedWarning() || controller.hostKeyFingerprint() != expectedFingerprint)
+                {
+                    unexpectedSftpHostIdentity = true;
+                    return true;
+                }
+                controller.acceptHostKey(true);
+            }
+            return controller.activeSftpState() == QStringLiteral("ready");
+        },
+        std::chrono::seconds{10});
+    auto *directoryModel = qobject_cast<QAbstractItemModel *>(controller.activeSftpDirectoryModel());
+    const QString homePath = controller.activeSftpHomePath();
+    const QString currentPath = controller.activeSftpPath();
+    const int directoryEntryCount = directoryModel == nullptr ? -1 : directoryModel->rowCount();
+    if (!sftpReady || unexpectedSftpHostIdentity || directoryModel == nullptr || directoryEntryCount <= 0
+        || homePath.isEmpty() || currentPath != homePath)
+    {
+        qCWarning(applicationLog) << "Real-host UI smoke did not load the remote home directory"
+                                  << "state=" << controller.activeSftpState()
+                                  << "error=" << controller.activeSftpError() << "home=" << homePath
+                                  << "path=" << currentPath << "rows=" << directoryEntryCount;
+        return false;
+    }
+
+    QQuickItem *browser = visualQuickItem(rootObject, "sftpBrowser");
+    QQuickItem *pathField = visualQuickItem(rootObject, "sftpPathField");
+    QQuickItem *copyPathButton = visualQuickItem(rootObject, "sftpCopyPathButton");
+    QQuickItem *fileList = visualQuickItem(rootObject, "sftpFileList");
+    QQuickItem *moreActionsButton = visualQuickItem(rootObject, "sftpMoreActionsButton");
+    QQuickItem *refreshButton = visualQuickItem(rootObject, "sftpRefreshButton");
+    if (browser == nullptr || !focusItem(window, pathField, QStringLiteral("sftpPathField"))
+        || !focusItem(window, copyPathButton, QStringLiteral("sftpCopyPathButton")))
+    {
+        qCWarning(applicationLog) << "Real-host UI smoke could not traverse the SFTP path controls";
+        return false;
+    }
+    sendKey(window, Qt::Key_Space);
+    const bool pathCopied = processWindowEventsUntil(
+        [&] {
+            return QGuiApplication::clipboard()->text() == currentPath;
+        },
+        std::chrono::seconds{1});
+    fileList->setProperty("currentIndex", 0);
+    const bool fileListFocused = focusItem(window, fileList, QStringLiteral("sftpFileList"));
+    sendKey(window, Qt::Key_Down);
+    const bool fileListKeyboard = fileListFocused && fileList->property("currentIndex").toInt() >= 0;
+
+    controller.setTerminalWorkbenchWidth(360);
+    const bool narrowToolbar = processWindowEventsUntil(
+        [&] {
+            return browser->width() < 430 && moreActionsButton != nullptr && moreActionsButton->isVisible()
+                   && refreshButton != nullptr && !refreshButton->isVisible();
+        },
+        std::chrono::seconds{2});
+    const bool narrowCaptured =
+        narrowToolbar && captureLayout(window, outputDirectory, QStringLiteral("real-host-sftp-narrow"));
+    controller.setTerminalWorkbenchWidth(520);
+    const bool wideToolbar = processWindowEventsUntil(
+        [&] {
+            return browser->width() >= 430 && moreActionsButton != nullptr && !moreActionsButton->isVisible()
+                   && refreshButton != nullptr && refreshButton->isVisible();
+        },
+        std::chrono::seconds{2});
+    const bool wideCaptured =
+        wideToolbar && captureLayout(window, outputDirectory, QStringLiteral("real-host-sftp-wide"));
+
+    bool deniedPathPreserved = true;
+    bool deniedPathRecovered = true;
+    if (!deniedSftpPath.isEmpty())
+    {
+        const bool navigationRequested = controller.navigateSftpDirectory(deniedSftpPath);
+        deniedPathPreserved =
+            navigationRequested
+            && processWindowEventsUntil(
+                [&] {
+                    return controller.activeSftpState() == QStringLiteral("ready")
+                           && !controller.activeSftpError().isEmpty();
+                },
+                std::chrono::seconds{10})
+            && controller.activeSftpPath() == currentPath && directoryModel->rowCount() == directoryEntryCount
+            && captureLayout(window, outputDirectory, QStringLiteral("real-host-sftp-permission-error"));
+        controller.navigateSftpHome();
+        deniedPathRecovered = processWindowEventsUntil(
+            [&] {
+                return controller.activeSftpState() == QStringLiteral("ready") && controller.activeSftpError().isEmpty()
+                       && controller.activeSftpPath() == homePath;
+            },
+            std::chrono::seconds{10});
+    }
+
+    QQuickItem *closeWorkbenchButton = visualQuickItem(rootObject, "closeTerminalWorkbenchButton");
+    if (!pathCopied || !fileListKeyboard || !narrowCaptured || !wideCaptured || !deniedPathPreserved
+        || !deniedPathRecovered
+        || !focusItem(window, closeWorkbenchButton, QStringLiteral("closeTerminalWorkbenchButton")))
+    {
+        qCWarning(applicationLog) << "Real-host SFTP UI contract failed"
+                                  << "pathCopied=" << pathCopied << "fileListKeyboard=" << fileListKeyboard
+                                  << "narrowToolbar=" << narrowToolbar << "wideToolbar=" << wideToolbar
+                                  << "deniedPathPreserved=" << deniedPathPreserved
+                                  << "deniedPathRecovered=" << deniedPathRecovered;
+        return false;
+    }
+    sendKey(window, Qt::Key_Return);
+    const bool workbenchClosed = processWindowEventsUntil(
+        [&] {
+            return !activeTabState().value(QStringLiteral("workbenchOpen")).toBool()
+                   && namedFocusItem(window) == QStringLiteral("terminalViewport");
+        },
+        std::chrono::seconds{2});
+    const QString tabId = activeTabState().value(QStringLiteral("id")).toString();
+    controller.closeTerminalTab(tabId);
+    const bool sessionClosed = processWindowEventsUntil(
+        [&] {
+            return controller.terminalTabs().isEmpty();
+        },
+        std::chrono::seconds{5});
+    controller.deleteHostProfile(QString::fromLatin1(profileId));
+
+    qCInfo(applicationLog) << "Real-host SFTP UI runtime check"
+                           << "host=" << host << "rows=" << directoryEntryCount << "home=" << homePath
+                           << "pathCopied=" << pathCopied << "fileListKeyboard=" << fileListKeyboard
+                           << "narrowToolbar=" << narrowToolbar << "wideToolbar=" << wideToolbar
+                           << "deniedPathPreserved=" << deniedPathPreserved
+                           << "deniedPathRecovered=" << deniedPathRecovered << "workbenchClosed=" << workbenchClosed
+                           << "sessionClosed=" << sessionClosed;
+    return workbenchClosed && sessionClosed;
 }
 
 [[nodiscard]] bool terminalRegionHasRenderedContent(const QImage &windowImage,
@@ -2137,13 +2458,14 @@ int main(int argc, char *argv[])
     fontCatalog.applyUiFont(appController.uiFontFamily());
     const bool uiLayoutSmoke = QCoreApplication::arguments().contains(QStringLiteral("--ui-layout-smoke"));
     const bool uiKeyboardSmoke = QCoreApplication::arguments().contains(QStringLiteral("--ui-keyboard-smoke"));
+    const bool realHostUiSmoke = QCoreApplication::arguments().contains(QStringLiteral("--real-host-ui-smoke"));
     const bool terminalRenderSmoke = QCoreApplication::arguments().contains(QStringLiteral("--terminal-render-smoke"));
     const bool windowAppearanceSmoke =
         QCoreApplication::arguments().contains(QStringLiteral("--window-appearance-smoke"));
     const bool windowResizeSmoke = QCoreApplication::arguments().contains(QStringLiteral("--window-resize-smoke"));
     const bool windowDpiSmoke = QCoreApplication::arguments().contains(QStringLiteral("--window-dpi-smoke"));
     ztermy::LocalizationManager localizationManager;
-    const auto initialLanguage = uiLayoutSmoke || uiKeyboardSmoke
+    const auto initialLanguage = uiLayoutSmoke || uiKeyboardSmoke || realHostUiSmoke
                                      ? std::optional{ztermy::config::LanguagePreference::english}
                                      : ztermy::config::parseLanguagePreference(appController.languagePreference());
     if (!initialLanguage || !localizationManager.apply(*initialLanguage))
@@ -2151,7 +2473,7 @@ int main(int argc, char *argv[])
         qCCritical(applicationLog) << "Could not apply the configured UI language";
         return EXIT_FAILURE;
     }
-    if ((uiLayoutSmoke || uiKeyboardSmoke)
+    if ((uiLayoutSmoke || uiKeyboardSmoke || realHostUiSmoke)
         && !applyUiLayoutSmokeTheme(appController, QStringLiteral("dark"), QStringLiteral("en")))
     {
         qCCritical(applicationLog) << "Could not prepare the UI runtime smoke settings";
@@ -2294,6 +2616,19 @@ int main(int argc, char *argv[])
             return EXIT_FAILURE;
         }
         qCInfo(applicationLog) << "UI keyboard runtime smoke test completed";
+        return EXIT_SUCCESS;
+    }
+    if (realHostUiSmoke)
+    {
+        const bool passed = runRealHostUiRuntimeSmoke(window, appController, paths->dataDirectory);
+        appController.shutdown();
+        window.releaseResources();
+        if (!passed)
+        {
+            qCCritical(applicationLog) << "Real-host SFTP UI runtime smoke test failed";
+            return EXIT_FAILURE;
+        }
+        qCInfo(applicationLog) << "Real-host SFTP UI runtime smoke test completed";
         return EXIT_SUCCESS;
     }
     if (terminalRenderSmoke)

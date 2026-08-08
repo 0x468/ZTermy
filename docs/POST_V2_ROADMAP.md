@@ -24,23 +24,28 @@ codename is selected only when the minor version changes.
   requirement without changing the per-user runtime install contract;
 - complete a focused icon and visual-consistency pass using owned vector assets.
 
-## V2.2 — SFTP and session productivity (`0.2.2`)
+## V2.2 — NetCatty workflow convergence (`0.2.2`)
 
-- add path bookmarks, terminal-directory synchronization/following, richer
-  columns, directory-first sorting, and the compact overflow-toolbar behavior;
-- evaluate tree view and Explorer-to-local drag/download against clear Windows
-  drag-and-drop and overwrite contracts;
-- refine transfer pause/resume feasibility, destination reveal/copy actions,
-  completed-history cleanup, and progress detail;
-- expand shell-aware history, scripts, session metadata, and telemetry without
-  blocking terminal I/O or silently executing commands.
+- correct the post-V2 product-shell drift using a frozen NetCatty runtime
+  baseline and the scope in `V2_2_SCOPE.md`;
+- rebuild Hosts as a compact browse-and-connect workspace with a unified
+  command row, compact host items, secondary management actions, and the
+  established right-side editor;
+- converge the terminal toolbar, workbench, command snippets, composer, find,
+  session logging, and integrated SFTP interaction anatomy;
+- replace presentation-oriented settings cards with compact setting rows while
+  retaining the approved on-demand Settings work tab;
+- add SFTP productivity only where persisted behavior and automated evidence
+  can be completed in the same release.
 
-## V2.3 — compatibility and accessibility (`0.2.3`)
+## V2.3 — compatibility, accessibility, and deferred productivity (`0.2.3`)
 
 - execute the retained high-contrast, Narrator, keyboard-only, physical DPI,
   multi-monitor, and long-running shutdown matrix;
 - improve startup, resize/reflow, large-history search, SFTP listing, and
   transfer-center performance using measured budgets;
+- evaluate tree-view SFTP, Explorer-to-local drag/download, true script
+  triggers, session telemetry, and unsupported transfer pause/resume contracts;
 - finish English/Chinese visual QA and migration/upgrade coverage for all
   supported `0.2.x` data.
 
@@ -52,5 +57,6 @@ file-management workspace, or deeper remote-development workflows. Cloud sync,
 collaboration, AI, serial support, and remote editing remain separate decisions
 and are not implied by V3.
 
-The recommended next step is V2.1 stabilization driven by real daily use, not
-immediate feature expansion or a premature `0.3.0` bump.
+After V2.2 manual acceptance, the recommended next step is V2.3 compatibility,
+accessibility, measured performance, and deliberately selected productivity
+work, not a premature `0.3.0` bump.

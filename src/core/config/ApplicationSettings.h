@@ -72,6 +72,8 @@ struct ApplicationSettings final
     bool cursorBlink = true;
     bool copyOnSelect = false;
     bool confirmMultilinePaste = true;
+    bool sftpShowHiddenFiles = false;
+    bool sftpConfirmDelete = true;
     CredentialStoragePreference credentialStorage = CredentialStoragePreference::automatic;
     LanguagePreference language = LanguagePreference::system;
     QMap<QString, QString> shortcutOverrides;

@@ -188,6 +188,14 @@ Rectangle {
         searchField.selectAll();
     }
 
+    function toggleTerminalSearch() {
+        if (terminalSearchVisible) {
+            closeTerminalSearch();
+        } else {
+            openTerminalSearch();
+        }
+    }
+
     function closeTerminalSearch() {
         terminalSearchVisible = false;
         searchDelay.stop();
@@ -291,7 +299,7 @@ Rectangle {
             activateRelativeTerminalTab(-1);
             break;
         case "terminal.find":
-            openTerminalSearch();
+            toggleTerminalSearch();
             break;
         case "terminal.history":
             currentPage = "terminal";
@@ -487,7 +495,8 @@ Rectangle {
         function onTerminalTabsChanged() {
             Qt.callLater(titleTerminalTabs.syncCurrentIndex);
             if (root.currentPage === "terminal" && root.controller.terminalTabs.length === 0) {
-                Qt.callLater(emptyTerminalPrimaryAction.forceActiveFocus);
+                root.currentPage = "hosts";
+                Qt.callLater(hostsTitleAction.forceActiveFocus);
             }
         }
 
@@ -650,7 +659,7 @@ Rectangle {
 
                 objectName: "titleTerminalTabs"
                 currentIndex: -1
-                width: count === 0 ? 0 : Math.min(Math.max(contentWidth, 126), Math.max(140, root.titleNavigationWidth - 174 - settingsTitleTab.width))
+                width: count === 0 ? 0 : Math.min(contentWidth, Math.max(140, root.titleNavigationWidth - 174 - settingsTitleTab.width))
                 height: titleNavigation.height
                 orientation: ListView.Horizontal
                 spacing: 2
@@ -750,8 +759,37 @@ Rectangle {
                     objectName: "titleNewTabAction"
                     anchors.fill: parent
                     anchors.margins: 2
-                    accessibleName: qsTr("New local terminal")
-                    onActivated: root.startLocalTerminalTab()
+                    accessibleName: qsTr("Open new terminal menu")
+                    onActivated: newTerminalMenu.open()
+                }
+
+                AppToolTip {
+                    visible: titleNewTabAction.hovered && !newTerminalMenu.visible
+                    text: qsTr("New terminal")
+                }
+
+                AppMenu {
+                    id: newTerminalMenu
+
+                    y: parent.height
+
+                    AppMenuItem {
+                        objectName: "newLocalTerminalMenuAction"
+                        text: qsTr("New local terminal")
+                        onTriggered: {
+                            root.startLocalTerminalTab();
+                            Qt.callLater(terminalViewport.forceActiveFocus);
+                        }
+                    }
+
+                    AppMenuItem {
+                        objectName: "browseHostsMenuAction"
+                        text: qsTr("Browse hosts")
+                        onTriggered: {
+                            root.currentPage = "hosts";
+                            Qt.callLater(hostsTitleAction.forceActiveFocus);
+                        }
+                    }
                 }
             }
         }
@@ -1005,7 +1043,7 @@ Rectangle {
     FileDialog {
         id: scriptImportDialog
 
-        title: qsTr("Import script library")
+        title: qsTr("Import command snippet library")
         fileMode: FileDialog.OpenFile
         nameFilters: [qsTr("ztermy script libraries (*.json)"), qsTr("All files (*)")]
         onAccepted: root.controller.importQuickCommands(selectedFile.toString())
@@ -1014,7 +1052,7 @@ Rectangle {
     FileDialog {
         id: scriptExportDialog
 
-        title: qsTr("Export script library")
+        title: qsTr("Export command snippet library")
         fileMode: FileDialog.SaveFile
         nameFilters: [qsTr("ztermy script libraries (*.json)"), qsTr("All files (*)")]
         defaultSuffix: "json"
@@ -1038,70 +1076,69 @@ Rectangle {
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 14
-                spacing: 10
+                anchors.margins: 8
+                spacing: 4
 
-                Text {
-                    text: "ZTERMY"
-                    color: Theme.textSubtle
-                    font.family: Theme.uiFont
-                    font.pixelSize: 10
-                    font.letterSpacing: 1.2
-                    font.weight: Font.DemiBold
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 4
+                    Layout.rightMargin: 4
+                    Layout.bottomMargin: 8
+                    Layout.preferredHeight: 38
+                    spacing: 9
+
+                    BrandIcon {
+                        Layout.preferredWidth: 30
+                        Layout.preferredHeight: 30
+                        tileColor: Theme.accent
+                        ribbonColor: Theme.accentText
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("ztermy")
+                        color: Theme.text
+                        font.family: Theme.uiFont
+                        font.pixelSize: 17
+                        font.weight: Font.Bold
+                    }
                 }
 
                 SideNavigationItem {
                     actionObjectName: "sideHostsAction"
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 38
+                    iconName: "hosts"
                     text: qsTr("Hosts")
                     selected: root.currentPage === "hosts"
                     onActivated: root.currentPage = "hosts"
+                }
+
+                SideNavigationItem {
+                    actionObjectName: "sideCredentialsAction"
+                    Layout.fillWidth: true
+                    iconName: "security"
+                    text: qsTr("Credentials")
+                    onActivated: root.openSecuritySettingsTab()
+                }
+
+                SideNavigationItem {
+                    actionObjectName: "sideTransfersAction"
+                    Layout.fillWidth: true
+                    iconName: "transfer"
+                    text: qsTr("Transfers")
+                    onActivated: transferCenter.visible ? transferCenter.close() : transferCenter.open()
                 }
 
                 Item {
                     Layout.fillHeight: true
                 }
 
-                Rectangle {
-                    id: localMachineActionTile
-
+                SideNavigationItem {
+                    actionObjectName: "sideSettingsAction"
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 58
-                    radius: 8
-                    color: localMachineAction.hovered ? Theme.controlHover : Theme.elevatedBackground
-                    border.color: localMachineAction.activeFocus ? Theme.focus : root.borderColor
-
-                    Column {
-                        anchors.left: parent.left
-                        anchors.leftMargin: 12
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: 3
-
-                        Text {
-                            text: qsTr("Local machine")
-                            color: root.textColor
-                            font.family: Theme.uiFont
-                            font.pixelSize: 12
-                        }
-
-                        Text {
-                            text: qsTr("Windows 11 · ready")
-                            color: root.mutedColor
-                            font.family: Theme.uiFont
-                            font.pixelSize: 10
-                        }
-                    }
-
-                    KeyboardAction {
-                        id: localMachineAction
-
-                        objectName: "localMachineAction"
-                        anchors.fill: parent
-                        anchors.margins: 2
-                        accessibleName: qsTr("Open local terminal")
-                        onActivated: root.startLocalTerminalTab()
-                    }
+                    iconName: "settings"
+                    text: qsTr("Settings")
+                    onActivated: root.openSettingsTab()
                 }
             }
         }
@@ -1278,7 +1315,7 @@ Rectangle {
                                 Layout.preferredWidth: 28
                                 Layout.preferredHeight: 22
                                 enabled: root.activeTerminalTab !== null
-                                onClicked: root.openTerminalSearch()
+                                onClicked: root.toggleTerminalSearch()
                                 Keys.onReturnPressed: click()
                                 Keys.onEnterPressed: click()
                                 Accessible.name: qsTr("Find in terminal")
@@ -1326,14 +1363,14 @@ Rectangle {
                                 onClicked: root.controller.toggleTerminalWorkbench("scripts")
                                 Keys.onReturnPressed: click()
                                 Keys.onEnterPressed: click()
-                                Accessible.name: qsTr("Scripts")
+                                Accessible.name: qsTr("Command snippets")
                                 contentItem: AppIcon {
                                     name: "commands"
                                     color: scriptsToolbarButton.checked ? Theme.accent : root.mutedColor
                                 }
                                 AppToolTip {
                                     visible: scriptsToolbarButton.hovered
-                                    text: qsTr("Scripts")
+                                    text: qsTr("Command snippets")
                                 }
                             }
 
@@ -1807,6 +1844,7 @@ Rectangle {
                 accentColor: root.accentColor
                 onConnectionStarted: root.currentPage = "terminal"
                 onSecuritySettingsRequested: root.openSecuritySettingsTab()
+                onLocalTerminalRequested: root.startLocalTerminalTab()
 
                 transform: Translate {
                     y: Theme.motionDistanceSmall * (1.0 - root.hostsPageReveal)

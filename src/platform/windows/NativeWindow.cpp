@@ -549,6 +549,13 @@ bool NativeWindow::handleWindowProcedureMessage(const HWND windowHandle, const U
             if (wParam == HTMAXBUTTON)
             {
                 setMaximizeButtonHovered(true);
+                TRACKMOUSEEVENT tracking{
+                    .cbSize = sizeof(TRACKMOUSEEVENT),
+                    .dwFlags = TME_LEAVE | TME_NONCLIENT,
+                    .hwndTrack = windowHandle,
+                    .dwHoverTime = HOVER_DEFAULT,
+                };
+                TrackMouseEvent(&tracking);
                 *result = DefWindowProcW(windowHandle, message, wParam, lParam);
                 return true;
             }

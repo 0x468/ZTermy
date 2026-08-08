@@ -13,13 +13,14 @@ Rectangle {
     property string closeActionObjectName: ""
     property bool componentReady: false
     property real enterProgress: Theme.animationsEnabled ? 0.0 : 1.0
+    readonly property bool hovered: activateAction.hovered || closeAction.hovered
     signal activated
     signal closeRequested
 
     implicitWidth: Math.min(184, Math.max(112, titleText.implicitWidth + 54))
     implicitHeight: Theme.titleBarHeight
     opacity: enterProgress
-    color: control.selected ? Theme.controlBackground : (activateAction.hovered || activateAction.activeFocus ? Theme.controlHover : "transparent")
+    color: control.selected ? Theme.controlBackground : (control.hovered || activateAction.activeFocus ? Theme.controlHover : "transparent")
     border.color: activateAction.activeFocus ? Theme.focus : "transparent"
     border.width: activateAction.activeFocus ? 1 : 0
     transform: Translate {
@@ -124,7 +125,7 @@ Rectangle {
         height: 24
         radius: 5
         color: closeAction.hovered || closeAction.activeFocus ? Theme.borderStrong : "transparent"
-        opacity: control.selected || activateAction.hovered || activateAction.activeFocus || closeAction.hovered || closeAction.activeFocus ? 1.0 : 0.45
+        opacity: control.selected || control.hovered || activateAction.activeFocus || closeAction.activeFocus ? 1.0 : 0.45
         border.color: closeAction.activeFocus ? Theme.focus : "transparent"
         border.width: closeAction.activeFocus ? 1 : 0
 

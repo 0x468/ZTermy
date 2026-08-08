@@ -66,6 +66,8 @@ void ApplicationSettingsTests::savesAndLoadsEveryPreference()
         .cursorBlink = false,
         .copyOnSelect = true,
         .confirmMultilinePaste = false,
+        .sftpShowHiddenFiles = true,
+        .sftpConfirmDelete = false,
         .credentialStorage = ztermy::config::CredentialStoragePreference::portable,
         .language = ztermy::config::LanguagePreference::simplifiedChinese,
         .shortcutOverrides = {{QStringLiteral("terminal.find"), QStringLiteral("Ctrl+Alt+F")}},
@@ -103,12 +105,14 @@ void ApplicationSettingsTests::migratesLegacyWindowOpacityAndNoneBackdrop()
     QCOMPARE(loaded->backdropOpacity, 0.75);
     QCOMPARE(loaded->backdrop, ztermy::config::BackdropPreference::transparent);
     QCOMPARE(loaded->terminalBackgroundOpacity, 1.0);
+    QVERIFY(!loaded->sftpShowHiddenFiles);
+    QVERIFY(loaded->sftpConfirmDelete);
 
     QVERIFY(store.save(*loaded));
     QFile saved(path);
     QVERIFY(saved.open(QIODevice::ReadOnly));
     const QByteArray persisted = saved.readAll();
-    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 9")));
+    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 10")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdropOpacity\": 0.75")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdrop\": \"transparent\"")));
     QVERIFY(!persisted.contains(QByteArrayLiteral("windowOpacity")));
@@ -277,7 +281,7 @@ void ApplicationSettingsTests::rejectsMalformedUnsupportedAndIncompleteDocuments
     QVERIFY(!malformed);
     QCOMPARE(malformed.error(), ztermy::config::ApplicationSettingsStoreError::invalidFormat);
 
-    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":10})")));
+    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":11})")));
     const auto unsupported = store.load();
     QVERIFY(!unsupported);
     QCOMPARE(unsupported.error(), ztermy::config::ApplicationSettingsStoreError::unsupportedVersion);

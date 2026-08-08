@@ -4,8 +4,8 @@ Item {
     id: control
 
     required property string accessibleName
-    readonly property alias hovered: hoverHandler.hovered
-    readonly property alias pressed: tapHandler.pressed
+    readonly property alias hovered: pointerArea.containsMouse
+    readonly property alias pressed: pointerArea.pressed
     signal activated
 
     activeFocusOnTab: true
@@ -20,15 +20,13 @@ Item {
         event.accepted = true;
     }
 
-    HoverHandler {
-        id: hoverHandler
+    MouseArea {
+        id: pointerArea
+
+        anchors.fill: parent
+        hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-    }
-
-    TapHandler {
-        id: tapHandler
-
-        onTapped: {
+        onClicked: {
             control.forceActiveFocus(Qt.MouseFocusReason);
             control.activated();
         }

@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 
 project(
     ztermy
-    VERSION 0.2.1
+    VERSION 0.2.2
     DESCRIPTION "A native Windows SSH terminal"
     LANGUAGES C CXX RC
 )
@@ -832,6 +832,8 @@ target_link_libraries(ztermy PRIVATE
 )
 
 add_custom_target(ztermy_window_runtime_smoke
+    COMMAND "${CMAKE_COMMAND}" -E rm -rf
+            "${CMAKE_CURRENT_BINARY_DIR}/test-data/window-runtime-smoke"
     COMMAND "$<TARGET_FILE:ztermy>"
             --window-runtime-smoke
             --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/window-runtime-smoke"
@@ -879,6 +881,8 @@ add_custom_target(ztermy_window_dpi_runtime_smoke
 )
 
 add_custom_target(ztermy_ui_layout_runtime_smoke
+    COMMAND "${CMAKE_COMMAND}" -E rm -rf
+            "${CMAKE_CURRENT_BINARY_DIR}/test-data/ui-layout-smoke"
     COMMAND "$<TARGET_FILE:ztermy>"
             --ui-layout-smoke
             --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/ui-layout-smoke"
@@ -908,6 +912,18 @@ add_custom_target(ztermy_terminal_render_runtime_smoke
             --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/terminal-render-smoke"
     DEPENDS ztermy
     COMMENT "Checking terminal rendering and GUI responsiveness under large output"
+    USES_TERMINAL
+    VERBATIM
+)
+
+add_custom_target(ztermy_real_host_ui_runtime_smoke
+    COMMAND "${CMAKE_COMMAND}" -E rm -rf
+            "${CMAKE_CURRENT_BINARY_DIR}/test-data/real-host-ui-smoke"
+    COMMAND "$<TARGET_FILE:ztermy>"
+            --real-host-ui-smoke
+            --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/real-host-ui-smoke"
+    DEPENDS ztermy
+    COMMENT "Checking the integrated SSH and SFTP UI against an explicitly configured real host"
     USES_TERMINAL
     VERBATIM
 )

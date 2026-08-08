@@ -13,7 +13,7 @@ Item {
 
     implicitHeight: compact ? 176 : 210
     Accessible.role: Accessible.Graphic
-    Accessible.name: qsTr("ztermy version %1, codename %2. %3").arg(version, codename, verse)
+    Accessible.name: qsTr("ztermy version %1, codename %2. %3").arg(version).arg(codename).arg(verse)
 
     Rectangle {
         id: surface

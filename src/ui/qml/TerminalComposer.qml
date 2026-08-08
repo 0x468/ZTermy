@@ -215,14 +215,14 @@ Rectangle {
                 Layout.preferredWidth: 26
                 Layout.preferredHeight: 26
                 onClicked: composer.controller.toggleTerminalWorkbench("scripts")
-                Accessible.name: qsTr("Manage scripts and code snippets")
+                Accessible.name: qsTr("Manage command snippets")
                 contentItem: AppIcon {
                     name: "commands"
                     color: Theme.textSoft
                 }
 
                 AppToolTip {
-                    text: qsTr("Scripts library")
+                    text: qsTr("Command snippets")
                 }
             }
 
