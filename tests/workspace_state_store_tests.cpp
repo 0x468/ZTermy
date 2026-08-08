@@ -1,6 +1,7 @@
 #include "infrastructure/workbench/WorkspaceStateStore.h"
 
 #include <QFile>
+#include <QFileInfo>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -18,6 +19,8 @@ private slots:
     void migratesVersionThreeWithoutSftpNavigationPreferences();
     void togglesAndBoundsSftpBookmarks();
     void rejectsMalformedDuplicateAndInvalidState();
+    void recoversTheLastKnownGoodStateFromBackup();
+    void refusesToOverwriteANewerWorkspaceSchema();
 };
 
 void WorkspaceStateStoreTests::missingFileLoadsEmptyState()
@@ -159,6 +162,51 @@ void WorkspaceStateStoreTests::rejectsMalformedDuplicateAndInvalidState()
     const auto saved = store.save(invalid);
     QVERIFY(!saved.has_value());
     QCOMPARE(saved.error(), ztermy::workbench::WorkspaceStateStoreError::InvalidDocument);
+}
+
+void WorkspaceStateStoreTests::recoversTheLastKnownGoodStateFromBackup()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("workspace.json"));
+    const ztermy::workbench::WorkspaceStateStore store(path);
+
+    ztermy::workbench::WorkspaceState first;
+    first.profiles.push_back({.profileId = "host-a", .lastRemotePath = "/first"});
+    ztermy::workbench::WorkspaceState second;
+    second.profiles.push_back({.profileId = "host-a", .lastRemotePath = "/second"});
+    QVERIFY(store.save(first).has_value());
+    QVERIFY(store.save(second).has_value());
+    QVERIFY(QFileInfo::exists(path + QStringLiteral(".bak")));
+
+    QFile corrupted(path);
+    QVERIFY(corrupted.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    QCOMPARE(corrupted.write("{corrupted"), qint64{10});
+    corrupted.close();
+
+    const auto recovered = store.load();
+    QVERIFY(recovered.has_value());
+    QCOMPARE(*recovered, first);
+}
+
+void WorkspaceStateStoreTests::refusesToOverwriteANewerWorkspaceSchema()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("workspace.json"));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    const QByteArray futurePayload = R"({"schemaVersion":999,"profiles":[],"collapsedHostSections":[]})";
+    QCOMPARE(file.write(futurePayload), futurePayload.size());
+    file.close();
+
+    const ztermy::workbench::WorkspaceStateStore store(path);
+    const auto saved = store.save({});
+    QVERIFY(!saved.has_value());
+    QCOMPARE(saved.error(), ztermy::workbench::WorkspaceStateStoreError::UnsupportedVersion);
+
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(), futurePayload);
 }
 
 QTEST_GUILESS_MAIN(WorkspaceStateStoreTests)

@@ -68,6 +68,48 @@ The frozen boundary and backend contract are recorded in `V2_4_SCOPE.md` and
 ADR 0039. Explorer drag-out, script triggers, telemetry, and resumable transfer
 controls remain deferred.
 
+## V2.5 — daily-use lifecycle closure (`0.2.5`)
+
+- bound, deduplicate, and generation-cancel SFTP tree background requests so a
+  large remote tree cannot grow memory indefinitely or starve file mutations;
+- close the SFTP acceptance gate before shutdown, discard queued work, and
+  reject late commands with deterministic cancellation results;
+- keep an atomic last-known-good backup of the non-secret workspace state,
+  recover from a damaged primary file, and refuse to overwrite data written by
+  a newer schema;
+- exercise repeated real ConPTY tab creation/close and multi-session app
+  shutdown as a release preflight gate;
+- repeat the complete quality, migration, real-host, portable, and MSI handoff
+  checks without expanding the visible product surface.
+
+The frozen boundary is recorded in `V2_5_SCOPE.md`, the concurrency and
+recovery decision in ADR 0040, and the evidence matrix in
+`testing/V2_5_ACCEPTANCE.md`. V2.5 is intentionally a reliability milestone;
+remote monitoring, transfer pause/resume, script triggers, and Explorer
+drag-out remain out of scope.
+
+## V2.6 — remote system monitoring (`0.2.6`)
+
+- reuse the session's isolated auxiliary SSH exec channel rather than opening
+  a second user-visible terminal or parsing prompt output;
+- start with a Linux adapter that samples fixed, read-only commands and virtual
+  files (`/proc/stat`, `/proc/meminfo`, `/proc/net/dev`, `df`, and bounded
+  `ps` output), with no `sudo`, shell interpolation, or secret-bearing logs;
+- show a compact CPU, memory, disk, network, and SSH-latency strip in the
+  terminal identity row, with themed hover panels for history and detailed
+  breakdowns;
+- poll only while the SSH session is connected and its tab is visible, use a
+  five-second minimum interval, bounded output/timeouts, backoff after errors,
+  and suspension after three consecutive failures;
+- retain a bounded in-memory ring buffer only. Fast counters use the normal
+  interval; expensive process/disk details refresh more slowly or on demand;
+- keep platform collectors behind an adapter boundary. Linux is the first
+  supported remote OS; macOS and Windows remote collectors are later subphases
+  and must not be inferred from a generic SSH connection.
+
+V2.6 must ship a capability/error state that is unobtrusive when unsupported;
+it must never inject commands into the interactive shell or block terminal I/O.
+
 ## V3 decision gate (`0.3.0`)
 
 V3 starts only after the owner chooses a coherent major direction and records
@@ -76,6 +118,7 @@ file-management workspace, or deeper remote-development workflows. Cloud sync,
 collaboration, AI, serial support, and remote editing remain separate decisions
 and are not implied by V3.
 
-After V2.4 acceptance, daily-use defects may continue on `0.2.x`. The next
-planned feature milestone is chosen at the V3 decision gate rather than by
+After V2.6, compatible daily-use work may continue through the planned
+`0.2.x` line (including richer transfer and workspace workflows). The V3
+direction is still chosen explicitly at the decision gate rather than by
 automatically incrementing to `0.3.0`.

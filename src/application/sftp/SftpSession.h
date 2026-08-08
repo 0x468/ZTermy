@@ -135,7 +135,14 @@ private:
 
     void run(ssh::SshConnectionRequest &request, const std::stop_token &stopToken);
     void processCommand(SftpClient &client, Command command, const std::stop_token &stopToken);
-    void enqueue(Command command);
+    enum class EnqueueResult : std::uint8_t
+    {
+        Accepted,
+        Stopped,
+        LimitReached,
+    };
+
+    [[nodiscard]] EnqueueResult enqueue(Command command);
     [[nodiscard]] bool isCurrentDirectoryRequest(quint64 requestId, quint64 generation) const noexcept;
     void postRunning(bool running);
     void postWorkerFinished();
@@ -160,6 +167,8 @@ private:
     mutable std::mutex m_commandMutex;
     std::condition_variable_any m_commandAvailable;
     std::deque<Command> m_commands;
+    static constexpr std::size_t maximumQueuedTreeCommands = 128;
+    std::atomic_bool m_acceptingCommands = false;
     quint64 m_latestDirectoryRequestId = 0;
     quint64 m_latestDirectoryGeneration = 0;
 

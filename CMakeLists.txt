@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 
 project(
     ztermy
-    VERSION 0.2.4
+    VERSION 0.2.5
     DESCRIPTION "A native Windows SSH terminal"
     LANGUAGES C CXX RC
 )
@@ -919,6 +919,18 @@ add_custom_target(ztermy_terminal_render_runtime_smoke
             --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/terminal-render-smoke"
     DEPENDS ztermy
     COMMENT "Checking terminal rendering and GUI responsiveness under large output"
+    USES_TERMINAL
+    VERBATIM
+)
+
+add_custom_target(ztermy_lifecycle_runtime_smoke
+    COMMAND "${CMAKE_COMMAND}" -E rm -rf
+            "${CMAKE_CURRENT_BINARY_DIR}/test-data/lifecycle-runtime-smoke"
+    COMMAND "$<TARGET_FILE:ztermy>"
+            --lifecycle-runtime-smoke
+            --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/lifecycle-runtime-smoke"
+    DEPENDS ztermy
+    COMMENT "Checking repeated ConPTY tab startup, close, and orderly multi-session shutdown"
     USES_TERMINAL
     VERBATIM
 )
@@ -2322,10 +2334,13 @@ if(BUILD_TESTING)
         COMMAND "$<TARGET_FILE:ztermy>"
                 --terminal-render-smoke
                 --data-dir "${ZTERMY_V1_PREFLIGHT_DATA_ROOT}/terminal-render"
+        COMMAND "$<TARGET_FILE:ztermy>"
+                --lifecycle-runtime-smoke
+                --data-dir "${ZTERMY_V1_PREFLIGHT_DATA_ROOT}/lifecycle"
         DEPENDS
             ztermy_v1_preflight_prerequisites
             ztermy_clang_tidy_check
-        COMMENT "Running all seven real-window V1 gates serially"
+        COMMENT "Running all eight real-window gates serially"
         USES_TERMINAL
         VERBATIM
     )

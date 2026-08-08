@@ -1,12 +1,12 @@
 # NetCatty and ztermy product comparison
 
-Status: V2.4 implementation candidate
+Status: V2.5 implementation candidate
 
 ## Purpose and evidence
 
 This document prevents reference drift. It compares the locally installed
 NetCatty `1.1.75` runtime, the offered `1.1.76` update, the reference source at
-`D:/tmp/Netcatty`, and the ztermy `0.2.4` candidate. Runtime behavior wins when
+`D:/tmp/Netcatty`, and the ztermy `0.2.5` candidate. Runtime behavior wins when
 the installed binary and source snapshot differ.
 
 The source review identified the following reference boundaries:
@@ -42,7 +42,7 @@ and remote editing are explicitly excluded.
 
 ## Detailed matrix
 
-| Area | NetCatty reference | ztermy 0.2.4 candidate | Decision / remaining gap |
+| Area | NetCatty reference | ztermy 0.2.5 candidate | Decision / remaining gap |
 | --- | --- | --- | --- |
 | Product shell | Persistent work tabs, compact title chrome, global utility actions, and terminal tabs share one task hierarchy. | Hosts, Settings, and terminal sessions share the custom native tab bar; Settings is an on-demand singleton tab. | Aligned in workflow. ztermy retains native Windows caption/Snap behavior and its own brand. |
 | Startup | Opens into the host/vault workflow rather than forcing an unsolicited shell. | Opens Hosts and does not create a local terminal automatically. | Aligned. Session restoration remains later work. |
@@ -50,7 +50,7 @@ and remote editing are explicitly excluded.
 | Host items | Compact recent/grouped entries; item activation connects while management actions are secondary. | Recent and saved entries are compact, grouped, collapsible, persisted, keyboard-activatable, and use secondary edit/more actions. | Main anatomy aligned. Nested groups, tags, bulk organization, and additional protocols are absent. |
 | Host editor | Right-side `HostDetailsPanel` reduces the host-list width; fields are organized as an inspector rather than a modal card. | New/Edit host uses a fixed right inspector and keeps the list visible. Generated profile name, group suggestions, credentials, Escape, and focus restoration are retained. | Main interaction aligned. NetCatty's richer advanced host options are deferred unless an SSH use case justifies them. |
 | Credentials | Vault state is integrated into the connection workflow. | Installed builds use Windows Credential Manager; portable builds use the encrypted portable vault, with visible lock state and unlock entry points. | Deliberate native/security difference. No plaintext fallback. |
-| Terminal identity row | Compact session identity/state on the left; supported host metadata and actions on the right. | Compact identity/state and connected duration on the left; supported terminal actions on the right. | Layout aligned. Host name copy and remote telemetry are not yet at NetCatty depth. |
+| Terminal identity row | Compact session identity/state on the left; supported host metadata and actions on the right. | Compact identity/state and connected duration on the left; supported terminal actions on the right. | Layout aligned. Remote CPU, memory, disk, network, and latency monitoring is frozen for V2.6. |
 | Toolbar order | Keyword highlight, SFTP, composer, find, session log, scripts, then overflow; unsupported/less-used actions progressively move into overflow. | SFTP, composer, find, session log, command snippets, and overflow are available without covering the viewport. History is reached through overflow/workbench. | Supported actions converged. Keyword highlighting, directory tracking, recording, encoding, and richer terminal settings remain gaps. |
 | Terminal side panels | File transfer, scripts, history, theme, system information, notes, and AI can occupy a movable terminal-adjacent surface. | SFTP, command history, command snippets, search, and composer use one movable/resizable workbench. | Correct shared-panel model. Theme/system/notes are deferred; AI is excluded. |
 | Command history | Search, current-host/global scope, counts, refresh, and command reuse actions. | Search, current-profile/global scope, counts, refresh, Run, Insert, and Save as snippet are implemented. | Functionally aligned for supported shells. History adapters and large-history performance need broader real-world coverage. |
@@ -62,6 +62,8 @@ and remote editing are explicitly excluded.
 | SFTP navigation | Home, parent, breadcrumb/editable path, bookmarks, terminal-directory locate/follow, copy path, list/tree modes, filter, hidden files, refresh, overflow, and `..`. | The same core navigation is implemented, including event-driven terminal CWD locate/follow and a lazily loaded tree. Bookmarks, list/tree mode, and follow preference are per profile. | Core workflow aligned. Breadcrumb segments, filename encoding, configurable columns, and terminal-directory availability still depend on their respective platform/shell contracts. |
 | SFTP file actions | Upload, download, new folder/file, rename, delete, drag/drop, context actions, encoding, and detailed columns/sorting. | Upload, download, new folder/file, rename, delete, drag upload, name/type/size/time columns, and permission-preserving error state are implemented. | Partial parity. Drag-out download, filename encoding, column customization, directory-first control, and broader keyboard shortcuts remain gaps. |
 | SFTP errors | Errors remain contextual and do not unnecessarily destroy useful navigation state. | A permission/transport error is shown while retaining the last successful listing and recovery controls. | Corrected from the former full-surface dead end; destructive and permission-error recovery still need manual acceptance. |
+| Background work and shutdown | Renderer-side operations are mediated by Electron bridges and application state. | SFTP tree requests are bounded, deduplicated, invalidated by root generation, and deprioritized behind mutations; shutdown closes the command gate and cancels queued work. | V2.5 native reliability contract. Late UI work cannot prolong session teardown indefinitely. |
+| Workspace recovery | Application state is persisted by the Electron application. | Non-secret workspace JSON uses atomic commits plus a last-known-good backup, restores from primary corruption, and refuses to overwrite a newer schema. | V2.5 deliberate native recovery policy. Credential stores remain separate and are never copied into workspace backup. |
 | Transfers | Rich upload/download task rows, aggregate controls, per-task actions, progress, and completed-history management. | Stable progress, cancel, retry, dismiss, and clear-completed are implemented; cancellation is preserved across progress refreshes. | Core daily-use path present. Pause/resume, open target, copy target path, aggregate pause/resume, and drag download require backend contracts and are not faked. |
 | Settings shell | Left category rail and compact right detail surface: Application, Appearance, Terminal, Shortcuts, SFTP, AI, Sync/Cloud, and System. | Application, Appearance, Terminal, Shortcuts, SFTP, and Security use the same compact rail/detail anatomy inside the Settings tab. | Main hierarchy aligned. Security is a ztermy-owned category; empty AI/cloud/system placeholders are intentionally omitted. |
 | Settings density | Ordinary preferences are compact rows; cards are reserved for genuinely grouped or exceptional content. | Appearance, Terminal, Security, and SFTP use compact rows and Apply/Discard semantics; brand/release identity retains presentation treatment. | Corrected in V2.2. |
@@ -80,9 +82,10 @@ The following NetCatty areas do not belong to the current ztermy product scope:
 - remote text editing and remote-development workspace features;
 - inert placeholders for any unsupported module.
 
-Port forwarding, terminal split panes, and remote system telemetry are not
-implicitly excluded, but each needs a separate product decision and native
-backend contract before entering a milestone.
+Port forwarding and terminal split panes are not implicitly excluded, but each
+needs a separate product decision and native backend contract before entering a
+milestone. Remote system telemetry has that decision now and is scheduled for
+V2.6 under the bounded auxiliary-channel contract in the roadmap.
 
 ## Acceptance rule going forward
 

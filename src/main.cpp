@@ -2305,6 +2305,87 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     return colors.size() >= 8;
 }
 
+[[nodiscard]] bool terminalTabRunning(const ztermy::AppController &controller, const QString &tabId)
+{
+    const QVariantList tabs = controller.terminalTabs();
+    const auto position = std::ranges::find(tabs, tabId, [](const QVariant &tab) {
+        return tab.toMap().value(QStringLiteral("id")).toString();
+    });
+    return position != tabs.end() && position->toMap().value(QStringLiteral("running")).toBool();
+}
+
+[[nodiscard]] bool runLifecycleRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller,
+                                            ztermy::ui::TerminalItem &terminalItem)
+{
+    window.resize(QSize{1120, 800});
+    window.show();
+    window.requestActivate();
+    processWindowEventsFor(std::chrono::milliseconds{200});
+
+    constexpr int sequentialCycles = 8;
+    qint64 maximumCloseMilliseconds = 0;
+    for (int cycle = 0; cycle < sequentialCycles; ++cycle)
+    {
+        const QString tabId = controller.startLocalTerminal();
+        if (tabId.isEmpty()
+            || !processWindowEventsUntil(
+                [&controller, &tabId] {
+                    return terminalTabRunning(controller, tabId);
+                },
+                std::chrono::seconds{5}))
+        {
+            qCWarning(applicationLog) << "Lifecycle smoke could not start local terminal" << "cycle=" << cycle;
+            return false;
+        }
+        terminalItem.inputGenerated(QByteArrayLiteral("Write-Output ('ZTERMY_LIFECYCLE_' + 'READY')\r"));
+        processWindowEventsFor(std::chrono::milliseconds{40});
+        QElapsedTimer closeTimer;
+        closeTimer.start();
+        if (!controller.closeTerminalTab(tabId))
+        {
+            return false;
+        }
+        maximumCloseMilliseconds = std::max(maximumCloseMilliseconds, closeTimer.elapsed());
+        if (!processWindowEventsUntil(
+                [&controller] {
+                    return controller.terminalTabs().isEmpty();
+                },
+                std::chrono::seconds{3}))
+        {
+            qCWarning(applicationLog) << "Lifecycle smoke retained a closed tab" << "cycle=" << cycle;
+            return false;
+        }
+    }
+
+    constexpr int concurrentTabs = 3;
+    QStringList finalTabs;
+    for (int index = 0; index < concurrentTabs; ++index)
+    {
+        const QString tabId = controller.startLocalTerminal();
+        if (tabId.isEmpty())
+        {
+            return false;
+        }
+        finalTabs.push_back(tabId);
+    }
+    const bool allRunning = processWindowEventsUntil(
+        [&controller, &finalTabs] {
+            return std::ranges::all_of(finalTabs, [&controller](const QString &tabId) {
+                return terminalTabRunning(controller, tabId);
+            });
+        },
+        std::chrono::seconds{8});
+    if (allRunning)
+    {
+        terminalItem.inputGenerated(QByteArrayLiteral("1..2000 | ForEach-Object { \"ztermy lifecycle line $_\" }\r"));
+        processWindowEventsFor(std::chrono::milliseconds{100});
+    }
+    qCInfo(applicationLog) << "Lifecycle runtime exercise"
+                           << "sequentialCycles=" << sequentialCycles << "maximumCloseMs=" << maximumCloseMilliseconds
+                           << "concurrentTabs=" << finalTabs.size() << "allRunning=" << allRunning;
+    return allRunning && maximumCloseMilliseconds < 3000;
+}
+
 [[nodiscard]] bool runTerminalRenderRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller,
                                                  ztermy::ui::TerminalItem &terminalItem, const QString &outputDirectory)
 {
@@ -2481,6 +2562,8 @@ int main(int argc, char *argv[])
     const bool uiKeyboardSmoke = QCoreApplication::arguments().contains(QStringLiteral("--ui-keyboard-smoke"));
     const bool realHostUiSmoke = QCoreApplication::arguments().contains(QStringLiteral("--real-host-ui-smoke"));
     const bool terminalRenderSmoke = QCoreApplication::arguments().contains(QStringLiteral("--terminal-render-smoke"));
+    const bool lifecycleRuntimeSmoke =
+        QCoreApplication::arguments().contains(QStringLiteral("--lifecycle-runtime-smoke"));
     const bool windowAppearanceSmoke =
         QCoreApplication::arguments().contains(QStringLiteral("--window-appearance-smoke"));
     const bool windowResizeSmoke = QCoreApplication::arguments().contains(QStringLiteral("--window-resize-smoke"));
@@ -2650,6 +2733,26 @@ int main(int argc, char *argv[])
             return EXIT_FAILURE;
         }
         qCInfo(applicationLog) << "Real-host SFTP UI runtime smoke test completed";
+        return EXIT_SUCCESS;
+    }
+    if (lifecycleRuntimeSmoke)
+    {
+        const bool exercised = runLifecycleRuntimeSmoke(window, appController, *terminalItem);
+        QElapsedTimer shutdownTimer;
+        shutdownTimer.start();
+        appController.shutdown();
+        const qint64 shutdownMilliseconds = shutdownTimer.elapsed();
+        const bool shutdownPassed = shutdownMilliseconds < 5000 && appController.terminalTabs().isEmpty();
+        window.releaseResources();
+        if (!exercised || !shutdownPassed)
+        {
+            qCCritical(applicationLog) << "Lifecycle runtime smoke test failed"
+                                       << "exercised=" << exercised << "shutdownMs=" << shutdownMilliseconds
+                                       << "shutdownPassed=" << shutdownPassed;
+            return EXIT_FAILURE;
+        }
+        qCInfo(applicationLog) << "Lifecycle runtime smoke test completed"
+                               << "shutdownMs=" << shutdownMilliseconds;
         return EXIT_SUCCESS;
     }
     if (terminalRenderSmoke)

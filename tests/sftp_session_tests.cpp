@@ -22,6 +22,7 @@ struct FakeState final
     std::condition_variable_any available;
     std::atomic_bool slowListEntered = false;
     std::atomic_bool releaseSlowList = false;
+    std::vector<std::string> listed;
     std::vector<std::string> created;
     std::vector<std::string> createdFiles;
     std::vector<std::pair<std::string, std::string>> renamed;
@@ -42,6 +43,10 @@ public:
     std::expected<std::vector<ztermy::sftp::DirectoryEntry>, ztermy::ssh::SshTransportError>
     listDirectory(const std::string_view remotePath, const std::stop_token &stopToken) override
     {
+        {
+            std::scoped_lock lock(m_state->mutex);
+            m_state->listed.emplace_back(remotePath);
+        }
         if (remotePath == "/slow")
         {
             m_state->slowListEntered.store(true);
@@ -164,6 +169,9 @@ private slots:
     void serializesMutatingOperations();
     void stopsOutstandingDirectoryRequestsWithoutBlockingCaller();
     void survivesRepeatedStartAndDeferredStop();
+    void boundsBackgroundTreeRequestsAndPrioritizesMutations();
+    void dropsStaleTreeBacklogWhenRootGenerationChanges();
+    void rejectsCommandsAfterStopBegins();
 };
 
 void SftpSessionTests::initTestCase()
@@ -282,6 +290,90 @@ void SftpSessionTests::survivesRepeatedStartAndDeferredStop()
         QTRY_COMPARE(finishedSpy.count(), 1);
         QVERIFY(session.workerFinished());
     }
+}
+
+void SftpSessionTests::boundsBackgroundTreeRequestsAndPrioritizesMutations()
+{
+    const auto state = std::make_shared<FakeState>();
+    ztermy::sftp::SftpSession session(fakeFactory(state));
+    QSignalSpy treeReadySpy(&session, &ztermy::sftp::SftpSession::treeDirectoryReady);
+    QSignalSpy treeFailedSpy(&session, &ztermy::sftp::SftpSession::treeDirectoryFailed);
+    QSignalSpy operationSpy(&session, &ztermy::sftp::SftpSession::operationSucceeded);
+
+    QVERIFY(!session.start(validRequest()));
+    QTRY_VERIFY(session.running());
+    session.requestDirectory(1, 1, QStringLiteral("/slow"));
+    QTRY_VERIFY(state->slowListEntered.load());
+
+    constexpr int requestCount = 160;
+    for (int index = 0; index < requestCount; ++index)
+    {
+        session.requestTreeDirectory(quint64{100} + static_cast<quint64>(index), 1,
+                                     QStringLiteral("/tree-%1").arg(index));
+    }
+    session.requestCreateDirectory(500, QStringLiteral("/priority"));
+    QTRY_COMPARE(treeFailedSpy.count(), 32);
+
+    state->releaseSlowList.store(true);
+    state->available.notify_all();
+    QTRY_COMPARE(operationSpy.count(), 1);
+    {
+        std::scoped_lock lock(state->mutex);
+        QCOMPARE(state->created, std::vector<std::string>{"/priority"});
+    }
+    QTRY_COMPARE_WITH_TIMEOUT(treeReadySpy.count(), 128, 5000);
+}
+
+void SftpSessionTests::dropsStaleTreeBacklogWhenRootGenerationChanges()
+{
+    const auto state = std::make_shared<FakeState>();
+    ztermy::sftp::SftpSession session(fakeFactory(state));
+    QSignalSpy directorySpy(&session, &ztermy::sftp::SftpSession::directoryReady);
+
+    QVERIFY(!session.start(validRequest()));
+    QTRY_VERIFY(session.running());
+    session.requestDirectory(1, 1, QStringLiteral("/slow"));
+    QTRY_VERIFY(state->slowListEntered.load());
+    for (int index = 0; index < 40; ++index)
+    {
+        session.requestTreeDirectory(quint64{100} + static_cast<quint64>(index), 1,
+                                     QStringLiteral("/old-%1").arg(index));
+    }
+    session.requestDirectory(2, 2, QStringLiteral("/new-root"));
+
+    state->releaseSlowList.store(true);
+    state->available.notify_all();
+    QTRY_COMPARE(directorySpy.count(), 1);
+    QCOMPARE(directorySpy.front().at(2).toString(), QStringLiteral("/new-root"));
+    QTest::qWait(100);
+    {
+        std::scoped_lock lock(state->mutex);
+        QCOMPARE(state->listed, std::vector<std::string>({"/slow", "/new-root"}));
+    }
+}
+
+void SftpSessionTests::rejectsCommandsAfterStopBegins()
+{
+    const auto state = std::make_shared<FakeState>();
+    ztermy::sftp::SftpSession session(fakeFactory(state));
+    QSignalSpy treeFailedSpy(&session, &ztermy::sftp::SftpSession::treeDirectoryFailed);
+    QSignalSpy operationFailedSpy(&session, &ztermy::sftp::SftpSession::operationFailed);
+
+    QVERIFY(!session.start(validRequest()));
+    QTRY_VERIFY(session.running());
+    session.requestDirectory(1, 1, QStringLiteral("/slow"));
+    QTRY_VERIFY(state->slowListEntered.load());
+    session.requestStop();
+    session.requestTreeDirectory(2, 1, QStringLiteral("/late-tree"));
+    session.requestCreateDirectory(3, QStringLiteral("/late-mutation"));
+
+    QTRY_COMPARE(treeFailedSpy.count(), 1);
+    QCOMPARE(qvariant_cast<ztermy::ssh::SshTransportErrorKind>(treeFailedSpy.front().at(3)),
+             ztermy::ssh::SshTransportErrorKind::Cancelled);
+    QTRY_COMPARE(operationFailedSpy.count(), 1);
+    QCOMPARE(qvariant_cast<ztermy::ssh::SshTransportErrorKind>(operationFailedSpy.front().at(2)),
+             ztermy::ssh::SshTransportErrorKind::Cancelled);
+    QTRY_VERIFY(session.workerFinished());
 }
 
 } // namespace

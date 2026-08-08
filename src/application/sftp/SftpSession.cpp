@@ -62,6 +62,7 @@ std::error_code SftpSession::start(ssh::SshConnectionRequest request)
         m_commands.clear();
         m_latestDirectoryRequestId = 0;
         m_latestDirectoryGeneration = 0;
+        m_acceptingCommands.store(true);
     }
     {
         std::scoped_lock lock(m_hostKeyMutex);
@@ -83,6 +84,7 @@ std::error_code SftpSession::start(ssh::SshConnectionRequest request)
             postConnectionFailure(ssh::SshFailureKind::ProtocolError);
             postPhase(ssh::SshConnectionPhase::Failed);
         }
+        m_acceptingCommands.store(false);
         m_workerFinished.store(true);
         postWorkerFinished();
     });
@@ -91,6 +93,11 @@ std::error_code SftpSession::start(ssh::SshConnectionRequest request)
 
 void SftpSession::requestStop() noexcept
 {
+    m_acceptingCommands.store(false);
+    {
+        std::scoped_lock lock(m_commandMutex);
+        m_commands.clear();
+    }
     if (!m_worker.joinable())
     {
         return;
@@ -111,6 +118,7 @@ void SftpSession::stop() noexcept
         std::scoped_lock lock(m_commandMutex);
         m_commands.clear();
     }
+    m_acceptingCommands.store(false);
     if (m_running.exchange(false))
     {
         emit runningChanged(false);
@@ -163,14 +171,38 @@ void SftpSession::requestDirectory(const quint64 requestId, const quint64 genera
         return;
     }
 
-    std::scoped_lock lock(m_commandMutex);
-    m_latestDirectoryRequestId = requestId;
-    m_latestDirectoryGeneration = generation;
-    std::erase_if(m_commands, [](const Command &command) {
-        return std::holds_alternative<ListDirectoryCommand>(command);
-    });
-    m_commands.emplace_back(
-        ListDirectoryCommand{.requestId = requestId, .generation = generation, .remotePath = std::move(*path)});
+    bool stopped = false;
+    {
+        std::scoped_lock lock(m_commandMutex);
+        if (!m_acceptingCommands.load())
+        {
+            stopped = true;
+        }
+        else
+        {
+            m_latestDirectoryRequestId = requestId;
+            m_latestDirectoryGeneration = generation;
+            std::erase_if(m_commands, [generation](const Command &command) {
+                if (std::holds_alternative<ListDirectoryCommand>(command))
+                {
+                    return true;
+                }
+                const auto *tree = std::get_if<ListTreeDirectoryCommand>(&command);
+                return tree != nullptr && tree->generation != generation;
+            });
+            const auto firstTree = std::ranges::find_if(m_commands, [](const Command &command) {
+                return std::holds_alternative<ListTreeDirectoryCommand>(command);
+            });
+            m_commands.insert(
+                firstTree,
+                ListDirectoryCommand{.requestId = requestId, .generation = generation, .remotePath = std::move(*path)});
+        }
+    }
+    if (stopped)
+    {
+        postOperationFailed(requestId, SftpOperationKind::ListDirectory, ssh::SshTransportErrorKind::Cancelled);
+        return;
+    }
     m_commandAvailable.notify_all();
 }
 
@@ -182,7 +214,14 @@ void SftpSession::requestTreeDirectory(const quint64 requestId, const quint64 ge
         postTreeDirectoryFailure(requestId, generation, remotePath, ssh::SshTransportErrorKind::InvalidArgument);
         return;
     }
-    enqueue(ListTreeDirectoryCommand{.requestId = requestId, .generation = generation, .remotePath = std::move(*path)});
+    const EnqueueResult result = enqueue(
+        ListTreeDirectoryCommand{.requestId = requestId, .generation = generation, .remotePath = std::move(*path)});
+    if (result != EnqueueResult::Accepted)
+    {
+        postTreeDirectoryFailure(requestId, generation, remotePath,
+                                 result == EnqueueResult::Stopped ? ssh::SshTransportErrorKind::Cancelled
+                                                                  : ssh::SshTransportErrorKind::InvalidState);
+    }
 }
 
 void SftpSession::requestCreateDirectory(const quint64 requestId, const QString &remotePath)
@@ -193,7 +232,11 @@ void SftpSession::requestCreateDirectory(const quint64 requestId, const QString 
         postOperationFailed(requestId, SftpOperationKind::CreateDirectory, ssh::SshTransportErrorKind::InvalidArgument);
         return;
     }
-    enqueue(CreateDirectoryCommand{.requestId = requestId, .remotePath = std::move(*path)});
+    if (enqueue(CreateDirectoryCommand{.requestId = requestId, .remotePath = std::move(*path)})
+        != EnqueueResult::Accepted)
+    {
+        postOperationFailed(requestId, SftpOperationKind::CreateDirectory, ssh::SshTransportErrorKind::Cancelled);
+    }
 }
 
 void SftpSession::requestCreateFile(const quint64 requestId, const QString &remotePath)
@@ -204,7 +247,10 @@ void SftpSession::requestCreateFile(const quint64 requestId, const QString &remo
         postOperationFailed(requestId, SftpOperationKind::CreateFile, ssh::SshTransportErrorKind::InvalidArgument);
         return;
     }
-    enqueue(CreateFileCommand{.requestId = requestId, .remotePath = std::move(*path)});
+    if (enqueue(CreateFileCommand{.requestId = requestId, .remotePath = std::move(*path)}) != EnqueueResult::Accepted)
+    {
+        postOperationFailed(requestId, SftpOperationKind::CreateFile, ssh::SshTransportErrorKind::Cancelled);
+    }
 }
 
 void SftpSession::requestRenameEntry(const quint64 requestId, const QString &sourcePath, const QString &destinationPath)
@@ -216,9 +262,13 @@ void SftpSession::requestRenameEntry(const quint64 requestId, const QString &sou
         postOperationFailed(requestId, SftpOperationKind::RenameEntry, ssh::SshTransportErrorKind::InvalidArgument);
         return;
     }
-    enqueue(RenameEntryCommand{.requestId = requestId,
-                               .sourcePath = std::move(*source),
-                               .destinationPath = std::move(*destination)});
+    if (enqueue(RenameEntryCommand{.requestId = requestId,
+                                   .sourcePath = std::move(*source),
+                                   .destinationPath = std::move(*destination)})
+        != EnqueueResult::Accepted)
+    {
+        postOperationFailed(requestId, SftpOperationKind::RenameEntry, ssh::SshTransportErrorKind::Cancelled);
+    }
 }
 
 void SftpSession::requestRemoveEntry(const quint64 requestId, const QString &remotePath, const bool directory)
@@ -230,7 +280,12 @@ void SftpSession::requestRemoveEntry(const quint64 requestId, const QString &rem
                             ssh::SshTransportErrorKind::InvalidArgument);
         return;
     }
-    enqueue(RemoveEntryCommand{.requestId = requestId, .remotePath = std::move(*path), .directory = directory});
+    const SftpOperationKind operation = directory ? SftpOperationKind::RemoveDirectory : SftpOperationKind::RemoveFile;
+    if (enqueue(RemoveEntryCommand{.requestId = requestId, .remotePath = std::move(*path), .directory = directory})
+        != EnqueueResult::Accepted)
+    {
+        postOperationFailed(requestId, operation, ssh::SshTransportErrorKind::Cancelled);
+    }
 }
 
 void SftpSession::run(ssh::SshConnectionRequest &request, const std::stop_token &stopToken)
@@ -380,13 +435,47 @@ void SftpSession::processCommand(SftpClient &client, Command command, const std:
         command);
 }
 
-void SftpSession::enqueue(Command command)
+SftpSession::EnqueueResult SftpSession::enqueue(Command command)
 {
     {
         std::scoped_lock lock(m_commandMutex);
-        m_commands.push_back(std::move(command));
+        if (!m_acceptingCommands.load())
+        {
+            return EnqueueResult::Stopped;
+        }
+        if (const auto *tree = std::get_if<ListTreeDirectoryCommand>(&command))
+        {
+            const auto duplicate = std::ranges::find_if(m_commands, [tree](const Command &queued) {
+                const auto *queuedTree = std::get_if<ListTreeDirectoryCommand>(&queued);
+                return queuedTree != nullptr && queuedTree->generation == tree->generation
+                       && queuedTree->remotePath == tree->remotePath;
+            });
+            if (duplicate != m_commands.end())
+            {
+                *duplicate = std::move(command);
+            }
+            else
+            {
+                const auto treeCount = std::ranges::count_if(m_commands, [](const Command &queued) {
+                    return std::holds_alternative<ListTreeDirectoryCommand>(queued);
+                });
+                if (std::cmp_greater_equal(treeCount, maximumQueuedTreeCommands))
+                {
+                    return EnqueueResult::LimitReached;
+                }
+                m_commands.push_back(std::move(command));
+            }
+        }
+        else
+        {
+            const auto firstTree = std::ranges::find_if(m_commands, [](const Command &queued) {
+                return std::holds_alternative<ListTreeDirectoryCommand>(queued);
+            });
+            m_commands.insert(firstTree, std::move(command));
+        }
     }
     m_commandAvailable.notify_all();
+    return EnqueueResult::Accepted;
 }
 
 bool SftpSession::isCurrentDirectoryRequest(const quint64 requestId, const quint64 generation) const noexcept

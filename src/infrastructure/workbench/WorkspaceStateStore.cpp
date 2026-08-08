@@ -117,28 +117,10 @@ std::optional<ProfileWorkspaceState> parseProfile(const QJsonValue &value, const
     return validProfileWorkspaceState(state) ? std::optional{std::move(state)} : std::nullopt;
 }
 
-} // namespace
-
-WorkspaceStateStore::WorkspaceStateStore(QString filePath) : m_filePath(std::move(filePath)) {}
-
-const QString &WorkspaceStateStore::filePath() const noexcept
+std::expected<WorkspaceState, WorkspaceStateStoreError> parseWorkspacePayload(const QByteArray &payload)
 {
-    return m_filePath;
-}
-
-std::expected<WorkspaceState, WorkspaceStateStoreError> WorkspaceStateStore::load() const
-{
-    QFile file(m_filePath);
-    if (!file.exists())
-    {
-        return WorkspaceState{};
-    }
-    if (!file.open(QIODevice::ReadOnly))
-    {
-        return std::unexpected(WorkspaceStateStoreError::Io);
-    }
     QJsonParseError parseError;
-    const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &parseError);
+    const QJsonDocument document = QJsonDocument::fromJson(payload, &parseError);
     if (parseError.error != QJsonParseError::NoError || !document.isObject())
     {
         return std::unexpected(WorkspaceStateStoreError::InvalidDocument);
@@ -186,6 +168,71 @@ std::expected<WorkspaceState, WorkspaceStateStoreError> WorkspaceStateStore::loa
                                       : std::unexpected(WorkspaceStateStoreError::InvalidDocument);
 }
 
+std::expected<QByteArray, WorkspaceStateStoreError> readWorkspacePayload(const QString &path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+    {
+        return std::unexpected(WorkspaceStateStoreError::Io);
+    }
+    return file.readAll();
+}
+
+std::expected<void, WorkspaceStateStoreError> writeWorkspacePayload(const QString &path, const QByteArray &payload)
+{
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly) || file.write(payload) != payload.size() || !file.commit())
+    {
+        return std::unexpected(WorkspaceStateStoreError::Io);
+    }
+    return {};
+}
+
+} // namespace
+
+WorkspaceStateStore::WorkspaceStateStore(QString filePath) : m_filePath(std::move(filePath)) {}
+
+const QString &WorkspaceStateStore::filePath() const noexcept
+{
+    return m_filePath;
+}
+
+std::expected<WorkspaceState, WorkspaceStateStoreError> WorkspaceStateStore::load() const
+{
+    const QString backupPath = m_filePath + QStringLiteral(".bak");
+    if (!QFileInfo::exists(m_filePath))
+    {
+        if (QFileInfo::exists(backupPath))
+        {
+            auto backupPayload = readWorkspacePayload(backupPath);
+            if (backupPayload)
+            {
+                return parseWorkspacePayload(*backupPayload);
+            }
+        }
+        return WorkspaceState{};
+    }
+    auto primaryPayload = readWorkspacePayload(m_filePath);
+    auto primary =
+        primaryPayload
+            ? parseWorkspacePayload(*primaryPayload)
+            : std::expected<WorkspaceState, WorkspaceStateStoreError>{std::unexpected(primaryPayload.error())};
+    if (primary || primary.error() == WorkspaceStateStoreError::UnsupportedVersion || !QFileInfo::exists(backupPath))
+    {
+        return primary;
+    }
+    auto backupPayload = readWorkspacePayload(backupPath);
+    if (backupPayload)
+    {
+        auto backup = parseWorkspacePayload(*backupPayload);
+        if (backup)
+        {
+            return backup;
+        }
+    }
+    return primary;
+}
+
 std::expected<void, WorkspaceStateStoreError> WorkspaceStateStore::save(const WorkspaceState &state) const
 {
     if (!validWorkspaceState(state))
@@ -197,6 +244,27 @@ std::expected<void, WorkspaceStateStoreError> WorkspaceStateStore::save(const Wo
     {
         return std::unexpected(WorkspaceStateStoreError::Io);
     }
+    const QString backupPath = m_filePath + QStringLiteral(".bak");
+    if (QFileInfo::exists(m_filePath))
+    {
+        auto previousPayload = readWorkspacePayload(m_filePath);
+        if (previousPayload)
+        {
+            auto previous = parseWorkspacePayload(*previousPayload);
+            if (!previous && previous.error() == WorkspaceStateStoreError::UnsupportedVersion)
+            {
+                return std::unexpected(WorkspaceStateStoreError::UnsupportedVersion);
+            }
+            if (previous)
+            {
+                auto backupWritten = writeWorkspacePayload(backupPath, *previousPayload);
+                if (!backupWritten)
+                {
+                    return backupWritten;
+                }
+            }
+        }
+    }
     QJsonArray profiles;
     for (const ProfileWorkspaceState &profile : state.profiles)
     {
@@ -207,20 +275,11 @@ std::expected<void, WorkspaceStateStoreError> WorkspaceStateStore::save(const Wo
     {
         collapsedSections.push_back(text(section));
     }
-    QSaveFile file(m_filePath);
-    if (!file.open(QIODevice::WriteOnly))
-    {
-        return std::unexpected(WorkspaceStateStoreError::Io);
-    }
     const QByteArray payload = QJsonDocument(QJsonObject{{QStringLiteral("schemaVersion"), currentSchemaVersion},
                                                          {QStringLiteral("profiles"), profiles},
                                                          {QStringLiteral("collapsedHostSections"), collapsedSections}})
                                    .toJson(QJsonDocument::Indented);
-    if (file.write(payload) != payload.size() || !file.commit())
-    {
-        return std::unexpected(WorkspaceStateStoreError::Io);
-    }
-    return {};
+    return writeWorkspacePayload(m_filePath, payload);
 }
 
 } // namespace ztermy::workbench
