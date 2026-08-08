@@ -57,13 +57,6 @@ Item {
         return values;
     }
 
-    function seriesMaximum(values, floor) {
-        let maximum = floor;
-        for (const value of values || [])
-            maximum = Math.max(maximum, Number(value) || 0);
-        return maximum;
-    }
-
     function openMetric(kind, trigger) {
         detailPopup.metric = kind;
         detailPopup.trigger = trigger;
@@ -211,10 +204,11 @@ Item {
         property string metric: "cpu"
         property var trigger: null
         readonly property bool hovered: detailHover.hovered
+        readonly property real maximumPanelHeight: Math.max(160, Math.min(420, parent ? parent.height - 16 : 420))
 
         parent: Overlay.overlay
         width: 326
-        height: Math.min(360, detailColumn.implicitHeight + 24)
+        height: Math.min(maximumPanelHeight, detailColumn.implicitHeight + 24)
         padding: 12
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         onClosed: trigger = null
@@ -242,180 +236,193 @@ Item {
             border.color: Theme.borderStrong
         }
 
-        contentItem: ColumnLayout {
-            id: detailColumn
-            spacing: 9
+        contentItem: ScrollView {
+            id: detailScroll
 
-            RowLayout {
-                Layout.fillWidth: true
+            clip: true
+            contentWidth: availableWidth
+            contentHeight: detailColumn.implicitHeight
+            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+            ScrollBar.vertical.policy: contentHeight > availableHeight ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
 
-                Text {
+            ColumnLayout {
+                id: detailColumn
+
+                width: detailScroll.availableWidth
+                spacing: 9
+
+                RowLayout {
                     Layout.fillWidth: true
-                    text: detailPopup.metric === "cpu" ? qsTr("CPU details") : detailPopup.metric === "memory" ? qsTr("Memory details") : detailPopup.metric === "disk" ? qsTr("Mounted disks") : detailPopup.metric === "network" ? qsTr("Network interfaces") : qsTr("SSH probe latency")
-                    color: Theme.text
-                    font.family: Theme.uiFont
-                    font.pixelSize: Theme.textBody
-                    font.weight: Font.DemiBold
-                }
 
-                ToolButton {
-                    id: refreshTelemetryButton
-
-                    implicitWidth: 26
-                    implicitHeight: 26
-                    onClicked: strip.controller.refreshRemoteTelemetry()
-                    Accessible.name: qsTr("Refresh remote telemetry")
-                    background: Rectangle {
-                        radius: 13
-                        color: refreshTelemetryButton.hovered ? Theme.controlHover : "transparent"
+                    Text {
+                        Layout.fillWidth: true
+                        text: detailPopup.metric === "cpu" ? qsTr("CPU details") : detailPopup.metric === "memory" ? qsTr("Memory details") : detailPopup.metric === "disk" ? qsTr("Mounted disks") : detailPopup.metric === "network" ? qsTr("Network interfaces") : qsTr("SSH probe latency")
+                        color: Theme.text
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textBody
+                        font.weight: Font.DemiBold
                     }
-                    contentItem: AppIcon {
-                        name: "refresh"
-                        color: Theme.textSoft
-                    }
-                    AppToolTip {
-                        text: qsTr("Refresh")
-                    }
-                }
-            }
 
-            Text {
-                Layout.fillWidth: true
-                text: detailPopup.metric === "latency" ? qsTr("Auxiliary SSH command round trip; this is not ICMP latency.") : qsTr("Recent foreground samples")
-                color: Theme.textMuted
-                wrapMode: Text.Wrap
-                font.family: Theme.uiFont
-                font.pixelSize: Theme.textCompact
-            }
+                    ToolButton {
+                        id: refreshTelemetryButton
 
-            TelemetrySparkline {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 52
-                values: strip.series(detailPopup.metric === "cpu" ? "cpu" : detailPopup.metric === "memory" ? "memory" : detailPopup.metric === "disk" ? "disk" : detailPopup.metric === "latency" ? "latency" : "received")
-                maximum: detailPopup.metric === "network" ? strip.seriesMaximum(values, 1) : detailPopup.metric === "latency" ? strip.seriesMaximum(values, 100) : 100
-                lineColor: detailPopup.metric === "latency" ? "#A78BFA" : Theme.accent
-            }
-
-            Flow {
-                Layout.fillWidth: true
-                spacing: 5
-                visible: detailPopup.metric === "cpu" && (strip.telemetry.cores || []).length > 0
-
-                Repeater {
-                    model: strip.telemetry.cores || []
-                    delegate: Rectangle {
-                        required property real modelData
-                        required property int index
-                        width: 70
-                        height: 24
-                        radius: Theme.radiusSmall
-                        color: Theme.controlBackground
-                        Text {
-                            anchors.centerIn: parent
-                            text: qsTr("Core %1  %2%").arg(parent.index).arg(Math.round(parent.modelData))
-                            color: parent.modelData >= 90 ? Theme.dangerText : Theme.textSoft
-                            font.family: Theme.uiFont
-                            font.pixelSize: Theme.textCompact
+                        implicitWidth: 26
+                        implicitHeight: 26
+                        onClicked: strip.controller.refreshRemoteTelemetry()
+                        Accessible.name: qsTr("Refresh remote telemetry")
+                        background: Rectangle {
+                            radius: 13
+                            color: refreshTelemetryButton.hovered ? Theme.controlHover : "transparent"
+                        }
+                        contentItem: AppIcon {
+                            name: "refresh"
+                            color: Theme.textSoft
+                        }
+                        AppToolTip {
+                            text: qsTr("Refresh")
                         }
                     }
                 }
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 6
-                visible: detailPopup.metric === "memory"
 
                 Text {
-                    text: qsTr("Used %1 of %2").arg(strip.kib(strip.telemetry.memoryUsedKiB)).arg(strip.kib(strip.telemetry.memoryTotalKiB))
-                    color: Theme.textSoft
-                    font.pixelSize: Theme.textCompact
-                }
-                Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 7
-                    radius: 3.5
-                    color: Theme.controlBackground
-                    Rectangle {
-                        width: parent.width * Math.max(0, Math.min(1, Number(strip.telemetry.memoryUsedKiB || 0) / Math.max(1, Number(strip.telemetry.memoryTotalKiB || 1))))
-                        height: parent.height
-                        radius: parent.radius
-                        color: Theme.accent
-                    }
-                }
-                Text {
-                    text: qsTr("Available %1 · Cache %2 · Swap %3/%4").arg(strip.kib(strip.telemetry.memoryAvailableKiB)).arg(strip.kib(strip.telemetry.memoryCachedKiB)).arg(strip.kib(strip.telemetry.swapUsedKiB)).arg(strip.kib(strip.telemetry.swapTotalKiB))
+                    text: detailPopup.metric === "latency" ? qsTr("Auxiliary SSH command round trip; this is not ICMP latency.") : qsTr("Recent foreground samples")
                     color: Theme.textMuted
+                    wrapMode: Text.Wrap
+                    font.family: Theme.uiFont
                     font.pixelSize: Theme.textCompact
                 }
-                Repeater {
-                    model: strip.telemetry.processes || []
-                    delegate: RowLayout {
-                        required property var modelData
-                        Layout.fillWidth: true
-                        Text {
-                            Layout.fillWidth: true
-                            text: parent.modelData.command + "  (" + parent.modelData.pid + ")"
-                            elide: Text.ElideRight
-                            color: Theme.textSoft
-                            font.family: Theme.terminalFont
-                            font.pixelSize: Theme.textCompact
-                        }
-                        Text {
-                            text: Number(parent.modelData.memoryPercent).toFixed(1) + "%"
-                            color: Theme.textMuted
-                            font.pixelSize: Theme.textCompact
+
+                TelemetrySparkline {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 52
+                    values: strip.series(detailPopup.metric === "cpu" ? "cpu" : detailPopup.metric === "memory" ? "memory" : detailPopup.metric === "disk" ? "disk" : detailPopup.metric === "latency" ? "latency" : "received")
+                    upperBound: detailPopup.metric === "cpu" || detailPopup.metric === "memory" || detailPopup.metric === "disk" ? 100 : -1
+                    minimumSpan: detailPopup.metric === "network" ? 1024 : detailPopup.metric === "latency" ? 10 : 8
+                    lineColor: detailPopup.metric === "latency" ? "#A78BFA" : Theme.accent
+                }
+
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: 5
+                    visible: detailPopup.metric === "cpu" && (strip.telemetry.cores || []).length > 0
+
+                    Repeater {
+                        model: strip.telemetry.cores || []
+                        delegate: Rectangle {
+                            required property real modelData
+                            required property int index
+                            width: 70
+                            height: 24
+                            radius: Theme.radiusSmall
+                            color: Theme.controlBackground
+                            Text {
+                                anchors.centerIn: parent
+                                text: qsTr("Core %1  %2%").arg(parent.index).arg(Math.round(parent.modelData))
+                                color: parent.modelData >= 90 ? Theme.dangerText : Theme.textSoft
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.textCompact
+                            }
                         }
                     }
                 }
-            }
 
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 5
-                visible: detailPopup.metric === "disk"
-                Repeater {
-                    model: strip.telemetry.disks || []
-                    delegate: RowLayout {
-                        required property var modelData
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+                    visible: detailPopup.metric === "memory"
+
+                    Text {
+                        text: qsTr("Used %1 of %2").arg(strip.kib(strip.telemetry.memoryUsedKiB)).arg(strip.kib(strip.telemetry.memoryTotalKiB))
+                        color: Theme.textSoft
+                        font.pixelSize: Theme.textCompact
+                    }
+                    Rectangle {
                         Layout.fillWidth: true
-                        Text {
-                            Layout.fillWidth: true
-                            text: parent.modelData.mountPoint
-                            elide: Text.ElideMiddle
-                            color: Theme.textSoft
-                            font.family: Theme.terminalFont
-                            font.pixelSize: Theme.textCompact
+                        Layout.preferredHeight: 7
+                        radius: 3.5
+                        color: Theme.controlBackground
+                        Rectangle {
+                            width: parent.width * Math.max(0, Math.min(1, Number(strip.telemetry.memoryUsedKiB || 0) / Math.max(1, Number(strip.telemetry.memoryTotalKiB || 1))))
+                            height: parent.height
+                            radius: parent.radius
+                            color: Theme.accent
                         }
-                        Text {
-                            text: strip.kib(parent.modelData.usedKiB) + "/" + strip.kib(parent.modelData.totalKiB) + "  " + Math.round(parent.modelData.percent) + "%"
-                            color: parent.modelData.percent >= 90 ? Theme.dangerText : Theme.textMuted
-                            font.pixelSize: Theme.textCompact
+                    }
+                    Text {
+                        text: qsTr("Available %1 · Cache %2 · Swap %3/%4").arg(strip.kib(strip.telemetry.memoryAvailableKiB)).arg(strip.kib(strip.telemetry.memoryCachedKiB)).arg(strip.kib(strip.telemetry.swapUsedKiB)).arg(strip.kib(strip.telemetry.swapTotalKiB))
+                        color: Theme.textMuted
+                        font.pixelSize: Theme.textCompact
+                    }
+                    Repeater {
+                        model: strip.telemetry.processes || []
+                        delegate: RowLayout {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            Text {
+                                Layout.fillWidth: true
+                                text: parent.modelData.command + "  (" + parent.modelData.pid + ")"
+                                elide: Text.ElideRight
+                                color: Theme.textSoft
+                                font.family: Theme.terminalFont
+                                font.pixelSize: Theme.textCompact
+                            }
+                            Text {
+                                text: Number(parent.modelData.memoryPercent).toFixed(1) + "%"
+                                color: Theme.textMuted
+                                font.pixelSize: Theme.textCompact
+                            }
                         }
                     }
                 }
-            }
 
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 5
-                visible: detailPopup.metric === "network"
-                Repeater {
-                    model: strip.telemetry.interfaces || []
-                    delegate: RowLayout {
-                        required property var modelData
-                        Layout.fillWidth: true
-                        Text {
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 5
+                    visible: detailPopup.metric === "disk"
+                    Repeater {
+                        model: strip.telemetry.disks || []
+                        delegate: RowLayout {
+                            required property var modelData
                             Layout.fillWidth: true
-                            text: parent.modelData.name
-                            color: Theme.textSoft
-                            font.family: Theme.terminalFont
-                            font.pixelSize: Theme.textCompact
+                            Text {
+                                Layout.fillWidth: true
+                                text: parent.modelData.mountPoint
+                                elide: Text.ElideMiddle
+                                color: Theme.textSoft
+                                font.family: Theme.terminalFont
+                                font.pixelSize: Theme.textCompact
+                            }
+                            Text {
+                                text: strip.kib(parent.modelData.usedKiB) + "/" + strip.kib(parent.modelData.totalKiB) + "  " + Math.round(parent.modelData.percent) + "%"
+                                color: parent.modelData.percent >= 90 ? Theme.dangerText : Theme.textMuted
+                                font.pixelSize: Theme.textCompact
+                            }
                         }
-                        Text {
-                            text: "↓ " + strip.rate(parent.modelData.receivedBytesPerSecond) + "  ↑ " + strip.rate(parent.modelData.transmittedBytesPerSecond)
-                            color: Theme.textMuted
-                            font.pixelSize: Theme.textCompact
+                    }
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 5
+                    visible: detailPopup.metric === "network"
+                    Repeater {
+                        model: strip.telemetry.interfaces || []
+                        delegate: RowLayout {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            Text {
+                                Layout.fillWidth: true
+                                text: parent.modelData.name
+                                color: Theme.textSoft
+                                font.family: Theme.terminalFont
+                                font.pixelSize: Theme.textCompact
+                            }
+                            Text {
+                                text: "↓ " + strip.rate(parent.modelData.receivedBytesPerSecond) + "  ↑ " + strip.rate(parent.modelData.transmittedBytesPerSecond)
+                                color: Theme.textMuted
+                                font.pixelSize: Theme.textCompact
+                            }
                         }
                     }
                 }
