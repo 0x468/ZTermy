@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -7,6 +8,8 @@
 
 namespace ztermy::ssh
 {
+
+inline constexpr std::size_t maximumSshJumpHostCount = 3;
 
 enum class SshFailureKind : std::uint8_t;
 
@@ -100,6 +103,7 @@ struct SshProfile
     bool keywordHighlightEnabled = true;
     SshSessionOptions sessionOptions;
     SshProxyOptions proxy;
+    std::vector<std::string> jumpProfileIds;
 
     friend bool operator==(const SshProfile &, const SshProfile &) = default;
 };

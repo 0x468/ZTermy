@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 
 project(
     ztermy
-    VERSION 0.2.8
+    VERSION 0.2.9
     DESCRIPTION "A native Windows SSH terminal"
     LANGUAGES C CXX RC
 )
@@ -251,6 +251,8 @@ add_library(ztermy_ssh_transport STATIC
     src/infrastructure/ssh/Libssh2Session.cpp
     src/infrastructure/ssh/Libssh2Session.h
     src/infrastructure/ssh/SshByteTransport.h
+    src/infrastructure/ssh/SshDirectTcpipTransport.cpp
+    src/infrastructure/ssh/SshDirectTcpipTransport.h
     src/infrastructure/ssh/WindowsTcpSocket.cpp
     src/infrastructure/ssh/WindowsTcpSocket.h
 )
@@ -1897,6 +1899,7 @@ if(BUILD_TESTING)
 
     target_compile_features(ztermy_ssh_real_host_tests PRIVATE cxx_std_23)
     target_link_libraries(ztermy_ssh_real_host_tests PRIVATE
+        ztermy_ssh_connection
         ztermy_ssh_transport
         Qt6::Test
     )

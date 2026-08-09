@@ -72,14 +72,18 @@ public slots:
 signals:
     void tasksChanged(ztermy::sftp::TransferTasksPtr tasks);
     void conflictRequired(const QString &taskId, ztermy::sftp::FileConflictPtr conflict);
-    void hostKeyConfirmationRequired(const QString &taskId, const QString &algorithm, const QString &fingerprint);
-    void hostKeyChanged(const QString &taskId, const QString &algorithm, const QString &fingerprint);
+    void hostKeyConfirmationRequired(const QString &taskId, const QString &endpoint, const QString &algorithm,
+                                     const QString &fingerprint);
+    void hostKeyChanged(const QString &taskId, const QString &endpoint, const QString &algorithm,
+                        const QString &fingerprint);
     void recoveryError(const QString &errorCode);
 
 private slots:
     void deliverCredentialError(const QString &taskId, ztermy::sftp::TransferCredentialError error);
-    void deliverHostKeyConfirmation(const QString &taskId, const QString &algorithm, const QString &fingerprint);
-    void deliverHostKeyChange(const QString &taskId, const QString &algorithm, const QString &fingerprint);
+    void deliverHostKeyConfirmation(const QString &taskId, const QString &endpoint, const QString &algorithm,
+                                    const QString &fingerprint);
+    void deliverHostKeyChange(const QString &taskId, const QString &endpoint, const QString &algorithm,
+                              const QString &fingerprint);
     void deliverProgress(const QString &taskId, qulonglong transferredBytes, qulonglong totalBytes,
                          qulonglong bytesPerSecond);
     void deliverResult(const QString &taskId, ztermy::sftp::TransferExecutionResult result);

@@ -523,14 +523,14 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                         break;
                 }
             },
-        .confirmUnknownHostKey = [this, &stopToken](const QString &algorithm,
+        .confirmUnknownHostKey = [this, &stopToken](const QString &endpoint, const QString &algorithm,
                                                     const QString &fingerprint) -> UnknownHostKeyDecision {
             {
                 std::scoped_lock lock(m_hostKeyMutex);
                 m_hostKeyDecision.reset();
                 m_awaitingHostKey = true;
             }
-            postHostKeyConfirmation(algorithm, fingerprint);
+            postHostKeyConfirmation(endpoint, algorithm, fingerprint);
 
             std::unique_lock lock(m_hostKeyMutex);
             const bool decided = m_hostKeyAvailable.wait(lock, stopToken, [this] {
@@ -540,8 +540,8 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
             return decided ? *m_hostKeyDecision : UnknownHostKeyDecision::Reject;
         },
         .hostKeyChanged =
-            [this](const QString &algorithm, const QString &fingerprint) {
-                postHostKeyChange(algorithm, fingerprint);
+            [this](const QString &endpoint, const QString &algorithm, const QString &fingerprint) {
+                postHostKeyChange(endpoint, algorithm, fingerprint);
             },
     };
 
@@ -1214,29 +1214,31 @@ void SshTerminalSession::postRunning(const bool running)
     }
 }
 
-void SshTerminalSession::postHostKeyConfirmation(const QString &algorithm, const QString &fingerprint)
+void SshTerminalSession::postHostKeyConfirmation(const QString &endpoint, const QString &algorithm,
+                                                 const QString &fingerprint)
 {
     if (QThread::currentThread() == thread())
     {
-        deliverHostKeyConfirmation(algorithm, fingerprint);
+        deliverHostKeyConfirmation(endpoint, algorithm, fingerprint);
         return;
     }
-    if (!QMetaObject::invokeMethod(this, "deliverHostKeyConfirmation", Qt::QueuedConnection, Q_ARG(QString, algorithm),
-                                   Q_ARG(QString, fingerprint)))
+    if (!QMetaObject::invokeMethod(this, "deliverHostKeyConfirmation", Qt::QueuedConnection, Q_ARG(QString, endpoint),
+                                   Q_ARG(QString, algorithm), Q_ARG(QString, fingerprint)))
     {
         qCWarning(sshSessionLog) << "SSH host-key confirmation could not be queued to its owner thread";
     }
 }
 
-void SshTerminalSession::postHostKeyChange(const QString &algorithm, const QString &fingerprint)
+void SshTerminalSession::postHostKeyChange(const QString &endpoint, const QString &algorithm,
+                                           const QString &fingerprint)
 {
     if (QThread::currentThread() == thread())
     {
-        deliverHostKeyChange(algorithm, fingerprint);
+        deliverHostKeyChange(endpoint, algorithm, fingerprint);
         return;
     }
-    if (!QMetaObject::invokeMethod(this, "deliverHostKeyChange", Qt::QueuedConnection, Q_ARG(QString, algorithm),
-                                   Q_ARG(QString, fingerprint)))
+    if (!QMetaObject::invokeMethod(this, "deliverHostKeyChange", Qt::QueuedConnection, Q_ARG(QString, endpoint),
+                                   Q_ARG(QString, algorithm), Q_ARG(QString, fingerprint)))
     {
         qCWarning(sshSessionLog) << "SSH host-key change could not be queued to its owner thread";
     }
@@ -1343,14 +1345,16 @@ void SshTerminalSession::deliverRunning(const bool running)
     emit runningChanged(running);
 }
 
-void SshTerminalSession::deliverHostKeyConfirmation(const QString &algorithm, const QString &fingerprint)
+void SshTerminalSession::deliverHostKeyConfirmation(const QString &endpoint, const QString &algorithm,
+                                                    const QString &fingerprint)
 {
-    emit hostKeyConfirmationRequired(algorithm, fingerprint);
+    emit hostKeyConfirmationRequired(endpoint, algorithm, fingerprint);
 }
 
-void SshTerminalSession::deliverHostKeyChange(const QString &algorithm, const QString &fingerprint)
+void SshTerminalSession::deliverHostKeyChange(const QString &endpoint, const QString &algorithm,
+                                              const QString &fingerprint)
 {
-    emit hostKeyChanged(algorithm, fingerprint);
+    emit hostKeyChanged(endpoint, algorithm, fingerprint);
 }
 
 void SshTerminalSession::deliverClipboardText(const QString &text)

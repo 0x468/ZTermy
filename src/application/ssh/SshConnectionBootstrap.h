@@ -25,8 +25,9 @@ enum class UnknownHostKeyDecision : std::uint8_t
 struct SshConnectionCallbacks final
 {
     std::function<void(SshConnectionPhase)> phaseChanged;
-    std::function<UnknownHostKeyDecision(const QString &algorithm, const QString &fingerprint)> confirmUnknownHostKey;
-    std::function<void(const QString &algorithm, const QString &fingerprint)> hostKeyChanged;
+    std::function<UnknownHostKeyDecision(const QString &endpoint, const QString &algorithm, const QString &fingerprint)>
+        confirmUnknownHostKey;
+    std::function<void(const QString &endpoint, const QString &algorithm, const QString &fingerprint)> hostKeyChanged;
 };
 
 enum class SshBootstrapErrorReason : std::uint8_t

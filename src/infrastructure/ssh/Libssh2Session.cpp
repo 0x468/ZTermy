@@ -359,6 +359,10 @@ Libssh2Session::~Libssh2Session()
     {
         libssh2_channel_free(static_cast<LIBSSH2_CHANNEL *>(m_terminalChannel));
     }
+    if (m_directTcpipChannel != nullptr)
+    {
+        libssh2_channel_free(static_cast<LIBSSH2_CHANNEL *>(m_directTcpipChannel));
+    }
     if (m_session != nullptr)
     {
         libssh2_session_free(static_cast<LIBSSH2_SESSION *>(m_session));
@@ -706,6 +710,179 @@ std::expected<void, SshTransportError> Libssh2Session::authenticateWithAgent(Ssh
 bool Libssh2Session::authenticated() const noexcept
 {
     return m_authenticated;
+}
+
+std::expected<void, SshTransportError>
+Libssh2Session::openDirectTcpip(SshByteTransport &transport, const std::string_view host, const std::uint16_t port,
+                                const std::chrono::milliseconds timeout, const std::stop_token &stopToken) noexcept
+{
+    if (m_session == nullptr || !m_authenticated || m_directTcpipChannel != nullptr || !usesTransport(transport)
+        || host.empty() || port == 0)
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
+    }
+    if (timeout <= std::chrono::milliseconds::zero())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::TimedOut});
+    }
+    if (stopToken.stop_requested())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::Cancelled});
+    }
+
+    std::string targetHost;
+    try
+    {
+        targetHost = host;
+    }
+    catch (const std::bad_alloc &)
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InitializationFailed});
+    }
+
+    auto *session = static_cast<LIBSSH2_SESSION *>(m_session);
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (true)
+    {
+        auto *channel = libssh2_channel_direct_tcpip_ex(session, targetHost.c_str(), port, "127.0.0.1", 0);
+        if (channel != nullptr)
+        {
+            m_directTcpipChannel = channel;
+            return {};
+        }
+        const int error = libssh2_session_last_errno(session);
+        if (error != LIBSSH2_ERROR_EAGAIN)
+        {
+            return std::unexpected(mapChannelError(error));
+        }
+        auto ready = waitForSessionIo(transport, session, deadline, stopToken);
+        if (!ready)
+        {
+            return std::unexpected(ready.error());
+        }
+    }
+}
+
+std::expected<std::size_t, SshByteTransportError> Libssh2Session::readDirectTcpip(const std::span<char> output) noexcept
+{
+    if (m_directTcpipChannel == nullptr)
+    {
+        return std::unexpected(
+            SshByteTransportError{.kind = SshByteTransportErrorKind::SystemError, .nativeCode = LIBSSH2_ERROR_BAD_USE});
+    }
+    if (output.empty())
+    {
+        return std::size_t{0};
+    }
+    auto *channel = static_cast<LIBSSH2_CHANNEL *>(m_directTcpipChannel);
+    const auto length = (std::min)(output.size(), static_cast<std::size_t>((std::numeric_limits<int>::max)()));
+    const ssize_t result = libssh2_channel_read_ex(channel, 0, output.data(), length);
+    if (result >= 0)
+    {
+        return static_cast<std::size_t>(result);
+    }
+    if (result == LIBSSH2_ERROR_EAGAIN)
+    {
+        return std::unexpected(SshByteTransportError{.kind = SshByteTransportErrorKind::WouldBlock});
+    }
+    return std::unexpected(SshByteTransportError{.kind = libssh2_channel_eof(channel) != 0
+                                                             ? SshByteTransportErrorKind::Closed
+                                                             : SshByteTransportErrorKind::SystemError,
+                                                 .nativeCode = static_cast<int>(result)});
+}
+
+std::expected<std::size_t, SshByteTransportError>
+Libssh2Session::writeDirectTcpip(const std::span<const char> input) noexcept
+{
+    if (m_directTcpipChannel == nullptr)
+    {
+        return std::unexpected(
+            SshByteTransportError{.kind = SshByteTransportErrorKind::SystemError, .nativeCode = LIBSSH2_ERROR_BAD_USE});
+    }
+    if (input.empty())
+    {
+        return std::size_t{0};
+    }
+    auto *channel = static_cast<LIBSSH2_CHANNEL *>(m_directTcpipChannel);
+    const auto length = (std::min)(input.size(), static_cast<std::size_t>((std::numeric_limits<int>::max)()));
+    const ssize_t result = libssh2_channel_write_ex(channel, 0, input.data(), length);
+    if (result >= 0)
+    {
+        return static_cast<std::size_t>(result);
+    }
+    if (result == LIBSSH2_ERROR_EAGAIN)
+    {
+        return std::unexpected(SshByteTransportError{.kind = SshByteTransportErrorKind::WouldBlock});
+    }
+    return std::unexpected(SshByteTransportError{.kind = libssh2_channel_eof(channel) != 0
+                                                             ? SshByteTransportErrorKind::Closed
+                                                             : SshByteTransportErrorKind::SystemError,
+                                                 .nativeCode = static_cast<int>(result)});
+}
+
+std::expected<void, SshByteTransportError>
+Libssh2Session::waitDirectTcpip(SshByteTransport &transport, const std::chrono::steady_clock::time_point deadline,
+                                const std::stop_token &stopToken, const std::uintptr_t interruptHandle) noexcept
+{
+    if (m_session == nullptr || m_directTcpipChannel == nullptr || !usesTransport(transport))
+    {
+        return std::unexpected(
+            SshByteTransportError{.kind = SshByteTransportErrorKind::SystemError, .nativeCode = LIBSSH2_ERROR_BAD_USE});
+    }
+    return transport.waitUntilReady(blockedInterest(static_cast<LIBSSH2_SESSION *>(m_session)), deadline, stopToken,
+                                    interruptHandle);
+}
+
+std::expected<void, SshTransportError> Libssh2Session::closeDirectTcpip(SshByteTransport &transport,
+                                                                        const std::chrono::milliseconds timeout,
+                                                                        const std::stop_token &stopToken) noexcept
+{
+    if (m_session == nullptr || m_directTcpipChannel == nullptr || !usesTransport(transport))
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
+    }
+    if (timeout <= std::chrono::milliseconds::zero())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::TimedOut});
+    }
+    if (stopToken.stop_requested())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::Cancelled});
+    }
+
+    auto *session = static_cast<LIBSSH2_SESSION *>(m_session);
+    auto *channel = static_cast<LIBSSH2_CHANNEL *>(m_directTcpipChannel);
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (true)
+    {
+        const int result = libssh2_channel_close(channel);
+        if (result == 0)
+        {
+            break;
+        }
+        if (result != LIBSSH2_ERROR_EAGAIN)
+        {
+            return std::unexpected(mapChannelError(result));
+        }
+        auto ready = waitForSessionIo(transport, session, deadline, stopToken);
+        if (!ready)
+        {
+            return std::unexpected(ready.error());
+        }
+    }
+
+    const int freeResult = libssh2_channel_free(channel);
+    if (freeResult != 0)
+    {
+        return std::unexpected(mapChannelError(freeResult));
+    }
+    m_directTcpipChannel = nullptr;
+    return {};
+}
+
+bool Libssh2Session::directTcpipOpen() const noexcept
+{
+    return m_directTcpipChannel != nullptr;
 }
 
 std::expected<void, SshTransportError>

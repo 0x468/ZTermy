@@ -83,6 +83,27 @@ void SshConnectionBootstrapTests::validatesReusableConnectionRequests()
     QVERIFY(ztermy::ssh::validSshConnectionRequest(anonymousProxy));
     anonymousProxy.proxySecret = ztermy::security::SensitiveByteArray(QByteArray("unexpected"));
     QVERIFY(!ztermy::ssh::validSshConnectionRequest(anonymousProxy));
+
+    auto jumped = validPasswordRequest();
+    jumped.jumpHosts.push_back({
+        .profileId = QStringLiteral("jump-1"),
+        .displayName = QStringLiteral("Jump one"),
+        .host = QStringLiteral("jump.example.test"),
+        .port = 22,
+        .username = QStringLiteral("jump-user"),
+        .authentication = ztermy::ssh::SshAuthenticationMethod::Password,
+        .secret = ztermy::security::SensitiveByteArray(QByteArray("jump-secret")),
+    });
+    QVERIFY(ztermy::ssh::validSshConnectionRequest(jumped));
+    jumped.jumpHosts.push_back({
+        .profileId = QStringLiteral("jump-1"),
+        .displayName = QStringLiteral("Duplicate jump"),
+        .host = QStringLiteral("duplicate.example.test"),
+        .port = 22,
+        .username = QStringLiteral("jump-user"),
+        .authentication = ztermy::ssh::SshAuthenticationMethod::Agent,
+    });
+    QVERIFY(!ztermy::ssh::validSshConnectionRequest(jumped));
 }
 
 void SshConnectionBootstrapTests::clearsSecretsWhenBootstrapRejectsARequest()
@@ -90,6 +111,20 @@ void SshConnectionBootstrapTests::clearsSecretsWhenBootstrapRejectsARequest()
     auto request = validPasswordRequest();
     request.host.clear();
     request.proxySecret = ztermy::security::SensitiveByteArray(QByteArray("proxy-secret"));
+    request.jumpHosts.push_back({
+        .profileId = QStringLiteral("jump-1"),
+        .displayName = QStringLiteral("Jump one"),
+        .host = QStringLiteral("jump.example.test"),
+        .port = 22,
+        .username = QStringLiteral("jump-user"),
+        .authentication = ztermy::ssh::SshAuthenticationMethod::Password,
+        .secret = ztermy::security::SensitiveByteArray(QByteArray("jump-secret")),
+        .proxy = {.type = ztermy::ssh::SshProxyType::HttpConnect,
+                  .host = "proxy.example.test",
+                  .port = 8080,
+                  .username = "proxy-user"},
+        .proxySecret = ztermy::security::SensitiveByteArray(QByteArray("jump-proxy-secret")),
+    });
     QVERIFY(!request.secret.empty());
     QVERIFY(!request.proxySecret.empty());
 
@@ -98,6 +133,8 @@ void SshConnectionBootstrapTests::clearsSecretsWhenBootstrapRejectsARequest()
     QCOMPARE(result.error().failure, ztermy::ssh::SshFailureKind::ProtocolError);
     QVERIFY(request.secret.empty());
     QVERIFY(request.proxySecret.empty());
+    QVERIFY(request.jumpHosts.front().secret.empty());
+    QVERIFY(request.jumpHosts.front().proxySecret.empty());
 }
 
 void SshConnectionBootstrapTests::mapsTransportFailuresForConnectionAndChannelStages()

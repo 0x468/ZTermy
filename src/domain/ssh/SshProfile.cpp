@@ -195,9 +195,22 @@ bool validSshProfile(const SshProfile &profile) noexcept
         || profile.keywordHighlightRules.size() > maximumKeywordRuleCount
         || !std::ranges::all_of(profile.keywordHighlightRules, validKeywordHighlightRule)
         || (profile.lastConnectedUtcMs.has_value() && *profile.lastConnectedUtcMs < 0)
-        || !validSshSessionOptions(profile.sessionOptions) || !validSshProxyOptions(profile.proxy))
+        || !validSshSessionOptions(profile.sessionOptions) || !validSshProxyOptions(profile.proxy)
+        || profile.jumpProfileIds.size() > maximumSshJumpHostCount)
     {
         return false;
+    }
+
+    for (std::size_t index = 0; index < profile.jumpProfileIds.size(); ++index)
+    {
+        const std::string &jumpProfileId = profile.jumpProfileIds[index];
+        if (jumpProfileId == profile.id || !validCredentialReference(std::optional{jumpProfileId})
+            || std::ranges::find(profile.jumpProfileIds.begin() + static_cast<std::ptrdiff_t>(index + 1),
+                                 profile.jumpProfileIds.end(), jumpProfileId)
+                   != profile.jumpProfileIds.end())
+        {
+            return false;
+        }
     }
 
     switch (profile.authentication)

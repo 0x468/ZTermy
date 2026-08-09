@@ -107,6 +107,20 @@ public:
     [[nodiscard]] bool authenticated() const noexcept;
 
     [[nodiscard]] std::expected<void, SshTransportError>
+    openDirectTcpip(SshByteTransport &transport, std::string_view host, std::uint16_t port,
+                    std::chrono::milliseconds timeout, const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] std::expected<std::size_t, SshByteTransportError> readDirectTcpip(std::span<char> output) noexcept;
+    [[nodiscard]] std::expected<std::size_t, SshByteTransportError>
+    writeDirectTcpip(std::span<const char> input) noexcept;
+    [[nodiscard]] std::expected<void, SshByteTransportError>
+    waitDirectTcpip(SshByteTransport &transport, std::chrono::steady_clock::time_point deadline,
+                    const std::stop_token &stopToken = {}, std::uintptr_t interruptHandle = 0) noexcept;
+    [[nodiscard]] std::expected<void, SshTransportError>
+    closeDirectTcpip(SshByteTransport &transport, std::chrono::milliseconds timeout,
+                     const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] bool directTcpipOpen() const noexcept;
+
+    [[nodiscard]] std::expected<void, SshTransportError>
     openTerminal(SshByteTransport &transport, std::uint32_t columns, std::uint32_t rows, std::string_view terminalType,
                  std::chrono::milliseconds timeout, const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] std::expected<void, SshTransportError>
@@ -203,6 +217,7 @@ private:
     void *m_session = nullptr;
     SshByteTransport *m_transport = nullptr;
     void *m_terminalChannel = nullptr;
+    void *m_directTcpipChannel = nullptr;
     void *m_auxiliaryChannel = nullptr;
     void *m_sftp = nullptr;
     void *m_sftpFile = nullptr;

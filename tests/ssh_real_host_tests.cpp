@@ -1,13 +1,19 @@
+#include "application/ssh/SshConnectionBootstrap.h"
+#include "application/ssh/SshConnectionRequest.h"
 #include "domain/ssh/SshHostKey.h"
 #include "infrastructure/ssh/ExplicitProxyTunnel.h"
 #include "infrastructure/ssh/Libssh2Session.h"
+#include "infrastructure/ssh/SshDirectTcpipTransport.h"
 #include "infrastructure/ssh/WindowsTcpSocket.h"
 
 #include <QByteArray>
+#include <QTemporaryDir>
 #include <QTest>
 
 #include <chrono>
 #include <cstdint>
+#include <memory>
+#include <new>
 #include <string>
 #include <utility>
 #include <vector>
@@ -22,6 +28,8 @@ private slots:
     void observesUnknownHostBeforeAuthentication();
     void authenticatesWithExplicitPrivateKey();
     void authenticatesThroughConfiguredProxy();
+    void authenticatesThroughConfiguredJumpHost();
+    void authenticatesBootstrapThroughConfiguredJumpHost();
     void opensAndClosesTerminalWithExplicitPrivateKey();
     void listsSftpDirectoryWithExplicitPrivateKey();
 };
@@ -249,6 +257,132 @@ void SshRealHostTests::authenticatesThroughConfiguredProxy()
     const std::string privateKey(privateKeyValue.constData(), static_cast<std::size_t>(privateKeyValue.size()));
     QVERIFY((*session)->authenticateWithPrivateKeyFile(*socket, username, privateKey, {}, 10s));
     qInfo("Private-key authentication through the configured proxy succeeded");
+}
+
+void SshRealHostTests::authenticatesThroughConfiguredJumpHost()
+{
+    const QByteArray hostValue = qgetenv("ZTERMY_TEST_SSH_HOST");
+    const QByteArray usernameValue = qgetenv("ZTERMY_TEST_SSH_USERNAME");
+    const QByteArray privateKeyValue = qgetenv("ZTERMY_TEST_SSH_PRIVATE_KEY");
+    const QByteArray expectedFingerprint = qgetenv("ZTERMY_TEST_SSH_EXPECTED_FINGERPRINT");
+    if (hostValue.isEmpty() || usernameValue.isEmpty() || privateKeyValue.isEmpty() || expectedFingerprint.isEmpty())
+    {
+        QSKIP("Set the host, username, private-key path, and expected fingerprint to run the jump-host gate");
+    }
+
+    const std::uint16_t port = configuredPort();
+    const std::string host(hostValue.constData(), static_cast<std::size_t>(hostValue.size()));
+    auto socket = ztermy::ssh::WindowsTcpSocket::connect(host, port, 5s);
+    QVERIFY(socket);
+    std::unique_ptr<ztermy::ssh::SshByteTransport> outerTransport;
+    try
+    {
+        outerTransport = std::make_unique<ztermy::ssh::WindowsTcpSocket>(std::move(*socket));
+    }
+    catch (const std::bad_alloc &)
+    {
+        QFAIL("Unable to allocate the outer SSH transport");
+    }
+
+    auto outerSession = ztermy::ssh::Libssh2Session::create();
+    QVERIFY(outerSession);
+    QVERIFY((*outerSession)->handshake(*outerTransport, 5s));
+    auto outerHostKey = (*outerSession)->hostKey();
+    QVERIFY(outerHostKey);
+    QCOMPARE(QByteArray::fromStdString(ztermy::ssh::sha256Fingerprint(*outerHostKey)), expectedFingerprint);
+    const ztermy::ssh::SshEndpoint endpoint{.host = host, .port = port};
+    const std::vector knownHosts{ztermy::ssh::KnownHostEntry{
+        .endpoint = endpoint,
+        .algorithm = outerHostKey->algorithm,
+        .encodedKey = outerHostKey->encodedKey,
+    }};
+    auto outerTrust = (*outerSession)->verifyHostKey(endpoint, knownHosts);
+    QVERIFY(outerTrust);
+    QCOMPARE(*outerTrust, ztermy::ssh::HostKeyTrust::Trusted);
+    const std::string username(usernameValue.constData(), static_cast<std::size_t>(usernameValue.size()));
+    const std::string privateKey(privateKeyValue.constData(), static_cast<std::size_t>(privateKeyValue.size()));
+    QVERIFY((*outerSession)->authenticateWithPrivateKeyFile(*outerTransport, username, privateKey, {}, 10s));
+
+    auto tunneled = ztermy::ssh::SshDirectTcpipTransport::create(std::move(outerTransport), std::move(*outerSession),
+                                                                 host, port, 10s);
+    QVERIFY(tunneled);
+    std::unique_ptr<ztermy::ssh::SshByteTransport> innerTransport(std::move(*tunneled));
+    auto innerSession = ztermy::ssh::Libssh2Session::create();
+    QVERIFY(innerSession);
+    QVERIFY((*innerSession)->handshake(*innerTransport, 10s));
+    auto innerHostKey = (*innerSession)->hostKey();
+    QVERIFY(innerHostKey);
+    QCOMPARE(QByteArray::fromStdString(ztermy::ssh::sha256Fingerprint(*innerHostKey)), expectedFingerprint);
+    auto innerTrust = (*innerSession)->verifyHostKey(endpoint, knownHosts);
+    QVERIFY(innerTrust);
+    QCOMPARE(*innerTrust, ztermy::ssh::HostKeyTrust::Trusted);
+    QVERIFY((*innerSession)->authenticateWithPrivateKeyFile(*innerTransport, username, privateKey, {}, 10s));
+    qInfo("Private-key authentication through the configured jump host succeeded");
+}
+
+void SshRealHostTests::authenticatesBootstrapThroughConfiguredJumpHost()
+{
+    const QByteArray hostValue = qgetenv("ZTERMY_TEST_SSH_HOST");
+    const QByteArray usernameValue = qgetenv("ZTERMY_TEST_SSH_USERNAME");
+    const QByteArray privateKeyValue = qgetenv("ZTERMY_TEST_SSH_PRIVATE_KEY");
+    const QByteArray expectedFingerprint = qgetenv("ZTERMY_TEST_SSH_EXPECTED_FINGERPRINT");
+    if (hostValue.isEmpty() || usernameValue.isEmpty() || privateKeyValue.isEmpty() || expectedFingerprint.isEmpty())
+    {
+        QSKIP("Set the host, username, private-key path, and expected fingerprint to run the bootstrap jump gate");
+    }
+
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString host = QString::fromUtf8(hostValue);
+    const QString username = QString::fromUtf8(usernameValue);
+    const QString privateKey = QString::fromUtf8(privateKeyValue);
+    const std::uint16_t port = configuredPort();
+    ztermy::ssh::SshConnectionRequest request{
+        .host = host,
+        .port = port,
+        .username = username,
+        .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
+        .privateKeyPath = privateKey,
+        .knownHostsPath = directory.filePath(QStringLiteral("known_hosts")),
+    };
+    request.jumpHosts.push_back({
+        .profileId = QStringLiteral("real-jump"),
+        .displayName = QStringLiteral("Real jump"),
+        .host = host,
+        .port = port,
+        .username = username,
+        .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
+        .privateKeyPath = privateKey,
+    });
+    QStringList verifiedEndpoints;
+    const ztermy::ssh::SshConnectionCallbacks callbacks{
+        .phaseChanged = {},
+        .confirmUnknownHostKey =
+            [&verifiedEndpoints, &expectedFingerprint](const QString &endpoint, const QString &,
+                                                       const QString &fingerprint) {
+                if (fingerprint.toUtf8() != expectedFingerprint)
+                {
+                    return ztermy::ssh::UnknownHostKeyDecision::Reject;
+                }
+                verifiedEndpoints.push_back(endpoint);
+                return ztermy::ssh::UnknownHostKeyDecision::AcceptOnce;
+            },
+        .hostKeyChanged = {},
+    };
+
+    auto connection = ztermy::ssh::establishAuthenticatedSshConnection(request, callbacks);
+    if (!connection)
+    {
+        QFAIL(qPrintable(QStringLiteral("Bootstrap jump authentication failed: failure=%1 reason=%2")
+                             .arg(static_cast<int>(connection.error().failure))
+                             .arg(static_cast<int>(connection.error().reason))));
+    }
+    QCOMPARE(verifiedEndpoints.size(), 2);
+    QVERIFY(verifiedEndpoints.constFirst().contains(QStringLiteral("Real jump")));
+    QVERIFY(verifiedEndpoints.constLast().contains(host));
+    QVERIFY(request.secret.empty());
+    QVERIFY(request.jumpHosts.front().secret.empty());
+    qInfo("Full SSH bootstrap through the configured jump host succeeded");
 }
 
 void SshRealHostTests::opensAndClosesTerminalWithExplicitPrivateKey()

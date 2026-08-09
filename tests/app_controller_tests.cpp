@@ -94,6 +94,7 @@ private slots:
     void savesUpdatesReloadsAndDeletesProfiles();
     void persistsAndPreservesSessionOptions();
     void managesExplicitProxyProfilesAndCredentials();
+    void managesOrderedJumpHostProfiles();
     void rejectsInvalidProfiles();
     void agentProfilesNeverStoreCredentials();
     void managesSavedCredentialsAndPortableVault();
@@ -288,6 +289,66 @@ void AppControllerTests::managesExplicitProxyProfilesAndCredentials()
     QVERIFY(!contents.contains("host-secret"));
     QVERIFY(!contents.contains("proxy-secret"));
     QVERIFY(!contents.contains("updated-proxy-secret"));
+}
+
+void AppControllerTests::managesOrderedJumpHostProfiles()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString profilesPath = directory.filePath(QStringLiteral("profiles.json"));
+    ztermy::AppController controller(profilesPath);
+
+    QVERIFY(controller.saveHostProfile(QStringLiteral("jump-agent"), QStringLiteral("Edge"),
+                                       QStringLiteral("edge.example.test"), 22, QStringLiteral("operator"),
+                                       QStringLiteral("agent"), {}, false, QStringLiteral("Gateways")));
+    QVERIFY(controller.saveHostProfileWithCredential(QStringLiteral("jump-password"), QStringLiteral("Inner"),
+                                                     QStringLiteral("inner.example.test"), 2222,
+                                                     QStringLiteral("developer"), QStringLiteral("password"), {}, false,
+                                                     QStringLiteral("Gateways"), QStringLiteral("jump-secret"), true));
+
+    const QVariantMap route{
+        {QStringLiteral("jumpProfileIds"), QVariantList{QStringLiteral("jump-agent"), QStringLiteral("jump-password")}},
+    };
+    QVERIFY(controller.saveHostProfileWithCredential(QStringLiteral("target"), QStringLiteral("Target"),
+                                                     QStringLiteral("target.example.test"), 22, QStringLiteral("root"),
+                                                     QStringLiteral("agent"), {}, false, QStringLiteral("Servers"), {},
+                                                     false, {}, {}, {}, false, route));
+
+    const QVariantList profiles = controller.hostProfiles();
+    const auto targetPosition = std::ranges::find(profiles, QStringLiteral("target"), [](const QVariant &value) {
+        return value.toMap().value(QStringLiteral("id")).toString();
+    });
+    QVERIFY(targetPosition != profiles.end());
+    const QVariantMap target = targetPosition->toMap();
+    QCOMPARE(target.value(QStringLiteral("jumpProfileIds")).toList(),
+             QVariantList({QStringLiteral("jump-agent"), QStringLiteral("jump-password")}));
+    const QVariantList jumps = target.value(QStringLiteral("jumpProfiles")).toList();
+    QCOMPARE(jumps.size(), 2);
+    QCOMPARE(jumps.constFirst().toMap().value(QStringLiteral("name")).toString(), QStringLiteral("Edge"));
+    QVERIFY(target.value(QStringLiteral("jumpProfilesReady")).toBool());
+    QVERIFY(target.value(QStringLiteral("connectionCredentialStored")).toBool());
+
+    QVERIFY(!controller.deleteHostProfile(QStringLiteral("jump-agent")));
+    QVERIFY(controller.credentialOperationError().contains(QStringLiteral("Target")));
+    QVERIFY(!controller.saveHostProfileWithCredential(
+        QStringLiteral("target"), QStringLiteral("Target"), QStringLiteral("target.example.test"), 22,
+        QStringLiteral("root"), QStringLiteral("agent"), {}, false, QStringLiteral("Servers"), {}, false, {}, {}, {},
+        false, QVariantMap{{QStringLiteral("jumpProfileIds"), QVariantList{QStringLiteral("missing")}}}));
+
+    QVERIFY(controller.saveHostProfileWithCredential(
+        QStringLiteral("target"), QStringLiteral("Target"), QStringLiteral("target.example.test"), 22,
+        QStringLiteral("root"), QStringLiteral("agent"), {}, false, QStringLiteral("Servers"), {}, false, {}, {}, {},
+        false, QVariantMap{{QStringLiteral("jumpProfileIds"), QVariantList{}}}));
+    QVERIFY(controller.deleteHostProfile(QStringLiteral("jump-agent")));
+
+    ztermy::AppController reloaded(profilesPath);
+    const QVariantList reloadedProfiles = reloaded.hostProfiles();
+    const auto reloadedTarget =
+        std::ranges::find(reloadedProfiles, QStringLiteral("target"), [](const QVariant &value) {
+            return value.toMap().value(QStringLiteral("id")).toString();
+        });
+    QVERIFY(reloadedTarget != reloadedProfiles.end());
+    QVERIFY(reloadedTarget->toMap().value(QStringLiteral("jumpProfileIds")).toList().isEmpty());
 }
 
 void AppControllerTests::rejectsInvalidProfiles()

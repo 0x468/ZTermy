@@ -159,8 +159,10 @@ directly from an undownloaded remote entry. Those require separate queue and
 
 ## V2.9 — SSH connection depth and resilience (`0.2.9`)
 
-Status: planned. This milestone extends the existing native connection pipeline
-rather than adding UI-only profile fields.
+Status: implemented. The frozen contract is recorded in `V2_9_SCOPE.md`, the
+transport decisions in ADRs 0044–0048, and the evidence/manual matrix in
+`testing/V2_9_ACCEPTANCE.md`. This milestone extends the existing native
+connection pipeline rather than adding UI-only profile fields.
 
 - add bounded keepalive and explicit reconnect behavior with observable states;
 - add ProxyJump/host-chain and explicit proxy support behind transport

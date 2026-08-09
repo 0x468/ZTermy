@@ -306,14 +306,14 @@ void SftpSession::run(ssh::SshConnectionRequest &request, const std::stop_token 
             [this](const ssh::SshConnectionPhase phase) {
                 postPhase(phase);
             },
-        .confirmUnknownHostKey = [this, &stopToken](const QString &algorithm,
+        .confirmUnknownHostKey = [this, &stopToken](const QString &endpoint, const QString &algorithm,
                                                     const QString &fingerprint) -> ssh::UnknownHostKeyDecision {
             {
                 std::scoped_lock lock(m_hostKeyMutex);
                 m_hostKeyDecision.reset();
                 m_awaitingHostKey = true;
             }
-            postHostKeyConfirmation(algorithm, fingerprint);
+            postHostKeyConfirmation(endpoint, algorithm, fingerprint);
             std::unique_lock lock(m_hostKeyMutex);
             const bool decided = m_hostKeyAvailable.wait(lock, stopToken, [this] {
                 return m_hostKeyDecision.has_value();
@@ -322,8 +322,8 @@ void SftpSession::run(ssh::SshConnectionRequest &request, const std::stop_token 
             return decided ? *m_hostKeyDecision : ssh::UnknownHostKeyDecision::Reject;
         },
         .hostKeyChanged =
-            [this](const QString &algorithm, const QString &fingerprint) {
-                postHostKeyChange(algorithm, fingerprint);
+            [this](const QString &endpoint, const QString &algorithm, const QString &fingerprint) {
+                postHostKeyChange(endpoint, algorithm, fingerprint);
             },
     };
 
@@ -588,42 +588,43 @@ void SftpSession::deliverConnectionFailure(const ssh::SshFailureKind failure)
     emit connectionFailed(failure);
 }
 
-void SftpSession::postHostKeyConfirmation(const QString &algorithm, const QString &fingerprint)
+void SftpSession::postHostKeyConfirmation(const QString &endpoint, const QString &algorithm, const QString &fingerprint)
 {
     if (QThread::currentThread() == thread())
     {
-        deliverHostKeyConfirmation(algorithm, fingerprint);
+        deliverHostKeyConfirmation(endpoint, algorithm, fingerprint);
         return;
     }
-    if (!QMetaObject::invokeMethod(this, "deliverHostKeyConfirmation", Qt::QueuedConnection, Q_ARG(QString, algorithm),
-                                   Q_ARG(QString, fingerprint)))
+    if (!QMetaObject::invokeMethod(this, "deliverHostKeyConfirmation", Qt::QueuedConnection, Q_ARG(QString, endpoint),
+                                   Q_ARG(QString, algorithm), Q_ARG(QString, fingerprint)))
     {
         qWarning("SFTP host-key confirmation could not be queued to its owner thread");
     }
 }
 
-void SftpSession::deliverHostKeyConfirmation(const QString &algorithm, const QString &fingerprint)
+void SftpSession::deliverHostKeyConfirmation(const QString &endpoint, const QString &algorithm,
+                                             const QString &fingerprint)
 {
-    emit hostKeyConfirmationRequired(algorithm, fingerprint);
+    emit hostKeyConfirmationRequired(endpoint, algorithm, fingerprint);
 }
 
-void SftpSession::postHostKeyChange(const QString &algorithm, const QString &fingerprint)
+void SftpSession::postHostKeyChange(const QString &endpoint, const QString &algorithm, const QString &fingerprint)
 {
     if (QThread::currentThread() == thread())
     {
-        deliverHostKeyChange(algorithm, fingerprint);
+        deliverHostKeyChange(endpoint, algorithm, fingerprint);
         return;
     }
-    if (!QMetaObject::invokeMethod(this, "deliverHostKeyChange", Qt::QueuedConnection, Q_ARG(QString, algorithm),
-                                   Q_ARG(QString, fingerprint)))
+    if (!QMetaObject::invokeMethod(this, "deliverHostKeyChange", Qt::QueuedConnection, Q_ARG(QString, endpoint),
+                                   Q_ARG(QString, algorithm), Q_ARG(QString, fingerprint)))
     {
         qWarning("SFTP host-key change could not be queued to its owner thread");
     }
 }
 
-void SftpSession::deliverHostKeyChange(const QString &algorithm, const QString &fingerprint)
+void SftpSession::deliverHostKeyChange(const QString &endpoint, const QString &algorithm, const QString &fingerprint)
 {
-    emit hostKeyChanged(algorithm, fingerprint);
+    emit hostKeyChanged(endpoint, algorithm, fingerprint);
 }
 
 void SftpSession::postDirectory(const quint64 requestId, const quint64 generation, const QString &remotePath,

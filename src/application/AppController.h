@@ -52,6 +52,7 @@ class AppController final : public QObject
     Q_OBJECT
     Q_PROPERTY(bool sshActive READ sshActive NOTIFY sshActiveChanged)
     Q_PROPERTY(bool hostKeyPromptVisible READ hostKeyPromptVisible NOTIFY hostKeyPromptChanged)
+    Q_PROPERTY(QString hostKeyEndpoint READ hostKeyEndpoint NOTIFY hostKeyPromptChanged)
     Q_PROPERTY(QString hostKeyAlgorithm READ hostKeyAlgorithm NOTIFY hostKeyPromptChanged)
     Q_PROPERTY(QString hostKeyFingerprint READ hostKeyFingerprint NOTIFY hostKeyPromptChanged)
     Q_PROPERTY(bool hostKeyChangedWarning READ hostKeyChangedWarning NOTIFY hostKeyPromptChanged)
@@ -144,6 +145,7 @@ public:
 
     [[nodiscard]] bool sshActive() const noexcept;
     [[nodiscard]] bool hostKeyPromptVisible() const noexcept;
+    [[nodiscard]] QString hostKeyEndpoint() const;
     [[nodiscard]] QString hostKeyAlgorithm() const;
     [[nodiscard]] QString hostKeyFingerprint() const;
     [[nodiscard]] bool hostKeyChangedWarning() const noexcept;
@@ -298,18 +300,21 @@ public:
                                      const QString &username, const QString &authentication,
                                      const QString &privateKeyPath, bool privateKeyPassphraseRequired,
                                      const QString &group);
-    Q_INVOKABLE bool saveHostProfileWithCredential(
-        const QString &id, const QString &name, const QString &host, int port, const QString &username,
-        const QString &authentication, const QString &privateKeyPath, bool privateKeyPassphraseRequired,
-        const QString &group, const QString &secret, bool rememberCredential, const QVariantMap &sessionOptions = {},
-        const QVariantMap &proxyOptions = {}, const QString &proxySecret = {}, bool rememberProxyCredential = false);
+    Q_INVOKABLE bool
+    saveHostProfileWithCredential(const QString &id, const QString &name, const QString &host, int port,
+                                  const QString &username, const QString &authentication, const QString &privateKeyPath,
+                                  bool privateKeyPassphraseRequired, const QString &group, const QString &secret,
+                                  bool rememberCredential, const QVariantMap &sessionOptions = {},
+                                  const QVariantMap &proxyOptions = {}, const QString &proxySecret = {},
+                                  bool rememberProxyCredential = false, const QVariantMap &routeOptions = {});
     Q_INVOKABLE bool saveAndConnectHostProfile(const QString &id, const QString &name, const QString &host, int port,
                                                const QString &username, const QString &authentication,
                                                const QString &privateKeyPath, bool privateKeyPassphraseRequired,
                                                const QString &group, const QString &secret, bool rememberCredential,
                                                const QVariantMap &sessionOptions = {},
                                                const QVariantMap &proxyOptions = {}, const QString &proxySecret = {},
-                                               bool rememberProxyCredential = false);
+                                               bool rememberProxyCredential = false,
+                                               const QVariantMap &routeOptions = {});
     Q_INVOKABLE bool duplicateHostProfile(const QString &id);
     Q_INVOKABLE bool deleteHostProfile(const QString &id);
     Q_INVOKABLE bool clearRecentHostProfiles();
@@ -468,7 +473,7 @@ private:
     void requestSelection(quint16 startColumn, quint16 startRow, quint16 endColumn, quint16 endRow, bool rectangular);
     void clearSelection();
     void copySelection();
-    void setHostKeyPrompt(QString algorithm, QString fingerprint, bool changed);
+    void setHostKeyPrompt(QString endpoint, QString algorithm, QString fingerprint, bool changed);
     void clearHostKeyPrompt();
     void loadHostProfiles();
     void loadApplicationSettings();
@@ -486,8 +491,8 @@ private:
                                                const QString &group, const QString &secret, bool rememberCredential,
                                                bool manageCredential, const QVariantMap &sessionOptions = {},
                                                const QVariantMap &proxyOptions = {}, const QString &proxySecret = {},
-                                               bool rememberProxyCredential = false,
-                                               bool manageProxyCredential = false);
+                                               bool rememberProxyCredential = false, bool manageProxyCredential = false,
+                                               const QVariantMap &routeOptions = {});
     void setCredentialOperationError(QString message);
     [[nodiscard]] bool startSshConnection(ssh::SshConnectionRequest request, QString sourceProfileId = {});
     [[nodiscard]] std::optional<ssh::SshConnectionRequest> connectionRequestForProfile(const ssh::SshProfile &profile,
@@ -543,6 +548,7 @@ private:
     std::vector<std::unique_ptr<sftp::SftpSession>> m_stoppingSftpSessions;
     QString m_activeTabId;
     QString m_hostKeyTabId;
+    QString m_hostKeyEndpoint;
     QString m_hostKeyAlgorithm;
     QString m_hostKeyFingerprint;
     std::uint32_t m_nextLocalTabNumber = 1;

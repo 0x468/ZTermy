@@ -23,7 +23,8 @@ constexpr qint64 legacySchemaVersion = 1;
 constexpr qint64 credentialSchemaVersion = 2;
 constexpr qint64 keywordSchemaVersion = 3;
 constexpr qint64 sessionOptionsSchemaVersion = 4;
-constexpr qint64 currentSchemaVersion = 5;
+constexpr qint64 proxySchemaVersion = 5;
+constexpr qint64 currentSchemaVersion = 6;
 constexpr qsizetype maximumEnvironmentVariableCount = 32;
 
 [[nodiscard]] std::optional<ztermy::ssh::SshStartupCommandMode> parseStartupCommandMode(const QString &value)
@@ -334,6 +335,7 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
     const QJsonValue keywordRulesValue = object.value(QStringLiteral("keywordHighlightRules"));
     const QJsonValue sessionOptionsValue = object.value(QStringLiteral("sessionOptions"));
     const QJsonValue proxyValue = object.value(QStringLiteral("proxy"));
+    const QJsonValue jumpProfileIdsValue = object.value(QStringLiteral("jumpProfileIds"));
     if (!idValue.isString() || !nameValue.isString() || (!groupValue.isUndefined() && !groupValue.isString())
         || !hostValue.isString() || !portValue.isDouble() || !usernameValue.isString()
         || !authenticationValue.isString() || !privateKeyPathValue.isString()
@@ -344,7 +346,8 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
         || (version >= keywordSchemaVersion && !keywordEnabledValue.isUndefined() && !keywordEnabledValue.isBool())
         || (version >= keywordSchemaVersion && !keywordRulesValue.isUndefined() && !keywordRulesValue.isArray())
         || (version >= sessionOptionsSchemaVersion && !sessionOptionsValue.isObject())
-        || (version >= currentSchemaVersion && !proxyValue.isObject()))
+        || (version >= proxySchemaVersion && !proxyValue.isObject())
+        || (version >= currentSchemaVersion && !jumpProfileIdsValue.isArray()))
     {
         return std::nullopt;
     }
@@ -400,10 +403,28 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
         return std::nullopt;
     }
     auto proxy =
-        version >= currentSchemaVersion ? parseProxyOptions(proxyValue) : std::optional{ztermy::ssh::SshProxyOptions{}};
+        version >= proxySchemaVersion ? parseProxyOptions(proxyValue) : std::optional{ztermy::ssh::SshProxyOptions{}};
     if (!proxy)
     {
         return std::nullopt;
+    }
+    std::vector<std::string> jumpProfileIds;
+    if (version >= currentSchemaVersion)
+    {
+        const QJsonArray values = jumpProfileIdsValue.toArray();
+        if (std::cmp_greater(values.size(), ztermy::ssh::maximumSshJumpHostCount))
+        {
+            return std::nullopt;
+        }
+        jumpProfileIds.reserve(static_cast<std::size_t>(values.size()));
+        for (const auto &jumpProfileId : values)
+        {
+            if (!jumpProfileId.isString())
+            {
+                return std::nullopt;
+            }
+            jumpProfileIds.push_back(jumpProfileId.toString().toStdString());
+        }
     }
 
     ztermy::ssh::SshProfile profile{
@@ -424,6 +445,7 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
         .keywordHighlightEnabled = keywordEnabledValue.toBool(true),
         .sessionOptions = std::move(*sessionOptions),
         .proxy = std::move(*proxy),
+        .jumpProfileIds = std::move(jumpProfileIds),
     };
     return ztermy::ssh::validSshProfile(profile) ? std::optional{std::move(profile)} : std::nullopt;
 }
@@ -465,6 +487,12 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
     object.insert(QStringLiteral("keywordHighlightRules"), keywordRules);
     object.insert(QStringLiteral("sessionOptions"), serializeSessionOptions(profile.sessionOptions));
     object.insert(QStringLiteral("proxy"), serializeProxyOptions(profile.proxy));
+    QJsonArray jumpProfileIds;
+    for (const std::string &jumpProfileId : profile.jumpProfileIds)
+    {
+        jumpProfileIds.append(QString::fromStdString(jumpProfileId));
+    }
+    object.insert(QStringLiteral("jumpProfileIds"), jumpProfileIds);
     return object;
 }
 
@@ -482,6 +510,15 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
         }
     }
     return false;
+}
+
+[[nodiscard]] bool missingJumpProfiles(const std::span<const ztermy::ssh::SshProfile> profiles)
+{
+    return std::ranges::any_of(profiles, [profiles](const ztermy::ssh::SshProfile &profile) {
+        return std::ranges::any_of(profile.jumpProfileIds, [profiles](const std::string &jumpProfileId) {
+            return std::ranges::find(profiles, jumpProfileId, &ztermy::ssh::SshProfile::id) == profiles.end();
+        });
+    });
 }
 
 } // namespace
@@ -527,7 +564,7 @@ std::expected<std::vector<SshProfile>, SshProfileStoreError> SshProfileStore::lo
     if (!versionValue.isDouble()
         || (versionValue.toInteger() != legacySchemaVersion && versionValue.toInteger() != credentialSchemaVersion
             && versionValue.toInteger() != keywordSchemaVersion
-            && versionValue.toInteger() != sessionOptionsSchemaVersion
+            && versionValue.toInteger() != sessionOptionsSchemaVersion && versionValue.toInteger() != proxySchemaVersion
             && versionValue.toInteger() != currentSchemaVersion))
     {
         return std::unexpected(versionValue.isDouble() ? SshProfileStoreError::UnsupportedVersion
@@ -555,7 +592,7 @@ std::expected<std::vector<SshProfile>, SshProfileStoreError> SshProfileStore::lo
         }
         profiles.push_back(std::move(*profile));
     }
-    if (duplicateIds(profiles))
+    if (duplicateIds(profiles) || missingJumpProfiles(profiles))
     {
         return std::unexpected(SshProfileStoreError::InvalidFormat);
     }
@@ -569,7 +606,7 @@ std::expected<void, SshProfileStoreError> SshProfileStore::save(const std::span<
         return std::unexpected(SshProfileStoreError::InvalidPath);
     }
     if (profiles.size() > static_cast<std::size_t>(maximumProfileCount) || duplicateIds(profiles)
-        || std::ranges::any_of(profiles, [](const SshProfile &profile) {
+        || missingJumpProfiles(profiles) || std::ranges::any_of(profiles, [](const SshProfile &profile) {
                return !validSshProfile(profile);
            }))
     {

@@ -449,7 +449,7 @@ void TransferManager::startWorker(const TransferTask &task, const WorkSpec &spec
             const ssh::SshConnectionCallbacks callbacks{
                 .phaseChanged = {},
                 .confirmUnknownHostKey = [this, id = task.id, context,
-                                          &stopToken](const QString &algorithm,
+                                          &stopToken](const QString &endpoint, const QString &algorithm,
                                                       const QString &fingerprint) -> ssh::UnknownHostKeyDecision {
                     {
                         std::scoped_lock lock(context->mutex);
@@ -457,8 +457,8 @@ void TransferManager::startWorker(const TransferTask &task, const WorkSpec &spec
                         context->awaitingHostKey = true;
                     }
                     QMetaObject::invokeMethod(this, "deliverHostKeyConfirmation", Qt::QueuedConnection,
-                                              Q_ARG(QString, qTaskId(id)), Q_ARG(QString, algorithm),
-                                              Q_ARG(QString, fingerprint));
+                                              Q_ARG(QString, qTaskId(id)), Q_ARG(QString, endpoint),
+                                              Q_ARG(QString, algorithm), Q_ARG(QString, fingerprint));
                     std::unique_lock lock(context->mutex);
                     const bool decided = context->hostKeyAvailable.wait(lock, stopToken, [context] {
                         return context->hostKeyDecision.has_value();
@@ -467,10 +467,11 @@ void TransferManager::startWorker(const TransferTask &task, const WorkSpec &spec
                     return decided ? *context->hostKeyDecision : ssh::UnknownHostKeyDecision::Reject;
                 },
                 .hostKeyChanged =
-                    [this, id = task.id](const QString &algorithm, const QString &fingerprint) {
+                    [this, id = task.id](const QString &endpoint, const QString &algorithm,
+                                         const QString &fingerprint) {
                         QMetaObject::invokeMethod(this, "deliverHostKeyChange", Qt::QueuedConnection,
-                                                  Q_ARG(QString, qTaskId(id)), Q_ARG(QString, algorithm),
-                                                  Q_ARG(QString, fingerprint));
+                                                  Q_ARG(QString, qTaskId(id)), Q_ARG(QString, endpoint),
+                                                  Q_ARG(QString, algorithm), Q_ARG(QString, fingerprint));
                     },
             };
             auto client = m_clientFactory(*request, callbacks, stopToken);
@@ -545,7 +546,7 @@ void TransferManager::cleanupPartial(const TransferTask &task, const WorkSpec &s
                 const ssh::SshConnectionCallbacks callbacks{
                     .phaseChanged = {},
                     .confirmUnknownHostKey =
-                        [](const QString &, const QString &) {
+                        [](const QString &, const QString &, const QString &) {
                             return ssh::UnknownHostKeyDecision::Reject;
                         },
                     .hostKeyChanged = {},
@@ -588,24 +589,24 @@ void TransferManager::deliverCredentialError(const QString &taskIdValue, const T
     handleCredentialError(taskId(taskIdValue), error);
 }
 
-void TransferManager::deliverHostKeyConfirmation(const QString &taskIdValue, const QString &algorithm,
-                                                 const QString &fingerprint)
+void TransferManager::deliverHostKeyConfirmation(const QString &taskIdValue, const QString &endpoint,
+                                                 const QString &algorithm, const QString &fingerprint)
 {
     if (m_stopRequested)
     {
         return;
     }
-    emit hostKeyConfirmationRequired(taskIdValue, algorithm, fingerprint);
+    emit hostKeyConfirmationRequired(taskIdValue, endpoint, algorithm, fingerprint);
 }
 
-void TransferManager::deliverHostKeyChange(const QString &taskIdValue, const QString &algorithm,
-                                           const QString &fingerprint)
+void TransferManager::deliverHostKeyChange(const QString &taskIdValue, const QString &endpoint,
+                                           const QString &algorithm, const QString &fingerprint)
 {
     if (m_stopRequested)
     {
         return;
     }
-    emit hostKeyChanged(taskIdValue, algorithm, fingerprint);
+    emit hostKeyChanged(taskIdValue, endpoint, algorithm, fingerprint);
 }
 
 void TransferManager::deliverProgress(const QString &taskIdValue, const qulonglong transferredBytes,

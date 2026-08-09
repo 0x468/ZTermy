@@ -46,6 +46,17 @@ Item {
         }
     }
 
+    Text {
+        Layout.fillWidth: true
+        text: overlay.controller.hostKeyEndpoint
+        color: overlay.textColor
+        elide: Text.ElideMiddle
+        font.family: Theme.uiFont
+        font.pixelSize: Theme.textBody
+        font.weight: Font.DemiBold
+        Accessible.name: qsTr("SSH endpoint being verified")
+    }
+
     Rectangle {
         id: promptPanel
 

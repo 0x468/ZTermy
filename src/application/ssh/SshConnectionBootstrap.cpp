@@ -3,6 +3,7 @@
 #include "domain/ssh/SshHostKey.h"
 #include "infrastructure/ssh/ExplicitProxyTunnel.h"
 #include "infrastructure/ssh/KnownHostsStore.h"
+#include "infrastructure/ssh/SshDirectTcpipTransport.h"
 #include "infrastructure/ssh/WindowsTcpSocket.h"
 
 #include <QByteArray>
@@ -20,17 +21,26 @@ namespace ztermy::ssh
 namespace
 {
 
-class SecretClearGuard final
+class RequestSecretsClearGuard final
 {
 public:
-    explicit SecretClearGuard(security::SensitiveByteArray &secret) noexcept : m_secret(secret) {}
-    ~SecretClearGuard() { m_secret.clear(); }
+    explicit RequestSecretsClearGuard(SshConnectionRequest &request) noexcept : m_request(request) {}
+    ~RequestSecretsClearGuard()
+    {
+        m_request.secret.clear();
+        m_request.proxySecret.clear();
+        for (SshJumpHostRequest &jump : m_request.jumpHosts)
+        {
+            jump.secret.clear();
+            jump.proxySecret.clear();
+        }
+    }
 
-    SecretClearGuard(const SecretClearGuard &) = delete;
-    SecretClearGuard &operator=(const SecretClearGuard &) = delete;
+    RequestSecretsClearGuard(const RequestSecretsClearGuard &) = delete;
+    RequestSecretsClearGuard &operator=(const RequestSecretsClearGuard &) = delete;
 
 private:
-    security::SensitiveByteArray &m_secret;
+    SshConnectionRequest &m_request;
 };
 
 [[nodiscard]] SshFailureKind failureFromTcp(const TcpConnectErrorKind kind) noexcept
@@ -87,6 +97,216 @@ void publishPhase(const SshConnectionCallbacks &callbacks, const SshConnectionPh
     return SshBootstrapError{.failure = failure};
 }
 
+template <typename Endpoint>
+[[nodiscard]] std::string endpointHost(const Endpoint &endpoint)
+{
+    const QByteArray hostUtf8 = endpoint.host.trimmed().toUtf8();
+    return {hostUtf8.constData(), static_cast<std::size_t>(hostUtf8.size())};
+}
+
+template <typename Endpoint>
+[[nodiscard]] QString endpointDescription(const Endpoint &endpoint)
+{
+    QString address = QStringLiteral("%1@%2:%3").arg(endpoint.username, endpoint.host).arg(endpoint.port);
+    if constexpr (requires { endpoint.displayName; })
+    {
+        return endpoint.displayName.isEmpty() ? address : QStringLiteral("%1 — %2").arg(endpoint.displayName, address);
+    }
+    return address;
+}
+
+template <typename Endpoint>
+[[nodiscard]] std::expected<std::unique_ptr<SshByteTransport>, SshBootstrapError>
+connectInitialTransport(Endpoint &endpoint, const std::stop_token &stopToken)
+{
+    std::string host;
+    try
+    {
+        host = endpointHost(endpoint);
+    }
+    catch (const std::bad_alloc &)
+    {
+        return std::unexpected(connectionError(SshFailureKind::ProtocolError));
+    }
+    const std::string &connectHost = endpoint.proxy.type == SshProxyType::None ? host : endpoint.proxy.host;
+    const std::uint16_t connectPort = endpoint.proxy.type == SshProxyType::None ? endpoint.port : endpoint.proxy.port;
+    auto directSocket = WindowsTcpSocket::connect(connectHost, connectPort, 10s, stopToken);
+    if (!directSocket)
+    {
+        return std::unexpected(connectionError(failureFromTcp(directSocket.error().kind)));
+    }
+
+    std::unique_ptr<SshByteTransport> transport;
+    try
+    {
+        transport = std::make_unique<WindowsTcpSocket>(std::move(*directSocket));
+    }
+    catch (const std::bad_alloc &)
+    {
+        return std::unexpected(connectionError(SshFailureKind::ProtocolError));
+    }
+    if (endpoint.proxy.type != SshProxyType::None)
+    {
+        auto tunnel =
+            establishExplicitProxyTunnel(*transport, endpoint.proxy.type, host, endpoint.port, endpoint.proxy.username,
+                                         endpoint.proxySecret.view(), 10s, stopToken);
+        if (!tunnel)
+        {
+            return std::unexpected(connectionError(failureFromProxy(tunnel.error().kind)));
+        }
+    }
+    return transport;
+}
+
+template <typename Endpoint>
+[[nodiscard]] std::expected<std::unique_ptr<SshByteTransport>, SshBootstrapError>
+connectTransportThroughJump(std::unique_ptr<SshByteTransport> upstreamTransport,
+                            std::unique_ptr<Libssh2Session> upstreamSession, Endpoint &endpoint,
+                            const std::stop_token &stopToken)
+{
+    std::string host;
+    try
+    {
+        host = endpointHost(endpoint);
+    }
+    catch (const std::bad_alloc &)
+    {
+        return std::unexpected(connectionError(SshFailureKind::ProtocolError));
+    }
+    const std::string &connectHost = endpoint.proxy.type == SshProxyType::None ? host : endpoint.proxy.host;
+    const std::uint16_t connectPort = endpoint.proxy.type == SshProxyType::None ? endpoint.port : endpoint.proxy.port;
+    auto tunneled = SshDirectTcpipTransport::create(std::move(upstreamTransport), std::move(upstreamSession),
+                                                    connectHost, connectPort, 10s, stopToken);
+    if (!tunneled)
+    {
+        return std::unexpected(connectionError(sshFailureFromTransport(tunneled.error(), true)));
+    }
+    std::unique_ptr<SshByteTransport> transport = std::move(*tunneled);
+    if (endpoint.proxy.type != SshProxyType::None)
+    {
+        auto tunnel =
+            establishExplicitProxyTunnel(*transport, endpoint.proxy.type, host, endpoint.port, endpoint.proxy.username,
+                                         endpoint.proxySecret.view(), 10s, stopToken);
+        if (!tunnel)
+        {
+            return std::unexpected(connectionError(failureFromProxy(tunnel.error().kind)));
+        }
+    }
+    return transport;
+}
+
+template <typename Endpoint>
+[[nodiscard]] std::expected<std::unique_ptr<Libssh2Session>, SshBootstrapError>
+authenticateEndpoint(Endpoint &endpoint, SshByteTransport &transport, const QString &knownHostsPath,
+                     const SshConnectionCallbacks &callbacks, const std::stop_token &stopToken)
+{
+    auto session = Libssh2Session::create();
+    if (!session)
+    {
+        return std::unexpected(connectionError(SshFailureKind::ProtocolError));
+    }
+
+    publishPhase(callbacks, SshConnectionPhase::Handshaking);
+    auto handshake = (*session)->handshake(transport, 10s, stopToken);
+    if (!handshake)
+    {
+        return std::unexpected(connectionError(sshFailureFromTransport(handshake.error())));
+    }
+
+    publishPhase(callbacks, SshConnectionPhase::VerifyingHostKey);
+    auto hostKey = (*session)->hostKey();
+    const KnownHostsStore knownHostsStore(knownHostsPath);
+    auto knownHosts = knownHostsStore.load();
+    if (!hostKey || !knownHosts)
+    {
+        return std::unexpected(connectionError(SshFailureKind::HostKeyInvalid));
+    }
+
+    std::string host;
+    try
+    {
+        host = endpointHost(endpoint);
+    }
+    catch (const std::bad_alloc &)
+    {
+        return std::unexpected(connectionError(SshFailureKind::ProtocolError));
+    }
+    const SshEndpoint observedEndpoint{.host = host, .port = endpoint.port};
+    auto trust = (*session)->verifyHostKey(observedEndpoint, *knownHosts);
+    if (!trust)
+    {
+        return std::unexpected(connectionError(SshFailureKind::HostKeyInvalid));
+    }
+
+    const QString description = endpointDescription(endpoint);
+    const QString algorithm = QString::fromUtf8(hostKeyAlgorithmName(hostKey->algorithm));
+    const QString fingerprint = QString::fromStdString(sha256Fingerprint(*hostKey));
+    if (*trust == HostKeyTrust::Changed)
+    {
+        if (callbacks.hostKeyChanged)
+        {
+            callbacks.hostKeyChanged(description, algorithm, fingerprint);
+        }
+        return std::unexpected(connectionError(SshFailureKind::HostKeyChanged));
+    }
+    if (*trust == HostKeyTrust::Unknown)
+    {
+        publishPhase(callbacks, SshConnectionPhase::AwaitingHostKeyConfirmation);
+        const UnknownHostKeyDecision decision =
+            callbacks.confirmUnknownHostKey ? callbacks.confirmUnknownHostKey(description, algorithm, fingerprint)
+                                            : UnknownHostKeyDecision::Reject;
+        if (decision == UnknownHostKeyDecision::Reject)
+        {
+            return std::unexpected(connectionError(stopToken.stop_requested() ? SshFailureKind::Cancelled
+                                                                              : SshFailureKind::HostKeyInvalid));
+        }
+        knownHosts->push_back(KnownHostEntry{
+            .endpoint = observedEndpoint,
+            .algorithm = hostKey->algorithm,
+            .encodedKey = hostKey->encodedKey,
+        });
+        if (decision == UnknownHostKeyDecision::AcceptAndRemember && !knownHostsStore.save(*knownHosts))
+        {
+            return std::unexpected(SshBootstrapError{
+                .failure = SshFailureKind::HostKeyInvalid,
+                .reason = SshBootstrapErrorReason::KnownHostsSaveFailed,
+            });
+        }
+        trust = (*session)->verifyHostKey(observedEndpoint, *knownHosts);
+        if (!trust || *trust != HostKeyTrust::Trusted)
+        {
+            return std::unexpected(connectionError(SshFailureKind::HostKeyInvalid));
+        }
+    }
+
+    publishPhase(callbacks, SshConnectionPhase::Authenticating);
+    const QByteArray usernameUtf8 = endpoint.username.toUtf8();
+    const QByteArray privateKeyPathUtf8 = endpoint.privateKeyPath.toUtf8();
+    const std::string username(usernameUtf8.constData(), static_cast<std::size_t>(usernameUtf8.size()));
+    const std::string privateKeyPath(privateKeyPathUtf8.constData(),
+                                     static_cast<std::size_t>(privateKeyPathUtf8.size()));
+    std::expected<void, SshTransportError> authentication;
+    switch (endpoint.authentication)
+    {
+        case SshAuthenticationMethod::PrivateKey:
+            authentication = (*session)->authenticateWithPrivateKeyFile(transport, username, privateKeyPath,
+                                                                        endpoint.secret.view(), 15s, stopToken);
+            break;
+        case SshAuthenticationMethod::Password:
+            authentication =
+                (*session)->authenticateWithPassword(transport, username, endpoint.secret.view(), 15s, stopToken);
+            break;
+        case SshAuthenticationMethod::Agent:
+            authentication = (*session)->authenticateWithAgent(transport, username, 15s, stopToken);
+            break;
+    }
+    if (!authentication)
+    {
+        return std::unexpected(connectionError(sshFailureFromTransport(authentication.error())));
+    }
+    return std::move(*session);
+}
+
 } // namespace
 
 SshFailureKind sshFailureFromTransport(const SshTransportError &error, const bool openingChannel) noexcept
@@ -116,145 +336,70 @@ std::expected<AuthenticatedSshConnection, SshBootstrapError>
 establishAuthenticatedSshConnection(SshConnectionRequest &request, const SshConnectionCallbacks &callbacks,
                                     const std::stop_token &stopToken)
 {
-    SecretClearGuard clearSecret(request.secret);
-    SecretClearGuard clearProxySecret(request.proxySecret);
+    RequestSecretsClearGuard clearSecrets(request);
     if (!validSshConnectionRequest(request))
     {
         return std::unexpected(connectionError(SshFailureKind::ProtocolError));
     }
 
     publishPhase(callbacks, SshConnectionPhase::Connecting);
-    const QByteArray hostUtf8 = request.host.trimmed().toUtf8();
-    const std::string host(hostUtf8.constData(), static_cast<std::size_t>(hostUtf8.size()));
-    const std::string &connectHost = request.proxy.type == SshProxyType::None ? host : request.proxy.host;
-    const std::uint16_t connectPort = request.proxy.type == SshProxyType::None ? request.port : request.proxy.port;
-    auto directSocket = WindowsTcpSocket::connect(connectHost, connectPort, 10s, stopToken);
-    if (!directSocket)
+    if (request.jumpHosts.empty())
     {
-        return std::unexpected(connectionError(failureFromTcp(directSocket.error().kind)));
-    }
-
-    std::unique_ptr<SshByteTransport> transport;
-    try
-    {
-        transport = std::make_unique<WindowsTcpSocket>(std::move(*directSocket));
-    }
-    catch (const std::bad_alloc &)
-    {
-        return std::unexpected(connectionError(SshFailureKind::ProtocolError));
-    }
-
-    if (request.proxy.type != SshProxyType::None)
-    {
-        auto tunnel = establishExplicitProxyTunnel(*transport, request.proxy.type, host, request.port,
-                                                   request.proxy.username, request.proxySecret.view(), 10s, stopToken);
-        if (!tunnel)
+        auto transport = connectInitialTransport(request, stopToken);
+        if (!transport)
         {
-            return std::unexpected(connectionError(failureFromProxy(tunnel.error().kind)));
+            return std::unexpected(transport.error());
         }
+        auto session = authenticateEndpoint(request, **transport, request.knownHostsPath, callbacks, stopToken);
+        if (!session)
+        {
+            return std::unexpected(session.error());
+        }
+        return AuthenticatedSshConnection{.transport = std::move(*transport), .session = std::move(*session)};
     }
 
-    auto session = Libssh2Session::create();
+    auto transport = connectInitialTransport(request.jumpHosts.front(), stopToken);
+    if (!transport)
+    {
+        return std::unexpected(transport.error());
+    }
+    auto session =
+        authenticateEndpoint(request.jumpHosts.front(), **transport, request.knownHostsPath, callbacks, stopToken);
     if (!session)
     {
-        return std::unexpected(connectionError(SshFailureKind::ProtocolError));
+        return std::unexpected(session.error());
     }
 
-    publishPhase(callbacks, SshConnectionPhase::Handshaking);
-    auto handshake = (*session)->handshake(*transport, 10s, stopToken);
-    if (!handshake)
+    for (std::size_t index = 1; index < request.jumpHosts.size(); ++index)
     {
-        return std::unexpected(connectionError(sshFailureFromTransport(handshake.error())));
-    }
-
-    publishPhase(callbacks, SshConnectionPhase::VerifyingHostKey);
-    auto hostKey = (*session)->hostKey();
-    const KnownHostsStore knownHostsStore(request.knownHostsPath);
-    auto knownHosts = knownHostsStore.load();
-    if (!hostKey || !knownHosts)
-    {
-        return std::unexpected(connectionError(SshFailureKind::HostKeyInvalid));
-    }
-
-    const SshEndpoint endpoint{.host = host, .port = request.port};
-    auto trust = (*session)->verifyHostKey(endpoint, *knownHosts);
-    if (!trust)
-    {
-        return std::unexpected(connectionError(SshFailureKind::HostKeyInvalid));
-    }
-
-    const QString algorithm = QString::fromUtf8(hostKeyAlgorithmName(hostKey->algorithm));
-    const QString fingerprint = QString::fromStdString(sha256Fingerprint(*hostKey));
-    if (*trust == HostKeyTrust::Changed)
-    {
-        if (callbacks.hostKeyChanged)
+        publishPhase(callbacks, SshConnectionPhase::Connecting);
+        auto nextTransport = connectTransportThroughJump(std::move(*transport), std::move(*session),
+                                                         request.jumpHosts[index], stopToken);
+        if (!nextTransport)
         {
-            callbacks.hostKeyChanged(algorithm, fingerprint);
+            return std::unexpected(nextTransport.error());
         }
-        return std::unexpected(connectionError(SshFailureKind::HostKeyChanged));
-    }
-
-    if (*trust == HostKeyTrust::Unknown)
-    {
-        publishPhase(callbacks, SshConnectionPhase::AwaitingHostKeyConfirmation);
-        const UnknownHostKeyDecision decision = callbacks.confirmUnknownHostKey
-                                                    ? callbacks.confirmUnknownHostKey(algorithm, fingerprint)
-                                                    : UnknownHostKeyDecision::Reject;
-        if (decision == UnknownHostKeyDecision::Reject)
+        transport = std::move(nextTransport);
+        session =
+            authenticateEndpoint(request.jumpHosts[index], **transport, request.knownHostsPath, callbacks, stopToken);
+        if (!session)
         {
-            return std::unexpected(connectionError(stopToken.stop_requested() ? SshFailureKind::Cancelled
-                                                                              : SshFailureKind::HostKeyInvalid));
-        }
-
-        knownHosts->push_back(KnownHostEntry{
-            .endpoint = endpoint,
-            .algorithm = hostKey->algorithm,
-            .encodedKey = hostKey->encodedKey,
-        });
-        if (decision == UnknownHostKeyDecision::AcceptAndRemember && !knownHostsStore.save(*knownHosts))
-        {
-            return std::unexpected(SshBootstrapError{
-                .failure = SshFailureKind::HostKeyInvalid,
-                .reason = SshBootstrapErrorReason::KnownHostsSaveFailed,
-            });
-        }
-        trust = (*session)->verifyHostKey(endpoint, *knownHosts);
-        if (!trust || *trust != HostKeyTrust::Trusted)
-        {
-            return std::unexpected(connectionError(SshFailureKind::HostKeyInvalid));
+            return std::unexpected(session.error());
         }
     }
 
-    publishPhase(callbacks, SshConnectionPhase::Authenticating);
-    const QByteArray usernameUtf8 = request.username.toUtf8();
-    const QByteArray privateKeyPathUtf8 = request.privateKeyPath.toUtf8();
-    const std::string username(usernameUtf8.constData(), static_cast<std::size_t>(usernameUtf8.size()));
-    const std::string privateKeyPath(privateKeyPathUtf8.constData(),
-                                     static_cast<std::size_t>(privateKeyPathUtf8.size()));
-    std::expected<void, SshTransportError> authentication;
-    switch (request.authentication)
+    publishPhase(callbacks, SshConnectionPhase::Connecting);
+    auto finalTransport = connectTransportThroughJump(std::move(*transport), std::move(*session), request, stopToken);
+    if (!finalTransport)
     {
-        case SshAuthenticationMethod::PrivateKey:
-            authentication = (*session)->authenticateWithPrivateKeyFile(*transport, username, privateKeyPath,
-                                                                        request.secret.view(), 15s, stopToken);
-            break;
-        case SshAuthenticationMethod::Password:
-            authentication =
-                (*session)->authenticateWithPassword(*transport, username, request.secret.view(), 15s, stopToken);
-            break;
-        case SshAuthenticationMethod::Agent:
-            authentication = (*session)->authenticateWithAgent(*transport, username, 15s, stopToken);
-            break;
+        return std::unexpected(finalTransport.error());
     }
-    if (!authentication)
+    auto finalSession = authenticateEndpoint(request, **finalTransport, request.knownHostsPath, callbacks, stopToken);
+    if (!finalSession)
     {
-        return std::unexpected(connectionError(sshFailureFromTransport(authentication.error())));
+        return std::unexpected(finalSession.error());
     }
-
-    return AuthenticatedSshConnection{
-        .transport = std::move(transport),
-        .session = std::move(*session),
-    };
+    return AuthenticatedSshConnection{.transport = std::move(*finalTransport), .session = std::move(*finalSession)};
 }
 
 } // namespace ztermy::ssh

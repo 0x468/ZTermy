@@ -30,9 +30,21 @@ The real-host test remains opt-in through `ZTERMY_TEST_SSH_PROXY_TYPE`,
 `ZTERMY_TEST_SSH_PROXY_HOST`, and `ZTERMY_TEST_SSH_PROXY_PORT`; ordinary CTest
 runs skip external access.
 
-## Remaining V2.9 work
+## Subsequent ProxyJump evidence
 
-- ProxyJump/host-chain transport composition and per-hop host-key decisions.
-- Final direct/multi-hop failure, cancellation, shutdown, static Release, and
-  package gates.
-- Manual native-window inspection is retained for the V2.9 acceptance pass.
+- Profile schema v6 migration, ordered route validation, missing/self/duplicate
+  rejection, deletion protection, controller projection, and route clearing are
+  covered by automated tests.
+- A complete real bootstrap connected to the authorized host, authenticated it
+  as the first jump, opened `direct-tcpip` back to the host, independently
+  verified the inner SSH identity, and authenticated the final session. The
+  callback evidence distinguished `Real jump — user@host:22` from the final
+  `user@host:22` endpoint.
+- The same resolved route is supplied to interactive terminals, independent
+  SFTP sessions, and retryable background transfers. Every request guard clears
+  target, proxy, and hop secrets.
+
+## Final status
+
+The complete automated V2.9 evidence and retained environment-dependent checks
+are recorded in `V2_9_ACCEPTANCE.md`.

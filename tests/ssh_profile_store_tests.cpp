@@ -74,6 +74,7 @@ private slots:
     void loadsKeywordSchemaWithDefaultSessionOptions();
     void rejectsMalformedSessionOptions();
     void rejectsMalformedProxyOptions();
+    void savesAndValidatesJumpHostChains();
 };
 
 void SshProfileStoreTests::missingFileLoadsAsEmpty()
@@ -110,7 +111,9 @@ void SshProfileStoreTests::savesAndLoadsNonSecretProfiles()
         .username = "operator",
         .authentication = ztermy::ssh::SshAuthenticationMethod::Agent,
     };
-    const std::array profiles{privateKeyProfile(), passwordProfile, agentProfile};
+    auto keyProfile = privateKeyProfile();
+    keyProfile.jumpProfileIds = {"profile-2", "profile-3"};
+    const std::array profiles{keyProfile, passwordProfile, agentProfile};
     const QString path = directory.filePath(QStringLiteral("profiles.json"));
     const ztermy::ssh::SshProfileStore store(path);
 
@@ -136,6 +139,8 @@ void SshProfileStoreTests::savesAndLoadsNonSecretProfiles()
     QVERIFY(persisted.contains("\"type\": \"socks5\""));
     QVERIFY(persisted.contains("\"host\": \"proxy.example.test\""));
     QVERIFY(persisted.contains("\"credentialReference\": \"proxy-profile-1\""));
+    QVERIFY(persisted.contains("\"jumpProfileIds\""));
+    QVERIFY(persisted.contains("\"profile-2\""));
     QVERIFY(persisted.contains("\"authentication\": \"agent\""));
     QVERIFY(!persisted.contains("privateKeyContent"));
 }
@@ -162,6 +167,7 @@ void SshProfileStoreTests::loadsProfilesWrittenBeforePassphraseMetadata()
     QVERIFY(profiles->front().keywordHighlightEnabled);
     QCOMPARE(profiles->front().sessionOptions, ztermy::ssh::SshSessionOptions{});
     QCOMPARE(profiles->front().proxy, ztermy::ssh::SshProxyOptions{});
+    QVERIFY(profiles->front().jumpProfileIds.empty());
 }
 
 void SshProfileStoreTests::loadsKeywordSchemaWithDefaultSessionOptions()
@@ -180,6 +186,7 @@ void SshProfileStoreTests::loadsKeywordSchemaWithDefaultSessionOptions()
     QCOMPARE(profiles->size(), std::size_t{1});
     QCOMPARE(profiles->front().sessionOptions, ztermy::ssh::SshSessionOptions{});
     QCOMPARE(profiles->front().proxy, ztermy::ssh::SshProxyOptions{});
+    QVERIFY(profiles->front().jumpProfileIds.empty());
 }
 
 void SshProfileStoreTests::createsMissingParentDirectory()
@@ -248,7 +255,7 @@ void SshProfileStoreTests::rejectsMalformedAndUnsupportedDocuments()
     QVERIFY(!malformed);
     QCOMPARE(malformed.error(), ztermy::ssh::SshProfileStoreError::InvalidFormat);
 
-    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":6,"profiles":[]})")));
+    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":7,"profiles":[]})")));
     auto unsupported = store.load();
     QVERIFY(!unsupported);
     QCOMPARE(unsupported.error(), ztermy::ssh::SshProfileStoreError::UnsupportedVersion);
@@ -294,6 +301,48 @@ void SshProfileStoreTests::rejectsMalformedProxyOptions()
     auto unknownType = store.load();
     QVERIFY(!unknownType);
     QCOMPARE(unknownType.error(), ztermy::ssh::SshProfileStoreError::InvalidFormat);
+}
+
+void SshProfileStoreTests::savesAndValidatesJumpHostChains()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("profiles.json"));
+    const ztermy::ssh::SshProfileStore store(path);
+
+    auto target = privateKeyProfile("target");
+    target.credentialReference = "target";
+    target.jumpProfileIds = {"jump-1", "jump-2"};
+    auto jumpOne = privateKeyProfile("jump-1");
+    jumpOne.credentialReference = "jump-1";
+    auto jumpTwo = privateKeyProfile("jump-2");
+    jumpTwo.credentialReference = "jump-2";
+    const std::array validProfiles{target, jumpOne, jumpTwo};
+    QVERIFY(store.save(validProfiles));
+    auto loaded = store.load();
+    QVERIFY(loaded);
+    QCOMPARE(loaded->front().jumpProfileIds, target.jumpProfileIds);
+
+    auto missing = target;
+    missing.jumpProfileIds = {"missing"};
+    const std::array missingProfiles{missing, jumpOne, jumpTwo};
+    QVERIFY(!store.save(missingProfiles));
+
+    auto self = target;
+    self.jumpProfileIds = {"target"};
+    QVERIFY(!ztermy::ssh::validSshProfile(self));
+
+    auto duplicate = target;
+    duplicate.jumpProfileIds = {"jump-1", "jump-1"};
+    QVERIFY(!ztermy::ssh::validSshProfile(duplicate));
+
+    QVERIFY(writeFile(
+        path,
+        QByteArrayLiteral(
+            R"({"version":6,"profiles":[{"id":"p","name":"n","group":"","host":"h","port":22,"username":"u","authentication":"password","privateKeyPath":"","keywordHighlightEnabled":true,"keywordHighlightRules":[],"sessionOptions":{"terminalType":"xterm-256color","keepaliveIntervalSeconds":0,"keepaliveFailureThreshold":3,"startupCommand":"","startupCommandMode":"paste","startupLineDelayMilliseconds":100,"environment":[],"reconnectPolicy":"never","reconnectMaximumAttempts":3,"reconnectInitialBackoffMilliseconds":1000},"proxy":{"type":"none","host":"","port":0,"username":""},"jumpProfileIds":[1]}]})")));
+    auto malformed = store.load();
+    QVERIFY(!malformed);
+    QCOMPARE(malformed.error(), ztermy::ssh::SshProfileStoreError::InvalidFormat);
 }
 
 void SshProfileStoreTests::rejectsFractionalPortsAndUnknownAuthentication()

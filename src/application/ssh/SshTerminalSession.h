@@ -75,8 +75,8 @@ signals:
     void runningChanged(bool running);
     void phaseChanged(ztermy::ssh::SshConnectionPhase phase);
     void failureOccurred(ztermy::ssh::SshFailureKind failure);
-    void hostKeyConfirmationRequired(const QString &algorithm, const QString &fingerprint);
-    void hostKeyChanged(const QString &algorithm, const QString &fingerprint);
+    void hostKeyConfirmationRequired(const QString &endpoint, const QString &algorithm, const QString &fingerprint);
+    void hostKeyChanged(const QString &endpoint, const QString &algorithm, const QString &fingerprint);
     void searchResultReady(const QString &query, quint32 current, quint32 total, bool wrapped);
     void shellHistoryReady(quint64 requestId, const QString &shell, const QByteArray &contents, const QString &error);
     void remoteTelemetryReady(const ztermy::telemetry::Sample &sample);
@@ -88,8 +88,8 @@ private slots:
     void deliverPhase(ztermy::ssh::SshConnectionPhase phase);
     void deliverFailure(ztermy::ssh::SshFailureKind failure);
     void deliverRunning(bool running);
-    void deliverHostKeyConfirmation(const QString &algorithm, const QString &fingerprint);
-    void deliverHostKeyChange(const QString &algorithm, const QString &fingerprint);
+    void deliverHostKeyConfirmation(const QString &endpoint, const QString &algorithm, const QString &fingerprint);
+    void deliverHostKeyChange(const QString &endpoint, const QString &algorithm, const QString &fingerprint);
     void deliverClipboardText(const QString &text);
     void deliverSearchResult(const QString &query, quint32 current, quint32 total, bool wrapped);
     void deliverShellHistory(quint64 requestId, const QString &shell, const QByteArray &contents, const QString &error);
@@ -153,8 +153,8 @@ private:
     void postPhase(SshConnectionPhase phase);
     void postFailure(SshFailureKind failure);
     void postRunning(bool running);
-    void postHostKeyConfirmation(const QString &algorithm, const QString &fingerprint);
-    void postHostKeyChange(const QString &algorithm, const QString &fingerprint);
+    void postHostKeyConfirmation(const QString &endpoint, const QString &algorithm, const QString &fingerprint);
+    void postHostKeyChange(const QString &endpoint, const QString &algorithm, const QString &fingerprint);
     void postClipboardText(const QString &text);
     void postSearchResult(const QString &query, quint32 current, quint32 total, bool wrapped);
     void postShellHistory(quint64 requestId, const QString &shell, const QByteArray &contents, const QString &error);

@@ -522,9 +522,159 @@ void removeLastUtf8CodePoint(QByteArray &value)
     return ztermy::ssh::validSshProxyOptions(options) ? std::optional{std::move(options)} : std::nullopt;
 }
 
-[[nodiscard]] QVariantMap profileVariantMap(const ztermy::ssh::SshProfile &profile, const bool credentialStored,
-                                            const bool proxyCredentialStored)
+[[nodiscard]] std::optional<std::vector<std::string>>
+mergeJumpProfileIds(const QVariantMap &routeOptions, std::vector<std::string> jumpProfileIds,
+                    const std::string &profileId, const std::vector<ztermy::ssh::SshProfile> &profiles)
 {
+    const QString key = QStringLiteral("jumpProfileIds");
+    if (!routeOptions.contains(key))
+    {
+        return jumpProfileIds;
+    }
+    const QVariant value = routeOptions.value(key);
+    if (!value.canConvert<QVariantList>())
+    {
+        return std::nullopt;
+    }
+    const QVariantList values = value.toList();
+    if (values.size() > static_cast<qsizetype>(ztermy::ssh::maximumSshJumpHostCount))
+    {
+        return std::nullopt;
+    }
+    jumpProfileIds.clear();
+    jumpProfileIds.reserve(static_cast<std::size_t>(values.size()));
+    for (const QVariant &entry : values)
+    {
+        const std::string jumpId = utf8String(entry.toString().trimmed());
+        if (jumpId.empty() || jumpId == profileId || std::ranges::find(jumpProfileIds, jumpId) != jumpProfileIds.end()
+            || std::ranges::find(profiles, jumpId, &ztermy::ssh::SshProfile::id) == profiles.end())
+        {
+            return std::nullopt;
+        }
+        jumpProfileIds.push_back(jumpId);
+    }
+    return jumpProfileIds;
+}
+
+[[nodiscard]] bool profileRequiresCredential(const ztermy::ssh::SshProfile &profile) noexcept
+{
+    return profile.authentication == ztermy::ssh::SshAuthenticationMethod::Password
+           || (profile.authentication == ztermy::ssh::SshAuthenticationMethod::PrivateKey
+               && profile.privateKeyPassphraseRequired);
+}
+
+[[nodiscard]] bool proxyRequiresCredential(const ztermy::ssh::SshProfile &profile) noexcept
+{
+    return profile.proxy.type != ztermy::ssh::SshProxyType::None && !profile.proxy.username.empty();
+}
+
+[[nodiscard]] ztermy::security::CredentialKind credentialKind(const ztermy::ssh::SshProfile &profile) noexcept;
+
+[[nodiscard]] std::expected<std::vector<ztermy::ssh::SshJumpHostRequest>, ztermy::sftp::TransferCredentialError>
+storedJumpHostRequests(const ztermy::ssh::SshProfile &profile, const std::vector<ztermy::ssh::SshProfile> &profiles,
+                       ztermy::security::CredentialVault &vault) noexcept
+{
+    using ztermy::sftp::TransferCredentialError;
+    try
+    {
+        std::vector<ztermy::ssh::SshJumpHostRequest> requests;
+        requests.reserve(profile.jumpProfileIds.size());
+        for (const std::string &jumpProfileId : profile.jumpProfileIds)
+        {
+            const auto jump = std::ranges::find(profiles, jumpProfileId, &ztermy::ssh::SshProfile::id);
+            if (jump == profiles.end())
+            {
+                return std::unexpected(TransferCredentialError::Unavailable);
+            }
+            ztermy::security::SensitiveByteArray secret;
+            if (jump->credentialReference)
+            {
+                auto stored = vault.read({.profileId = *jump->credentialReference, .kind = credentialKind(*jump)});
+                if (!stored)
+                {
+                    return std::unexpected(stored.error() == ztermy::security::CredentialVaultError::Locked
+                                               ? TransferCredentialError::Locked
+                                               : TransferCredentialError::Unavailable);
+                }
+                secret = std::move(*stored);
+            }
+            if (profileRequiresCredential(*jump) && secret.empty())
+            {
+                return std::unexpected(TransferCredentialError::Unavailable);
+            }
+            ztermy::security::SensitiveByteArray proxySecret;
+            if (jump->proxy.credentialReference)
+            {
+                auto stored = vault.read({.profileId = *jump->proxy.credentialReference,
+                                          .kind = ztermy::security::CredentialKind::ProxyPassword});
+                if (!stored)
+                {
+                    return std::unexpected(stored.error() == ztermy::security::CredentialVaultError::Locked
+                                               ? TransferCredentialError::Locked
+                                               : TransferCredentialError::Unavailable);
+                }
+                proxySecret = std::move(*stored);
+            }
+            if (proxyRequiresCredential(*jump) && proxySecret.empty())
+            {
+                return std::unexpected(TransferCredentialError::Unavailable);
+            }
+            requests.push_back({
+                .profileId = utf8QString(jump->id),
+                .displayName = utf8QString(jump->name),
+                .host = utf8QString(jump->host),
+                .port = jump->port,
+                .username = utf8QString(jump->username),
+                .authentication = jump->authentication,
+                .privateKeyPath = utf8QString(jump->privateKeyPath),
+                .secret = std::move(secret),
+                .proxy = jump->proxy,
+                .proxySecret = std::move(proxySecret),
+            });
+        }
+        return requests;
+    }
+    catch (...)
+    {
+        return std::unexpected(TransferCredentialError::Unavailable);
+    }
+}
+
+[[nodiscard]] QVariantMap profileVariantMap(const ztermy::ssh::SshProfile &profile,
+                                            const std::vector<ztermy::ssh::SshProfile> &profiles,
+                                            const std::vector<ztermy::security::CredentialKey> *availableKeys)
+{
+    const bool credentialStored = profileHasStoredCredential(profile, availableKeys);
+    const bool proxyCredentialStored = profileHasStoredProxyCredential(profile, availableKeys);
+    QVariantList jumpProfileIds;
+    QVariantList jumpProfiles;
+    bool jumpProfilesReady = true;
+    bool connectionCredentialStored = credentialStored || proxyCredentialStored;
+    jumpProfileIds.reserve(static_cast<qsizetype>(profile.jumpProfileIds.size()));
+    jumpProfiles.reserve(static_cast<qsizetype>(profile.jumpProfileIds.size()));
+    for (const std::string &jumpId : profile.jumpProfileIds)
+    {
+        jumpProfileIds.append(utf8QString(jumpId));
+        const auto jump = std::ranges::find(profiles, jumpId, &ztermy::ssh::SshProfile::id);
+        if (jump == profiles.end())
+        {
+            jumpProfilesReady = false;
+            continue;
+        }
+        const bool jumpCredentialStored = profileHasStoredCredential(*jump, availableKeys);
+        const bool jumpProxyCredentialStored = profileHasStoredProxyCredential(*jump, availableKeys);
+        const bool ready = (!profileRequiresCredential(*jump) || jumpCredentialStored)
+                           && (!proxyRequiresCredential(*jump) || jumpProxyCredentialStored);
+        jumpProfilesReady = jumpProfilesReady && ready;
+        connectionCredentialStored = connectionCredentialStored || jumpCredentialStored || jumpProxyCredentialStored;
+        jumpProfiles.append(QVariantMap{
+            {QStringLiteral("id"), utf8QString(jump->id)},
+            {QStringLiteral("name"), utf8QString(jump->name)},
+            {QStringLiteral("endpoint"),
+             QStringLiteral("%1@%2:%3").arg(utf8QString(jump->username), utf8QString(jump->host)).arg(jump->port)},
+            {QStringLiteral("ready"), ready},
+        });
+    }
     QVariantMap result{
         {QStringLiteral("id"), utf8QString(profile.id)},
         {QStringLiteral("name"), utf8QString(profile.name)},
@@ -538,6 +688,10 @@ void removeLastUtf8CodePoint(QByteArray &value)
         {QStringLiteral("credentialStored"), credentialStored},
         {QStringLiteral("sessionOptions"), sessionOptionsVariantMap(profile.sessionOptions)},
         {QStringLiteral("proxy"), proxyOptionsVariantMap(profile.proxy, proxyCredentialStored)},
+        {QStringLiteral("jumpProfileIds"), jumpProfileIds},
+        {QStringLiteral("jumpProfiles"), jumpProfiles},
+        {QStringLiteral("jumpProfilesReady"), jumpProfilesReady},
+        {QStringLiteral("connectionCredentialStored"), connectionCredentialStored},
     };
     if (profile.lastConnectedUtcMs)
     {
@@ -1190,6 +1344,11 @@ bool AppController::hostKeyPromptVisible() const noexcept
     return m_hostKeyPromptVisible;
 }
 
+QString AppController::hostKeyEndpoint() const
+{
+    return m_hostKeyEndpoint;
+}
+
 QString AppController::hostKeyAlgorithm() const
 {
     return m_hostKeyAlgorithm;
@@ -1219,8 +1378,7 @@ QVariantList AppController::hostProfiles() const
     result.reserve(static_cast<qsizetype>(m_profiles.size()));
     for (const ssh::SshProfile &profile : m_profiles)
     {
-        result.append(profileVariantMap(profile, profileHasStoredCredential(profile, availableKeys),
-                                        profileHasStoredProxyCredential(profile, availableKeys)));
+        result.append(profileVariantMap(profile, m_profiles, availableKeys));
     }
     return result;
 }
@@ -1250,8 +1408,7 @@ QVariantList AppController::recentHostProfiles() const
     result.reserve(static_cast<qsizetype>(recent.size()));
     for (const ssh::SshProfile *profile : recent)
     {
-        result.append(profileVariantMap(*profile, profileHasStoredCredential(*profile, availableKeys),
-                                        profileHasStoredProxyCredential(*profile, availableKeys)));
+        result.append(profileVariantMap(*profile, m_profiles, availableKeys));
     }
     return result;
 }
@@ -3628,6 +3785,11 @@ AppController::sftpConnectionRequest(const TerminalTab &tab)
     {
         return std::unexpected(sftp::TransferCredentialError::Unavailable);
     }
+    auto jumpHosts = storedJumpHostRequests(*profile, m_profiles, m_credentialVaults->active());
+    if (!jumpHosts)
+    {
+        return std::unexpected(jumpHosts.error());
+    }
     return ssh::SshConnectionRequest{
         .host = utf8QString(profile->host),
         .port = profile->port,
@@ -3637,6 +3799,7 @@ AppController::sftpConnectionRequest(const TerminalTab &tab)
         .secret = std::move(secret),
         .proxy = profile->proxy,
         .proxySecret = std::move(proxySecret),
+        .jumpHosts = std::move(*jumpHosts),
         .knownHostsPath = m_knownHostsPath,
         .sessionOptions = profile->sessionOptions,
     };
@@ -3653,10 +3816,12 @@ sftp::TransferRequestProvider AppController::transferRequestProvider(const QStri
         };
     }
     ssh::SshProfile profile = *found;
+    std::vector<ssh::SshProfile> profiles = m_profiles;
     security::CredentialVault *vault = &m_credentialVaults->active();
     QString knownHostsPath = m_knownHostsPath;
-    return [profile = std::move(profile), vault, knownHostsPath = std::move(knownHostsPath)]() noexcept
-               -> std::expected<ssh::SshConnectionRequest, sftp::TransferCredentialError> {
+    return [profile = std::move(profile), profiles = std::move(profiles), vault,
+            knownHostsPath = std::move(
+                knownHostsPath)]() noexcept -> std::expected<ssh::SshConnectionRequest, sftp::TransferCredentialError> {
         try
         {
             security::SensitiveByteArray secret;
@@ -3694,6 +3859,11 @@ sftp::TransferRequestProvider AppController::transferRequestProvider(const QStri
             {
                 return std::unexpected(sftp::TransferCredentialError::Unavailable);
             }
+            auto jumpHosts = storedJumpHostRequests(profile, profiles, *vault);
+            if (!jumpHosts)
+            {
+                return std::unexpected(jumpHosts.error());
+            }
             return ssh::SshConnectionRequest{
                 .host = utf8QString(profile.host),
                 .port = profile.port,
@@ -3703,6 +3873,7 @@ sftp::TransferRequestProvider AppController::transferRequestProvider(const QStri
                 .secret = std::move(secret),
                 .proxy = profile.proxy,
                 .proxySecret = std::move(proxySecret),
+                .jumpHosts = std::move(*jumpHosts),
                 .knownHostsPath = knownHostsPath,
                 .sessionOptions = profile.sessionOptions,
             };
@@ -3737,37 +3908,41 @@ void AppController::initializeTransferManager()
                     {QStringLiteral("destinationSize"), QVariant::fromValue<qulonglong>(conflict->destinationSize)},
                 });
         });
-    QObject::connect(m_transferManager.get(), &sftp::TransferManager::hostKeyConfirmationRequired, this,
-                     [this](const QString &taskId, const QString &algorithm, const QString &fingerprint) {
-                         if (m_hostKeyPromptVisible)
-                         {
-                             m_transferManager->rejectHostKey(taskId);
-                             return;
-                         }
-                         m_hostKeyTransferTaskId = taskId;
-                         m_hostKeyTabId.clear();
-                         m_hostKeyForSftp = false;
-                         m_hostKeyChangedWarning = false;
-                         m_hostKeyAlgorithm = algorithm;
-                         m_hostKeyFingerprint = fingerprint;
-                         m_hostKeyPromptVisible = true;
-                         emit hostKeyPromptChanged();
-                     });
-    QObject::connect(m_transferManager.get(), &sftp::TransferManager::hostKeyChanged, this,
-                     [this](const QString &taskId, const QString &algorithm, const QString &fingerprint) {
-                         if (m_hostKeyPromptVisible)
-                         {
-                             return;
-                         }
-                         m_hostKeyTransferTaskId = taskId;
-                         m_hostKeyTabId.clear();
-                         m_hostKeyForSftp = false;
-                         m_hostKeyChangedWarning = true;
-                         m_hostKeyAlgorithm = algorithm;
-                         m_hostKeyFingerprint = fingerprint;
-                         m_hostKeyPromptVisible = true;
-                         emit hostKeyPromptChanged();
-                     });
+    QObject::connect(
+        m_transferManager.get(), &sftp::TransferManager::hostKeyConfirmationRequired, this,
+        [this](const QString &taskId, const QString &endpoint, const QString &algorithm, const QString &fingerprint) {
+            if (m_hostKeyPromptVisible)
+            {
+                m_transferManager->rejectHostKey(taskId);
+                return;
+            }
+            m_hostKeyTransferTaskId = taskId;
+            m_hostKeyTabId.clear();
+            m_hostKeyForSftp = false;
+            m_hostKeyChangedWarning = false;
+            m_hostKeyEndpoint = endpoint;
+            m_hostKeyAlgorithm = algorithm;
+            m_hostKeyFingerprint = fingerprint;
+            m_hostKeyPromptVisible = true;
+            emit hostKeyPromptChanged();
+        });
+    QObject::connect(
+        m_transferManager.get(), &sftp::TransferManager::hostKeyChanged, this,
+        [this](const QString &taskId, const QString &endpoint, const QString &algorithm, const QString &fingerprint) {
+            if (m_hostKeyPromptVisible)
+            {
+                return;
+            }
+            m_hostKeyTransferTaskId = taskId;
+            m_hostKeyTabId.clear();
+            m_hostKeyForSftp = false;
+            m_hostKeyChangedWarning = true;
+            m_hostKeyEndpoint = endpoint;
+            m_hostKeyAlgorithm = algorithm;
+            m_hostKeyFingerprint = fingerprint;
+            m_hostKeyPromptVisible = true;
+            emit hostKeyPromptChanged();
+        });
     QObject::connect(
         m_transferManager.get(), &sftp::TransferManager::recoveryError, this, [this](const QString &errorCode) {
             emit transferNotificationRequested({
@@ -3972,11 +4147,13 @@ bool AppController::saveHostProfileWithCredential(const QString &id, const QStri
                                                   const bool privateKeyPassphraseRequired, const QString &group,
                                                   const QString &secret, const bool rememberCredential,
                                                   const QVariantMap &sessionOptions, const QVariantMap &proxyOptions,
-                                                  const QString &proxySecret, const bool rememberProxyCredential)
+                                                  const QString &proxySecret, const bool rememberProxyCredential,
+                                                  const QVariantMap &routeOptions)
 {
     return saveHostProfileInternal(id, name, host, port, username, authentication, privateKeyPath,
                                    privateKeyPassphraseRequired, group, secret, rememberCredential, true,
-                                   sessionOptions, proxyOptions, proxySecret, rememberProxyCredential, true);
+                                   sessionOptions, proxyOptions, proxySecret, rememberProxyCredential, true,
+                                   routeOptions);
 }
 
 bool AppController::saveAndConnectHostProfile(const QString &id, const QString &name, const QString &host,
@@ -3985,13 +4162,13 @@ bool AppController::saveAndConnectHostProfile(const QString &id, const QString &
                                               const QString &group, const QString &secret,
                                               const bool rememberCredential, const QVariantMap &sessionOptions,
                                               const QVariantMap &proxyOptions, const QString &proxySecret,
-                                              const bool rememberProxyCredential)
+                                              const bool rememberProxyCredential, const QVariantMap &routeOptions)
 {
     const QString profileId =
         id.trimmed().isEmpty() ? QUuid::createUuid().toString(QUuid::WithoutBraces) : id.trimmed();
     if (!saveHostProfileInternal(profileId, name, host, port, username, authentication, privateKeyPath,
                                  privateKeyPassphraseRequired, group, secret, rememberCredential, true, sessionOptions,
-                                 proxyOptions, proxySecret, rememberProxyCredential, true))
+                                 proxyOptions, proxySecret, rememberProxyCredential, true, routeOptions))
     {
         return false;
     }
@@ -4018,7 +4195,8 @@ bool AppController::saveHostProfileInternal(const QString &id, const QString &na
                                             const QString &group, const QString &secret, const bool rememberCredential,
                                             const bool manageCredential, const QVariantMap &sessionOptions,
                                             const QVariantMap &proxyOptions, const QString &proxySecret,
-                                            const bool rememberProxyCredential, const bool manageProxyCredential)
+                                            const bool rememberProxyCredential, const bool manageProxyCredential,
+                                            const QVariantMap &routeOptions)
 {
     const QString normalizedHost = host.trimmed();
     const QString normalizedName = name.trimmed().isEmpty() ? normalizedHost : name.trimmed();
@@ -4058,6 +4236,14 @@ bool AppController::saveHostProfileInternal(const QString &id, const QString &na
         }
         resolvedProxy = std::move(*merged);
     }
+    auto resolvedJumpProfileIds = mergeJumpProfileIds(
+        routeOptions, storedProfile == m_profiles.end() ? std::vector<std::string>{} : storedProfile->jumpProfileIds,
+        storedProfileId, m_profiles);
+    if (!resolvedJumpProfileIds)
+    {
+        setCredentialOperationError(tr("Select up to three distinct saved jump hosts."));
+        return false;
+    }
 
     ssh::SshProfile profile{
         .id = storedProfileId,
@@ -4074,6 +4260,7 @@ bool AppController::saveHostProfileInternal(const QString &id, const QString &na
             *authenticationMethod == ssh::SshAuthenticationMethod::PrivateKey && privateKeyPassphraseRequired,
         .sessionOptions = std::move(resolvedSessionOptions),
         .proxy = std::move(resolvedProxy),
+        .jumpProfileIds = std::move(*resolvedJumpProfileIds),
     };
     if (!ssh::validSshProfile(profile))
     {
@@ -4241,6 +4428,15 @@ bool AppController::deleteHostProfile(const QString &id)
     const auto profile = std::ranges::find(updated, profileId, &ssh::SshProfile::id);
     if (profile == updated.end())
     {
+        return false;
+    }
+    const auto dependent = std::ranges::find_if(updated, [&profileId](const ssh::SshProfile &candidate) {
+        return std::ranges::find(candidate.jumpProfileIds, profileId) != candidate.jumpProfileIds.end();
+    });
+    if (dependent != updated.end())
+    {
+        setCredentialOperationError(tr("Remove this host from the jump-host chain of \"%1\" before deleting it.")
+                                        .arg(utf8QString(dependent->name)));
         return false;
     }
     const std::optional<security::CredentialKey> key =
@@ -4503,6 +4699,68 @@ std::optional<ssh::SshConnectionRequest> AppController::connectionRequestForProf
         setCredentialOperationError(tr("Enter the credential required by this proxy."));
         return std::nullopt;
     }
+    std::vector<ssh::SshJumpHostRequest> jumpHosts;
+    jumpHosts.reserve(profile.jumpProfileIds.size());
+    for (const std::string &jumpProfileId : profile.jumpProfileIds)
+    {
+        const auto jump = std::ranges::find(m_profiles, jumpProfileId, &ssh::SshProfile::id);
+        if (jump == m_profiles.end())
+        {
+            setCredentialOperationError(tr("A configured jump host no longer exists."));
+            return std::nullopt;
+        }
+
+        security::SensitiveByteArray jumpSecret;
+        if (jump->credentialReference)
+        {
+            auto stored = m_credentialVaults->active().read(
+                {.profileId = *jump->credentialReference, .kind = credentialKind(*jump)});
+            if (!stored)
+            {
+                setCredentialOperationError(credentialVaultErrorMessage(stored.error()));
+                return std::nullopt;
+            }
+            jumpSecret = std::move(*stored);
+        }
+        if (profileRequiresCredential(*jump) && jumpSecret.empty())
+        {
+            setCredentialOperationError(
+                tr("Save the credential for jump host \"%1\" before using this chain.").arg(utf8QString(jump->name)));
+            return std::nullopt;
+        }
+
+        security::SensitiveByteArray jumpProxySecret;
+        if (jump->proxy.credentialReference)
+        {
+            auto stored = m_credentialVaults->active().read(
+                {.profileId = *jump->proxy.credentialReference, .kind = security::CredentialKind::ProxyPassword});
+            if (!stored)
+            {
+                setCredentialOperationError(credentialVaultErrorMessage(stored.error()));
+                return std::nullopt;
+            }
+            jumpProxySecret = std::move(*stored);
+        }
+        if (proxyRequiresCredential(*jump) && jumpProxySecret.empty())
+        {
+            setCredentialOperationError(tr("Save the proxy credential for jump host \"%1\" before using this chain.")
+                                            .arg(utf8QString(jump->name)));
+            return std::nullopt;
+        }
+
+        jumpHosts.push_back({
+            .profileId = utf8QString(jump->id),
+            .displayName = utf8QString(jump->name),
+            .host = utf8QString(jump->host),
+            .port = jump->port,
+            .username = utf8QString(jump->username),
+            .authentication = jump->authentication,
+            .privateKeyPath = utf8QString(jump->privateKeyPath),
+            .secret = std::move(jumpSecret),
+            .proxy = jump->proxy,
+            .proxySecret = std::move(jumpProxySecret),
+        });
+    }
     return ssh::SshConnectionRequest{
         .host = utf8QString(profile.host),
         .port = profile.port,
@@ -4512,6 +4770,7 @@ std::optional<ssh::SshConnectionRequest> AppController::connectionRequestForProf
         .secret = std::move(connectionSecret),
         .proxy = profile.proxy,
         .proxySecret = std::move(connectionProxySecret),
+        .jumpHosts = std::move(jumpHosts),
         .knownHostsPath = m_knownHostsPath,
         .sessionOptions = profile.sessionOptions,
     };
@@ -5173,18 +5432,18 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
                          }
                      });
     QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::hostKeyConfirmationRequired, this,
-                     [this, tabId](const QString &algorithm, const QString &fingerprint) {
+                     [this, tabId](const QString &endpoint, const QString &algorithm, const QString &fingerprint) {
                          m_hostKeyTabId = tabId;
                          m_hostKeyForSftp = false;
                          activateTerminalTab(tabId);
-                         setHostKeyPrompt(algorithm, fingerprint, false);
+                         setHostKeyPrompt(endpoint, algorithm, fingerprint, false);
                      });
     QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::hostKeyChanged, this,
-                     [this, tabId](const QString &algorithm, const QString &fingerprint) {
+                     [this, tabId](const QString &endpoint, const QString &algorithm, const QString &fingerprint) {
                          m_hostKeyTabId = tabId;
                          m_hostKeyForSftp = false;
                          activateTerminalTab(tabId);
-                         setHostKeyPrompt(algorithm, fingerprint, true);
+                         setHostKeyPrompt(endpoint, algorithm, fingerprint, true);
                          if (m_terminal != nullptr)
                          {
                              m_terminal->setStatusText(tr("SSH host key changed; connection blocked"));
@@ -5320,18 +5579,18 @@ void AppController::connectSftpTabSignals(TerminalTab &tab)
                          }
                      });
     QObject::connect(tab.sftpSession.get(), &sftp::SftpSession::hostKeyConfirmationRequired, this,
-                     [this, tabId](const QString &algorithm, const QString &fingerprint) {
+                     [this, tabId](const QString &endpoint, const QString &algorithm, const QString &fingerprint) {
                          m_hostKeyTabId = tabId;
                          m_hostKeyForSftp = true;
                          activateTerminalTab(tabId);
-                         setHostKeyPrompt(algorithm, fingerprint, false);
+                         setHostKeyPrompt(endpoint, algorithm, fingerprint, false);
                      });
     QObject::connect(tab.sftpSession.get(), &sftp::SftpSession::hostKeyChanged, this,
-                     [this, tabId](const QString &algorithm, const QString &fingerprint) {
+                     [this, tabId](const QString &endpoint, const QString &algorithm, const QString &fingerprint) {
                          m_hostKeyTabId = tabId;
                          m_hostKeyForSftp = true;
                          activateTerminalTab(tabId);
-                         setHostKeyPrompt(algorithm, fingerprint, true);
+                         setHostKeyPrompt(endpoint, algorithm, fingerprint, true);
                      });
 }
 
@@ -5708,8 +5967,9 @@ void AppController::replayRecordedScriptStep(const QString &tabId, const std::si
     });
 }
 
-void AppController::setHostKeyPrompt(QString algorithm, QString fingerprint, const bool changed)
+void AppController::setHostKeyPrompt(QString endpoint, QString algorithm, QString fingerprint, const bool changed)
 {
+    m_hostKeyEndpoint = std::move(endpoint);
     m_hostKeyAlgorithm = std::move(algorithm);
     m_hostKeyFingerprint = std::move(fingerprint);
     m_hostKeyPromptVisible = true;
@@ -5720,7 +5980,7 @@ void AppController::setHostKeyPrompt(QString algorithm, QString fingerprint, con
 void AppController::clearHostKeyPrompt()
 {
     if (!m_hostKeyPromptVisible && m_hostKeyTabId.isEmpty() && m_hostKeyTransferTaskId.isEmpty()
-        && m_hostKeyAlgorithm.isEmpty() && m_hostKeyFingerprint.isEmpty())
+        && m_hostKeyEndpoint.isEmpty() && m_hostKeyAlgorithm.isEmpty() && m_hostKeyFingerprint.isEmpty())
     {
         return;
     }
@@ -5729,6 +5989,7 @@ void AppController::clearHostKeyPrompt()
     m_hostKeyForSftp = false;
     m_hostKeyTransferTaskId.clear();
     m_hostKeyTabId.clear();
+    m_hostKeyEndpoint.clear();
     m_hostKeyAlgorithm.clear();
     m_hostKeyFingerprint.clear();
     emit hostKeyPromptChanged();

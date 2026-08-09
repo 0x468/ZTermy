@@ -77,9 +77,17 @@ the next transport is introduced.
   storage, schema migration, connection-bootstrap composition, compact profile
   UX, saved-profile credential prompts, SFTP/transfer reuse, and Simplified
   Chinese localization are complete. A live SOCKS5 gate authenticated to the
-  authorized host through a temporary OpenSSH dynamic forward. ProxyJump
-  composition remains.
-- Phase 6 remains after phase 5 composition before V2.9 acceptance.
+  authorized host through a temporary OpenSSH dynamic forward. Native
+  ProxyJump composition is also complete: schema v6 stores an ordered route of
+  at most three saved profiles, nested `direct-tcpip` transports authenticate
+  every hop, all host-key prompts identify the exact endpoint, and terminal,
+  SFTP, transfer, and reconnect request providers share the route.
+- Phase 6 automated evidence is complete: direct and nested bootstrap paths,
+  failure/cancellation/secret-clearing behavior, Debug and static Release
+  suites, executable metadata, portable packaging, MSI static contract, and
+  release checksums pass. The environment-dependent Windows Agent success and
+  native-window visual checks remain explicitly retained for manual acceptance
+  rather than being reported as executed.
 
 ## Acceptance boundary
 

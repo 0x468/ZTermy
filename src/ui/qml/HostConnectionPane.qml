@@ -28,6 +28,7 @@ Rectangle {
     property bool nameWasAutoFilled: false
     property bool editingCredentialStored: false
     property bool editingProxyCredentialStored: false
+    property var jumpProfileIds: []
     property var pendingQuickTarget: ({})
     property string quickConnectMessage: ""
     property bool quickConnectMessageIsError: false
@@ -121,6 +122,63 @@ Rectangle {
             port: port,
             username: proxyUsernameField.text.trim()
         };
+    }
+
+    function routeOptionsMap() {
+        return {
+            jumpProfileIds: jumpProfileIds.slice(0)
+        };
+    }
+
+    function availableJumpProfiles() {
+        const result = [];
+        for (const profile of controller.hostProfiles) {
+            if (profile.id !== editingProfileId && jumpProfileIds.indexOf(profile.id) < 0) {
+                result.push({
+                    id: profile.id,
+                    label: profile.name + "  ·  " + profile.username + "@" + profile.host + ":" + profile.port
+                });
+            }
+        }
+        return result;
+    }
+
+    function jumpProfile(profileId) {
+        for (const profile of controller.hostProfiles) {
+            if (profile.id === profileId) {
+                return profile;
+            }
+        }
+        return null;
+    }
+
+    function addJumpProfile() {
+        const options = availableJumpProfiles();
+        if (jumpProfileIds.length >= 3 || jumpProfileBox.currentIndex < 0 || jumpProfileBox.currentIndex >= options.length) {
+            return;
+        }
+        const updated = jumpProfileIds.slice(0);
+        updated.push(options[jumpProfileBox.currentIndex].id);
+        jumpProfileIds = updated;
+        jumpProfileBox.currentIndex = availableJumpProfiles().length > 0 ? 0 : -1;
+    }
+
+    function removeJumpProfile(index) {
+        const updated = jumpProfileIds.slice(0);
+        updated.splice(index, 1);
+        jumpProfileIds = updated;
+    }
+
+    function moveJumpProfile(index, delta) {
+        const target = index + delta;
+        if (target < 0 || target >= jumpProfileIds.length) {
+            return;
+        }
+        const updated = jumpProfileIds.slice(0);
+        const value = updated[index];
+        updated[index] = updated[target];
+        updated[target] = value;
+        jumpProfileIds = updated;
     }
 
     function sessionOptionsMap() {
@@ -318,6 +376,7 @@ Rectangle {
         proxyCredentialField.passwordVisible = false;
         rememberProxyCredentialSwitch.checked = true;
         editingProxyCredentialStored = false;
+        jumpProfileIds = [];
         terminalTypeField.text = "xterm-256color";
         keepaliveIntervalField.text = "0";
         keepaliveThresholdField.text = "3";
@@ -411,6 +470,7 @@ Rectangle {
         proxyCredentialField.text = "";
         rememberProxyCredentialSwitch.checked = true;
         editingProxyCredentialStored = proxy.credentialStored === true;
+        jumpProfileIds = profile.jumpProfileIds ? profile.jumpProfileIds.slice(0) : [];
         const options = profile.sessionOptions || {};
         terminalTypeField.text = options.terminalType || "xterm-256color";
         keepaliveIntervalField.text = String(options.keepaliveIntervalSeconds === undefined ? 0 : options.keepaliveIntervalSeconds);
@@ -443,7 +503,7 @@ Rectangle {
             advancedExpanded = true;
             return;
         }
-        if (controller.saveHostProfileWithCredential(editingProfileId, nameField.text, hostField.text, portNumber(), usernameField.text, authenticationToken(), keyPathField.text, passphraseRequiredBox.checked, groupField.text, credentialField.text, rememberCredentialSwitch.checked, sessionOptions, proxyOptions, proxyCredentialField.text, rememberProxyCredentialSwitch.checked)) {
+        if (controller.saveHostProfileWithCredential(editingProfileId, nameField.text, hostField.text, portNumber(), usernameField.text, authenticationToken(), keyPathField.text, passphraseRequiredBox.checked, groupField.text, credentialField.text, rememberCredentialSwitch.checked, sessionOptions, proxyOptions, proxyCredentialField.text, rememberProxyCredentialSwitch.checked, routeOptionsMap())) {
             clearEditor();
             editorExpanded = false;
             showStatus(qsTr("Profile and credential preferences saved."), false);
@@ -471,7 +531,7 @@ Rectangle {
         const proxySecret = proxyCredentialField.text;
         credentialField.text = "";
         proxyCredentialField.text = "";
-        const started = controller.saveAndConnectHostProfile(editingProfileId, nameField.text, hostField.text, portNumber(), usernameField.text, authenticationToken(), keyPathField.text, passphraseRequiredBox.checked, groupField.text, secret, rememberCredentialSwitch.checked, sessionOptions, proxyOptions, proxySecret, rememberProxyCredentialSwitch.checked);
+        const started = controller.saveAndConnectHostProfile(editingProfileId, nameField.text, hostField.text, portNumber(), usernameField.text, authenticationToken(), keyPathField.text, passphraseRequiredBox.checked, groupField.text, secret, rememberCredentialSwitch.checked, sessionOptions, proxyOptions, proxySecret, rememberProxyCredentialSwitch.checked, routeOptionsMap());
         if (started) {
             clearEditor();
             editorExpanded = false;
@@ -482,6 +542,10 @@ Rectangle {
     }
 
     function connectSaved(profile, sourceItem) {
+        if (profile.jumpProfilesReady === false) {
+            showStatus(qsTr("Save the required credentials in every jump profile before connecting."), true);
+            return;
+        }
         const needsHostCredential = (profile.authentication === "password" || profile.privateKeyPassphraseRequired) && !profile.credentialStored;
         const proxy = profile.proxy || {};
         const needsProxyCredential = proxy.type !== "none" && (proxy.username || "").length > 0 && !proxy.credentialStored;
@@ -491,7 +555,7 @@ Rectangle {
         pendingConnectNeedsHostCredential = needsHostCredential;
         pendingConnectNeedsProxyCredential = needsProxyCredential;
 
-        if (profile.credentialStored || proxy.credentialStored === true) {
+        if (profile.connectionCredentialStored === true) {
             if (controller.effectiveCredentialStorage === "portable" && controller.portableVaultLocked) {
                 portableUnlockDialog.focusRestoreItem = sourceItem;
                 portableUnlockPassword.text = "";
@@ -1443,6 +1507,147 @@ Rectangle {
                                         y: 12
                                         width: Math.max(0, parent.width - 24)
                                         spacing: 10
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: qsTr("Jump hosts")
+                                            color: pane.textColor
+                                            font.family: Theme.uiFont
+                                            font.pixelSize: Theme.textBody
+                                            font.weight: Font.DemiBold
+                                        }
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: qsTr("Route this connection through up to three saved SSH profiles, in order.")
+                                            color: pane.mutedColor
+                                            font.family: Theme.uiFont
+                                            font.pixelSize: Theme.textLabel
+                                            wrapMode: Text.WordWrap
+                                        }
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 6
+
+                                            Repeater {
+                                                model: pane.jumpProfileIds
+
+                                                delegate: Rectangle {
+                                                    id: jumpHostRow
+
+                                                    required property int index
+                                                    required property string modelData
+                                                    readonly property var profile: pane.jumpProfile(modelData)
+
+                                                    Layout.fillWidth: true
+                                                    implicitHeight: 42
+                                                    radius: Theme.radiusSmall
+                                                    color: Theme.controlBackground
+                                                    border.color: pane.borderColor
+
+                                                    RowLayout {
+                                                        anchors.fill: parent
+                                                        anchors.leftMargin: 10
+                                                        anchors.rightMargin: 6
+                                                        spacing: 6
+
+                                                        Text {
+                                                            text: String(jumpHostRow.index + 1)
+                                                            color: pane.accentColor
+                                                            font.family: Theme.uiFont
+                                                            font.pixelSize: Theme.textLabel
+                                                            font.weight: Font.DemiBold
+                                                        }
+                                                        ColumnLayout {
+                                                            Layout.fillWidth: true
+                                                            spacing: 0
+                                                            Text {
+                                                                Layout.fillWidth: true
+                                                                text: jumpHostRow.profile ? jumpHostRow.profile.name : qsTr("Missing profile")
+                                                                color: pane.textColor
+                                                                elide: Text.ElideRight
+                                                                font.family: Theme.uiFont
+                                                                font.pixelSize: Theme.textBody
+                                                                font.weight: Font.Medium
+                                                            }
+                                                            Text {
+                                                                Layout.fillWidth: true
+                                                                text: jumpHostRow.profile ? jumpHostRow.profile.username + "@" + jumpHostRow.profile.host + ":" + jumpHostRow.profile.port : jumpHostRow.modelData
+                                                                color: pane.mutedColor
+                                                                elide: Text.ElideMiddle
+                                                                font.family: Theme.uiFont
+                                                                font.pixelSize: Theme.textLabel
+                                                            }
+                                                        }
+                                                        ToolButton {
+                                                            enabled: jumpHostRow.index > 0
+                                                            Accessible.name: qsTr("Move jump host earlier")
+                                                            onClicked: pane.moveJumpProfile(jumpHostRow.index, -1)
+                                                            contentItem: AppIcon {
+                                                                name: "chevron-up"
+                                                                color: parent.enabled ? pane.textColor : Theme.textSubtle
+                                                            }
+                                                        }
+                                                        ToolButton {
+                                                            enabled: jumpHostRow.index + 1 < pane.jumpProfileIds.length
+                                                            Accessible.name: qsTr("Move jump host later")
+                                                            onClicked: pane.moveJumpProfile(jumpHostRow.index, 1)
+                                                            contentItem: AppIcon {
+                                                                name: "chevron-down"
+                                                                color: parent.enabled ? pane.textColor : Theme.textSubtle
+                                                            }
+                                                        }
+                                                        ToolButton {
+                                                            Accessible.name: qsTr("Remove jump host")
+                                                            onClicked: pane.removeJumpProfile(jumpHostRow.index)
+                                                            contentItem: AppIcon {
+                                                                name: "close"
+                                                                color: pane.textColor
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            RowLayout {
+                                                Layout.fillWidth: true
+                                                visible: pane.jumpProfileIds.length < 3 && pane.availableJumpProfiles().length > 0
+                                                spacing: 8
+
+                                                AppComboBox {
+                                                    id: jumpProfileBox
+                                                    objectName: "hostJumpProfile"
+                                                    Layout.fillWidth: true
+                                                    model: pane.availableJumpProfiles()
+                                                    textRole: "label"
+                                                    valueRole: "id"
+                                                    currentIndex: model.length > 0 ? 0 : -1
+                                                    accessibleName: qsTr("Saved SSH profile to use as a jump host")
+                                                }
+                                                ActionButton {
+                                                    text: qsTr("Add")
+                                                    accessibleName: qsTr("Add selected jump host")
+                                                    onClicked: pane.addJumpProfile()
+                                                }
+                                            }
+
+                                            Text {
+                                                Layout.fillWidth: true
+                                                visible: pane.jumpProfileIds.length > 0
+                                                text: qsTr("Jump profiles that require credentials must store them before this chain can connect.")
+                                                color: pane.mutedColor
+                                                wrapMode: Text.WordWrap
+                                                font.family: Theme.uiFont
+                                                font.pixelSize: Theme.textLabel
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 1
+                                            color: pane.borderColor
+                                        }
 
                                         Text {
                                             Layout.fillWidth: true

@@ -66,8 +66,8 @@ signals:
     void homeDirectoryReady(const QString &remotePath);
     void sshPhaseChanged(ztermy::ssh::SshConnectionPhase phase);
     void connectionFailed(ztermy::ssh::SshFailureKind failure);
-    void hostKeyConfirmationRequired(const QString &algorithm, const QString &fingerprint);
-    void hostKeyChanged(const QString &algorithm, const QString &fingerprint);
+    void hostKeyConfirmationRequired(const QString &endpoint, const QString &algorithm, const QString &fingerprint);
+    void hostKeyChanged(const QString &endpoint, const QString &algorithm, const QString &fingerprint);
     void directoryReady(quint64 requestId, quint64 generation, const QString &remotePath,
                         ztermy::sftp::DirectoryListingPtr entries);
     void treeDirectoryReady(quint64 requestId, quint64 generation, const QString &remotePath,
@@ -84,8 +84,8 @@ private slots:
     void deliverHomeDirectory(const QString &remotePath);
     void deliverPhase(ztermy::ssh::SshConnectionPhase phase);
     void deliverConnectionFailure(ztermy::ssh::SshFailureKind failure);
-    void deliverHostKeyConfirmation(const QString &algorithm, const QString &fingerprint);
-    void deliverHostKeyChange(const QString &algorithm, const QString &fingerprint);
+    void deliverHostKeyConfirmation(const QString &endpoint, const QString &algorithm, const QString &fingerprint);
+    void deliverHostKeyChange(const QString &endpoint, const QString &algorithm, const QString &fingerprint);
     void deliverDirectory(quint64 requestId, quint64 generation, const QString &remotePath,
                           ztermy::sftp::DirectoryListingPtr entries);
     void deliverTreeDirectory(quint64 requestId, quint64 generation, const QString &remotePath,
@@ -150,8 +150,8 @@ private:
     void postHomeDirectory(const QString &remotePath);
     void postPhase(ssh::SshConnectionPhase phase);
     void postConnectionFailure(ssh::SshFailureKind failure);
-    void postHostKeyConfirmation(const QString &algorithm, const QString &fingerprint);
-    void postHostKeyChange(const QString &algorithm, const QString &fingerprint);
+    void postHostKeyConfirmation(const QString &endpoint, const QString &algorithm, const QString &fingerprint);
+    void postHostKeyChange(const QString &endpoint, const QString &algorithm, const QString &fingerprint);
     void postDirectory(quint64 requestId, quint64 generation, const QString &remotePath, DirectoryListingPtr entries);
     void postTreeDirectory(quint64 requestId, quint64 generation, const QString &remotePath,
                            DirectoryListingPtr entries);
