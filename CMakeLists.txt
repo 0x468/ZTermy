@@ -804,6 +804,14 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS TelemetrySparkline.qml
 )
 set_source_files_properties(
+    src/ui/qml/ScriptEditor.qml
+    PROPERTIES QT_RESOURCE_ALIAS ScriptEditor.qml
+)
+set_source_files_properties(
+    src/ui/qml/ScriptRunPane.qml
+    PROPERTIES QT_RESOURCE_ALIAS ScriptRunPane.qml
+)
+set_source_files_properties(
     src/ui/qml/TerminalWorkbench.qml
     PROPERTIES QT_RESOURCE_ALIAS TerminalWorkbench.qml
 )
@@ -863,6 +871,8 @@ qt_add_qml_module(ztermy
         src/ui/qml/Main.qml
         src/ui/qml/ReleaseIdentityCard.qml
         src/ui/qml/RemoteTelemetryStrip.qml
+        src/ui/qml/ScriptEditor.qml
+        src/ui/qml/ScriptRunPane.qml
         src/ui/qml/SectionCard.qml
         src/ui/qml/SettingsPane.qml
         src/ui/qml/SftpBrowser.qml

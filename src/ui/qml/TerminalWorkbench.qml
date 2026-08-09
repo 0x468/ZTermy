@@ -17,6 +17,7 @@ Rectangle {
     property string pendingDeleteName: ""
     property string historyScope: "profile"
     property string appliedHistorySearch: ""
+    property string scriptSurface: "library"
     readonly property string currentPage: activeTab ? activeTab.workbenchPage : "history"
     readonly property var historySource: historyScope === "global" ? controller.terminalGlobalHistory : controller.terminalHistory
     readonly property var filteredQuickCommands: {
@@ -138,22 +139,21 @@ Rectangle {
     focus: visible
     Keys.onEscapePressed: closeRequested()
     Accessible.role: Accessible.Pane
-    Accessible.name: currentPage === "sftp" ? qsTr("SFTP file browser") : currentPage === "history" ? qsTr("Command history") : qsTr("Command snippets")
+    Accessible.name: currentPage === "sftp" ? qsTr("SFTP file browser") : currentPage === "history" ? qsTr("Command history") : qsTr("Scripts")
     onVisibleChanged: {
         if (visible && currentPage === "history" && controller.terminalHistoryState === "idle") {
             controller.refreshTerminalHistory();
         }
     }
+    onCurrentPageChanged: {
+        if (currentPage !== "scripts") {
+            scriptSurface = "library";
+        }
+    }
 
     function beginNewCommand(prefill) {
-        const command = prefill || "";
-        commandEditor.editingId = "";
-        commandName.text = command.length > 0 ? command.split("\n")[0].slice(0, 64) : "";
-        commandText.text = command;
-        commandDescription.text = "";
-        commandShell.currentIndex = 0;
-        commandEditor.visible = true;
-        Qt.callLater(commandName.forceActiveFocus);
+        scriptEditor.beginNew(prefill || "");
+        scriptSurface = "editor";
     }
 
     function saveHistoryCommand(command) {
@@ -162,13 +162,13 @@ Rectangle {
     }
 
     function beginEditCommand(command) {
-        commandEditor.editingId = command.id;
-        commandName.text = command.name;
-        commandText.text = command.command;
-        commandDescription.text = command.description;
-        commandShell.currentIndex = command.shell === "posix" ? 1 : command.shell === "powershell" ? 2 : 0;
-        commandEditor.visible = true;
-        Qt.callLater(commandName.forceActiveFocus);
+        scriptEditor.beginEdit(command);
+        scriptSurface = "editor";
+    }
+
+    function beginRunScript(command) {
+        scriptRunPane.begin(command);
+        scriptSurface = "run";
     }
 
     function requestDeleteCommand(command, focusItem) {
@@ -289,7 +289,7 @@ Rectangle {
                     checked: workbench.currentPage === "scripts"
                     selected: checked
                     onClicked: workbench.controller.toggleTerminalWorkbench("scripts")
-                    Accessible.name: qsTr("Command snippets")
+                    Accessible.name: qsTr("Scripts")
                     contentItem: AppIcon {
                         name: "commands"
                         color: quickCommandsPageButton.checked ? Theme.accent : Theme.textSoft
@@ -547,7 +547,7 @@ Rectangle {
                                         }
 
                                         AppToolTip {
-                                            text: qsTr("Save as code snippet")
+                                            text: qsTr("Save as script")
                                         }
                                     }
                                 }
@@ -593,6 +593,7 @@ Rectangle {
                     RowLayout {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 26
+                        visible: workbench.scriptSurface === "library"
                         spacing: 6
 
                         AppIcon {
@@ -603,7 +604,7 @@ Rectangle {
                         }
 
                         Text {
-                            text: qsTr("Code snippets")
+                            text: qsTr("Scripts")
                             color: Theme.text
                             font.family: Theme.uiFont
                             font.pixelSize: Theme.textCompact
@@ -627,7 +628,7 @@ Rectangle {
                             Layout.preferredWidth: 28
                             Layout.preferredHeight: 26
                             onClicked: scriptLibraryMenu.open()
-                            Accessible.name: qsTr("Command snippet library actions")
+                            Accessible.name: qsTr("Script library actions")
                             contentItem: AppIcon {
                                 name: "more"
                                 color: Theme.textSoft
@@ -654,6 +655,7 @@ Rectangle {
 
                     RowLayout {
                         Layout.fillWidth: true
+                        visible: workbench.scriptSurface === "library"
                         spacing: 8
 
                         AppTextField {
@@ -661,15 +663,15 @@ Rectangle {
 
                             Layout.fillWidth: true
                             compact: true
-                            placeholderText: qsTr("Search command snippets")
-                            accessibleName: qsTr("Search command snippets")
+                            placeholderText: qsTr("Search scripts")
+                            accessibleName: qsTr("Search scripts")
                         }
 
                         WorkbenchToolButton {
                             Layout.preferredWidth: 32
                             Layout.preferredHeight: 32
                             onClicked: workbench.beginNewCommand("")
-                            Accessible.name: qsTr("New code snippet")
+                            Accessible.name: qsTr("New script")
                             contentItem: AppIcon {
                                 name: "plus"
                                 color: Theme.text
@@ -677,104 +679,31 @@ Rectangle {
                         }
                     }
 
-                    Rectangle {
-                        id: commandEditor
-
-                        property string editingId: ""
+                    ScriptEditor {
+                        id: scriptEditor
 
                         Layout.fillWidth: true
-                        Layout.preferredHeight: visible ? 246 : 0
-                        visible: false
-                        radius: Theme.radiusControl
-                        color: Theme.raisedBackground
-                        border.color: Theme.border
+                        Layout.fillHeight: true
+                        visible: workbench.scriptSurface === "editor"
+                        controller: workbench.controller
+                        onClosed: workbench.scriptSurface = "library"
+                        onSaved: workbench.scriptSurface = "library"
+                    }
 
-                        ColumnLayout {
-                            anchors.fill: parent
-                            anchors.margins: 10
-                            spacing: 7
+                    ScriptRunPane {
+                        id: scriptRunPane
 
-                            AppTextField {
-                                id: commandName
-
-                                Layout.fillWidth: true
-                                compact: true
-                                placeholderText: qsTr("Snippet name")
-                                accessibleName: qsTr("Code snippet name")
-                            }
-
-                            ScrollView {
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: 74
-                                clip: true
-
-                                TextArea {
-                                    id: commandText
-
-                                    placeholderText: qsTr("Command or multiline shell text")
-                                    color: Theme.text
-                                    placeholderTextColor: Theme.textMuted
-                                    selectionColor: Theme.accent
-                                    selectedTextColor: Theme.accentText
-                                    wrapMode: TextEdit.NoWrap
-                                    font.family: Theme.terminalFont
-                                    font.pixelSize: Theme.textBody
-                                    Accessible.name: qsTr("Code snippet command")
-                                    background: Rectangle {
-                                        radius: Theme.radiusSmall
-                                        color: Theme.fieldBackground
-                                        border.color: commandText.activeFocus ? Theme.focus : Theme.border
-                                    }
-                                }
-                            }
-
-                            AppTextField {
-                                id: commandDescription
-
-                                Layout.fillWidth: true
-                                compact: true
-                                placeholderText: qsTr("Description (optional)")
-                                accessibleName: qsTr("Code snippet description")
-                            }
-
-                            AppComboBox {
-                                id: commandShell
-
-                                Layout.fillWidth: true
-                                model: ["any", "posix", "powershell"]
-                                displayTextModel: [qsTr("Any shell"), qsTr("POSIX shell"), qsTr("PowerShell")]
-                                accessibleName: qsTr("Code snippet shell scope")
-                            }
-
-                            RowLayout {
-                                Layout.fillWidth: true
-
-                                Item {
-                                    Layout.fillWidth: true
-                                }
-
-                                ActionButton {
-                                    text: qsTr("Cancel")
-                                    onClicked: commandEditor.visible = false
-                                }
-
-                                ActionButton {
-                                    text: qsTr("Save")
-                                    variant: "primary"
-                                    enabled: commandName.text.trim().length > 0 && commandText.text.trim().length > 0
-                                    onClicked: {
-                                        const shell = commandShell.currentIndex === 1 ? "posix" : commandShell.currentIndex === 2 ? "powershell" : "any";
-                                        if (workbench.controller.saveQuickCommand(commandEditor.editingId, commandName.text, commandText.text, commandDescription.text, shell)) {
-                                            commandEditor.visible = false;
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        visible: workbench.scriptSurface === "run"
+                        controller: workbench.controller
+                        activeTab: workbench.activeTab
+                        onClosed: workbench.scriptSurface = "library"
                     }
 
                     StatusMessage {
                         Layout.fillWidth: true
+                        visible: workbench.scriptSurface === "library"
                         kind: "error"
                         text: workbench.controller.quickCommandOperationError
                     }
@@ -789,7 +718,7 @@ Rectangle {
                         model: workbench.filteredQuickCommands
                         keyNavigationEnabled: true
                         activeFocusOnTab: true
-                        visible: workbench.filteredQuickCommands.length > 0
+                        visible: workbench.scriptSurface === "library" && workbench.filteredQuickCommands.length > 0
 
                         delegate: Rectangle {
                             id: commandDelegate
@@ -810,7 +739,7 @@ Rectangle {
                                     if ((event.modifiers & Qt.ControlModifier) !== 0) {
                                         workbench.insertRequested(commandDelegate.modelData.command);
                                     } else {
-                                        workbench.runRequested(commandDelegate.modelData.command, commandDelegate);
+                                        workbench.beginRunScript(commandDelegate.modelData);
                                     }
                                     event.accepted = true;
                                 } else if (event.key === Qt.Key_Delete) {
@@ -879,7 +808,7 @@ Rectangle {
                                     height: 28
                                     enabled: workbench.quickCommandIndex(commandDelegate.modelData.id) > 0
                                     onClicked: workbench.moveQuickCommand(commandDelegate.modelData.id, -1)
-                                    Accessible.name: qsTr("Move code snippet up")
+                                    Accessible.name: qsTr("Move script up")
                                     contentItem: AppIcon {
                                         name: "chevron-up"
                                         color: moveCommandUpButton.enabled ? Theme.textSoft : Theme.textSubtle
@@ -897,7 +826,7 @@ Rectangle {
                                     height: 28
                                     enabled: workbench.quickCommandIndex(commandDelegate.modelData.id) + 1 < workbench.controller.quickCommands.length
                                     onClicked: workbench.moveQuickCommand(commandDelegate.modelData.id, 1)
-                                    Accessible.name: qsTr("Move code snippet down")
+                                    Accessible.name: qsTr("Move script down")
                                     contentItem: AppIcon {
                                         name: "chevron-down"
                                         color: moveCommandDownButton.enabled ? Theme.textSoft : Theme.textSubtle
@@ -913,8 +842,8 @@ Rectangle {
 
                                     width: 26
                                     height: 28
-                                    onClicked: workbench.runRequested(commandDelegate.modelData.command, runQuickCommandButton)
-                                    Accessible.name: qsTr("Run code snippet")
+                                    onClicked: workbench.beginRunScript(commandDelegate.modelData)
+                                    Accessible.name: qsTr("Review and run script")
                                     contentItem: AppIcon {
                                         name: "play"
                                         color: Theme.textSoft
@@ -929,7 +858,7 @@ Rectangle {
                                     width: 26
                                     height: 28
                                     onClicked: workbench.insertRequested(commandDelegate.modelData.command)
-                                    Accessible.name: qsTr("Insert code snippet")
+                                    Accessible.name: qsTr("Insert script text")
                                     contentItem: AppIcon {
                                         name: "compose"
                                         color: Theme.textSoft
@@ -944,7 +873,7 @@ Rectangle {
                                     width: 26
                                     height: 28
                                     onClicked: workbench.beginEditCommand(commandDelegate.modelData)
-                                    Accessible.name: qsTr("Edit code snippet")
+                                    Accessible.name: qsTr("Edit script")
                                     contentItem: AppIcon {
                                         name: "edit"
                                         color: Theme.textSoft
@@ -961,7 +890,7 @@ Rectangle {
                                     width: 26
                                     height: 28
                                     onClicked: workbench.requestDeleteCommand(commandDelegate.modelData, deleteCommandButton)
-                                    Accessible.name: qsTr("Delete code snippet")
+                                    Accessible.name: qsTr("Delete script")
                                     contentItem: AppIcon {
                                         name: "trash"
                                         color: Theme.danger
@@ -988,15 +917,15 @@ Rectangle {
                     StatePanel {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        visible: workbench.filteredQuickCommands.length === 0 && !commandEditor.visible
+                        visible: workbench.scriptSurface === "library" && workbench.filteredQuickCommands.length === 0
                         kind: "empty"
                         centered: true
-                        heading: quickCommandSearch.text.length > 0 ? qsTr("No matching snippets") : qsTr("No command snippets")
-                        description: quickCommandSearch.text.length > 0 ? qsTr("Try a different search term.") : qsTr("Save reusable commands here, then run or insert them from any terminal.")
+                        heading: quickCommandSearch.text.length > 0 ? qsTr("No matching scripts") : qsTr("No scripts")
+                        description: quickCommandSearch.text.length > 0 ? qsTr("Try a different search term.") : qsTr("Build reusable, typed command sequences and run them against one explicit terminal.")
 
                         ActionButton {
-                            text: qsTr("New code snippet")
-                            accessibleName: qsTr("Create the first code snippet")
+                            text: qsTr("New script")
+                            accessibleName: qsTr("Create the first script")
                             onClicked: workbench.beginNewCommand("")
                         }
                     }
@@ -1008,7 +937,7 @@ Rectangle {
     ConfirmationDialog {
         id: deleteCommandDialog
 
-        heading: qsTr("Delete code snippet?")
+        heading: qsTr("Delete script?")
         description: qsTr("%1 will be removed from every terminal.").arg(workbench.pendingDeleteName)
         acceptText: qsTr("Delete")
         rejectText: qsTr("Cancel")
