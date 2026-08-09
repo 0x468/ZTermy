@@ -22,6 +22,7 @@ enum class TransferPlanEntryKind : std::uint8_t
     Directory,
     RegularFile,
     SymbolicLink,
+    Unsupported,
 };
 
 enum class TransferPlanEntryStatus : std::uint8_t
@@ -62,6 +63,7 @@ struct TransferPlanEntry final
     std::string id;
     std::string parentId;
     std::string relativePath;
+    std::string sourcePath;
     std::string childTaskId;
     std::string errorCode;
     TransferPlanEntryKind kind = TransferPlanEntryKind::RegularFile;

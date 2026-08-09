@@ -44,35 +44,52 @@ void TransferBatchTests::validatesPathsAndTreeOrdering()
     QVERIFY(!validTransferRelativePath("trailing/"));
 
     TransferBatch batch = makeBatch();
-    QVERIFY(appendTransferPlanEntry(batch,
-                                    {.id = "root", .relativePath = "project", .kind = TransferPlanEntryKind::Directory})
+    QVERIFY(appendTransferPlanEntry(batch, {.id = "root",
+                                            .relativePath = "project",
+                                            .sourcePath = "/srv/project",
+                                            .kind = TransferPlanEntryKind::Directory})
                 .has_value());
-    QCOMPARE(appendTransferPlanEntry(
-                 batch, {.id = "orphan", .parentId = "missing", .relativePath = "project/orphan", .depth = 1})
+    QCOMPARE(appendTransferPlanEntry(batch, {.id = "orphan",
+                                             .parentId = "missing",
+                                             .relativePath = "project/orphan",
+                                             .sourcePath = "/srv/project/orphan",
+                                             .depth = 1})
                  .error(),
              TransferBatchError::MissingParent);
-    QCOMPARE(appendTransferPlanEntry(
-                 batch, {.id = "wrong-depth", .parentId = "root", .relativePath = "project/wrong-depth", .depth = 2})
+    QCOMPARE(appendTransferPlanEntry(batch, {.id = "wrong-depth",
+                                             .parentId = "root",
+                                             .relativePath = "project/wrong-depth",
+                                             .sourcePath = "/srv/project/wrong-depth",
+                                             .depth = 2})
                  .error(),
              TransferBatchError::DepthMismatch);
     QVERIFY(appendTransferPlanEntry(batch, {.id = "file",
                                             .parentId = "root",
                                             .relativePath = "project/file.txt",
+                                            .sourcePath = "/srv/project/file.txt",
                                             .kind = TransferPlanEntryKind::RegularFile,
                                             .totalBytes = 42,
                                             .depth = 1})
                 .has_value());
-    QCOMPARE(
-        appendTransferPlanEntry(
-            batch, {.id = "child-of-file", .parentId = "file", .relativePath = "project/file.txt/child", .depth = 2})
-            .error(),
-        TransferBatchError::ParentNotDirectory);
-    QCOMPARE(appendTransferPlanEntry(
-                 batch, {.id = "file", .parentId = "root", .relativePath = "project/other.txt", .depth = 1})
+    QCOMPARE(appendTransferPlanEntry(batch, {.id = "child-of-file",
+                                             .parentId = "file",
+                                             .relativePath = "project/file.txt/child",
+                                             .sourcePath = "/srv/project/file.txt/child",
+                                             .depth = 2})
+                 .error(),
+             TransferBatchError::ParentNotDirectory);
+    QCOMPARE(appendTransferPlanEntry(batch, {.id = "file",
+                                             .parentId = "root",
+                                             .relativePath = "project/other.txt",
+                                             .sourcePath = "/srv/project/other.txt",
+                                             .depth = 1})
                  .error(),
              TransferBatchError::DuplicateEntryId);
-    QCOMPARE(appendTransferPlanEntry(
-                 batch, {.id = "other", .parentId = "root", .relativePath = "project/file.txt", .depth = 1})
+    QCOMPARE(appendTransferPlanEntry(batch, {.id = "other",
+                                             .parentId = "root",
+                                             .relativePath = "project/file.txt",
+                                             .sourcePath = "/srv/project/file.txt",
+                                             .depth = 1})
                  .error(),
              TransferBatchError::DuplicateRelativePath);
     QVERIFY(validTransferBatch(batch));
@@ -82,18 +99,22 @@ void TransferBatchTests::appendsFinalizesAndSummarizesPlan()
 {
     using namespace ztermy::sftp;
     TransferBatch batch = makeBatch();
-    QVERIFY(appendTransferPlanEntry(batch,
-                                    {.id = "root", .relativePath = "project", .kind = TransferPlanEntryKind::Directory})
+    QVERIFY(appendTransferPlanEntry(batch, {.id = "root",
+                                            .relativePath = "project",
+                                            .sourcePath = "/srv/project",
+                                            .kind = TransferPlanEntryKind::Directory})
                 .has_value());
     QVERIFY(appendTransferPlanEntry(batch, {.id = "link",
                                             .parentId = "root",
                                             .relativePath = "project/latest",
+                                            .sourcePath = "/srv/project/latest",
                                             .kind = TransferPlanEntryKind::SymbolicLink,
                                             .depth = 1})
                 .has_value());
     QVERIFY(appendTransferPlanEntry(batch, {.id = "file",
                                             .parentId = "root",
                                             .relativePath = "project/data.bin",
+                                            .sourcePath = "/srv/project/data.bin",
                                             .kind = TransferPlanEntryKind::RegularFile,
                                             .totalBytes = 100,
                                             .depth = 1})
@@ -121,11 +142,12 @@ void TransferBatchTests::enforcesEntryTransitionsAndProgress()
 {
     using namespace ztermy::sftp;
     TransferBatch batch = makeBatch();
-    QVERIFY(
-        appendTransferPlanEntry(
-            batch,
-            {.id = "file", .relativePath = "file.bin", .kind = TransferPlanEntryKind::RegularFile, .totalBytes = 100})
-            .has_value());
+    QVERIFY(appendTransferPlanEntry(batch, {.id = "file",
+                                            .relativePath = "file.bin",
+                                            .sourcePath = "/srv/file.bin",
+                                            .kind = TransferPlanEntryKind::RegularFile,
+                                            .totalBytes = 100})
+                .has_value());
     QVERIFY(finalizeTransferDiscovery(batch).has_value());
     QVERIFY(updateTransferPlanEntry(batch, "file", TransferPlanEntryStatus::Queued).has_value());
     QVERIFY(updateTransferPlanEntry(batch, "file", TransferPlanEntryStatus::Running, 40).has_value());
@@ -151,12 +173,14 @@ void TransferBatchTests::saturatesAggregateByteCounters()
     const auto maximum = std::numeric_limits<std::uint64_t>::max();
     QVERIFY(appendTransferPlanEntry(batch, {.id = "first",
                                             .relativePath = "first.bin",
+                                            .sourcePath = "/srv/first.bin",
                                             .kind = TransferPlanEntryKind::RegularFile,
                                             .totalBytes = maximum,
                                             .transferredBytes = maximum})
                 .has_value());
     QVERIFY(appendTransferPlanEntry(batch, {.id = "second",
                                             .relativePath = "second.bin",
+                                            .sourcePath = "/srv/second.bin",
                                             .kind = TransferPlanEntryKind::RegularFile,
                                             .totalBytes = 10,
                                             .transferredBytes = 5})

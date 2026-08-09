@@ -89,7 +89,7 @@ bool validTransferRelativePath(const std::string_view path) noexcept
 
 bool validTransferPlanEntry(const TransferPlanEntry &entry) noexcept
 {
-    if (!validIdentifier(entry.id) || !validTransferRelativePath(entry.relativePath)
+    if (!validIdentifier(entry.id) || !validTransferRelativePath(entry.relativePath) || !validRootPath(entry.sourcePath)
         || entry.depth > maximumTransferTreeDepth || entry.transferredBytes > entry.totalBytes
         || containsNull(entry.errorCode) || entry.errorCode.size() > 256)
     {
@@ -247,7 +247,8 @@ std::expected<void, TransferBatchError> finalizeTransferDiscovery(TransferBatch 
     batch.status = batch.discoveryErrorCode.empty() ? TransferBatchStatus::Ready : TransferBatchStatus::Failed;
     for (TransferPlanEntry &entry : batch.entries)
     {
-        if (entry.kind == TransferPlanEntryKind::SymbolicLink && entry.status == TransferPlanEntryStatus::Pending)
+        if ((entry.kind == TransferPlanEntryKind::SymbolicLink || entry.kind == TransferPlanEntryKind::Unsupported)
+            && entry.status == TransferPlanEntryStatus::Pending)
         {
             entry.status = TransferPlanEntryStatus::Skipped;
         }
