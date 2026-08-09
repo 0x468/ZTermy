@@ -157,6 +157,77 @@ V2.8 does not claim recursive directory transfer or Windows virtual-file drag
 directly from an undownloaded remote entry. Those require separate queue and
 `IDataObject` contracts rather than presentation-only controls.
 
+## V2.9 — SSH connection depth and resilience (`0.2.9`)
+
+Status: planned. This milestone extends the existing native connection pipeline
+rather than adding UI-only profile fields.
+
+- add bounded keepalive and explicit reconnect behavior with observable states;
+- add ProxyJump/host-chain and explicit proxy support behind transport
+  abstractions;
+- integrate Windows OpenSSH agent authentication and separately decide remote
+  agent forwarding instead of treating the two as the same feature;
+- add startup commands, environment requests, terminal type, and carefully
+  bounded compatibility overrides to saved SSH profiles;
+- version profile persistence and prove password, private-key, host-key, SFTP,
+  telemetry, cancellation, and shutdown behavior through direct and multi-hop
+  real-host fixtures.
+
+## V2.10 — native SSH port forwarding (`0.2.10`)
+
+Status: planned.
+
+- implement local, remote, and dynamic SOCKS forwarding as owned native jobs;
+- persist rules separately from credentials, expose start/stop/error state, and
+  support opt-in startup with deterministic host-key and credential handling;
+- bound listeners, channels, buffers, retries, and shutdown so forwarding can
+  never block terminal or application teardown.
+
+## V2.11 — terminal workspace continuity (`0.2.11`)
+
+Status: planned.
+
+- add a persistent split-pane tree, keyboard resizing/focus, and session move,
+  duplicate, and close operations;
+- restore local terminals and SSH reconnection intents without claiming that a
+  remote process survived application exit;
+- retain one custom terminal item per viewport and keep all layout operations
+  independent from the terminal cell model.
+
+## V2.12 — recursive and batch SFTP (`0.2.12`)
+
+Status: planned.
+
+- add multi-selection, recursive directory job graphs, aggregate progress,
+  conflict policy, cancellation, recovery, and symlink boundaries;
+- add richer Explorer integration, including a separately reviewed native
+  virtual-file drag contract for remote entries that do not yet exist locally;
+- preserve the V2.8 regular-file fast path and its byte-range resume guarantees.
+
+## V2.13 — scripts and local notes (`0.2.13`)
+
+Status: planned.
+
+- evolve snippets into versioned multi-line scripts with typed variables,
+  explicit target selection, reviewable execution, and bounded output triggers;
+- add a local Markdown notes workspace with folders, search, import/export, and
+  terminal-side access;
+- keep arbitrary code execution, secrets, and unbounded terminal-output matching
+  outside implicit automation paths.
+
+## V2.14 — pre-V3 stable baseline (`0.2.14`)
+
+Status: planned final `0.2.x` milestone.
+
+- perform long-duration, multi-session, multi-transfer, reconnect, forwarding,
+  workspace-recovery, and shutdown stress passes with measured budgets;
+- close accessibility, localization, mixed-DPI, installer/upgrade, migration,
+  diagnostic, and error-recovery evidence across the complete supported surface;
+- remove stale compatibility paths and placeholder affordances only after data
+  migrations and rollback boundaries are proven;
+- deliver the final Windows 11 daily-use baseline before a separately approved
+  V3 direction.
+
 ## V3 decision gate (`0.3.0`)
 
 V3 starts only after the owner chooses a coherent major direction and records
@@ -165,7 +236,6 @@ file-management workspace, or deeper remote-development workflows. Cloud sync,
 collaboration, AI, serial support, and remote editing remain separate decisions
 and are not implied by V3.
 
-After V2.7, compatible daily-use work may continue through the planned
-`0.2.x` line (including richer transfer and workspace workflows). The V3
-direction is still chosen explicitly at the decision gate rather than by
-automatically incrementing to `0.3.0`.
+The complete V2.9–V2.14 program, invariants, and release gates are recorded in
+`PRE_V3_PROGRAM.md`. The V3 direction is still chosen explicitly at the decision
+gate rather than by automatically incrementing to `0.3.0`.

@@ -21,7 +21,152 @@ constexpr qint64 maximumFileSize = qint64{1024} * 1024;
 constexpr qsizetype maximumProfileCount = 128;
 constexpr qint64 legacySchemaVersion = 1;
 constexpr qint64 credentialSchemaVersion = 2;
-constexpr qint64 currentSchemaVersion = 3;
+constexpr qint64 keywordSchemaVersion = 3;
+constexpr qint64 currentSchemaVersion = 4;
+constexpr qsizetype maximumEnvironmentVariableCount = 32;
+
+[[nodiscard]] std::optional<ztermy::ssh::SshStartupCommandMode> parseStartupCommandMode(const QString &value)
+{
+    if (value == QStringLiteral("paste"))
+    {
+        return ztermy::ssh::SshStartupCommandMode::Paste;
+    }
+    if (value == QStringLiteral("line-delay"))
+    {
+        return ztermy::ssh::SshStartupCommandMode::LineDelay;
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] QString serializeStartupCommandMode(const ztermy::ssh::SshStartupCommandMode mode)
+{
+    return mode == ztermy::ssh::SshStartupCommandMode::LineDelay ? QStringLiteral("line-delay")
+                                                                 : QStringLiteral("paste");
+}
+
+[[nodiscard]] std::optional<ztermy::ssh::SshReconnectPolicy> parseReconnectPolicy(const QString &value)
+{
+    if (value == QStringLiteral("never"))
+    {
+        return ztermy::ssh::SshReconnectPolicy::Never;
+    }
+    if (value == QStringLiteral("transport-failure"))
+    {
+        return ztermy::ssh::SshReconnectPolicy::OnTransportFailure;
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] QString serializeReconnectPolicy(const ztermy::ssh::SshReconnectPolicy policy)
+{
+    return policy == ztermy::ssh::SshReconnectPolicy::OnTransportFailure ? QStringLiteral("transport-failure")
+                                                                         : QStringLiteral("never");
+}
+
+[[nodiscard]] std::optional<ztermy::ssh::SshSessionOptions> parseSessionOptions(const QJsonValue &value)
+{
+    if (!value.isObject())
+    {
+        return std::nullopt;
+    }
+    const QJsonObject object = value.toObject();
+    const QJsonValue terminalType = object.value(QStringLiteral("terminalType"));
+    const QJsonValue keepaliveInterval = object.value(QStringLiteral("keepaliveIntervalSeconds"));
+    const QJsonValue keepaliveThreshold = object.value(QStringLiteral("keepaliveFailureThreshold"));
+    const QJsonValue startupCommand = object.value(QStringLiteral("startupCommand"));
+    const QJsonValue startupMode = object.value(QStringLiteral("startupCommandMode"));
+    const QJsonValue startupDelay = object.value(QStringLiteral("startupLineDelayMilliseconds"));
+    const QJsonValue environment = object.value(QStringLiteral("environment"));
+    const QJsonValue reconnectPolicy = object.value(QStringLiteral("reconnectPolicy"));
+    const QJsonValue reconnectAttempts = object.value(QStringLiteral("reconnectMaximumAttempts"));
+    const QJsonValue reconnectBackoff = object.value(QStringLiteral("reconnectInitialBackoffMilliseconds"));
+    if (!terminalType.isString() || !keepaliveInterval.isDouble() || !keepaliveThreshold.isDouble()
+        || !startupCommand.isString() || !startupMode.isString() || !startupDelay.isDouble() || !environment.isArray()
+        || !reconnectPolicy.isString() || !reconnectAttempts.isDouble() || !reconnectBackoff.isDouble())
+    {
+        return std::nullopt;
+    }
+    const auto parsedStartupMode = parseStartupCommandMode(startupMode.toString());
+    const auto parsedReconnectPolicy = parseReconnectPolicy(reconnectPolicy.toString());
+    const qint64 interval = keepaliveInterval.toInteger(-1);
+    const qint64 threshold = keepaliveThreshold.toInteger(-1);
+    const qint64 delay = startupDelay.toInteger(-1);
+    const qint64 attempts = reconnectAttempts.toInteger(-1);
+    const qint64 backoff = reconnectBackoff.toInteger(-1);
+    if (!parsedStartupMode || !parsedReconnectPolicy || interval < 0 || threshold < 0 || delay < 0 || attempts < 0
+        || backoff < 0 || static_cast<double>(interval) != keepaliveInterval.toDouble()
+        || static_cast<double>(threshold) != keepaliveThreshold.toDouble()
+        || static_cast<double>(delay) != startupDelay.toDouble()
+        || static_cast<double>(attempts) != reconnectAttempts.toDouble()
+        || static_cast<double>(backoff) != reconnectBackoff.toDouble()
+        || std::cmp_greater(interval, std::numeric_limits<std::uint16_t>::max())
+        || std::cmp_greater(threshold, std::numeric_limits<std::uint8_t>::max())
+        || std::cmp_greater(delay, std::numeric_limits<std::uint16_t>::max())
+        || std::cmp_greater(attempts, std::numeric_limits<std::uint8_t>::max())
+        || std::cmp_greater(backoff, std::numeric_limits<std::uint16_t>::max()))
+    {
+        return std::nullopt;
+    }
+
+    std::vector<ztermy::ssh::SshEnvironmentVariable> variables;
+    const QJsonArray values = environment.toArray();
+    if (values.size() > maximumEnvironmentVariableCount)
+    {
+        return std::nullopt;
+    }
+    variables.reserve(static_cast<std::size_t>(values.size()));
+    for (const QJsonValue &variableValue : values)
+    {
+        if (!variableValue.isObject())
+        {
+            return std::nullopt;
+        }
+        const QJsonObject variableObject = variableValue.toObject();
+        const QJsonValue name = variableObject.value(QStringLiteral("name"));
+        const QJsonValue variableContent = variableObject.value(QStringLiteral("value"));
+        if (!name.isString() || !variableContent.isString())
+        {
+            return std::nullopt;
+        }
+        variables.push_back({.name = name.toString().toStdString(), .value = variableContent.toString().toStdString()});
+    }
+
+    ztermy::ssh::SshSessionOptions options{
+        .terminalType = terminalType.toString().toStdString(),
+        .keepaliveIntervalSeconds = static_cast<std::uint16_t>(interval),
+        .keepaliveFailureThreshold = static_cast<std::uint8_t>(threshold),
+        .startupCommand = startupCommand.toString().toStdString(),
+        .startupCommandMode = *parsedStartupMode,
+        .startupLineDelayMilliseconds = static_cast<std::uint16_t>(delay),
+        .environment = std::move(variables),
+        .reconnectPolicy = *parsedReconnectPolicy,
+        .reconnectMaximumAttempts = static_cast<std::uint8_t>(attempts),
+        .reconnectInitialBackoffMilliseconds = static_cast<std::uint16_t>(backoff),
+    };
+    return ztermy::ssh::validSshSessionOptions(options) ? std::optional{std::move(options)} : std::nullopt;
+}
+
+[[nodiscard]] QJsonObject serializeSessionOptions(const ztermy::ssh::SshSessionOptions &options)
+{
+    QJsonArray environment;
+    for (const ztermy::ssh::SshEnvironmentVariable &variable : options.environment)
+    {
+        environment.append(QJsonObject{{QStringLiteral("name"), QString::fromStdString(variable.name)},
+                                       {QStringLiteral("value"), QString::fromStdString(variable.value)}});
+    }
+    return {
+        {QStringLiteral("terminalType"), QString::fromStdString(options.terminalType)},
+        {QStringLiteral("keepaliveIntervalSeconds"), options.keepaliveIntervalSeconds},
+        {QStringLiteral("keepaliveFailureThreshold"), options.keepaliveFailureThreshold},
+        {QStringLiteral("startupCommand"), QString::fromStdString(options.startupCommand)},
+        {QStringLiteral("startupCommandMode"), serializeStartupCommandMode(options.startupCommandMode)},
+        {QStringLiteral("startupLineDelayMilliseconds"), options.startupLineDelayMilliseconds},
+        {QStringLiteral("environment"), environment},
+        {QStringLiteral("reconnectPolicy"), serializeReconnectPolicy(options.reconnectPolicy)},
+        {QStringLiteral("reconnectMaximumAttempts"), options.reconnectMaximumAttempts},
+        {QStringLiteral("reconnectInitialBackoffMilliseconds"), options.reconnectInitialBackoffMilliseconds},
+    };
+}
 
 [[nodiscard]] std::optional<ztermy::ssh::SshKeywordHighlightRule> parseKeywordRule(const QJsonValue &value)
 {
@@ -98,6 +243,7 @@ constexpr qint64 currentSchemaVersion = 3;
     const QJsonValue credentialReferenceValue = object.value(QStringLiteral("credentialReference"));
     const QJsonValue keywordEnabledValue = object.value(QStringLiteral("keywordHighlightEnabled"));
     const QJsonValue keywordRulesValue = object.value(QStringLiteral("keywordHighlightRules"));
+    const QJsonValue sessionOptionsValue = object.value(QStringLiteral("sessionOptions"));
     if (!idValue.isString() || !nameValue.isString() || (!groupValue.isUndefined() && !groupValue.isString())
         || !hostValue.isString() || !portValue.isDouble() || !usernameValue.isString()
         || !authenticationValue.isString() || !privateKeyPathValue.isString()
@@ -105,8 +251,9 @@ constexpr qint64 currentSchemaVersion = 3;
         || (!lastConnectedValue.isUndefined() && !lastConnectedValue.isDouble())
         || (version >= credentialSchemaVersion && !credentialReferenceValue.isUndefined()
             && !credentialReferenceValue.isString())
-        || (version >= currentSchemaVersion && !keywordEnabledValue.isUndefined() && !keywordEnabledValue.isBool())
-        || (version >= currentSchemaVersion && !keywordRulesValue.isUndefined() && !keywordRulesValue.isArray()))
+        || (version >= keywordSchemaVersion && !keywordEnabledValue.isUndefined() && !keywordEnabledValue.isBool())
+        || (version >= keywordSchemaVersion && !keywordRulesValue.isUndefined() && !keywordRulesValue.isArray())
+        || (version >= currentSchemaVersion && !sessionOptionsValue.isObject()))
     {
         return std::nullopt;
     }
@@ -155,6 +302,13 @@ constexpr qint64 currentSchemaVersion = 3;
         }
     }
 
+    auto sessionOptions = version >= currentSchemaVersion ? parseSessionOptions(sessionOptionsValue)
+                                                          : std::optional{ztermy::ssh::SshSessionOptions{}};
+    if (!sessionOptions)
+    {
+        return std::nullopt;
+    }
+
     ztermy::ssh::SshProfile profile{
         .id = idValue.toString().toStdString(),
         .name = nameValue.toString().toStdString(),
@@ -171,6 +325,7 @@ constexpr qint64 currentSchemaVersion = 3;
         .lastConnectedUtcMs = lastConnectedUtcMs,
         .keywordHighlightRules = std::move(keywordRules),
         .keywordHighlightEnabled = keywordEnabledValue.toBool(true),
+        .sessionOptions = std::move(*sessionOptions),
     };
     return ztermy::ssh::validSshProfile(profile) ? std::optional{std::move(profile)} : std::nullopt;
 }
@@ -210,6 +365,7 @@ constexpr qint64 currentSchemaVersion = 3;
         });
     }
     object.insert(QStringLiteral("keywordHighlightRules"), keywordRules);
+    object.insert(QStringLiteral("sessionOptions"), serializeSessionOptions(profile.sessionOptions));
     return object;
 }
 
@@ -271,7 +427,7 @@ std::expected<std::vector<SshProfile>, SshProfileStoreError> SshProfileStore::lo
     const QJsonValue profilesValue = root.value(QStringLiteral("profiles"));
     if (!versionValue.isDouble()
         || (versionValue.toInteger() != legacySchemaVersion && versionValue.toInteger() != credentialSchemaVersion
-            && versionValue.toInteger() != currentSchemaVersion))
+            && versionValue.toInteger() != keywordSchemaVersion && versionValue.toInteger() != currentSchemaVersion))
     {
         return std::unexpected(versionValue.isDouble() ? SshProfileStoreError::UnsupportedVersion
                                                        : SshProfileStoreError::InvalidFormat);

@@ -19,6 +19,7 @@ struct SshConnectionRequest final
     QString privateKeyPath;
     security::SensitiveByteArray secret;
     QString knownHostsPath;
+    SshSessionOptions sessionOptions;
 };
 
 [[nodiscard]] bool validSshConnectionRequest(const SshConnectionRequest &request) noexcept;

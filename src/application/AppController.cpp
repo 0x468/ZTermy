@@ -3117,6 +3117,7 @@ AppController::sftpConnectionRequest(const TerminalTab &tab)
         .privateKeyPath = utf8QString(profile->privateKeyPath),
         .secret = std::move(secret),
         .knownHostsPath = m_knownHostsPath,
+        .sessionOptions = profile->sessionOptions,
     };
 }
 
@@ -3163,6 +3164,7 @@ sftp::TransferRequestProvider AppController::transferRequestProvider(const QStri
                 .privateKeyPath = utf8QString(profile.privateKeyPath),
                 .secret = std::move(secret),
                 .knownHostsPath = knownHostsPath,
+                .sessionOptions = profile.sessionOptions,
             };
         }
         catch (...)
@@ -3888,6 +3890,7 @@ bool AppController::connectHostProfile(const QString &id, const QString &secret)
         .privateKeyPath = utf8QString(profile->privateKeyPath),
         .secret = std::move(connectionSecret),
         .knownHostsPath = m_knownHostsPath,
+        .sessionOptions = profile->sessionOptions,
     };
     setCredentialOperationError({});
     return startSshConnection(std::move(request), id);

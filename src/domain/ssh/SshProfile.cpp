@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
 
 namespace
 {
@@ -13,6 +14,10 @@ constexpr std::size_t maximumHostLength = 1024;
 constexpr std::size_t maximumUsernameLength = 256;
 constexpr std::size_t maximumPrivateKeyPathLength = 32767;
 constexpr std::size_t maximumKeywordRuleCount = 16;
+constexpr std::size_t maximumEnvironmentVariableCount = 32;
+constexpr std::size_t maximumEnvironmentNameLength = 128;
+constexpr std::size_t maximumEnvironmentValueLength = 4096;
+constexpr std::size_t maximumStartupCommandLength = 32768;
 
 [[nodiscard]] bool nonEmptyWithin(const std::string &value, const std::size_t maximumLength) noexcept
 {
@@ -43,6 +48,31 @@ constexpr std::size_t maximumKeywordRuleCount = 16;
     });
 }
 
+[[nodiscard]] bool validBoundedText(const std::string &value, const std::size_t maximumLength) noexcept
+{
+    return value.size() <= maximumLength && value.find('\0') == std::string::npos;
+}
+
+[[nodiscard]] bool validTerminalType(const std::string &value) noexcept
+{
+    return nonEmptyWithin(value, 64) && std::ranges::all_of(value, [](const unsigned char character) {
+               return std::isalnum(character) != 0 || character == '-' || character == '_' || character == '.'
+                      || character == '+';
+           });
+}
+
+[[nodiscard]] bool validEnvironmentName(const std::string &value) noexcept
+{
+    if (!nonEmptyWithin(value, maximumEnvironmentNameLength)
+        || !(std::isalpha(static_cast<unsigned char>(value.front())) != 0 || value.front() == '_'))
+    {
+        return false;
+    }
+    return std::ranges::all_of(value.begin() + 1, value.end(), [](const unsigned char character) {
+        return std::isalnum(character) != 0 || character == '_';
+    });
+}
+
 } // namespace
 
 namespace ztermy::ssh
@@ -54,6 +84,40 @@ bool validKeywordHighlightRule(const SshKeywordHighlightRule &rule) noexcept
            && validColor(rule.background) && (!rule.foreground.empty() || !rule.background.empty());
 }
 
+bool validSshSessionOptions(const SshSessionOptions &options) noexcept
+{
+    if (!validTerminalType(options.terminalType) || options.keepaliveIntervalSeconds > 3600
+        || options.keepaliveFailureThreshold == 0 || options.keepaliveFailureThreshold > 10
+        || !validBoundedText(options.startupCommand, maximumStartupCommandLength)
+        || (options.startupCommandMode != SshStartupCommandMode::Paste
+            && options.startupCommandMode != SshStartupCommandMode::LineDelay)
+        || options.startupLineDelayMilliseconds > 5000 || options.environment.size() > maximumEnvironmentVariableCount
+        || options.reconnectMaximumAttempts == 0 || options.reconnectMaximumAttempts > 10
+        || options.reconnectInitialBackoffMilliseconds < 250 || options.reconnectInitialBackoffMilliseconds > 30000
+        || (options.reconnectPolicy != SshReconnectPolicy::Never
+            && options.reconnectPolicy != SshReconnectPolicy::OnTransportFailure))
+    {
+        return false;
+    }
+
+    for (std::size_t index = 0; index < options.environment.size(); ++index)
+    {
+        const SshEnvironmentVariable &variable = options.environment[index];
+        if (!validEnvironmentName(variable.name) || !validBoundedText(variable.value, maximumEnvironmentValueLength))
+        {
+            return false;
+        }
+        const auto duplicate =
+            std::ranges::find(options.environment.begin() + static_cast<std::ptrdiff_t>(index + 1),
+                              options.environment.end(), variable.name, &SshEnvironmentVariable::name);
+        if (duplicate != options.environment.end())
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool validSshProfile(const SshProfile &profile) noexcept
 {
     if (!nonEmptyWithin(profile.id, maximumIdLength) || !nonEmptyWithin(profile.name, maximumNameLength)
@@ -62,7 +126,8 @@ bool validSshProfile(const SshProfile &profile) noexcept
         || !validCredentialReference(profile.credentialReference)
         || profile.keywordHighlightRules.size() > maximumKeywordRuleCount
         || !std::ranges::all_of(profile.keywordHighlightRules, validKeywordHighlightRule)
-        || (profile.lastConnectedUtcMs.has_value() && *profile.lastConnectedUtcMs < 0))
+        || (profile.lastConnectedUtcMs.has_value() && *profile.lastConnectedUtcMs < 0)
+        || !validSshSessionOptions(profile.sessionOptions))
     {
         return false;
     }

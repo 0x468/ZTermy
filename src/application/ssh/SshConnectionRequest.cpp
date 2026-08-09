@@ -6,7 +6,7 @@ namespace ztermy::ssh
 bool validSshConnectionRequest(const SshConnectionRequest &request) noexcept
 {
     if (request.host.trimmed().isEmpty() || request.port == 0 || request.username.isEmpty()
-        || request.knownHostsPath.isEmpty())
+        || request.knownHostsPath.isEmpty() || !validSshSessionOptions(request.sessionOptions))
     {
         return false;
     }

@@ -48,6 +48,10 @@ void SshConnectionBootstrapTests::validatesReusableConnectionRequests()
     QVERIFY(!ztermy::ssh::validSshConnectionRequest(password));
     privateKey.privateKeyPath.clear();
     QVERIFY(!ztermy::ssh::validSshConnectionRequest(privateKey));
+
+    auto invalidSessionOptions = validPasswordRequest();
+    invalidSessionOptions.sessionOptions.terminalType = "xterm 256color";
+    QVERIFY(!ztermy::ssh::validSshConnectionRequest(invalidSessionOptions));
 }
 
 void SshConnectionBootstrapTests::clearsSecretsWhenBootstrapRejectsARequest()

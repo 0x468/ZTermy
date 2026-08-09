@@ -32,6 +32,17 @@ namespace
                                    .enabled = true,
                                    .caseSensitive = false}},
         .keywordHighlightEnabled = true,
+        .sessionOptions = {.terminalType = "screen-256color",
+                           .keepaliveIntervalSeconds = 30,
+                           .keepaliveFailureThreshold = 4,
+                           .startupCommand = "export TERM_PROGRAM=ztermy\nuname -a",
+                           .startupCommandMode = ztermy::ssh::SshStartupCommandMode::LineDelay,
+                           .startupLineDelayMilliseconds = 175,
+                           .environment = {{.name = "LANG", .value = "en_US.UTF-8"},
+                                           {.name = "COLORTERM", .value = "truecolor"}},
+                           .reconnectPolicy = ztermy::ssh::SshReconnectPolicy::OnTransportFailure,
+                           .reconnectMaximumAttempts = 5,
+                           .reconnectInitialBackoffMilliseconds = 1500},
     };
 }
 
@@ -55,6 +66,8 @@ private slots:
     void rejectsMalformedAndUnsupportedDocuments();
     void rejectsFractionalPortsAndUnknownAuthentication();
     void loadsProfilesWrittenBeforePassphraseMetadata();
+    void loadsKeywordSchemaWithDefaultSessionOptions();
+    void rejectsMalformedSessionOptions();
 };
 
 void SshProfileStoreTests::missingFileLoadsAsEmpty()
@@ -102,6 +115,9 @@ void SshProfileStoreTests::savesAndLoadsNonSecretProfiles()
     QVERIFY(persisted.contains("\"credentialReference\": \"profile-1\""));
     QVERIFY(persisted.contains("\"keywordHighlightRules\""));
     QVERIFY(persisted.contains("\"pattern\": \"failed\""));
+    QVERIFY(persisted.contains("\"sessionOptions\""));
+    QVERIFY(persisted.contains("\"terminalType\": \"screen-256color\""));
+    QVERIFY(persisted.contains("\"reconnectPolicy\": \"transport-failure\""));
     QVERIFY(!persisted.contains("privateKeyContent"));
 }
 
@@ -125,6 +141,24 @@ void SshProfileStoreTests::loadsProfilesWrittenBeforePassphraseMetadata()
     QVERIFY(!profiles->front().credentialReference);
     QVERIFY(profiles->front().keywordHighlightRules.empty());
     QVERIFY(profiles->front().keywordHighlightEnabled);
+    QCOMPARE(profiles->front().sessionOptions, ztermy::ssh::SshSessionOptions{});
+}
+
+void SshProfileStoreTests::loadsKeywordSchemaWithDefaultSessionOptions()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("profiles.json"));
+    const ztermy::ssh::SshProfileStore store(path);
+
+    QVERIFY(writeFile(
+        path,
+        QByteArrayLiteral(
+            R"({"version":3,"profiles":[{"id":"p","name":"n","group":"g","host":"h","port":22,"username":"u","authentication":"password","privateKeyPath":"","keywordHighlightEnabled":true,"keywordHighlightRules":[]}]})")));
+    auto profiles = store.load();
+    QVERIFY(profiles);
+    QCOMPARE(profiles->size(), std::size_t{1});
+    QCOMPARE(profiles->front().sessionOptions, ztermy::ssh::SshSessionOptions{});
 }
 
 void SshProfileStoreTests::createsMissingParentDirectory()
@@ -167,6 +201,13 @@ void SshProfileStoreTests::rejectsInvalidProfilesAndDuplicateIds()
     QVERIFY(!negativeTimestampResult);
     QCOMPARE(negativeTimestampResult.error(), ztermy::ssh::SshProfileStoreError::InvalidFormat);
 
+    auto duplicateEnvironment = privateKeyProfile();
+    duplicateEnvironment.sessionOptions.environment.push_back({.name = "LANG", .value = "C"});
+    const std::array duplicateEnvironmentProfiles{duplicateEnvironment};
+    auto duplicateEnvironmentResult = store.save(duplicateEnvironmentProfiles);
+    QVERIFY(!duplicateEnvironmentResult);
+    QCOMPARE(duplicateEnvironmentResult.error(), ztermy::ssh::SshProfileStoreError::InvalidFormat);
+
     const auto profile = privateKeyProfile();
     const std::array duplicateProfiles{profile, profile};
     auto duplicateResult = store.save(duplicateProfiles);
@@ -186,10 +227,26 @@ void SshProfileStoreTests::rejectsMalformedAndUnsupportedDocuments()
     QVERIFY(!malformed);
     QCOMPARE(malformed.error(), ztermy::ssh::SshProfileStoreError::InvalidFormat);
 
-    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":4,"profiles":[]})")));
+    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":5,"profiles":[]})")));
     auto unsupported = store.load();
     QVERIFY(!unsupported);
     QCOMPARE(unsupported.error(), ztermy::ssh::SshProfileStoreError::UnsupportedVersion);
+}
+
+void SshProfileStoreTests::rejectsMalformedSessionOptions()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("profiles.json"));
+    const ztermy::ssh::SshProfileStore store(path);
+
+    QVERIFY(writeFile(
+        path,
+        QByteArrayLiteral(
+            R"({"version":4,"profiles":[{"id":"p","name":"n","group":"","host":"h","port":22,"username":"u","authentication":"password","privateKeyPath":"","keywordHighlightEnabled":true,"keywordHighlightRules":[],"sessionOptions":{"terminalType":"xterm-256color","keepaliveIntervalSeconds":30,"keepaliveFailureThreshold":3,"startupCommand":"","startupCommandMode":"unknown","startupLineDelayMilliseconds":100,"environment":[],"reconnectPolicy":"never","reconnectMaximumAttempts":3,"reconnectInitialBackoffMilliseconds":1000}}]})")));
+    auto malformedMode = store.load();
+    QVERIFY(!malformedMode);
+    QCOMPARE(malformedMode.error(), ztermy::ssh::SshProfileStoreError::InvalidFormat);
 }
 
 void SshProfileStoreTests::rejectsFractionalPortsAndUnknownAuthentication()
