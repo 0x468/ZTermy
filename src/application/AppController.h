@@ -15,7 +15,7 @@
 #include "infrastructure/logging/SessionLogWriter.h"
 #include "infrastructure/ssh/SshProfileStore.h"
 #include "infrastructure/workbench/PowerShellHistoryReader.h"
-#include "infrastructure/workbench/QuickCommandStore.h"
+#include "infrastructure/workbench/ScriptStore.h"
 #include "infrastructure/workbench/WorkspaceStateStore.h"
 
 #include <QHash>
@@ -619,10 +619,11 @@ private:
     config::ApplicationSettingsStore m_settingsStore;
     config::ApplicationSettings m_settings;
     actions::ActionRegistry m_actionRegistry;
-    workbench::QuickCommandStore m_quickCommandStore;
+    workbench::ScriptStore m_scriptStore;
+    QString m_legacyQuickCommandPath;
     workbench::WorkspaceStateStore m_workspaceStateStore;
     workbench::WorkspaceState m_workspaceState;
-    std::vector<workbench::QuickCommand> m_quickCommands;
+    std::vector<workbench::ScriptDefinition> m_scripts;
     QString m_quickCommandOperationError;
     std::unique_ptr<security::CredentialVaultCoordinator> m_credentialVaults;
     std::unique_ptr<sftp::TransferManager> m_transferManager;

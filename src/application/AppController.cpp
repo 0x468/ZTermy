@@ -2,6 +2,7 @@
 
 #include "domain/ssh/SshTarget.h"
 #include "infrastructure/security/InMemoryCredentialVault.h"
+#include "infrastructure/workbench/QuickCommandStore.h"
 #include "ui/terminal/TerminalItem.h"
 
 #include <QClipboard>
@@ -30,6 +31,7 @@
 #include <algorithm>
 #include <chrono>
 #include <functional>
+#include <iterator>
 #include <limits>
 #include <new>
 #include <optional>
@@ -95,6 +97,11 @@ constexpr std::size_t maximumRecentHostProfiles = 6;
 [[nodiscard]] QString siblingQuickCommandsFile(const QString &settingsPath)
 {
     return QFileInfo(settingsPath).dir().filePath(QStringLiteral("quick_commands.json"));
+}
+
+[[nodiscard]] QString siblingScriptsFile(const QString &settingsPath)
+{
+    return QFileInfo(settingsPath).dir().filePath(QStringLiteral("scripts.json"));
 }
 
 [[nodiscard]] QString siblingWorkspaceStateFile(const QString &settingsPath)
@@ -307,6 +314,28 @@ constexpr std::size_t maximumRecentHostProfiles = 6;
         default:
             return QStringLiteral("any");
     }
+}
+
+[[nodiscard]] QString scriptVariableTypeToken(const ztermy::workbench::ScriptVariableType type)
+{
+    switch (type)
+    {
+        case ztermy::workbench::ScriptVariableType::integer:
+            return QStringLiteral("integer");
+        case ztermy::workbench::ScriptVariableType::boolean:
+            return QStringLiteral("boolean");
+        case ztermy::workbench::ScriptVariableType::choice:
+            return QStringLiteral("choice");
+        case ztermy::workbench::ScriptVariableType::text:
+        default:
+            return QStringLiteral("text");
+    }
+}
+
+[[nodiscard]] QString scriptContinuationToken(const ztermy::workbench::ScriptContinuation continuation)
+{
+    return continuation == ztermy::workbench::ScriptContinuation::literalOutput ? QStringLiteral("literal-output")
+                                                                                : QStringLiteral("immediate");
 }
 
 [[nodiscard]] QString shellKindToken(const ztermy::workbench::ShellKind value)
@@ -1324,7 +1353,8 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
       m_portForwardingStore(siblingPortForwardingFile(m_profileStore.filePath())),
       m_settingsStore(settingsPath.isEmpty() ? siblingSettingsFile(m_profileStore.filePath())
                                              : std::move(settingsPath)),
-      m_quickCommandStore(siblingQuickCommandsFile(m_settingsStore.filePath())),
+      m_scriptStore(siblingScriptsFile(m_settingsStore.filePath())),
+      m_legacyQuickCommandPath(siblingQuickCommandsFile(m_settingsStore.filePath())),
       m_workspaceStateStore(siblingWorkspaceStateFile(m_settingsStore.filePath())),
       m_credentialVaults(std::make_unique<security::CredentialVaultCoordinator>(
           siblingCredentialsFile(m_profileStore.filePath()), security::CredentialStorage::Session)),
@@ -1372,7 +1402,8 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
       m_portForwardingStore(siblingPortForwardingFile(m_profileStore.filePath())),
       m_settingsStore(settingsPath.isEmpty() ? siblingSettingsFile(m_profileStore.filePath())
                                              : std::move(settingsPath)),
-      m_quickCommandStore(siblingQuickCommandsFile(m_settingsStore.filePath())),
+      m_scriptStore(siblingScriptsFile(m_settingsStore.filePath())),
+      m_legacyQuickCommandPath(siblingQuickCommandsFile(m_settingsStore.filePath())),
       m_workspaceStateStore(siblingWorkspaceStateFile(m_settingsStore.filePath())),
       m_credentialVaults(std::make_unique<security::CredentialVaultCoordinator>(
           credentialsPath.isEmpty() ? siblingCredentialsFile(m_profileStore.filePath()) : std::move(credentialsPath),
@@ -1764,17 +1795,49 @@ QVariantMap AppController::terminalTabValue(const TerminalTab &tab, const QStrin
 QVariantList AppController::quickCommands() const
 {
     QVariantList result;
-    result.reserve(static_cast<qsizetype>(m_quickCommands.size()));
-    for (const workbench::QuickCommand &quickCommand : m_quickCommands)
+    result.reserve(static_cast<qsizetype>(m_scripts.size()));
+    for (const workbench::ScriptDefinition &script : m_scripts)
     {
+        QVariantList variables;
+        variables.reserve(static_cast<qsizetype>(script.variables.size()));
+        for (const workbench::ScriptVariable &variable : script.variables)
+        {
+            QStringList choices;
+            choices.reserve(static_cast<qsizetype>(variable.choices.size()));
+            for (const std::string &choice : variable.choices)
+            {
+                choices.append(utf8QString(choice));
+            }
+            variables.append(QVariantMap{{QStringLiteral("name"), utf8QString(variable.name)},
+                                         {QStringLiteral("label"), utf8QString(variable.label)},
+                                         {QStringLiteral("type"), scriptVariableTypeToken(variable.type)},
+                                         {QStringLiteral("defaultValue"), utf8QString(variable.defaultValue)},
+                                         {QStringLiteral("choices"), choices},
+                                         {QStringLiteral("required"), variable.required}});
+        }
+        QVariantList steps;
+        QStringList commandText;
+        steps.reserve(static_cast<qsizetype>(script.steps.size()));
+        commandText.reserve(static_cast<qsizetype>(script.steps.size()));
+        for (const workbench::ScriptStep &step : script.steps)
+        {
+            const QString command = utf8QString(step.command);
+            commandText.append(command);
+            steps.append(QVariantMap{{QStringLiteral("command"), command},
+                                     {QStringLiteral("continuation"), scriptContinuationToken(step.continuation)},
+                                     {QStringLiteral("outputMarker"), utf8QString(step.outputMarker)},
+                                     {QStringLiteral("timeoutMs"), step.timeoutMs}});
+        }
         result.append(QVariantMap{
-            {QStringLiteral("id"), utf8QString(quickCommand.id)},
-            {QStringLiteral("name"), utf8QString(quickCommand.name)},
-            {QStringLiteral("command"), utf8QString(quickCommand.command)},
-            {QStringLiteral("description"), utf8QString(quickCommand.description)},
-            {QStringLiteral("shell"), quickCommandShellScopeToken(quickCommand.shellScope)},
-            {QStringLiteral("createdUtcMs"), quickCommand.createdUtcMs},
-            {QStringLiteral("modifiedUtcMs"), quickCommand.modifiedUtcMs},
+            {QStringLiteral("id"), utf8QString(script.id)},
+            {QStringLiteral("name"), utf8QString(script.name)},
+            {QStringLiteral("command"), commandText.join(QLatin1Char('\n'))},
+            {QStringLiteral("description"), utf8QString(script.description)},
+            {QStringLiteral("shell"), quickCommandShellScopeToken(script.shellScope)},
+            {QStringLiteral("variables"), variables},
+            {QStringLiteral("steps"), steps},
+            {QStringLiteral("createdUtcMs"), script.createdUtcMs},
+            {QStringLiteral("modifiedUtcMs"), script.modifiedUtcMs},
         });
     }
     return result;
@@ -3384,41 +3447,42 @@ bool AppController::saveQuickCommand(const QString &id, const QString &name, con
         return false;
     }
 
-    std::vector<workbench::QuickCommand> candidate = m_quickCommands;
+    std::vector<workbench::ScriptDefinition> candidate = m_scripts;
     const std::int64_t now = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
-    workbench::QuickCommand quickCommand{
+    workbench::ScriptDefinition script{
         .id = id.isEmpty() ? QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString() : utf8String(id),
         .name = utf8String(normalizedName),
-        .command = utf8String(normalizedCommand),
         .description = utf8String(normalizedDescription),
         .shellScope = *parsedShellScope,
+        .variables = {},
+        .steps = {{.command = utf8String(normalizedCommand)}},
         .createdUtcMs = now,
         .modifiedUtcMs = now,
     };
 
     if (id.isEmpty())
     {
-        candidate.push_back(std::move(quickCommand));
+        candidate.push_back(std::move(script));
     }
     else
     {
-        const auto existing = std::ranges::find(candidate, quickCommand.id, &workbench::QuickCommand::id);
+        const auto existing = std::ranges::find(candidate, script.id, &workbench::ScriptDefinition::id);
         if (existing == candidate.end())
         {
-            setQuickCommandOperationError(tr("The quick command no longer exists."));
+            setQuickCommandOperationError(tr("The script no longer exists."));
             return false;
         }
-        quickCommand.createdUtcMs = existing->createdUtcMs;
-        *existing = std::move(quickCommand);
+        script.createdUtcMs = existing->createdUtcMs;
+        *existing = std::move(script);
     }
 
-    if (!m_quickCommandStore.save(candidate))
+    if (!m_scriptStore.save(candidate))
     {
-        qCWarning(appControllerLog) << "Unable to persist quick commands";
-        setQuickCommandOperationError(tr("The quick command could not be saved."));
+        qCWarning(appControllerLog) << "Unable to persist scripts";
+        setQuickCommandOperationError(tr("The script could not be saved."));
         return false;
     }
-    m_quickCommands = std::move(candidate);
+    m_scripts = std::move(candidate);
     m_quickCommandOperationError.clear();
     emit quickCommandsChanged();
     return true;
@@ -3426,22 +3490,22 @@ bool AppController::saveQuickCommand(const QString &id, const QString &name, con
 
 bool AppController::deleteQuickCommand(const QString &id)
 {
-    std::vector<workbench::QuickCommand> candidate = m_quickCommands;
+    std::vector<workbench::ScriptDefinition> candidate = m_scripts;
     const std::string commandId = utf8String(id);
-    const auto existing = std::ranges::find(candidate, commandId, &workbench::QuickCommand::id);
+    const auto existing = std::ranges::find(candidate, commandId, &workbench::ScriptDefinition::id);
     if (existing == candidate.end())
     {
-        setQuickCommandOperationError(tr("The quick command no longer exists."));
+        setQuickCommandOperationError(tr("The script no longer exists."));
         return false;
     }
     candidate.erase(existing);
-    if (!m_quickCommandStore.save(candidate))
+    if (!m_scriptStore.save(candidate))
     {
-        qCWarning(appControllerLog) << "Unable to persist quick command deletion";
-        setQuickCommandOperationError(tr("The quick command could not be deleted."));
+        qCWarning(appControllerLog) << "Unable to persist script deletion";
+        setQuickCommandOperationError(tr("The script could not be deleted."));
         return false;
     }
-    m_quickCommands = std::move(candidate);
+    m_scripts = std::move(candidate);
     m_quickCommandOperationError.clear();
     emit quickCommandsChanged();
     return true;
@@ -3449,16 +3513,16 @@ bool AppController::deleteQuickCommand(const QString &id)
 
 bool AppController::moveQuickCommand(const QString &id, const int targetIndex)
 {
-    if (m_quickCommands.empty())
+    if (m_scripts.empty())
     {
         return false;
     }
-    std::vector<workbench::QuickCommand> candidate = m_quickCommands;
+    std::vector<workbench::ScriptDefinition> candidate = m_scripts;
     const std::string commandId = utf8String(id);
-    const auto existing = std::ranges::find(candidate, commandId, &workbench::QuickCommand::id);
+    const auto existing = std::ranges::find(candidate, commandId, &workbench::ScriptDefinition::id);
     if (existing == candidate.end())
     {
-        setQuickCommandOperationError(tr("The quick command no longer exists."));
+        setQuickCommandOperationError(tr("The script no longer exists."));
         return false;
     }
 
@@ -3469,16 +3533,16 @@ bool AppController::moveQuickCommand(const QString &id, const int targetIndex)
     {
         return true;
     }
-    workbench::QuickCommand moved = std::move(candidate[sourceIndex]);
+    workbench::ScriptDefinition moved = std::move(candidate[sourceIndex]);
     candidate.erase(candidate.begin() + static_cast<std::ptrdiff_t>(sourceIndex));
     candidate.insert(candidate.begin() + static_cast<std::ptrdiff_t>(boundedTarget), std::move(moved));
-    if (!m_quickCommandStore.save(candidate))
+    if (!m_scriptStore.save(candidate))
     {
-        qCWarning(appControllerLog) << "Unable to persist quick command order";
-        setQuickCommandOperationError(tr("The quick command order could not be saved."));
+        qCWarning(appControllerLog) << "Unable to persist script order";
+        setQuickCommandOperationError(tr("The script order could not be saved."));
         return false;
     }
-    m_quickCommands = std::move(candidate);
+    m_scripts = std::move(candidate);
     m_quickCommandOperationError.clear();
     emit quickCommandsChanged();
     return true;
@@ -3493,43 +3557,58 @@ bool AppController::importQuickCommands(const QString &localFileUrl)
         setQuickCommandOperationError(tr("The script library could not be imported."));
         return false;
     }
-    workbench::QuickCommandStore source(path);
-    auto imported = source.load();
-    if (!imported)
+    std::vector<workbench::ScriptDefinition> imported;
+    const workbench::ScriptStore source(path);
+    if (auto scripts = source.load())
+    {
+        imported = std::move(*scripts);
+    }
+    else if (scripts.error() == workbench::ScriptStoreError::unsupportedVersion)
+    {
+        const auto legacy = workbench::QuickCommandStore(path).load();
+        if (!legacy)
+        {
+            setQuickCommandOperationError(tr("The script library could not be imported."));
+            return false;
+        }
+        imported.reserve(legacy->size());
+        std::ranges::transform(*legacy, std::back_inserter(imported), workbench::scriptFromQuickCommand);
+    }
+    else
     {
         setQuickCommandOperationError(tr("The script library could not be imported."));
         return false;
     }
-    if (m_quickCommands.size() + imported->size() > static_cast<std::size_t>(workbench::maximumQuickCommandCount))
+    if (m_scripts.size() + imported.size() > workbench::maximumScriptCount)
     {
-        setQuickCommandOperationError(tr("The imported script library exceeds the 1000 item limit."));
+        setQuickCommandOperationError(tr("The imported script library exceeds the 256 item limit."));
         return false;
     }
 
-    std::vector<workbench::QuickCommand> candidate = m_quickCommands;
+    std::vector<workbench::ScriptDefinition> candidate = m_scripts;
     QSet<QString> ids;
-    ids.reserve(static_cast<qsizetype>(candidate.size() + imported->size()));
-    for (const workbench::QuickCommand &quickCommand : candidate)
+    ids.reserve(static_cast<qsizetype>(candidate.size() + imported.size()));
+    for (const workbench::ScriptDefinition &script : candidate)
     {
-        ids.insert(utf8QString(quickCommand.id));
+        ids.insert(utf8QString(script.id));
     }
-    for (workbench::QuickCommand &quickCommand : *imported)
+    for (workbench::ScriptDefinition &script : imported)
     {
-        QString id = utf8QString(quickCommand.id);
+        QString id = utf8QString(script.id);
         if (ids.contains(id))
         {
             id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-            quickCommand.id = utf8String(id);
+            script.id = utf8String(id);
         }
         ids.insert(id);
-        candidate.push_back(std::move(quickCommand));
+        candidate.push_back(std::move(script));
     }
-    if (!m_quickCommandStore.save(candidate))
+    if (!m_scriptStore.save(candidate))
     {
         setQuickCommandOperationError(tr("The imported script library could not be saved."));
         return false;
     }
-    m_quickCommands = std::move(candidate);
+    m_scripts = std::move(candidate);
     setQuickCommandOperationError({});
     return true;
 }
@@ -3538,8 +3617,8 @@ bool AppController::exportQuickCommands(const QString &localFileUrl)
 {
     const QUrl url(localFileUrl);
     const QString path = url.isLocalFile() ? url.toLocalFile() : localFileUrl;
-    const workbench::QuickCommandStore destination(path);
-    if (!destination.save(m_quickCommands))
+    const workbench::ScriptStore destination(path);
+    if (!destination.save(m_scripts))
     {
         setQuickCommandOperationError(tr("The script library could not be exported."));
         return false;
@@ -7607,14 +7686,14 @@ QVariantMap AppController::shortcutResult(const actions::ShortcutValidation &val
 
 void AppController::loadQuickCommands()
 {
-    auto quickCommands = m_quickCommandStore.load();
-    if (!quickCommands)
+    auto scripts = m_scriptStore.loadOrMigrate(m_legacyQuickCommandPath);
+    if (!scripts)
     {
-        qCWarning(appControllerLog) << "Unable to load quick commands; starting with an empty command list";
-        setQuickCommandOperationError(tr("Saved quick commands could not be loaded."));
+        qCWarning(appControllerLog) << "Unable to load scripts; starting with an empty script list";
+        setQuickCommandOperationError(tr("Saved scripts could not be loaded."));
         return;
     }
-    m_quickCommands = std::move(*quickCommands);
+    m_scripts = std::move(*scripts);
 }
 
 void AppController::loadWorkspaceState()
