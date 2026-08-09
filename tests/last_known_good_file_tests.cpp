@@ -32,6 +32,8 @@ class LastKnownGoodFileTests final : public QObject
 private slots:
     void missingPrimaryUsesValidBackup();
     void malformedPrimaryUsesValidBackup();
+    void oversizedPrimaryUsesValidBackup();
+    void invalidBackupDoesNotMaskPrimaryFailure();
     void futurePrimaryFailsClosed();
     void saveBacksUpOnlyValidPrimary();
 };
@@ -62,6 +64,33 @@ void LastKnownGoodFileTests::malformedPrimaryUsesValidBackup()
     QVERIFY(loaded && loaded->has_value());
     QVERIFY(loaded->value().recoveredFromBackup);
     QCOMPARE(loaded->value().bytes, QByteArrayLiteral("valid:old"));
+}
+
+void LastKnownGoodFileTests::oversizedPrimaryUsesValidBackup()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("settings.json"));
+    QVERIFY(writeFile(path, QByteArray(256, 'x')));
+    QVERIFY(writeFile(path + QStringLiteral(".bak"), QByteArrayLiteral("valid:old")));
+
+    const auto loaded = ztermy::persistence::loadLastKnownGood(path, 128, validatePayload);
+    QVERIFY(loaded && loaded->has_value());
+    QVERIFY(loaded->value().recoveredFromBackup);
+    QCOMPARE(loaded->value().bytes, QByteArrayLiteral("valid:old"));
+}
+
+void LastKnownGoodFileTests::invalidBackupDoesNotMaskPrimaryFailure()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("settings.json"));
+    QVERIFY(writeFile(path, QByteArrayLiteral("damaged-primary")));
+    QVERIFY(writeFile(path + QStringLiteral(".bak"), QByteArrayLiteral("damaged-backup")));
+
+    const auto loaded = ztermy::persistence::loadLastKnownGood(path, 128, validatePayload);
+    QVERIFY(!loaded);
+    QCOMPARE(loaded.error(), LastKnownGoodError::invalidFormat);
 }
 
 void LastKnownGoodFileTests::futurePrimaryFailsClosed()

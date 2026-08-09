@@ -2932,8 +2932,37 @@ if(BUILD_TESTING)
         DEPENDS ztermy_v1_automated_preflight
     )
 
+    set(ZTERMY_V2_14_STABILITY_DATA_ROOT
+        "${CMAKE_CURRENT_BINARY_DIR}/test-data/v2-14-stability"
+    )
+    add_custom_target(ztermy_v2_14_stability_core
+        COMMAND "${CMAKE_COMMAND}" -E rm -rf
+                "${ZTERMY_V2_14_STABILITY_DATA_ROOT}"
+        COMMAND "${CMAKE_COMMAND}" -E env
+                "ZTERMY_RUN_LOCAL_SOAK_GATE=1"
+                "ZTERMY_LOCAL_SOAK_SECONDS=30"
+                "$<TARGET_FILE:ztermy_local_terminal_session_tests>"
+                survivesSustainedInteractionWithoutLatencyGrowth
+        COMMAND "${CMAKE_CTEST_COMMAND}"
+                --test-dir "${CMAKE_BINARY_DIR}"
+                -R "^(last-known-good-file|application-settings|ssh-profile-store|port-forwarding-rule-store|script-store|workspace-state-store|credential-vault|session-log-writer|sftp-session|transfer-manager|transfer-recovery-store|transfer-batch-recovery-store|port-forwarding-job|ssh-runtime|app-controller|diagnostic-reporter)$"
+                --output-on-failure
+        DEPENDS ztermy_test_binaries
+        COMMENT "Running the bounded V2.14 persistence and lifecycle stability core"
+        USES_TERMINAL
+        VERBATIM
+    )
+
+    add_custom_target(ztermy_v2_14_stability_preflight
+        DEPENDS
+            ztermy_v2_14_stability_core
+            ztermy_v1_runtime_preflight
+        COMMENT "Running the complete V2.14 stability and Windows runtime preflight"
+    )
+
     unset(ZTERMY_V1_PREFLIGHT_DATA_ROOT)
     unset(ZTERMY_V1_PREFLIGHT_PREREQUISITES)
+    unset(ZTERMY_V2_14_STABILITY_DATA_ROOT)
 endif()
 
 unset(ZTERMY_FORMAT_SOURCES)
