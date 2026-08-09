@@ -11,6 +11,8 @@
 namespace ztermy::ssh
 {
 
+class WindowsTcpListener;
+
 enum class TcpConnectErrorKind : std::uint8_t
 {
     InvalidEndpoint,
@@ -78,6 +80,8 @@ public:
     void close() noexcept;
 
 private:
+    friend class WindowsTcpListener;
+
     explicit WindowsTcpSocket(std::uintptr_t socket) noexcept;
 
     [[nodiscard]] std::uintptr_t release() noexcept;

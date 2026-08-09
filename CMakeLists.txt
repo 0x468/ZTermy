@@ -255,6 +255,8 @@ add_library(ztermy_ssh_transport STATIC
     src/infrastructure/ssh/SshDirectTcpipTransport.h
     src/infrastructure/ssh/WindowsTcpSocket.cpp
     src/infrastructure/ssh/WindowsTcpSocket.h
+    src/infrastructure/ssh/WindowsTcpListener.cpp
+    src/infrastructure/ssh/WindowsTcpListener.h
 )
 
 add_library(ztermy_ssh_domain STATIC
@@ -283,6 +285,8 @@ add_library(ztermy_sftp_domain STATIC
 add_library(ztermy_forwarding_domain STATIC
     src/domain/forwarding/PortForwardingRule.cpp
     src/domain/forwarding/PortForwardingRule.h
+    src/domain/forwarding/Socks5Protocol.cpp
+    src/domain/forwarding/Socks5Protocol.h
 )
 
 add_library(ztermy_forwarding_persistence STATIC
@@ -1388,6 +1392,27 @@ if(BUILD_TESTING)
 
     add_test(NAME port-forwarding-rule-store COMMAND ztermy_port_forwarding_rule_store_tests)
 
+    qt_add_executable(ztermy_socks5_protocol_tests
+        tests/socks5_protocol_tests.cpp
+    )
+
+    target_compile_features(ztermy_socks5_protocol_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_socks5_protocol_tests PRIVATE
+        ztermy_forwarding_domain
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_socks5_protocol_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME socks5-protocol COMMAND ztermy_socks5_protocol_tests)
+
     qt_add_executable(ztermy_transfer_queue_tests
         tests/transfer_queue_tests.cpp
     )
@@ -2279,6 +2304,7 @@ if(BUILD_TESTING)
             ztermy_ssh_terminal_session_tests
             ztermy_sftp_types_tests
             ztermy_port_forwarding_rule_store_tests
+            ztermy_socks5_protocol_tests
             ztermy_session_log_writer_tests
             ztermy_transfer_queue_tests
             ztermy_sftp_session_tests

@@ -1,3 +1,4 @@
+#include "infrastructure/ssh/WindowsTcpListener.h"
 #include "infrastructure/ssh/WindowsTcpSocket.h"
 
 #include <QHostAddress>
@@ -26,6 +27,8 @@ private slots:
     void moveTransfersSocketOwnership();
     void transfersBytesThroughInterface();
     void interruptEventWakesPendingRead();
+    void listenerAcceptsLoopbackClient();
+    void listenerRejectsConflictingBindAndHonorsCancellation();
 };
 
 void WindowsTcpSocketTests::connectsToLoopbackListener()
@@ -156,6 +159,58 @@ void WindowsTcpSocketTests::interruptEventWakesPendingRead()
     QVERIFY(!result);
     QCOMPARE(result.error().kind, ztermy::ssh::SshByteTransportErrorKind::Cancelled);
     QVERIFY(std::chrono::steady_clock::now() - started < 500ms);
+}
+
+void WindowsTcpSocketTests::listenerAcceptsLoopbackClient()
+{
+    QTcpServer reservation;
+    QVERIFY(reservation.listen(QHostAddress::LocalHost, 0));
+    const std::uint16_t port = reservation.serverPort();
+    reservation.close();
+
+    auto listener = ztermy::ssh::WindowsTcpListener::listen("127.0.0.1", port);
+    QVERIFY(listener);
+    QVERIFY(listener->valid());
+    QCOMPARE(listener->boundPort(), port);
+
+    QTcpSocket client;
+    client.connectToHost(QHostAddress::LocalHost, port);
+    QVERIFY(client.waitForConnected(1000));
+    QVERIFY(listener->waitForClient(std::chrono::steady_clock::now() + 1s));
+    auto accepted = listener->accept();
+    QVERIFY(accepted);
+    QVERIFY(accepted->has_value());
+    QVERIFY((*accepted)->valid());
+
+    const QByteArray payload = QByteArrayLiteral("accepted-socket");
+    QCOMPARE(client.write(payload), payload.size());
+    QVERIFY(client.waitForBytesWritten(1000));
+    QVERIFY((*accepted)->waitUntilReady(ztermy::ssh::SocketIoInterest::Read, std::chrono::steady_clock::now() + 1s));
+    std::array<char, 64> buffer{};
+    const auto read = (*accepted)->read(buffer);
+    QVERIFY(read);
+    QCOMPARE(QByteArray(buffer.data(), static_cast<qsizetype>(*read)), payload);
+}
+
+void WindowsTcpSocketTests::listenerRejectsConflictingBindAndHonorsCancellation()
+{
+    QTcpServer reservation;
+    QVERIFY(reservation.listen(QHostAddress::LocalHost, 0));
+    const std::uint16_t port = reservation.serverPort();
+
+    const auto conflict = ztermy::ssh::WindowsTcpListener::listen("127.0.0.1", port);
+    QVERIFY(!conflict);
+    QVERIFY(conflict.error().kind == ztermy::ssh::TcpListenErrorKind::AddressInUse
+            || conflict.error().kind == ztermy::ssh::TcpListenErrorKind::AccessDenied);
+    reservation.close();
+
+    auto listener = ztermy::ssh::WindowsTcpListener::listen("127.0.0.1", port);
+    QVERIFY(listener);
+    std::stop_source stopSource;
+    stopSource.request_stop();
+    const auto cancelled = listener->waitForClient(std::chrono::steady_clock::now() + 1s, stopSource.get_token());
+    QVERIFY(!cancelled);
+    QCOMPARE(cancelled.error().kind, ztermy::ssh::TcpListenErrorKind::Cancelled);
 }
 
 QTEST_GUILESS_MAIN(WindowsTcpSocketTests)
