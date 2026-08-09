@@ -17,6 +17,7 @@ private slots:
     void migratesVersionOneWithoutHostCollapseState();
     void migratesVersionTwoWithoutSftpBookmarks();
     void migratesVersionThreeWithoutSftpNavigationPreferences();
+    void migratesVersionFourWithoutSftpListingPreferences();
     void migratesVersionFiveWithoutTerminalWorkspaces();
     void togglesAndBoundsSftpBookmarks();
     void rejectsMalformedDuplicateAndInvalidState();
@@ -122,6 +123,28 @@ void WorkspaceStateStoreTests::migratesVersionThreeWithoutSftpNavigationPreferen
     QVERIFY(loaded.has_value());
     QCOMPARE(loaded->profiles.front().sftpViewMode, std::string("list"));
     QVERIFY(!loaded->profiles.front().followTerminalDirectory);
+}
+
+void WorkspaceStateStoreTests::migratesVersionFourWithoutSftpListingPreferences()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("workspace.json"));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    const QByteArray payload =
+        R"({"schemaVersion":4,"profiles":[{"profileId":"host","lastRemotePath":"/srv","recentRemotePaths":["/srv"],"bookmarkedRemotePaths":["/srv/log"],"workbenchPage":"sftp","workbenchSide":"left","workbenchWidth":520,"composerHeight":132,"sftpViewMode":"tree","followTerminalDirectory":true}],"collapsedHostSections":[]})";
+    QCOMPARE(file.write(payload), payload.size());
+    file.close();
+
+    const auto loaded = ztermy::workbench::WorkspaceStateStore(path).load();
+    QVERIFY(loaded);
+    QCOMPARE(loaded->profiles.size(), std::size_t{1});
+    QCOMPARE(loaded->profiles.front().sftpViewMode, std::string("tree"));
+    QVERIFY(loaded->profiles.front().followTerminalDirectory);
+    QCOMPARE(loaded->profiles.front().sftpSortColumn, std::string("name"));
+    QCOMPARE(loaded->profiles.front().sftpFilenameEncoding, std::string("utf-8"));
+    QVERIFY(loaded->profiles.front().sftpDirectoriesFirst);
 }
 
 void WorkspaceStateStoreTests::migratesVersionTwoWithoutSftpBookmarks()

@@ -1,6 +1,8 @@
 #include "core/config/ApplicationSettings.h"
 
 #include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -28,6 +30,7 @@ private slots:
     void migratesCredentialSchemaWithSystemLanguage();
     void migratesLocalizationSchemaWithFontDefaults();
     void migratesFontOptionsSchema();
+    void migratesEveryIntermediateSchema();
     void rejectsMalformedUnsupportedAndIncompleteDocuments();
     void rejectsOutOfRangeValues();
     void recoversLastKnownGoodSettings();
@@ -268,6 +271,58 @@ void ApplicationSettingsTests::migratesFontOptionsSchema()
     const auto loaded = store.load();
     QVERIFY(loaded);
     QCOMPARE(loaded->terminalFontFamily, QStringLiteral("Cascadia Mono"));
+}
+
+void ApplicationSettingsTests::migratesEveryIntermediateSchema()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+
+    const auto base = [](const int version) {
+        QJsonObject root{
+            {QStringLiteral("version"), version},
+            {QStringLiteral("theme"), QStringLiteral("dark")},
+            {QStringLiteral("backdropOpacity"), 0.8},
+            {QStringLiteral("backdrop"), QStringLiteral("acrylic")},
+            {QStringLiteral("accent"), QStringLiteral("custom")},
+            {QStringLiteral("customAccent"), QStringLiteral("#3366CC")},
+            {QStringLiteral("uiFontFamily"), QStringLiteral("Microsoft YaHei UI")},
+            {QStringLiteral("terminalFontFamily"), QStringLiteral("Cascadia Mono")},
+            {QStringLiteral("terminalFontSize"), 15},
+            {QStringLiteral("showAllTerminalFonts"), false},
+            {QStringLiteral("terminalLigatures"), true},
+            {QStringLiteral("terminalBackgroundOpacity"), 0.7},
+            {QStringLiteral("cursor"), QStringLiteral("bar")},
+            {QStringLiteral("cursorBlink"), true},
+            {QStringLiteral("copyOnSelect"), false},
+            {QStringLiteral("confirmMultilinePaste"), true},
+            {QStringLiteral("credentialStorage"), QStringLiteral("system")},
+            {QStringLiteral("language"), QStringLiteral("zh_CN")},
+        };
+        if (version >= 9)
+        {
+            root.insert(QStringLiteral("shortcutOverrides"),
+                        QJsonObject{{QStringLiteral("terminal.find"), QStringLiteral("Ctrl+Alt+F")}});
+        }
+        return root;
+    };
+
+    for (const int version : {4, 8, 9})
+    {
+        const QString path = directory.filePath(QStringLiteral("settings-v%1.json").arg(version));
+        QVERIFY(writeFile(path, QJsonDocument(base(version)).toJson(QJsonDocument::Compact)));
+        const auto loaded = ztermy::config::ApplicationSettingsStore(path).load();
+        QVERIFY2(loaded, qPrintable(QStringLiteral("Schema %1 did not load").arg(version)));
+        QCOMPARE(loaded->terminalFontSize, 15);
+        QCOMPARE(loaded->accent, ztermy::config::AccentPreference::custom);
+        QCOMPARE(loaded->credentialStorage, version >= 5 ? ztermy::config::CredentialStoragePreference::system
+                                                         : ztermy::config::CredentialStoragePreference::automatic);
+        QCOMPARE(loaded->language, version >= 6 ? ztermy::config::LanguagePreference::simplifiedChinese
+                                                : ztermy::config::LanguagePreference::system);
+        QCOMPARE(loaded->shortcutOverrides.size(), version >= 9 ? 1 : 0);
+        QVERIFY(!loaded->sftpShowHiddenFiles);
+        QVERIFY(loaded->sftpConfirmDelete);
+    }
 }
 
 void ApplicationSettingsTests::rejectsMalformedUnsupportedAndIncompleteDocuments()
