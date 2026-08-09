@@ -736,6 +736,25 @@ WindowsTcpSocket::waitUntilReady(const SocketIoInterest interest, const std::chr
     return std::unexpected(SshByteTransportError{.kind = SshByteTransportErrorKind::SystemError});
 }
 
+std::expected<void, SshByteTransportError> WindowsTcpSocket::shutdownWrite() noexcept
+{
+    if (!valid())
+    {
+        return std::unexpected(
+            SshByteTransportError{.kind = SshByteTransportErrorKind::SystemError, .nativeCode = WSAENOTSOCK});
+    }
+    if (::shutdown(static_cast<SOCKET>(m_socket), SD_SEND) == 0)
+    {
+        return {};
+    }
+    const int error = WSAGetLastError();
+    if (error == WSAESHUTDOWN)
+    {
+        return {};
+    }
+    return std::unexpected(mapIoError(error));
+}
+
 void WindowsTcpSocket::close() noexcept
 {
     const std::uintptr_t socket = release();

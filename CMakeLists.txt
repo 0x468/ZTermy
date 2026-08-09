@@ -294,6 +294,11 @@ add_library(ztermy_forwarding_persistence STATIC
     src/infrastructure/forwarding/PortForwardingRuleStore.h
 )
 
+add_library(ztermy_forwarding_session STATIC
+    src/application/forwarding/PortForwardingJob.cpp
+    src/application/forwarding/PortForwardingJob.h
+)
+
 add_library(ztermy_ssh_persistence STATIC
     src/infrastructure/ssh/KnownHostsStore.cpp
     src/infrastructure/ssh/KnownHostsStore.h
@@ -347,6 +352,23 @@ target_include_directories(ztermy_forwarding_persistence PUBLIC src)
 target_link_libraries(ztermy_forwarding_persistence
     PUBLIC ztermy_forwarding_domain
     PRIVATE Qt6::Core
+)
+
+target_compile_features(ztermy_forwarding_session PUBLIC cxx_std_23)
+target_include_directories(ztermy_forwarding_session PUBLIC src)
+target_compile_definitions(ztermy_forwarding_session PRIVATE
+    NOMINMAX
+    UNICODE
+    WIN32_LEAN_AND_MEAN
+    _UNICODE
+)
+target_link_libraries(ztermy_forwarding_session
+    PUBLIC
+        ztermy_forwarding_domain
+        ztermy_ssh_connection
+    PRIVATE
+        ztermy_ssh_transport
+        Qt6::Core
 )
 
 target_compile_features(ztermy_ssh_persistence PUBLIC cxx_std_23)
@@ -1413,6 +1435,49 @@ if(BUILD_TESTING)
 
     add_test(NAME socks5-protocol COMMAND ztermy_socks5_protocol_tests)
 
+    qt_add_executable(ztermy_port_forwarding_job_tests
+        tests/port_forwarding_job_tests.cpp
+    )
+
+    target_compile_features(ztermy_port_forwarding_job_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_port_forwarding_job_tests PRIVATE
+        ztermy_forwarding_session
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_port_forwarding_job_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME port-forwarding-job COMMAND ztermy_port_forwarding_job_tests)
+
+    qt_add_executable(ztermy_port_forwarding_real_host_tests
+        tests/port_forwarding_real_host_tests.cpp
+    )
+
+    target_compile_features(ztermy_port_forwarding_real_host_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_port_forwarding_real_host_tests PRIVATE
+        ztermy_forwarding_session
+        Qt6::Network
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_port_forwarding_real_host_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME port-forwarding-real-host COMMAND ztermy_port_forwarding_real_host_tests)
+
     qt_add_executable(ztermy_transfer_queue_tests
         tests/transfer_queue_tests.cpp
     )
@@ -2305,6 +2370,8 @@ if(BUILD_TESTING)
             ztermy_sftp_types_tests
             ztermy_port_forwarding_rule_store_tests
             ztermy_socks5_protocol_tests
+            ztermy_port_forwarding_job_tests
+            ztermy_port_forwarding_real_host_tests
             ztermy_session_log_writer_tests
             ztermy_transfer_queue_tests
             ztermy_sftp_session_tests

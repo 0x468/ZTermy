@@ -48,7 +48,7 @@ namespace
     {
         return ztermy::ssh::SocketIoInterest::Write;
     }
-    return ztermy::ssh::SocketIoInterest::ReadWrite;
+    return wantsRead && wantsWrite ? ztermy::ssh::SocketIoInterest::ReadWrite : ztermy::ssh::SocketIoInterest::Read;
 }
 
 [[nodiscard]] ztermy::ssh::SshByteTransport *callbackTransport(void **abstract) noexcept

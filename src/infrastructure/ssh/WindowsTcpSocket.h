@@ -76,6 +76,7 @@ public:
     [[nodiscard]] std::expected<void, SshByteTransportError>
     waitUntilReady(SocketIoInterest interest, std::chrono::steady_clock::time_point deadline,
                    const std::stop_token &stopToken = {}, std::uintptr_t interruptHandle = 0) noexcept override;
+    [[nodiscard]] std::expected<void, SshByteTransportError> shutdownWrite() noexcept;
 
     void close() noexcept;
 
