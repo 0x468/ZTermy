@@ -68,6 +68,7 @@ public:
     void setEntries(const DirectoryListingPtr &entries, const QString &remotePath = {});
     [[nodiscard]] Q_INVOKABLE QVariantMap entry(int row) const;
     Q_INVOKABLE bool setSelected(int row, bool selected);
+    Q_INVOKABLE void selectRange(int firstRow, int lastRow, bool clearExisting = true);
     Q_INVOKABLE void clearSelection();
     [[nodiscard]] Q_INVOKABLE QStringList selectedPaths() const;
     Q_INVOKABLE bool toggleExpanded(int row);

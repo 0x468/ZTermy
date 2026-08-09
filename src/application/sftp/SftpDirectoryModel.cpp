@@ -311,7 +311,7 @@ QVariantMap SftpDirectoryModel::entry(const int row) const
 bool SftpDirectoryModel::setSelected(const int row, const bool selected)
 {
     const DirectoryEntry *item = visibleEntry(row);
-    if (item == nullptr)
+    if (item == nullptr || item->name == "..")
     {
         return false;
     }
@@ -323,6 +323,37 @@ bool SftpDirectoryModel::setSelected(const int row, const bool selected)
         emit selectionChanged();
     }
     return changed;
+}
+
+void SftpDirectoryModel::selectRange(const int firstRow, const int lastRow, const bool clearExisting)
+{
+    if (rowCount() <= 0)
+    {
+        return;
+    }
+
+    const auto previous = m_selectedPaths;
+    if (clearExisting)
+    {
+        m_selectedPaths.clear();
+    }
+
+    const int first = std::clamp(std::min(firstRow, lastRow), 0, rowCount() - 1);
+    const int last = std::clamp(std::max(firstRow, lastRow), 0, rowCount() - 1);
+    for (int row = first; row <= last; ++row)
+    {
+        const DirectoryEntry *item = visibleEntry(row);
+        if (item != nullptr && item->name != "..")
+        {
+            m_selectedPaths.insert(item->remotePath);
+        }
+    }
+
+    if (previous != m_selectedPaths)
+    {
+        emit dataChanged(index(0), index(rowCount() - 1), {SelectedRole});
+        emit selectionChanged();
+    }
 }
 
 void SftpDirectoryModel::clearSelection()

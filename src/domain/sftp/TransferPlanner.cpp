@@ -84,13 +84,13 @@ planTransferTree(const TransferPlanRequest &request, TransferSourceTree &source,
 
     std::vector<PendingNode> pending;
     pending.reserve(request.sourceRoots.size());
-    for (auto root = request.sourceRoots.rbegin(); root != request.sourceRoots.rend(); ++root)
+    for (const auto &root : std::views::reverse(request.sourceRoots))
     {
         if (stopToken.stop_requested())
         {
             return std::unexpected(TransferPlanningError::Cancelled);
         }
-        auto node = source.stat(*root, stopToken);
+        auto node = source.stat(root, stopToken);
         if (!node)
         {
             return std::unexpected(TransferPlanningError::SourceUnavailable);
@@ -153,14 +153,14 @@ planTransferTree(const TransferPlanRequest &request, TransferSourceTree &source,
             return std::unexpected(TransferPlanningError::SourceUnavailable);
         }
         std::ranges::sort(*children, {}, &TransferSourceNode::name);
-        for (auto child = children->rbegin(); child != children->rend(); ++child)
+        for (auto &child : std::views::reverse(*children))
         {
-            if (!validNodeName(child->name) || child->sourcePath.empty())
+            if (!validNodeName(child.name) || child.sourcePath.empty())
             {
                 return std::unexpected(TransferPlanningError::InvalidSource);
             }
-            std::string relativePath = current.relativePath + '/' + child->name;
-            pending.push_back(PendingNode{.node = std::move(*child),
+            std::string relativePath = current.relativePath + '/' + child.name;
+            pending.push_back(PendingNode{.node = std::move(child),
                                           .parentId = currentId,
                                           .relativePath = std::move(relativePath),
                                           .depth = current.depth + 1});

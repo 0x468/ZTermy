@@ -90,6 +90,7 @@ struct TransferBatch final
     TransferBatchDirection direction = TransferBatchDirection::Download;
     TransferBatchStatus status = TransferBatchStatus::Discovering;
     TransferConflictPolicy conflictPolicy = TransferConflictPolicy::Ask;
+    std::uint64_t bytesPerSecond = 0;
     bool applyConflictPolicyToRemaining = false;
 
     [[nodiscard]] friend bool operator==(const TransferBatch &, const TransferBatch &) = default;

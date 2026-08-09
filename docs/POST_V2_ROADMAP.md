@@ -203,7 +203,8 @@ and retained manual matrix in `testing/V2_11_ACCEPTANCE.md`.
 
 ## V2.12 — recursive and batch SFTP (`0.2.12`)
 
-Status: planned.
+Status: implemented; final release evidence is recorded in the V2.12
+acceptance matrix.
 
 - add multi-selection, recursive directory job graphs, aggregate progress,
   conflict policy, cancellation, recovery, and symlink boundaries;

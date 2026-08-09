@@ -5,6 +5,7 @@
 #include "application/sftp/TransferSourceAdapters.h"
 
 #include <algorithm>
+#include <limits>
 #include <ranges>
 #include <utility>
 
@@ -101,12 +102,16 @@ TransferBatchCoordinator::TransferBatchCoordinator(TransferManager &transferMana
     connect(&m_transferManager, &TransferManager::tasksChanged, this, &TransferBatchCoordinator::applyTaskSnapshot);
     connect(this, &TransferBatchCoordinator::planningCompleted, this, &TransferBatchCoordinator::completePlanning,
             Qt::QueuedConnection);
+    m_recoveryTimer.setSingleShot(true);
+    m_recoveryTimer.setInterval(750);
+    connect(&m_recoveryTimer, &QTimer::timeout, this, &TransferBatchCoordinator::persistRecovery);
 }
 
 TransferBatchCoordinator::~TransferBatchCoordinator()
 {
     requestStop();
     m_planners.clear();
+    persistRecovery();
 }
 
 std::expected<std::string, TransferBatchCoordinatorError>
@@ -251,9 +256,73 @@ TransferBatchesPtr TransferBatchCoordinator::snapshot() const
     return std::make_shared<const std::vector<TransferBatch>>(m_batches);
 }
 
+bool TransferBatchCoordinator::ownsChildTask(const std::string_view taskId) const
+{
+    return std::ranges::any_of(m_batches, [taskId](const TransferBatch &batch) {
+        return std::ranges::any_of(batch.entries, [taskId](const TransferPlanEntry &entry) {
+            return entry.childTaskId == taskId;
+        });
+    });
+}
+
+std::optional<TransferConflictPolicy>
+TransferBatchCoordinator::automaticConflictPolicy(const std::string_view taskId) const
+{
+    const auto batch = std::ranges::find_if(m_batches, [taskId](const TransferBatch &candidate) {
+        return std::ranges::any_of(candidate.entries, [taskId](const TransferPlanEntry &entry) {
+            return entry.childTaskId == taskId;
+        });
+    });
+    if (batch == m_batches.end() || !batch->applyConflictPolicyToRemaining
+        || (batch->conflictPolicy != TransferConflictPolicy::Replace
+            && batch->conflictPolicy != TransferConflictPolicy::Skip))
+    {
+        return std::nullopt;
+    }
+    return batch->conflictPolicy;
+}
+
+void TransferBatchCoordinator::setConflictPolicyForChild(const std::string_view taskId,
+                                                         const TransferConflictPolicy policy,
+                                                         const bool applyToRemaining)
+{
+    const auto batch = std::ranges::find_if(m_batches, [taskId](const TransferBatch &candidate) {
+        return std::ranges::any_of(candidate.entries, [taskId](const TransferPlanEntry &entry) {
+            return entry.childTaskId == taskId;
+        });
+    });
+    if (batch == m_batches.end())
+    {
+        return;
+    }
+    batch->conflictPolicy = policy;
+    batch->applyConflictPolicyToRemaining =
+        applyToRemaining && (policy == TransferConflictPolicy::Replace || policy == TransferConflictPolicy::Skip);
+    publishSnapshot();
+}
+
+void TransferBatchCoordinator::enableRecovery(QString path)
+{
+    if (m_stopRequested)
+    {
+        return;
+    }
+    m_recoveryStore = std::make_unique<TransferBatchRecoveryStore>(std::move(path));
+    auto recovered = m_recoveryStore->load();
+    if (!recovered)
+    {
+        emit recoveryError(QStringLiteral("batch-recovery-load-failed"));
+        return;
+    }
+    m_batches = std::move(*recovered);
+    applyTaskSnapshot(m_transferManager.snapshot());
+    publishSnapshot();
+}
+
 void TransferBatchCoordinator::requestStop() noexcept
 {
     m_stopRequested = true;
+    m_recoveryTimer.stop();
     for (auto &[id, planner] : m_planners)
     {
         (void)id;
@@ -314,7 +383,7 @@ void TransferBatchCoordinator::dismiss(const QString &batchId)
     const auto found = std::ranges::find(m_batches, id, &TransferBatch::id);
     if (found == m_batches.end() || m_planners.contains(id)
         || (found->status != TransferBatchStatus::Completed && found->status != TransferBatchStatus::Failed
-            && found->status != TransferBatchStatus::Cancelled))
+            && found->status != TransferBatchStatus::Cancelled && found->status != TransferBatchStatus::Interrupted))
     {
         return;
     }
@@ -323,6 +392,42 @@ void TransferBatchCoordinator::dismiss(const QString &batchId)
     });
     m_batches.erase(found);
     publishSnapshot();
+}
+
+void TransferBatchCoordinator::pauseAll()
+{
+    m_pauseAllRequested = true;
+    for (const TransferBatch &batch : m_batches)
+    {
+        forEachChild(batch, [this](const QString &taskId) {
+            m_transferManager.pause(taskId);
+        });
+    }
+}
+
+void TransferBatchCoordinator::resumeAll()
+{
+    m_pauseAllRequested = false;
+    for (const TransferBatch &batch : m_batches)
+    {
+        forEachChild(batch, [this](const QString &taskId) {
+            m_transferManager.resume(taskId);
+        });
+    }
+}
+
+void TransferBatchCoordinator::cancelAll()
+{
+    std::vector<QString> ids;
+    ids.reserve(m_batches.size());
+    for (const TransferBatch &batch : m_batches)
+    {
+        ids.push_back(QString::fromStdString(batch.id));
+    }
+    for (const QString &id : ids)
+    {
+        cancel(id);
+    }
 }
 
 void TransferBatchCoordinator::completePlanning(const TransferBatchPlanningOutcomePtr &outcome)
@@ -355,6 +460,10 @@ void TransferBatchCoordinator::completePlanning(const TransferBatchPlanningOutco
             }
             placeholder->status = TransferBatchStatus::Failed;
         }
+        else if (m_pauseAllRequested)
+        {
+            m_transferManager.pause(QString::fromStdString(childId));
+        }
     }
     publishSnapshot();
 }
@@ -368,6 +477,7 @@ void TransferBatchCoordinator::applyTaskSnapshot(const TransferTasksPtr &tasks)
         {
             continue;
         }
+        std::uint64_t bytesPerSecond = 0;
         for (TransferPlanEntry &entry : batch.entries)
         {
             if (entry.childTaskId.empty())
@@ -380,6 +490,9 @@ void TransferBatchCoordinator::applyTaskSnapshot(const TransferTasksPtr &tasks)
                 continue;
             }
             const TransferPlanEntryStatus status = entryStatus(task->status);
+            bytesPerSecond = task->bytesPerSecond > std::numeric_limits<std::uint64_t>::max() - bytesPerSecond
+                                 ? std::numeric_limits<std::uint64_t>::max()
+                                 : bytesPerSecond + task->bytesPerSecond;
             const std::string errorCode = status == TransferPlanEntryStatus::Failed ? task->errorCode : std::string{};
             if (entry.status != status || entry.transferredBytes != task->transferredBytes
                 || entry.errorCode != errorCode)
@@ -389,6 +502,11 @@ void TransferBatchCoordinator::applyTaskSnapshot(const TransferTasksPtr &tasks)
                 entry.errorCode = errorCode;
                 changed = true;
             }
+        }
+        if (batch.bytesPerSecond != bytesPerSecond)
+        {
+            batch.bytesPerSecond = bytesPerSecond;
+            changed = true;
         }
         const TransferBatchStatus previous = batch.status;
         updateBatchStatus(batch);
@@ -403,6 +521,22 @@ void TransferBatchCoordinator::applyTaskSnapshot(const TransferTasksPtr &tasks)
 void TransferBatchCoordinator::publishSnapshot()
 {
     emit batchesChanged(snapshot());
+    if (m_recoveryStore && !m_stopRequested)
+    {
+        m_recoveryTimer.start();
+    }
+}
+
+void TransferBatchCoordinator::persistRecovery()
+{
+    if (m_recoveryStore)
+    {
+        const auto saved = m_recoveryStore->save(m_batches);
+        if (!saved)
+        {
+            emit recoveryError(QStringLiteral("batch-recovery-save-failed"));
+        }
+    }
 }
 
 TransferBatch *TransferBatchCoordinator::findBatch(const std::string_view batchId)

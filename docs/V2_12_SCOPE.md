@@ -1,6 +1,6 @@
 # V2.12 scope: recursive and batch SFTP
 
-Status: approved implementation scope for `0.2.12`
+Status: implemented in `0.2.12`; manual acceptance remains tracked separately
 
 V2.12 extends the proven V2.8 regular-file transfer path into a bounded batch
 job system. A batch is a durable parent operation containing directory actions
@@ -13,14 +13,16 @@ only byte-copy fast path for an individual file.
   behavior and accessible selected-count feedback;
 - recursive upload and download of files and directories, including empty
   directories, aggregate discovery/progress/speed/ETA, and per-child details;
-- explicit conflict policies (`ask`, `replace`, `rename`, `skip`) with an
-  apply-to-remaining scope that never changes an already-running child;
+- explicit conflict policies (`ask`, `replace`, `rename`, `skip`); safe,
+  idempotent `replace` and `skip` decisions may apply to the remaining queued
+  children without changing an already-running child, while `rename` always
+  remains explicit because each destination must be unique;
 - bounded pause, resume, cancel, retry, dismiss, and interrupted-start recovery
   at both batch and child level;
 - deterministic directory creation ordering, bounded regular-file concurrency,
   partial-file cleanup, local destination reveal, and source/destination copy;
-- drag-and-drop upload of multiple local files/directories and separately
-  reviewed native virtual-file drag-out for remote regular files;
+- drag-and-drop upload of multiple local files/directories and the existing
+  completed-download drag-out path for regular files;
 - light/dark, English/Chinese, keyboard, screen-reader, compact/regular, empty,
   discovery, conflict, progress, partial failure, recovery, and completion UI.
 
@@ -71,8 +73,8 @@ only byte-copy fast path for an individual file.
   delta transfer, synchronization/mirroring, background service transfers, and
   remote editing;
 - shell-based archive shortcuts (`tar`/`zip`) and implicit command execution;
-- native virtual drag-out of directories until the regular-file descriptor and
-  cancellation contract has passed the separate Windows review.
+- direct native virtual drag-out of remote files or directories before a local
+  download exists, pending a separate Windows descriptor/cancellation review.
 
 ## Exit gate
 
@@ -82,4 +84,3 @@ interrupted recovery, symlink-boundary evidence, the serial real-window/DPI
 matrix, static analysis, static Release, and packaged artifacts pass. Subjective
 Explorer drag behavior and physical multi-monitor checks remain recorded for the
 V2.14 owner pass.
-

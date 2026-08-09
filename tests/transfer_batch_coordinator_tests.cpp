@@ -1,11 +1,16 @@
+#include "application/sftp/SftpClient.h"
 #include "application/sftp/TransferBatchCoordinator.h"
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
+#include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QUuid>
 
 #include <algorithm>
+#include <atomic>
 #include <mutex>
 #include <optional>
 #include <ranges>
@@ -166,6 +171,140 @@ private:
     };
 }
 
+struct RealHostConfiguration final
+{
+    QString host;
+    QString username;
+    QString privateKeyPath;
+    QString expectedFingerprint;
+    std::uint16_t port = 22;
+};
+
+[[nodiscard]] std::optional<RealHostConfiguration> realHostConfiguration()
+{
+    if (qEnvironmentVariable("ZTERMY_TEST_SFTP_RECURSIVE") != QStringLiteral("1"))
+    {
+        return std::nullopt;
+    }
+
+    const QString host = qEnvironmentVariable("ZTERMY_TEST_SSH_HOST");
+    const QString username = qEnvironmentVariable("ZTERMY_TEST_SSH_USERNAME");
+    const QString privateKeyPath = qEnvironmentVariable("ZTERMY_TEST_SSH_PRIVATE_KEY");
+    const QString expectedFingerprint = qEnvironmentVariable("ZTERMY_TEST_SSH_EXPECTED_FINGERPRINT");
+    if (host.isEmpty() || username.isEmpty() || privateKeyPath.isEmpty() || expectedFingerprint.isEmpty())
+    {
+        return std::nullopt;
+    }
+
+    bool validPort = false;
+    const int configuredPort = qEnvironmentVariableIntValue("ZTERMY_TEST_SSH_PORT", &validPort);
+    return RealHostConfiguration{
+        .host = host,
+        .username = username,
+        .privateKeyPath = privateKeyPath,
+        .expectedFingerprint = expectedFingerprint,
+        .port = validPort && configuredPort > 0 && configuredPort <= 65'535 ? static_cast<std::uint16_t>(configuredPort)
+                                                                            : std::uint16_t{22},
+    };
+}
+
+[[nodiscard]] ztermy::sftp::TransferRequestProvider realHostProvider(const RealHostConfiguration &configuration,
+                                                                     const QString &knownHostsPath)
+{
+    return
+        [configuration,
+         knownHostsPath]() -> std::expected<ztermy::ssh::SshConnectionRequest, ztermy::sftp::TransferCredentialError> {
+            return ztermy::ssh::SshConnectionRequest{
+                .host = configuration.host,
+                .port = configuration.port,
+                .username = configuration.username,
+                .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
+                .privateKeyPath = configuration.privateKeyPath,
+                .knownHostsPath = knownHostsPath,
+            };
+        };
+}
+
+[[nodiscard]] ztermy::sftp::SftpClientFactory
+realHostFactory(const QString &expectedFingerprint, const std::shared_ptr<std::atomic_bool> &fingerprintMismatch)
+{
+    return [expectedFingerprint, fingerprintMismatch](ztermy::ssh::SshConnectionRequest &request,
+                                                      const ztermy::ssh::SshConnectionCallbacks &,
+                                                      const std::stop_token &stopToken) {
+        const ztermy::ssh::SshConnectionCallbacks callbacks{
+            .phaseChanged = {},
+            .confirmUnknownHostKey =
+                [expectedFingerprint, fingerprintMismatch](const QString &, const QString &,
+                                                           const QString &fingerprint) {
+                    if (fingerprint != expectedFingerprint)
+                    {
+                        fingerprintMismatch->store(true);
+                        return ztermy::ssh::UnknownHostKeyDecision::Reject;
+                    }
+                    return ztermy::ssh::UnknownHostKeyDecision::AcceptOnce;
+                },
+            .hostKeyChanged = {},
+        };
+        auto client = ztermy::sftp::createSftpClient(request, callbacks, stopToken);
+        if (!client)
+        {
+            qInfo() << "SFTP client bootstrap failed: failure" << static_cast<int>(client.error().failure) << "reason"
+                    << static_cast<int>(client.error().reason);
+        }
+        return client;
+    };
+}
+
+[[nodiscard]] std::optional<ztermy::sftp::TransferBatchStatus>
+batchStatus(const ztermy::sftp::TransferBatchCoordinator &coordinator, const std::string_view batchId)
+{
+    const auto batches = coordinator.snapshot();
+    const auto batch = std::ranges::find(*batches, batchId, &ztermy::sftp::TransferBatch::id);
+    if (batch == batches->end())
+    {
+        return std::nullopt;
+    }
+    return batch->status;
+}
+
+[[nodiscard]] std::optional<ztermy::sftp::TransferBatchStatus>
+waitForBatchTerminalStatus(const ztermy::sftp::TransferBatchCoordinator &coordinator, const std::string_view batchId,
+                           const int timeoutMilliseconds)
+{
+    QElapsedTimer timer;
+    timer.start();
+    auto status = batchStatus(coordinator, batchId);
+    while (timer.elapsed() < timeoutMilliseconds
+           && (!status
+               || (*status != ztermy::sftp::TransferBatchStatus::Completed
+                   && *status != ztermy::sftp::TransferBatchStatus::Failed)))
+    {
+        QTest::qWait(25);
+        status = batchStatus(coordinator, batchId);
+    }
+    return status;
+}
+
+void reportBatchFailure(const ztermy::sftp::TransferBatchCoordinator &coordinator, const std::string_view batchId)
+{
+    const auto batches = coordinator.snapshot();
+    const auto batch = std::ranges::find(*batches, batchId, &ztermy::sftp::TransferBatch::id);
+    if (batch == batches->end())
+    {
+        qInfo() << "Missing transfer batch";
+        return;
+    }
+    qInfo() << "Transfer batch status" << static_cast<int>(batch->status) << "entries" << batch->entries.size();
+    for (const auto &entry : batch->entries)
+    {
+        if (!entry.errorCode.empty() || entry.status != ztermy::sftp::TransferPlanEntryStatus::Completed)
+        {
+            qInfo().noquote() << "Entry" << QString::fromStdString(entry.relativePath) << "status"
+                              << static_cast<int>(entry.status) << "error" << QString::fromStdString(entry.errorCode);
+        }
+    }
+}
+
 } // namespace
 
 class TransferBatchCoordinatorTests final : public QObject
@@ -175,6 +314,7 @@ class TransferBatchCoordinatorTests final : public QObject
 private slots:
     void plansMaterializesAndCompletesRecursiveUpload();
     void rejectsInvalidAndDuplicateBatchRequests();
+    void recursivelyUploadsAndDownloadsOnRealHost();
 };
 
 void TransferBatchCoordinatorTests::plansMaterializesAndCompletesRecursiveUpload()
@@ -201,6 +341,16 @@ void TransferBatchCoordinatorTests::plansMaterializesAndCompletesRecursiveUpload
     auto queued = coordinator.enqueue(std::move(request), provider(), "utf-8");
     QVERIFY(queued.has_value());
     QTRY_COMPARE_WITH_TIMEOUT(coordinator.snapshot()->front().status, TransferBatchStatus::Completed, 5000);
+
+    const auto batch = coordinator.snapshot()->front();
+    const auto child = std::ranges::find_if(batch.entries, [](const TransferPlanEntry &entry) {
+        return !entry.childTaskId.empty();
+    });
+    QVERIFY(child != batch.entries.end());
+    QVERIFY(coordinator.ownsChildTask(child->childTaskId));
+    QVERIFY(!coordinator.automaticConflictPolicy(child->childTaskId).has_value());
+    coordinator.setConflictPolicyForChild(child->childTaskId, TransferConflictPolicy::Skip, true);
+    QCOMPARE(coordinator.automaticConflictPolicy(child->childTaskId), TransferConflictPolicy::Skip);
 
     std::scoped_lock lock(state->mutex);
     QVERIFY(state->directories.contains("/upload/project"));
@@ -231,6 +381,123 @@ void TransferBatchCoordinatorTests::rejectsInvalidAndDuplicateBatchRequests()
     QCOMPARE(coordinator.enqueue(std::move(request), provider(), "utf-8").error(),
              TransferBatchCoordinatorError::Capacity);
     QTRY_VERIFY_WITH_TIMEOUT(coordinator.snapshot()->front().status == TransferBatchStatus::Failed, 5000);
+    manager.shutdown();
+}
+
+void TransferBatchCoordinatorTests::recursivelyUploadsAndDownloadsOnRealHost()
+{
+    using namespace ztermy::sftp;
+    const auto configuration = realHostConfiguration();
+    if (!configuration)
+    {
+        QSKIP("Set ZTERMY_TEST_SFTP_RECURSIVE=1 and the real-host private-key variables to run this gate");
+    }
+
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    const QString uniqueName = QStringLiteral("ztermy-v212-%1").arg(QUuid::createUuid().toString(QUuid::Id128));
+    const QString sourceRoot = temporary.filePath(uniqueName);
+    const QString unicodeDirectory = sourceRoot + QStringLiteral("/中文目录");
+    QVERIFY(QDir().mkpath(unicodeDirectory));
+    QVERIFY(QDir().mkpath(sourceRoot + QStringLiteral("/empty")));
+
+    QFile rootFile(sourceRoot + QStringLiteral("/root.txt"));
+    QVERIFY(rootFile.open(QIODevice::WriteOnly));
+    QCOMPARE(rootFile.write("ztermy recursive root\n"), 22);
+    rootFile.close();
+    QFile unicodeFile(unicodeDirectory + QStringLiteral("/内容.txt"));
+    QVERIFY(unicodeFile.open(QIODevice::WriteOnly));
+    const QByteArray unicodePayload = QStringLiteral("递归 SFTP 往返\n").toUtf8();
+    QCOMPARE(unicodeFile.write(unicodePayload), unicodePayload.size());
+    unicodeFile.close();
+
+    const auto mismatch = std::make_shared<std::atomic_bool>(false);
+    const auto clientFactory = realHostFactory(configuration->expectedFingerprint, mismatch);
+    const auto requestProvider =
+        realHostProvider(*configuration, temporary.filePath(QStringLiteral("known_hosts.json")));
+    const std::string remoteRoot = QStringLiteral("/tmp/%1").arg(uniqueName).toStdString();
+    const std::string remoteUnicodeDirectory = remoteRoot + "/中文目录";
+
+    auto cleanup = qScopeGuard([&] {
+        auto request = requestProvider();
+        if (!request)
+        {
+            return;
+        }
+        auto client = clientFactory(*request, {}, {});
+        if (!client)
+        {
+            return;
+        }
+        const auto remove = [&client](const std::string_view path, const bool directory) {
+            if (const auto removed = (*client)->removeEntry(path, directory, {}); !removed)
+            {
+                qInfo() << "Real-host fixture cleanup skipped an entry: kind" << static_cast<int>(removed.error().kind);
+            }
+        };
+        remove(remoteUnicodeDirectory + "/内容.txt", false);
+        remove(remoteRoot + "/root.txt", false);
+        remove(remoteRoot + "/empty", true);
+        remove(remoteUnicodeDirectory, true);
+        remove(remoteRoot, true);
+    });
+
+    TransferManager manager(2, clientFactory);
+    TransferBatchCoordinator coordinator(manager, clientFactory);
+    QString planningError;
+    connect(&coordinator, &TransferBatchCoordinator::planningCompleted, &coordinator,
+            [&planningError](const TransferBatchPlanningOutcomePtr &outcome) {
+                if (outcome && !outcome->errorCode.empty())
+                {
+                    planningError = QString::fromStdString(outcome->errorCode);
+                }
+            });
+    TransferPlanRequest upload{
+        .batchId = "real-upload",
+        .endpointId = "real-host",
+        .displayName = "Recursive real-host upload",
+        .destinationRoot = "/tmp",
+        .sourceRoots = {sourceRoot.toStdString()},
+        .direction = TransferBatchDirection::Upload,
+    };
+    QVERIFY(coordinator.enqueue(std::move(upload), requestProvider, "utf-8").has_value());
+    const auto uploadStatus = waitForBatchTerminalStatus(coordinator, "real-upload", 30'000);
+    if (uploadStatus != TransferBatchStatus::Completed)
+    {
+        reportBatchFailure(coordinator, "real-upload");
+        qInfo().noquote() << "Planning error" << planningError;
+        QFAIL("Recursive real-host upload did not complete");
+    }
+    QVERIFY(!mismatch->load());
+
+    const QString downloadRoot = temporary.filePath(QStringLiteral("download"));
+    QVERIFY(QDir().mkpath(downloadRoot));
+    TransferPlanRequest download{
+        .batchId = "real-download",
+        .endpointId = "real-host",
+        .displayName = "Recursive real-host download",
+        .destinationRoot = downloadRoot.toStdString(),
+        .sourceRoots = {remoteRoot},
+        .direction = TransferBatchDirection::Download,
+    };
+    planningError.clear();
+    QVERIFY(coordinator.enqueue(std::move(download), requestProvider, "utf-8").has_value());
+    const auto downloadStatus = waitForBatchTerminalStatus(coordinator, "real-download", 30'000);
+    if (downloadStatus != TransferBatchStatus::Completed)
+    {
+        reportBatchFailure(coordinator, "real-download");
+        qInfo().noquote() << "Planning error" << planningError;
+        QFAIL("Recursive real-host download did not complete");
+    }
+    QVERIFY(!mismatch->load());
+
+    QFile downloadedRoot(downloadRoot + QLatin1Char('/') + uniqueName + QStringLiteral("/root.txt"));
+    QVERIFY(downloadedRoot.open(QIODevice::ReadOnly));
+    QCOMPARE(downloadedRoot.readAll(), QByteArrayLiteral("ztermy recursive root\n"));
+    QFile downloadedUnicode(downloadRoot + QLatin1Char('/') + uniqueName + QStringLiteral("/中文目录/内容.txt"));
+    QVERIFY(downloadedUnicode.open(QIODevice::ReadOnly));
+    QCOMPARE(downloadedUnicode.readAll(), unicodePayload);
+    QVERIFY(QDir(downloadRoot + QLatin1Char('/') + uniqueName + QStringLiteral("/empty")).exists());
     manager.shutdown();
 }
 

@@ -4,6 +4,7 @@
 #include "application/forwarding/PortForwardingJob.h"
 #include "application/security/CredentialVaultCoordinator.h"
 #include "application/sftp/SftpDirectoryModel.h"
+#include "application/sftp/TransferBatchCoordinator.h"
 #include "application/sftp/TransferManager.h"
 #include "application/ssh/SshTerminalSession.h"
 #include "application/terminal/LocalTerminalSession.h"
@@ -96,6 +97,7 @@ class AppController final : public QObject
     Q_PROPERTY(bool activeSftpFollowTerminalDirectory READ activeSftpFollowTerminalDirectory NOTIFY sftpChanged)
     Q_PROPERTY(QString activeTerminalWorkingDirectory READ activeTerminalWorkingDirectory NOTIFY sftpChanged)
     Q_PROPERTY(QVariantList transferTasks READ transferTasks NOTIFY transferTasksChanged)
+    Q_PROPERTY(QVariantList transferBatches READ transferBatches NOTIFY transferTasksChanged)
     Q_PROPERTY(int activeTransferCount READ activeTransferCount NOTIFY transferTasksChanged)
     Q_PROPERTY(QString activeTerminalTabId READ activeTerminalTabId NOTIFY activeTerminalTabChanged)
     Q_PROPERTY(QVariantMap activeTerminalWorkspace READ activeTerminalWorkspace NOTIFY terminalWorkspaceChanged)
@@ -194,6 +196,7 @@ public:
     [[nodiscard]] bool activeSftpFollowTerminalDirectory() const noexcept;
     [[nodiscard]] QString activeTerminalWorkingDirectory() const;
     [[nodiscard]] QVariantList transferTasks() const;
+    [[nodiscard]] QVariantList transferBatches() const;
     [[nodiscard]] int activeTransferCount() const noexcept;
     [[nodiscard]] QString activeTerminalTabId() const;
     [[nodiscard]] QVariantMap activeTerminalWorkspace() const;
@@ -298,6 +301,13 @@ public:
     Q_INVOKABLE bool enqueueSftpDownload(const QString &remotePath, const QString &localFileUrl, qulonglong totalBytes,
                                          qlonglong modifiedUtcSeconds = -1);
     Q_INVOKABLE bool enqueueSftpUpload(const QString &localFileUrl);
+    Q_INVOKABLE bool enqueueSftpUploadBatch(const QStringList &localFileUrls);
+    Q_INVOKABLE bool enqueueSftpDownloadBatch(const QStringList &remotePaths, const QString &localDirectoryUrl);
+    Q_INVOKABLE void cancelTransferBatch(const QString &batchId);
+    Q_INVOKABLE void pauseTransferBatch(const QString &batchId);
+    Q_INVOKABLE void resumeTransferBatch(const QString &batchId);
+    Q_INVOKABLE void retryTransferBatch(const QString &batchId);
+    Q_INVOKABLE void dismissTransferBatch(const QString &batchId);
     Q_INVOKABLE void cancelTransfer(const QString &taskId);
     Q_INVOKABLE void pauseTransfer(const QString &taskId);
     Q_INVOKABLE void resumeTransfer(const QString &taskId);
@@ -310,7 +320,8 @@ public:
     Q_INVOKABLE void dismissTransfer(const QString &taskId);
     Q_INVOKABLE void clearFinishedTransfers();
     Q_INVOKABLE void resolveTransferConflict(const QString &taskId, const QString &action,
-                                             const QString &renamedDestinationPath = {});
+                                             const QString &renamedDestinationPath = {},
+                                             bool applyToRemainingBatch = false);
     Q_INVOKABLE bool triggerAction(const QString &actionId);
     [[nodiscard]] Q_INVOKABLE QVariantMap setActionShortcut(const QString &actionId, const QString &shortcut);
     [[nodiscard]] Q_INVOKABLE QVariantMap setActionShortcutFromKey(const QString &actionId, int key, int modifiers);
@@ -566,6 +577,7 @@ private:
     [[nodiscard]] sftp::TransferRequestProvider transferRequestProvider(const QString &profileId);
     void initializeTransferManager();
     void applyTransferSnapshot(const sftp::TransferTasksPtr &tasks);
+    void applyTransferBatchSnapshot(const sftp::TransferBatchesPtr &batches);
     void stopSftpSession(TerminalTab &tab);
     void deferSftpSessionStop(std::unique_ptr<sftp::SftpSession> session);
     void reapStoppedSftpSession(sftp::SftpSession *session);
@@ -614,7 +626,9 @@ private:
     QString m_quickCommandOperationError;
     std::unique_ptr<security::CredentialVaultCoordinator> m_credentialVaults;
     std::unique_ptr<sftp::TransferManager> m_transferManager;
+    std::unique_ptr<sftp::TransferBatchCoordinator> m_transferBatchCoordinator;
     QVariantList m_transferTasks;
+    QVariantList m_transferBatches;
     security::CredentialStorage m_defaultCredentialStorage = security::CredentialStorage::Session;
     QString m_credentialOperationError;
     QString m_knownHostsPath;

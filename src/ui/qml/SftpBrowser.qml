@@ -19,6 +19,8 @@ Item {
     property string pendingDownloadPath: ""
     property var pendingDownloadSize: 0
     property var pendingDownloadModified: -1
+    property var pendingDownloadPaths: []
+    property int selectionAnchor: -1
 
     Accessible.role: Accessible.Pane
     Accessible.name: qsTr("SFTP file browser")
@@ -81,6 +83,22 @@ Item {
         pendingDownloadModified = modified === undefined || modified === null ? -1 : modified;
         downloadDialog.currentFile = path.split("/").pop();
         downloadDialog.open();
+    }
+
+    function beginBatchDownload(paths) {
+        if (!paths || paths.length === 0) {
+            return;
+        }
+        pendingDownloadPaths = paths;
+        downloadBatchDialog.open();
+    }
+
+    function downloadRow(path, directory, size, modified) {
+        if (directory) {
+            beginBatchDownload([path]);
+        } else {
+            beginDownload(path, size, modified);
+        }
     }
 
     function sortBy(column) {
@@ -280,14 +298,29 @@ Item {
                 objectName: "sftpUploadButton"
                 visible: !browser.compactToolbar
                 enabled: browser.controller.activeSftpState === "ready"
-                onClicked: uploadDialog.open()
-                Accessible.name: qsTr("Upload files")
+                onClicked: uploadOptionsMenu.popup()
+                Accessible.name: qsTr("Upload")
                 contentItem: AppIcon {
                     name: "upload"
                     color: parent.enabled ? Theme.textSoft : Theme.textSubtle
                 }
                 AppToolTip {
-                    text: qsTr("Upload files")
+                    text: qsTr("Upload files or a folder")
+                }
+            }
+
+            BrowserToolButton {
+                objectName: "sftpDownloadSelectedButton"
+                visible: !browser.compactToolbar
+                enabled: browser.directoryModel !== null && browser.directoryModel.selectedCount > 0
+                onClicked: browser.beginBatchDownload(browser.directoryModel.selectedPaths())
+                Accessible.name: qsTr("Download selected items")
+                contentItem: AppIcon {
+                    name: "download"
+                    color: parent.enabled ? Theme.textSoft : Theme.textSubtle
+                }
+                AppToolTip {
+                    text: qsTr("Download selected (%1)").arg(browser.directoryModel ? browser.directoryModel.selectedCount : 0)
                 }
             }
 
@@ -371,6 +404,14 @@ Item {
                         browser.directoryModel.showHidden = checked;
                     }
                 }
+            }
+
+            Text {
+                visible: browser.directoryModel !== null && browser.directoryModel.selectedCount > 1
+                text: qsTr("%n selected", "", browser.directoryModel ? browser.directoryModel.selectedCount : 0)
+                color: Theme.textMuted
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.textCompact
             }
         }
 
@@ -514,7 +555,21 @@ Item {
                 Accessible.description: loadError
 
                 Keys.onPressed: event => {
-                    if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                    if (event.key === Qt.Key_A && (event.modifiers & Qt.ControlModifier)) {
+                        browser.directoryModel.selectRange(0, fileList.count - 1, true);
+                        browser.selectionAnchor = fileList.currentIndex >= 0 ? fileList.currentIndex : 0;
+                        event.accepted = true;
+                    } else if (event.key === Qt.Key_Space && !fileDelegate.isParent) {
+                        browser.directoryModel.setSelected(fileDelegate.index, !fileDelegate.selected);
+                        browser.selectionAnchor = fileDelegate.index;
+                        event.accepted = true;
+                    } else if ((event.key === Qt.Key_Up || event.key === Qt.Key_Down) && (event.modifiers & Qt.ShiftModifier)) {
+                        const anchor = browser.selectionAnchor >= 0 ? browser.selectionAnchor : fileDelegate.index;
+                        const target = Math.max(0, Math.min(fileList.count - 1, fileDelegate.index + (event.key === Qt.Key_Up ? -1 : 1)));
+                        fileList.currentIndex = target;
+                        browser.directoryModel.selectRange(anchor, target, (event.modifiers & Qt.ControlModifier) === 0);
+                        event.accepted = true;
+                    } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                         if (browser.controller.activeSftpViewMode === "tree" && expandable) {
                             browser.directoryModel.toggleExpanded(index);
                         } else if (isDirectory) {
@@ -617,10 +672,9 @@ Item {
                         spacing: 1
 
                         BrowserToolButton {
-                            visible: !fileDelegate.isDirectory
-                            width: visible ? 28 : 0
+                            width: 28
                             height: 30
-                            onClicked: browser.beginDownload(fileDelegate.remotePath, fileDelegate.size, fileDelegate.modifiedUtcSeconds)
+                            onClicked: browser.downloadRow(fileDelegate.remotePath, fileDelegate.isDirectory, fileDelegate.size, fileDelegate.modifiedUtcSeconds)
                             Accessible.name: qsTr("Download %1").arg(fileDelegate.name)
                             contentItem: AppIcon {
                                 name: "download"
@@ -662,20 +716,61 @@ Item {
                 }
 
                 TapHandler {
+                    acceptedModifiers: Qt.NoModifier
                     acceptedButtons: Qt.LeftButton
                     onTapped: {
                         fileList.currentIndex = fileDelegate.index;
                         if (browser.directoryModel) {
                             browser.directoryModel.clearSelection();
                             browser.directoryModel.setSelected(fileDelegate.index, true);
+                            browser.selectionAnchor = fileDelegate.index;
                         }
                     }
                     onDoubleTapped: {
                         if (fileDelegate.isDirectory) {
                             browser.controller.navigateSftpDirectory(fileDelegate.remotePath);
                         } else {
-                            browser.beginDownload(fileDelegate.remotePath, fileDelegate.size, fileDelegate.modifiedUtcSeconds);
+                            browser.downloadRow(fileDelegate.remotePath, false, fileDelegate.size, fileDelegate.modifiedUtcSeconds);
                         }
+                    }
+                }
+
+                TapHandler {
+                    acceptedModifiers: Qt.ControlModifier
+                    acceptedButtons: Qt.LeftButton
+                    onTapped: {
+                        if (!browser.directoryModel || fileDelegate.isParent) {
+                            return;
+                        }
+                        fileList.currentIndex = fileDelegate.index;
+                        browser.directoryModel.setSelected(fileDelegate.index, !fileDelegate.selected);
+                        browser.selectionAnchor = fileDelegate.index;
+                    }
+                }
+
+                TapHandler {
+                    acceptedModifiers: Qt.ShiftModifier
+                    acceptedButtons: Qt.LeftButton
+                    onTapped: {
+                        if (!browser.directoryModel || fileDelegate.isParent) {
+                            return;
+                        }
+                        const anchor = browser.selectionAnchor >= 0 ? browser.selectionAnchor : fileDelegate.index;
+                        fileList.currentIndex = fileDelegate.index;
+                        browser.directoryModel.selectRange(anchor, fileDelegate.index, true);
+                    }
+                }
+
+                TapHandler {
+                    acceptedModifiers: Qt.ControlModifier | Qt.ShiftModifier
+                    acceptedButtons: Qt.LeftButton
+                    onTapped: {
+                        if (!browser.directoryModel || fileDelegate.isParent) {
+                            return;
+                        }
+                        const anchor = browser.selectionAnchor >= 0 ? browser.selectionAnchor : fileDelegate.index;
+                        fileList.currentIndex = fileDelegate.index;
+                        browser.directoryModel.selectRange(anchor, fileDelegate.index, false);
                     }
                 }
 
@@ -695,9 +790,11 @@ Item {
                     if (!drop.hasUrls) {
                         return;
                     }
+                    const roots = [];
                     for (const url of drop.urls) {
-                        browser.controller.enqueueSftpUpload(url.toString());
+                        roots.push(url.toString());
                     }
+                    browser.controller.enqueueSftpUploadBatch(roots);
                     drop.acceptProposedAction();
                 }
 
@@ -722,7 +819,7 @@ Item {
                         }
 
                         Text {
-                            text: qsTr("Drop files to upload")
+                            text: qsTr("Drop files or folders to upload")
                             color: Theme.text
                             font.family: Theme.uiFont
                             font.pixelSize: Theme.textBody
@@ -847,6 +944,16 @@ Item {
             onTriggered: uploadDialog.open()
         }
         AppMenuItem {
+            text: qsTr("Upload folder")
+            enabled: browser.controller.activeSftpState === "ready"
+            onTriggered: uploadFolderDialog.open()
+        }
+        AppMenuItem {
+            text: qsTr("Download selected")
+            enabled: browser.directoryModel !== null && browser.directoryModel.selectedCount > 0
+            onTriggered: browser.beginBatchDownload(browser.directoryModel.selectedPaths())
+        }
+        AppMenuItem {
             text: qsTr("New folder")
             enabled: browser.controller.activeSftpState === "ready"
             onTriggered: browser.beginCreateDirectory()
@@ -899,6 +1006,19 @@ Item {
             checkable: true
             checked: browser.controller.activeSftpFilenameEncoding === "gb18030"
             onTriggered: browser.controller.setSftpFilenameEncoding("gb18030")
+        }
+    }
+
+    AppMenu {
+        id: uploadOptionsMenu
+
+        AppMenuItem {
+            text: qsTr("Upload files")
+            onTriggered: uploadDialog.open()
+        }
+        AppMenuItem {
+            text: qsTr("Upload folder")
+            onTriggered: uploadFolderDialog.open()
         }
     }
 
@@ -994,10 +1114,19 @@ Item {
         title: qsTr("Upload files")
         fileMode: FileDialog.OpenFiles
         onAccepted: {
+            const roots = [];
             for (const file of selectedFiles) {
-                browser.controller.enqueueSftpUpload(file.toString());
+                roots.push(file.toString());
             }
+            browser.controller.enqueueSftpUploadBatch(roots);
         }
+    }
+
+    FolderDialog {
+        id: uploadFolderDialog
+
+        title: qsTr("Upload folder")
+        onAccepted: browser.controller.enqueueSftpUploadBatch([selectedFolder.toString()])
     }
 
     FileDialog {
@@ -1016,5 +1145,16 @@ Item {
             browser.pendingDownloadSize = 0;
             browser.pendingDownloadModified = -1;
         }
+    }
+
+    FolderDialog {
+        id: downloadBatchDialog
+
+        title: qsTr("Choose download folder")
+        onAccepted: {
+            browser.controller.enqueueSftpDownloadBatch(browser.pendingDownloadPaths, selectedFolder.toString());
+            browser.pendingDownloadPaths = [];
+        }
+        onRejected: browser.pendingDownloadPaths = []
     }
 }

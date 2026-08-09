@@ -18,6 +18,7 @@ private slots:
     void sortsDirectoriesAndFiltersHiddenEntries();
     void filtersNamesCaseInsensitively();
     void tracksSelectionAndClearsItOnRefresh();
+    void selectsVisibleRangesAndSkipsParentEntry();
     void exposesParentDirectoryOutsideRoot();
     void handlesLargeDirectoryWithinBudget();
     void expandsTreeDirectoriesLazilyAndSurfacesErrors();
@@ -132,6 +133,24 @@ void SftpDirectoryModelTests::tracksSelectionAndClearsItOnRefresh()
     model.setEntries(listing());
     QCOMPARE(model.selectedCount(), 0);
     QVERIFY(model.selectedPaths().isEmpty());
+}
+
+void SftpDirectoryModelTests::selectsVisibleRangesAndSkipsParentEntry()
+{
+    ztermy::sftp::SftpDirectoryModel model;
+    QSignalSpy selectionSpy(&model, &ztermy::sftp::SftpDirectoryModel::selectionChanged);
+    model.setEntries(listing(), QStringLiteral("/work"));
+    selectionSpy.clear();
+
+    model.selectRange(0, 2);
+    QCOMPARE(model.selectedCount(), 2);
+    QCOMPARE(model.selectedPaths(), QStringList({QStringLiteral("/Alpha"), QStringLiteral("/zeta.txt")}));
+    QCOMPARE(selectionSpy.count(), 1);
+    QVERIFY(!model.setSelected(0, true));
+
+    model.selectRange(2, 2);
+    QCOMPARE(model.selectedCount(), 1);
+    QCOMPARE(model.selectedPaths(), QStringList{QStringLiteral("/zeta.txt")});
 }
 
 void SftpDirectoryModelTests::exposesParentDirectoryOutsideRoot()

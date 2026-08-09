@@ -107,6 +107,11 @@ constexpr std::size_t maximumRecentHostProfiles = 6;
     return QFileInfo(settingsPath).dir().filePath(QStringLiteral("transfer_recovery.json"));
 }
 
+[[nodiscard]] QString siblingTransferBatchRecoveryFile(const QString &settingsPath)
+{
+    return QFileInfo(settingsPath).dir().filePath(QStringLiteral("transfer_batch_recovery.json"));
+}
+
 [[nodiscard]] std::string utf8String(const QString &value)
 {
     const QByteArray bytes = value.toUtf8();
@@ -1019,6 +1024,33 @@ private:
     return QStringLiteral("failed");
 }
 
+[[nodiscard]] QString transferBatchStatusToken(const ztermy::sftp::TransferBatchStatus status)
+{
+    using ztermy::sftp::TransferBatchStatus;
+    switch (status)
+    {
+        case TransferBatchStatus::Discovering:
+            return QStringLiteral("discovering");
+        case TransferBatchStatus::Ready:
+            return QStringLiteral("ready");
+        case TransferBatchStatus::Running:
+            return QStringLiteral("running");
+        case TransferBatchStatus::Paused:
+            return QStringLiteral("paused");
+        case TransferBatchStatus::NeedsAttention:
+            return QStringLiteral("needs-attention");
+        case TransferBatchStatus::Completed:
+            return QStringLiteral("completed");
+        case TransferBatchStatus::Failed:
+            return QStringLiteral("failed");
+        case TransferBatchStatus::Cancelled:
+            return QStringLiteral("cancelled");
+        case TransferBatchStatus::Interrupted:
+            return QStringLiteral("interrupted");
+    }
+    return QStringLiteral("failed");
+}
+
 [[nodiscard]] QString sessionLogStateToken(const ztermy::logging::SessionLogState state)
 {
     using ztermy::logging::SessionLogState;
@@ -1120,6 +1152,39 @@ private:
         {QStringLiteral("errorCode"), utf8QString(task.errorCode)},
         {QStringLiteral("errorMessage"), transferErrorMessage(task.errorCode)},
         {QStringLiteral("retryable"), task.retryable},
+    };
+}
+
+[[nodiscard]] QVariantMap transferBatchValue(const ztermy::sftp::TransferBatch &batch)
+{
+    const ztermy::sftp::TransferBatchSummary summary = ztermy::sftp::summarizeTransferBatch(batch);
+    QStringList roots;
+    roots.reserve(static_cast<qsizetype>(batch.sourceRoots.size()));
+    for (const std::string &root : batch.sourceRoots)
+    {
+        roots.push_back(utf8QString(root));
+    }
+    return {
+        {QStringLiteral("id"), utf8QString(batch.id)},
+        {QStringLiteral("endpointId"), utf8QString(batch.endpointId)},
+        {QStringLiteral("displayName"), utf8QString(batch.displayName)},
+        {QStringLiteral("sourceRoots"), roots},
+        {QStringLiteral("destinationRoot"), utf8QString(batch.destinationRoot)},
+        {QStringLiteral("direction"), batch.direction == ztermy::sftp::TransferBatchDirection::Download
+                                          ? QStringLiteral("download")
+                                          : QStringLiteral("upload")},
+        {QStringLiteral("status"), transferBatchStatusToken(batch.status)},
+        {QStringLiteral("entryCount"), QVariant::fromValue<qulonglong>(summary.entryCount)},
+        {QStringLiteral("directoryCount"), QVariant::fromValue<qulonglong>(summary.directoryCount)},
+        {QStringLiteral("fileCount"), QVariant::fromValue<qulonglong>(summary.regularFileCount)},
+        {QStringLiteral("completedCount"), QVariant::fromValue<qulonglong>(summary.completedCount)},
+        {QStringLiteral("skippedCount"), QVariant::fromValue<qulonglong>(summary.skippedCount)},
+        {QStringLiteral("failedCount"), QVariant::fromValue<qulonglong>(summary.failedCount)},
+        {QStringLiteral("totalBytes"), QVariant::fromValue<qulonglong>(summary.totalBytes)},
+        {QStringLiteral("transferredBytes"), QVariant::fromValue<qulonglong>(summary.transferredBytes)},
+        {QStringLiteral("bytesPerSecond"), QVariant::fromValue<qulonglong>(batch.bytesPerSecond)},
+        {QStringLiteral("errorCode"), utf8QString(batch.discoveryErrorCode)},
+        {QStringLiteral("errorMessage"), transferErrorMessage(batch.discoveryErrorCode)},
     };
 }
 
@@ -1451,6 +1516,10 @@ void AppController::shutdown() noexcept
     stopAllPortForwardingRules();
     clearHostKeyPrompt();
 
+    if (m_transferBatchCoordinator)
+    {
+        m_transferBatchCoordinator->requestStop();
+    }
     if (m_transferManager)
     {
         m_transferManager->requestStop();
@@ -1482,6 +1551,7 @@ void AppController::shutdown() noexcept
             tab->sessionLog->stop();
         }
     }
+    m_transferBatchCoordinator.reset();
     if (m_transferManager)
     {
         m_transferManager->shutdown();
@@ -1490,6 +1560,7 @@ void AppController::shutdown() noexcept
     m_tabs.clear();
     m_stoppingSftpSessions.clear();
     m_transferTasks.clear();
+    m_transferBatches.clear();
     m_activeTabId.clear();
     m_focusedTabId.clear();
     for (ui::TerminalItem *terminal : std::as_const(m_terminalViewports))
@@ -1968,6 +2039,11 @@ QString AppController::activeTerminalWorkingDirectory() const
 QVariantList AppController::transferTasks() const
 {
     return m_transferTasks;
+}
+
+QVariantList AppController::transferBatches() const
+{
+    return m_transferBatches;
 }
 
 int AppController::activeTransferCount() const noexcept
@@ -3867,6 +3943,10 @@ bool AppController::enqueueSftpUpload(const QString &localFileUrl)
     const QUrl localUrl(localFileUrl);
     const QString localPath = localUrl.isLocalFile() ? localUrl.toLocalFile() : localFileUrl;
     const QFileInfo source(localPath);
+    if (source.isDir())
+    {
+        return enqueueSftpUploadBatch({localFileUrl});
+    }
     if (!source.exists() || !source.isFile())
     {
         return false;
@@ -3889,6 +3969,126 @@ bool AppController::enqueueSftpUpload(const QString &localFileUrl)
     };
     const auto queued = m_transferManager->enqueue(std::move(task), transferRequestProvider(tab->sourceProfileId), {});
     return queued.has_value();
+}
+
+bool AppController::enqueueSftpUploadBatch(const QStringList &localFileUrls)
+{
+    const TerminalTab *tab = activeTab();
+    if (tab == nullptr || tab->kind != TerminalTabKind::Ssh || tab->sourceProfileId.isEmpty()
+        || m_transferBatchCoordinator == nullptr || localFileUrls.isEmpty()
+        || localFileUrls.size() > static_cast<qsizetype>(sftp::maximumTransferSourceRoots))
+    {
+        return false;
+    }
+    std::vector<std::string> roots;
+    roots.reserve(static_cast<std::size_t>(localFileUrls.size()));
+    for (const QString &value : localFileUrls)
+    {
+        const QUrl url(value);
+        const QString path = url.isLocalFile() ? url.toLocalFile() : value;
+        const QFileInfo source(path);
+        if (!source.exists() || (!source.isFile() && !source.isDir()))
+        {
+            return false;
+        }
+        roots.push_back(utf8String(source.absoluteFilePath()));
+    }
+    const QString displayName = roots.size() == 1 ? QFileInfo(utf8QString(roots.front())).fileName()
+                                                  : tr("Upload %1 items").arg(static_cast<qulonglong>(roots.size()));
+    sftp::TransferPlanRequest request{
+        .batchId = utf8String(QUuid::createUuid().toString(QUuid::WithoutBraces)),
+        .endpointId = utf8String(tab->sourceProfileId),
+        .displayName = utf8String(displayName),
+        .destinationRoot = utf8String(tab->sftpPath),
+        .sourceRoots = std::move(roots),
+        .direction = sftp::TransferBatchDirection::Upload,
+    };
+    return m_transferBatchCoordinator
+        ->enqueue(std::move(request), transferRequestProvider(tab->sourceProfileId),
+                  utf8String(tab->sftpFilenameEncoding))
+        .has_value();
+}
+
+bool AppController::enqueueSftpDownloadBatch(const QStringList &remotePaths, const QString &localDirectoryUrl)
+{
+    const TerminalTab *tab = activeTab();
+    if (tab == nullptr || tab->kind != TerminalTabKind::Ssh || tab->sourceProfileId.isEmpty()
+        || m_transferBatchCoordinator == nullptr || remotePaths.isEmpty()
+        || remotePaths.size() > static_cast<qsizetype>(sftp::maximumTransferSourceRoots))
+    {
+        return false;
+    }
+    const QUrl destinationUrl(localDirectoryUrl);
+    const QString destinationPath = destinationUrl.isLocalFile() ? destinationUrl.toLocalFile() : localDirectoryUrl;
+    if (!QFileInfo(destinationPath).isDir())
+    {
+        return false;
+    }
+    std::vector<std::string> roots;
+    roots.reserve(static_cast<std::size_t>(remotePaths.size()));
+    for (const QString &path : remotePaths)
+    {
+        auto normalized = sftp::normalizeRemotePath(utf8String(path));
+        if (!normalized || *normalized == "/")
+        {
+            return false;
+        }
+        roots.push_back(std::move(*normalized));
+    }
+    const QString displayName = roots.size() == 1 ? QFileInfo(utf8QString(roots.front())).fileName()
+                                                  : tr("Download %1 items").arg(static_cast<qulonglong>(roots.size()));
+    sftp::TransferPlanRequest request{
+        .batchId = utf8String(QUuid::createUuid().toString(QUuid::WithoutBraces)),
+        .endpointId = utf8String(tab->sourceProfileId),
+        .displayName = utf8String(displayName),
+        .destinationRoot = utf8String(QFileInfo(destinationPath).absoluteFilePath()),
+        .sourceRoots = std::move(roots),
+        .direction = sftp::TransferBatchDirection::Download,
+    };
+    return m_transferBatchCoordinator
+        ->enqueue(std::move(request), transferRequestProvider(tab->sourceProfileId),
+                  utf8String(tab->sftpFilenameEncoding))
+        .has_value();
+}
+
+void AppController::cancelTransferBatch(const QString &batchId)
+{
+    if (m_transferBatchCoordinator)
+    {
+        m_transferBatchCoordinator->cancel(batchId);
+    }
+}
+
+void AppController::pauseTransferBatch(const QString &batchId)
+{
+    if (m_transferBatchCoordinator)
+    {
+        m_transferBatchCoordinator->pause(batchId);
+    }
+}
+
+void AppController::resumeTransferBatch(const QString &batchId)
+{
+    if (m_transferBatchCoordinator)
+    {
+        m_transferBatchCoordinator->resume(batchId);
+    }
+}
+
+void AppController::retryTransferBatch(const QString &batchId)
+{
+    if (m_transferBatchCoordinator)
+    {
+        m_transferBatchCoordinator->retry(batchId);
+    }
+}
+
+void AppController::dismissTransferBatch(const QString &batchId)
+{
+    if (m_transferBatchCoordinator)
+    {
+        m_transferBatchCoordinator->dismiss(batchId);
+    }
 }
 
 void AppController::cancelTransfer(const QString &taskId)
@@ -3925,6 +4125,10 @@ void AppController::retryTransfer(const QString &taskId)
 
 void AppController::pauseAllTransfers()
 {
+    if (m_transferBatchCoordinator != nullptr)
+    {
+        m_transferBatchCoordinator->pauseAll();
+    }
     if (m_transferManager != nullptr)
     {
         m_transferManager->pauseAll();
@@ -3933,6 +4137,10 @@ void AppController::pauseAllTransfers()
 
 void AppController::resumeAllTransfers()
 {
+    if (m_transferBatchCoordinator != nullptr)
+    {
+        m_transferBatchCoordinator->resumeAll();
+    }
     if (m_transferManager != nullptr)
     {
         m_transferManager->resumeAll();
@@ -3941,6 +4149,10 @@ void AppController::resumeAllTransfers()
 
 void AppController::cancelAllTransfers()
 {
+    if (m_transferBatchCoordinator != nullptr)
+    {
+        m_transferBatchCoordinator->cancelAll();
+    }
     if (m_transferManager != nullptr)
     {
         m_transferManager->cancelAll();
@@ -3995,6 +4207,20 @@ void AppController::dismissTransfer(const QString &taskId)
 
 void AppController::clearFinishedTransfers()
 {
+    if (m_transferBatchCoordinator != nullptr)
+    {
+        const QVariantList batches = m_transferBatches;
+        for (const QVariant &value : batches)
+        {
+            const QVariantMap batch = value.toMap();
+            const QString status = batch.value(QStringLiteral("status")).toString();
+            if (status == QStringLiteral("completed") || status == QStringLiteral("failed")
+                || status == QStringLiteral("cancelled"))
+            {
+                m_transferBatchCoordinator->dismiss(batch.value(QStringLiteral("id")).toString());
+            }
+        }
+    }
     if (m_transferManager != nullptr)
     {
         m_transferManager->dismissFinished();
@@ -4002,7 +4228,7 @@ void AppController::clearFinishedTransfers()
 }
 
 void AppController::resolveTransferConflict(const QString &taskId, const QString &action,
-                                            const QString &renamedDestinationPath)
+                                            const QString &renamedDestinationPath, const bool applyToRemainingBatch)
 {
     if (m_transferManager == nullptr)
     {
@@ -4016,6 +4242,15 @@ void AppController::resolveTransferConflict(const QString &taskId, const QString
                                                                   : std::nullopt;
     if (decision)
     {
+        if (applyToRemainingBatch && m_transferBatchCoordinator != nullptr
+            && (*decision == sftp::ConflictAction::Skip || *decision == sftp::ConflictAction::Replace))
+        {
+            m_transferBatchCoordinator->setConflictPolicyForChild(utf8String(taskId),
+                                                                  *decision == sftp::ConflictAction::Skip
+                                                                      ? sftp::TransferConflictPolicy::Skip
+                                                                      : sftp::TransferConflictPolicy::Replace,
+                                                                  true);
+        }
         m_transferManager->resolveConflict(taskId, *decision, renamedDestinationPath);
     }
 }
@@ -4540,6 +4775,17 @@ void AppController::initializeTransferManager()
             {
                 return;
             }
+            if (m_transferBatchCoordinator != nullptr)
+            {
+                const auto policy = m_transferBatchCoordinator->automaticConflictPolicy(utf8String(taskId));
+                if (policy == sftp::TransferConflictPolicy::Skip || policy == sftp::TransferConflictPolicy::Replace)
+                {
+                    m_transferManager->resolveConflict(taskId, policy == sftp::TransferConflictPolicy::Skip
+                                                                   ? sftp::ConflictAction::Skip
+                                                                   : sftp::ConflictAction::Replace);
+                    return;
+                }
+            }
             emit transferConflictRequested(
                 taskId,
                 QVariantMap{
@@ -4549,6 +4795,9 @@ void AppController::initializeTransferManager()
                     {QStringLiteral("destinationDirectory"), conflict->destinationType == sftp::EntryType::Directory},
                     {QStringLiteral("sourceSize"), QVariant::fromValue<qulonglong>(conflict->sourceSize)},
                     {QStringLiteral("destinationSize"), QVariant::fromValue<qulonglong>(conflict->destinationSize)},
+                    {QStringLiteral("batchChild"),
+                     m_transferBatchCoordinator != nullptr
+                         && m_transferBatchCoordinator->ownsChildTask(utf8String(taskId))},
                 });
         });
     QObject::connect(
@@ -4602,6 +4851,23 @@ void AppController::initializeTransferManager()
                                       [this](const std::string &endpointId) {
                                           return transferRequestProvider(utf8QString(endpointId));
                                       });
+    m_transferBatchCoordinator = std::make_unique<sftp::TransferBatchCoordinator>(*m_transferManager);
+    QObject::connect(m_transferBatchCoordinator.get(), &sftp::TransferBatchCoordinator::batchesChanged, this,
+                     &AppController::applyTransferBatchSnapshot);
+    QObject::connect(
+        m_transferBatchCoordinator.get(), &sftp::TransferBatchCoordinator::recoveryError, this,
+        [this](const QString &errorCode) {
+            emit transferNotificationRequested({
+                {QStringLiteral("kind"), QStringLiteral("error")},
+                {QStringLiteral("title"), tr("Batch transfer recovery unavailable")},
+                {QStringLiteral("message"),
+                 errorCode == QStringLiteral("batch-recovery-load-failed")
+                     ? tr("Previous batch transfer state could not be read. New transfers remain available.")
+                     : tr("Batch transfer state could not be saved. Active batches may not be recoverable "
+                          "after exit.")},
+            });
+        });
+    m_transferBatchCoordinator->enableRecovery(siblingTransferBatchRecoveryFile(m_settingsStore.filePath()));
 }
 
 void AppController::applyTransferSnapshot(const sftp::TransferTasksPtr &tasks)
@@ -4658,6 +4924,21 @@ void AppController::applyTransferSnapshot(const sftp::TransferTasksPtr &tasks)
         }
     }
     m_transferTasks = std::move(values);
+    emit transferTasksChanged();
+}
+
+void AppController::applyTransferBatchSnapshot(const sftp::TransferBatchesPtr &batches)
+{
+    QVariantList values;
+    if (batches)
+    {
+        values.reserve(static_cast<qsizetype>(batches->size()));
+        for (const sftp::TransferBatch &batch : *batches)
+        {
+            values.push_back(transferBatchValue(batch));
+        }
+    }
+    m_transferBatches = std::move(values);
     emit transferTasksChanged();
 }
 

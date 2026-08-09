@@ -3,9 +3,11 @@
 #include "application/sftp/TransferManager.h"
 #include "domain/sftp/TransferBatch.h"
 #include "domain/sftp/TransferPlanner.h"
+#include "infrastructure/sftp/TransferBatchRecoveryStore.h"
 
 #include <QObject>
 #include <QString>
+#include <QTimer>
 
 #include <expected>
 #include <functional>
@@ -55,6 +57,10 @@ public:
     [[nodiscard]] std::expected<std::string, TransferBatchCoordinatorError>
     enqueue(TransferPlanRequest request, TransferRequestProvider requestProvider, std::string filenameEncoding);
     [[nodiscard]] TransferBatchesPtr snapshot() const;
+    [[nodiscard]] bool ownsChildTask(std::string_view taskId) const;
+    [[nodiscard]] std::optional<TransferConflictPolicy> automaticConflictPolicy(std::string_view taskId) const;
+    void setConflictPolicyForChild(std::string_view taskId, TransferConflictPolicy policy, bool applyToRemaining);
+    void enableRecovery(QString path);
     void requestStop() noexcept;
 
 public slots:
@@ -63,15 +69,20 @@ public slots:
     void cancel(const QString &batchId);
     void retry(const QString &batchId);
     void dismiss(const QString &batchId);
+    void pauseAll();
+    void resumeAll();
+    void cancelAll();
 
 signals:
     void batchesChanged(ztermy::sftp::TransferBatchesPtr batches);
     void planningCompleted(ztermy::sftp::TransferBatchPlanningOutcomePtr outcome);
+    void recoveryError(const QString &errorCode);
 
 private:
     void completePlanning(const TransferBatchPlanningOutcomePtr &outcome);
     void applyTaskSnapshot(const TransferTasksPtr &tasks);
     void publishSnapshot();
+    void persistRecovery();
     [[nodiscard]] TransferBatch *findBatch(std::string_view batchId);
     [[nodiscard]] const TransferBatch *findBatch(std::string_view batchId) const;
     void forEachChild(const TransferBatch &batch, const std::function<void(const QString &)> &operation);
@@ -80,7 +91,10 @@ private:
     SftpClientFactory m_clientFactory;
     std::vector<TransferBatch> m_batches;
     std::unordered_map<std::string, std::jthread> m_planners;
+    std::unique_ptr<TransferBatchRecoveryStore> m_recoveryStore;
+    QTimer m_recoveryTimer;
     bool m_stopRequested = false;
+    bool m_pauseAllRequested = false;
 };
 
 } // namespace ztermy::sftp

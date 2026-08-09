@@ -13,6 +13,11 @@ Popup {
     property string conflictTaskId: ""
     property var conflict: ({})
     readonly property bool hasFinishedTasks: {
+        for (const batch of controller.transferBatches) {
+            if (batch.status === "completed" || batch.status === "failed" || batch.status === "cancelled" || batch.status === "interrupted") {
+                return true;
+            }
+        }
         for (const task of controller.transferTasks) {
             if (task.status === "completed" || task.status === "failed" || task.status === "cancelled") {
                 return true;
@@ -20,13 +25,13 @@ Popup {
         }
         return false;
     }
-    readonly property bool hasPausableTasks: controller.transferTasks.some(task => task.status === "queued" || task.status === "running")
-    readonly property bool hasPausedTasks: controller.transferTasks.some(task => task.status === "paused")
+    readonly property bool hasPausableTasks: controller.transferTasks.some(task => task.status === "queued" || task.status === "running") || controller.transferBatches.some(batch => batch.status === "discovering" || batch.status === "ready" || batch.status === "running")
+    readonly property bool hasPausedTasks: controller.transferTasks.some(task => task.status === "paused") || controller.transferBatches.some(batch => batch.status === "paused")
     readonly property bool completedDownloadDragAvailable: controller.transferTasks.some(task => task.direction === "download" && task.status === "completed")
-    readonly property bool hasActiveTasks: controller.transferTasks.some(task => task.status === "queued" || task.status === "running" || task.status === "pausing" || task.status === "paused" || task.status === "needs-attention")
+    readonly property bool hasActiveTasks: controller.transferTasks.some(task => task.status === "queued" || task.status === "running" || task.status === "pausing" || task.status === "paused" || task.status === "needs-attention") || controller.transferBatches.some(batch => batch.status === "discovering" || batch.status === "ready" || batch.status === "running" || batch.status === "paused" || batch.status === "needs-attention" || batch.status === "interrupted")
 
     width: 500
-    height: Math.min(520, Math.max(170, contentColumn.implicitHeight + topPadding + bottomPadding))
+    height: Math.min(620, Math.max(170, contentColumn.implicitHeight + topPadding + bottomPadding))
     padding: 12
     modal: false
     focus: true
@@ -69,8 +74,49 @@ Popup {
         }
     }
 
+    function batchStatusText(batch) {
+        switch (batch.status) {
+        case "discovering":
+            return qsTr("Discovering files…");
+        case "ready":
+            return qsTr("Preparing transfer…");
+        case "running":
+            if (batch.fileCount === 0) {
+                return qsTr("Transferring folders…");
+            }
+            if (batch.bytesPerSecond > 0 && batch.totalBytes > batch.transferredBytes) {
+                const remainingSeconds = Math.ceil((batch.totalBytes - batch.transferredBytes) / batch.bytesPerSecond);
+                return qsTr("%1 of %2 files · %3 of %4 · %5/s · %6 left").arg(batch.completedCount).arg(batch.fileCount).arg(formatBytes(batch.transferredBytes)).arg(formatBytes(batch.totalBytes)).arg(formatBytes(batch.bytesPerSecond)).arg(formatDuration(remainingSeconds));
+            }
+            return qsTr("%1 of %2 files · %3 of %4").arg(batch.completedCount).arg(batch.fileCount).arg(formatBytes(batch.transferredBytes)).arg(formatBytes(batch.totalBytes));
+        case "paused":
+            return qsTr("Paused · %1 of %2 files").arg(batch.completedCount).arg(batch.fileCount);
+        case "needs-attention":
+            return batch.errorMessage || qsTr("A file needs attention");
+        case "completed":
+            return qsTr("Completed · %1 files, %2 folders").arg(batch.fileCount).arg(batch.directoryCount);
+        case "cancelled":
+            return qsTr("Cancelled");
+        case "interrupted":
+            return qsTr("Interrupted · retry to continue");
+        case "failed":
+        default:
+            return batch.errorMessage || qsTr("Failed");
+        }
+    }
+
+    function formatDuration(seconds) {
+        if (seconds < 60) {
+            return qsTr("%1s").arg(seconds);
+        }
+        if (seconds < 3600) {
+            return qsTr("%1m %2s").arg(Math.floor(seconds / 60)).arg(seconds % 60);
+        }
+        return qsTr("%1h %2m").arg(Math.floor(seconds / 3600)).arg(Math.floor((seconds % 3600) / 60));
+    }
+
     function resolveConflict(action) {
-        controller.resolveTransferConflict(conflictTaskId, action, action === "rename" ? conflictRename.text : "");
+        controller.resolveTransferConflict(conflictTaskId, action, action === "rename" ? conflictRename.text : "", conflictApplyRemaining.checked && (action === "skip" || action === "replace"));
         conflictDialog.close();
     }
 
@@ -214,6 +260,216 @@ Popup {
                     text: qsTr("Clear finished transfers")
                 }
             }
+        }
+
+        Text {
+            Layout.fillWidth: true
+            visible: batchList.count > 0
+            text: qsTr("Batches")
+            color: Theme.textMuted
+            font.family: Theme.uiFont
+            font.pixelSize: Theme.textCompact
+            font.weight: Font.DemiBold
+        }
+
+        ListView {
+            id: batchList
+
+            objectName: "transferBatchList"
+            Layout.fillWidth: true
+            Layout.preferredHeight: Math.min(210, contentHeight)
+            Layout.minimumHeight: count > 0 ? Math.min(96, contentHeight) : 0
+            visible: count > 0
+            clip: true
+            spacing: 4
+            model: center.controller.transferBatches
+            activeFocusOnTab: true
+            keyNavigationEnabled: true
+
+            delegate: Rectangle {
+                id: batchDelegate
+
+                required property var modelData
+                required property int index
+
+                readonly property bool pausable: modelData.status === "discovering" || modelData.status === "ready" || modelData.status === "running"
+                readonly property bool resumable: modelData.status === "paused"
+                readonly property bool cancellable: pausable || resumable || modelData.status === "needs-attention" || modelData.status === "interrupted"
+                readonly property bool retryable: modelData.status === "failed" || modelData.status === "needs-attention" || modelData.status === "interrupted"
+                readonly property bool dismissible: modelData.status === "completed" || modelData.status === "failed" || modelData.status === "cancelled"
+
+                width: ListView.view.width
+                height: 88
+                radius: Theme.radiusControl
+                color: batchHover.hovered ? Theme.controlHover : Theme.controlBackground
+                border.color: activeFocus ? Theme.focus : Theme.border
+                focus: ListView.isCurrentItem
+                Accessible.role: Accessible.ListItem
+                Accessible.name: qsTr("%1, %2").arg(modelData.displayName).arg(center.batchStatusText(modelData))
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 10
+                    anchors.rightMargin: 6
+                    spacing: 8
+
+                    AppIcon {
+                        Layout.preferredWidth: 19
+                        Layout.preferredHeight: 19
+                        name: batchDelegate.modelData.direction === "upload" ? "upload" : "download"
+                        color: batchDelegate.modelData.status === "failed" || batchDelegate.modelData.status === "needs-attention" ? Theme.dangerText : Theme.accent
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: batchDelegate.modelData.displayName
+                            color: Theme.text
+                            elide: Text.ElideMiddle
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.textBody
+                            font.weight: Font.DemiBold
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: center.batchStatusText(batchDelegate.modelData)
+                            color: batchDelegate.modelData.status === "failed" || batchDelegate.modelData.status === "needs-attention" ? Theme.dangerText : Theme.textMuted
+                            elide: Text.ElideRight
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.textCompact
+                        }
+                        ProgressBar {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 3
+                            visible: batchDelegate.modelData.status === "discovering" || batchDelegate.modelData.status === "ready" || batchDelegate.modelData.status === "running" || batchDelegate.modelData.status === "paused"
+                            from: 0
+                            to: Math.max(1, batchDelegate.modelData.totalBytes > 0 ? batchDelegate.modelData.totalBytes : batchDelegate.modelData.fileCount)
+                            value: batchDelegate.modelData.totalBytes > 0 ? batchDelegate.modelData.transferredBytes : batchDelegate.modelData.completedCount
+                            indeterminate: batchDelegate.modelData.status === "discovering" || batchDelegate.modelData.status === "ready"
+                        }
+                    }
+
+                    ToolButton {
+                        id: batchPauseButton
+                        visible: batchDelegate.pausable
+                        Layout.preferredWidth: visible ? 30 : 0
+                        Layout.preferredHeight: 30
+                        hoverEnabled: true
+                        onPressed: center.controller.pauseTransferBatch(batchDelegate.modelData.id)
+                        Accessible.name: qsTr("Pause batch")
+                        contentItem: AppIcon {
+                            name: "pause"
+                            color: Theme.textSoft
+                        }
+                        background: Rectangle {
+                            radius: width / 2
+                            color: batchPauseButton.down ? Theme.controlPressed : batchPauseButton.hovered ? Theme.controlHover : "transparent"
+                        }
+                        AppToolTip {
+                            text: qsTr("Pause batch")
+                        }
+                    }
+                    ToolButton {
+                        id: batchResumeButton
+                        visible: batchDelegate.resumable
+                        Layout.preferredWidth: visible ? 30 : 0
+                        Layout.preferredHeight: 30
+                        hoverEnabled: true
+                        onClicked: center.controller.resumeTransferBatch(batchDelegate.modelData.id)
+                        Accessible.name: qsTr("Resume batch")
+                        contentItem: AppIcon {
+                            name: "play"
+                            color: Theme.textSoft
+                        }
+                        background: Rectangle {
+                            radius: width / 2
+                            color: batchResumeButton.down ? Theme.controlPressed : batchResumeButton.hovered ? Theme.controlHover : "transparent"
+                        }
+                        AppToolTip {
+                            text: qsTr("Resume batch")
+                        }
+                    }
+                    ToolButton {
+                        id: batchRetryButton
+                        visible: batchDelegate.retryable
+                        Layout.preferredWidth: visible ? 30 : 0
+                        Layout.preferredHeight: 30
+                        hoverEnabled: true
+                        onClicked: center.controller.retryTransferBatch(batchDelegate.modelData.id)
+                        Accessible.name: qsTr("Retry batch")
+                        contentItem: AppIcon {
+                            name: "refresh"
+                            color: Theme.textSoft
+                        }
+                        background: Rectangle {
+                            radius: width / 2
+                            color: batchRetryButton.down ? Theme.controlPressed : batchRetryButton.hovered ? Theme.controlHover : "transparent"
+                        }
+                        AppToolTip {
+                            text: qsTr("Retry batch")
+                        }
+                    }
+                    ToolButton {
+                        id: batchCancelButton
+                        visible: batchDelegate.cancellable
+                        Layout.preferredWidth: visible ? 30 : 0
+                        Layout.preferredHeight: 30
+                        hoverEnabled: true
+                        onPressed: center.controller.cancelTransferBatch(batchDelegate.modelData.id)
+                        Accessible.name: qsTr("Cancel batch")
+                        contentItem: AppIcon {
+                            name: "close"
+                            color: Theme.textSoft
+                        }
+                        background: Rectangle {
+                            radius: width / 2
+                            color: batchCancelButton.down ? Theme.controlPressed : batchCancelButton.hovered ? Theme.controlHover : "transparent"
+                        }
+                        AppToolTip {
+                            text: qsTr("Cancel batch")
+                        }
+                    }
+                    ToolButton {
+                        id: batchDismissButton
+                        visible: batchDelegate.dismissible
+                        Layout.preferredWidth: visible ? 30 : 0
+                        Layout.preferredHeight: 30
+                        hoverEnabled: true
+                        onClicked: center.controller.dismissTransferBatch(batchDelegate.modelData.id)
+                        Accessible.name: qsTr("Remove batch")
+                        contentItem: AppIcon {
+                            name: "close"
+                            color: Theme.textSoft
+                        }
+                        background: Rectangle {
+                            radius: width / 2
+                            color: batchDismissButton.down ? Theme.controlPressed : batchDismissButton.hovered ? Theme.controlHover : "transparent"
+                        }
+                        AppToolTip {
+                            text: qsTr("Remove batch")
+                        }
+                    }
+                }
+
+                HoverHandler {
+                    id: batchHover
+                }
+            }
+
+            ScrollBar.vertical: ScrollBar {}
+        }
+
+        Text {
+            Layout.fillWidth: true
+            visible: transferList.count > 0 && batchList.count > 0
+            text: qsTr("Files")
+            color: Theme.textMuted
+            font.family: Theme.uiFont
+            font.pixelSize: Theme.textCompact
+            font.weight: Font.DemiBold
         }
 
         ListView {
@@ -508,7 +764,7 @@ Popup {
         StatePanel {
             Layout.fillWidth: true
             Layout.preferredHeight: 112
-            visible: center.controller.transferTasks.length === 0
+            visible: center.controller.transferTasks.length === 0 && center.controller.transferBatches.length === 0
             kind: "empty"
             centered: true
             heading: qsTr("No file transfers")
@@ -523,6 +779,7 @@ Popup {
             center.conflictTaskId = taskId;
             center.conflict = details;
             conflictRename.text = details.destinationPath || "";
+            conflictApplyRemaining.checked = false;
             center.open();
             conflictDialog.open();
         }
@@ -560,6 +817,15 @@ Popup {
                 Layout.fillWidth: true
                 placeholderText: qsTr("Renamed destination path")
                 accessibleName: qsTr("Renamed destination path")
+            }
+
+            AppCheckBox {
+                id: conflictApplyRemaining
+
+                visible: center.conflict.batchChild === true
+                text: qsTr("Apply Skip or Replace to remaining files in this batch")
+                checked: false
+                Accessible.name: text
             }
 
             RowLayout {
