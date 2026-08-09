@@ -43,6 +43,11 @@ namespace
                            .reconnectPolicy = ztermy::ssh::SshReconnectPolicy::OnTransportFailure,
                            .reconnectMaximumAttempts = 5,
                            .reconnectInitialBackoffMilliseconds = 1500},
+        .proxy = {.type = ztermy::ssh::SshProxyType::Socks5,
+                  .host = "proxy.example.test",
+                  .port = 1080,
+                  .username = "proxy-user",
+                  .credentialReference = "proxy-profile-1"},
     };
 }
 
@@ -68,6 +73,7 @@ private slots:
     void loadsProfilesWrittenBeforePassphraseMetadata();
     void loadsKeywordSchemaWithDefaultSessionOptions();
     void rejectsMalformedSessionOptions();
+    void rejectsMalformedProxyOptions();
 };
 
 void SshProfileStoreTests::missingFileLoadsAsEmpty()
@@ -127,6 +133,9 @@ void SshProfileStoreTests::savesAndLoadsNonSecretProfiles()
     QVERIFY(persisted.contains("\"sessionOptions\""));
     QVERIFY(persisted.contains("\"terminalType\": \"screen-256color\""));
     QVERIFY(persisted.contains("\"reconnectPolicy\": \"transport-failure\""));
+    QVERIFY(persisted.contains("\"type\": \"socks5\""));
+    QVERIFY(persisted.contains("\"host\": \"proxy.example.test\""));
+    QVERIFY(persisted.contains("\"credentialReference\": \"proxy-profile-1\""));
     QVERIFY(persisted.contains("\"authentication\": \"agent\""));
     QVERIFY(!persisted.contains("privateKeyContent"));
 }
@@ -152,6 +161,7 @@ void SshProfileStoreTests::loadsProfilesWrittenBeforePassphraseMetadata()
     QVERIFY(profiles->front().keywordHighlightRules.empty());
     QVERIFY(profiles->front().keywordHighlightEnabled);
     QCOMPARE(profiles->front().sessionOptions, ztermy::ssh::SshSessionOptions{});
+    QCOMPARE(profiles->front().proxy, ztermy::ssh::SshProxyOptions{});
 }
 
 void SshProfileStoreTests::loadsKeywordSchemaWithDefaultSessionOptions()
@@ -169,6 +179,7 @@ void SshProfileStoreTests::loadsKeywordSchemaWithDefaultSessionOptions()
     QVERIFY(profiles);
     QCOMPARE(profiles->size(), std::size_t{1});
     QCOMPARE(profiles->front().sessionOptions, ztermy::ssh::SshSessionOptions{});
+    QCOMPARE(profiles->front().proxy, ztermy::ssh::SshProxyOptions{});
 }
 
 void SshProfileStoreTests::createsMissingParentDirectory()
@@ -237,7 +248,7 @@ void SshProfileStoreTests::rejectsMalformedAndUnsupportedDocuments()
     QVERIFY(!malformed);
     QCOMPARE(malformed.error(), ztermy::ssh::SshProfileStoreError::InvalidFormat);
 
-    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":5,"profiles":[]})")));
+    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":6,"profiles":[]})")));
     auto unsupported = store.load();
     QVERIFY(!unsupported);
     QCOMPARE(unsupported.error(), ztermy::ssh::SshProfileStoreError::UnsupportedVersion);
@@ -257,6 +268,29 @@ void SshProfileStoreTests::rejectsMalformedSessionOptions()
     auto malformedMode = store.load();
     QVERIFY(!malformedMode);
     QCOMPARE(malformedMode.error(), ztermy::ssh::SshProfileStoreError::InvalidFormat);
+}
+
+void SshProfileStoreTests::rejectsMalformedProxyOptions()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("profiles.json"));
+    const ztermy::ssh::SshProfileStore store(path);
+
+    const QByteArray prefix = QByteArrayLiteral(
+        R"({"version":5,"profiles":[{"id":"p","name":"n","group":"","host":"h","port":22,"username":"u","authentication":"password","privateKeyPath":"","keywordHighlightEnabled":true,"keywordHighlightRules":[],"sessionOptions":{"terminalType":"xterm-256color","keepaliveIntervalSeconds":0,"keepaliveFailureThreshold":3,"startupCommand":"","startupCommandMode":"paste","startupLineDelayMilliseconds":100,"environment":[],"reconnectPolicy":"never","reconnectMaximumAttempts":3,"reconnectInitialBackoffMilliseconds":1000},"proxy":)");
+
+    QVERIFY(writeFile(
+        path, prefix + QByteArrayLiteral(R"({"type":"socks5","host":"proxy","port":1080,"username":"user"}}]})")));
+    auto missingCredential = store.load();
+    QVERIFY(!missingCredential);
+    QCOMPARE(missingCredential.error(), ztermy::ssh::SshProfileStoreError::InvalidFormat);
+
+    QVERIFY(writeFile(path,
+                      prefix + QByteArrayLiteral(R"({"type":"unknown","host":"proxy","port":1080,"username":""}}]})")));
+    auto unknownType = store.load();
+    QVERIFY(!unknownType);
+    QCOMPARE(unknownType.error(), ztermy::ssh::SshProfileStoreError::InvalidFormat);
 }
 
 void SshProfileStoreTests::rejectsFractionalPortsAndUnknownAuthentication()

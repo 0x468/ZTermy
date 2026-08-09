@@ -14,6 +14,8 @@ constexpr std::size_t maximumNameLength = 256;
 constexpr std::size_t maximumGroupLength = 128;
 constexpr std::size_t maximumHostLength = 1024;
 constexpr std::size_t maximumUsernameLength = 256;
+constexpr std::size_t maximumProxyHostLength = 1024;
+constexpr std::size_t maximumProxyUsernameLength = 255;
 constexpr std::size_t maximumPrivateKeyPathLength = 32767;
 constexpr std::size_t maximumKeywordRuleCount = 16;
 constexpr std::size_t maximumEnvironmentVariableCount = 32;
@@ -126,6 +128,24 @@ bool validSshSessionOptions(const SshSessionOptions &options) noexcept
     return true;
 }
 
+bool validSshProxyOptions(const SshProxyOptions &options) noexcept
+{
+    switch (options.type)
+    {
+        case SshProxyType::None:
+            return options.host.empty() && options.port == 0 && options.username.empty()
+                   && !options.credentialReference.has_value();
+        case SshProxyType::Socks5:
+        case SshProxyType::HttpConnect:
+            return nonEmptyWithin(options.host, maximumProxyHostLength) && options.port != 0
+                   && options.username.size() <= maximumProxyUsernameLength
+                   && validCredentialReference(options.credentialReference)
+                   && (options.username.empty() ? !options.credentialReference.has_value()
+                                                : options.credentialReference.has_value());
+    }
+    return false;
+}
+
 bool shouldReconnectAfter(const SshReconnectPolicy policy, const SshFailureKind failure) noexcept
 {
     if (policy != SshReconnectPolicy::OnTransportFailure)
@@ -176,7 +196,7 @@ bool validSshProfile(const SshProfile &profile) noexcept
         || profile.keywordHighlightRules.size() > maximumKeywordRuleCount
         || !std::ranges::all_of(profile.keywordHighlightRules, validKeywordHighlightRule)
         || (profile.lastConnectedUtcMs.has_value() && *profile.lastConnectedUtcMs < 0)
-        || !validSshSessionOptions(profile.sessionOptions))
+        || !validSshSessionOptions(profile.sessionOptions) || !validSshProxyOptions(profile.proxy))
     {
         return false;
     }

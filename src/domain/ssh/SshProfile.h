@@ -29,6 +29,24 @@ enum class SshReconnectPolicy : std::uint8_t
     OnTransportFailure,
 };
 
+enum class SshProxyType : std::uint8_t
+{
+    None,
+    Socks5,
+    HttpConnect,
+};
+
+struct SshProxyOptions final
+{
+    SshProxyType type = SshProxyType::None;
+    std::string host;
+    std::uint16_t port = 0;
+    std::string username;
+    std::optional<std::string> credentialReference;
+
+    friend bool operator==(const SshProxyOptions &, const SshProxyOptions &) = default;
+};
+
 struct SshEnvironmentVariable final
 {
     std::string name;
@@ -81,6 +99,7 @@ struct SshProfile
     std::vector<SshKeywordHighlightRule> keywordHighlightRules;
     bool keywordHighlightEnabled = true;
     SshSessionOptions sessionOptions;
+    SshProxyOptions proxy;
 
     friend bool operator==(const SshProfile &, const SshProfile &) = default;
 };
@@ -88,6 +107,7 @@ struct SshProfile
 [[nodiscard]] bool validSshProfile(const SshProfile &profile) noexcept;
 [[nodiscard]] bool validKeywordHighlightRule(const SshKeywordHighlightRule &rule) noexcept;
 [[nodiscard]] bool validSshSessionOptions(const SshSessionOptions &options) noexcept;
+[[nodiscard]] bool validSshProxyOptions(const SshProxyOptions &options) noexcept;
 [[nodiscard]] bool shouldReconnectAfter(SshReconnectPolicy policy, SshFailureKind failure) noexcept;
 [[nodiscard]] std::uint32_t reconnectBackoffMilliseconds(const SshSessionOptions &options,
                                                          std::uint8_t attempt) noexcept;

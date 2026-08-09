@@ -72,8 +72,10 @@ the next transport is introduced.
   service with an accepted identity loaded.
 - Phase 5 foundation is complete: all libssh2 traffic, including direct SSH,
   now uses the cancellable byte-transport callback boundary and owns the
-  transport on the heap for stable session lifetime. Explicit proxy and
-  ProxyJump composition remain.
+  transport on the heap for stable session lifetime. SOCKS5 and HTTP CONNECT
+  handshakes, bounded protocol parsing, cancellation, separate proxy credential
+  storage, schema migration, and connection-bootstrap composition are complete
+  at the native layer. Profile UX and ProxyJump composition remain.
 - Phase 6 remains after phase 5 composition before V2.9 acceptance.
 
 ## Acceptance boundary

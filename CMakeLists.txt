@@ -244,6 +244,8 @@ target_compile_definitions(ztermy_terminal_transport PRIVATE
 )
 
 add_library(ztermy_ssh_transport STATIC
+    src/infrastructure/ssh/ExplicitProxyTunnel.cpp
+    src/infrastructure/ssh/ExplicitProxyTunnel.h
     src/infrastructure/ssh/Libssh2Runtime.cpp
     src/infrastructure/ssh/Libssh2Runtime.h
     src/infrastructure/ssh/Libssh2Session.cpp
@@ -1825,6 +1827,27 @@ if(BUILD_TESTING)
 
     add_test(NAME windows-tcp-socket COMMAND ztermy_windows_tcp_socket_tests)
 
+    qt_add_executable(ztermy_explicit_proxy_tunnel_tests
+        tests/explicit_proxy_tunnel_tests.cpp
+    )
+
+    target_compile_features(ztermy_explicit_proxy_tunnel_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_explicit_proxy_tunnel_tests PRIVATE
+        ztermy_ssh_transport
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_explicit_proxy_tunnel_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME explicit-proxy-tunnel COMMAND ztermy_explicit_proxy_tunnel_tests)
+
     qt_add_executable(ztermy_ssh_handshake_tests
         tests/ssh_handshake_tests.cpp
     )
@@ -2205,6 +2228,7 @@ if(BUILD_TESTING)
             ztermy_ssh_profile_store_tests
             ztermy_ssh_target_tests
             ztermy_windows_tcp_socket_tests
+            ztermy_explicit_proxy_tunnel_tests
             ztermy_ssh_handshake_tests
             ztermy_ssh_connection_bootstrap_tests
             ztermy_ssh_real_host_tests

@@ -1,6 +1,7 @@
 #include "application/ssh/SshConnectionBootstrap.h"
 
 #include "domain/ssh/SshHostKey.h"
+#include "infrastructure/ssh/ExplicitProxyTunnel.h"
 #include "infrastructure/ssh/KnownHostsStore.h"
 #include "infrastructure/ssh/WindowsTcpSocket.h"
 
@@ -52,6 +53,27 @@ private:
     return SshFailureKind::TransportError;
 }
 
+[[nodiscard]] SshFailureKind failureFromProxy(const ExplicitProxyErrorKind kind) noexcept
+{
+    switch (kind)
+    {
+        case ExplicitProxyErrorKind::AuthenticationRequired:
+        case ExplicitProxyErrorKind::AuthenticationRejected:
+            return SshFailureKind::AuthenticationRejected;
+        case ExplicitProxyErrorKind::TimedOut:
+            return SshFailureKind::TimedOut;
+        case ExplicitProxyErrorKind::Cancelled:
+            return SshFailureKind::Cancelled;
+        case ExplicitProxyErrorKind::ConnectionLost:
+        case ExplicitProxyErrorKind::ConnectionRejected:
+            return SshFailureKind::TransportError;
+        case ExplicitProxyErrorKind::InvalidConfiguration:
+        case ExplicitProxyErrorKind::ProtocolError:
+            return SshFailureKind::ProtocolError;
+    }
+    return SshFailureKind::ProtocolError;
+}
+
 void publishPhase(const SshConnectionCallbacks &callbacks, const SshConnectionPhase phase)
 {
     if (callbacks.phaseChanged)
@@ -95,6 +117,7 @@ establishAuthenticatedSshConnection(SshConnectionRequest &request, const SshConn
                                     const std::stop_token &stopToken)
 {
     SecretClearGuard clearSecret(request.secret);
+    SecretClearGuard clearProxySecret(request.proxySecret);
     if (!validSshConnectionRequest(request))
     {
         return std::unexpected(connectionError(SshFailureKind::ProtocolError));
@@ -103,7 +126,9 @@ establishAuthenticatedSshConnection(SshConnectionRequest &request, const SshConn
     publishPhase(callbacks, SshConnectionPhase::Connecting);
     const QByteArray hostUtf8 = request.host.trimmed().toUtf8();
     const std::string host(hostUtf8.constData(), static_cast<std::size_t>(hostUtf8.size()));
-    auto directSocket = WindowsTcpSocket::connect(host, request.port, 10s, stopToken);
+    const std::string &connectHost = request.proxy.type == SshProxyType::None ? host : request.proxy.host;
+    const std::uint16_t connectPort = request.proxy.type == SshProxyType::None ? request.port : request.proxy.port;
+    auto directSocket = WindowsTcpSocket::connect(connectHost, connectPort, 10s, stopToken);
     if (!directSocket)
     {
         return std::unexpected(connectionError(failureFromTcp(directSocket.error().kind)));
@@ -117,6 +142,16 @@ establishAuthenticatedSshConnection(SshConnectionRequest &request, const SshConn
     catch (const std::bad_alloc &)
     {
         return std::unexpected(connectionError(SshFailureKind::ProtocolError));
+    }
+
+    if (request.proxy.type != SshProxyType::None)
+    {
+        auto tunnel = establishExplicitProxyTunnel(*transport, request.proxy.type, host, request.port,
+                                                   request.proxy.username, request.proxySecret.view(), 10s, stopToken);
+        if (!tunnel)
+        {
+            return std::unexpected(connectionError(failureFromProxy(tunnel.error().kind)));
+        }
     }
 
     auto session = Libssh2Session::create();

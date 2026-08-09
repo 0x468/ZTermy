@@ -18,6 +18,8 @@ struct SshConnectionRequest final
     SshAuthenticationMethod authentication = SshAuthenticationMethod::PrivateKey;
     QString privateKeyPath;
     security::SensitiveByteArray secret;
+    SshProxyOptions proxy;
+    security::SensitiveByteArray proxySecret;
     QString knownHostsPath;
     SshSessionOptions sessionOptions;
 };

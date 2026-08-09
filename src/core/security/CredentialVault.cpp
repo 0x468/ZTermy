@@ -25,6 +25,8 @@ std::string_view credentialKindToken(const CredentialKind kind) noexcept
             return "password";
         case CredentialKind::PrivateKeyPassphrase:
             return "key-passphrase";
+        case CredentialKind::ProxyPassword:
+            return "proxy-password";
     }
     return {};
 }

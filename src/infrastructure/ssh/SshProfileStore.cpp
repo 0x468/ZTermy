@@ -22,7 +22,8 @@ constexpr qsizetype maximumProfileCount = 128;
 constexpr qint64 legacySchemaVersion = 1;
 constexpr qint64 credentialSchemaVersion = 2;
 constexpr qint64 keywordSchemaVersion = 3;
-constexpr qint64 currentSchemaVersion = 4;
+constexpr qint64 sessionOptionsSchemaVersion = 4;
+constexpr qint64 currentSchemaVersion = 5;
 constexpr qsizetype maximumEnvironmentVariableCount = 32;
 
 [[nodiscard]] std::optional<ztermy::ssh::SshStartupCommandMode> parseStartupCommandMode(const QString &value)
@@ -61,6 +62,88 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
 {
     return policy == ztermy::ssh::SshReconnectPolicy::OnTransportFailure ? QStringLiteral("transport-failure")
                                                                          : QStringLiteral("never");
+}
+
+[[nodiscard]] std::optional<ztermy::ssh::SshProxyType> parseProxyType(const QString &value)
+{
+    if (value == QStringLiteral("none"))
+    {
+        return ztermy::ssh::SshProxyType::None;
+    }
+    if (value == QStringLiteral("socks5"))
+    {
+        return ztermy::ssh::SshProxyType::Socks5;
+    }
+    if (value == QStringLiteral("http-connect"))
+    {
+        return ztermy::ssh::SshProxyType::HttpConnect;
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] QString serializeProxyType(const ztermy::ssh::SshProxyType type)
+{
+    switch (type)
+    {
+        case ztermy::ssh::SshProxyType::None:
+            return QStringLiteral("none");
+        case ztermy::ssh::SshProxyType::Socks5:
+            return QStringLiteral("socks5");
+        case ztermy::ssh::SshProxyType::HttpConnect:
+            return QStringLiteral("http-connect");
+    }
+    return {};
+}
+
+[[nodiscard]] std::optional<ztermy::ssh::SshProxyOptions> parseProxyOptions(const QJsonValue &value)
+{
+    if (!value.isObject())
+    {
+        return std::nullopt;
+    }
+    const QJsonObject object = value.toObject();
+    const QJsonValue typeValue = object.value(QStringLiteral("type"));
+    const QJsonValue hostValue = object.value(QStringLiteral("host"));
+    const QJsonValue portValue = object.value(QStringLiteral("port"));
+    const QJsonValue usernameValue = object.value(QStringLiteral("username"));
+    const QJsonValue credentialReferenceValue = object.value(QStringLiteral("credentialReference"));
+    if (!typeValue.isString() || !hostValue.isString() || !portValue.isDouble() || !usernameValue.isString()
+        || (!credentialReferenceValue.isUndefined() && !credentialReferenceValue.isString()))
+    {
+        return std::nullopt;
+    }
+    const auto type = parseProxyType(typeValue.toString());
+    const qint64 port = portValue.toInteger(-1);
+    if (!type || static_cast<double>(port) != portValue.toDouble() || port < 0
+        || std::cmp_greater(port, std::numeric_limits<std::uint16_t>::max()))
+    {
+        return std::nullopt;
+    }
+    ztermy::ssh::SshProxyOptions options{
+        .type = *type,
+        .host = hostValue.toString().toStdString(),
+        .port = static_cast<std::uint16_t>(port),
+        .username = usernameValue.toString().toStdString(),
+        .credentialReference = credentialReferenceValue.isString()
+                                   ? std::optional{credentialReferenceValue.toString().toStdString()}
+                                   : std::nullopt,
+    };
+    return ztermy::ssh::validSshProxyOptions(options) ? std::optional{std::move(options)} : std::nullopt;
+}
+
+[[nodiscard]] QJsonObject serializeProxyOptions(const ztermy::ssh::SshProxyOptions &options)
+{
+    QJsonObject object{
+        {QStringLiteral("type"), serializeProxyType(options.type)},
+        {QStringLiteral("host"), QString::fromStdString(options.host)},
+        {QStringLiteral("port"), options.port},
+        {QStringLiteral("username"), QString::fromStdString(options.username)},
+    };
+    if (options.credentialReference)
+    {
+        object.insert(QStringLiteral("credentialReference"), QString::fromStdString(*options.credentialReference));
+    }
+    return object;
 }
 
 [[nodiscard]] std::optional<ztermy::ssh::SshSessionOptions> parseSessionOptions(const QJsonValue &value)
@@ -250,6 +333,7 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
     const QJsonValue keywordEnabledValue = object.value(QStringLiteral("keywordHighlightEnabled"));
     const QJsonValue keywordRulesValue = object.value(QStringLiteral("keywordHighlightRules"));
     const QJsonValue sessionOptionsValue = object.value(QStringLiteral("sessionOptions"));
+    const QJsonValue proxyValue = object.value(QStringLiteral("proxy"));
     if (!idValue.isString() || !nameValue.isString() || (!groupValue.isUndefined() && !groupValue.isString())
         || !hostValue.isString() || !portValue.isDouble() || !usernameValue.isString()
         || !authenticationValue.isString() || !privateKeyPathValue.isString()
@@ -259,7 +343,8 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
             && !credentialReferenceValue.isString())
         || (version >= keywordSchemaVersion && !keywordEnabledValue.isUndefined() && !keywordEnabledValue.isBool())
         || (version >= keywordSchemaVersion && !keywordRulesValue.isUndefined() && !keywordRulesValue.isArray())
-        || (version >= currentSchemaVersion && !sessionOptionsValue.isObject()))
+        || (version >= sessionOptionsSchemaVersion && !sessionOptionsValue.isObject())
+        || (version >= currentSchemaVersion && !proxyValue.isObject()))
     {
         return std::nullopt;
     }
@@ -308,9 +393,15 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
         }
     }
 
-    auto sessionOptions = version >= currentSchemaVersion ? parseSessionOptions(sessionOptionsValue)
-                                                          : std::optional{ztermy::ssh::SshSessionOptions{}};
+    auto sessionOptions = version >= sessionOptionsSchemaVersion ? parseSessionOptions(sessionOptionsValue)
+                                                                 : std::optional{ztermy::ssh::SshSessionOptions{}};
     if (!sessionOptions)
+    {
+        return std::nullopt;
+    }
+    auto proxy =
+        version >= currentSchemaVersion ? parseProxyOptions(proxyValue) : std::optional{ztermy::ssh::SshProxyOptions{}};
+    if (!proxy)
     {
         return std::nullopt;
     }
@@ -332,6 +423,7 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
         .keywordHighlightRules = std::move(keywordRules),
         .keywordHighlightEnabled = keywordEnabledValue.toBool(true),
         .sessionOptions = std::move(*sessionOptions),
+        .proxy = std::move(*proxy),
     };
     return ztermy::ssh::validSshProfile(profile) ? std::optional{std::move(profile)} : std::nullopt;
 }
@@ -372,6 +464,7 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
     }
     object.insert(QStringLiteral("keywordHighlightRules"), keywordRules);
     object.insert(QStringLiteral("sessionOptions"), serializeSessionOptions(profile.sessionOptions));
+    object.insert(QStringLiteral("proxy"), serializeProxyOptions(profile.proxy));
     return object;
 }
 
@@ -433,7 +526,9 @@ std::expected<std::vector<SshProfile>, SshProfileStoreError> SshProfileStore::lo
     const QJsonValue profilesValue = root.value(QStringLiteral("profiles"));
     if (!versionValue.isDouble()
         || (versionValue.toInteger() != legacySchemaVersion && versionValue.toInteger() != credentialSchemaVersion
-            && versionValue.toInteger() != keywordSchemaVersion && versionValue.toInteger() != currentSchemaVersion))
+            && versionValue.toInteger() != keywordSchemaVersion
+            && versionValue.toInteger() != sessionOptionsSchemaVersion
+            && versionValue.toInteger() != currentSchemaVersion))
     {
         return std::unexpected(versionValue.isDouble() ? SshProfileStoreError::UnsupportedVersion
                                                        : SshProfileStoreError::InvalidFormat);

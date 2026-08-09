@@ -67,18 +67,37 @@ void SshConnectionBootstrapTests::validatesReusableConnectionRequests()
     auto invalidSessionOptions = validPasswordRequest();
     invalidSessionOptions.sessionOptions.terminalType = "xterm 256color";
     QVERIFY(!ztermy::ssh::validSshConnectionRequest(invalidSessionOptions));
+
+    auto proxied = validPasswordRequest();
+    proxied.proxy = {.type = ztermy::ssh::SshProxyType::HttpConnect,
+                     .host = "proxy.example.test",
+                     .port = 8080,
+                     .username = "proxy-user",
+                     .credentialReference = "proxy-profile"};
+    QVERIFY(!ztermy::ssh::validSshConnectionRequest(proxied));
+    proxied.proxySecret = ztermy::security::SensitiveByteArray(QByteArray("proxy-secret"));
+    QVERIFY(ztermy::ssh::validSshConnectionRequest(proxied));
+
+    auto anonymousProxy = validPasswordRequest();
+    anonymousProxy.proxy = {.type = ztermy::ssh::SshProxyType::Socks5, .host = "proxy.example.test", .port = 1080};
+    QVERIFY(ztermy::ssh::validSshConnectionRequest(anonymousProxy));
+    anonymousProxy.proxySecret = ztermy::security::SensitiveByteArray(QByteArray("unexpected"));
+    QVERIFY(!ztermy::ssh::validSshConnectionRequest(anonymousProxy));
 }
 
 void SshConnectionBootstrapTests::clearsSecretsWhenBootstrapRejectsARequest()
 {
     auto request = validPasswordRequest();
     request.host.clear();
+    request.proxySecret = ztermy::security::SensitiveByteArray(QByteArray("proxy-secret"));
     QVERIFY(!request.secret.empty());
+    QVERIFY(!request.proxySecret.empty());
 
     const auto result = ztermy::ssh::establishAuthenticatedSshConnection(request, {});
     QVERIFY(!result);
     QCOMPARE(result.error().failure, ztermy::ssh::SshFailureKind::ProtocolError);
     QVERIFY(request.secret.empty());
+    QVERIFY(request.proxySecret.empty());
 }
 
 void SshConnectionBootstrapTests::mapsTransportFailuresForConnectionAndChannelStages()
