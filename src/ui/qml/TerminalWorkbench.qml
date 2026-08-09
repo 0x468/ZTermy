@@ -139,7 +139,7 @@ Rectangle {
     focus: visible
     Keys.onEscapePressed: closeRequested()
     Accessible.role: Accessible.Pane
-    Accessible.name: currentPage === "sftp" ? qsTr("SFTP file browser") : currentPage === "history" ? qsTr("Command history") : qsTr("Scripts")
+    Accessible.name: currentPage === "sftp" ? qsTr("SFTP file browser") : currentPage === "history" ? qsTr("Command history") : currentPage === "notes" ? qsTr("Notes") : qsTr("Scripts")
     onVisibleChanged: {
         if (visible && currentPage === "history" && controller.terminalHistoryState === "idle") {
             controller.refreshTerminalHistory();
@@ -296,6 +296,27 @@ Rectangle {
                     }
                 }
 
+                WorkbenchToolButton {
+                    id: notesPageButton
+
+                    Layout.alignment: Qt.AlignVCenter
+                    Layout.preferredWidth: 28
+                    Layout.preferredHeight: 28
+                    checkable: true
+                    checked: workbench.currentPage === "notes"
+                    selected: checked
+                    onClicked: workbench.controller.toggleTerminalWorkbench("notes")
+                    Accessible.name: qsTr("Notes")
+                    contentItem: AppIcon {
+                        name: "file"
+                        color: notesPageButton.checked ? Theme.accent : Theme.textSoft
+                    }
+
+                    AppToolTip {
+                        text: qsTr("Notes")
+                    }
+                }
+
                 Item {
                     Layout.fillWidth: true
                 }
@@ -340,6 +361,13 @@ Rectangle {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     visible: workbench.currentPage === "sftp"
+                    controller: workbench.controller
+                }
+
+                NotesPane {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    visible: workbench.currentPage === "notes"
                     controller: workbench.controller
                 }
 

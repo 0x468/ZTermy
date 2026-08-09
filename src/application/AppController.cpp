@@ -143,6 +143,11 @@ private:
     return QFileInfo(settingsPath).dir().filePath(QStringLiteral("scripts.json"));
 }
 
+[[nodiscard]] QString siblingNotesDirectory(const QString &settingsPath)
+{
+    return QFileInfo(settingsPath).dir().filePath(QStringLiteral("notes"));
+}
+
 [[nodiscard]] QString siblingWorkspaceStateFile(const QString &settingsPath)
 {
     return QFileInfo(settingsPath).dir().filePath(QStringLiteral("workspace_state.json"));
@@ -1472,6 +1477,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
                                              : std::move(settingsPath)),
       m_scriptStore(siblingScriptsFile(m_settingsStore.filePath())),
       m_legacyQuickCommandPath(siblingQuickCommandsFile(m_settingsStore.filePath())),
+      m_noteStore(siblingNotesDirectory(m_settingsStore.filePath())),
       m_workspaceStateStore(siblingWorkspaceStateFile(m_settingsStore.filePath())),
       m_credentialVaults(std::make_unique<security::CredentialVaultCoordinator>(
           siblingCredentialsFile(m_profileStore.filePath()), security::CredentialStorage::Session)),
@@ -1485,9 +1491,12 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     }
     Q_ASSERT(m_localSessionFactory);
     qRegisterMetaType<ShellHistoryEntries>();
+    qRegisterMetaType<NoteSearchResults>();
     QObject::connect(this, &AppController::terminalTabsChanged, this, &AppController::terminalWorkspaceChanged);
     QObject::connect(this, &AppController::terminalHistoryTaskCompleted, this,
                      &AppController::applyTerminalHistoryTaskResult, Qt::QueuedConnection);
+    QObject::connect(this, &AppController::noteSearchTaskCompleted, this, &AppController::applyNoteSearchTaskResult,
+                     Qt::QueuedConnection);
     initializePortForwardingSignalBridges();
     loadHostProfiles();
     loadPortForwardingRules();
@@ -1497,6 +1506,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     initializeScriptExecutionTimer();
     loadQuickCommands();
     loadWorkspaceState();
+    refreshNotes();
 }
 
 AppController::AppController(QString profileStorePath, QString knownHostsPath, QString settingsPath,
@@ -1522,6 +1532,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
                                              : std::move(settingsPath)),
       m_scriptStore(siblingScriptsFile(m_settingsStore.filePath())),
       m_legacyQuickCommandPath(siblingQuickCommandsFile(m_settingsStore.filePath())),
+      m_noteStore(siblingNotesDirectory(m_settingsStore.filePath())),
       m_workspaceStateStore(siblingWorkspaceStateFile(m_settingsStore.filePath())),
       m_credentialVaults(std::make_unique<security::CredentialVaultCoordinator>(
           credentialsPath.isEmpty() ? siblingCredentialsFile(m_profileStore.filePath()) : std::move(credentialsPath),
@@ -1538,9 +1549,12 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     Q_ASSERT(m_localSessionFactory);
     Q_ASSERT(m_credentialVaults);
     qRegisterMetaType<ShellHistoryEntries>();
+    qRegisterMetaType<NoteSearchResults>();
     QObject::connect(this, &AppController::terminalTabsChanged, this, &AppController::terminalWorkspaceChanged);
     QObject::connect(this, &AppController::terminalHistoryTaskCompleted, this,
                      &AppController::applyTerminalHistoryTaskResult, Qt::QueuedConnection);
+    QObject::connect(this, &AppController::noteSearchTaskCompleted, this, &AppController::applyNoteSearchTaskResult,
+                     Qt::QueuedConnection);
     initializePortForwardingSignalBridges();
     loadHostProfiles();
     loadPortForwardingRules();
@@ -1550,6 +1564,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     initializeScriptExecutionTimer();
     loadQuickCommands();
     loadWorkspaceState();
+    refreshNotes();
 }
 
 AppController::~AppController()
@@ -1972,6 +1987,41 @@ QVariantList AppController::quickCommands() const
 QString AppController::quickCommandOperationError() const
 {
     return m_quickCommandOperationError;
+}
+
+QVariantList AppController::notes() const
+{
+    return m_notes;
+}
+
+QVariantList AppController::noteSearchResults() const
+{
+    return m_noteSearchResults;
+}
+
+QString AppController::activeNotePath() const
+{
+    return m_activeNotePath;
+}
+
+QString AppController::activeNoteContent() const
+{
+    return m_activeNoteContent;
+}
+
+bool AppController::activeNoteDirty() const noexcept
+{
+    return m_activeNoteDirty;
+}
+
+QString AppController::noteSearchState() const
+{
+    return m_noteSearchState;
+}
+
+QString AppController::noteOperationError() const
+{
+    return m_noteOperationError;
 }
 
 QVariantList AppController::terminalHistory() const
@@ -3105,7 +3155,8 @@ bool AppController::toggleTerminalWorkbench(const QString &page)
 {
     TerminalTab *tab = activeTab();
     if (tab == nullptr
-        || (page != QStringLiteral("history") && page != QStringLiteral("scripts") && page != QStringLiteral("sftp")))
+        || (page != QStringLiteral("history") && page != QStringLiteral("scripts") && page != QStringLiteral("sftp")
+            && page != QStringLiteral("notes")))
     {
         return false;
     }
@@ -3547,6 +3598,39 @@ bool AppController::copyTerminalScriptRecording()
     return true;
 }
 
+bool AppController::saveTerminalScriptRecordingAsScript(const QString &name, const QString &description)
+{
+    const TerminalTab *tab = activeTab();
+    if (tab == nullptr || tab->scriptRecorder.state() != workbench::ScriptRecorderState::Review
+        || tab->scriptRecorder.steps().empty())
+    {
+        setQuickCommandOperationError(tr("Stop and review a non-empty recording before saving it as a script."));
+        return false;
+    }
+
+    QVariantList steps;
+    for (const workbench::RecordedScriptStep &step : tab->scriptRecorder.steps())
+    {
+        if (step.kind == workbench::RecordedScriptStepKind::Send)
+        {
+            steps.append(QVariantMap{{QStringLiteral("command"), utf8QString(step.command)},
+                                     {QStringLiteral("continuation"), QStringLiteral("immediate")},
+                                     {QStringLiteral("outputMarker"), QString{}},
+                                     {QStringLiteral("timeoutMs"), 30'000}});
+        }
+    }
+    if (steps.isEmpty())
+    {
+        setQuickCommandOperationError(tr("The recording does not contain any command actions."));
+        return false;
+    }
+    return saveScript(QVariantMap{{QStringLiteral("name"), name},
+                                  {QStringLiteral("description"), description},
+                                  {QStringLiteral("shell"), QStringLiteral("any")},
+                                  {QStringLiteral("variables"), QVariantList{}},
+                                  {QStringLiteral("steps"), steps}});
+}
+
 void AppController::clearTerminalScriptRecording()
 {
     TerminalTab *tab = activeTab();
@@ -3938,6 +4022,243 @@ bool AppController::exportQuickCommands(const QString &localFileUrl)
         return false;
     }
     setQuickCommandOperationError({});
+    return true;
+}
+
+void AppController::refreshNotes()
+{
+    const auto entries = m_noteStore.entries();
+    if (!entries)
+    {
+        setNoteOperationError(tr("The local notes folder could not be read."));
+        return;
+    }
+    QVariantList values;
+    values.reserve(static_cast<qsizetype>(entries->size()));
+    for (const workbench::NoteEntry &entry : *entries)
+    {
+        values.append(QVariantMap{{QStringLiteral("path"), entry.path},
+                                  {QStringLiteral("name"), entry.name},
+                                  {QStringLiteral("folder"), entry.folder},
+                                  {QStringLiteral("size"), QVariant::fromValue<qulonglong>(entry.size)},
+                                  {QStringLiteral("modifiedUtcMs"), entry.modifiedUtcMs}});
+    }
+    m_notes = std::move(values);
+    m_noteOperationError.clear();
+    emit notesChanged();
+}
+
+bool AppController::openNote(const QString &relativePath, const bool discardUnsavedChanges)
+{
+    if (m_activeNoteDirty && !discardUnsavedChanges)
+    {
+        if (relativePath == m_activeNotePath)
+        {
+            return true;
+        }
+        setNoteOperationError(tr("Save or discard the current note before opening another one."));
+        return false;
+    }
+    const auto content = m_noteStore.read(relativePath);
+    if (!content)
+    {
+        setNoteOperationError(tr("The note could not be opened."));
+        return false;
+    }
+    m_activeNotePath = relativePath;
+    m_activeNoteContent = *content;
+    m_activeNoteDirty = false;
+    m_noteOperationError.clear();
+    emit notesChanged();
+    return true;
+}
+
+void AppController::updateActiveNoteContent(const QString &content)
+{
+    if (m_activeNotePath.isEmpty() || m_activeNoteContent == content)
+    {
+        return;
+    }
+    m_activeNoteContent = content;
+    m_activeNoteDirty = true;
+    emit notesChanged();
+}
+
+bool AppController::saveActiveNote()
+{
+    if (m_activeNotePath.isEmpty())
+    {
+        setNoteOperationError(tr("Open a note before saving."));
+        return false;
+    }
+    if (const auto saved = m_noteStore.save(m_activeNotePath, m_activeNoteContent); !saved)
+    {
+        setNoteOperationError(saved.error() == workbench::NoteStoreError::noteTooLarge
+                                  ? tr("The note exceeds the 2 MiB limit.")
+                                  : tr("The note could not be saved."));
+        return false;
+    }
+    m_activeNoteDirty = false;
+    m_noteOperationError.clear();
+    refreshNotes();
+    return true;
+}
+
+bool AppController::discardActiveNoteChanges()
+{
+    if (m_activeNotePath.isEmpty())
+    {
+        return false;
+    }
+    return openNote(m_activeNotePath, true);
+}
+
+bool AppController::createNote(const QString &relativePath)
+{
+    if (m_activeNoteDirty)
+    {
+        setNoteOperationError(tr("Save or discard the current note before creating another one."));
+        return false;
+    }
+    if (const auto saved = m_noteStore.save(relativePath, QString{}); !saved)
+    {
+        setNoteOperationError(tr("The note could not be created. Use a safe relative path ending in .md."));
+        return false;
+    }
+    refreshNotes();
+    return openNote(relativePath, true);
+}
+
+bool AppController::createNoteFolder(const QString &relativePath)
+{
+    if (const auto created = m_noteStore.createFolder(relativePath); !created)
+    {
+        setNoteOperationError(tr("The note folder could not be created."));
+        return false;
+    }
+    refreshNotes();
+    return true;
+}
+
+bool AppController::renameNoteEntry(const QString &sourceRelativePath, const QString &destinationRelativePath)
+{
+    if (const auto renamed = m_noteStore.renameEntry(sourceRelativePath, destinationRelativePath); !renamed)
+    {
+        setNoteOperationError(tr("The note or folder could not be moved or renamed."));
+        return false;
+    }
+    if (m_activeNotePath == sourceRelativePath)
+    {
+        m_activeNotePath = destinationRelativePath;
+    }
+    else if (m_activeNotePath.startsWith(sourceRelativePath + QLatin1Char('/')))
+    {
+        m_activeNotePath = destinationRelativePath + m_activeNotePath.sliced(sourceRelativePath.size());
+    }
+    refreshNotes();
+    return true;
+}
+
+bool AppController::deleteNoteEntry(const QString &relativePath)
+{
+    if ((m_activeNotePath == relativePath || m_activeNotePath.startsWith(relativePath + QLatin1Char('/')))
+        && m_activeNoteDirty)
+    {
+        setNoteOperationError(tr("Discard the active note changes before deleting it."));
+        return false;
+    }
+    if (const auto removed = m_noteStore.removeEntry(relativePath); !removed)
+    {
+        setNoteOperationError(tr("The note or folder could not be deleted."));
+        return false;
+    }
+    if (m_activeNotePath == relativePath || m_activeNotePath.startsWith(relativePath + QLatin1Char('/')))
+    {
+        m_activeNotePath.clear();
+        m_activeNoteContent.clear();
+        m_activeNoteDirty = false;
+    }
+    refreshNotes();
+    return true;
+}
+
+void AppController::searchNotes(const QString &query)
+{
+    const std::uint64_t requestId = ++m_noteSearchRequestId;
+    const QString normalized = query.trimmed();
+    if (normalized.isEmpty())
+    {
+        m_noteSearchResults.clear();
+        m_noteSearchState = QStringLiteral("idle");
+        emit notesChanged();
+        return;
+    }
+    m_noteSearchState = QStringLiteral("loading");
+    m_noteOperationError.clear();
+    emit notesChanged();
+
+    const QString rootPath = m_noteStore.rootPath();
+    const QString searchError = tr("The local notes search could not be completed.");
+    const QPointer<AppController> self(this);
+    QThreadPool::globalInstance()->start([self, rootPath, normalized, requestId, searchError] {
+        NoteSearchResults results;
+        QString error;
+        try
+        {
+            auto searched = workbench::NoteStore(rootPath).search(normalized);
+            if (searched)
+            {
+                results = std::move(*searched);
+            }
+            else
+            {
+                error = searchError;
+            }
+        }
+        catch (const std::bad_alloc &)
+        {
+            error = searchError;
+        }
+        if (self)
+        {
+            emit self->noteSearchTaskCompleted(requestId, std::move(results), error);
+        }
+    });
+}
+
+bool AppController::importNote(const QString &localFileUrl, const QString &destinationFolder)
+{
+    if (m_activeNoteDirty)
+    {
+        setNoteOperationError(tr("Save or discard the current note before importing another one."));
+        return false;
+    }
+    const QUrl url(localFileUrl);
+    const QString path = url.isLocalFile() ? url.toLocalFile() : localFileUrl;
+    const auto imported = m_noteStore.importNote(path, destinationFolder);
+    if (!imported)
+    {
+        setNoteOperationError(tr("Only valid UTF-8 Markdown notes up to 2 MiB can be imported."));
+        return false;
+    }
+    refreshNotes();
+    return openNote(*imported, true);
+}
+
+bool AppController::exportActiveNote(const QString &localFileUrl)
+{
+    if (m_activeNotePath.isEmpty())
+    {
+        return false;
+    }
+    const QUrl url(localFileUrl);
+    const QString path = url.isLocalFile() ? url.toLocalFile() : localFileUrl;
+    if (const auto exported = m_noteStore.exportNote(m_activeNotePath, path); !exported)
+    {
+        setNoteOperationError(tr("The note could not be exported."));
+        return false;
+    }
+    setNoteOperationError({});
     return true;
 }
 
@@ -4742,6 +5063,33 @@ void AppController::applyTerminalHistoryTaskResult(const QString &tabId, const q
         target->historyError.clear();
     }
     emit terminalHistoryChanged();
+}
+
+void AppController::applyNoteSearchTaskResult(const quint64 requestId, NoteSearchResults results, const QString &error)
+{
+    if (requestId != m_noteSearchRequestId)
+    {
+        return;
+    }
+    m_noteSearchResults.clear();
+    if (!error.isEmpty())
+    {
+        m_noteSearchState = QStringLiteral("error");
+        m_noteOperationError = error;
+    }
+    else
+    {
+        m_noteSearchState = QStringLiteral("ready");
+        m_noteOperationError.clear();
+        m_noteSearchResults.reserve(static_cast<qsizetype>(results.size()));
+        for (const workbench::NoteSearchResult &result : results)
+        {
+            m_noteSearchResults.append(QVariantMap{{QStringLiteral("path"), result.path},
+                                                   {QStringLiteral("title"), result.title},
+                                                   {QStringLiteral("snippet"), result.snippet}});
+        }
+    }
+    emit notesChanged();
 }
 
 bool AppController::connectPrivateKey(const QString &host, const int port, const QString &username,
@@ -8301,6 +8649,16 @@ void AppController::setQuickCommandOperationError(QString message)
     }
     m_quickCommandOperationError = std::move(message);
     emit quickCommandsChanged();
+}
+
+void AppController::setNoteOperationError(QString message)
+{
+    if (m_noteOperationError == message)
+    {
+        return;
+    }
+    m_noteOperationError = std::move(message);
+    emit notesChanged();
 }
 
 } // namespace ztermy

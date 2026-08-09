@@ -806,6 +806,10 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS TelemetrySparkline.qml
 )
 set_source_files_properties(
+    src/ui/qml/NotesPane.qml
+    PROPERTIES QT_RESOURCE_ALIAS NotesPane.qml
+)
+set_source_files_properties(
     src/ui/qml/ScriptEditor.qml
     PROPERTIES QT_RESOURCE_ALIAS ScriptEditor.qml
 )
@@ -871,6 +875,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/HostKeyPrompt.qml
         src/ui/qml/KeyboardAction.qml
         src/ui/qml/Main.qml
+        src/ui/qml/NotesPane.qml
         src/ui/qml/ReleaseIdentityCard.qml
         src/ui/qml/RemoteTelemetryStrip.qml
         src/ui/qml/ScriptEditor.qml

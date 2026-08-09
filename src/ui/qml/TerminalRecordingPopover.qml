@@ -131,10 +131,98 @@ Popup {
                 onClicked: popover.controller.copyTerminalScriptRecording()
             }
             ActionButton {
+                text: qsTr("Save as script")
+                enabled: popover.terminalTab !== null && popover.terminalTab.scriptRecordingState === "review" && popover.terminalTab.scriptRecordingSteps.length > 0
+                onClicked: {
+                    recordingName.text = qsTr("Recording %1").arg(Qt.formatDateTime(new Date(), "yyyy-MM-dd HH:mm"));
+                    recordingDescription.text = "";
+                    saveRecordingDialog.open();
+                    Qt.callLater(() => {
+                        recordingName.forceActiveFocus();
+                        recordingName.selectAll();
+                    });
+                }
+            }
+            ActionButton {
                 text: popover.terminalTab !== null && popover.terminalTab.scriptPlaybackActive ? qsTr("Running…") : qsTr("Replay")
                 variant: "primary"
                 enabled: popover.terminalTab !== null && popover.terminalTab.scriptRecordingState === "review" && popover.terminalTab.scriptRecordingSteps.length > 0 && !popover.terminalTab.scriptPlaybackActive
                 onClicked: popover.controller.replayTerminalScriptRecording()
+            }
+        }
+    }
+
+    Dialog {
+        id: saveRecordingDialog
+
+        anchors.centerIn: Overlay.overlay
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape
+        padding: 18
+        background: Rectangle {
+            radius: Theme.radiusPanel
+            color: Theme.floatingBackground
+            border.color: Theme.borderStrong
+        }
+        contentItem: ColumnLayout {
+            spacing: 12
+
+            Text {
+                Layout.preferredWidth: 380
+                text: qsTr("Save recording as script")
+                color: Theme.text
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.textTitle
+                font.weight: Font.DemiBold
+            }
+            Text {
+                Layout.fillWidth: true
+                text: qsTr("Command actions become immediate script steps. Recorded replay delays are not stored in the script library.")
+                color: Theme.textMuted
+                wrapMode: Text.WordWrap
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.textCompact
+            }
+            AppTextField {
+                id: recordingName
+
+                Layout.fillWidth: true
+                placeholderText: qsTr("Script name")
+                accessibleName: qsTr("Recorded script name")
+                onAccepted: saveRecordingButton.click()
+            }
+            AppTextField {
+                id: recordingDescription
+
+                Layout.fillWidth: true
+                placeholderText: qsTr("Description (optional)")
+                accessibleName: qsTr("Recorded script description")
+                onAccepted: saveRecordingButton.click()
+            }
+            RowLayout {
+                Layout.fillWidth: true
+
+                Item {
+                    Layout.fillWidth: true
+                }
+                ActionButton {
+                    text: qsTr("Cancel")
+                    onClicked: saveRecordingDialog.close()
+                }
+                ActionButton {
+                    id: saveRecordingButton
+
+                    text: qsTr("Save script")
+                    variant: "primary"
+                    enabled: recordingName.text.trim().length > 0
+                    onClicked: {
+                        if (popover.controller.saveTerminalScriptRecordingAsScript(recordingName.text, recordingDescription.text)) {
+                            saveRecordingDialog.close();
+                            popover.close();
+                        }
+                    }
+                }
             }
         }
     }

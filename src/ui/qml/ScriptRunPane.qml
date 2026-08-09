@@ -11,7 +11,17 @@ Item {
     required property var activeTab
     property var script: null
     property int valuesRevision: 0
-    readonly property bool executionActive: activeTab && (activeTab.scriptExecutionState === "running" || activeTab.scriptExecutionState === "waiting-output")
+    property string targetSessionId: ""
+    readonly property var runningTargets: controller.terminalTabs.filter(tab => tab.running)
+    readonly property var targetTab: {
+        for (const tab of controller.terminalTabs) {
+            if (tab.sessionId === targetSessionId) {
+                return tab;
+            }
+        }
+        return null;
+    }
+    readonly property bool executionActive: targetTab && (targetTab.scriptExecutionState === "running" || targetTab.scriptExecutionState === "waiting-output")
     readonly property var preview: {
         root.valuesRevision;
         return root.script ? root.controller.renderScript(root.script.id, root.variableValues()) : {
@@ -25,6 +35,7 @@ Item {
 
     function begin(scriptValue) {
         script = scriptValue;
+        targetSessionId = activeTab && activeTab.running ? activeTab.sessionId : (runningTargets.length > 0 ? runningTargets[0].sessionId : "");
         runVariableModel.clear();
         for (const variable of scriptValue.variables || []) {
             runVariableModel.append({
@@ -51,6 +62,24 @@ Item {
     function setVariableValue(index, value) {
         runVariableModel.setProperty(index, "value", value);
         valuesRevision++;
+    }
+
+    function targetLabel(tab) {
+        if (!tab) {
+            return qsTr("Unavailable terminal");
+        }
+        const title = tab.title || qsTr("Terminal");
+        const identity = tab.identity || tab.sessionId;
+        return title + " · " + identity;
+    }
+
+    function targetIndex() {
+        for (let index = 0; index < runningTargets.length; ++index) {
+            if (runningTargets[index].sessionId === targetSessionId) {
+                return index;
+            }
+        }
+        return -1;
     }
 
     ColumnLayout {
@@ -107,15 +136,47 @@ Item {
             ActionButton {
                 text: root.executionActive ? qsTr("Running") : qsTr("Run")
                 variant: "primary"
-                enabled: root.preview.ok && root.activeTab && root.activeTab.running && !root.executionActive
-                onClicked: root.controller.runScript(root.script.id, root.variableValues(), root.activeTab.sessionId)
+                enabled: root.preview.ok && root.targetTab && root.targetTab.running && !root.executionActive
+                onClicked: root.controller.runScript(root.script.id, root.variableValues(), root.targetSessionId)
+            }
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 4
+
+            Text {
+                text: qsTr("Target terminal")
+                color: Theme.textSoft
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.textCompact
+                font.weight: Font.DemiBold
+            }
+
+            AppComboBox {
+                Layout.fillWidth: true
+                model: root.runningTargets.map(tab => tab.sessionId)
+                displayTextModel: root.runningTargets.map(tab => root.targetLabel(tab))
+                currentIndex: root.targetIndex()
+                accessibleName: qsTr("Script target terminal")
+                enabled: !root.executionActive && root.runningTargets.length > 0
+                onActivated: index => root.targetSessionId = root.runningTargets[index].sessionId
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: root.targetTab ? qsTr("This target remains fixed while the script runs.") : qsTr("Open a running terminal before executing the script.")
+                color: Theme.textSubtle
+                wrapMode: Text.WordWrap
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.textCompact
             }
         }
 
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: executionStatus.visible ? 44 : 0
-            visible: root.activeTab && root.activeTab.scriptExecutionState !== "idle"
+            visible: root.targetTab && root.targetTab.scriptExecutionState !== "idle"
             radius: Theme.radiusControl
             color: Theme.selectedBackground
             border.color: Theme.border
@@ -131,25 +192,25 @@ Item {
                     Layout.preferredWidth: 8
                     Layout.preferredHeight: 8
                     radius: 4
-                    color: root.activeTab && root.activeTab.scriptExecutionState === "timed-out" ? Theme.danger : root.executionActive ? Theme.accent : Theme.success
+                    color: root.targetTab && root.targetTab.scriptExecutionState === "timed-out" ? Theme.danger : root.executionActive ? Theme.accent : Theme.successText
                 }
 
                 Text {
                     Layout.fillWidth: true
                     text: {
-                        if (!root.activeTab) {
+                        if (!root.targetTab) {
                             return "";
                         }
-                        if (root.activeTab.scriptExecutionState === "waiting-output") {
-                            return qsTr("Waiting for output · %1/%2 steps sent").arg(root.activeTab.scriptExecutionDispatchedSteps).arg(root.activeTab.scriptExecutionTotalSteps);
+                        if (root.targetTab.scriptExecutionState === "waiting-output") {
+                            return qsTr("Waiting for output · %1/%2 steps sent").arg(root.targetTab.scriptExecutionDispatchedSteps).arg(root.targetTab.scriptExecutionTotalSteps);
                         }
-                        if (root.activeTab.scriptExecutionState === "running") {
-                            return qsTr("Running · %1/%2 steps sent").arg(root.activeTab.scriptExecutionDispatchedSteps).arg(root.activeTab.scriptExecutionTotalSteps);
+                        if (root.targetTab.scriptExecutionState === "running") {
+                            return qsTr("Running · %1/%2 steps sent").arg(root.targetTab.scriptExecutionDispatchedSteps).arg(root.targetTab.scriptExecutionTotalSteps);
                         }
-                        if (root.activeTab.scriptExecutionState === "completed") {
+                        if (root.targetTab.scriptExecutionState === "completed") {
                             return qsTr("Script completed");
                         }
-                        if (root.activeTab.scriptExecutionState === "cancelled") {
+                        if (root.targetTab.scriptExecutionState === "cancelled") {
                             return qsTr("Script cancelled");
                         }
                         return qsTr("Script timed out while waiting for output");
@@ -163,7 +224,7 @@ Item {
                 ActionButton {
                     text: qsTr("Cancel")
                     visible: root.executionActive
-                    onClicked: root.controller.cancelScript(root.activeTab.sessionId)
+                    onClicked: root.controller.cancelScript(root.targetSessionId)
                 }
             }
         }

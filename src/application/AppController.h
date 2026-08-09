@@ -15,6 +15,7 @@
 #include "infrastructure/forwarding/PortForwardingRuleStore.h"
 #include "infrastructure/logging/SessionLogWriter.h"
 #include "infrastructure/ssh/SshProfileStore.h"
+#include "infrastructure/workbench/NoteStore.h"
 #include "infrastructure/workbench/PowerShellHistoryReader.h"
 #include "infrastructure/workbench/ScriptStore.h"
 #include "infrastructure/workbench/WorkspaceStateStore.h"
@@ -50,10 +51,12 @@ namespace ztermy
 {
 
 using ShellHistoryEntries = std::vector<workbench::ShellHistoryEntry>;
+using NoteSearchResults = std::vector<workbench::NoteSearchResult>;
 
 } // namespace ztermy
 
 Q_DECLARE_METATYPE(ztermy::ShellHistoryEntries)
+Q_DECLARE_METATYPE(ztermy::NoteSearchResults)
 
 namespace ztermy
 {
@@ -75,6 +78,13 @@ class AppController final : public QObject
     Q_PROPERTY(QVariantList terminalTabs READ terminalTabs NOTIFY terminalTabsChanged)
     Q_PROPERTY(QVariantList quickCommands READ quickCommands NOTIFY quickCommandsChanged)
     Q_PROPERTY(QString quickCommandOperationError READ quickCommandOperationError NOTIFY quickCommandsChanged)
+    Q_PROPERTY(QVariantList notes READ notes NOTIFY notesChanged)
+    Q_PROPERTY(QVariantList noteSearchResults READ noteSearchResults NOTIFY notesChanged)
+    Q_PROPERTY(QString activeNotePath READ activeNotePath NOTIFY notesChanged)
+    Q_PROPERTY(QString activeNoteContent READ activeNoteContent NOTIFY notesChanged)
+    Q_PROPERTY(bool activeNoteDirty READ activeNoteDirty NOTIFY notesChanged)
+    Q_PROPERTY(QString noteSearchState READ noteSearchState NOTIFY notesChanged)
+    Q_PROPERTY(QString noteOperationError READ noteOperationError NOTIFY notesChanged)
     Q_PROPERTY(QVariantList terminalHistory READ terminalHistory NOTIFY terminalHistoryChanged)
     Q_PROPERTY(QVariantList terminalGlobalHistory READ terminalGlobalHistory NOTIFY terminalHistoryChanged)
     Q_PROPERTY(QVariantList actions READ actions NOTIFY actionRegistryChanged)
@@ -174,6 +184,13 @@ public:
     [[nodiscard]] QVariantList terminalTabs() const;
     [[nodiscard]] QVariantList quickCommands() const;
     [[nodiscard]] QString quickCommandOperationError() const;
+    [[nodiscard]] QVariantList notes() const;
+    [[nodiscard]] QVariantList noteSearchResults() const;
+    [[nodiscard]] QString activeNotePath() const;
+    [[nodiscard]] QString activeNoteContent() const;
+    [[nodiscard]] bool activeNoteDirty() const noexcept;
+    [[nodiscard]] QString noteSearchState() const;
+    [[nodiscard]] QString noteOperationError() const;
     [[nodiscard]] QVariantList terminalHistory() const;
     [[nodiscard]] QVariantList terminalGlobalHistory() const;
     [[nodiscard]] QVariantList actions() const;
@@ -274,6 +291,7 @@ public:
     Q_INVOKABLE bool stopTerminalScriptRecording();
     Q_INVOKABLE bool replayTerminalScriptRecording();
     Q_INVOKABLE bool copyTerminalScriptRecording();
+    Q_INVOKABLE bool saveTerminalScriptRecordingAsScript(const QString &name, const QString &description = {});
     Q_INVOKABLE void clearTerminalScriptRecording();
     Q_INVOKABLE bool saveQuickCommand(const QString &id, const QString &name, const QString &command,
                                       const QString &description, const QString &shellScope);
@@ -285,6 +303,18 @@ public:
     Q_INVOKABLE bool moveQuickCommand(const QString &id, int targetIndex);
     Q_INVOKABLE bool importQuickCommands(const QString &localFileUrl);
     Q_INVOKABLE bool exportQuickCommands(const QString &localFileUrl);
+    Q_INVOKABLE void refreshNotes();
+    Q_INVOKABLE bool openNote(const QString &relativePath, bool discardUnsavedChanges = false);
+    Q_INVOKABLE void updateActiveNoteContent(const QString &content);
+    Q_INVOKABLE bool saveActiveNote();
+    Q_INVOKABLE bool discardActiveNoteChanges();
+    Q_INVOKABLE bool createNote(const QString &relativePath);
+    Q_INVOKABLE bool createNoteFolder(const QString &relativePath);
+    Q_INVOKABLE bool renameNoteEntry(const QString &sourceRelativePath, const QString &destinationRelativePath);
+    Q_INVOKABLE bool deleteNoteEntry(const QString &relativePath);
+    Q_INVOKABLE void searchNotes(const QString &query);
+    Q_INVOKABLE bool importNote(const QString &localFileUrl, const QString &destinationFolder = {});
+    Q_INVOKABLE bool exportActiveNote(const QString &localFileUrl);
     Q_INVOKABLE void refreshTerminalHistory();
     Q_INVOKABLE void setTerminalTelemetryVisible(bool visible);
     Q_INVOKABLE void refreshRemoteTelemetry();
@@ -404,6 +434,7 @@ signals:
     void hostWorkspaceChanged();
     void terminalTabsChanged();
     void quickCommandsChanged();
+    void notesChanged();
     void terminalHistoryChanged();
     void sftpChanged();
     void transferTasksChanged();
@@ -422,6 +453,7 @@ signals:
 private:
     Q_SIGNAL void terminalHistoryTaskCompleted(const QString &tabId, quint64 requestId, ShellHistoryEntries entries,
                                                const QString &error);
+    Q_SIGNAL void noteSearchTaskCompleted(quint64 requestId, NoteSearchResults results, const QString &error);
     Q_SIGNAL void portForwardingSnapshotReady(const QString &ruleId, int state, int failure, qulonglong activeClients,
                                               qulonglong bytesFromClients, qulonglong bytesToClients,
                                               qulonglong rejectedClients);
@@ -566,6 +598,8 @@ private:
     [[nodiscard]] QVariantMap shortcutResult(const actions::ShortcutValidation &validation) const;
     void applyTerminalHistoryTaskResult(const QString &tabId, quint64 requestId, ShellHistoryEntries entries,
                                         const QString &error);
+    void applyNoteSearchTaskResult(quint64 requestId, NoteSearchResults results, const QString &error);
+    void setNoteOperationError(QString message);
     void setQuickCommandOperationError(QString message);
     [[nodiscard]] bool persistApplicationSettings(const config::ApplicationSettings &settings);
     [[nodiscard]] bool saveHostProfileInternal(const QString &id, const QString &name, const QString &host, int port,
@@ -633,10 +667,19 @@ private:
     actions::ActionRegistry m_actionRegistry;
     workbench::ScriptStore m_scriptStore;
     QString m_legacyQuickCommandPath;
+    workbench::NoteStore m_noteStore;
     workbench::WorkspaceStateStore m_workspaceStateStore;
     workbench::WorkspaceState m_workspaceState;
     std::vector<workbench::ScriptDefinition> m_scripts;
     QString m_quickCommandOperationError;
+    QVariantList m_notes;
+    QVariantList m_noteSearchResults;
+    QString m_activeNotePath;
+    QString m_activeNoteContent;
+    QString m_noteSearchState = QStringLiteral("idle");
+    QString m_noteOperationError;
+    std::uint64_t m_noteSearchRequestId = 0;
+    bool m_activeNoteDirty = false;
     std::unique_ptr<security::CredentialVaultCoordinator> m_credentialVaults;
     std::unique_ptr<sftp::TransferManager> m_transferManager;
     std::unique_ptr<sftp::TransferBatchCoordinator> m_transferBatchCoordinator;
