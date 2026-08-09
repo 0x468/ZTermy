@@ -3099,62 +3099,62 @@
         <translation>添加文字关键字并选择其终端颜色。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="157"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="159"/>
         <source>A</source>
         <translation>A</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="177"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="180"/>
         <source>Delete keyword rule</source>
         <translation>删除关键字规则</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="199"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="207"/>
         <source>Keyword</source>
         <translation>关键字</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="209"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="217"/>
         <source>#FFFFFF</source>
         <translation>#FFFFFF</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="210"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="218"/>
         <source>Text color</source>
         <translation>文字颜色</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="216"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="224"/>
         <source>#D13438</source>
         <translation>#D13438</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="217"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="225"/>
         <source>Background color</source>
         <translation>背景颜色</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="226"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="234"/>
         <source>Enabled</source>
         <translation>启用</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="231"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="239"/>
         <source>Match case</source>
         <translation>区分大小写</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="244"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="252"/>
         <source>New</source>
         <translation>新建</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="248"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="256"/>
         <source>Update</source>
         <translation>更新</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="248"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="256"/>
         <source>Add</source>
         <translation>添加</translation>
     </message>

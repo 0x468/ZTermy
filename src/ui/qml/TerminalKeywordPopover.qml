@@ -10,7 +10,7 @@ Popup {
     required property var controller
     property var terminalTab: null
     property string editingId: ""
-    readonly property real maximumRulesHeight: 160
+    readonly property real maximumRulesHeight: 172
 
     function openFor(item) {
         const overlay = Overlay.overlay;
@@ -112,6 +112,7 @@ Popup {
             Layout.preferredHeight: Math.min(popover.maximumRulesHeight, Math.ceil(rulesColumn.implicitHeight) + 4)
             visible: popover.terminalTab !== null && popover.terminalTab.keywordHighlightRules.length > 0
             clip: true
+            padding: 0
             contentWidth: availableWidth
             contentHeight: rulesColumn.implicitHeight
             rightPadding: rulesScrollBar.visible ? rulesScrollBar.width + 4 : 0
@@ -138,6 +139,7 @@ Popup {
                         id: ruleDelegate
 
                         required property var modelData
+                        objectName: "keywordRule-" + ruleDelegate.modelData.id
                         width: rulesColumn.width
                         height: 38
                         hoverEnabled: true
@@ -170,6 +172,7 @@ Popup {
                                 font.pixelSize: Theme.textBody
                             }
                             ActionButton {
+                                objectName: "keywordRuleDelete-" + ruleDelegate.modelData.id
                                 Layout.preferredWidth: 34
                                 implicitWidth: 34
                                 text: ""
@@ -183,6 +186,11 @@ Popup {
                             }
                         }
                     }
+                }
+
+                Item {
+                    width: 1
+                    height: 8
                 }
             }
         }

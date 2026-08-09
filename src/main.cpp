@@ -1818,13 +1818,13 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     processWindowEventsFor(std::chrono::milliseconds{100});
     const bool keywordPopoverOpened =
         clickKeywordHighlightAction() && processWindowEventsUntil(keywordPopoverVisible, std::chrono::seconds{1});
+    processWindowEventsFor(std::chrono::milliseconds{100});
     QQuickItem *keywordRulesScrollView = quickItem(rootObject, "keywordRulesScrollView");
     QQuickItem *keywordRulesColumn = quickItem(rootObject, "keywordRulesColumn");
-    const bool twoRuleViewportFits =
-        keywordRulesScrollView != nullptr && keywordRulesColumn != nullptr
-        && keywordRulesScrollView->property("availableHeight").toReal() + 0.5 >= keywordRulesColumn->height();
+    const bool twoRuleViewportFits = keywordRulesScrollView != nullptr && keywordRulesColumn != nullptr
+                                     && keywordRulesScrollView->height() >= keywordRulesColumn->height() + 3.5;
     const bool keywordPopoverCaptured =
-        keywordPopoverOpened && twoRuleViewportFits
+        keywordPopoverOpened
         && captureLayout(window, outputDirectory, QStringLiteral("terminal-keyword-popover-two-rules"));
     const bool keywordToggledClosed = clickKeywordHighlightAction()
                                       && processWindowEventsUntil(
@@ -1888,8 +1888,8 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     {
         sendKey(window, Qt::Key_Escape);
     }
-    if (!keywordPopoverCaptured || !keywordToggledClosed || !keywordClosedByButton || !keywordClosedOutside
-        || !keywordClosedByEscape || !manyRulesScroll)
+    if (!keywordPopoverCaptured || !twoRuleViewportFits || !keywordToggledClosed || !keywordClosedByButton
+        || !keywordClosedOutside || !keywordClosedByEscape || !manyRulesScroll)
     {
         qCWarning(applicationLog) << "Keyword-highlight popover close contract failed"
                                   << "opened=" << keywordPopoverOpened << "captured=" << keywordPopoverCaptured
