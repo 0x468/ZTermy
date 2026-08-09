@@ -1,6 +1,6 @@
 # V2.14 scope: pre-V3 stable baseline
 
-Status: frozen for implementation
+Status: implemented and release-gated for `0.2.14`
 
 ## Goal
 

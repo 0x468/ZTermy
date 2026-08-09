@@ -1,6 +1,6 @@
 # Pre-V3 program: final Windows 11 daily-use baseline
 
-Status: approved long-term execution program
+Status: completed through `0.2.14`; V3 direction pending owner decision
 
 ## Objective
 
