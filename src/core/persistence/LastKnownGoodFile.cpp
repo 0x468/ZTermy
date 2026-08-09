@@ -38,7 +38,7 @@ enum class ReadError : std::uint8_t
     {
         return std::unexpected(ReadError::tooLarge);
     }
-    const QByteArray payload = file.readAll();
+    QByteArray payload = file.readAll();
     if (payload.size() != file.size())
     {
         return std::unexpected(ReadError::io);
