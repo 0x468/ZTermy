@@ -39,6 +39,7 @@ Rectangle {
     property real hostsPageReveal: 1.0
     property bool terminalSearchVisible: false
     property int pendingPasteLineCount: 0
+    property var pendingPasteViewport: null
     property bool appearancePreviewActive: false
     property string previewThemePreference: "dark"
     property string previewBackdropPreference: "acrylic"
@@ -293,7 +294,7 @@ Rectangle {
             startLocalTerminalTab();
             break;
         case "tabs.close":
-            closeActiveTerminalTab();
+            controller.closeActiveTerminalPane();
             break;
         case "tabs.next":
             activateRelativeTerminalTab(1);
@@ -303,6 +304,35 @@ Rectangle {
             break;
         case "terminal.find":
             toggleTerminalSearch();
+            break;
+        case "terminal.splitHorizontal":
+            controller.splitActiveTerminal("horizontal", false);
+            break;
+        case "terminal.splitVertical":
+            controller.splitActiveTerminal("vertical", false);
+            break;
+        case "terminal.duplicatePane":
+            controller.splitActiveTerminal("horizontal", true);
+            break;
+        case "terminal.focusNextPane":
+            controller.focusRelativeTerminalPane(1);
+            terminalViewport.forceActiveFocus();
+            break;
+        case "terminal.focusPreviousPane":
+            controller.focusRelativeTerminalPane(-1);
+            terminalViewport.forceActiveFocus();
+            break;
+        case "terminal.growPane":
+            controller.resizeActiveTerminalPane(0.05);
+            break;
+        case "terminal.shrinkPane":
+            controller.resizeActiveTerminalPane(-0.05);
+            break;
+        case "terminal.swapNextPane":
+            controller.swapActiveTerminalPane(1);
+            break;
+        case "terminal.swapPreviousPane":
+            controller.swapActiveTerminalPane(-1);
             break;
         case "terminal.history":
             currentPage = "terminal";
@@ -1620,30 +1650,32 @@ Rectangle {
                         Layout.fillHeight: true
                         color: "transparent"
 
-                        TerminalView {
+                        TerminalSplitNode {
                             id: terminalViewport
-                            objectName: "terminalViewport"
+                            objectName: "terminalWorkspaceViewport"
                             anchors.fill: parent
                             anchors.leftMargin: root.activeTerminalWorkbenchSide === "left" ? root.activeTerminalWorkbenchWidth : 0
                             anchors.rightMargin: root.activeTerminalWorkbenchSide === "right" ? root.activeTerminalWorkbenchWidth : 0
                             anchors.bottomMargin: root.activeTerminalComposerHeight
-                            focus: true
-                            fontFamily: root.activeTerminalTab !== null && root.activeTerminalTab.sessionFontFamily.length > 0 ? root.activeTerminalTab.sessionFontFamily : root.controller.terminalFontFamily
-                            fontPixelSize: root.activeTerminalTab !== null && root.activeTerminalTab.sessionFontSize > 0 ? root.activeTerminalTab.sessionFontSize : root.controller.terminalFontSize
-                            ligaturesEnabled: root.activeTerminalTab !== null && root.activeTerminalTab.sessionFontSize > 0 ? root.activeTerminalTab.sessionLigatures : root.controller.terminalLigatures
-                            backgroundOpacity: root.activeTerminalTab !== null && root.activeTerminalTab.sessionBackgroundOpacity >= 0 ? root.activeTerminalTab.sessionBackgroundOpacity : root.controller.terminalBackgroundOpacity
-                            cursorPreference: root.activeTerminalTab !== null && root.activeTerminalTab.sessionCursor.length > 0 ? root.activeTerminalTab.sessionCursor : root.controller.cursorPreference
-                            foregroundOverride: root.activeTerminalTab !== null ? root.activeTerminalTab.sessionForeground : ""
-                            backgroundOverride: root.activeTerminalTab !== null ? root.activeTerminalTab.sessionBackground : ""
+                            visible: root.activeTerminalTab !== null && root.controller.activeTerminalWorkspace.root
+                            controller: root.controller
+                            node: root.controller.activeTerminalWorkspace.root || ({})
+                            defaultFontFamily: root.controller.terminalFontFamily
+                            defaultFontSize: root.controller.terminalFontSize
+                            defaultLigatures: root.controller.terminalLigatures
+                            defaultBackgroundOpacity: root.controller.terminalBackgroundOpacity
+                            defaultCursor: root.controller.cursorPreference
                             cursorBlink: root.controller.cursorBlink
                             copyOnSelect: root.controller.copyOnSelect
                             confirmMultilinePaste: root.controller.confirmMultilinePaste
 
                             Component.onCompleted: forceActiveFocus()
-                            onMultilinePasteConfirmationRequested: lineCount => {
+                            onMultilinePasteConfirmationRequested: (viewport, lineCount) => {
                                 root.pendingPasteLineCount = lineCount;
-                                multilinePasteDialog.openFrom(terminalViewport);
+                                root.pendingPasteViewport = viewport;
+                                multilinePasteDialog.openFrom(viewport);
                             }
+                            onBrowseHostsRequested: root.currentPage = "hosts"
 
                             Behavior on anchors.rightMargin {
                                 NumberAnimation {
@@ -1962,118 +1994,6 @@ Rectangle {
                             }
                         }
 
-                        StatePanel {
-                            anchors.centerIn: parent
-                            width: Math.min(520, parent.width - 48)
-                            visible: root.activeSshConnecting
-                            z: 9
-                            kind: "loading"
-                            heading: qsTr("Connecting to SSH host")
-                            description: root.activeTerminalTab ? root.activeTerminalTab.status : ""
-                            detail: qsTr("Connection setup runs outside the interface thread. You can close this tab to cancel.")
-
-                            ActionButton {
-                                text: qsTr("Cancel connection")
-                                Accessible.name: qsTr("Cancel SSH connection and close tab")
-                                onClicked: {
-                                    if (root.activeTerminalTab) {
-                                        root.controller.closeTerminalTab(root.activeTerminalTab.id);
-                                    }
-                                }
-                            }
-                        }
-
-                        StatePanel {
-                            anchors.centerIn: parent
-                            width: Math.min(520, parent.width - 48)
-                            visible: root.activeSshReconnecting
-                            z: 9
-                            kind: "loading"
-                            heading: qsTr("Reconnecting to SSH host")
-                            description: root.activeTerminalTab ? root.activeTerminalTab.status : ""
-                            detail: qsTr("Automatic retries use bounded exponential backoff and never retain credentials in the terminal tab.")
-
-                            ActionButton {
-                                text: qsTr("Cancel reconnect")
-                                accessibleName: qsTr("Cancel automatic SSH reconnect")
-                                onClicked: {
-                                    if (root.activeTerminalTab) {
-                                        root.controller.cancelTerminalReconnect(root.activeTerminalTab.id);
-                                    }
-                                }
-                            }
-                        }
-
-                        StatePanel {
-                            anchors.centerIn: parent
-                            width: Math.min(520, parent.width - 48)
-                            visible: root.activeSshDisconnected
-                            z: 9
-                            kind: "disconnected"
-                            heading: qsTr("SSH session ended")
-                            description: root.activeTerminalTab ? root.activeTerminalTab.status : ""
-                            detail: qsTr("The remote host closed the terminal connection. Reconnect is available for saved host profiles.")
-
-                            ActionButton {
-                                visible: root.activeTerminalTab !== null && root.activeTerminalTab.canReconnect
-                                text: qsTr("Reconnect")
-                                accessibleName: qsTr("Reconnect saved SSH terminal tab")
-                                variant: "primary"
-                                onClicked: root.controller.reconnectTerminalTab(root.activeTerminalTab.id)
-                            }
-
-                            ActionButton {
-                                text: qsTr("Close tab")
-                                accessibleName: qsTr("Close ended SSH terminal tab")
-                                onClicked: {
-                                    if (root.activeTerminalTab) {
-                                        root.controller.closeTerminalTab(root.activeTerminalTab.id);
-                                    }
-                                }
-                            }
-
-                            ActionButton {
-                                text: qsTr("Review host")
-                                accessibleName: qsTr("Return to SSH host profiles")
-                                onClicked: root.currentPage = "hosts"
-                            }
-                        }
-
-                        StatePanel {
-                            anchors.centerIn: parent
-                            width: Math.min(520, parent.width - 48)
-                            visible: root.activeSshFailure
-                            z: 9
-                            kind: "error"
-                            heading: qsTr("SSH session unavailable")
-                            description: root.activeTerminalTab ? root.activeTerminalTab.status : ""
-                            detail: qsTr("Review the saved host and authentication settings, or retry the connection.")
-
-                            ActionButton {
-                                visible: root.activeTerminalTab !== null && root.activeTerminalTab.canReconnect
-                                text: qsTr("Reconnect")
-                                accessibleName: qsTr("Reconnect saved SSH terminal tab")
-                                variant: "primary"
-                                onClicked: root.controller.reconnectTerminalTab(root.activeTerminalTab.id)
-                            }
-
-                            ActionButton {
-                                text: qsTr("Close tab")
-                                Accessible.name: qsTr("Close failed SSH terminal tab")
-                                onClicked: {
-                                    if (root.activeTerminalTab) {
-                                        root.controller.closeTerminalTab(root.activeTerminalTab.id);
-                                    }
-                                }
-                            }
-
-                            ActionButton {
-                                text: qsTr("Review host")
-                                Accessible.name: qsTr("Return to SSH host profiles")
-                                onClicked: root.currentPage = "hosts"
-                            }
-                        }
-
                         Timer {
                             id: searchDelay
 
@@ -2246,12 +2166,18 @@ Rectangle {
         acceptObjectName: "multilinePasteAccept"
         rejectObjectName: "multilinePasteReject"
         onAccepted: {
-            terminalViewport.resolveMultilinePaste(true);
+            if (root.pendingPasteViewport) {
+                root.pendingPasteViewport.resolveMultilinePaste(true);
+            }
             root.pendingPasteLineCount = 0;
+            root.pendingPasteViewport = null;
         }
         onRejected: {
-            terminalViewport.resolveMultilinePaste(false);
+            if (root.pendingPasteViewport) {
+                root.pendingPasteViewport.resolveMultilinePaste(false);
+            }
             root.pendingPasteLineCount = 0;
+            root.pendingPasteViewport = null;
         }
     }
 

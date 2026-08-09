@@ -625,6 +625,8 @@ set(ZTERMY_INTERFACE_ICON_FILES
     resources/icons/security.svg
     resources/icons/settings.svg
     resources/icons/shortcuts.svg
+    resources/icons/split-horizontal.svg
+    resources/icons/split-vertical.svg
     resources/icons/swap-horizontal.svg
     resources/icons/terminal.svg
     resources/icons/transfer.svg
@@ -855,6 +857,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/TerminalComposer.qml
         src/ui/qml/TerminalKeywordPopover.qml
         src/ui/qml/TerminalSessionSettingsPopover.qml
+        src/ui/qml/TerminalSplitNode.qml
         src/ui/qml/TerminalRecordingPopover.qml
         src/ui/qml/TerminalWorkbench.qml
         src/ui/qml/TransferCenter.qml

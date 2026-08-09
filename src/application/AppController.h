@@ -17,8 +17,10 @@
 #include "infrastructure/workbench/QuickCommandStore.h"
 #include "infrastructure/workbench/WorkspaceStateStore.h"
 
+#include <QHash>
 #include <QMetaType>
 #include <QObject>
+#include <QPointer>
 #include <QString>
 #include <QStringList>
 #include <QVariantList>
@@ -96,6 +98,7 @@ class AppController final : public QObject
     Q_PROPERTY(QVariantList transferTasks READ transferTasks NOTIFY transferTasksChanged)
     Q_PROPERTY(int activeTransferCount READ activeTransferCount NOTIFY transferTasksChanged)
     Q_PROPERTY(QString activeTerminalTabId READ activeTerminalTabId NOTIFY activeTerminalTabChanged)
+    Q_PROPERTY(QVariantMap activeTerminalWorkspace READ activeTerminalWorkspace NOTIFY terminalWorkspaceChanged)
     Q_PROPERTY(QVariantMap activeRemoteTelemetry READ activeRemoteTelemetry NOTIFY remoteTelemetryChanged)
     Q_PROPERTY(QString terminalSearchQuery READ terminalSearchQuery NOTIFY terminalSearchChanged)
     Q_PROPERTY(int terminalSearchCurrent READ terminalSearchCurrent NOTIFY terminalSearchChanged)
@@ -149,6 +152,8 @@ public:
     AppController &operator=(const AppController &) = delete;
 
     void attachTerminal(ui::TerminalItem *terminal);
+    Q_INVOKABLE void attachTerminalViewport(const QString &paneId, QObject *viewport);
+    Q_INVOKABLE void detachTerminalViewport(const QString &paneId, QObject *viewport);
     void shutdown() noexcept;
 
     [[nodiscard]] bool sshActive() const noexcept;
@@ -191,6 +196,7 @@ public:
     [[nodiscard]] QVariantList transferTasks() const;
     [[nodiscard]] int activeTransferCount() const noexcept;
     [[nodiscard]] QString activeTerminalTabId() const;
+    [[nodiscard]] QVariantMap activeTerminalWorkspace() const;
     [[nodiscard]] QVariantMap activeRemoteTelemetry() const;
     [[nodiscard]] QString terminalSearchQuery() const;
     [[nodiscard]] int terminalSearchCurrent() const noexcept;
@@ -226,6 +232,13 @@ public:
     Q_INVOKABLE QString startLocalTerminal();
     Q_INVOKABLE bool activateTerminalTab(const QString &id);
     Q_INVOKABLE bool closeTerminalTab(const QString &id);
+    Q_INVOKABLE bool activateTerminalPane(const QString &paneId);
+    Q_INVOKABLE bool splitActiveTerminal(const QString &orientation, bool duplicateActive = false);
+    Q_INVOKABLE bool closeActiveTerminalPane();
+    Q_INVOKABLE bool focusRelativeTerminalPane(int offset);
+    Q_INVOKABLE bool resizeActiveTerminalPane(qreal delta);
+    Q_INVOKABLE bool setTerminalSplitRatio(const QString &splitNodeId, qreal ratio);
+    Q_INVOKABLE bool swapActiveTerminalPane(int offset);
     Q_INVOKABLE void searchTerminal(const QString &query, bool backwards, bool caseSensitive);
     Q_INVOKABLE void clearTerminalSearch();
     Q_INVOKABLE bool toggleTerminalWorkbench(const QString &page);
@@ -382,6 +395,7 @@ signals:
     void actionRegistryChanged();
     void actionRequested(const QString &actionId);
     void activeTerminalTabChanged();
+    void terminalWorkspaceChanged();
     void terminalSearchChanged();
     void remoteTelemetryChanged();
     void applicationSettingsChanged();
@@ -424,6 +438,8 @@ private:
         terminal::TerminalSnapshotPtr snapshot;
         std::shared_ptr<logging::SessionLogWriter> sessionLog;
         QString id;
+        QString workspaceId;
+        QString paneId;
         QString title;
         QString status;
         QString searchQuery;
@@ -492,7 +508,7 @@ private:
         bool awaitingHostKey = false;
     };
 
-    void connectTerminalSignals();
+    void connectTerminalSignals(ui::TerminalItem &terminal, const QString &paneId);
     void connectLocalTabSignals(TerminalTab &tab);
     void connectSshTabSignals(TerminalTab &tab);
     void connectSftpTabSignals(TerminalTab &tab);
@@ -522,6 +538,7 @@ private:
     void loadApplicationSettings();
     void loadQuickCommands();
     void loadWorkspaceState();
+    void restoreTerminalWorkspaces();
     void initializeActionRegistry();
     [[nodiscard]] QVariantMap shortcutResult(const actions::ShortcutValidation &validation) const;
     void applyTerminalHistoryTaskResult(const QString &tabId, quint64 requestId, ShellHistoryEntries entries,
@@ -560,6 +577,19 @@ private:
     [[nodiscard]] const TerminalTab *activeTab() const;
     [[nodiscard]] TerminalTab *findTab(const QString &id);
     [[nodiscard]] const TerminalTab *findTab(const QString &id) const;
+    [[nodiscard]] TerminalTab *findTabForPane(const QString &paneId);
+    [[nodiscard]] const TerminalTab *findTabForPane(const QString &paneId) const;
+    [[nodiscard]] workbench::TerminalWorkspaceLayout *findTerminalWorkspace(const QString &id);
+    [[nodiscard]] const workbench::TerminalWorkspaceLayout *findTerminalWorkspace(const QString &id) const;
+    [[nodiscard]] QString firstTabIdForWorkspace(const workbench::TerminalWorkspaceLayout &workspace) const;
+    [[nodiscard]] QVariantMap terminalTabValue(const TerminalTab &tab, const QString &publicId) const;
+    [[nodiscard]] QVariantMap terminalLayoutNodeValue(const workbench::TerminalWorkspaceLayout &workspace,
+                                                      std::string_view nodeId) const;
+    [[nodiscard]] bool persistTerminalWorkspaces();
+    [[nodiscard]] bool saveWorkspaceStateCandidate(const workbench::WorkspaceState &candidate);
+    void emitActiveTerminalContextChanged();
+    void showTabInViewport(const TerminalTab &tab);
+    void showAllTerminalViewports();
     void showActiveTab();
     [[nodiscard]] QVariantList keywordRulesVariant(const TerminalTab &tab) const;
     [[nodiscard]] bool persistKeywordRules(TerminalTab &tab);
@@ -570,6 +600,7 @@ private:
     static constexpr std::size_t maximumTerminalTabs = 32;
 
     ui::TerminalItem *m_terminal = nullptr;
+    QHash<QString, QPointer<ui::TerminalItem>> m_terminalViewports;
     LocalTerminalSessionFactory m_localSessionFactory;
     ssh::SshProfileStore m_profileStore;
     forwarding::PortForwardingRuleStore m_portForwardingStore;
@@ -594,6 +625,7 @@ private:
     std::vector<std::unique_ptr<TerminalTab>> m_tabs;
     std::vector<std::unique_ptr<sftp::SftpSession>> m_stoppingSftpSessions;
     QString m_activeTabId;
+    QString m_focusedTabId;
     QString m_hostKeyTabId;
     QString m_hostKeyEndpoint;
     QString m_hostKeyAlgorithm;

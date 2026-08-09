@@ -2671,8 +2671,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     return position != tabs.end() && position->toMap().value(QStringLiteral("running")).toBool();
 }
 
-[[nodiscard]] bool runLifecycleRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller,
-                                            ztermy::ui::TerminalItem &terminalItem)
+[[nodiscard]] bool runLifecycleRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller)
 {
     window.resize(QSize{1120, 800});
     window.show();
@@ -2694,7 +2693,12 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
             qCWarning(applicationLog) << "Lifecycle smoke could not start local terminal" << "cycle=" << cycle;
             return false;
         }
-        terminalItem.inputGenerated(QByteArrayLiteral("Write-Output ('ZTERMY_LIFECYCLE_' + 'READY')\r"));
+        auto *terminalItem = window.findChild<ztermy::ui::TerminalItem *>();
+        if (terminalItem == nullptr)
+        {
+            return false;
+        }
+        terminalItem->inputGenerated(QByteArrayLiteral("Write-Output ('ZTERMY_LIFECYCLE_' + 'READY')\r"));
         processWindowEventsFor(std::chrono::milliseconds{40});
         QElapsedTimer closeTimer;
         closeTimer.start();
@@ -2734,7 +2738,12 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
         std::chrono::seconds{8});
     if (allRunning)
     {
-        terminalItem.inputGenerated(QByteArrayLiteral("1..2000 | ForEach-Object { \"ztermy lifecycle line $_\" }\r"));
+        auto *terminalItem = window.findChild<ztermy::ui::TerminalItem *>();
+        if (terminalItem == nullptr)
+        {
+            return false;
+        }
+        terminalItem->inputGenerated(QByteArrayLiteral("1..2000 | ForEach-Object { \"ztermy lifecycle line $_\" }\r"));
         processWindowEventsFor(std::chrono::milliseconds{100});
     }
     qCInfo(applicationLog) << "Lifecycle runtime exercise"
@@ -2744,7 +2753,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
 }
 
 [[nodiscard]] bool runTerminalRenderRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller,
-                                                 ztermy::ui::TerminalItem &terminalItem, const QString &outputDirectory)
+                                                 const QString &outputDirectory)
 {
     window.resize(QSize{1120, 800});
     window.show();
@@ -2756,6 +2765,11 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
         qCWarning(applicationLog) << "Terminal render smoke could not start the local terminal";
         return false;
     }
+    if (QQuickItem *rootObject = window.rootObject(); rootObject != nullptr)
+    {
+        rootObject->setProperty("currentPage", QStringLiteral("terminal"));
+    }
+    processWindowEventsFor(std::chrono::milliseconds{100});
 
     QElapsedTimer startupTimer;
     startupTimer.start();
@@ -2772,6 +2786,12 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
         return false;
     }
     processWindowEventsFor(std::chrono::milliseconds{250});
+    auto *terminalItem = window.findChild<ztermy::ui::TerminalItem *>();
+    if (terminalItem == nullptr)
+    {
+        qCWarning(applicationLog) << "Terminal render smoke could not find the active terminal viewport";
+        return false;
+    }
 
     std::uint64_t frameSwaps = 0;
     const QMetaObject::Connection frameConnection =
@@ -2792,8 +2812,8 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     heartbeat.start();
 
     constexpr auto completionMarker = "ZTERMY_RENDER_GATE_DONE";
-    terminalItem.inputGenerated(QByteArrayLiteral("1..20000 | ForEach-Object { \"ztermy render line $_\" }; "
-                                                  "Write-Output ('ZTERMY_RENDER_' + 'GATE_DONE')\r"));
+    terminalItem->inputGenerated(QByteArrayLiteral("1..20000 | ForEach-Object { \"ztermy render line $_\" }; "
+                                                   "Write-Output ('ZTERMY_RENDER_' + 'GATE_DONE')\r"));
     QElapsedTimer completionTimer;
     completionTimer.start();
     qint64 nextSearchMilliseconds = 100;
@@ -2821,22 +2841,22 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     }
     const qint64 completionMilliseconds = completionTimer.elapsed();
     processWindowEventsFor(std::chrono::milliseconds{250});
-    const bool scrollbarExposed = terminalItem.scrollbarVisible() && terminalItem.scrollbarPageRatio() < 1.0
-                                  && terminalItem.scrollbarPosition() > 0.9;
+    const bool scrollbarExposed = terminalItem->scrollbarVisible() && terminalItem->scrollbarPageRatio() < 1.0
+                                  && terminalItem->scrollbarPosition() > 0.9;
     const auto waitForScrollbarPosition = [&](const auto predicate) {
         QElapsedTimer timer;
         timer.start();
-        while (timer.elapsed() < 2000 && !predicate(terminalItem.scrollbarPosition()))
+        while (timer.elapsed() < 2000 && !predicate(terminalItem->scrollbarPosition()))
         {
             processWindowEventsFor(std::chrono::milliseconds{20});
         }
-        return predicate(terminalItem.scrollbarPosition());
+        return predicate(terminalItem->scrollbarPosition());
     };
-    terminalItem.scrollToFraction(0.0);
+    terminalItem->scrollToFraction(0.0);
     const bool scrollbarReachedHistory = waitForScrollbarPosition([](const qreal position) {
         return position < 0.1;
     });
-    terminalItem.scrollToFraction(1.0);
+    terminalItem->scrollToFraction(1.0);
     const bool scrollbarReturnedToBottom = waitForScrollbarPosition([](const qreal position) {
         return position > 0.9;
     });
@@ -2848,7 +2868,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     const QString capturePath = QDir(outputDirectory).filePath(QStringLiteral("terminal-render-complete.png"));
     const QImage capture = window.grabWindow();
     const bool captureSaved = capture.save(capturePath);
-    const bool terminalRendered = terminalRegionHasRenderedContent(capture, terminalItem);
+    const bool terminalRendered = terminalRegionHasRenderedContent(capture, *terminalItem);
     const bool completed = controller.terminalSearchTotal() > 0;
     const bool responsive = heartbeatTicks >= 20 && maximumHeartbeatGapMilliseconds <= 250;
     const bool progressiveFrames = frameSwaps >= 5;
@@ -2861,8 +2881,65 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
                            << "resizeCompleted=" << resizeCompleted << "captureSaved=" << captureSaved
                            << "terminalRendered=" << terminalRendered << "scrollbarPassed=" << scrollbarPassed
                            << "capture=" << capturePath;
-    return completed && responsive && progressiveFrames && resizeCompleted && captureSaved && terminalRendered
-           && scrollbarPassed;
+    const bool baselinePassed = completed && responsive && progressiveFrames && resizeCompleted && captureSaved
+                                && terminalRendered && scrollbarPassed;
+    bool splitWorkspacePassed = false;
+    QString splitCapturePath;
+    if (baselinePassed && controller.splitActiveTerminal(QStringLiteral("horizontal"), false))
+    {
+        const bool secondPaneRunning = processWindowEventsUntil(
+            [&controller] {
+                const QVariantMap workspace = controller.activeTerminalWorkspace();
+                return workspace.value(QStringLiteral("paneCount")).toInt() == 2 && !controller.terminalTabs().isEmpty()
+                       && controller.terminalTabs().front().toMap().value(QStringLiteral("running")).toBool();
+            },
+            std::chrono::seconds{5});
+        const QVariantMap workspace = controller.activeTerminalWorkspace();
+        const QString splitNodeId =
+            workspace.value(QStringLiteral("root")).toMap().value(QStringLiteral("id")).toString();
+        const QString activePaneId = workspace.value(QStringLiteral("activePaneId")).toString();
+        auto *activePane =
+            window.findChild<ztermy::ui::TerminalItem *>(QStringLiteral("terminalViewport-") + activePaneId);
+        const bool activePaneFound = activePane != nullptr;
+        if (activePane != nullptr)
+        {
+            processWindowEventsFor(std::chrono::milliseconds{150});
+            activePane->requestCurrentSize();
+            activePane->inputGenerated(QByteArrayLiteral("Write-Output ztermy-split-ready\r"));
+        }
+        const bool splitOutputReady =
+            activePane != nullptr
+            && processWindowEventsUntil(
+                [&controller] {
+                    controller.searchTerminal(QStringLiteral("ztermy-split-ready"), false, true);
+                    return controller.terminalSearchTotal() > 0;
+                },
+                std::chrono::seconds{5});
+        const bool ratioStored = !splitNodeId.isEmpty() && controller.setTerminalSplitRatio(splitNodeId, 0.4);
+        processWindowEventsFor(std::chrono::milliseconds{250});
+        const QList<ztermy::ui::TerminalItem *> panes = window.findChildren<ztermy::ui::TerminalItem *>();
+        const qsizetype usablePaneCount = std::ranges::count_if(panes, [](const ztermy::ui::TerminalItem *pane) {
+            return pane != nullptr && pane->isVisible() && pane->width() >= 200 && pane->height() >= 150;
+        });
+        splitCapturePath = QDir(outputDirectory).filePath(QStringLiteral("terminal-workspace-split.png"));
+        const bool splitCaptureSaved = window.grabWindow().save(splitCapturePath);
+        const QString focusedBefore =
+            controller.activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString();
+        const bool focusMoved =
+            controller.focusRelativeTerminalPane(-1)
+            && controller.activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString() != focusedBefore;
+        const bool paneClosed = controller.closeActiveTerminalPane()
+                                && controller.activeTerminalWorkspace().value(QStringLiteral("paneCount")).toInt() == 1;
+        splitWorkspacePassed = secondPaneRunning && activePaneFound && splitOutputReady && ratioStored
+                               && usablePaneCount == 2 && splitCaptureSaved && focusMoved && paneClosed;
+        qCInfo(applicationLog) << "Terminal workspace runtime check"
+                               << "secondPaneRunning=" << secondPaneRunning << "activePaneFound=" << activePaneFound
+                               << "splitOutputReady=" << splitOutputReady << "ratioStored=" << ratioStored
+                               << "usablePaneCount=" << usablePaneCount << "captureSaved=" << splitCaptureSaved
+                               << "focusMoved=" << focusMoved << "paneClosed=" << paneClosed
+                               << "capture=" << splitCapturePath;
+    }
+    return baselinePassed && splitWorkspacePassed;
 }
 
 } // namespace
@@ -2977,14 +3054,6 @@ int main(int argc, char *argv[])
                          appController.retranslateUiState();
                      });
 
-    auto *terminalItem = window.findChild<ztermy::ui::TerminalItem *>(QStringLiteral("terminalViewport"));
-    if (terminalItem == nullptr)
-    {
-        qCCritical(applicationLog) << "Terminal viewport was not created";
-        return EXIT_FAILURE;
-    }
-
-    appController.attachTerminal(terminalItem);
     if (QCoreApplication::arguments().contains(QStringLiteral("--smoke-test")))
     {
         QTimer::singleShot(50, &window, &QWindow::close);
@@ -3094,7 +3163,7 @@ int main(int argc, char *argv[])
     }
     if (lifecycleRuntimeSmoke)
     {
-        const bool exercised = runLifecycleRuntimeSmoke(window, appController, *terminalItem);
+        const bool exercised = runLifecycleRuntimeSmoke(window, appController);
         QElapsedTimer shutdownTimer;
         shutdownTimer.start();
         appController.shutdown();
@@ -3114,7 +3183,7 @@ int main(int argc, char *argv[])
     }
     if (terminalRenderSmoke)
     {
-        const bool passed = runTerminalRenderRuntimeSmoke(window, appController, *terminalItem, paths->dataDirectory);
+        const bool passed = runTerminalRenderRuntimeSmoke(window, appController, paths->dataDirectory);
         appController.shutdown();
         window.releaseResources();
         if (!passed)

@@ -37,6 +37,7 @@ enum class TerminalRestoreKind : std::uint8_t
 {
     Local,
     SshProfile,
+    Transient,
 };
 
 enum class TerminalLayoutNodeKind : std::uint8_t

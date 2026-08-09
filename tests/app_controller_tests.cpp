@@ -108,6 +108,7 @@ private slots:
     void persistsApplicationSettings();
     void managesActionShortcutsAndDispatchContext();
     void managesMultipleLocalTerminalTabs();
+    void managesPersistentTerminalWorkspaceSplits();
     void managesSessionAppearanceAndStructuredRecording();
     void orderlyShutdownStopsAllLocalTabsOnce();
     void persistsQuickCommandsAndPerTabWorkbenchState();
@@ -1053,6 +1054,77 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
     QCOMPARE(sessionState->stops, 2);
     QVERIFY(tabsChanged.count() >= 4);
     QVERIFY(activeChanged.count() >= 4);
+}
+
+void AppControllerTests::managesPersistentTerminalWorkspaceSplits()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString profilesPath = directory.filePath(QStringLiteral("profiles.json"));
+    const QString knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json"));
+    const QString settingsPath = directory.filePath(QStringLiteral("settings.json"));
+    const auto firstState = std::make_shared<FakeLocalSessionState>();
+
+    {
+        ztermy::AppController controller(profilesPath, knownHostsPath, settingsPath, [firstState] {
+            return std::make_unique<FakeLocalTerminalSession>(firstState);
+        });
+        const QString workspaceId = controller.startLocalTerminal();
+        QVERIFY(!workspaceId.isEmpty());
+        QCOMPARE(controller.terminalTabs().size(), 1);
+        QCOMPARE(controller.activeTerminalWorkspace().value(QStringLiteral("paneCount")).toInt(), 1);
+
+        QVERIFY(controller.splitActiveTerminal(QStringLiteral("horizontal"), false));
+        QCOMPARE(controller.terminalTabs().size(), 1);
+        QCOMPARE(firstState->starts, 2);
+        QVariantMap workspace = controller.activeTerminalWorkspace();
+        QCOMPARE(workspace.value(QStringLiteral("paneCount")).toInt(), 2);
+        QVariantMap root = workspace.value(QStringLiteral("root")).toMap();
+        QCOMPARE(root.value(QStringLiteral("kind")).toString(), QStringLiteral("split"));
+        QCOMPARE(root.value(QStringLiteral("orientation")).toString(), QStringLiteral("horizontal"));
+        const QString firstPaneId = root.value(QStringLiteral("first")).toMap().value(QStringLiteral("id")).toString();
+        const QString secondPaneId =
+            root.value(QStringLiteral("second")).toMap().value(QStringLiteral("id")).toString();
+        QCOMPARE(workspace.value(QStringLiteral("activePaneId")).toString(), secondPaneId);
+
+        QVERIFY(controller.focusRelativeTerminalPane(-1));
+        QCOMPARE(controller.activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString(), firstPaneId);
+        QVERIFY(controller.setTerminalSplitRatio(root.value(QStringLiteral("id")).toString(), 0.37));
+        QCOMPARE(controller.activeTerminalWorkspace()
+                     .value(QStringLiteral("root"))
+                     .toMap()
+                     .value(QStringLiteral("ratio"))
+                     .toDouble(),
+                 0.37);
+        QVERIFY(controller.swapActiveTerminalPane(1));
+        QVERIFY(controller.closeActiveTerminalPane());
+        QCOMPARE(controller.activeTerminalWorkspace().value(QStringLiteral("paneCount")).toInt(), 1);
+        QCOMPARE(firstState->stops, 1);
+
+        QVERIFY(controller.splitActiveTerminal(QStringLiteral("vertical"), false));
+        workspace = controller.activeTerminalWorkspace();
+        root = workspace.value(QStringLiteral("root")).toMap();
+        QCOMPARE(root.value(QStringLiteral("orientation")).toString(), QStringLiteral("vertical"));
+        QVERIFY(controller.setTerminalSplitRatio(root.value(QStringLiteral("id")).toString(), 0.42));
+        QCOMPARE(firstState->starts, 3);
+    }
+    QCOMPARE(firstState->stops, 3);
+
+    const auto restoredState = std::make_shared<FakeLocalSessionState>();
+    ztermy::AppController restored(profilesPath, knownHostsPath, settingsPath, [restoredState] {
+        return std::make_unique<FakeLocalTerminalSession>(restoredState);
+    });
+    QCOMPARE(restored.terminalTabs().size(), 1);
+    QCOMPARE(restoredState->starts, 2);
+    const QVariantMap restoredWorkspace = restored.activeTerminalWorkspace();
+    QCOMPARE(restoredWorkspace.value(QStringLiteral("paneCount")).toInt(), 2);
+    const QVariantMap restoredRoot = restoredWorkspace.value(QStringLiteral("root")).toMap();
+    QCOMPARE(restoredRoot.value(QStringLiteral("kind")).toString(), QStringLiteral("split"));
+    QCOMPARE(restoredRoot.value(QStringLiteral("orientation")).toString(), QStringLiteral("vertical"));
+    QCOMPARE(restoredRoot.value(QStringLiteral("ratio")).toDouble(), 0.42);
+    QVERIFY(restored.closeTerminalTab(restored.activeTerminalTabId()));
+    QVERIFY(restored.terminalTabs().isEmpty());
+    QCOMPARE(restoredState->stops, 2);
 }
 
 void AppControllerTests::managesSessionAppearanceAndStructuredRecording()

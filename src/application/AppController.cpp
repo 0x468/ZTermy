@@ -1273,6 +1273,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     }
     Q_ASSERT(m_localSessionFactory);
     qRegisterMetaType<ShellHistoryEntries>();
+    QObject::connect(this, &AppController::terminalTabsChanged, this, &AppController::terminalWorkspaceChanged);
     QObject::connect(this, &AppController::terminalHistoryTaskCompleted, this,
                      &AppController::applyTerminalHistoryTaskResult, Qt::QueuedConnection);
     initializePortForwardingSignalBridges();
@@ -1382,17 +1383,61 @@ void AppController::initializePortForwardingSignalBridges()
 
 void AppController::attachTerminal(ui::TerminalItem *terminal)
 {
-    if (m_terminal == terminal)
+    m_terminal = terminal;
+    const TerminalTab *tab = activeTab();
+    if (terminal == nullptr || tab == nullptr)
     {
         return;
     }
-    if (m_terminal != nullptr)
+    attachTerminalViewport(tab->paneId, terminal);
+}
+
+void AppController::attachTerminalViewport(const QString &paneId, QObject *viewport)
+{
+    auto *terminal = qobject_cast<ui::TerminalItem *>(viewport);
+    const TerminalTab *tab = findTabForPane(paneId);
+    if (terminal == nullptr || tab == nullptr)
     {
-        QObject::disconnect(m_terminal, nullptr, this, nullptr);
+        return;
     }
-    m_terminal = terminal;
-    connectTerminalSignals();
-    showActiveTab();
+    if (const auto existing = m_terminalViewports.value(paneId); existing == terminal)
+    {
+        showTabInViewport(*tab);
+        return;
+    }
+    QObject::disconnect(terminal, nullptr, this, nullptr);
+    m_terminalViewports.insert(paneId, terminal);
+    if (tab->id == m_focusedTabId)
+    {
+        m_terminal = terminal;
+    }
+    QObject::connect(terminal, &QObject::destroyed, this, [this, paneId, terminal] {
+        if (m_terminalViewports.value(paneId) == terminal)
+        {
+            m_terminalViewports.remove(paneId);
+        }
+        if (m_terminal == terminal)
+        {
+            m_terminal = nullptr;
+        }
+    });
+    connectTerminalSignals(*terminal, paneId);
+    showTabInViewport(*tab);
+}
+
+void AppController::detachTerminalViewport(const QString &paneId, QObject *viewport)
+{
+    auto *terminal = qobject_cast<ui::TerminalItem *>(viewport);
+    if (terminal == nullptr || m_terminalViewports.value(paneId) != terminal)
+    {
+        return;
+    }
+    QObject::disconnect(terminal, nullptr, this, nullptr);
+    m_terminalViewports.remove(paneId);
+    if (m_terminal == terminal)
+    {
+        m_terminal = nullptr;
+    }
 }
 
 void AppController::shutdown() noexcept
@@ -1445,12 +1490,17 @@ void AppController::shutdown() noexcept
     m_stoppingSftpSessions.clear();
     m_transferTasks.clear();
     m_activeTabId.clear();
-    if (m_terminal != nullptr)
+    m_focusedTabId.clear();
+    for (ui::TerminalItem *terminal : std::as_const(m_terminalViewports))
     {
-        QObject::disconnect(m_terminal, nullptr, this, nullptr);
-        m_terminal->setSnapshot({});
-        m_terminal = nullptr;
+        if (terminal != nullptr)
+        {
+            QObject::disconnect(terminal, nullptr, this, nullptr);
+            terminal->setSnapshot({});
+        }
     }
+    m_terminalViewports.clear();
+    m_terminal = nullptr;
 }
 
 bool AppController::sshActive() const noexcept
@@ -1564,65 +1614,79 @@ QStringList AppController::collapsedHostSections() const
 QVariantList AppController::terminalTabs() const
 {
     QVariantList result;
-    result.reserve(static_cast<qsizetype>(m_tabs.size()));
-    for (const auto &tab : m_tabs)
+    result.reserve(static_cast<qsizetype>(m_workspaceState.terminalWorkspaces.size()));
+    for (const workbench::TerminalWorkspaceLayout &workspace : m_workspaceState.terminalWorkspaces)
     {
-        result.append(QVariantMap{
-            {QStringLiteral("id"), tab->id},
-            {QStringLiteral("title"), tab->title},
-            {QStringLiteral("kind"),
-             tab->kind == TerminalTabKind::Local ? QStringLiteral("local") : QStringLiteral("ssh")},
-            {QStringLiteral("status"), tab->status},
-            {QStringLiteral("identity"), tab->identity.isEmpty() ? tab->title : tab->identity},
-            {QStringLiteral("address"), tab->address},
-            {QStringLiteral("connectedUtcMs"), tab->connectedUtcMs},
-            {QStringLiteral("logState"),
-             tab->sessionLog ? sessionLogStateToken(tab->sessionLog->state()) : QStringLiteral("idle")},
-            {QStringLiteral("logPath"), tab->sessionLog ? tab->sessionLog->path() : QString{}},
-            {QStringLiteral("logError"), tab->sessionLog ? tab->sessionLog->errorString() : QString{}},
-            {QStringLiteral("logDroppedBytes"),
-             QVariant::fromValue<qulonglong>(tab->sessionLog ? tab->sessionLog->droppedBytes() : 0)},
-            {QStringLiteral("running"), tab->running},
-            {QStringLiteral("reconnecting"), tab->reconnectPending},
-            {QStringLiteral("reconnectAttempt"), static_cast<int>(tab->reconnectAttempt)},
-            {QStringLiteral("canReconnect"),
-             tab->kind == TerminalTabKind::Ssh && !tab->sourceProfileId.isEmpty() && !tab->running},
-            {QStringLiteral("connected"),
-             tab->kind == TerminalTabKind::Ssh && tab->sshPhase == ssh::SshConnectionPhase::Connected},
-            {QStringLiteral("connecting"), tab->kind == TerminalTabKind::Ssh
-                                               && tab->sshPhase != ssh::SshConnectionPhase::Disconnected
-                                               && tab->sshPhase != ssh::SshConnectionPhase::Connected
-                                               && tab->sshPhase != ssh::SshConnectionPhase::Closing
-                                               && tab->sshPhase != ssh::SshConnectionPhase::Failed},
-            {QStringLiteral("failed"), !tab->reconnectPending && tab->kind == TerminalTabKind::Ssh
-                                           && tab->sshPhase == ssh::SshConnectionPhase::Failed
-                                           && tab->sshFailure != ssh::SshFailureKind::RemoteClosed},
-            {QStringLiteral("remoteClosed"), !tab->reconnectPending && tab->kind == TerminalTabKind::Ssh
-                                                 && tab->sshPhase == ssh::SshConnectionPhase::Failed
-                                                 && tab->sshFailure == ssh::SshFailureKind::RemoteClosed},
-            {QStringLiteral("workbenchOpen"), tab->workbenchOpen},
-            {QStringLiteral("workbenchPage"), tab->workbenchPage},
-            {QStringLiteral("workbenchSide"), tab->workbenchSide},
-            {QStringLiteral("workbenchWidth"), tab->workbenchWidth},
-            {QStringLiteral("composerOpen"), tab->composerOpen},
-            {QStringLiteral("composerHeight"), tab->composerHeight},
-            {QStringLiteral("keywordHighlightEnabled"), tab->keywordHighlightEnabled},
-            {QStringLiteral("keywordHighlightRules"), keywordRulesVariant(*tab)},
-            {QStringLiteral("terminalEncoding"), tab->terminalEncoding},
-            {QStringLiteral("sessionFontFamily"), tab->sessionFontFamily},
-            {QStringLiteral("sessionFontSize"), tab->sessionFontSize},
-            {QStringLiteral("sessionLigatures"), tab->sessionLigatures},
-            {QStringLiteral("sessionBackgroundOpacity"), tab->sessionBackgroundOpacity},
-            {QStringLiteral("sessionCursor"), tab->sessionCursor},
-            {QStringLiteral("sessionForeground"), tab->sessionForeground},
-            {QStringLiteral("sessionBackground"), tab->sessionBackground},
-            {QStringLiteral("scriptRecordingState"), scriptRecorderStateToken(tab->scriptRecorder.state())},
-            {QStringLiteral("scriptRecordingSteps"), recordedScriptStepsVariant(*tab)},
-            {QStringLiteral("scriptRecordingStartedUtcMs"), tab->recordingStartedUtcMs},
-            {QStringLiteral("scriptPlaybackActive"), tab->scriptPlaybackActive},
-        });
+        const QString representativeId =
+            workspace.id == utf8String(m_activeTabId) ? m_focusedTabId : firstTabIdForWorkspace(workspace);
+        const TerminalTab *tab = findTab(representativeId);
+        if (tab != nullptr)
+        {
+            QVariantMap value = terminalTabValue(*tab, utf8QString(workspace.id));
+            value.insert(QStringLiteral("title"), utf8QString(workspace.title));
+            value.insert(QStringLiteral("paneCount"), static_cast<int>(workspace.restoreIntents.size()));
+            result.append(std::move(value));
+        }
     }
     return result;
+}
+
+QVariantMap AppController::terminalTabValue(const TerminalTab &tab, const QString &publicId) const
+{
+    return {
+        {QStringLiteral("id"), publicId},
+        {QStringLiteral("sessionId"), tab.id},
+        {QStringLiteral("paneId"), tab.paneId},
+        {QStringLiteral("title"), tab.title},
+        {QStringLiteral("kind"), tab.kind == TerminalTabKind::Local ? QStringLiteral("local") : QStringLiteral("ssh")},
+        {QStringLiteral("status"), tab.status},
+        {QStringLiteral("identity"), tab.identity.isEmpty() ? tab.title : tab.identity},
+        {QStringLiteral("address"), tab.address},
+        {QStringLiteral("connectedUtcMs"), tab.connectedUtcMs},
+        {QStringLiteral("logState"),
+         tab.sessionLog ? sessionLogStateToken(tab.sessionLog->state()) : QStringLiteral("idle")},
+        {QStringLiteral("logPath"), tab.sessionLog ? tab.sessionLog->path() : QString{}},
+        {QStringLiteral("logError"), tab.sessionLog ? tab.sessionLog->errorString() : QString{}},
+        {QStringLiteral("logDroppedBytes"),
+         QVariant::fromValue<qulonglong>(tab.sessionLog ? tab.sessionLog->droppedBytes() : 0)},
+        {QStringLiteral("running"), tab.running},
+        {QStringLiteral("reconnecting"), tab.reconnectPending},
+        {QStringLiteral("reconnectAttempt"), static_cast<int>(tab.reconnectAttempt)},
+        {QStringLiteral("canReconnect"),
+         tab.kind == TerminalTabKind::Ssh && !tab.sourceProfileId.isEmpty() && !tab.running},
+        {QStringLiteral("connected"),
+         tab.kind == TerminalTabKind::Ssh && tab.sshPhase == ssh::SshConnectionPhase::Connected},
+        {QStringLiteral("connecting"),
+         tab.kind == TerminalTabKind::Ssh && tab.sshPhase != ssh::SshConnectionPhase::Disconnected
+             && tab.sshPhase != ssh::SshConnectionPhase::Connected && tab.sshPhase != ssh::SshConnectionPhase::Closing
+             && tab.sshPhase != ssh::SshConnectionPhase::Failed},
+        {QStringLiteral("failed"), !tab.reconnectPending && tab.kind == TerminalTabKind::Ssh
+                                       && tab.sshPhase == ssh::SshConnectionPhase::Failed
+                                       && tab.sshFailure != ssh::SshFailureKind::RemoteClosed},
+        {QStringLiteral("remoteClosed"), !tab.reconnectPending && tab.kind == TerminalTabKind::Ssh
+                                             && tab.sshPhase == ssh::SshConnectionPhase::Failed
+                                             && tab.sshFailure == ssh::SshFailureKind::RemoteClosed},
+        {QStringLiteral("workbenchOpen"), tab.workbenchOpen},
+        {QStringLiteral("workbenchPage"), tab.workbenchPage},
+        {QStringLiteral("workbenchSide"), tab.workbenchSide},
+        {QStringLiteral("workbenchWidth"), tab.workbenchWidth},
+        {QStringLiteral("composerOpen"), tab.composerOpen},
+        {QStringLiteral("composerHeight"), tab.composerHeight},
+        {QStringLiteral("keywordHighlightEnabled"), tab.keywordHighlightEnabled},
+        {QStringLiteral("keywordHighlightRules"), keywordRulesVariant(tab)},
+        {QStringLiteral("terminalEncoding"), tab.terminalEncoding},
+        {QStringLiteral("sessionFontFamily"), tab.sessionFontFamily},
+        {QStringLiteral("sessionFontSize"), tab.sessionFontSize},
+        {QStringLiteral("sessionLigatures"), tab.sessionLigatures},
+        {QStringLiteral("sessionBackgroundOpacity"), tab.sessionBackgroundOpacity},
+        {QStringLiteral("sessionCursor"), tab.sessionCursor},
+        {QStringLiteral("sessionForeground"), tab.sessionForeground},
+        {QStringLiteral("sessionBackground"), tab.sessionBackground},
+        {QStringLiteral("scriptRecordingState"), scriptRecorderStateToken(tab.scriptRecorder.state())},
+        {QStringLiteral("scriptRecordingSteps"), recordedScriptStepsVariant(tab)},
+        {QStringLiteral("scriptRecordingStartedUtcMs"), tab.recordingStartedUtcMs},
+        {QStringLiteral("scriptPlaybackActive"), tab.scriptPlaybackActive},
+    };
 }
 
 QVariantList AppController::quickCommands() const
@@ -1918,6 +1982,56 @@ int AppController::activeTransferCount() const noexcept
 QString AppController::activeTerminalTabId() const
 {
     return m_activeTabId;
+}
+
+QVariantMap AppController::activeTerminalWorkspace() const
+{
+    const workbench::TerminalWorkspaceLayout *workspace = findTerminalWorkspace(m_activeTabId);
+    if (workspace == nullptr)
+    {
+        return {};
+    }
+    return {
+        {QStringLiteral("id"), utf8QString(workspace->id)},
+        {QStringLiteral("title"), utf8QString(workspace->title)},
+        {QStringLiteral("activePaneId"), utf8QString(workspace->activePaneId)},
+        {QStringLiteral("paneCount"), static_cast<int>(workspace->restoreIntents.size())},
+        {QStringLiteral("root"), terminalLayoutNodeValue(*workspace, workspace->rootNodeId)},
+    };
+}
+
+QVariantMap AppController::terminalLayoutNodeValue(const workbench::TerminalWorkspaceLayout &workspace,
+                                                   const std::string_view nodeId) const
+{
+    const auto position = std::ranges::find(workspace.nodes, nodeId, &workbench::TerminalLayoutNode::id);
+    if (position == workspace.nodes.end())
+    {
+        return {};
+    }
+    if (position->kind == workbench::TerminalLayoutNodeKind::Leaf)
+    {
+        const TerminalTab *tab = findTabForPane(utf8QString(position->id));
+        if (tab == nullptr)
+        {
+            return {};
+        }
+        return {
+            {QStringLiteral("id"), utf8QString(position->id)},
+            {QStringLiteral("kind"), QStringLiteral("leaf")},
+            {QStringLiteral("active"), position->id == workspace.activePaneId},
+            {QStringLiteral("tab"), terminalTabValue(*tab, utf8QString(workspace.id))},
+        };
+    }
+    return {
+        {QStringLiteral("id"), utf8QString(position->id)},
+        {QStringLiteral("kind"), QStringLiteral("split")},
+        {QStringLiteral("orientation"), position->orientation == workbench::TerminalSplitOrientation::Horizontal
+                                            ? QStringLiteral("horizontal")
+                                            : QStringLiteral("vertical")},
+        {QStringLiteral("ratio"), position->ratio},
+        {QStringLiteral("first"), terminalLayoutNodeValue(workspace, position->firstChildId)},
+        {QStringLiteral("second"), terminalLayoutNodeValue(workspace, position->secondChildId)},
+    };
 }
 
 QVariantMap AppController::activeRemoteTelemetry() const
@@ -2227,8 +2341,11 @@ QString AppController::startLocalTerminal()
         return {};
     }
 
+    const std::string previousActiveWorkspaceId = m_workspaceState.activeTerminalWorkspaceId;
     auto tab = std::make_unique<TerminalTab>();
     tab->id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    tab->workspaceId = tab->id;
+    tab->paneId = QUuid::createUuid().toString(QUuid::WithoutBraces);
     tab->title = tr("PowerShell %1").arg(m_nextLocalTabNumber++);
     tab->status = tr("Starting local terminal...");
     tab->kind = TerminalTabKind::Local;
@@ -2240,8 +2357,21 @@ QString AppController::startLocalTerminal()
     initializeSessionLog(*tab);
     tab->local->setOutputSink(tab->sessionLog);
     QString tabId = tab->id;
+    auto workspace = workbench::makeSinglePaneTerminalWorkspace(
+        utf8String(tab->workspaceId), utf8String(tab->paneId),
+        {.id = utf8String(tab->id), .title = utf8String(tab->title), .kind = workbench::TerminalRestoreKind::Local});
+    workspace.title = utf8String(tab->title);
     connectLocalTabSignals(*tab);
     m_tabs.push_back(std::move(tab));
+    m_workspaceState.terminalWorkspaces.push_back(std::move(workspace));
+    m_workspaceState.activeTerminalWorkspaceId = utf8String(tabId);
+    if (!persistTerminalWorkspaces())
+    {
+        m_workspaceState.terminalWorkspaces.pop_back();
+        m_workspaceState.activeTerminalWorkspaceId = previousActiveWorkspaceId;
+        m_tabs.pop_back();
+        return {};
+    }
     emit terminalTabsChanged();
     activateTerminalTab(tabId);
 
@@ -2266,80 +2396,394 @@ QString AppController::startLocalTerminal()
 
 bool AppController::activateTerminalTab(const QString &id)
 {
-    if (findTab(id) == nullptr)
+    QString workspaceId = id;
+    if (const TerminalTab *session = findTab(id); session != nullptr)
+    {
+        workspaceId = session->workspaceId;
+    }
+    workbench::TerminalWorkspaceLayout *workspace = findTerminalWorkspace(workspaceId);
+    if (workspace == nullptr)
     {
         return false;
     }
-    if (m_activeTabId == id)
+    const TerminalTab *focused = findTabForPane(utf8QString(workspace->activePaneId));
+    if (focused == nullptr)
+    {
+        return false;
+    }
+    m_focusedTabId = focused->id;
+    if (m_activeTabId == workspaceId)
     {
         updateTelemetryVisibility();
         showActiveTab();
         return true;
     }
-    m_activeTabId = id;
-    updateTelemetryVisibility();
-    emit activeTerminalTabChanged();
-    emit remoteTelemetryChanged();
-    emit sshActiveChanged();
-    emit terminalSearchChanged();
-    emit terminalHistoryChanged();
-    emit sftpChanged();
-    showActiveTab();
+    m_activeTabId = workspaceId;
+    m_workspaceState.activeTerminalWorkspaceId = utf8String(workspaceId);
+    static_cast<void>(persistTerminalWorkspaces());
+    emitActiveTerminalContextChanged();
     return true;
 }
 
 bool AppController::closeTerminalTab(const QString &id)
 {
-    const auto position = std::ranges::find(m_tabs, id, [](const std::unique_ptr<TerminalTab> &tab) {
-        return tab->id;
-    });
-    if (position == m_tabs.end())
+    QString workspaceId = id;
+    if (const TerminalTab *session = findTab(id); session != nullptr)
+    {
+        workspaceId = session->workspaceId;
+    }
+    const auto workspacePosition = std::ranges::find(m_workspaceState.terminalWorkspaces, utf8String(workspaceId),
+                                                     &workbench::TerminalWorkspaceLayout::id);
+    if (workspacePosition == m_workspaceState.terminalWorkspaces.end())
     {
         return false;
     }
-
-    const bool closingActive = (*position)->id == m_activeTabId;
-    const auto index = static_cast<std::size_t>(std::distance(m_tabs.begin(), position));
-    if ((*position)->id == m_hostKeyTabId)
-    {
-        clearHostKeyPrompt();
-    }
-    if ((*position)->local)
-    {
-        (*position)->local->stop();
-    }
-    if ((*position)->ssh)
-    {
-        (*position)->ssh->stop();
-    }
-    if ((*position)->sessionLog)
-    {
-        (*position)->sessionLog->stop();
-    }
-    stopSftpSession(**position);
-    m_tabs.erase(position);
+    const bool closingActive = workspaceId == m_activeTabId;
+    const auto workspaceIndex =
+        static_cast<std::size_t>(std::distance(m_workspaceState.terminalWorkspaces.begin(), workspacePosition));
+    std::erase_if(m_tabs, [this, &workspaceId](const std::unique_ptr<TerminalTab> &tab) {
+        if (tab->workspaceId != workspaceId)
+        {
+            return false;
+        }
+        if (tab->id == m_hostKeyTabId)
+        {
+            clearHostKeyPrompt();
+        }
+        if (tab->local)
+        {
+            tab->local->stop();
+        }
+        if (tab->ssh)
+        {
+            tab->ssh->stop();
+        }
+        if (tab->sessionLog)
+        {
+            tab->sessionLog->stop();
+        }
+        stopSftpSession(*tab);
+        m_terminalViewports.remove(tab->paneId);
+        return true;
+    });
+    m_workspaceState.terminalWorkspaces.erase(workspacePosition);
     emit terminalTabsChanged();
 
     if (closingActive)
     {
-        if (m_tabs.empty())
+        if (m_workspaceState.terminalWorkspaces.empty())
         {
             m_activeTabId.clear();
-            emit activeTerminalTabChanged();
-            emit remoteTelemetryChanged();
-            emit sshActiveChanged();
-            emit terminalSearchChanged();
-            emit terminalHistoryChanged();
-            emit sftpChanged();
-            showActiveTab();
+            m_focusedTabId.clear();
+            m_workspaceState.activeTerminalWorkspaceId.clear();
+            emitActiveTerminalContextChanged();
         }
         else
         {
-            const std::size_t nextIndex = std::min(index, m_tabs.size() - 1U);
+            const std::size_t nextIndex = std::min(workspaceIndex, m_workspaceState.terminalWorkspaces.size() - 1U);
             m_activeTabId.clear();
-            activateTerminalTab(m_tabs[nextIndex]->id);
+            activateTerminalTab(utf8QString(m_workspaceState.terminalWorkspaces[nextIndex].id));
         }
     }
+    static_cast<void>(persistTerminalWorkspaces());
+    return true;
+}
+
+bool AppController::activateTerminalPane(const QString &paneId)
+{
+    TerminalTab *tab = findTabForPane(paneId);
+    if (tab == nullptr)
+    {
+        return false;
+    }
+    workbench::TerminalWorkspaceLayout *workspace = findTerminalWorkspace(tab->workspaceId);
+    if (workspace == nullptr)
+    {
+        return false;
+    }
+    const bool changed =
+        m_activeTabId != tab->workspaceId || m_focusedTabId != tab->id || workspace->activePaneId != utf8String(paneId);
+    m_activeTabId = tab->workspaceId;
+    m_focusedTabId = tab->id;
+    workspace->activePaneId = utf8String(paneId);
+    m_workspaceState.activeTerminalWorkspaceId = utf8String(tab->workspaceId);
+    m_terminal = m_terminalViewports.value(paneId);
+    if (changed)
+    {
+        static_cast<void>(persistTerminalWorkspaces());
+        emitActiveTerminalContextChanged();
+        emit terminalTabsChanged();
+    }
+    return true;
+}
+
+bool AppController::splitActiveTerminal(const QString &orientation, const bool duplicateActive)
+{
+    TerminalTab *source = activeTab();
+    workbench::TerminalWorkspaceLayout *workspace = findTerminalWorkspace(m_activeTabId);
+    if (source == nullptr || workspace == nullptr || m_tabs.size() >= maximumTerminalTabs
+        || workspace->restoreIntents.size() >= workbench::maximumTerminalPanesPerWorkspace)
+    {
+        return false;
+    }
+    if (duplicateActive && source->kind == TerminalTabKind::Ssh && source->sourceProfileId.isEmpty())
+    {
+        return false;
+    }
+    workbench::TerminalSplitOrientation splitOrientation;
+    if (orientation == QStringLiteral("horizontal"))
+    {
+        splitOrientation = workbench::TerminalSplitOrientation::Horizontal;
+    }
+    else if (orientation == QStringLiteral("vertical"))
+    {
+        splitOrientation = workbench::TerminalSplitOrientation::Vertical;
+    }
+    else
+    {
+        return false;
+    }
+
+    auto tab = std::make_unique<TerminalTab>();
+    tab->id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    tab->workspaceId = source->workspaceId;
+    tab->paneId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    workbench::TerminalRestoreKind restoreKind = workbench::TerminalRestoreKind::Local;
+    if (duplicateActive && source->kind == TerminalTabKind::Ssh)
+    {
+        tab->kind = TerminalTabKind::Ssh;
+        tab->title = source->title;
+        tab->identity = source->identity;
+        tab->address = source->address;
+        tab->sourceProfileId = source->sourceProfileId;
+        tab->status = tr("SSH pane duplicated; reconnecting...");
+        tab->keywordHighlightRules = source->keywordHighlightRules;
+        tab->keywordHighlightEnabled = source->keywordHighlightEnabled;
+        applyWorkspaceState(*tab);
+        tab->ssh = std::make_unique<ssh::SshTerminalSession>();
+        restoreKind = tab->sourceProfileId.isEmpty() ? workbench::TerminalRestoreKind::Transient
+                                                     : workbench::TerminalRestoreKind::SshProfile;
+    }
+    else
+    {
+        tab->kind = TerminalTabKind::Local;
+        tab->title = tr("PowerShell %1").arg(m_nextLocalTabNumber++);
+        tab->status = tr("Starting local terminal...");
+        tab->local = m_localSessionFactory();
+        if (!tab->local)
+        {
+            return false;
+        }
+    }
+
+    const QString tabId = tab->id;
+    const QString paneId = tab->paneId;
+    const workbench::TerminalWorkspaceLayout previous = *workspace;
+    if (!workbench::splitTerminalPane(*workspace, utf8String(source->paneId),
+                                      utf8String(QUuid::createUuid().toString(QUuid::WithoutBraces)),
+                                      utf8String(paneId),
+                                      {.id = utf8String(tabId),
+                                       .profileId = utf8String(tab->sourceProfileId),
+                                       .title = utf8String(tab->title),
+                                       .kind = restoreKind},
+                                      splitOrientation))
+    {
+        return false;
+    }
+    workspace->activePaneId = utf8String(paneId);
+    initializeSessionLog(*tab);
+    if (tab->local)
+    {
+        tab->local->setOutputSink(tab->sessionLog);
+        connectLocalTabSignals(*tab);
+    }
+    else
+    {
+        tab->ssh->setOutputSink(tab->sessionLog);
+        connectSshTabSignals(*tab);
+    }
+    m_tabs.push_back(std::move(tab));
+    m_focusedTabId = tabId;
+    if (!persistTerminalWorkspaces())
+    {
+        *workspace = previous;
+        m_tabs.pop_back();
+        m_focusedTabId = source->id;
+        return false;
+    }
+
+    TerminalTab *created = findTab(tabId);
+    if (created != nullptr && created->local)
+    {
+        const std::error_code error = created->local->start({.columns = 100, .rows = 30});
+        if (error)
+        {
+            created->status = tr("Unable to start local terminal: %1").arg(QString::fromStdString(error.message()));
+        }
+    }
+    else if (created != nullptr && created->ssh && !created->sourceProfileId.isEmpty())
+    {
+        created->reconnectPending = true;
+        attemptSshReconnect(created->id, ++created->reconnectGeneration);
+    }
+    emit terminalTabsChanged();
+    emitActiveTerminalContextChanged();
+    return true;
+}
+
+bool AppController::closeActiveTerminalPane()
+{
+    TerminalTab *tab = activeTab();
+    workbench::TerminalWorkspaceLayout *workspace = findTerminalWorkspace(m_activeTabId);
+    if (tab == nullptr || workspace == nullptr)
+    {
+        return false;
+    }
+    if (workspace->restoreIntents.size() == 1)
+    {
+        return closeTerminalTab(workspace->id.empty() ? QString{} : utf8QString(workspace->id));
+    }
+    const workbench::TerminalWorkspaceLayout previous = *workspace;
+    if (!workbench::closeTerminalPane(*workspace, utf8String(tab->paneId)))
+    {
+        return false;
+    }
+    TerminalTab *next = findTabForPane(utf8QString(workspace->activePaneId));
+    if (next == nullptr || !persistTerminalWorkspaces())
+    {
+        *workspace = previous;
+        return false;
+    }
+    if (tab->local)
+    {
+        tab->local->stop();
+    }
+    if (tab->ssh)
+    {
+        tab->ssh->stop();
+    }
+    if (tab->sessionLog)
+    {
+        tab->sessionLog->stop();
+    }
+    stopSftpSession(*tab);
+    m_terminalViewports.remove(tab->paneId);
+    const QString closedId = tab->id;
+    std::erase_if(m_tabs, [&closedId](const std::unique_ptr<TerminalTab> &candidate) {
+        return candidate->id == closedId;
+    });
+    m_focusedTabId = next->id;
+    emit terminalTabsChanged();
+    emitActiveTerminalContextChanged();
+    return true;
+}
+
+bool AppController::focusRelativeTerminalPane(const int offset)
+{
+    const workbench::TerminalWorkspaceLayout *workspace = findTerminalWorkspace(m_activeTabId);
+    const TerminalTab *tab = activeTab();
+    if (workspace == nullptr || tab == nullptr || offset == 0)
+    {
+        return false;
+    }
+    const std::vector<std::string> panes = workbench::terminalPaneOrder(*workspace);
+    const auto current = std::ranges::find(panes, utf8String(tab->paneId));
+    if (current == panes.end() || panes.empty())
+    {
+        return false;
+    }
+    const auto index = static_cast<std::ptrdiff_t>(std::distance(panes.begin(), current));
+    const auto count = static_cast<std::ptrdiff_t>(panes.size());
+    const auto next = (index + static_cast<std::ptrdiff_t>(offset % static_cast<int>(count)) + count) % count;
+    return activateTerminalPane(utf8QString(panes[static_cast<std::size_t>(next)]));
+}
+
+bool AppController::resizeActiveTerminalPane(const qreal delta)
+{
+    workbench::TerminalWorkspaceLayout *workspace = findTerminalWorkspace(m_activeTabId);
+    const TerminalTab *tab = activeTab();
+    if (workspace == nullptr || tab == nullptr || !std::isfinite(delta) || qFuzzyIsNull(delta))
+    {
+        return false;
+    }
+    const std::string paneId = utf8String(tab->paneId);
+    const auto parent = std::ranges::find_if(workspace->nodes, [&paneId](const workbench::TerminalLayoutNode &node) {
+        return node.kind == workbench::TerminalLayoutNodeKind::Split
+               && (node.firstChildId == paneId || node.secondChildId == paneId);
+    });
+    if (parent == workspace->nodes.end())
+    {
+        return false;
+    }
+    const double adjusted = parent->ratio + (parent->firstChildId == paneId ? delta : -delta);
+    const workbench::TerminalWorkspaceLayout previous = *workspace;
+    if (!workbench::resizeTerminalSplit(*workspace, parent->id, adjusted) || !persistTerminalWorkspaces())
+    {
+        *workspace = previous;
+        return false;
+    }
+    emit terminalWorkspaceChanged();
+    return true;
+}
+
+bool AppController::setTerminalSplitRatio(const QString &splitNodeId, const qreal ratio)
+{
+    workbench::TerminalWorkspaceLayout *workspace = findTerminalWorkspace(m_activeTabId);
+    if (workspace == nullptr || !std::isfinite(ratio))
+    {
+        return false;
+    }
+    const workbench::TerminalWorkspaceLayout previous = *workspace;
+    if (!workbench::resizeTerminalSplit(*workspace, utf8String(splitNodeId), ratio) || !persistTerminalWorkspaces())
+    {
+        *workspace = previous;
+        return false;
+    }
+    emit terminalWorkspaceChanged();
+    return true;
+}
+
+bool AppController::swapActiveTerminalPane(const int offset)
+{
+    workbench::TerminalWorkspaceLayout *workspace = findTerminalWorkspace(m_activeTabId);
+    TerminalTab *active = activeTab();
+    if (workspace == nullptr || active == nullptr || offset == 0)
+    {
+        return false;
+    }
+    const std::vector<std::string> panes = workbench::terminalPaneOrder(*workspace);
+    const auto current = std::ranges::find(panes, utf8String(active->paneId));
+    if (current == panes.end())
+    {
+        return false;
+    }
+    const auto index = static_cast<std::ptrdiff_t>(std::distance(panes.begin(), current));
+    const auto targetIndex = index + (offset < 0 ? -1 : 1);
+    if (targetIndex < 0 || targetIndex >= static_cast<std::ptrdiff_t>(panes.size()))
+    {
+        return false;
+    }
+    const QString otherPaneId = utf8QString(panes[static_cast<std::size_t>(targetIndex)]);
+    TerminalTab *other = findTabForPane(otherPaneId);
+    if (other == nullptr)
+    {
+        return false;
+    }
+    const workbench::TerminalWorkspaceLayout previous = *workspace;
+    if (!workbench::swapTerminalPanes(*workspace, utf8String(active->paneId), utf8String(other->paneId)))
+    {
+        return false;
+    }
+    std::swap(active->paneId, other->paneId);
+    workspace->activePaneId = utf8String(active->paneId);
+    if (!persistTerminalWorkspaces())
+    {
+        std::swap(active->paneId, other->paneId);
+        *workspace = previous;
+        return false;
+    }
+    emit terminalWorkspaceChanged();
+    showAllTerminalViewports();
     return true;
 }
 
@@ -3177,7 +3621,7 @@ bool AppController::toggleActiveSftpBookmark()
     workbench::ProfileWorkspaceState &state =
         workbench::ensureProfileWorkspaceState(candidate, utf8String(tab->sourceProfileId));
     (void)workbench::toggleBookmarkedRemotePath(state, utf8String(tab->sftpPath));
-    if (!m_workspaceStateStore.save(candidate))
+    if (!saveWorkspaceStateCandidate(candidate))
     {
         qCWarning(appControllerLog) << "Unable to persist SFTP path bookmark";
         return false;
@@ -3731,8 +4175,11 @@ bool AppController::startSshConnection(ssh::SshConnectionRequest request, QStrin
         return false;
     }
 
+    const std::string previousActiveWorkspaceId = m_workspaceState.activeTerminalWorkspaceId;
     auto tab = std::make_unique<TerminalTab>();
     tab->id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    tab->workspaceId = tab->id;
+    tab->paneId = QUuid::createUuid().toString(QUuid::WithoutBraces);
     const QString fallbackTitle = QStringLiteral("%1@%2").arg(request.username, request.host);
     const std::string profileId = utf8String(sourceProfileId.trimmed());
     const auto sourceProfile = std::ranges::find(m_profiles, profileId, &ssh::SshProfile::id);
@@ -3755,8 +4202,25 @@ bool AppController::startSshConnection(ssh::SshConnectionRequest request, QStrin
     const QString tabId = tab->id;
     initializeSessionLog(*tab);
     tab->ssh->setOutputSink(tab->sessionLog);
+    auto workspace = workbench::makeSinglePaneTerminalWorkspace(
+        utf8String(tab->workspaceId), utf8String(tab->paneId),
+        {.id = utf8String(tab->id),
+         .profileId = utf8String(tab->sourceProfileId),
+         .title = utf8String(tab->title),
+         .kind = tab->sourceProfileId.isEmpty() ? workbench::TerminalRestoreKind::Transient
+                                                : workbench::TerminalRestoreKind::SshProfile});
+    workspace.title = utf8String(tab->title);
     connectSshTabSignals(*tab);
     m_tabs.push_back(std::move(tab));
+    m_workspaceState.terminalWorkspaces.push_back(std::move(workspace));
+    m_workspaceState.activeTerminalWorkspaceId = utf8String(tabId);
+    if (!persistTerminalWorkspaces())
+    {
+        m_workspaceState.terminalWorkspaces.pop_back();
+        m_workspaceState.activeTerminalWorkspaceId = previousActiveWorkspaceId;
+        m_tabs.pop_back();
+        return false;
+    }
     emit terminalTabsChanged();
     activateTerminalTab(tabId);
 
@@ -3857,15 +4321,25 @@ void AppController::attemptSshReconnect(const QString &tabId, const std::uint64_
         emit terminalTabsChanged();
         return;
     }
-    if (m_terminal != nullptr && m_activeTabId == tabId)
+    if (const TerminalTab *started = findTab(tabId); started != nullptr)
     {
-        m_terminal->requestCurrentSize();
+        if (ui::TerminalItem *terminal = m_terminalViewports.value(started->paneId))
+        {
+            terminal->requestCurrentSize();
+        }
     }
 }
 
 bool AppController::reconnectTerminalTab(const QString &id)
 {
     TerminalTab *tab = findTab(id);
+    if (tab == nullptr)
+    {
+        if (const workbench::TerminalWorkspaceLayout *workspace = findTerminalWorkspace(id); workspace != nullptr)
+        {
+            tab = findTabForPane(utf8QString(workspace->activePaneId));
+        }
+    }
     if (tab == nullptr || tab->kind != TerminalTabKind::Ssh || tab->ssh == nullptr || tab->running
         || tab->sourceProfileId.isEmpty())
     {
@@ -3886,6 +4360,13 @@ bool AppController::reconnectTerminalTab(const QString &id)
 bool AppController::cancelTerminalReconnect(const QString &id)
 {
     TerminalTab *tab = findTab(id);
+    if (tab == nullptr)
+    {
+        if (const workbench::TerminalWorkspaceLayout *workspace = findTerminalWorkspace(id); workspace != nullptr)
+        {
+            tab = findTabForPane(utf8QString(workspace->activePaneId));
+        }
+    }
     if (tab == nullptr || !tab->reconnectPending)
     {
         return false;
@@ -4694,7 +5175,7 @@ bool AppController::setHostSectionCollapsed(const QString &sectionId, const bool
         }
         candidate.collapsedHostSections.erase(existing);
     }
-    if (!m_workspaceStateStore.save(candidate))
+    if (!saveWorkspaceStateCandidate(candidate))
     {
         return false;
     }
@@ -5631,9 +6112,9 @@ void AppController::initializeSessionLog(TerminalTab &tab)
         if (updated->sessionLog->state() == logging::SessionLogState::Failed)
         {
             updated->status = tr("Session log failed: %1").arg(updated->sessionLog->errorString());
-            if (m_terminal != nullptr && m_activeTabId == tabId)
+            if (ui::TerminalItem *terminal = m_terminalViewports.value(updated->paneId))
             {
-                m_terminal->setStatusText(updated->status);
+                terminal->setStatusText(updated->status);
             }
         }
         emit terminalTabsChanged();
@@ -5651,9 +6132,9 @@ void AppController::connectLocalTabSignals(TerminalTab &tab)
                              return;
                          }
                          updated->snapshot = snapshot;
-                         if (m_terminal != nullptr && m_activeTabId == tabId)
+                         if (ui::TerminalItem *terminal = m_terminalViewports.value(updated->paneId))
                          {
-                             m_terminal->setSnapshot(snapshot);
+                             terminal->setSnapshot(snapshot);
                          }
                      });
     QObject::connect(tab.local.get(), &terminal::LocalTerminalSessionBackend::statusChanged, this,
@@ -5664,17 +6145,21 @@ void AppController::connectLocalTabSignals(TerminalTab &tab)
                              return;
                          }
                          updated->status = status;
-                         if (m_terminal != nullptr && m_activeTabId == tabId)
+                         if (ui::TerminalItem *terminal = m_terminalViewports.value(updated->paneId))
                          {
-                             m_terminal->setStatusText(status);
+                             terminal->setStatusText(status);
                          }
                          emit terminalTabsChanged();
                      });
     QObject::connect(tab.local.get(), &terminal::LocalTerminalSessionBackend::clipboardTextReady, this,
                      [this, tabId](const QString &text) {
-                         if (m_terminal != nullptr && m_activeTabId == tabId)
+                         const TerminalTab *updated = findTab(tabId);
+                         if (updated != nullptr)
                          {
-                             m_terminal->setClipboardText(text);
+                             if (ui::TerminalItem *terminal = m_terminalViewports.value(updated->paneId))
+                             {
+                                 terminal->setClipboardText(text);
+                             }
                          }
                      });
     QObject::connect(tab.local.get(), &terminal::LocalTerminalSessionBackend::runningChanged, this,
@@ -5699,7 +6184,7 @@ void AppController::connectLocalTabSignals(TerminalTab &tab)
                          updated->searchQuery = query;
                          updated->searchCurrent = current;
                          updated->searchTotal = total;
-                         if (m_activeTabId == tabId)
+                         if (m_focusedTabId == tabId)
                          {
                              emit terminalSearchChanged();
                          }
@@ -5721,9 +6206,9 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
                              snapshot ? normalizedTerminalWorkingDirectory(snapshot->workingDirectory) : QString{};
                          const bool workingDirectoryChanged = updated->terminalWorkingDirectory != workingDirectory;
                          updated->terminalWorkingDirectory = workingDirectory;
-                         if (m_terminal != nullptr && m_activeTabId == tabId)
+                         if (ui::TerminalItem *terminal = m_terminalViewports.value(updated->paneId))
                          {
-                             m_terminal->setSnapshot(snapshot);
+                             terminal->setSnapshot(snapshot);
                          }
                          if (workingDirectoryChanged && updated->followTerminalDirectory
                              && updated->sftpSession != nullptr && updated->sftpState == QStringLiteral("ready")
@@ -5731,7 +6216,7 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
                          {
                              requestSftpDirectory(*updated, workingDirectory);
                          }
-                         else if (workingDirectoryChanged && m_activeTabId == tabId)
+                         else if (workingDirectoryChanged && m_focusedTabId == tabId)
                          {
                              emit sftpChanged();
                          }
@@ -5744,17 +6229,21 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
                              return;
                          }
                          updated->status = status;
-                         if (m_terminal != nullptr && m_activeTabId == tabId)
+                         if (ui::TerminalItem *terminal = m_terminalViewports.value(updated->paneId))
                          {
-                             m_terminal->setStatusText(status);
+                             terminal->setStatusText(status);
                          }
                          emit terminalTabsChanged();
                      });
     QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::clipboardTextReady, this,
                      [this, tabId](const QString &text) {
-                         if (m_terminal != nullptr && m_activeTabId == tabId)
+                         const TerminalTab *updated = findTab(tabId);
+                         if (updated != nullptr)
                          {
-                             m_terminal->setClipboardText(text);
+                             if (ui::TerminalItem *terminal = m_terminalViewports.value(updated->paneId))
+                             {
+                                 terminal->setClipboardText(text);
+                             }
                          }
                      });
     QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::runningChanged, this, [this, tabId](const bool running) {
@@ -5806,7 +6295,7 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
                          updated->searchQuery = query;
                          updated->searchCurrent = current;
                          updated->searchTotal = total;
-                         if (m_activeTabId == tabId)
+                         if (m_focusedTabId == tabId)
                          {
                              emit terminalSearchChanged();
                          }
@@ -5824,7 +6313,7 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
                 updated->history.clear();
                 updated->historyState = QStringLiteral("error");
                 updated->historyError = error;
-                if (m_activeTabId == tabId)
+                if (m_focusedTabId == tabId)
                 {
                     emit terminalHistoryChanged();
                 }
@@ -5836,7 +6325,7 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
                 updated->history.clear();
                 updated->historyState = QStringLiteral("error");
                 updated->historyError = tr("Remote shell history exceeded the safety limit.");
-                if (m_activeTabId == tabId)
+                if (m_focusedTabId == tabId)
                 {
                     emit terminalHistoryChanged();
                 }
@@ -5890,7 +6379,7 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
                          {
                              updated->telemetryHistory.pop_front();
                          }
-                         if (m_activeTabId == tabId)
+                         if (m_focusedTabId == tabId)
                          {
                              emit remoteTelemetryChanged();
                          }
@@ -5903,7 +6392,7 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
                              return;
                          }
                          updated->telemetryState = state;
-                         if (m_activeTabId == tabId)
+                         if (m_focusedTabId == tabId)
                          {
                              emit remoteTelemetryChanged();
                          }
@@ -5934,7 +6423,7 @@ void AppController::updateTelemetryVisibility()
     {
         if (tab->ssh)
         {
-            tab->ssh->setRemoteTelemetryVisible(m_terminalTelemetryVisible && tab->id == m_activeTabId
+            tab->ssh->setRemoteTelemetryVisible(m_terminalTelemetryVisible && tab->id == m_focusedTabId
                                                 && tab->sshPhase == ssh::SshConnectionPhase::Connected);
         }
     }
@@ -5984,7 +6473,7 @@ void AppController::connectSftpTabSignals(TerminalTab &tab)
                          updated->sftpHasListing = true;
                          updated->sftpModel->setEntries(entries, remotePath);
                          persistWorkspaceState(*updated, true);
-                         if (m_activeTabId == tabId)
+                         if (m_focusedTabId == tabId)
                          {
                              emit sftpChanged();
                          }
@@ -6036,7 +6525,7 @@ void AppController::connectSftpTabSignals(TerminalTab &tab)
             {
                 updated->sftpError = tr("The remote file operation failed.");
             }
-            if (m_activeTabId == tabId)
+            if (m_focusedTabId == tabId)
             {
                 emit sftpChanged();
             }
@@ -6050,7 +6539,7 @@ void AppController::connectSftpTabSignals(TerminalTab &tab)
                          }
                          updated->sftpState = QStringLiteral("error");
                          updated->sftpError = tr("The SFTP connection failed.");
-                         if (m_activeTabId == tabId)
+                         if (m_focusedTabId == tabId)
                          {
                              emit sftpChanged();
                          }
@@ -6095,19 +6584,79 @@ void AppController::recordRecentConnection(TerminalTab &tab)
     emit hostProfilesChanged();
 }
 
-void AppController::connectTerminalSignals()
+void AppController::connectTerminalSignals(ui::TerminalItem &terminal, const QString &paneId)
 {
-    if (m_terminal == nullptr)
-    {
-        return;
-    }
-    QObject::connect(m_terminal, &ui::TerminalItem::inputGenerated, this, &AppController::queueInput);
-    QObject::connect(m_terminal, &ui::TerminalItem::pasteRequested, this, &AppController::queuePaste);
-    QObject::connect(m_terminal, &ui::TerminalItem::sizeRequested, this, &AppController::requestResize);
-    QObject::connect(m_terminal, &ui::TerminalItem::scrollRequested, this, &AppController::requestScroll);
-    QObject::connect(m_terminal, &ui::TerminalItem::selectionRequested, this, &AppController::requestSelection);
-    QObject::connect(m_terminal, &ui::TerminalItem::clearSelectionRequested, this, &AppController::clearSelection);
-    QObject::connect(m_terminal, &ui::TerminalItem::copyRequested, this, &AppController::copySelection);
+    QObject::connect(&terminal, &ui::TerminalItem::inputGenerated, this, [this, paneId](const QByteArray &bytes) {
+        if (activateTerminalPane(paneId))
+        {
+            queueInput(bytes);
+        }
+    });
+    QObject::connect(&terminal, &ui::TerminalItem::pasteRequested, this, [this, paneId](const QByteArray &bytes) {
+        if (activateTerminalPane(paneId))
+        {
+            queuePaste(bytes);
+        }
+    });
+    QObject::connect(&terminal, &ui::TerminalItem::sizeRequested, this,
+                     [this, paneId](const quint16 columns, const quint16 rows, const quint32 cellWidthPixels,
+                                    const quint32 cellHeightPixels) {
+                         TerminalTab *tab = findTabForPane(paneId);
+                         if (tab != nullptr && tab->ssh)
+                         {
+                             tab->ssh->requestResize(columns, rows, cellWidthPixels, cellHeightPixels);
+                         }
+                         else if (tab != nullptr && tab->local)
+                         {
+                             tab->local->requestResize(columns, rows, cellWidthPixels, cellHeightPixels);
+                         }
+                     });
+    QObject::connect(&terminal, &ui::TerminalItem::scrollRequested, this, [this, paneId](const int rows) {
+        TerminalTab *tab = findTabForPane(paneId);
+        if (tab != nullptr && tab->ssh)
+        {
+            tab->ssh->requestScroll(rows);
+        }
+        else if (tab != nullptr && tab->local)
+        {
+            tab->local->requestScroll(rows);
+        }
+    });
+    QObject::connect(&terminal, &ui::TerminalItem::selectionRequested, this,
+                     [this, paneId](const quint16 startColumn, const quint16 startRow, const quint16 endColumn,
+                                    const quint16 endRow, const bool rectangular) {
+                         TerminalTab *tab = findTabForPane(paneId);
+                         if (tab != nullptr && tab->ssh)
+                         {
+                             tab->ssh->requestSelection(startColumn, startRow, endColumn, endRow, rectangular);
+                         }
+                         else if (tab != nullptr && tab->local)
+                         {
+                             tab->local->requestSelection(startColumn, startRow, endColumn, endRow, rectangular);
+                         }
+                     });
+    QObject::connect(&terminal, &ui::TerminalItem::clearSelectionRequested, this, [this, paneId] {
+        TerminalTab *tab = findTabForPane(paneId);
+        if (tab != nullptr && tab->ssh)
+        {
+            tab->ssh->clearSelection();
+        }
+        else if (tab != nullptr && tab->local)
+        {
+            tab->local->clearSelection();
+        }
+    });
+    QObject::connect(&terminal, &ui::TerminalItem::copyRequested, this, [this, paneId] {
+        TerminalTab *tab = findTabForPane(paneId);
+        if (tab != nullptr && tab->ssh)
+        {
+            tab->ssh->copySelection();
+        }
+        else if (tab != nullptr && tab->local)
+        {
+            tab->local->copySelection();
+        }
+    });
 }
 
 void AppController::queueInput(const QByteArray &bytes)
@@ -6302,12 +6851,12 @@ void AppController::requestResize(const quint16 columns, const quint16 rows, con
 
 AppController::TerminalTab *AppController::activeTab()
 {
-    return findTab(m_activeTabId);
+    return findTab(m_focusedTabId);
 }
 
 const AppController::TerminalTab *AppController::activeTab() const
 {
-    return findTab(m_activeTabId);
+    return findTab(m_focusedTabId);
 }
 
 AppController::TerminalTab *AppController::findTab(const QString &id)
@@ -6326,24 +6875,138 @@ const AppController::TerminalTab *AppController::findTab(const QString &id) cons
     return tab == m_tabs.end() ? nullptr : tab->get();
 }
 
+AppController::TerminalTab *AppController::findTabForPane(const QString &paneId)
+{
+    const auto tab = std::ranges::find(m_tabs, paneId, [](const std::unique_ptr<TerminalTab> &candidate) {
+        return candidate->paneId;
+    });
+    return tab == m_tabs.end() ? nullptr : tab->get();
+}
+
+const AppController::TerminalTab *AppController::findTabForPane(const QString &paneId) const
+{
+    const auto tab = std::ranges::find(m_tabs, paneId, [](const std::unique_ptr<TerminalTab> &candidate) {
+        return candidate->paneId;
+    });
+    return tab == m_tabs.end() ? nullptr : tab->get();
+}
+
+workbench::TerminalWorkspaceLayout *AppController::findTerminalWorkspace(const QString &id)
+{
+    const auto workspace =
+        std::ranges::find(m_workspaceState.terminalWorkspaces, utf8String(id), &workbench::TerminalWorkspaceLayout::id);
+    return workspace == m_workspaceState.terminalWorkspaces.end() ? nullptr : &*workspace;
+}
+
+const workbench::TerminalWorkspaceLayout *AppController::findTerminalWorkspace(const QString &id) const
+{
+    const auto workspace =
+        std::ranges::find(m_workspaceState.terminalWorkspaces, utf8String(id), &workbench::TerminalWorkspaceLayout::id);
+    return workspace == m_workspaceState.terminalWorkspaces.end() ? nullptr : &*workspace;
+}
+
+QString AppController::firstTabIdForWorkspace(const workbench::TerminalWorkspaceLayout &workspace) const
+{
+    const std::vector<std::string> panes = workbench::terminalPaneOrder(workspace);
+    if (panes.empty())
+    {
+        return {};
+    }
+    const TerminalTab *tab = findTabForPane(utf8QString(panes.front()));
+    return tab == nullptr ? QString{} : tab->id;
+}
+
+bool AppController::persistTerminalWorkspaces()
+{
+    return saveWorkspaceStateCandidate(m_workspaceState);
+}
+
+bool AppController::saveWorkspaceStateCandidate(const workbench::WorkspaceState &candidate)
+{
+    workbench::WorkspaceState persistable = candidate;
+    std::erase_if(persistable.terminalWorkspaces, [](const workbench::TerminalWorkspaceLayout &workspace) {
+        return std::ranges::any_of(workspace.restoreIntents, [](const workbench::TerminalRestoreIntent &intent) {
+            return intent.kind == workbench::TerminalRestoreKind::Transient;
+        });
+    });
+    const auto active = std::ranges::find(persistable.terminalWorkspaces, persistable.activeTerminalWorkspaceId,
+                                          &workbench::TerminalWorkspaceLayout::id);
+    if (active == persistable.terminalWorkspaces.end())
+    {
+        persistable.activeTerminalWorkspaceId =
+            persistable.terminalWorkspaces.empty() ? std::string{} : persistable.terminalWorkspaces.front().id;
+    }
+    if (!workbench::validWorkspaceState(persistable))
+    {
+        qCWarning(appControllerLog) << "Terminal workspace candidate failed domain validation"
+                                    << "profiles=" << persistable.profiles.size()
+                                    << "workspaces=" << persistable.terminalWorkspaces.size()
+                                    << "activeWorkspaceEmpty=" << persistable.activeTerminalWorkspaceId.empty();
+        for (const workbench::TerminalWorkspaceLayout &workspace : persistable.terminalWorkspaces)
+        {
+            qCWarning(appControllerLog) << "workspaceValid=" << workbench::validTerminalWorkspaceLayout(workspace)
+                                        << "nodes=" << workspace.nodes.size()
+                                        << "intents=" << workspace.restoreIntents.size();
+        }
+    }
+    const auto saved = m_workspaceStateStore.save(persistable);
+    if (!saved)
+    {
+        qCWarning(appControllerLog) << "Unable to persist terminal workspace topology"
+                                    << "error=" << static_cast<int>(saved.error());
+        return false;
+    }
+    return true;
+}
+
+void AppController::emitActiveTerminalContextChanged()
+{
+    updateTelemetryVisibility();
+    emit activeTerminalTabChanged();
+    emit terminalWorkspaceChanged();
+    emit remoteTelemetryChanged();
+    emit sshActiveChanged();
+    emit terminalSearchChanged();
+    emit terminalHistoryChanged();
+    emit sftpChanged();
+    showActiveTab();
+}
+
 void AppController::showActiveTab()
 {
-    if (m_terminal == nullptr)
-    {
-        return;
-    }
+    showAllTerminalViewports();
     const TerminalTab *tab = activeTab();
-    if (tab == nullptr)
+    if (tab != nullptr)
+    {
+        m_terminal = m_terminalViewports.value(tab->paneId);
+    }
+    if (m_terminal != nullptr && tab == nullptr)
     {
         m_terminal->setSnapshot({});
         m_terminal->setStatusText(tr("No terminal session"));
         m_terminal->setKeywordHighlightRules({});
+    }
+}
+
+void AppController::showTabInViewport(const TerminalTab &tab)
+{
+    ui::TerminalItem *terminal = m_terminalViewports.value(tab.paneId);
+    if (terminal == nullptr)
+    {
         return;
     }
-    m_terminal->setSnapshot(tab->snapshot);
-    m_terminal->setStatusText(tab->status);
-    m_terminal->setKeywordHighlightRules(tab->keywordHighlightEnabled ? keywordRulesVariant(*tab) : QVariantList{});
-    m_terminal->requestCurrentSize();
+    terminal->setSnapshot(tab.snapshot);
+    terminal->setStatusText(tab.status);
+    terminal->setKeywordHighlightRules(tab.keywordHighlightEnabled ? keywordRulesVariant(tab) : QVariantList{});
+    terminal->requestCurrentSize();
+}
+
+void AppController::showAllTerminalViewports()
+{
+    for (const auto &tab : m_tabs)
+    {
+        showTabInViewport(*tab);
+    }
 }
 
 QVariantList AppController::keywordRulesVariant(const TerminalTab &tab) const
@@ -6681,6 +7344,95 @@ void AppController::loadWorkspaceState()
         return;
     }
     m_workspaceState = std::move(*state);
+    restoreTerminalWorkspaces();
+}
+
+void AppController::restoreTerminalWorkspaces()
+{
+    for (const workbench::TerminalWorkspaceLayout &workspace : m_workspaceState.terminalWorkspaces)
+    {
+        for (const workbench::TerminalLayoutNode &node : workspace.nodes)
+        {
+            if (node.kind != workbench::TerminalLayoutNodeKind::Leaf)
+            {
+                continue;
+            }
+            const auto intent = std::ranges::find(workspace.restoreIntents, node.restoreIntentId,
+                                                  &workbench::TerminalRestoreIntent::id);
+            if (intent == workspace.restoreIntents.end() || intent->kind == workbench::TerminalRestoreKind::Transient)
+            {
+                continue;
+            }
+            auto tab = std::make_unique<TerminalTab>();
+            tab->id = utf8QString(intent->id);
+            tab->workspaceId = utf8QString(workspace.id);
+            tab->paneId = utf8QString(node.id);
+            tab->title = utf8QString(intent->title);
+            if (intent->kind == workbench::TerminalRestoreKind::Local)
+            {
+                tab->kind = TerminalTabKind::Local;
+                tab->title = tab->title.isEmpty() ? tr("PowerShell %1").arg(m_nextLocalTabNumber) : tab->title;
+                ++m_nextLocalTabNumber;
+                tab->status = tr("Restoring local terminal...");
+                tab->local = m_localSessionFactory();
+                if (!tab->local)
+                {
+                    continue;
+                }
+                initializeSessionLog(*tab);
+                tab->local->setOutputSink(tab->sessionLog);
+                connectLocalTabSignals(*tab);
+                const QString tabId = tab->id;
+                m_tabs.push_back(std::move(tab));
+                TerminalTab *created = findTab(tabId);
+                if (created != nullptr)
+                {
+                    const std::error_code error = created->local->start({.columns = 100, .rows = 30});
+                    if (error)
+                    {
+                        created->status =
+                            tr("Unable to restore local terminal: %1").arg(QString::fromStdString(error.message()));
+                    }
+                }
+                continue;
+            }
+
+            tab->kind = TerminalTabKind::Ssh;
+            tab->sourceProfileId = utf8QString(intent->profileId);
+            const auto profile = std::ranges::find(m_profiles, intent->profileId, &ssh::SshProfile::id);
+            if (profile != m_profiles.end())
+            {
+                tab->title = tab->title.isEmpty() ? utf8QString(profile->name) : tab->title;
+                tab->identity = QStringLiteral("%1@%2:%3")
+                                    .arg(utf8QString(profile->username), utf8QString(profile->host))
+                                    .arg(profile->port);
+                tab->address = utf8QString(profile->host);
+                tab->keywordHighlightRules = profile->keywordHighlightRules;
+                tab->keywordHighlightEnabled = profile->keywordHighlightEnabled;
+                tab->status = tr("SSH workspace restored; reconnect when ready.");
+            }
+            else
+            {
+                tab->status = tr("The saved SSH host for this workspace no longer exists.");
+            }
+            applyWorkspaceState(*tab);
+            tab->ssh = std::make_unique<ssh::SshTerminalSession>();
+            initializeSessionLog(*tab);
+            tab->ssh->setOutputSink(tab->sessionLog);
+            connectSshTabSignals(*tab);
+            m_tabs.push_back(std::move(tab));
+        }
+    }
+
+    QString activeWorkspace = utf8QString(m_workspaceState.activeTerminalWorkspaceId);
+    if (findTerminalWorkspace(activeWorkspace) == nullptr && !m_workspaceState.terminalWorkspaces.empty())
+    {
+        activeWorkspace = utf8QString(m_workspaceState.terminalWorkspaces.front().id);
+    }
+    if (!activeWorkspace.isEmpty())
+    {
+        static_cast<void>(activateTerminalTab(activeWorkspace));
+    }
 }
 
 void AppController::applyWorkspaceState(TerminalTab &tab) const
@@ -6738,7 +7490,7 @@ void AppController::persistWorkspaceState(const TerminalTab &tab, const bool sho
     state.sftpShowTypeColumn = tab.sftpShowTypeColumn;
     state.workbenchWidth = tab.workbenchWidth;
     state.composerHeight = tab.composerHeight;
-    if (!m_workspaceStateStore.save(candidate))
+    if (!saveWorkspaceStateCandidate(candidate))
     {
         qCWarning(appControllerLog) << "Unable to persist safe workspace state";
         return;

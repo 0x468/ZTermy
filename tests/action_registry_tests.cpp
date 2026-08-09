@@ -62,6 +62,13 @@ void ActionRegistryTests::exposesStableMetadataAndContext()
     const QVariantMap sessionLog = actionById(registry.actions(true), QStringLiteral("terminal.sessionLog"));
     QVERIFY(sessionLog.value(QStringLiteral("enabled")).toBool());
     QVERIFY(sessionLog.value(QStringLiteral("paletteVisible")).toBool());
+
+    const QVariantMap split = actionById(registry.actions(true), QStringLiteral("terminal.splitHorizontal"));
+    QCOMPARE(split.value(QStringLiteral("shortcut")).toString(), QStringLiteral("Alt+Shift+H"));
+    QVERIFY(split.value(QStringLiteral("enabled")).toBool());
+    QVERIFY(!actionById(registry.actions(false), QStringLiteral("terminal.focusNextPane"))
+                 .value(QStringLiteral("enabled"))
+                 .toBool());
 }
 
 void ActionRegistryTests::normalizesOverridesAndSupportsUnbind()

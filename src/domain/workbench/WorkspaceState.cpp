@@ -66,7 +66,11 @@ bool validRestoreIntent(const TerminalRestoreIntent &intent) noexcept
     {
         return false;
     }
-    return intent.kind == TerminalRestoreKind::Local ? intent.profileId.empty() : !intent.profileId.empty();
+    if (intent.kind == TerminalRestoreKind::SshProfile)
+    {
+        return !intent.profileId.empty();
+    }
+    return intent.profileId.empty();
 }
 
 bool uniqueTerminalIds(const TerminalWorkspaceLayout &layout) noexcept

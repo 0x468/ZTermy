@@ -4,12 +4,13 @@ endif()
 
 file(GLOB icon_files LIST_DIRECTORIES FALSE "${ZTERMY_ICON_DIRECTORY}/*.svg")
 list(LENGTH icon_files icon_count)
-if(NOT icon_count EQUAL 49)
-    message(FATAL_ERROR "Expected 49 production interface icons, found ${icon_count}")
+if(NOT icon_count EQUAL 51)
+    message(FATAL_ERROR "Expected 51 production interface icons, found ${icon_count}")
 endif()
 
 foreach(required_icon IN ITEMS activity.svg application.svg bookmark.svg close.svg cpu.svg disk.svg highlight.svg
-                               memory.svg minus.svg network.svg new-file.svg pause.svg security.svg shortcuts.svg settings.svg)
+                               memory.svg minus.svg network.svg new-file.svg pause.svg security.svg shortcuts.svg settings.svg
+                               split-horizontal.svg split-vertical.svg)
     if(NOT EXISTS "${ZTERMY_ICON_DIRECTORY}/${required_icon}")
         message(FATAL_ERROR "Missing required interface icon: ${required_icon}")
     endif()

@@ -32,7 +32,16 @@ std::string bytes(const QString &value)
 
 QString restoreKindToken(const TerminalRestoreKind kind)
 {
-    return kind == TerminalRestoreKind::Local ? QStringLiteral("local") : QStringLiteral("ssh-profile");
+    switch (kind)
+    {
+        case TerminalRestoreKind::Local:
+            return QStringLiteral("local");
+        case TerminalRestoreKind::SshProfile:
+            return QStringLiteral("ssh-profile");
+        case TerminalRestoreKind::Transient:
+            return QStringLiteral("transient");
+    }
+    return {};
 }
 
 QString nodeKindToken(const TerminalLayoutNodeKind kind)
@@ -95,6 +104,10 @@ std::optional<TerminalRestoreKind> parseRestoreKind(const QJsonValue &value)
     if (token == QStringLiteral("ssh-profile"))
     {
         return TerminalRestoreKind::SshProfile;
+    }
+    if (token == QStringLiteral("transient"))
+    {
+        return TerminalRestoreKind::Transient;
     }
     return std::nullopt;
 }
