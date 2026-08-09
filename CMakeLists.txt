@@ -280,6 +280,16 @@ add_library(ztermy_sftp_domain STATIC
     src/domain/sftp/TransferQueue.h
 )
 
+add_library(ztermy_forwarding_domain STATIC
+    src/domain/forwarding/PortForwardingRule.cpp
+    src/domain/forwarding/PortForwardingRule.h
+)
+
+add_library(ztermy_forwarding_persistence STATIC
+    src/infrastructure/forwarding/PortForwardingRuleStore.cpp
+    src/infrastructure/forwarding/PortForwardingRuleStore.h
+)
+
 add_library(ztermy_ssh_persistence STATIC
     src/infrastructure/ssh/KnownHostsStore.cpp
     src/infrastructure/ssh/KnownHostsStore.h
@@ -324,6 +334,16 @@ target_include_directories(ztermy_remote_telemetry PUBLIC src)
 
 target_compile_features(ztermy_sftp_domain PUBLIC cxx_std_23)
 target_include_directories(ztermy_sftp_domain PUBLIC src)
+
+target_compile_features(ztermy_forwarding_domain PUBLIC cxx_std_23)
+target_include_directories(ztermy_forwarding_domain PUBLIC src)
+
+target_compile_features(ztermy_forwarding_persistence PUBLIC cxx_std_23)
+target_include_directories(ztermy_forwarding_persistence PUBLIC src)
+target_link_libraries(ztermy_forwarding_persistence
+    PUBLIC ztermy_forwarding_domain
+    PRIVATE Qt6::Core
+)
 
 target_compile_features(ztermy_ssh_persistence PUBLIC cxx_std_23)
 target_include_directories(ztermy_ssh_persistence PUBLIC src)
@@ -1347,6 +1367,27 @@ if(BUILD_TESTING)
 
     add_test(NAME sftp-types COMMAND ztermy_sftp_types_tests)
 
+    qt_add_executable(ztermy_port_forwarding_rule_store_tests
+        tests/port_forwarding_rule_store_tests.cpp
+    )
+
+    target_compile_features(ztermy_port_forwarding_rule_store_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_port_forwarding_rule_store_tests PRIVATE
+        ztermy_forwarding_persistence
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_port_forwarding_rule_store_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME port-forwarding-rule-store COMMAND ztermy_port_forwarding_rule_store_tests)
+
     qt_add_executable(ztermy_transfer_queue_tests
         tests/transfer_queue_tests.cpp
     )
@@ -2237,6 +2278,7 @@ if(BUILD_TESTING)
             ztermy_ssh_real_host_tests
             ztermy_ssh_terminal_session_tests
             ztermy_sftp_types_tests
+            ztermy_port_forwarding_rule_store_tests
             ztermy_session_log_writer_tests
             ztermy_transfer_queue_tests
             ztermy_sftp_session_tests
