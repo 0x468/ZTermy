@@ -51,7 +51,7 @@ struct NoteSearchResult final
 class NoteStore final
 {
 public:
-    explicit NoteStore(QString rootPath);
+    explicit NoteStore(const QString &rootPath);
 
     [[nodiscard]] const QString &rootPath() const noexcept;
     [[nodiscard]] std::expected<std::vector<NoteEntry>, NoteStoreError> entries() const;

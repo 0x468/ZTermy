@@ -18,7 +18,6 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
-#include <QMetaObject>
 #include <QPointer>
 #include <QSet>
 #include <QStandardPaths>
@@ -72,7 +71,7 @@ public:
         }
         catch (...)
         {
-            // Terminal output must never be allowed to unwind into a session worker.
+            qCCritical(appControllerLog) << "Terminal output fanout suppressed an exception";
         }
     }
 
@@ -1497,6 +1496,8 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
                      &AppController::applyTerminalHistoryTaskResult, Qt::QueuedConnection);
     QObject::connect(this, &AppController::noteSearchTaskCompleted, this, &AppController::applyNoteSearchTaskResult,
                      Qt::QueuedConnection);
+    QObject::connect(this, &AppController::scriptOutputObserved, this, &AppController::observeScriptOutput,
+                     Qt::QueuedConnection);
     initializePortForwardingSignalBridges();
     loadHostProfiles();
     loadPortForwardingRules();
@@ -1554,6 +1555,8 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     QObject::connect(this, &AppController::terminalHistoryTaskCompleted, this,
                      &AppController::applyTerminalHistoryTaskResult, Qt::QueuedConnection);
     QObject::connect(this, &AppController::noteSearchTaskCompleted, this, &AppController::applyNoteSearchTaskResult,
+                     Qt::QueuedConnection);
+    QObject::connect(this, &AppController::scriptOutputObserved, this, &AppController::observeScriptOutput,
                      Qt::QueuedConnection);
     initializePortForwardingSignalBridges();
     loadHostProfiles();
@@ -3702,7 +3705,7 @@ bool AppController::saveScript(const QVariantMap &value)
         bool validTimeout = false;
         const qlonglong timeout = stepValue.value(QStringLiteral("timeoutMs")).toLongLong(&validTimeout);
         if (!continuation || !validTimeout || timeout < 0
-            || timeout > static_cast<qlonglong>(std::numeric_limits<std::uint32_t>::max()))
+            || std::cmp_greater(timeout, std::numeric_limits<std::uint32_t>::max()))
         {
             setQuickCommandOperationError(tr("The script contains an invalid step."));
             return false;
@@ -5065,7 +5068,8 @@ void AppController::applyTerminalHistoryTaskResult(const QString &tabId, const q
     emit terminalHistoryChanged();
 }
 
-void AppController::applyNoteSearchTaskResult(const quint64 requestId, NoteSearchResults results, const QString &error)
+void AppController::applyNoteSearchTaskResult(const quint64 requestId, const NoteSearchResults &results,
+                                              const QString &error)
 {
     if (requestId != m_noteSearchRequestId)
     {
@@ -7154,12 +7158,7 @@ void AppController::initializeTerminalOutputSink(TerminalTab &tab)
                 return;
             }
             const QByteArray copy(reinterpret_cast<const char *>(bytes.data()), static_cast<qsizetype>(bytes.size()));
-            QMetaObject::invokeMethod(
-                this,
-                [this, tabId, copy] {
-                    observeScriptOutput(tabId, copy);
-                },
-                Qt::QueuedConnection);
+            emit scriptOutputObserved(tabId, copy);
         });
     if (tab.local)
     {

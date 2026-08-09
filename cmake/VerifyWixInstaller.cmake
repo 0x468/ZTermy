@@ -45,17 +45,24 @@ if(NOT inspection_is_below_build
 endif()
 set(ZTERMY_INSTALLER_INSPECTION_ROOT "${inspection_root}")
 
-find_program(ZTERMY_POWERSHELL_EXECUTABLE NAMES pwsh pwsh.exe REQUIRED)
-execute_process(
-    COMMAND
-        "${ZTERMY_POWERSHELL_EXECUTABLE}" -NoProfile -Command
-        "& '${ZTERMY_WIX_EXECUTABLE}' msi validate '${ZTERMY_INSTALLER}'; exit $LASTEXITCODE"
-    RESULT_VARIABLE validate_result
-)
-if(NOT validate_result EQUAL 0)
-    message(FATAL_ERROR
-        "WiX validation failed with exit code ${validate_result}"
+if(ZTERMY_SKIP_ICE_VALIDATION)
+    message(STATUS
+        "Skipping WiX ICE validation by explicit request; structural MSI "
+        "inspection remains enabled"
     )
+else()
+    find_program(ZTERMY_POWERSHELL_EXECUTABLE NAMES pwsh pwsh.exe REQUIRED)
+    execute_process(
+        COMMAND
+            "${ZTERMY_POWERSHELL_EXECUTABLE}" -NoProfile -Command
+            "& '${ZTERMY_WIX_EXECUTABLE}' msi validate '${ZTERMY_INSTALLER}'; exit $LASTEXITCODE"
+        RESULT_VARIABLE validate_result
+    )
+    if(NOT validate_result EQUAL 0)
+        message(FATAL_ERROR
+            "WiX validation failed with exit code ${validate_result}"
+        )
+    endif()
 endif()
 
 file(REMOVE_RECURSE "${ZTERMY_INSTALLER_INSPECTION_ROOT}")

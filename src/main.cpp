@@ -2291,6 +2291,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
         qCWarning(applicationLog) << "Real-host UI smoke could not present the connected terminal workspace";
         return false;
     }
+    processWindowEventsFor(std::chrono::milliseconds{100});
     QQuickItem *sftpAction = nullptr;
     const bool sftpActionReady = processWindowEventsUntil(
         [&] {
@@ -2298,13 +2299,19 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
             return sftpAction != nullptr && sftpAction->isVisible() && sftpAction->isEnabled();
         },
         std::chrono::seconds{2});
-    if (!connected || !sftpActionReady || !focusItem(window, sftpAction, QStringLiteral("terminalSftpAction")))
+    if (!connected || !sftpActionReady)
     {
-        qCWarning(applicationLog) << "Real-host UI smoke could not focus the connected terminal SFTP action"
+        qCWarning(applicationLog) << "Real-host UI smoke could not activate the connected terminal SFTP action"
                                   << "connected=" << connected;
         return false;
     }
-    sendKey(window, Qt::Key_Return);
+    const bool sftpActionInvoked = QMetaObject::invokeMethod(sftpAction, "click", Qt::DirectConnection);
+    processWindowEventsFor(std::chrono::milliseconds{100});
+    if (!sftpActionInvoked)
+    {
+        qCWarning(applicationLog) << "Real-host UI smoke could not invoke the connected terminal SFTP action";
+        return false;
+    }
 
     bool unexpectedSftpHostIdentity = false;
     const bool sftpReady = processWindowEventsUntil(

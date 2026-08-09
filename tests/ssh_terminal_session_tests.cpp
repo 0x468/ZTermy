@@ -537,7 +537,7 @@ void SshTerminalSessionTests::connectsAfterExplicitHostKeyConfirmation()
     QTRY_COMPARE_WITH_TIMEOUT(confirmationSpy.count(), 1, 10s);
 
     const QList<QVariant> confirmation = confirmationSpy.takeFirst();
-    QCOMPARE(confirmation.at(1).toString(), QString::fromLatin1(expectedFingerprint));
+    QCOMPARE(confirmation.at(2).toString(), QString::fromLatin1(expectedFingerprint));
     session.confirmHostKey(true);
 
     QTRY_VERIFY_WITH_TIMEOUT(
@@ -554,9 +554,30 @@ void SshTerminalSessionTests::connectsAfterExplicitHostKeyConfirmation()
         15s);
     QTRY_VERIFY_WITH_TIMEOUT(snapshotSpy.count() > 0, 5s);
 
+    const auto snapshotSelectionMatches = [&snapshotSpy](const bool expected) {
+        if (snapshotSpy.isEmpty())
+        {
+            return false;
+        }
+        const auto snapshot =
+            qvariant_cast<ztermy::terminal::TerminalSnapshotPtr>(snapshotSpy.constLast().constFirst());
+        if (!snapshot)
+        {
+            return false;
+        }
+        for (std::uint16_t column = 0; column < 6; ++column)
+        {
+            if (snapshot->cell(column, 0).selected != expected)
+            {
+                return false;
+            }
+        }
+        return true;
+    };
+
     snapshotSpy.clear();
     session.requestSelection(0, 0, 5, 0, false);
-    QTRY_VERIFY_WITH_TIMEOUT(snapshotSpy.count() > 0, 5s);
+    QTRY_VERIFY_WITH_TIMEOUT(snapshotSelectionMatches(true), 5s);
     const auto selectedSnapshot =
         qvariant_cast<ztermy::terminal::TerminalSnapshotPtr>(snapshotSpy.constLast().constFirst());
     QVERIFY(selectedSnapshot);
@@ -566,8 +587,9 @@ void SshTerminalSessionTests::connectsAfterExplicitHostKeyConfirmation()
     }
 
     session.copySelection();
+    snapshotSpy.clear();
     session.clearSelection();
-    QTRY_VERIFY_WITH_TIMEOUT(snapshotSpy.count() > 1, 5s);
+    QTRY_VERIFY_WITH_TIMEOUT(snapshotSelectionMatches(false), 5s);
     const auto clearedSnapshot =
         qvariant_cast<ztermy::terminal::TerminalSnapshotPtr>(snapshotSpy.constLast().constFirst());
     QVERIFY(clearedSnapshot);
@@ -632,7 +654,7 @@ void SshTerminalSessionTests::readsRemoteShellHistoryOnRealHost()
 
     QVERIFY(!session.start(std::move(request), {.columns = 80, .rows = 24}));
     QTRY_COMPARE_WITH_TIMEOUT(confirmationSpy.count(), 1, 10s);
-    QCOMPARE(confirmationSpy.constFirst().at(1).toString(), QString::fromLatin1(expectedFingerprint));
+    QCOMPARE(confirmationSpy.constFirst().at(2).toString(), QString::fromLatin1(expectedFingerprint));
     session.confirmHostKey(true);
     QTRY_VERIFY_WITH_TIMEOUT(std::ranges::any_of(runningSpy,
                                                  [](const QList<QVariant> &arguments) {
@@ -682,7 +704,7 @@ void SshTerminalSessionTests::collectsRemoteTelemetryOnRealHost()
     };
     QVERIFY(!session.start(std::move(request), {.columns = 80, .rows = 24}));
     QTRY_COMPARE_WITH_TIMEOUT(confirmationSpy.count(), 1, 10s);
-    QCOMPARE(confirmationSpy.constFirst().at(1).toString(), QString::fromLatin1(expectedFingerprint));
+    QCOMPARE(confirmationSpy.constFirst().at(2).toString(), QString::fromLatin1(expectedFingerprint));
     session.confirmHostKey(true);
     QTRY_VERIFY_WITH_TIMEOUT(std::ranges::any_of(runningSpy,
                                                  [](const QList<QVariant> &arguments) {
@@ -743,7 +765,7 @@ void SshTerminalSessionTests::switchesTerminalEncodingOnRealHost()
 
     QVERIFY(!session.start(std::move(request), {.columns = 80, .rows = 24}));
     QTRY_COMPARE_WITH_TIMEOUT(confirmationSpy.count(), 1, 10s);
-    QCOMPARE(confirmationSpy.constFirst().at(1).toString(), QString::fromLatin1(expectedFingerprint));
+    QCOMPARE(confirmationSpy.constFirst().at(2).toString(), QString::fromLatin1(expectedFingerprint));
     session.confirmHostKey(true);
     QTRY_VERIFY_WITH_TIMEOUT(std::ranges::any_of(runningSpy,
                                                  [](const QList<QVariant> &arguments) {
@@ -817,7 +839,7 @@ void SshTerminalSessionTests::appliesSessionOptionsOnRealHost()
 
     QVERIFY(!session.start(std::move(request), {.columns = 80, .rows = 24}));
     QTRY_COMPARE_WITH_TIMEOUT(confirmationSpy.count(), 1, 10s);
-    QCOMPARE(confirmationSpy.constFirst().at(1).toString(), QString::fromLatin1(expectedFingerprint));
+    QCOMPARE(confirmationSpy.constFirst().at(2).toString(), QString::fromLatin1(expectedFingerprint));
     session.confirmHostKey(true);
     QTRY_VERIFY_WITH_TIMEOUT(std::ranges::any_of(runningSpy,
                                                  [](const QList<QVariant> &arguments) {
@@ -874,7 +896,7 @@ void SshTerminalSessionTests::reportsAuthenticationRejectionOnRealHost()
 
     QVERIFY(!session.start(std::move(request), {.columns = 80, .rows = 24}));
     QTRY_COMPARE_WITH_TIMEOUT(confirmationSpy.count(), 1, 10s);
-    QCOMPARE(confirmationSpy.constFirst().at(1).toString(), QString::fromLatin1(expectedFingerprint));
+    QCOMPARE(confirmationSpy.constFirst().at(2).toString(), QString::fromLatin1(expectedFingerprint));
     session.confirmHostKey(true);
     QTRY_VERIFY_WITH_TIMEOUT(
         std::ranges::any_of(failureSpy,
@@ -919,7 +941,7 @@ void SshTerminalSessionTests::reportsRemoteCloseOnRealHost()
 
     QVERIFY(!session.start(std::move(request), {.columns = 80, .rows = 24}));
     QTRY_COMPARE_WITH_TIMEOUT(confirmationSpy.count(), 1, 10s);
-    QCOMPARE(confirmationSpy.constFirst().at(1).toString(), QString::fromLatin1(expectedFingerprint));
+    QCOMPARE(confirmationSpy.constFirst().at(2).toString(), QString::fromLatin1(expectedFingerprint));
     session.confirmHostKey(true);
     QTRY_VERIFY_WITH_TIMEOUT(std::ranges::any_of(runningSpy,
                                                  [](const QList<QVariant> &arguments) {
@@ -981,7 +1003,7 @@ void SshTerminalSessionTests::authenticatesWithInteractivePasswordOnRealHost()
 
     QVERIFY(!session.start(std::move(request), {.columns = 80, .rows = 24}));
     QTRY_COMPARE_WITH_TIMEOUT(confirmationSpy.count(), 1, 10s);
-    QCOMPARE(confirmationSpy.constFirst().at(1).toString(), QString::fromLatin1(expectedFingerprint));
+    QCOMPARE(confirmationSpy.constFirst().at(2).toString(), QString::fromLatin1(expectedFingerprint));
     session.confirmHostKey(true);
     QTRY_VERIFY_WITH_TIMEOUT(std::ranges::any_of(runningSpy,
                                                  [](const QList<QVariant> &arguments) {
@@ -1029,7 +1051,7 @@ void SshTerminalSessionTests::authenticatesWithAgentOnRealHost()
 
     QVERIFY(!session.start(std::move(request), {.columns = 80, .rows = 24}));
     QTRY_COMPARE_WITH_TIMEOUT(confirmationSpy.count(), 1, 10s);
-    QCOMPARE(confirmationSpy.constFirst().at(1).toString(), QString::fromLatin1(expectedFingerprint));
+    QCOMPARE(confirmationSpy.constFirst().at(2).toString(), QString::fromLatin1(expectedFingerprint));
     session.confirmHostKey(true);
     QTRY_VERIFY_WITH_TIMEOUT(std::ranges::any_of(runningSpy,
                                                  [](const QList<QVariant> &arguments) {
@@ -1078,7 +1100,7 @@ void SshTerminalSessionTests::reportsUnavailableAgentOnRealHost()
 
     QVERIFY(!session.start(std::move(request), {.columns = 80, .rows = 24}));
     QTRY_COMPARE_WITH_TIMEOUT(confirmationSpy.count(), 1, 10s);
-    QCOMPARE(confirmationSpy.constFirst().at(1).toString(), QString::fromLatin1(expectedFingerprint));
+    QCOMPARE(confirmationSpy.constFirst().at(2).toString(), QString::fromLatin1(expectedFingerprint));
     session.confirmHostKey(true);
     QTRY_VERIFY_WITH_TIMEOUT(
         std::ranges::any_of(failureSpy,
@@ -1132,7 +1154,7 @@ void SshTerminalSessionTests::measuresInteractiveInputQueueLatency()
     };
     QVERIFY(!session.start(std::move(request), {.columns = 80, .rows = 24}));
     QTRY_COMPARE_WITH_TIMEOUT(confirmationSpy.count(), 1, 10s);
-    QCOMPARE(confirmationSpy.constFirst().at(1).toString(), QString::fromLatin1(expectedFingerprint));
+    QCOMPARE(confirmationSpy.constFirst().at(2).toString(), QString::fromLatin1(expectedFingerprint));
     session.confirmHostKey(true);
     QTRY_VERIFY_WITH_TIMEOUT(observedRunningState(true), 15s);
 
@@ -1208,7 +1230,7 @@ void SshTerminalSessionTests::survivesRepeatedConnectDisconnectCycles()
 
     QVERIFY(!session.start(request(), {.columns = 80, .rows = 24}));
     QTRY_COMPARE_WITH_TIMEOUT(confirmationSpy.count(), 1, 10s);
-    QCOMPARE(confirmationSpy.constFirst().at(1).toString(), QString::fromLatin1(expectedFingerprint));
+    QCOMPARE(confirmationSpy.constFirst().at(2).toString(), QString::fromLatin1(expectedFingerprint));
     session.confirmHostKey(true);
     QTRY_VERIFY_WITH_TIMEOUT(observedRunningState(runningSpy, true), 15s);
     session.stop();

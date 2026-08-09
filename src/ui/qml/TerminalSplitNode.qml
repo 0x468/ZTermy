@@ -92,7 +92,8 @@ Item {
 
                 function attachToController() {
                     const paneId = leaf.node.id || "";
-                    if (attachedController && attachedPaneId.length > 0 && (attachedController !== root.controller || attachedPaneId !== paneId)) {
+                    const attachmentChanged = attachedController !== root.controller || attachedPaneId !== paneId;
+                    if (attachedController && attachedPaneId.length > 0 && attachmentChanged) {
                         attachedController.detachTerminalViewport(attachedPaneId, viewport);
                         attachedController = null;
                         attachedPaneId = "";
@@ -103,7 +104,7 @@ Item {
                     root.controller.attachTerminalViewport(paneId, viewport);
                     attachedController = root.controller;
                     attachedPaneId = paneId;
-                    if (leaf.node.active) {
+                    if (attachmentChanged && leaf.node.active) {
                         forceActiveFocus();
                     }
                 }

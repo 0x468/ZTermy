@@ -1,6 +1,6 @@
 # V2.13 scope: scripts and local notes
 
-Status: frozen for `0.2.13`
+Status: implemented and release-gated for `0.2.13`
 
 V2.13 turns the existing command-snippet and structured-recording surfaces
 into a durable script library and adds a local Markdown notes workspace. Both
@@ -74,4 +74,3 @@ features remain local-first, bounded, and independent from credentials.
 - Manual acceptance covers editing and importing scripts/notes, executing a
   rendered multi-step script on local and real SSH targets, timeout/cancel/tab
   close, Unicode Markdown, search cancellation, and restart recovery.
-

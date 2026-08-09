@@ -454,6 +454,7 @@ private:
     Q_SIGNAL void terminalHistoryTaskCompleted(const QString &tabId, quint64 requestId, ShellHistoryEntries entries,
                                                const QString &error);
     Q_SIGNAL void noteSearchTaskCompleted(quint64 requestId, NoteSearchResults results, const QString &error);
+    Q_SIGNAL void scriptOutputObserved(const QString &tabId, const QByteArray &bytes);
     Q_SIGNAL void portForwardingSnapshotReady(const QString &ruleId, int state, int failure, qulonglong activeClients,
                                               qulonglong bytesFromClients, qulonglong bytesToClients,
                                               qulonglong rejectedClients);
@@ -598,7 +599,7 @@ private:
     [[nodiscard]] QVariantMap shortcutResult(const actions::ShortcutValidation &validation) const;
     void applyTerminalHistoryTaskResult(const QString &tabId, quint64 requestId, ShellHistoryEntries entries,
                                         const QString &error);
-    void applyNoteSearchTaskResult(quint64 requestId, NoteSearchResults results, const QString &error);
+    void applyNoteSearchTaskResult(quint64 requestId, const NoteSearchResults &results, const QString &error);
     void setNoteOperationError(QString message);
     void setQuickCommandOperationError(QString message);
     [[nodiscard]] bool persistApplicationSettings(const config::ApplicationSettings &settings);

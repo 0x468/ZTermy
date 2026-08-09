@@ -114,7 +114,7 @@ collectEntries(const QString &absoluteDirectory, const QString &relativeDirector
             continue;
         }
         if (!validRelativePath(relativePath, true) || child.size() < 0
-            || static_cast<std::uint64_t>(child.size()) > ztermy::workbench::maximumNoteBytes)
+            || child.size() > static_cast<qint64>(ztermy::workbench::maximumNoteBytes))
         {
             return std::unexpected(child.size() > static_cast<qint64>(ztermy::workbench::maximumNoteBytes)
                                        ? ztermy::workbench::NoteStoreError::noteTooLarge
@@ -156,7 +156,8 @@ collectEntries(const QString &absoluteDirectory, const QString &relativeDirector
 namespace ztermy::workbench
 {
 
-NoteStore::NoteStore(QString rootPath) : m_rootPath(QDir::fromNativeSeparators(QFileInfo(rootPath).absoluteFilePath()))
+NoteStore::NoteStore(const QString &rootPath)
+    : m_rootPath(QDir::fromNativeSeparators(QFileInfo(rootPath).absoluteFilePath()))
 {
     m_rootPath = QDir::cleanPath(m_rootPath);
 }
@@ -190,8 +191,7 @@ std::expected<QString, NoteStoreError> NoteStore::resolvedPath(const QString &re
     {
         return std::unexpected(root.error());
     }
-    const QString candidate =
-        QDir::cleanPath(QDir::fromNativeSeparators(QDir(m_rootPath).absoluteFilePath(relativePath)));
+    QString candidate = QDir::cleanPath(QDir::fromNativeSeparators(QDir(m_rootPath).absoluteFilePath(relativePath)));
     if (!insideRoot(m_rootPath, candidate))
     {
         return std::unexpected(NoteStoreError::invalidPath);
@@ -256,7 +256,7 @@ std::expected<void, NoteStoreError> NoteStore::save(const QString &relativePath,
         return std::unexpected(path.error());
     }
     const QByteArray encoded = content.toUtf8();
-    if (static_cast<std::size_t>(encoded.size()) > maximumNoteBytes)
+    if (encoded.size() > static_cast<qsizetype>(maximumNoteBytes))
     {
         return std::unexpected(NoteStoreError::noteTooLarge);
     }
@@ -389,7 +389,7 @@ std::expected<QString, NoteStoreError> NoteStore::importNote(const QString &sour
     {
         return std::unexpected(content.error());
     }
-    const QString destination =
+    QString destination =
         destinationFolder.isEmpty() ? source.fileName() : destinationFolder + QLatin1Char('/') + source.fileName();
     if (auto saved = save(destination, *content); !saved)
     {

@@ -129,7 +129,7 @@ constexpr qint64 maximumFileSize = qint64{16} * 1024 * 1024;
 [[nodiscard]] std::optional<std::uint32_t> parseUnsigned(const QJsonValue &value)
 {
     const auto parsed = parseTimestamp(value);
-    if (!parsed || *parsed > std::numeric_limits<std::uint32_t>::max())
+    if (!parsed || std::cmp_greater(*parsed, std::numeric_limits<std::uint32_t>::max()))
     {
         return std::nullopt;
     }
@@ -157,7 +157,7 @@ constexpr qint64 maximumFileSize = qint64{16} * 1024 * 1024;
     }
     std::vector<std::string> choices;
     choices.reserve(static_cast<std::size_t>(choicesValue.toArray().size()));
-    for (const QJsonValue &choice : choicesValue.toArray())
+    for (const QJsonValue choice : choicesValue.toArray())
     {
         if (!choice.isString())
         {
@@ -250,7 +250,7 @@ constexpr qint64 maximumFileSize = qint64{16} * 1024 * 1024;
                                                .createdUtcMs = *createdUtcMs,
                                                .modifiedUtcMs = *modifiedUtcMs};
     script.variables.reserve(static_cast<std::size_t>(variableValues.toArray().size()));
-    for (const QJsonValue &variableValue : variableValues.toArray())
+    for (const QJsonValue variableValue : variableValues.toArray())
     {
         auto variable = parseVariable(variableValue);
         if (!variable)
@@ -260,7 +260,7 @@ constexpr qint64 maximumFileSize = qint64{16} * 1024 * 1024;
         script.variables.push_back(std::move(*variable));
     }
     script.steps.reserve(static_cast<std::size_t>(stepValues.toArray().size()));
-    for (const QJsonValue &stepValue : stepValues.toArray())
+    for (const QJsonValue stepValue : stepValues.toArray())
     {
         auto step = parseStep(stepValue);
         if (!step)
@@ -369,7 +369,7 @@ std::expected<std::vector<ScriptDefinition>, ScriptStoreError> ScriptStore::load
     }
     std::vector<ScriptDefinition> scripts;
     scripts.reserve(static_cast<std::size_t>(values.toArray().size()));
-    for (const QJsonValue &value : values.toArray())
+    for (const QJsonValue value : values.toArray())
     {
         auto script = parseScript(value);
         if (!script)

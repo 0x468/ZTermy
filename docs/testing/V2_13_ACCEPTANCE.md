@@ -2,17 +2,39 @@
 
 ## Automated evidence
 
-Recorded here as the implementation lands:
+Completed on 2026-08-10:
 
-- script schema validation and quick-command migration;
-- typed rendering, target fixation, trigger chunking/timeouts, cancellation,
-  terminal close, disconnect, and shutdown;
+- C++ formatting, 46-file QML formatting/quality, and clang-tidy with warnings
+  as errors passed;
+- dynamic Debug and static Release each passed 60/60 serial CTest tests;
+- script schema validation, quick-command migration, typed rendering, fixed
+  targets, trigger chunking/timeouts, cancellation, terminal close,
+  disconnect, and shutdown passed their focused tests;
 - notes path containment, UTF-8/size/count/depth bounds, atomic writes,
-  generation-cancelled search, and import/export;
-- controller, QML, translation, dynamic Debug, static Release, runtime, and
-  real-SSH gates.
+  latest-generation search, and import/export passed their focused tests;
+- 1217/1217 Chinese translations were complete;
+- Release window gates passed for maximize/work area, DWM appearance, native
+  resizing, 100%/125%/150%/200% DPI, compact/regular layouts, keyboard routes,
+  large-output rendering/scrolling/split panes, and repeated ConPTY lifecycle;
+- the authorized key-auth fixture passed authentication, terminal open/close,
+  SFTP listing, host-key confirmation, remote history, telemetry, and the full
+  real-window SSH/SFTP UI and transfer smoke path in Debug and static Release;
+- structural MSI inspection passed for per-user LocalAppData installation, one
+  executable, product icon, Start-menu shortcut, same-version upgrade, and
+  uninstall folder removal. WiX ICE validation remains unavailable because the
+  Windows Installer service is disabled on the build machine; it was skipped
+  explicitly without enabling the service;
+- the release bundle is
+  `build/msvc-static-release/package/release/ztermy-0.2.13-windows-x64`:
+  - portable ZIP SHA-256:
+    `52b976884181207d35d903a0d97ac37d10a8ff4ae7cbda80864d3e8a238ca948`;
+  - MSI SHA-256:
+    `5a4424cb92b38e56b98dc71c57277b3e874db73836f5b6a38eb1d86ee24c1533`.
 
 ## Retained manual acceptance
+
+These checks are intentionally retained for the owner and are not claimed as
+completed by automated evidence.
 
 1. Create, edit, reorder, export, import, and delete multiline scripts with all
    four non-secret variable types. Invalid variables and templates must explain
@@ -31,4 +53,3 @@ Recorded here as the implementation lands:
 6. Exercise scripts and notes from the left and right terminal workbench at
    compact/regular widths, keyboard-only, English/Chinese, light/dark, and 100%,
    125%, 150%, and 200% DPI.
-
