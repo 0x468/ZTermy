@@ -1,12 +1,12 @@
 # NetCatty and ztermy product comparison
 
-Status: V2.7 implementation complete
+Status: V2.8 implementation complete
 
 ## Purpose and evidence
 
 This document prevents reference drift. It compares the locally installed
 NetCatty `1.1.75` runtime, the offered `1.1.76` update, the reference source at
-`D:/tmp/Netcatty`, and ztermy `0.2.7`. Runtime behavior wins when
+`D:/tmp/Netcatty`, and ztermy `0.2.8`. Runtime behavior wins when
 the installed binary and source snapshot differ.
 
 The source review identified the following reference boundaries:
@@ -42,7 +42,7 @@ and remote editing are explicitly excluded.
 
 ## Detailed matrix
 
-| Area | NetCatty reference | ztermy 0.2.7 | Decision / remaining gap |
+| Area | NetCatty reference | ztermy 0.2.8 | Decision / remaining gap |
 | --- | --- | --- | --- |
 | Product shell | Persistent work tabs, compact title chrome, global utility actions, and terminal tabs share one task hierarchy. | Hosts, Settings, and terminal sessions share the custom native tab bar; Settings is an on-demand singleton tab. | Aligned in workflow. ztermy retains native Windows caption/Snap behavior and its own brand. |
 | Startup | Opens into the host/vault workflow rather than forcing an unsolicited shell. | Opens Hosts and does not create a local terminal automatically. | Aligned. Session restoration remains later work. |
@@ -61,12 +61,12 @@ and remote editing are explicitly excluded.
 | Keyword highlighting | Per-host rules can emphasize matching terminal text. | Saved SSH profiles own enabled literal rules and colors; quick connections keep rules session-local. Matching is bounded to the visible snapshot, supports wide characters and case policy, and gives the first rule priority. | V2.7 aligns the workflow while deliberately excluding unbounded regular expressions from the paint path. |
 | Session terminal settings | Per-session terminal controls and encoding are reachable from terminal actions. | Temporary font, size, ligature, opacity, cursor, and default-color overrides are discarded with the tab. SSH encoding switches real transport conversion between UTF-8 and GB18030. | V2.7 aligned for the supported contract; global defaults remain the only persistent appearance policy. |
 | SFTP opening path | Integrated SFTP resolves the remote user's home directory and remains attached to the terminal session. | Opens the remote home directory and shares the terminal workbench. | Aligned; the read-only real-host GUI smoke proves the visible toolbar-to-home-listing path. |
-| SFTP navigation | Home, parent, breadcrumb/editable path, bookmarks, terminal-directory locate/follow, copy path, list/tree modes, filter, hidden files, refresh, overflow, and `..`. | The same core navigation is implemented, including event-driven terminal CWD locate/follow and a lazily loaded tree. Bookmarks, list/tree mode, and follow preference are per profile. | Core workflow aligned. Breadcrumb segments, filename encoding, configurable columns, and terminal-directory availability still depend on their respective platform/shell contracts. |
-| SFTP file actions | Upload, download, new folder/file, rename, delete, drag/drop, context actions, encoding, and detailed columns/sorting. | Upload, download, new folder/file, rename, delete, drag upload, name/type/size/time columns, and permission-preserving error state are implemented. | Partial parity. Drag-out download, filename encoding, column customization, directory-first control, and broader keyboard shortcuts remain gaps. |
+| SFTP navigation | Home, parent, breadcrumb/editable path, bookmarks, terminal-directory locate/follow, copy path, list/tree modes, filter, hidden files, refresh, overflow, and `..`. | The same core navigation is implemented, including event-driven terminal CWD locate/follow and a lazily loaded tree. Bookmarks, list/tree mode, follow preference, sort order, visible columns, directory-first order, and filename encoding are persisted per host workspace. | Core workflow aligned. Breadcrumb segments and shell-provided terminal-directory availability remain possible refinements. |
+| SFTP file actions | Upload, download, new folder/file, rename, delete, drag/drop, context actions, encoding, and detailed columns/sorting. | Upload, download, new folder/file, rename, delete, drag upload, completed-download drag-out, UTF-8/GB18030 filename conversion, configurable name/time/size/type columns, sorting, and permission-preserving errors are implemented. | Daily-use workflow aligned. Direct virtual drag of a remote file before downloading and recursive directory transfer remain deferred backend contracts. |
 | SFTP errors | Errors remain contextual and do not unnecessarily destroy useful navigation state. | A permission/transport error is shown while retaining the last successful listing and recovery controls. | Corrected from the former full-surface dead end; destructive and permission-error recovery still need manual acceptance. |
 | Background work and shutdown | Renderer-side operations are mediated by Electron bridges and application state. | SFTP tree requests are bounded, deduplicated, invalidated by root generation, and deprioritized behind mutations; shutdown closes the command gate and cancels queued work. | V2.5 native reliability contract. Late UI work cannot prolong session teardown indefinitely. |
 | Workspace recovery | Application state is persisted by the Electron application. | Non-secret workspace JSON uses atomic commits plus a last-known-good backup, restores from primary corruption, and refuses to overwrite a newer schema. | V2.5 deliberate native recovery policy. Credential stores remain separate and are never copied into workspace backup. |
-| Transfers | Rich upload/download task rows, aggregate controls, per-task actions, progress, and completed-history management. | Stable progress, cancel, retry, dismiss, and clear-completed are implemented; cancellation is preserved across progress refreshes. | Core daily-use path present. Pause/resume, open target, copy target path, aggregate pause/resume, and drag download require backend contracts and are not faked. |
+| Transfers | Rich upload/download task rows, aggregate controls, per-task actions, progress, and completed-history management. | True byte-range pause/resume, persisted recovery, aggregate pause/resume/cancel, per-task retry/cancel/dismiss, copy path, open download folder, native drag-out of completed downloads, and clear-completed are implemented. | V2.8 closes the supported daily-use transfer surface. Recursive directory jobs and direct virtual remote-file drag are explicitly deferred. |
 | Settings shell | Left category rail and compact right detail surface: Application, Appearance, Terminal, Shortcuts, SFTP, AI, Sync/Cloud, and System. | Application, Appearance, Terminal, Shortcuts, SFTP, and Security use the same compact rail/detail anatomy inside the Settings tab. | Main hierarchy aligned. Security is a ztermy-owned category; empty AI/cloud/system placeholders are intentionally omitted. |
 | Settings density | Ordinary preferences are compact rows; cards are reserved for genuinely grouped or exceptional content. | Appearance, Terminal, Security, and SFTP use compact rows and Apply/Discard semantics; brand/release identity retains presentation treatment. | Corrected in V2.2. |
 | Appearance model | Rich global and in some cases host/profile appearance controls. | Global UI/terminal appearance, accent policy, material, opacity, fonts, and language. | Deliberate global-only policy. Profile-owned appearance is excluded as unnecessary complexity. |

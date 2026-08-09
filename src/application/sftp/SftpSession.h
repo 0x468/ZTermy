@@ -44,6 +44,7 @@ public:
     SftpSession &operator=(const SftpSession &) = delete;
 
     [[nodiscard]] std::error_code start(ssh::SshConnectionRequest request);
+    void setFilenameEncoding(QString encoding);
     void requestStop() noexcept;
     void stop() noexcept;
     [[nodiscard]] bool running() const noexcept;
@@ -160,6 +161,7 @@ private:
     void postOperationFailed(quint64 requestId, SftpOperationKind operation, ssh::SshTransportErrorKind error);
 
     SftpClientFactory m_clientFactory;
+    std::string m_filenameEncoding = "utf-8";
     std::jthread m_worker;
     std::atomic_bool m_running = false;
     std::atomic_bool m_workerFinished = true;

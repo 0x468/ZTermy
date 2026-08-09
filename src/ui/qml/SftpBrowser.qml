@@ -18,6 +18,7 @@ Item {
     property bool pendingDirectory: false
     property string pendingDownloadPath: ""
     property var pendingDownloadSize: 0
+    property var pendingDownloadModified: -1
 
     Accessible.role: Accessible.Pane
     Accessible.name: qsTr("SFTP file browser")
@@ -74,11 +75,21 @@ Item {
         deleteDialog.openFrom(sourceItem);
     }
 
-    function beginDownload(path, size) {
+    function beginDownload(path, size, modified) {
         pendingDownloadPath = path;
         pendingDownloadSize = size;
+        pendingDownloadModified = modified === undefined || modified === null ? -1 : modified;
         downloadDialog.currentFile = path.split("/").pop();
         downloadDialog.open();
+    }
+
+    function sortBy(column) {
+        const ascending = controller.activeSftpSortColumn === column ? !controller.activeSftpSortAscending : true;
+        controller.setSftpSort(column, ascending);
+    }
+
+    function sortLabel(label, column) {
+        return controller.activeSftpSortColumn === column ? label + (controller.activeSftpSortAscending ? "  ↑" : "  ↓") : label;
     }
 
     component BrowserToolButton: ToolButton {
@@ -312,7 +323,7 @@ Item {
 
             BrowserToolButton {
                 objectName: "sftpMoreActionsButton"
-                visible: browser.compactToolbar
+                visible: true
                 enabled: browser.controller.activeSftpState !== "loading"
                 onClicked: browserActionsMenu.popup()
                 Accessible.name: qsTr("More file browser actions")
@@ -383,29 +394,78 @@ Item {
                 anchors.rightMargin: 10
                 spacing: 8
 
-                Text {
+                ToolButton {
+                    id: nameHeader
+
+                    objectName: "sftpNameHeader"
+
                     Layout.fillWidth: true
-                    text: qsTr("Name")
-                    color: Theme.textMuted
-                    font.family: Theme.uiFont
-                    font.pixelSize: Theme.textCompact
-                    font.weight: Font.DemiBold
+                    text: browser.sortLabel(qsTr("Name"), "name")
+                    onClicked: browser.sortBy("name")
+                    contentItem: Text {
+                        text: nameHeader.text
+                        color: Theme.textMuted
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textCompact
+                        font.weight: Font.DemiBold
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Item {}
                 }
-                Text {
+                ToolButton {
+                    id: modifiedHeader
+
+                    objectName: "sftpModifiedHeader"
+
                     Layout.preferredWidth: 82
-                    visible: !browser.compactToolbar
-                    text: qsTr("Modified")
-                    color: Theme.textMuted
-                    font.family: Theme.uiFont
-                    font.pixelSize: Theme.textCompact
+                    visible: !browser.compactToolbar && browser.controller.activeSftpShowModifiedColumn
+                    text: browser.sortLabel(qsTr("Modified"), "modified")
+                    onClicked: browser.sortBy("modified")
+                    contentItem: Text {
+                        text: modifiedHeader.text
+                        color: Theme.textMuted
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textCompact
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Item {}
                 }
-                Text {
+                ToolButton {
+                    id: sizeHeader
+
+                    objectName: "sftpSizeHeader"
+
                     Layout.preferredWidth: 62
-                    text: qsTr("Size")
-                    color: Theme.textMuted
-                    font.family: Theme.uiFont
-                    font.pixelSize: Theme.textCompact
-                    horizontalAlignment: Text.AlignRight
+                    visible: browser.controller.activeSftpShowSizeColumn
+                    text: browser.sortLabel(qsTr("Size"), "size")
+                    onClicked: browser.sortBy("size")
+                    contentItem: Text {
+                        text: sizeHeader.text
+                        color: Theme.textMuted
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textCompact
+                        horizontalAlignment: Text.AlignRight
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Item {}
+                }
+                ToolButton {
+                    id: typeHeader
+
+                    objectName: "sftpTypeHeader"
+
+                    Layout.preferredWidth: 64
+                    visible: !browser.compactToolbar && browser.controller.activeSftpShowTypeColumn
+                    text: browser.sortLabel(qsTr("Type"), "type")
+                    onClicked: browser.sortBy("type")
+                    contentItem: Text {
+                        text: typeHeader.text
+                        color: Theme.textMuted
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textCompact
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Item {}
                 }
             }
         }
@@ -524,7 +584,7 @@ Item {
 
                     Text {
                         Layout.preferredWidth: 82
-                        visible: !browser.compactToolbar
+                        visible: !browser.compactToolbar && browser.controller.activeSftpShowModifiedColumn
                         text: fileDelegate.modifiedUtcSeconds ? Qt.formatDateTime(new Date(Number(fileDelegate.modifiedUtcSeconds) * 1000), "MM-dd HH:mm") : "—"
                         color: Theme.textSubtle
                         elide: Text.ElideRight
@@ -534,9 +594,20 @@ Item {
 
                     Text {
                         Layout.preferredWidth: 62
+                        visible: browser.controller.activeSftpShowSizeColumn
                         text: fileDelegate.isDirectory ? "—" : browser.formatSize(fileDelegate.size)
                         color: Theme.textSubtle
                         horizontalAlignment: Text.AlignRight
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textCompact
+                    }
+
+                    Text {
+                        Layout.preferredWidth: 64
+                        visible: !browser.compactToolbar && browser.controller.activeSftpShowTypeColumn
+                        text: fileDelegate.isDirectory ? qsTr("Folder") : fileDelegate.entryType === "file" ? qsTr("File") : fileDelegate.entryType
+                        color: Theme.textSubtle
+                        elide: Text.ElideRight
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.textCompact
                     }
@@ -549,7 +620,7 @@ Item {
                             visible: !fileDelegate.isDirectory
                             width: visible ? 28 : 0
                             height: 30
-                            onClicked: browser.beginDownload(fileDelegate.remotePath, fileDelegate.size)
+                            onClicked: browser.beginDownload(fileDelegate.remotePath, fileDelegate.size, fileDelegate.modifiedUtcSeconds)
                             Accessible.name: qsTr("Download %1").arg(fileDelegate.name)
                             contentItem: AppIcon {
                                 name: "download"
@@ -603,7 +674,7 @@ Item {
                         if (fileDelegate.isDirectory) {
                             browser.controller.navigateSftpDirectory(fileDelegate.remotePath);
                         } else {
-                            browser.beginDownload(fileDelegate.remotePath, fileDelegate.size);
+                            browser.beginDownload(fileDelegate.remotePath, fileDelegate.size, fileDelegate.modifiedUtcSeconds);
                         }
                     }
                 }
@@ -750,6 +821,8 @@ Item {
     AppMenu {
         id: browserActionsMenu
 
+        objectName: "sftpBrowserActionsMenu"
+
         AppMenuItem {
             text: qsTr("Refresh")
             onTriggered: browser.controller.refreshSftpDirectory()
@@ -782,6 +855,50 @@ Item {
             text: qsTr("New file")
             enabled: browser.controller.activeSftpState === "ready"
             onTriggered: browser.beginCreateFile()
+        }
+        AppMenuSeparator {}
+        AppMenuItem {
+            objectName: "sftpDirectoriesFirstAction"
+            text: qsTr("Directories first")
+            checkable: true
+            checked: browser.controller.activeSftpDirectoriesFirst
+            onTriggered: browser.controller.setSftpDirectoriesFirst(checked)
+        }
+        AppMenuItem {
+            objectName: "sftpModifiedColumnAction"
+            text: qsTr("Modified column")
+            checkable: true
+            checked: browser.controller.activeSftpShowModifiedColumn
+            onTriggered: browser.controller.setSftpVisibleColumns(checked, browser.controller.activeSftpShowSizeColumn, browser.controller.activeSftpShowTypeColumn)
+        }
+        AppMenuItem {
+            objectName: "sftpSizeColumnAction"
+            text: qsTr("Size column")
+            checkable: true
+            checked: browser.controller.activeSftpShowSizeColumn
+            onTriggered: browser.controller.setSftpVisibleColumns(browser.controller.activeSftpShowModifiedColumn, checked, browser.controller.activeSftpShowTypeColumn)
+        }
+        AppMenuItem {
+            objectName: "sftpTypeColumnAction"
+            text: qsTr("Type column")
+            checkable: true
+            checked: browser.controller.activeSftpShowTypeColumn
+            onTriggered: browser.controller.setSftpVisibleColumns(browser.controller.activeSftpShowModifiedColumn, browser.controller.activeSftpShowSizeColumn, checked)
+        }
+        AppMenuSeparator {}
+        AppMenuItem {
+            objectName: "sftpUtf8EncodingAction"
+            text: qsTr("Filename encoding: UTF-8")
+            checkable: true
+            checked: browser.controller.activeSftpFilenameEncoding === "utf-8"
+            onTriggered: browser.controller.setSftpFilenameEncoding("utf-8")
+        }
+        AppMenuItem {
+            objectName: "sftpGb18030EncodingAction"
+            text: qsTr("Filename encoding: GB18030")
+            checkable: true
+            checked: browser.controller.activeSftpFilenameEncoding === "gb18030"
+            onTriggered: browser.controller.setSftpFilenameEncoding("gb18030")
         }
     }
 
@@ -889,13 +1006,15 @@ Item {
         title: qsTr("Save remote file")
         fileMode: FileDialog.SaveFile
         onAccepted: {
-            browser.controller.enqueueSftpDownload(browser.pendingDownloadPath, selectedFile.toString(), browser.pendingDownloadSize);
+            browser.controller.enqueueSftpDownload(browser.pendingDownloadPath, selectedFile.toString(), browser.pendingDownloadSize, browser.pendingDownloadModified);
             browser.pendingDownloadPath = "";
             browser.pendingDownloadSize = 0;
+            browser.pendingDownloadModified = -1;
         }
         onRejected: {
             browser.pendingDownloadPath = "";
             browser.pendingDownloadSize = 0;
+            browser.pendingDownloadModified = -1;
         }
     }
 }

@@ -58,6 +58,7 @@ enum class SftpWriteDisposition : std::uint8_t
 {
     CreateNew,
     Replace,
+    OpenOrCreate,
 };
 
 enum class SftpRenameDisposition : std::uint8_t
@@ -152,6 +153,7 @@ public:
                                                                        std::span<const char> input,
                                                                        std::chrono::milliseconds timeout,
                                                                        const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] std::expected<void, SshTransportError> seekSftpFile(std::uint64_t offset) noexcept;
     [[nodiscard]] std::expected<void, SshTransportError> closeSftpFile(WindowsTcpSocket &socket,
                                                                        std::chrono::milliseconds timeout,
                                                                        const std::stop_token &stopToken = {}) noexcept;

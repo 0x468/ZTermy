@@ -101,6 +101,18 @@ public:
                                                           operationTimeout, stopToken);
     }
 
+    [[nodiscard]] std::expected<void, ssh::SshTransportError>
+    openFileForResume(const std::string_view remotePath, const std::stop_token &stopToken) noexcept override
+    {
+        return m_connection.session->openSftpFileForWrite(
+            m_connection.socket, remotePath, ssh::SftpWriteDisposition::OpenOrCreate, operationTimeout, stopToken);
+    }
+
+    [[nodiscard]] std::expected<void, ssh::SshTransportError> seekFile(const std::uint64_t offset) noexcept override
+    {
+        return m_connection.session->seekSftpFile(offset);
+    }
+
     [[nodiscard]] std::expected<std::size_t, ssh::SshTransportError>
     readFile(const std::span<char> output, const std::stop_token &stopToken) noexcept override
     {

@@ -8,6 +8,7 @@
 #include <QColor>
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QDesktopServices>
 #include <QDir>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -400,6 +401,10 @@ void logCredentialRollbackResult(std::expected<void, ztermy::security::Credentia
             return QStringLiteral("queued");
         case TransferStatus::Running:
             return QStringLiteral("running");
+        case TransferStatus::Pausing:
+            return QStringLiteral("pausing");
+        case TransferStatus::Paused:
+            return QStringLiteral("paused");
         case TransferStatus::Cancelling:
             return QStringLiteral("cancelling");
         case TransferStatus::NeedsAttention:
@@ -504,6 +509,7 @@ void logCredentialRollbackResult(std::expected<void, ztermy::security::Credentia
         {QStringLiteral("displayName"), utf8QString(task.displayName)},
         {QStringLiteral("sourcePath"), utf8QString(task.sourcePath)},
         {QStringLiteral("destinationPath"), utf8QString(task.destinationPath)},
+        {QStringLiteral("filenameEncoding"), utf8QString(task.filenameEncoding)},
         {QStringLiteral("direction"), task.direction == ztermy::sftp::TransferDirection::Download
                                           ? QStringLiteral("download")
                                           : QStringLiteral("upload")},
@@ -1184,6 +1190,48 @@ QString AppController::activeSftpViewMode() const
     return tab == nullptr ? QStringLiteral("list") : tab->sftpViewMode;
 }
 
+QString AppController::activeSftpSortColumn() const
+{
+    const TerminalTab *tab = activeTab();
+    return tab == nullptr ? QStringLiteral("name") : tab->sftpSortColumn;
+}
+
+bool AppController::activeSftpSortAscending() const noexcept
+{
+    const TerminalTab *tab = activeTab();
+    return tab == nullptr || tab->sftpSortAscending;
+}
+
+bool AppController::activeSftpDirectoriesFirst() const noexcept
+{
+    const TerminalTab *tab = activeTab();
+    return tab == nullptr || tab->sftpDirectoriesFirst;
+}
+
+bool AppController::activeSftpShowModifiedColumn() const noexcept
+{
+    const TerminalTab *tab = activeTab();
+    return tab == nullptr || tab->sftpShowModifiedColumn;
+}
+
+bool AppController::activeSftpShowSizeColumn() const noexcept
+{
+    const TerminalTab *tab = activeTab();
+    return tab == nullptr || tab->sftpShowSizeColumn;
+}
+
+bool AppController::activeSftpShowTypeColumn() const noexcept
+{
+    const TerminalTab *tab = activeTab();
+    return tab != nullptr && tab->sftpShowTypeColumn;
+}
+
+QString AppController::activeSftpFilenameEncoding() const
+{
+    const TerminalTab *tab = activeTab();
+    return tab == nullptr ? QStringLiteral("utf-8") : tab->sftpFilenameEncoding;
+}
+
 bool AppController::activeSftpFollowTerminalDirectory() const noexcept
 {
     const TerminalTab *tab = activeTab();
@@ -1206,6 +1254,7 @@ int AppController::activeTransferCount() const noexcept
     return static_cast<int>(std::ranges::count_if(m_transferTasks, [](const QVariant &value) {
         const QString status = value.toMap().value(QStringLiteral("status")).toString();
         return status == QLatin1StringView("queued") || status == QLatin1StringView("running")
+               || status == QLatin1StringView("pausing") || status == QLatin1StringView("paused")
                || status == QLatin1StringView("cancelling") || status == QLatin1StringView("needs-attention");
     }));
 }
@@ -2458,6 +2507,80 @@ bool AppController::setSftpViewMode(const QString &mode)
     return true;
 }
 
+bool AppController::setSftpSort(const QString &column, const bool ascending)
+{
+    TerminalTab *tab = activeTab();
+    const QString normalized = column.trimmed().toLower();
+    if (tab == nullptr
+        || (normalized != QStringLiteral("name") && normalized != QStringLiteral("modified")
+            && normalized != QStringLiteral("size") && normalized != QStringLiteral("type")))
+    {
+        return false;
+    }
+    tab->sftpSortColumn = normalized;
+    tab->sftpSortAscending = ascending;
+    if (tab->sftpModel != nullptr)
+    {
+        tab->sftpModel->setSortColumn(normalized);
+        tab->sftpModel->setSortAscending(ascending);
+    }
+    persistWorkspaceState(*tab);
+    emit sftpChanged();
+    return true;
+}
+
+bool AppController::setSftpDirectoriesFirst(const bool enabled)
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr)
+    {
+        return false;
+    }
+    tab->sftpDirectoriesFirst = enabled;
+    if (tab->sftpModel != nullptr)
+    {
+        tab->sftpModel->setDirectoriesFirst(enabled);
+    }
+    persistWorkspaceState(*tab);
+    emit sftpChanged();
+    return true;
+}
+
+bool AppController::setSftpVisibleColumns(const bool modified, const bool size, const bool type)
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr)
+    {
+        return false;
+    }
+    tab->sftpShowModifiedColumn = modified;
+    tab->sftpShowSizeColumn = size;
+    tab->sftpShowTypeColumn = type;
+    persistWorkspaceState(*tab);
+    emit sftpChanged();
+    return true;
+}
+
+bool AppController::setSftpFilenameEncoding(const QString &encoding)
+{
+    TerminalTab *tab = activeTab();
+    const QString normalized = encoding.trimmed().toLower();
+    if (tab == nullptr || (normalized != QStringLiteral("utf-8") && normalized != QStringLiteral("gb18030")))
+    {
+        return false;
+    }
+    if (tab->sftpFilenameEncoding == normalized)
+    {
+        return true;
+    }
+    tab->sftpFilenameEncoding = normalized;
+    persistWorkspaceState(*tab);
+    stopSftpSession(*tab);
+    const bool started = startSftpSession(*tab);
+    emit sftpChanged();
+    return started;
+}
+
 bool AppController::navigateSftpToTerminalDirectory()
 {
     TerminalTab *tab = activeTab();
@@ -2556,7 +2679,7 @@ bool AppController::removeSftpEntry(const QString &remotePath, const bool direct
 }
 
 bool AppController::enqueueSftpDownload(const QString &remotePath, const QString &localFileUrl,
-                                        const qulonglong totalBytes)
+                                        const qulonglong totalBytes, const qlonglong modifiedUtcSeconds)
 {
     const TerminalTab *tab = activeTab();
     if (tab == nullptr || tab->kind != TerminalTabKind::Ssh || tab->sourceProfileId.isEmpty()
@@ -2577,8 +2700,11 @@ bool AppController::enqueueSftpDownload(const QString &remotePath, const QString
         .displayName = utf8String(QFileInfo(utf8QString(*normalized)).fileName()),
         .sourcePath = *normalized,
         .destinationPath = utf8String(destination.absoluteFilePath()),
+        .filenameEncoding = utf8String(tab->sftpFilenameEncoding),
         .direction = sftp::TransferDirection::Download,
         .totalBytes = totalBytes,
+        .sourceModifiedUtcSeconds =
+            modifiedUtcSeconds >= 0 ? std::optional<std::int64_t>{modifiedUtcSeconds} : std::nullopt,
     };
     const auto queued = m_transferManager->enqueue(std::move(task), transferRequestProvider(tab->sourceProfileId), {});
     return queued.has_value();
@@ -2610,8 +2736,10 @@ bool AppController::enqueueSftpUpload(const QString &localFileUrl)
         .displayName = utf8String(source.fileName()),
         .sourcePath = utf8String(source.absoluteFilePath()),
         .destinationPath = *remotePath,
+        .filenameEncoding = utf8String(tab->sftpFilenameEncoding),
         .direction = sftp::TransferDirection::Upload,
         .totalBytes = static_cast<std::uint64_t>(source.size()),
+        .sourceModifiedUtcSeconds = source.lastModified().toSecsSinceEpoch(),
     };
     const auto queued = m_transferManager->enqueue(std::move(task), transferRequestProvider(tab->sourceProfileId), {});
     return queued.has_value();
@@ -2625,12 +2753,90 @@ void AppController::cancelTransfer(const QString &taskId)
     }
 }
 
+void AppController::pauseTransfer(const QString &taskId)
+{
+    if (m_transferManager != nullptr)
+    {
+        m_transferManager->pause(taskId);
+    }
+}
+
+void AppController::resumeTransfer(const QString &taskId)
+{
+    if (m_transferManager != nullptr)
+    {
+        m_transferManager->resume(taskId);
+    }
+}
+
 void AppController::retryTransfer(const QString &taskId)
 {
     if (m_transferManager != nullptr)
     {
         m_transferManager->retry(taskId);
     }
+}
+
+void AppController::pauseAllTransfers()
+{
+    if (m_transferManager != nullptr)
+    {
+        m_transferManager->pauseAll();
+    }
+}
+
+void AppController::resumeAllTransfers()
+{
+    if (m_transferManager != nullptr)
+    {
+        m_transferManager->resumeAll();
+    }
+}
+
+void AppController::cancelAllTransfers()
+{
+    if (m_transferManager != nullptr)
+    {
+        m_transferManager->cancelAll();
+    }
+}
+
+bool AppController::copyTransferPath(const QString &taskId)
+{
+    const auto found = std::ranges::find_if(m_transferTasks, [&taskId](const QVariant &value) {
+        return value.toMap().value(QStringLiteral("id")).toString() == taskId;
+    });
+    if (found == m_transferTasks.end())
+    {
+        return false;
+    }
+    const QVariantMap task = found->toMap();
+    const QString path = task.value(QStringLiteral("destinationPath")).toString();
+    if (path.isEmpty())
+    {
+        return false;
+    }
+    QGuiApplication::clipboard()->setText(path);
+    return true;
+}
+
+bool AppController::openTransferTarget(const QString &taskId)
+{
+    const auto found = std::ranges::find_if(m_transferTasks, [&taskId](const QVariant &value) {
+        return value.toMap().value(QStringLiteral("id")).toString() == taskId;
+    });
+    if (found == m_transferTasks.end())
+    {
+        return false;
+    }
+    const QVariantMap task = found->toMap();
+    if (task.value(QStringLiteral("direction")).toString() != QStringLiteral("download")
+        || task.value(QStringLiteral("status")).toString() != QStringLiteral("completed"))
+    {
+        return false;
+    }
+    const QFileInfo file(task.value(QStringLiteral("destinationPath")).toString());
+    return file.exists() && QDesktopServices::openUrl(QUrl::fromLocalFile(file.absolutePath()));
 }
 
 void AppController::dismissTransfer(const QString &taskId)
@@ -3104,6 +3310,9 @@ bool AppController::startSftpSession(TerminalTab &tab)
     tab.sftpModel = std::make_unique<sftp::SftpDirectoryModel>();
     tab.sftpModel->setShowHidden(m_settings.sftpShowHiddenFiles);
     tab.sftpModel->setViewMode(tab.sftpViewMode);
+    tab.sftpModel->setSortColumn(tab.sftpSortColumn);
+    tab.sftpModel->setSortAscending(tab.sftpSortAscending);
+    tab.sftpModel->setDirectoriesFirst(tab.sftpDirectoriesFirst);
     const QString tabId = tab.id;
     QObject::connect(tab.sftpModel.get(), &sftp::SftpDirectoryModel::treeDirectoryRequested, this,
                      [this, tabId](const QString &remotePath) {
@@ -3127,6 +3336,7 @@ bool AppController::startSftpSession(TerminalTab &tab)
     }
 
     tab.sftpSession = std::make_unique<sftp::SftpSession>();
+    tab.sftpSession->setFilenameEncoding(tab.sftpFilenameEncoding);
     connectSftpTabSignals(tab);
     tab.sftpState = QStringLiteral("connecting");
     tab.sftpError.clear();
@@ -4988,7 +5198,14 @@ void AppController::applyWorkspaceState(TerminalTab &tab) const
     tab.workbenchPage = utf8QString(state->workbenchPage);
     tab.workbenchSide = utf8QString(state->workbenchSide);
     tab.sftpViewMode = utf8QString(state->sftpViewMode);
+    tab.sftpSortColumn = utf8QString(state->sftpSortColumn);
+    tab.sftpFilenameEncoding = utf8QString(state->sftpFilenameEncoding);
     tab.followTerminalDirectory = state->followTerminalDirectory;
+    tab.sftpSortAscending = state->sftpSortAscending;
+    tab.sftpDirectoriesFirst = state->sftpDirectoriesFirst;
+    tab.sftpShowModifiedColumn = state->sftpShowModifiedColumn;
+    tab.sftpShowSizeColumn = state->sftpShowSizeColumn;
+    tab.sftpShowTypeColumn = state->sftpShowTypeColumn;
     tab.workbenchWidth = state->workbenchWidth;
     tab.composerHeight = state->composerHeight;
 }
@@ -5009,7 +5226,14 @@ void AppController::persistWorkspaceState(const TerminalTab &tab, const bool sho
     state.workbenchPage = utf8String(tab.workbenchPage);
     state.workbenchSide = utf8String(tab.workbenchSide);
     state.sftpViewMode = utf8String(tab.sftpViewMode);
+    state.sftpSortColumn = utf8String(tab.sftpSortColumn);
+    state.sftpFilenameEncoding = utf8String(tab.sftpFilenameEncoding);
     state.followTerminalDirectory = tab.followTerminalDirectory;
+    state.sftpSortAscending = tab.sftpSortAscending;
+    state.sftpDirectoriesFirst = tab.sftpDirectoriesFirst;
+    state.sftpShowModifiedColumn = tab.sftpShowModifiedColumn;
+    state.sftpShowSizeColumn = tab.sftpShowSizeColumn;
+    state.sftpShowTypeColumn = tab.sftpShowTypeColumn;
     state.workbenchWidth = tab.workbenchWidth;
     state.composerHeight = tab.composerHeight;
     if (!m_workspaceStateStore.save(candidate))

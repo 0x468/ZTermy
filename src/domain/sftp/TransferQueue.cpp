@@ -24,7 +24,8 @@ std::size_t TransferQueue::concurrencyLimit() const noexcept
 std::size_t TransferQueue::runningCount() const noexcept
 {
     return static_cast<std::size_t>(std::ranges::count_if(m_tasks, [](const TransferTask &task) {
-        return task.status == TransferStatus::Running || task.status == TransferStatus::Cancelling;
+        return task.status == TransferStatus::Running || task.status == TransferStatus::Pausing
+               || task.status == TransferStatus::Cancelling;
     }));
 }
 
@@ -55,8 +56,9 @@ std::expected<void, TransferQueueError> TransferQueue::enqueue(TransferTask task
 
 std::expected<void, TransferQueueError> TransferQueue::restoreInterrupted(TransferTask task)
 {
-    if (!validTransferTask(task) || task.status != TransferStatus::Failed || !task.retryable
-        || task.errorCode != "interrupted")
+    if (!validTransferTask(task)
+        || (task.status != TransferStatus::Paused
+            && (task.status != TransferStatus::Failed || !task.retryable || task.errorCode != "interrupted")))
     {
         return std::unexpected(TransferQueueError::InvalidTask);
     }
@@ -210,6 +212,66 @@ std::expected<void, TransferQueueError> TransferQueue::cancel(const std::string_
     return {};
 }
 
+std::expected<void, TransferQueueError> TransferQueue::pause(const std::string_view taskId)
+{
+    TransferTask *task = findMutable(taskId);
+    if (task == nullptr)
+    {
+        return std::unexpected(TransferQueueError::TaskNotFound);
+    }
+    const TransferStatus destination =
+        task->status == TransferStatus::Running ? TransferStatus::Pausing : TransferStatus::Paused;
+    auto changed = transition(*task, destination);
+    if (!changed)
+    {
+        return changed;
+    }
+    task->bytesPerSecond = 0;
+    return {};
+}
+
+std::expected<void, TransferQueueError> TransferQueue::markPaused(const std::string_view taskId,
+                                                                  const std::uint64_t transferredBytes)
+{
+    TransferTask *task = findMutable(taskId);
+    if (task == nullptr)
+    {
+        return std::unexpected(TransferQueueError::TaskNotFound);
+    }
+    if (task->totalBytes != 0 && transferredBytes > task->totalBytes)
+    {
+        return std::unexpected(TransferQueueError::InvalidProgress);
+    }
+    auto changed = transition(*task, TransferStatus::Paused);
+    if (!changed)
+    {
+        return changed;
+    }
+    task->transferredBytes = transferredBytes;
+    task->bytesPerSecond = 0;
+    task->finishedUtcMs.reset();
+    return {};
+}
+
+std::expected<void, TransferQueueError> TransferQueue::resume(const std::string_view taskId)
+{
+    TransferTask *task = findMutable(taskId);
+    if (task == nullptr)
+    {
+        return std::unexpected(TransferQueueError::TaskNotFound);
+    }
+    auto changed = transition(*task, TransferStatus::Queued);
+    if (!changed)
+    {
+        return changed;
+    }
+    task->bytesPerSecond = 0;
+    task->startedUtcMs.reset();
+    task->finishedUtcMs.reset();
+    task->errorCode.clear();
+    return {};
+}
+
 std::expected<void, TransferQueueError> TransferQueue::retry(const std::string_view taskId)
 {
     TransferTask *task = findMutable(taskId);
@@ -226,7 +288,10 @@ std::expected<void, TransferQueueError> TransferQueue::retry(const std::string_v
     {
         return changed;
     }
-    task->transferredBytes = 0;
+    if (task->errorCode == "invalid-task")
+    {
+        task->transferredBytes = 0;
+    }
     task->bytesPerSecond = 0;
     task->startedUtcMs.reset();
     task->finishedUtcMs.reset();

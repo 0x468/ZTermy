@@ -17,7 +17,7 @@ namespace ztermy::workbench
 namespace
 {
 
-constexpr int currentSchemaVersion = 4;
+constexpr int currentSchemaVersion = 5;
 
 QString text(const std::string &value)
 {
@@ -50,7 +50,14 @@ QJsonObject serializeProfile(const ProfileWorkspaceState &state)
         {QStringLiteral("workbenchPage"), text(state.workbenchPage)},
         {QStringLiteral("workbenchSide"), text(state.workbenchSide)},
         {QStringLiteral("sftpViewMode"), text(state.sftpViewMode)},
+        {QStringLiteral("sftpSortColumn"), text(state.sftpSortColumn)},
+        {QStringLiteral("sftpFilenameEncoding"), text(state.sftpFilenameEncoding)},
         {QStringLiteral("followTerminalDirectory"), state.followTerminalDirectory},
+        {QStringLiteral("sftpSortAscending"), state.sftpSortAscending},
+        {QStringLiteral("sftpDirectoriesFirst"), state.sftpDirectoriesFirst},
+        {QStringLiteral("sftpShowModifiedColumn"), state.sftpShowModifiedColumn},
+        {QStringLiteral("sftpShowSizeColumn"), state.sftpShowSizeColumn},
+        {QStringLiteral("sftpShowTypeColumn"), state.sftpShowTypeColumn},
         {QStringLiteral("workbenchWidth"), state.workbenchWidth},
         {QStringLiteral("composerHeight"), state.composerHeight},
     };
@@ -74,7 +81,15 @@ std::optional<ProfileWorkspaceState> parseProfile(const QJsonValue &value, const
         || (schemaVersion >= 3 && !bookmarksValue.isArray())
         || (schemaVersion >= 4
             && (!object.value(QStringLiteral("sftpViewMode")).isString()
-                || !object.value(QStringLiteral("followTerminalDirectory")).isBool())))
+                || !object.value(QStringLiteral("followTerminalDirectory")).isBool()))
+        || (schemaVersion >= 5
+            && (!object.value(QStringLiteral("sftpSortColumn")).isString()
+                || !object.value(QStringLiteral("sftpFilenameEncoding")).isString()
+                || !object.value(QStringLiteral("sftpSortAscending")).isBool()
+                || !object.value(QStringLiteral("sftpDirectoriesFirst")).isBool()
+                || !object.value(QStringLiteral("sftpShowModifiedColumn")).isBool()
+                || !object.value(QStringLiteral("sftpShowSizeColumn")).isBool()
+                || !object.value(QStringLiteral("sftpShowTypeColumn")).isBool())))
     {
         return std::nullopt;
     }
@@ -90,6 +105,16 @@ std::optional<ProfileWorkspaceState> parseProfile(const QJsonValue &value, const
     {
         state.sftpViewMode = bytes(object.value(QStringLiteral("sftpViewMode")).toString());
         state.followTerminalDirectory = object.value(QStringLiteral("followTerminalDirectory")).toBool();
+    }
+    if (schemaVersion >= 5)
+    {
+        state.sftpSortColumn = bytes(object.value(QStringLiteral("sftpSortColumn")).toString());
+        state.sftpFilenameEncoding = bytes(object.value(QStringLiteral("sftpFilenameEncoding")).toString());
+        state.sftpSortAscending = object.value(QStringLiteral("sftpSortAscending")).toBool();
+        state.sftpDirectoriesFirst = object.value(QStringLiteral("sftpDirectoriesFirst")).toBool();
+        state.sftpShowModifiedColumn = object.value(QStringLiteral("sftpShowModifiedColumn")).toBool();
+        state.sftpShowSizeColumn = object.value(QStringLiteral("sftpShowSizeColumn")).toBool();
+        state.sftpShowTypeColumn = object.value(QStringLiteral("sftpShowTypeColumn")).toBool();
     }
     const QJsonArray recent = recentValue.toArray();
     state.recentRemotePaths.reserve(static_cast<std::size_t>(recent.size()));

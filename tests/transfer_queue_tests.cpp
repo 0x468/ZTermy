@@ -31,6 +31,7 @@ private slots:
     void keepsRunningCancellationActiveUntilWorkerFinishes();
     void dismissesOnlyFinishedTransfers();
     void restoresOnlyExplicitInterruptedTasks();
+    void pausesAndResumesWithoutLosingProgress();
 };
 
 void TransferQueueTests::requiresPositiveConcurrency()
@@ -149,6 +150,21 @@ void TransferQueueTests::restoresOnlyExplicitInterruptedTasks()
     interrupted.id = "ordinary-failure";
     interrupted.errorCode = "remote-io";
     QCOMPARE(queue.restoreInterrupted(interrupted).error(), ztermy::sftp::TransferQueueError::InvalidTask);
+}
+
+void TransferQueueTests::pausesAndResumesWithoutLosingProgress()
+{
+    ztermy::sftp::TransferQueue queue;
+    QVERIFY(queue.enqueue(task("paused")));
+    QVERIFY(queue.takeNext(1).has_value());
+    QVERIFY(queue.updateProgress("paused", 40, 100, 20));
+    QVERIFY(queue.pause("paused"));
+    QCOMPARE(queue.find("paused")->status, ztermy::sftp::TransferStatus::Pausing);
+    QVERIFY(queue.markPaused("paused", 40));
+    QCOMPARE(queue.find("paused")->status, ztermy::sftp::TransferStatus::Paused);
+    QVERIFY(queue.resume("paused"));
+    QCOMPARE(queue.find("paused")->status, ztermy::sftp::TransferStatus::Queued);
+    QCOMPARE(queue.find("paused")->transferredBytes, std::uint64_t{40});
 }
 
 } // namespace

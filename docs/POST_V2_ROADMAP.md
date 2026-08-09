@@ -136,6 +136,27 @@ V2.7 does not add arbitrary regular expressions on the paint path, raw-input
 recording, a general-purpose script runtime, per-profile appearance, or terminal
 video capture. Those would require separate performance and security contracts.
 
+## V2.8 — SFTP and transfer workflow closure (`0.2.8`)
+
+Status: implemented. The frozen contract is recorded in `V2_8_SCOPE.md`, the
+resume/cleanup decision in ADR 0043, and the evidence matrix in
+`testing/V2_8_ACCEPTANCE.md`.
+
+- add real byte-range pause/resume for uploads and downloads, including
+  persisted paused state and explicit post-crash retry;
+- retain validated deterministic partial files while paused or retryable, clean
+  them on cancellation or dismissal, and atomically commit completed downloads;
+- add aggregate pause/resume/cancel plus per-task path copy, download-folder
+  opening, and completed-download drag-out to Explorer;
+- add per-host SFTP sorting, directory-first order, visible-column preferences,
+  and UTF-8/GB18030 filename conversion at the transport boundary;
+- prove the workflow with real-host 64 MiB upload/download pause-resume gates,
+  GUI screenshots, recovery tests, and shutdown-safe worker ownership.
+
+V2.8 does not claim recursive directory transfer or Windows virtual-file drag
+directly from an undownloaded remote entry. Those require separate queue and
+`IDataObject` contracts rather than presentation-only controls.
+
 ## V3 decision gate (`0.3.0`)
 
 V3 starts only after the owner chooses a coherent major direction and records

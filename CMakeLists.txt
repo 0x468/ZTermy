@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 
 project(
     ztermy
-    VERSION 0.2.7
+    VERSION 0.2.8
     DESCRIPTION "A native Windows SSH terminal"
     LANGUAGES C CXX RC
 )
@@ -379,6 +379,7 @@ add_library(ztermy_ssh_connection STATIC
 
 add_library(ztermy_sftp_session STATIC
     src/application/sftp/SftpClient.cpp
+    src/application/sftp/SftpFilenameCodec.cpp
     src/application/sftp/SftpClient.h
     src/application/sftp/SftpDirectoryModel.cpp
     src/application/sftp/SftpDirectoryModel.h
@@ -565,6 +566,7 @@ set(ZTERMY_INTERFACE_ICON_FILES
     resources/icons/new-file.svg
     resources/icons/network.svg
     resources/icons/play.svg
+    resources/icons/pause.svg
     resources/icons/plus.svg
     resources/icons/refresh.svg
     resources/icons/save.svg
@@ -1381,6 +1383,16 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME sftp-session COMMAND ztermy_sftp_session_tests)
+
+    qt_add_executable(ztermy_sftp_filename_codec_tests
+        tests/sftp_filename_codec_tests.cpp
+    )
+    target_compile_features(ztermy_sftp_filename_codec_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_sftp_filename_codec_tests PRIVATE ztermy_sftp_session Qt6::Test)
+    if(MSVC)
+        target_compile_options(ztermy_sftp_filename_codec_tests PRIVATE /permissive- /utf-8 /W4 /Zc:__cplusplus)
+    endif()
+    add_test(NAME sftp-filename-codec COMMAND ztermy_sftp_filename_codec_tests)
 
     qt_add_executable(ztermy_sftp_directory_model_tests
         tests/sftp_directory_model_tests.cpp

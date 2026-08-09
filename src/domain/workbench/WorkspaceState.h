@@ -17,7 +17,14 @@ struct ProfileWorkspaceState final
     std::string workbenchPage = "history";
     std::string workbenchSide = "left";
     std::string sftpViewMode = "list";
+    std::string sftpSortColumn = "name";
+    std::string sftpFilenameEncoding = "utf-8";
     bool followTerminalDirectory = false;
+    bool sftpSortAscending = true;
+    bool sftpDirectoriesFirst = true;
+    bool sftpShowModifiedColumn = true;
+    bool sftpShowSizeColumn = true;
+    bool sftpShowTypeColumn = false;
     double workbenchWidth = 520.0;
     double composerHeight = 132.0;
 

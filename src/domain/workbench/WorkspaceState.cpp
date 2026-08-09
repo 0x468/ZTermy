@@ -40,9 +40,12 @@ bool validProfileWorkspaceState(const ProfileWorkspaceState &state) noexcept
         || state.recentRemotePaths.size() > maximumRecentRemotePaths
         || state.bookmarkedRemotePaths.size() > maximumBookmarkedRemotePaths || !validPage(state.workbenchPage)
         || (state.workbenchSide != "left" && state.workbenchSide != "right") || !std::isfinite(state.workbenchWidth)
-        || (state.sftpViewMode != "list" && state.sftpViewMode != "tree") || state.workbenchWidth < 320.0
-        || state.workbenchWidth > 960.0 || !std::isfinite(state.composerHeight) || state.composerHeight < 96.0
-        || state.composerHeight > 480.0)
+        || (state.sftpViewMode != "list" && state.sftpViewMode != "tree")
+        || (state.sftpSortColumn != "name" && state.sftpSortColumn != "modified" && state.sftpSortColumn != "size"
+            && state.sftpSortColumn != "type")
+        || (state.sftpFilenameEncoding != "utf-8" && state.sftpFilenameEncoding != "gb18030")
+        || state.workbenchWidth < 320.0 || state.workbenchWidth > 960.0 || !std::isfinite(state.composerHeight)
+        || state.composerHeight < 96.0 || state.composerHeight > 480.0)
     {
         return false;
     }

@@ -7,6 +7,7 @@
 #include <QObject>
 #include <QString>
 
+#include <atomic>
 #include <condition_variable>
 #include <cstdint>
 #include <expected>
@@ -54,10 +55,15 @@ public:
     void shutdown() noexcept;
 
 public slots:
+    void pause(const QString &taskId);
+    void resume(const QString &taskId);
     void cancel(const QString &taskId);
     void retry(const QString &taskId);
     void dismiss(const QString &taskId);
     void dismissFinished();
+    void pauseAll();
+    void resumeAll();
+    void cancelAll();
     void resolveConflict(const QString &taskId, ztermy::sftp::ConflictAction action,
                          const QString &renamedDestinationPath = {});
     void confirmHostKey(const QString &taskId, bool remember);
@@ -90,6 +96,7 @@ private:
         std::mutex mutex;
         std::condition_variable_any hostKeyAvailable;
         std::optional<ssh::UnknownHostKeyDecision> hostKeyDecision;
+        std::atomic_bool pauseRequested = false;
         bool awaitingHostKey = false;
     };
 
@@ -105,8 +112,16 @@ private:
         std::jthread thread;
     };
 
+    struct CleanupWorkerRecord final
+    {
+        std::shared_ptr<std::atomic_bool> finished;
+        std::jthread thread;
+    };
+
     void schedule();
     void startWorker(const TransferTask &task, const WorkSpec &spec);
+    void cleanupPartial(const TransferTask &task, const WorkSpec &spec);
+    void pruneCleanupWorkers();
     void handleProgress(const std::string &taskId, std::uint64_t transferredBytes, std::uint64_t totalBytes,
                         std::uint64_t bytesPerSecond);
     void handleCredentialError(const std::string &taskId, TransferCredentialError error);
@@ -120,6 +135,7 @@ private:
     SftpClientFactory m_clientFactory;
     std::unordered_map<std::string, WorkSpec> m_work;
     std::unordered_map<std::string, WorkerRecord> m_workers;
+    std::vector<CleanupWorkerRecord> m_cleanupWorkers;
     std::unique_ptr<class TransferRecoveryStore> m_recoveryStore;
     TransferRecoveryRequestProviderFactory m_recoveryRequestProviderFactory;
     bool m_recoveryWriteFailed = false;

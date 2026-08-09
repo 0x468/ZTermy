@@ -48,19 +48,18 @@ void TransferRecoveryStoreTests::persistsOnlyRecoverableTasks()
     const std::array tasks{
         transfer("running", ztermy::sftp::TransferStatus::Running),
         transfer("interrupted", ztermy::sftp::TransferStatus::Failed),
+        transfer("paused", ztermy::sftp::TransferStatus::Paused),
         transfer("completed", ztermy::sftp::TransferStatus::Completed),
     };
 
     QVERIFY(store.save(tasks));
     const auto loaded = store.load();
     QVERIFY(loaded.has_value());
-    QCOMPARE(loaded->size(), std::size_t{2});
-    for (const auto &task : *loaded)
-    {
-        QCOMPARE(task.status, ztermy::sftp::TransferStatus::Failed);
-        QCOMPARE(task.errorCode, std::string("interrupted"));
-        QVERIFY(task.retryable);
-    }
+    QCOMPARE(loaded->size(), std::size_t{3});
+    QCOMPARE(loaded->at(0).status, ztermy::sftp::TransferStatus::Failed);
+    QCOMPARE(loaded->at(1).status, ztermy::sftp::TransferStatus::Failed);
+    QCOMPARE(loaded->at(2).status, ztermy::sftp::TransferStatus::Paused);
+    QCOMPARE(loaded->at(2).transferredBytes, std::uint64_t{40});
 }
 
 void TransferRecoveryStoreTests::rejectsCorruptAndUnsupportedDocuments()
@@ -76,7 +75,7 @@ void TransferRecoveryStoreTests::rejectsCorruptAndUnsupportedDocuments()
     QCOMPARE(store.load().error(), ztermy::sftp::TransferRecoveryError::InvalidData);
 
     QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
-    QVERIFY(file.write("{\"version\":2,\"tasks\":[]}") > 0);
+    QVERIFY(file.write("{\"version\":99,\"tasks\":[]}") > 0);
     file.close();
     QCOMPARE(store.load().error(), ztermy::sftp::TransferRecoveryError::UnsupportedVersion);
 }

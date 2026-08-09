@@ -43,6 +43,15 @@ public:
     openFileForRead(std::string_view remotePath, const std::stop_token &stopToken) = 0;
     [[nodiscard]] virtual std::expected<void, ssh::SshTransportError>
     openFileForWrite(std::string_view remotePath, bool replace, const std::stop_token &stopToken) = 0;
+    [[nodiscard]] virtual std::expected<void, ssh::SshTransportError> openFileForResume(std::string_view,
+                                                                                        const std::stop_token &)
+    {
+        return std::unexpected(ssh::SshTransportError{.kind = ssh::SshTransportErrorKind::InvalidState});
+    }
+    [[nodiscard]] virtual std::expected<void, ssh::SshTransportError> seekFile(std::uint64_t)
+    {
+        return std::unexpected(ssh::SshTransportError{.kind = ssh::SshTransportErrorKind::InvalidState});
+    }
     [[nodiscard]] virtual std::expected<std::size_t, ssh::SshTransportError>
     readFile(std::span<char> output, const std::stop_token &stopToken) = 0;
     [[nodiscard]] virtual std::expected<void, ssh::SshTransportError> writeFile(std::span<const char> input,

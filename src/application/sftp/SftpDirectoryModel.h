@@ -23,6 +23,9 @@ class SftpDirectoryModel final : public QAbstractListModel
     Q_PROPERTY(QString filterText READ filterText WRITE setFilterText NOTIFY filterTextChanged)
     Q_PROPERTY(int selectedCount READ selectedCount NOTIFY selectionChanged)
     Q_PROPERTY(QString viewMode READ viewMode WRITE setViewMode NOTIFY viewModeChanged)
+    Q_PROPERTY(QString sortColumn READ sortColumn WRITE setSortColumn NOTIFY sortChanged)
+    Q_PROPERTY(bool sortAscending READ sortAscending WRITE setSortAscending NOTIFY sortChanged)
+    Q_PROPERTY(bool directoriesFirst READ directoriesFirst WRITE setDirectoriesFirst NOTIFY sortChanged)
 
 public:
     enum Role : std::uint16_t
@@ -55,6 +58,12 @@ public:
     [[nodiscard]] int selectedCount() const noexcept;
     [[nodiscard]] QString viewMode() const;
     void setViewMode(const QString &mode);
+    [[nodiscard]] QString sortColumn() const;
+    void setSortColumn(const QString &column);
+    [[nodiscard]] bool sortAscending() const noexcept;
+    void setSortAscending(bool ascending);
+    [[nodiscard]] bool directoriesFirst() const noexcept;
+    void setDirectoriesFirst(bool enabled);
 
     void setEntries(const DirectoryListingPtr &entries, const QString &remotePath = {});
     [[nodiscard]] Q_INVOKABLE QVariantMap entry(int row) const;
@@ -70,13 +79,14 @@ signals:
     void filterTextChanged();
     void selectionChanged();
     void viewModeChanged();
+    void sortChanged();
     void treeDirectoryRequested(const QString &remotePath);
 
 private:
     void rebuildVisibleRows();
     [[nodiscard]] const DirectoryEntry *visibleEntry(int row) const noexcept;
     void appendTreeRows(const DirectoryListing &entries, int depth, std::unordered_set<std::string> &ancestors);
-    static void sortEntries(DirectoryListing &entries);
+    void sortEntries(DirectoryListing &entries) const;
     [[nodiscard]] bool matchesFilter(const DirectoryEntry &entry) const;
     [[nodiscard]] static QString qString(std::string_view text);
     [[nodiscard]] static QString typeName(EntryType type);
@@ -103,8 +113,11 @@ private:
     std::vector<TreeRow> m_treeRows;
     std::unordered_set<std::string> m_selectedPaths;
     QString m_filterText;
+    QString m_sortColumn = QStringLiteral("name");
     bool m_treeMode = false;
     bool m_showHidden = false;
+    bool m_sortAscending = true;
+    bool m_directoriesFirst = true;
 };
 
 } // namespace ztermy::sftp

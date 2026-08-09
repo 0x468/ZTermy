@@ -55,6 +55,8 @@ enum class TransferStatus : std::uint8_t
 {
     Queued,
     Running,
+    Pausing,
+    Paused,
     Cancelling,
     NeedsAttention,
     Completed,
@@ -69,6 +71,7 @@ struct TransferTask final
     std::string displayName;
     std::string sourcePath;
     std::string destinationPath;
+    std::string filenameEncoding = "utf-8";
     TransferDirection direction = TransferDirection::Download;
     TransferStatus status = TransferStatus::Queued;
     std::uint64_t totalBytes = 0;
@@ -76,6 +79,7 @@ struct TransferTask final
     std::uint64_t bytesPerSecond = 0;
     std::optional<std::int64_t> startedUtcMs;
     std::optional<std::int64_t> finishedUtcMs;
+    std::optional<std::int64_t> sourceModifiedUtcSeconds;
     std::string errorCode;
     bool retryable = true;
 

@@ -154,6 +154,57 @@ void SftpDirectoryModel::setViewMode(const QString &mode)
     emit viewModeChanged();
 }
 
+QString SftpDirectoryModel::sortColumn() const
+{
+    return m_sortColumn;
+}
+
+void SftpDirectoryModel::setSortColumn(const QString &column)
+{
+    const QString normalized = column.trimmed().toLower();
+    if ((normalized != QStringLiteral("name") && normalized != QStringLiteral("modified")
+         && normalized != QStringLiteral("size") && normalized != QStringLiteral("type"))
+        || normalized == m_sortColumn)
+    {
+        return;
+    }
+    m_sortColumn = normalized;
+    rebuildVisibleRows();
+    emit sortChanged();
+}
+
+bool SftpDirectoryModel::sortAscending() const noexcept
+{
+    return m_sortAscending;
+}
+
+void SftpDirectoryModel::setSortAscending(const bool ascending)
+{
+    if (m_sortAscending == ascending)
+    {
+        return;
+    }
+    m_sortAscending = ascending;
+    rebuildVisibleRows();
+    emit sortChanged();
+}
+
+bool SftpDirectoryModel::directoriesFirst() const noexcept
+{
+    return m_directoriesFirst;
+}
+
+void SftpDirectoryModel::setDirectoriesFirst(const bool enabled)
+{
+    if (m_directoriesFirst == enabled)
+    {
+        return;
+    }
+    m_directoriesFirst = enabled;
+    rebuildVisibleRows();
+    emit sortChanged();
+}
+
 void SftpDirectoryModel::setEntries(const DirectoryListingPtr &entries, const QString &remotePath)
 {
     beginResetModel();
@@ -193,20 +244,42 @@ void SftpDirectoryModel::setEntries(const DirectoryListingPtr &entries, const QS
     emit selectionChanged();
 }
 
-void SftpDirectoryModel::sortEntries(DirectoryListing &entries)
+void SftpDirectoryModel::sortEntries(DirectoryListing &entries) const
 {
-    std::ranges::sort(entries, [](const DirectoryEntry &left, const DirectoryEntry &right) {
+    std::ranges::sort(entries, [this](const DirectoryEntry &left, const DirectoryEntry &right) {
         if (left.name == ".." || right.name == "..")
         {
             return left.name == ".." && right.name != "..";
         }
-        const int leftRank = typeRank(left.type);
-        const int rightRank = typeRank(right.type);
-        if (leftRank != rightRank)
+        if (m_directoriesFirst)
         {
-            return leftRank < rightRank;
+            const int leftRank = typeRank(left.type);
+            const int rightRank = typeRank(right.type);
+            if (leftRank != rightRank)
+            {
+                return leftRank < rightRank;
+            }
         }
-        return QString::localeAwareCompare(qString(left.name), qString(right.name)) < 0;
+        int comparison = 0;
+        if (m_sortColumn == QStringLiteral("size"))
+        {
+            comparison = left.size < right.size ? -1 : left.size > right.size ? 1 : 0;
+        }
+        else if (m_sortColumn == QStringLiteral("modified"))
+        {
+            const std::int64_t leftValue = left.modifiedUtcSeconds.value_or(0);
+            const std::int64_t rightValue = right.modifiedUtcSeconds.value_or(0);
+            comparison = leftValue < rightValue ? -1 : leftValue > rightValue ? 1 : 0;
+        }
+        else if (m_sortColumn == QStringLiteral("type"))
+        {
+            comparison = typeRank(left.type) - typeRank(right.type);
+        }
+        if (comparison == 0)
+        {
+            comparison = QString::localeAwareCompare(qString(left.name), qString(right.name));
+        }
+        return m_sortAscending ? comparison < 0 : comparison > 0;
     });
 }
 
@@ -342,6 +415,12 @@ void SftpDirectoryModel::applyTreeError(const QString &remotePath, const QString
 void SftpDirectoryModel::rebuildVisibleRows()
 {
     beginResetModel();
+    sortEntries(m_entries);
+    for (auto &[path, state] : m_treeStates)
+    {
+        (void)path;
+        sortEntries(state.children);
+    }
     m_visibleRows.clear();
     m_treeRows.clear();
     if (m_treeMode)

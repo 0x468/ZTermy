@@ -77,6 +77,13 @@ class AppController final : public QObject
     Q_PROPERTY(QString activeSftpState READ activeSftpState NOTIFY sftpChanged)
     Q_PROPERTY(QString activeSftpError READ activeSftpError NOTIFY sftpChanged)
     Q_PROPERTY(QString activeSftpViewMode READ activeSftpViewMode NOTIFY sftpChanged)
+    Q_PROPERTY(QString activeSftpSortColumn READ activeSftpSortColumn NOTIFY sftpChanged)
+    Q_PROPERTY(bool activeSftpSortAscending READ activeSftpSortAscending NOTIFY sftpChanged)
+    Q_PROPERTY(bool activeSftpDirectoriesFirst READ activeSftpDirectoriesFirst NOTIFY sftpChanged)
+    Q_PROPERTY(bool activeSftpShowModifiedColumn READ activeSftpShowModifiedColumn NOTIFY sftpChanged)
+    Q_PROPERTY(bool activeSftpShowSizeColumn READ activeSftpShowSizeColumn NOTIFY sftpChanged)
+    Q_PROPERTY(bool activeSftpShowTypeColumn READ activeSftpShowTypeColumn NOTIFY sftpChanged)
+    Q_PROPERTY(QString activeSftpFilenameEncoding READ activeSftpFilenameEncoding NOTIFY sftpChanged)
     Q_PROPERTY(bool activeSftpFollowTerminalDirectory READ activeSftpFollowTerminalDirectory NOTIFY sftpChanged)
     Q_PROPERTY(QString activeTerminalWorkingDirectory READ activeTerminalWorkingDirectory NOTIFY sftpChanged)
     Q_PROPERTY(QVariantList transferTasks READ transferTasks NOTIFY transferTasksChanged)
@@ -162,6 +169,13 @@ public:
     [[nodiscard]] QString activeSftpState() const;
     [[nodiscard]] QString activeSftpError() const;
     [[nodiscard]] QString activeSftpViewMode() const;
+    [[nodiscard]] QString activeSftpSortColumn() const;
+    [[nodiscard]] bool activeSftpSortAscending() const noexcept;
+    [[nodiscard]] bool activeSftpDirectoriesFirst() const noexcept;
+    [[nodiscard]] bool activeSftpShowModifiedColumn() const noexcept;
+    [[nodiscard]] bool activeSftpShowSizeColumn() const noexcept;
+    [[nodiscard]] bool activeSftpShowTypeColumn() const noexcept;
+    [[nodiscard]] QString activeSftpFilenameEncoding() const;
     [[nodiscard]] bool activeSftpFollowTerminalDirectory() const noexcept;
     [[nodiscard]] QString activeTerminalWorkingDirectory() const;
     [[nodiscard]] QVariantList transferTasks() const;
@@ -246,16 +260,28 @@ public:
     Q_INVOKABLE bool navigateSftpParent();
     Q_INVOKABLE bool toggleActiveSftpBookmark();
     Q_INVOKABLE bool setSftpViewMode(const QString &mode);
+    Q_INVOKABLE bool setSftpSort(const QString &column, bool ascending);
+    Q_INVOKABLE bool setSftpDirectoriesFirst(bool enabled);
+    Q_INVOKABLE bool setSftpVisibleColumns(bool modified, bool size, bool type);
+    Q_INVOKABLE bool setSftpFilenameEncoding(const QString &encoding);
     Q_INVOKABLE bool navigateSftpToTerminalDirectory();
     Q_INVOKABLE bool setSftpFollowTerminalDirectory(bool enabled);
     Q_INVOKABLE bool createSftpDirectory(const QString &name);
     Q_INVOKABLE bool createSftpFile(const QString &name);
     Q_INVOKABLE bool renameSftpEntry(const QString &remotePath, const QString &newName);
     Q_INVOKABLE bool removeSftpEntry(const QString &remotePath, bool directory);
-    Q_INVOKABLE bool enqueueSftpDownload(const QString &remotePath, const QString &localFileUrl, qulonglong totalBytes);
+    Q_INVOKABLE bool enqueueSftpDownload(const QString &remotePath, const QString &localFileUrl, qulonglong totalBytes,
+                                         qlonglong modifiedUtcSeconds = -1);
     Q_INVOKABLE bool enqueueSftpUpload(const QString &localFileUrl);
     Q_INVOKABLE void cancelTransfer(const QString &taskId);
+    Q_INVOKABLE void pauseTransfer(const QString &taskId);
+    Q_INVOKABLE void resumeTransfer(const QString &taskId);
     Q_INVOKABLE void retryTransfer(const QString &taskId);
+    Q_INVOKABLE void pauseAllTransfers();
+    Q_INVOKABLE void resumeAllTransfers();
+    Q_INVOKABLE void cancelAllTransfers();
+    Q_INVOKABLE bool copyTransferPath(const QString &taskId);
+    Q_INVOKABLE bool openTransferTarget(const QString &taskId);
     Q_INVOKABLE void dismissTransfer(const QString &taskId);
     Q_INVOKABLE void clearFinishedTransfers();
     Q_INVOKABLE void resolveTransferConflict(const QString &taskId, const QString &action,
@@ -381,6 +407,8 @@ private:
         QString sftpState = QStringLiteral("idle");
         QString sftpError;
         QString sftpViewMode = QStringLiteral("list");
+        QString sftpSortColumn = QStringLiteral("name");
+        QString sftpFilenameEncoding = QStringLiteral("utf-8");
         QString terminalWorkingDirectory;
         QByteArray inputHistoryBuffer;
         QString telemetryState = QStringLiteral("paused");
@@ -400,6 +428,11 @@ private:
         bool sessionLigatures = true;
         bool scriptPlaybackActive = false;
         bool followTerminalDirectory = false;
+        bool sftpSortAscending = true;
+        bool sftpDirectoriesFirst = true;
+        bool sftpShowModifiedColumn = true;
+        bool sftpShowSizeColumn = true;
+        bool sftpShowTypeColumn = false;
         bool sftpHasListing = false;
         bool inputHistoryBufferReliable = true;
         bool workbenchOpen = false;

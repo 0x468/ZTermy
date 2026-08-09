@@ -17,6 +17,7 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QEventLoop>
+#include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QIcon>
@@ -30,6 +31,8 @@
 #include <QSet>
 #include <QStandardPaths>
 #include <QTimer>
+#include <QUrl>
+#include <QUuid>
 #include <QVariant>
 #include <QVariantMap>
 
@@ -40,6 +43,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <memory>
+#include <ranges>
 #include <utility>
 
 Q_LOGGING_CATEGORY(applicationLog, "ztermy.application")
@@ -2354,7 +2358,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     controller.setTerminalWorkbenchWidth(560);
     const bool wideToolbar = processWindowEventsUntil(
         [&] {
-            return browser->width() >= 520 && moreActionsButton != nullptr && !moreActionsButton->isVisible()
+            return browser->width() >= 520 && moreActionsButton != nullptr && moreActionsButton->isVisible()
                    && refreshButton != nullptr && refreshButton->isVisible() && newFileButton != nullptr
                    && newFileButton->isVisible();
         },
@@ -2362,6 +2366,48 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     const bool newFileKeyboard = wideToolbar && focusItem(window, newFileButton, QStringLiteral("sftpNewFileButton"));
     const bool wideCaptured =
         wideToolbar && captureLayout(window, outputDirectory, QStringLiteral("real-host-sftp-wide"));
+
+    const bool sortConfigured = controller.setSftpSort(QStringLiteral("size"), false)
+                                && controller.activeSftpSortColumn() == QStringLiteral("size")
+                                && !controller.activeSftpSortAscending();
+    const bool columnsConfigured = controller.setSftpVisibleColumns(true, true, true)
+                                   && controller.activeSftpShowModifiedColumn() && controller.activeSftpShowSizeColumn()
+                                   && controller.activeSftpShowTypeColumn();
+    const bool directoriesFirstConfigured =
+        controller.setSftpDirectoriesFirst(true) && controller.activeSftpDirectoriesFirst();
+    processWindowEventsFor(std::chrono::milliseconds{150});
+    QQuickItem *nameHeader = visualQuickItem(rootObject, "sftpNameHeader");
+    QQuickItem *modifiedHeader = visualQuickItem(rootObject, "sftpModifiedHeader");
+    QQuickItem *sizeHeader = visualQuickItem(rootObject, "sftpSizeHeader");
+    QQuickItem *typeHeader = visualQuickItem(rootObject, "sftpTypeHeader");
+    const bool columnHeadersVisible = nameHeader != nullptr && nameHeader->isVisible() && modifiedHeader != nullptr
+                                      && modifiedHeader->isVisible() && sizeHeader != nullptr && sizeHeader->isVisible()
+                                      && typeHeader != nullptr && typeHeader->isVisible();
+    const bool headerKeyboard = focusItem(window, sizeHeader, QStringLiteral("sftpSizeHeader"));
+    if (headerKeyboard)
+    {
+        sendKey(window, Qt::Key_Space);
+    }
+    const bool headerSortToggled =
+        controller.activeSftpSortColumn() == QStringLiteral("size") && controller.activeSftpSortAscending();
+    const bool gb18030Started = controller.setSftpFilenameEncoding(QStringLiteral("gb18030"));
+    const bool gb18030Ready = gb18030Started
+                              && processWindowEventsUntil(
+                                  [&] {
+                                      return controller.activeSftpState() == QStringLiteral("ready")
+                                             && controller.activeSftpFilenameEncoding() == QStringLiteral("gb18030");
+                                  },
+                                  std::chrono::seconds{10});
+    const bool utf8Restarted = controller.setSftpFilenameEncoding(QStringLiteral("utf-8"));
+    const bool utf8Ready = utf8Restarted
+                           && processWindowEventsUntil(
+                               [&] {
+                                   return controller.activeSftpState() == QStringLiteral("ready")
+                                          && controller.activeSftpFilenameEncoding() == QStringLiteral("utf-8")
+                                          && controller.activeSftpPath() == homePath;
+                               },
+                               std::chrono::seconds{10});
+    directoryModel = qobject_cast<QAbstractItemModel *>(controller.activeSftpDirectoryModel());
 
     bool deniedPathPreserved = true;
     bool deniedPathRecovered = true;
@@ -2387,15 +2433,163 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
             std::chrono::seconds{10});
     }
 
+    const auto transferById = [&controller](const QString &taskId) -> QVariantMap {
+        const QVariantList tasks = controller.transferTasks();
+        const auto position = std::ranges::find(tasks, taskId, [](const QVariant &value) {
+            return value.toMap().value(QStringLiteral("id")).toString();
+        });
+        return position == tasks.end() ? QVariantMap{} : position->toMap();
+    };
+    const auto newestTransfer = [&controller](const QString &direction) -> QVariantMap {
+        const QVariantList tasks = controller.transferTasks();
+        for (const QVariant &value : std::views::reverse(tasks))
+        {
+            const QVariantMap task = value.toMap();
+            if (task.value(QStringLiteral("direction")).toString() == direction)
+            {
+                return task;
+            }
+        }
+        return {};
+    };
+
+    QDir().mkpath(outputDirectory);
+    const QString transferToken = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const QString uploadPath =
+        QDir(outputDirectory).filePath(QStringLiteral("v2-8-resume-upload-%1.bin").arg(transferToken));
+    const QString downloadPath = QDir(outputDirectory).filePath(QStringLiteral("v2-8-resume-download.bin"));
+    QFile::remove(uploadPath);
+    QFile::remove(downloadPath);
+    QFile uploadFile(uploadPath);
+    constexpr qint64 transferSmokeBytes = qint64{64} * 1024 * 1024;
+    const bool uploadFixtureCreated = uploadFile.open(QIODevice::WriteOnly) && uploadFile.resize(transferSmokeBytes);
+    uploadFile.close();
+    const bool uploadQueued =
+        uploadFixtureCreated && controller.enqueueSftpUpload(QUrl::fromLocalFile(uploadPath).toString());
+    QString uploadTaskId;
+    const bool uploadRunning =
+        uploadQueued
+        && processWindowEventsUntil(
+            [&] {
+                const QVariantMap task = newestTransfer(QStringLiteral("upload"));
+                uploadTaskId = task.value(QStringLiteral("id")).toString();
+                return !uploadTaskId.isEmpty()
+                       && task.value(QStringLiteral("status")).toString() == QStringLiteral("running")
+                       && task.value(QStringLiteral("transferredBytes")).toULongLong() > 0;
+            },
+            std::chrono::seconds{15});
+    if (uploadRunning)
+    {
+        controller.pauseTransfer(uploadTaskId);
+    }
+    const bool uploadPaused = uploadRunning
+                              && processWindowEventsUntil(
+                                  [&] {
+                                      return transferById(uploadTaskId).value(QStringLiteral("status")).toString()
+                                             == QStringLiteral("paused");
+                                  },
+                                  std::chrono::seconds{10});
+    auto *transferCenter = rootObject->findChild<QObject *>(QStringLiteral("transferCenter"));
+    const bool transferCenterOpened = uploadPaused && transferCenter != nullptr
+                                      && QMetaObject::invokeMethod(transferCenter, "open", Qt::DirectConnection);
+    processWindowEventsFor(std::chrono::milliseconds{150});
+    const bool pausedTransferUi =
+        transferCenterOpened && transferCenter->property("hasPausedTasks").toBool()
+        && captureLayout(window, outputDirectory, QStringLiteral("real-host-transfer-paused"));
+    if (uploadPaused)
+    {
+        controller.resumeTransfer(uploadTaskId);
+    }
+    const bool uploadCompleted = uploadPaused
+                                 && processWindowEventsUntil(
+                                     [&] {
+                                         return transferById(uploadTaskId).value(QStringLiteral("status")).toString()
+                                                == QStringLiteral("completed");
+                                     },
+                                     std::chrono::seconds{60});
+    const QVariantMap completedUpload = transferById(uploadTaskId);
+    const QString remoteTransferPath = completedUpload.value(QStringLiteral("destinationPath")).toString();
+
+    const bool downloadQueued =
+        uploadCompleted
+        && controller.enqueueSftpDownload(remoteTransferPath, QUrl::fromLocalFile(downloadPath).toString(),
+                                          static_cast<qulonglong>(transferSmokeBytes));
+    QString downloadTaskId;
+    const bool downloadRunning =
+        downloadQueued
+        && processWindowEventsUntil(
+            [&] {
+                const QVariantMap task = newestTransfer(QStringLiteral("download"));
+                downloadTaskId = task.value(QStringLiteral("id")).toString();
+                return !downloadTaskId.isEmpty()
+                       && task.value(QStringLiteral("status")).toString() == QStringLiteral("running")
+                       && task.value(QStringLiteral("transferredBytes")).toULongLong() > 0;
+            },
+            std::chrono::seconds{15});
+    if (downloadRunning)
+    {
+        controller.pauseTransfer(downloadTaskId);
+    }
+    const bool downloadPaused = downloadRunning
+                                && processWindowEventsUntil(
+                                    [&] {
+                                        return transferById(downloadTaskId).value(QStringLiteral("status")).toString()
+                                               == QStringLiteral("paused");
+                                    },
+                                    std::chrono::seconds{10});
+    if (downloadPaused)
+    {
+        controller.resumeTransfer(downloadTaskId);
+    }
+    const bool downloadCompleted =
+        downloadPaused
+        && processWindowEventsUntil(
+            [&] {
+                return transferById(downloadTaskId).value(QStringLiteral("status")).toString()
+                       == QStringLiteral("completed");
+            },
+            std::chrono::seconds{60});
+    processWindowEventsFor(std::chrono::milliseconds{150});
+    const bool completedTransferUi =
+        downloadCompleted && transferCenter != nullptr
+        && transferCenter->property("completedDownloadDragAvailable").toBool()
+        && captureLayout(window, outputDirectory, QStringLiteral("real-host-transfer-completed"));
+    const bool downloadFileValid = QFileInfo(downloadPath).size() == transferSmokeBytes;
+    const bool transferPathCopied = downloadCompleted && controller.copyTransferPath(downloadTaskId)
+                                    && QGuiApplication::clipboard()->text() == downloadPath;
+    const bool remoteTransferRemoved = !remoteTransferPath.isEmpty()
+                                       && controller.removeSftpEntry(remoteTransferPath, false)
+                                       && processWindowEventsUntil(
+                                           [&] {
+                                               return controller.activeSftpState() == QStringLiteral("ready");
+                                           },
+                                           std::chrono::seconds{10});
+    controller.clearFinishedTransfers();
+    QFile::remove(uploadPath);
+    QFile::remove(downloadPath);
+
     QQuickItem *closeWorkbenchButton = visualQuickItem(rootObject, "closeTerminalWorkbenchButton");
     if (!pathCopied || !pathBookmarked || !fileListKeyboard || !narrowCaptured || !wideCaptured || !newFileKeyboard
-        || !deniedPathPreserved || !deniedPathRecovered
+        || !sortConfigured || !columnsConfigured || !directoriesFirstConfigured || !columnHeadersVisible
+        || !headerKeyboard || !headerSortToggled || !gb18030Ready || !utf8Ready || !deniedPathPreserved
+        || !deniedPathRecovered || !pausedTransferUi || !uploadCompleted || !downloadCompleted || !completedTransferUi
+        || !downloadFileValid || !transferPathCopied || !remoteTransferRemoved
         || !focusItem(window, closeWorkbenchButton, QStringLiteral("closeTerminalWorkbenchButton")))
     {
         qCWarning(applicationLog) << "Real-host SFTP UI contract failed"
                                   << "pathCopied=" << pathCopied << "pathBookmarked=" << pathBookmarked
                                   << "fileListKeyboard=" << fileListKeyboard << "narrowToolbar=" << narrowToolbar
                                   << "wideToolbar=" << wideToolbar << "newFileKeyboard=" << newFileKeyboard
+                                  << "sortConfigured=" << sortConfigured << "columnsConfigured=" << columnsConfigured
+                                  << "directoriesFirstConfigured=" << directoriesFirstConfigured
+                                  << "columnHeadersVisible=" << columnHeadersVisible
+                                  << "headerSortToggled=" << headerSortToggled << "gb18030Ready=" << gb18030Ready
+                                  << "utf8Ready=" << utf8Ready << "pausedTransferUi=" << pausedTransferUi
+                                  << "uploadCompleted=" << uploadCompleted << "downloadCompleted=" << downloadCompleted
+                                  << "completedTransferUi=" << completedTransferUi
+                                  << "downloadFileValid=" << downloadFileValid
+                                  << "transferPathCopied=" << transferPathCopied
+                                  << "remoteTransferRemoved=" << remoteTransferRemoved
                                   << "deniedPathPreserved=" << deniedPathPreserved
                                   << "deniedPathRecovered=" << deniedPathRecovered;
         return false;
@@ -2425,6 +2619,15 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
                            << "pathCopied=" << pathCopied << "pathBookmarked=" << pathBookmarked
                            << "fileListKeyboard=" << fileListKeyboard << "narrowToolbar=" << narrowToolbar
                            << "wideToolbar=" << wideToolbar << "newFileKeyboard=" << newFileKeyboard
+                           << "sortConfigured=" << sortConfigured << "columnsConfigured=" << columnsConfigured
+                           << "directoriesFirstConfigured=" << directoriesFirstConfigured
+                           << "columnHeadersVisible=" << columnHeadersVisible
+                           << "headerSortToggled=" << headerSortToggled << "gb18030Ready=" << gb18030Ready
+                           << "utf8Ready=" << utf8Ready << "pausedTransferUi=" << pausedTransferUi
+                           << "uploadCompleted=" << uploadCompleted << "downloadCompleted=" << downloadCompleted
+                           << "completedTransferUi=" << completedTransferUi << "downloadFileValid=" << downloadFileValid
+                           << "transferPathCopied=" << transferPathCopied
+                           << "remoteTransferRemoved=" << remoteTransferRemoved
                            << "deniedPathPreserved=" << deniedPathPreserved
                            << "deniedPathRecovered=" << deniedPathRecovered << "workbenchClosed=" << workbenchClosed
                            << "sessionClosed=" << sessionClosed;

@@ -121,6 +121,10 @@ bool validTransferTask(const TransferTask &task) noexcept
     {
         return false;
     }
+    if (task.filenameEncoding != "utf-8" && task.filenameEncoding != "gb18030")
+    {
+        return false;
+    }
     if (containsNull(task.id) || containsNull(task.endpointId) || containsNull(task.displayName)
         || containsNull(task.sourcePath) || containsNull(task.destinationPath) || containsNull(task.errorCode))
     {
@@ -147,12 +151,16 @@ bool canTransition(const TransferStatus from, const TransferStatus to) noexcept
     switch (from)
     {
         case TransferStatus::Queued:
-            return to == TransferStatus::Running || to == TransferStatus::NeedsAttention
+            return to == TransferStatus::Running || to == TransferStatus::Paused || to == TransferStatus::NeedsAttention
                    || to == TransferStatus::Cancelled;
         case TransferStatus::Running:
-            return to == TransferStatus::Cancelling || to == TransferStatus::NeedsAttention
-                   || to == TransferStatus::Completed || to == TransferStatus::Failed
-                   || to == TransferStatus::Cancelled;
+            return to == TransferStatus::Pausing || to == TransferStatus::Cancelling
+                   || to == TransferStatus::NeedsAttention || to == TransferStatus::Completed
+                   || to == TransferStatus::Failed || to == TransferStatus::Cancelled;
+        case TransferStatus::Pausing:
+            return to == TransferStatus::Paused || to == TransferStatus::Failed || to == TransferStatus::Cancelled;
+        case TransferStatus::Paused:
+            return to == TransferStatus::Queued || to == TransferStatus::Cancelled;
         case TransferStatus::Cancelling:
             return to == TransferStatus::Completed || to == TransferStatus::Failed || to == TransferStatus::Cancelled;
         case TransferStatus::NeedsAttention:

@@ -16,7 +16,7 @@ namespace ztermy::sftp
 namespace
 {
 
-constexpr int formatVersion = 1;
+constexpr int formatVersion = 2;
 constexpr qsizetype maximumDocumentBytes = qsizetype{1024} * 1024;
 constexpr qsizetype maximumRecoveredTasks = 100;
 
@@ -68,6 +68,7 @@ constexpr qsizetype maximumRecoveredTasks = 100;
 [[nodiscard]] bool recoverable(const TransferTask &task)
 {
     return task.status == TransferStatus::Queued || task.status == TransferStatus::Running
+           || task.status == TransferStatus::Pausing || task.status == TransferStatus::Paused
            || task.status == TransferStatus::Cancelling || task.status == TransferStatus::NeedsAttention
            || (task.status == TransferStatus::Failed && task.retryable && task.errorCode == "interrupted");
 }
@@ -80,13 +81,19 @@ constexpr qsizetype maximumRecoveredTasks = 100;
         {QStringLiteral("displayName"), qString(task.displayName)},
         {QStringLiteral("sourcePath"), qString(task.sourcePath)},
         {QStringLiteral("destinationPath"), qString(task.destinationPath)},
+        {QStringLiteral("filenameEncoding"), qString(task.filenameEncoding)},
         {QStringLiteral("direction"),
          task.direction == TransferDirection::Download ? QStringLiteral("download") : QStringLiteral("upload")},
+        {QStringLiteral("status"),
+         task.status == TransferStatus::Paused ? QStringLiteral("paused") : QStringLiteral("interrupted")},
         {QStringLiteral("totalBytes"), QString::number(task.totalBytes)},
         {QStringLiteral("transferredBytes"), QString::number(task.transferredBytes)},
     };
     object.insert(QStringLiteral("startedUtcMs"),
                   task.startedUtcMs ? QJsonValue(QString::number(*task.startedUtcMs)) : QJsonValue::Null);
+    object.insert(QStringLiteral("sourceModifiedUtcSeconds"),
+                  task.sourceModifiedUtcSeconds ? QJsonValue(QString::number(*task.sourceModifiedUtcSeconds))
+                                                : QJsonValue::Null);
     return object;
 }
 
@@ -102,29 +109,38 @@ constexpr qsizetype maximumRecoveredTasks = 100;
     const QString displayName = object.value(QStringLiteral("displayName")).toString();
     const QString sourcePath = object.value(QStringLiteral("sourcePath")).toString();
     const QString destinationPath = object.value(QStringLiteral("destinationPath")).toString();
+    const QString filenameEncoding = object.value(QStringLiteral("filenameEncoding")).toString(QStringLiteral("utf-8"));
     const QString direction = object.value(QStringLiteral("direction")).toString();
     const auto totalBytes = unsignedValue(object, QStringLiteral("totalBytes"));
     const auto transferredBytes = unsignedValue(object, QStringLiteral("transferredBytes"));
     if (!boundedString(id, 128) || !boundedString(endpointId, 128) || !boundedString(displayName, 512)
         || !boundedString(sourcePath, 4096) || !boundedString(destinationPath, 4096)
+        || (filenameEncoding != QStringLiteral("utf-8") && filenameEncoding != QStringLiteral("gb18030"))
         || (direction != QStringLiteral("download") && direction != QStringLiteral("upload")) || !totalBytes
         || !transferredBytes || (*totalBytes != 0 && *transferredBytes > *totalBytes))
     {
         return std::nullopt;
     }
 
+    const QString status = object.value(QStringLiteral("status")).toString(QStringLiteral("interrupted"));
+    if (status != QStringLiteral("interrupted") && status != QStringLiteral("paused"))
+    {
+        return std::nullopt;
+    }
     TransferTask task{
         .id = utf8String(id),
         .endpointId = utf8String(endpointId),
         .displayName = utf8String(displayName),
         .sourcePath = utf8String(sourcePath),
         .destinationPath = utf8String(destinationPath),
+        .filenameEncoding = utf8String(filenameEncoding),
         .direction = direction == QStringLiteral("download") ? TransferDirection::Download : TransferDirection::Upload,
-        .status = TransferStatus::Failed,
+        .status = status == QStringLiteral("paused") ? TransferStatus::Paused : TransferStatus::Failed,
         .totalBytes = *totalBytes,
         .transferredBytes = *transferredBytes,
         .startedUtcMs = signedValue(object, QStringLiteral("startedUtcMs")),
-        .errorCode = "interrupted",
+        .sourceModifiedUtcSeconds = signedValue(object, QStringLiteral("sourceModifiedUtcSeconds")),
+        .errorCode = status == QStringLiteral("paused") ? std::string{} : std::string{"interrupted"},
         .retryable = true,
     };
     return validTransferTask(task) ? std::optional{std::move(task)} : std::nullopt;
@@ -157,7 +173,8 @@ std::expected<std::vector<TransferTask>, TransferRecoveryError> TransferRecovery
         return std::unexpected(TransferRecoveryError::InvalidData);
     }
     const QJsonObject root = document.object();
-    if (root.value(QStringLiteral("version")).toInt(-1) != formatVersion)
+    const int version = root.value(QStringLiteral("version")).toInt(-1);
+    if (version != 1 && version != formatVersion)
     {
         return std::unexpected(TransferRecoveryError::UnsupportedVersion);
     }

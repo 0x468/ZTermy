@@ -1,5 +1,6 @@
 #include "application/sftp/TransferExecutor.h"
 
+#include <QCryptographicHash>
 #include <QFile>
 #include <QTemporaryDir>
 #include <QtTest/QTest>
@@ -134,6 +135,31 @@ public:
         return {};
     }
 
+    std::expected<void, ztermy::ssh::SshTransportError> openFileForResume(const std::string_view remotePath,
+                                                                          const std::stop_token &) override
+    {
+        if (m_open || !files.contains(std::string(remotePath)))
+        {
+            return std::unexpected(invalidState());
+        }
+        m_open = true;
+        m_writing = true;
+        m_path = remotePath;
+        m_pending = files.at(m_path);
+        m_offset = m_pending.size();
+        return {};
+    }
+
+    std::expected<void, ztermy::ssh::SshTransportError> seekFile(const std::uint64_t offset) override
+    {
+        if (!m_open || (m_writing && offset != m_pending.size()) || (!m_writing && offset > files.at(m_path).size()))
+        {
+            return std::unexpected(invalidState());
+        }
+        m_offset = static_cast<std::size_t>(offset);
+        return {};
+    }
+
     std::expected<std::size_t, ztermy::ssh::SshTransportError> readFile(const std::span<char> output,
                                                                         const std::stop_token &) override
     {
@@ -241,6 +267,8 @@ private slots:
     void uploadConflictWaitsForExplicitDecision();
     void cancelledUploadRemovesTemporaryRemoteFile();
     void retryRemovesStaleTemporaryUpload();
+    void pausesAndResumesDownloadFromPreservedPartial();
+    void pausesAndResumesUploadFromPreservedPartial();
 };
 
 void TransferExecutorTests::reportsDownloadConflictWithoutTouchingDestination()
@@ -365,7 +393,11 @@ void TransferExecutorTests::retryRemovesStaleTemporaryUpload()
     QVERIFY(writeLocal(source, QByteArrayLiteral("replacement")));
     const auto task = uploadTask(source);
     const std::string temporaryPath =
-        task.destinationPath + ".ztermy-part-" + std::to_string(std::hash<std::string_view>{}(task.id));
+        task.destinationPath + ".ztermy-part-"
+        + QCryptographicHash::hash(QByteArray::fromStdString(task.id), QCryptographicHash::Sha256)
+              .toHex()
+              .first(16)
+              .toStdString();
     MemorySftpClient client;
     client.files[temporaryPath] = bytes("stale-partial");
 
@@ -375,6 +407,65 @@ void TransferExecutorTests::retryRemovesStaleTemporaryUpload()
     QCOMPARE(client.files.at(task.destinationPath), bytes("replacement"));
     QVERIFY(std::ranges::find(client.removedPaths, temporaryPath) != client.removedPaths.end());
     QVERIFY(!client.files.contains(temporaryPath));
+}
+
+void TransferExecutorTests::pausesAndResumesDownloadFromPreservedPartial()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString destination = directory.filePath(QStringLiteral("resume.bin"));
+    MemorySftpClient client;
+    client.files["/remote/file.txt"] = std::vector<char>(600000, 'd');
+    auto task = downloadTask(destination);
+    task.totalBytes = 600000;
+    std::stop_source pause;
+
+    const auto paused = ztermy::sftp::executeTransfer(
+        client, task, {},
+        [&pause](const std::uint64_t, const std::uint64_t, const std::uint64_t) {
+            pause.request_stop();
+        },
+        pause.get_token(),
+        [] {
+            return true;
+        });
+    QCOMPARE(paused.kind, ztermy::sftp::TransferExecutionResultKind::Paused);
+    QVERIFY(paused.transferredBytes > 0);
+    QVERIFY(!QFileInfo::exists(destination));
+
+    task.transferredBytes = paused.transferredBytes;
+    const auto completed = ztermy::sftp::executeTransfer(client, task, {}, {}, {});
+    QCOMPARE(completed.kind, ztermy::sftp::TransferExecutionResultKind::Completed);
+    QCOMPARE(readLocal(destination), QByteArray(600000, 'd'));
+}
+
+void TransferExecutorTests::pausesAndResumesUploadFromPreservedPartial()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString source = directory.filePath(QStringLiteral("resume.bin"));
+    QVERIFY(writeLocal(source, QByteArray(600000, 'u')));
+    MemorySftpClient client;
+    auto task = uploadTask(source);
+    task.totalBytes = 600000;
+    std::stop_source pause;
+
+    const auto paused = ztermy::sftp::executeTransfer(
+        client, task, {},
+        [&pause](const std::uint64_t, const std::uint64_t, const std::uint64_t) {
+            pause.request_stop();
+        },
+        pause.get_token(),
+        [] {
+            return true;
+        });
+    QCOMPARE(paused.kind, ztermy::sftp::TransferExecutionResultKind::Paused);
+    QVERIFY(paused.transferredBytes > 0);
+
+    task.transferredBytes = paused.transferredBytes;
+    const auto completed = ztermy::sftp::executeTransfer(client, task, {}, {}, {});
+    QCOMPARE(completed.kind, ztermy::sftp::TransferExecutionResultKind::Completed);
+    QCOMPARE(client.files.at(task.destinationPath), std::vector<char>(600000, 'u'));
 }
 
 } // namespace

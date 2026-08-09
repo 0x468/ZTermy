@@ -1,4 +1,5 @@
 #include "application/sftp/SftpSession.h"
+#include "application/sftp/SftpFilenameCodec.h"
 
 #include <QByteArray>
 #include <QDebug>
@@ -46,6 +47,16 @@ SftpSession::SftpSession(SftpClientFactory clientFactory, QObject *parent)
 SftpSession::~SftpSession()
 {
     stop();
+}
+
+void SftpSession::setFilenameEncoding(QString encoding)
+{
+    if (running())
+    {
+        return;
+    }
+    encoding = encoding.trimmed().toLower();
+    m_filenameEncoding = encoding == QStringLiteral("gb18030") ? "gb18030" : "utf-8";
 }
 
 std::error_code SftpSession::start(ssh::SshConnectionRequest request)
@@ -324,6 +335,7 @@ void SftpSession::run(ssh::SshConnectionRequest &request, const std::stop_token 
         postPhase(ssh::SshConnectionPhase::Failed);
         return;
     }
+    *client = withFilenameEncoding(std::move(*client), m_filenameEncoding);
     if (stopToken.stop_requested())
     {
         return;

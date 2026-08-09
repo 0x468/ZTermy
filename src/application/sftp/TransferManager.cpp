@@ -1,8 +1,10 @@
 #include "application/sftp/TransferManager.h"
+#include "application/sftp/SftpFilenameCodec.h"
 
 #include "infrastructure/sftp/TransferRecoveryStore.h"
 
 #include <QDateTime>
+#include <QFile>
 #include <QMetaObject>
 
 #include <system_error>
@@ -87,6 +89,7 @@ TransferManager::~TransferManager()
 {
     requestStop();
     m_workers.clear();
+    m_cleanupWorkers.clear();
 }
 
 void TransferManager::requestStop() noexcept
@@ -112,6 +115,7 @@ void TransferManager::shutdown() noexcept
     }
     requestStop();
     m_workers.clear();
+    m_cleanupWorkers.clear();
     persistRecovery();
     m_shutdownComplete = true;
 }
@@ -182,6 +186,7 @@ void TransferManager::cancel(const QString &taskIdentifier)
     const bool wasRunning = task != nullptr && task->status == TransferStatus::Running;
     if (auto worker = m_workers.find(id); worker != m_workers.end())
     {
+        worker->second.context->pauseRequested = false;
         worker->second.thread.request_stop();
         worker->second.context->hostKeyAvailable.notify_all();
     }
@@ -193,6 +198,38 @@ void TransferManager::cancel(const QString &taskIdentifier)
         {
             schedule();
         }
+    }
+}
+
+void TransferManager::pause(const QString &taskIdentifier)
+{
+    const std::string id = taskId(taskIdentifier);
+    const TransferTask *task = m_queue.find(id);
+    const bool wasRunning = task != nullptr && task->status == TransferStatus::Running;
+    if (!m_queue.pause(id))
+    {
+        return;
+    }
+    if (auto worker = m_workers.find(id); worker != m_workers.end())
+    {
+        worker->second.context->pauseRequested = true;
+        worker->second.thread.request_stop();
+        worker->second.context->hostKeyAvailable.notify_all();
+    }
+    publishSnapshot();
+    if (!wasRunning)
+    {
+        schedule();
+    }
+}
+
+void TransferManager::resume(const QString &taskIdentifier)
+{
+    const std::string id = taskId(taskIdentifier);
+    if (m_work.contains(id) && m_queue.resume(id))
+    {
+        publishSnapshot();
+        schedule();
     }
 }
 
@@ -209,21 +246,97 @@ void TransferManager::retry(const QString &taskIdentifier)
 void TransferManager::dismiss(const QString &taskIdentifier)
 {
     const std::string id = taskId(taskIdentifier);
+    const TransferTask *task = m_queue.find(id);
+    const auto work = m_work.find(id);
+    const std::optional<TransferTask> cleanupTask = task == nullptr ? std::nullopt : std::optional(*task);
+    const std::optional<WorkSpec> cleanupWork = work == m_work.end() ? std::nullopt : std::optional(work->second);
     if (m_queue.dismiss(id))
     {
         m_work.erase(id);
+        if (cleanupTask && cleanupWork)
+        {
+            cleanupPartial(*cleanupTask, *cleanupWork);
+        }
         publishSnapshot();
     }
 }
 
 void TransferManager::dismissFinished()
 {
+    std::vector<std::pair<TransferTask, WorkSpec>> cleanup;
+    for (const TransferTask &task : m_queue.tasks())
+    {
+        if (task.status != TransferStatus::Completed && task.status != TransferStatus::Failed
+            && task.status != TransferStatus::Cancelled)
+        {
+            continue;
+        }
+        const auto work = m_work.find(task.id);
+        if (work != m_work.end())
+        {
+            cleanup.emplace_back(task, work->second);
+        }
+    }
     if (m_queue.dismissFinished() > 0)
     {
+        for (const auto &[task, work] : cleanup)
+        {
+            cleanupPartial(task, work);
+        }
         std::erase_if(m_work, [this](const auto &item) {
             return m_queue.find(item.first) == nullptr;
         });
         publishSnapshot();
+    }
+}
+
+void TransferManager::pauseAll()
+{
+    std::vector<QString> identifiers;
+    for (const TransferTask &task : m_queue.tasks())
+    {
+        if (task.status == TransferStatus::Queued || task.status == TransferStatus::Running)
+        {
+            identifiers.push_back(qTaskId(task.id));
+        }
+    }
+    for (const QString &identifier : identifiers)
+    {
+        pause(identifier);
+    }
+}
+
+void TransferManager::resumeAll()
+{
+    std::vector<QString> identifiers;
+    for (const TransferTask &task : m_queue.tasks())
+    {
+        if (task.status == TransferStatus::Paused)
+        {
+            identifiers.push_back(qTaskId(task.id));
+        }
+    }
+    for (const QString &identifier : identifiers)
+    {
+        resume(identifier);
+    }
+}
+
+void TransferManager::cancelAll()
+{
+    std::vector<QString> identifiers;
+    for (const TransferTask &task : m_queue.tasks())
+    {
+        if (task.status == TransferStatus::Queued || task.status == TransferStatus::Running
+            || task.status == TransferStatus::Pausing || task.status == TransferStatus::Paused
+            || task.status == TransferStatus::NeedsAttention)
+        {
+            identifiers.push_back(qTaskId(task.id));
+        }
+    }
+    for (const QString &identifier : identifiers)
+    {
+        cancel(identifier);
     }
 }
 
@@ -374,6 +487,7 @@ void TransferManager::startWorker(const TransferTask &task, const WorkSpec &spec
                                           Q_ARG(ztermy::sftp::TransferExecutionResult, result));
                 return;
             }
+            *client = withFilenameEncoding(std::move(*client), task.filenameEncoding);
             auto result = executeTransfer(
                 **client, task, spec.options,
                 [this, id = task.id](const std::uint64_t transferred, const std::uint64_t total,
@@ -382,7 +496,10 @@ void TransferManager::startWorker(const TransferTask &task, const WorkSpec &spec
                                               Q_ARG(QString, qTaskId(id)), Q_ARG(qulonglong, transferred),
                                               Q_ARG(qulonglong, total), Q_ARG(qulonglong, speed));
                 },
-                stopToken);
+                stopToken,
+                [context] {
+                    return context->pauseRequested.load();
+                });
             QMetaObject::invokeMethod(this, "deliverResult", Qt::QueuedConnection, Q_ARG(QString, qTaskId(task.id)),
                                       Q_ARG(ztermy::sftp::TransferExecutionResult, result));
         }
@@ -396,6 +513,70 @@ void TransferManager::startWorker(const TransferTask &task, const WorkSpec &spec
         }
     });
     m_workers.emplace(id, WorkerRecord{.context = context, .thread = std::move(worker)});
+}
+
+void TransferManager::cleanupPartial(const TransferTask &task, const WorkSpec &spec)
+{
+    const std::string destination =
+        spec.options.conflictAction == ConflictAction::Rename && !spec.options.renamedDestinationPath.empty()
+            ? spec.options.renamedDestinationPath
+            : task.destinationPath;
+    if (task.direction == TransferDirection::Download)
+    {
+        QFile::remove(localTransferPartialPath(destination, task.id));
+        return;
+    }
+
+    pruneCleanupWorkers();
+    const auto finished = std::make_shared<std::atomic_bool>(false);
+    const auto factory = std::make_shared<SftpClientFactory>(m_clientFactory);
+    const auto input = std::make_shared<WorkerInput>(WorkerInput{.task = task, .spec = spec});
+    const auto cleanupDestination = std::make_shared<std::string>(destination);
+    std::jthread worker([factory, finished, input, cleanupDestination](const std::stop_token &stopToken) noexcept {
+        try
+        {
+            do
+            {
+                auto request = input->spec.requestProvider();
+                if (!request)
+                {
+                    break;
+                }
+                const ssh::SshConnectionCallbacks callbacks{
+                    .phaseChanged = {},
+                    .confirmUnknownHostKey =
+                        [](const QString &, const QString &) {
+                            return ssh::UnknownHostKeyDecision::Reject;
+                        },
+                    .hostKeyChanged = {},
+                };
+                auto client = (*factory)(*request, callbacks, stopToken);
+                request->secret.clear();
+                if (!client)
+                {
+                    break;
+                }
+                *client = withFilenameEncoding(std::move(*client), input->task.filenameEncoding);
+                [[maybe_unused]] const auto removed = (*client)->removeEntry(
+                    remoteTransferPartialPath(*cleanupDestination, input->task.id), false, stopToken);
+            } while (false);
+        }
+        catch (...)
+        {
+            // Cleanup is best-effort and must never terminate the process.
+            finished->store(true, std::memory_order_release);
+            return;
+        }
+        finished->store(true, std::memory_order_release);
+    });
+    m_cleanupWorkers.push_back(CleanupWorkerRecord{.finished = finished, .thread = std::move(worker)});
+}
+
+void TransferManager::pruneCleanupWorkers()
+{
+    std::erase_if(m_cleanupWorkers, [](const CleanupWorkerRecord &worker) {
+        return worker.finished->load(std::memory_order_acquire);
+    });
 }
 
 void TransferManager::deliverCredentialError(const QString &taskIdValue, const TransferCredentialError error)
@@ -451,7 +632,7 @@ void TransferManager::handleProgress(const std::string &id, const std::uint64_t 
 {
     if (m_queue.updateProgress(id, transferredBytes, totalBytes, bytesPerSecond))
     {
-        publishSnapshot(false);
+        publishSnapshot();
     }
 }
 
@@ -470,7 +651,9 @@ void TransferManager::handleResult(const std::string &id, TransferExecutionResul
 {
     m_workers.erase(id);
     const TransferTask *task = m_queue.find(id);
-    if (task == nullptr || (task->status != TransferStatus::Running && task->status != TransferStatus::Cancelling))
+    if (task == nullptr
+        || (task->status != TransferStatus::Running && task->status != TransferStatus::Pausing
+            && task->status != TransferStatus::Cancelling))
     {
         schedule();
         return;
@@ -492,9 +675,23 @@ void TransferManager::handleResult(const std::string &id, TransferExecutionResul
         }
         case TransferExecutionResultKind::Cancelled:
         {
-            [[maybe_unused]] const auto cancelled = m_queue.cancel(id, now);
-            Q_ASSERT(cancelled.has_value());
-            m_work.erase(id);
+            if (task->status == TransferStatus::Pausing)
+            {
+                [[maybe_unused]] const auto paused = m_queue.markPaused(id, result.transferredBytes);
+                Q_ASSERT(paused.has_value());
+            }
+            else
+            {
+                [[maybe_unused]] const auto cancelled = m_queue.cancel(id, now);
+                Q_ASSERT(cancelled.has_value());
+                m_work.erase(id);
+            }
+            break;
+        }
+        case TransferExecutionResultKind::Paused:
+        {
+            [[maybe_unused]] const auto paused = m_queue.markPaused(id, result.transferredBytes);
+            Q_ASSERT(paused.has_value());
             break;
         }
         case TransferExecutionResultKind::NeedsAttention:
@@ -509,6 +706,11 @@ void TransferManager::handleResult(const std::string &id, TransferExecutionResul
         }
         case TransferExecutionResultKind::Failed:
         {
+            if (result.transferredBytes >= task->transferredBytes)
+            {
+                [[maybe_unused]] const auto updated =
+                    m_queue.updateProgress(id, result.transferredBytes, task->totalBytes, 0);
+            }
             [[maybe_unused]] const auto failed = m_queue.fail(id, executionErrorCode(result), true, now);
             Q_ASSERT(failed.has_value());
             break;

@@ -1,10 +1,15 @@
 #include "application/sftp/TransferExecutor.h"
 
+#include <QCryptographicHash>
 #include <QDateTime>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QSaveFile>
 #include <QString>
+
+#ifdef Q_OS_WIN
+#include <Windows.h>
+#endif
 
 #include <array>
 #include <chrono>
@@ -44,7 +49,16 @@ EntryType localEntryType(const QFileInfo &info)
 
 std::string temporaryRemotePath(const std::string_view destination, const std::string_view taskId)
 {
-    return std::string(destination) + ".ztermy-part-" + std::to_string(std::hash<std::string_view>{}(taskId));
+    const QByteArray id(taskId.data(), static_cast<qsizetype>(taskId.size()));
+    const QByteArray token = QCryptographicHash::hash(id, QCryptographicHash::Sha256).toHex().first(16);
+    return std::string(destination) + ".ztermy-part-" + token.toStdString();
+}
+
+QString temporaryLocalPath(const std::string_view destination, const std::string_view taskId)
+{
+    const QByteArray id(taskId.data(), static_cast<qsizetype>(taskId.size()));
+    const QByteArray token = QCryptographicHash::hash(id, QCryptographicHash::Sha256).toHex().first(16);
+    return localPath(destination) + QStringLiteral(".ztermy-part-") + QString::fromLatin1(token);
 }
 
 std::uint64_t speedSince(const std::chrono::steady_clock::time_point started, const std::uint64_t bytes)
@@ -86,6 +100,23 @@ TransferExecutionResult conflictResult(FileConflict conflict)
     };
 }
 
+bool commitLocalFile(const QString &partialPath, const QString &finalPath)
+{
+#ifdef Q_OS_WIN
+    const QString nativePartial = QDir::toNativeSeparators(partialPath);
+    const QString nativeFinal = QDir::toNativeSeparators(finalPath);
+    return MoveFileExW(reinterpret_cast<LPCWSTR>(nativePartial.utf16()), reinterpret_cast<LPCWSTR>(nativeFinal.utf16()),
+                       MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)
+           != FALSE;
+#else
+    if (QFileInfo::exists(finalPath) && !QFile::remove(finalPath))
+    {
+        return false;
+    }
+    return QFile::rename(partialPath, finalPath);
+#endif
+}
+
 class RemoteFileGuard final
 {
 public:
@@ -119,7 +150,8 @@ private:
 
 TransferExecutionResult executeDownload(SftpClient &client, const TransferTask &task,
                                         const TransferExecutionOptions &options,
-                                        const TransferProgressCallback &progress, const std::stop_token &stopToken)
+                                        const TransferProgressCallback &progress, const std::stop_token &stopToken,
+                                        const TransferPauseRequestedCallback &pauseRequested)
 {
     auto remoteSource = client.statEntry(task.sourcePath, stopToken);
     if (!remoteSource)
@@ -129,6 +161,11 @@ TransferExecutionResult executeDownload(SftpClient &client, const TransferTask &
     if (!*remoteSource || (*remoteSource)->type != EntryType::RegularFile)
     {
         return failure(TransferExecutionErrorKind::InvalidTask);
+    }
+    if (task.sourceModifiedUtcSeconds && (*remoteSource)->modifiedUtcSeconds
+        && task.sourceModifiedUtcSeconds != (*remoteSource)->modifiedUtcSeconds)
+    {
+        return failure(TransferExecutionErrorKind::InvalidTask, task.transferredBytes);
     }
 
     std::string destination = task.destinationPath;
@@ -174,29 +211,65 @@ TransferExecutionResult executeDownload(SftpClient &client, const TransferTask &
         }
     }
 
+    const QString partialPath = temporaryLocalPath(destination, task.id);
+    const QFileInfo partialInfo(partialPath);
+    std::uint64_t transferred = task.transferredBytes;
+    if (task.totalBytes != 0 && task.totalBytes != (*remoteSource)->size)
+    {
+        return failure(TransferExecutionErrorKind::InvalidTask, transferred);
+    }
+    if (transferred > 0)
+    {
+        if (!partialInfo.exists())
+        {
+            transferred = 0;
+        }
+        else if (!partialInfo.isFile() || partialInfo.size() < 0
+                 || std::cmp_greater(static_cast<std::uint64_t>(partialInfo.size()), (*remoteSource)->size))
+        {
+            return failure(TransferExecutionErrorKind::InvalidTask, transferred);
+        }
+        else
+        {
+            transferred = static_cast<std::uint64_t>(partialInfo.size());
+        }
+    }
+    if (transferred == 0 && partialInfo.exists() && !QFile::remove(partialPath))
+    {
+        return failure(TransferExecutionErrorKind::LocalIo);
+    }
+
     auto opened = client.openFileForRead(task.sourcePath, stopToken);
     if (!opened)
     {
         return remoteFailure(opened.error());
     }
     RemoteFileGuard remoteGuard(client);
+    if (transferred > 0)
+    {
+        auto sought = client.seekFile(transferred);
+        if (!sought)
+        {
+            return remoteFailure(sought.error(), transferred);
+        }
+    }
 
-    QSaveFile output(localPath(destination));
-    if (!output.open(QIODevice::WriteOnly))
+    QFile output(partialPath);
+    if (!output.open(QIODevice::WriteOnly | (transferred > 0 ? QIODevice::Append : QIODevice::Truncate)))
     {
         return failure(TransferExecutionErrorKind::LocalIo);
     }
 
     std::array<char, transferBufferSize> buffer{};
-    std::uint64_t transferred = 0;
     const auto started = std::chrono::steady_clock::now();
+    const std::uint64_t startedAt = transferred;
     auto lastProgress = started;
     while (!stopToken.stop_requested())
     {
         auto read = client.readFile(buffer, stopToken);
         if (!read)
         {
-            output.cancelWriting();
+            output.close();
             return remoteFailure(read.error(), transferred);
         }
         if (*read == 0)
@@ -205,21 +278,27 @@ TransferExecutionResult executeDownload(SftpClient &client, const TransferTask &
         }
         if (output.write(buffer.data(), static_cast<qint64>(*read)) != static_cast<qint64>(*read))
         {
-            output.cancelWriting();
+            output.close();
             return failure(TransferExecutionErrorKind::LocalIo, transferred);
         }
         transferred += *read;
         const auto now = std::chrono::steady_clock::now();
         if (progress && (transferred == (*remoteSource)->size || now - lastProgress >= progressInterval))
         {
-            progress(transferred, (*remoteSource)->size, speedSince(started, transferred));
+            progress(transferred, (*remoteSource)->size, speedSince(started, transferred - startedAt));
             lastProgress = now;
         }
     }
     if (stopToken.stop_requested())
     {
-        output.cancelWriting();
-        return TransferExecutionResult{.kind = TransferExecutionResultKind::Cancelled,
+        output.close();
+        const bool paused = pauseRequested && pauseRequested();
+        if (!paused)
+        {
+            QFile::remove(partialPath);
+        }
+        return TransferExecutionResult{.kind = paused ? TransferExecutionResultKind::Paused
+                                                      : TransferExecutionResultKind::Cancelled,
                                        .transferredBytes = transferred,
                                        .finalDestinationPath = destination};
     }
@@ -227,15 +306,17 @@ TransferExecutionResult executeDownload(SftpClient &client, const TransferTask &
     auto closed = remoteGuard.close(stopToken);
     if (!closed)
     {
-        output.cancelWriting();
+        output.close();
         return remoteFailure(closed.error(), transferred);
     }
-    if (QFileInfo::exists(localPath(destination)) && destination != task.destinationPath)
+    output.close();
+    const QString finalPath = localPath(destination);
+    if (QFileInfo::exists(finalPath) && destination != task.destinationPath)
     {
-        output.cancelWriting();
+        QFile::remove(partialPath);
         return failure(TransferExecutionErrorKind::InvalidConflictRename, transferred);
     }
-    if (!output.commit())
+    if (!commitLocalFile(partialPath, finalPath))
     {
         return failure(TransferExecutionErrorKind::CommitFailed, transferred);
     }
@@ -246,12 +327,17 @@ TransferExecutionResult executeDownload(SftpClient &client, const TransferTask &
 
 TransferExecutionResult executeUpload(SftpClient &client, const TransferTask &task,
                                       const TransferExecutionOptions &options, const TransferProgressCallback &progress,
-                                      const std::stop_token &stopToken)
+                                      const std::stop_token &stopToken,
+                                      const TransferPauseRequestedCallback &pauseRequested)
 {
     QFileInfo sourceInfo(localPath(task.sourcePath));
     if (!sourceInfo.exists() || !sourceInfo.isFile() || sourceInfo.isSymbolicLink())
     {
         return failure(TransferExecutionErrorKind::InvalidTask);
+    }
+    if (task.sourceModifiedUtcSeconds && *task.sourceModifiedUtcSeconds != sourceInfo.lastModified().toSecsSinceEpoch())
+    {
+        return failure(TransferExecutionErrorKind::InvalidTask, task.transferredBytes);
     }
     QFile input(sourceInfo.absoluteFilePath());
     if (!input.open(QIODevice::ReadOnly))
@@ -327,7 +413,28 @@ TransferExecutionResult executeUpload(SftpClient &client, const TransferTask &ta
     {
         return remoteFailure(staleTemporary.error());
     }
-    if (*staleTemporary)
+    std::uint64_t transferred = task.transferredBytes;
+    const auto sourceSize = static_cast<std::uint64_t>(sourceInfo.size());
+    if (task.totalBytes != 0 && task.totalBytes != sourceSize)
+    {
+        return failure(TransferExecutionErrorKind::InvalidTask, transferred);
+    }
+    if (transferred > 0)
+    {
+        if (!*staleTemporary)
+        {
+            transferred = 0;
+        }
+        else if ((*staleTemporary)->type != EntryType::RegularFile || (*staleTemporary)->size > sourceSize)
+        {
+            return failure(TransferExecutionErrorKind::InvalidTask, transferred);
+        }
+        else
+        {
+            transferred = (*staleTemporary)->size;
+        }
+    }
+    if (transferred == 0 && *staleTemporary)
     {
         auto removed = client.removeEntry(temporaryPath, false, stopToken);
         if (!removed)
@@ -335,28 +442,38 @@ TransferExecutionResult executeUpload(SftpClient &client, const TransferTask &ta
             return remoteFailure(removed.error());
         }
     }
-    auto opened = client.openFileForWrite(temporaryPath, false, stopToken);
+    auto opened = transferred > 0 ? client.openFileForResume(temporaryPath, stopToken)
+                                  : client.openFileForWrite(temporaryPath, false, stopToken);
     if (!opened)
     {
         return remoteFailure(opened.error());
     }
     RemoteFileGuard remoteGuard(client);
+    if (transferred > 0)
+    {
+        auto remoteSeek = client.seekFile(transferred);
+        if (!remoteSeek || !input.seek(static_cast<qint64>(transferred)))
+        {
+            return remoteSeek ? failure(TransferExecutionErrorKind::LocalIo, transferred)
+                              : remoteFailure(remoteSeek.error(), transferred);
+        }
+    }
     const auto closeAndRemoveTemporary = [&client, &temporaryPath, &remoteGuard] {
         [[maybe_unused]] const auto closed = remoteGuard.close({});
         [[maybe_unused]] const auto removed = client.removeEntry(temporaryPath, false, {});
     };
 
     std::array<char, transferBufferSize> buffer{};
-    std::uint64_t transferred = 0;
     const auto total = static_cast<std::uint64_t>(sourceInfo.size());
     const auto started = std::chrono::steady_clock::now();
+    const std::uint64_t startedAt = transferred;
     auto lastProgress = started;
     while (!stopToken.stop_requested())
     {
         const qint64 read = input.read(buffer.data(), static_cast<qint64>(buffer.size()));
         if (read < 0)
         {
-            closeAndRemoveTemporary();
+            [[maybe_unused]] const auto closed = remoteGuard.close({});
             return failure(TransferExecutionErrorKind::LocalIo, transferred);
         }
         if (read == 0)
@@ -367,21 +484,27 @@ TransferExecutionResult executeUpload(SftpClient &client, const TransferTask &ta
             client.writeFile(std::span<const char>(buffer.data(), static_cast<std::size_t>(read)), stopToken);
         if (!written)
         {
-            closeAndRemoveTemporary();
+            [[maybe_unused]] const auto closed = remoteGuard.close({});
             return remoteFailure(written.error(), transferred);
         }
         transferred += static_cast<std::uint64_t>(read);
         const auto now = std::chrono::steady_clock::now();
         if (progress && (transferred == total || now - lastProgress >= progressInterval))
         {
-            progress(transferred, total, speedSince(started, transferred));
+            progress(transferred, total, speedSince(started, transferred - startedAt));
             lastProgress = now;
         }
     }
     if (stopToken.stop_requested())
     {
-        closeAndRemoveTemporary();
-        return TransferExecutionResult{.kind = TransferExecutionResultKind::Cancelled,
+        [[maybe_unused]] const auto closed = remoteGuard.close({});
+        const bool paused = pauseRequested && pauseRequested();
+        if (!paused)
+        {
+            [[maybe_unused]] const auto removed = client.removeEntry(temporaryPath, false, {});
+        }
+        return TransferExecutionResult{.kind = paused ? TransferExecutionResultKind::Paused
+                                                      : TransferExecutionResultKind::Cancelled,
                                        .transferredBytes = transferred,
                                        .finalDestinationPath = destination};
     }
@@ -405,9 +528,20 @@ TransferExecutionResult executeUpload(SftpClient &client, const TransferTask &ta
 
 } // namespace
 
+QString localTransferPartialPath(const std::string_view destinationPath, const std::string_view taskId)
+{
+    return temporaryLocalPath(destinationPath, taskId);
+}
+
+std::string remoteTransferPartialPath(const std::string_view destinationPath, const std::string_view taskId)
+{
+    return temporaryRemotePath(destinationPath, taskId);
+}
+
 TransferExecutionResult executeTransfer(SftpClient &client, const TransferTask &task,
                                         const TransferExecutionOptions &options,
-                                        const TransferProgressCallback &progress, const std::stop_token &stopToken)
+                                        const TransferProgressCallback &progress, const std::stop_token &stopToken,
+                                        const TransferPauseRequestedCallback &pauseRequested)
 {
     if (!validTransferTask(task))
     {
@@ -417,8 +551,9 @@ TransferExecutionResult executeTransfer(SftpClient &client, const TransferTask &
     {
         return TransferExecutionResult{.kind = TransferExecutionResultKind::Cancelled};
     }
-    return task.direction == TransferDirection::Download ? executeDownload(client, task, options, progress, stopToken)
-                                                         : executeUpload(client, task, options, progress, stopToken);
+    return task.direction == TransferDirection::Download
+               ? executeDownload(client, task, options, progress, stopToken, pauseRequested)
+               : executeUpload(client, task, options, progress, stopToken, pauseRequested);
 }
 
 } // namespace ztermy::sftp

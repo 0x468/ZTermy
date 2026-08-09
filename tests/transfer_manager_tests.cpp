@@ -31,7 +31,9 @@ struct ManagerFakeState final
     std::atomic_int maximumActiveClients = 0;
     std::atomic_bool releaseWrites = false;
     bool holdWrites = false;
+    std::atomic_bool failWrites = false;
     std::atomic_bool destinationExists = false;
+    std::atomic_int removeCalls = 0;
 };
 
 ztermy::ssh::SshTransportError cancelledError()
@@ -99,6 +101,7 @@ public:
     std::expected<void, ztermy::ssh::SshTransportError> removeEntry(const std::string_view, const bool,
                                                                     const std::stop_token &) override
     {
+        m_state->removeCalls.fetch_add(1);
         return {};
     }
 
@@ -123,6 +126,11 @@ public:
     std::expected<void, ztermy::ssh::SshTransportError> writeFile(const std::span<const char>,
                                                                   const std::stop_token &stopToken) override
     {
+        if (m_state->failWrites.load())
+        {
+            return std::unexpected(
+                ztermy::ssh::SshTransportError{.kind = ztermy::ssh::SshTransportErrorKind::ConnectionLost});
+        }
         if (m_state->holdWrites)
         {
             std::unique_lock lock(m_state->mutex);
@@ -202,6 +210,8 @@ private slots:
     void restoresInterruptedTransferForExplicitRetry();
     void orderlyShutdownPreservesInterruptedTransferForRetry();
     void destructionCancelsInFlightWorkers();
+    void pausesAndResumesInFlightTransfer();
+    void dismissingFailedUploadCleansRemotePartial();
 };
 
 void TransferManagerTests::initTestCase()
@@ -256,6 +266,45 @@ void TransferManagerTests::destructionCancelsInFlightWorkers()
     }
 
     QTRY_COMPARE(state->activeClients.load(), 0);
+}
+
+void TransferManagerTests::pausesAndResumesInFlightTransfer()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString source = directory.filePath(QStringLiteral("source.txt"));
+    QVERIFY(writeLocal(source));
+    const auto state = std::make_shared<ManagerFakeState>();
+    state->holdWrites = true;
+    ztermy::sftp::TransferManager manager(1, clientFactory(state));
+
+    QVERIFY(manager.enqueue(uploadTask("pause-resume", source), requestProvider()));
+    QTRY_COMPARE(state->activeClients.load(), 1);
+    manager.pause(QStringLiteral("pause-resume"));
+    QTRY_VERIFY(findTask(manager.snapshot(), "pause-resume")->status == ztermy::sftp::TransferStatus::Paused);
+    QTRY_COMPARE(state->activeClients.load(), 0);
+
+    state->holdWrites = false;
+    manager.resume(QStringLiteral("pause-resume"));
+    QTRY_VERIFY(findTask(manager.snapshot(), "pause-resume")->status == ztermy::sftp::TransferStatus::Completed);
+}
+
+void TransferManagerTests::dismissingFailedUploadCleansRemotePartial()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString source = directory.filePath(QStringLiteral("source.txt"));
+    QVERIFY(writeLocal(source));
+    const auto state = std::make_shared<ManagerFakeState>();
+    state->failWrites.store(true);
+    ztermy::sftp::TransferManager manager(1, clientFactory(state));
+
+    QVERIFY(manager.enqueue(uploadTask("failed-cleanup", source), requestProvider()));
+    QTRY_VERIFY(findTask(manager.snapshot(), "failed-cleanup")->status == ztermy::sftp::TransferStatus::Failed);
+    manager.dismiss(QStringLiteral("failed-cleanup"));
+
+    QTRY_VERIFY(findTask(manager.snapshot(), "failed-cleanup") == nullptr);
+    QTRY_COMPARE(state->removeCalls.load(), 1);
 }
 
 void TransferManagerTests::orderlyShutdownPreservesInterruptedTransferForRetry()

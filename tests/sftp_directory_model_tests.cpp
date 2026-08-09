@@ -21,6 +21,7 @@ private slots:
     void exposesParentDirectoryOutsideRoot();
     void handlesLargeDirectoryWithinBudget();
     void expandsTreeDirectoriesLazilyAndSurfacesErrors();
+    void supportsConfigurableSortAndDirectoryGrouping();
 };
 
 ztermy::sftp::DirectoryListingPtr listing()
@@ -186,6 +187,23 @@ void SftpDirectoryModelTests::handlesLargeDirectoryWithinBudget()
           static_cast<long long>(filterMs));
     QVERIFY2(listingMs <= 5'000, "Large SFTP listing exceeded the V2.3 5 s Debug budget");
     QVERIFY2(filterMs <= 1'000, "Large SFTP filter exceeded the V2.3 1 s Debug budget");
+}
+
+void SftpDirectoryModelTests::supportsConfigurableSortAndDirectoryGrouping()
+{
+    ztermy::sftp::SftpDirectoryModel model;
+    model.setShowHidden(true);
+    model.setEntries(listing());
+    model.setDirectoriesFirst(false);
+    model.setSortColumn(QStringLiteral("size"));
+    model.setSortAscending(false);
+
+    QCOMPARE(model.entry(0).value(QStringLiteral("name")).toString(), QStringLiteral("zeta.txt"));
+    QCOMPARE(model.entry(1).value(QStringLiteral("name")).toString(), QStringLiteral(".secret"));
+    QCOMPARE(model.entry(2).value(QStringLiteral("name")).toString(), QStringLiteral("Alpha"));
+    QCOMPARE(model.sortColumn(), QStringLiteral("size"));
+    QVERIFY(!model.sortAscending());
+    QVERIFY(!model.directoriesFirst());
 }
 
 } // namespace

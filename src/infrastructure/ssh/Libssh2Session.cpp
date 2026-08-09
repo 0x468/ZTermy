@@ -1273,9 +1273,10 @@ std::expected<void, SshTransportError> Libssh2Session::openSftpFileForWrite(Wind
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::Cancelled});
     }
 
-    const unsigned long flags = disposition == SftpWriteDisposition::CreateNew
-                                    ? LIBSSH2_FXF_WRITE | LIBSSH2_FXF_CREAT | LIBSSH2_FXF_EXCL
-                                    : LIBSSH2_FXF_WRITE | LIBSSH2_FXF_CREAT | LIBSSH2_FXF_TRUNC;
+    const unsigned long flags =
+        disposition == SftpWriteDisposition::CreateNew      ? LIBSSH2_FXF_WRITE | LIBSSH2_FXF_CREAT | LIBSSH2_FXF_EXCL
+        : disposition == SftpWriteDisposition::OpenOrCreate ? LIBSSH2_FXF_WRITE | LIBSSH2_FXF_CREAT
+                                                            : LIBSSH2_FXF_WRITE | LIBSSH2_FXF_CREAT | LIBSSH2_FXF_TRUNC;
     auto *session = static_cast<LIBSSH2_SESSION *>(m_session);
     auto *sftpHandle = static_cast<LIBSSH2_SFTP *>(m_sftp);
     const auto deadline = std::chrono::steady_clock::now() + timeout;
@@ -1434,6 +1435,16 @@ std::expected<void, SshTransportError> Libssh2Session::closeSftpFile(WindowsTcpS
             return std::unexpected(ready.error());
         }
     }
+}
+
+std::expected<void, SshTransportError> Libssh2Session::seekSftpFile(const std::uint64_t offset) noexcept
+{
+    if (m_session == nullptr || m_sftp == nullptr || m_sftpFile == nullptr)
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
+    }
+    libssh2_sftp_seek64(static_cast<LIBSSH2_SFTP_HANDLE *>(m_sftpFile), offset);
+    return {};
 }
 
 bool Libssh2Session::sftpFileOpen() const noexcept

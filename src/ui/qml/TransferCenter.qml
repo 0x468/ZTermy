@@ -7,6 +7,8 @@ import QtQuick.Layouts
 Popup {
     id: center
 
+    objectName: "transferCenter"
+
     required property var controller
     property string conflictTaskId: ""
     property var conflict: ({})
@@ -18,8 +20,12 @@ Popup {
         }
         return false;
     }
+    readonly property bool hasPausableTasks: controller.transferTasks.some(task => task.status === "queued" || task.status === "running")
+    readonly property bool hasPausedTasks: controller.transferTasks.some(task => task.status === "paused")
+    readonly property bool completedDownloadDragAvailable: controller.transferTasks.some(task => task.direction === "download" && task.status === "completed")
+    readonly property bool hasActiveTasks: controller.transferTasks.some(task => task.status === "queued" || task.status === "running" || task.status === "pausing" || task.status === "paused" || task.status === "needs-attention")
 
-    width: 440
+    width: 500
     height: Math.min(520, Math.max(170, contentColumn.implicitHeight + topPadding + bottomPadding))
     padding: 12
     modal: false
@@ -45,6 +51,10 @@ Popup {
             return qsTr("Queued");
         case "running":
             return task.totalBytes > 0 ? qsTr("%1% · %2 of %3").arg(Math.min(100, Math.floor(task.transferredBytes * 100 / task.totalBytes))).arg(formatBytes(task.transferredBytes)).arg(formatBytes(task.totalBytes)) : qsTr("Transferring");
+        case "pausing":
+            return qsTr("Pausing…");
+        case "paused":
+            return task.totalBytes > 0 ? qsTr("Paused · %1 of %2").arg(formatBytes(task.transferredBytes)).arg(formatBytes(task.totalBytes)) : qsTr("Paused");
         case "cancelling":
             return qsTr("Cancelling…");
         case "needs-attention":
@@ -62,6 +72,10 @@ Popup {
     function resolveConflict(action) {
         controller.resolveTransferConflict(conflictTaskId, action, action === "rename" ? conflictRename.text : "");
         conflictDialog.close();
+    }
+
+    function localFileUrl(path) {
+        return "file:///" + encodeURI(path.replace(/\\/g, "/"));
     }
 
     background: Rectangle {
@@ -95,6 +109,78 @@ Popup {
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.textBody + 2
                 font.weight: Font.DemiBold
+            }
+
+            ToolButton {
+                id: pauseAllButton
+
+                objectName: "transferPauseAllButton"
+
+                visible: center.hasPausableTasks
+                implicitWidth: 28
+                implicitHeight: 28
+                hoverEnabled: true
+                onClicked: center.controller.pauseAllTransfers()
+                Accessible.name: qsTr("Pause all transfers")
+                contentItem: AppIcon {
+                    name: "pause"
+                    color: Theme.textMuted
+                }
+                background: Rectangle {
+                    radius: width / 2
+                    color: pauseAllButton.hovered ? Theme.controlHover : "transparent"
+                }
+                AppToolTip {
+                    text: qsTr("Pause all")
+                }
+            }
+
+            ToolButton {
+                id: resumeAllButton
+
+                objectName: "transferResumeAllButton"
+
+                visible: center.hasPausedTasks
+                implicitWidth: 28
+                implicitHeight: 28
+                hoverEnabled: true
+                onClicked: center.controller.resumeAllTransfers()
+                Accessible.name: qsTr("Resume all transfers")
+                contentItem: AppIcon {
+                    name: "play"
+                    color: Theme.textMuted
+                }
+                background: Rectangle {
+                    radius: width / 2
+                    color: resumeAllButton.hovered ? Theme.controlHover : "transparent"
+                }
+                AppToolTip {
+                    text: qsTr("Resume all")
+                }
+            }
+
+            ToolButton {
+                id: cancelAllButton
+
+                objectName: "transferCancelAllButton"
+
+                visible: center.hasActiveTasks
+                implicitWidth: 28
+                implicitHeight: 28
+                hoverEnabled: true
+                onClicked: center.controller.cancelAllTransfers()
+                Accessible.name: qsTr("Cancel all transfers")
+                contentItem: AppIcon {
+                    name: "close"
+                    color: Theme.textMuted
+                }
+                background: Rectangle {
+                    radius: width / 2
+                    color: cancelAllButton.hovered ? Theme.controlHover : "transparent"
+                }
+                AppToolTip {
+                    text: qsTr("Cancel all")
+                }
             }
 
             Text {
@@ -133,6 +219,8 @@ Popup {
         ListView {
             id: transferList
 
+            objectName: "transferList"
+
             Layout.fillWidth: true
             Layout.preferredHeight: Math.min(420, contentHeight)
             Layout.minimumHeight: count > 0 ? Math.min(80, contentHeight) : 0
@@ -146,21 +234,31 @@ Popup {
             delegate: Rectangle {
                 id: taskDelegate
 
+                objectName: "transferTask_" + modelData.id
+
                 required property var modelData
                 required property int index
 
                 readonly property bool cancellable: modelData.status === "queued" || modelData.status === "running"
+                readonly property bool pausable: modelData.status === "queued" || modelData.status === "running"
+                readonly property bool resumable: modelData.status === "paused"
                 readonly property bool retryable: modelData.retryable && (modelData.status === "failed" || modelData.status === "needs-attention")
                 readonly property bool dismissible: modelData.status === "completed" || modelData.status === "failed" || modelData.status === "cancelled"
 
                 width: ListView.view.width
-                height: 72
+                height: 78
                 radius: Theme.radiusSmall
                 color: ListView.isCurrentItem ? Theme.selectedBackground : taskHover.hovered ? Theme.controlHover : "transparent"
                 border.color: activeFocus ? Theme.focus : "transparent"
                 focus: ListView.isCurrentItem
                 Accessible.role: Accessible.ListItem
                 Accessible.name: qsTr("%1, %2").arg(modelData.displayName).arg(center.statusText(modelData))
+                Drag.active: completedFileDrag.active
+                Drag.dragType: Drag.Automatic
+                Drag.supportedActions: Qt.CopyAction
+                Drag.mimeData: ({
+                        "text/uri-list": center.localFileUrl(modelData.destinationPath)
+                    })
 
                 RowLayout {
                     anchors.fill: parent
@@ -201,7 +299,7 @@ Popup {
                         ProgressBar {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 3
-                            visible: taskDelegate.modelData.status === "running" || taskDelegate.modelData.status === "cancelling"
+                            visible: taskDelegate.modelData.status === "running" || taskDelegate.modelData.status === "pausing" || taskDelegate.modelData.status === "paused" || taskDelegate.modelData.status === "cancelling"
                             from: 0
                             to: Math.max(1, taskDelegate.modelData.totalBytes)
                             value: taskDelegate.modelData.transferredBytes
@@ -211,7 +309,57 @@ Popup {
                     }
 
                     ToolButton {
+                        id: pauseButton
+
+                        objectName: "transferPause_" + taskDelegate.modelData.id
+
+                        visible: taskDelegate.pausable
+                        Layout.preferredWidth: visible ? 30 : 0
+                        Layout.preferredHeight: 30
+                        hoverEnabled: true
+                        onPressed: center.controller.pauseTransfer(taskDelegate.modelData.id)
+                        Accessible.name: qsTr("Pause %1").arg(taskDelegate.modelData.displayName)
+                        contentItem: AppIcon {
+                            name: "pause"
+                            color: Theme.textSoft
+                        }
+                        background: Rectangle {
+                            radius: width / 2
+                            color: pauseButton.down ? Theme.controlPressed : pauseButton.hovered ? Theme.controlHover : "transparent"
+                        }
+                        AppToolTip {
+                            text: qsTr("Pause")
+                        }
+                    }
+
+                    ToolButton {
+                        id: resumeButton
+
+                        objectName: "transferResume_" + taskDelegate.modelData.id
+
+                        visible: taskDelegate.resumable
+                        Layout.preferredWidth: visible ? 30 : 0
+                        Layout.preferredHeight: 30
+                        hoverEnabled: true
+                        onClicked: center.controller.resumeTransfer(taskDelegate.modelData.id)
+                        Accessible.name: qsTr("Resume %1").arg(taskDelegate.modelData.displayName)
+                        contentItem: AppIcon {
+                            name: "play"
+                            color: Theme.textSoft
+                        }
+                        background: Rectangle {
+                            radius: width / 2
+                            color: resumeButton.down ? Theme.controlPressed : resumeButton.hovered ? Theme.controlHover : "transparent"
+                        }
+                        AppToolTip {
+                            text: qsTr("Resume")
+                        }
+                    }
+
+                    ToolButton {
                         id: retryButton
+
+                        objectName: "transferRetry_" + taskDelegate.modelData.id
 
                         visible: taskDelegate.retryable
                         Layout.preferredWidth: visible ? 30 : 0
@@ -237,6 +385,8 @@ Popup {
 
                     ToolButton {
                         id: cancelButton
+
+                        objectName: "transferCancel_" + taskDelegate.modelData.id
 
                         visible: taskDelegate.cancellable
                         Layout.preferredWidth: visible ? 30 : 0
@@ -265,6 +415,8 @@ Popup {
                     ToolButton {
                         id: dismissButton
 
+                        objectName: "transferDismiss_" + taskDelegate.modelData.id
+
                         visible: taskDelegate.dismissible
                         Layout.preferredWidth: visible ? 30 : 0
                         Layout.preferredHeight: 30
@@ -286,9 +438,67 @@ Popup {
                             text: qsTr("Remove")
                         }
                     }
+
+                    ToolButton {
+                        id: copyPathButton
+
+                        objectName: "transferCopyPath_" + taskDelegate.modelData.id
+
+                        visible: taskDelegate.dismissible
+                        Layout.preferredWidth: visible ? 30 : 0
+                        Layout.preferredHeight: 30
+                        hoverEnabled: true
+                        onClicked: center.controller.copyTransferPath(taskDelegate.modelData.id)
+                        Accessible.name: qsTr("Copy target path for %1").arg(taskDelegate.modelData.displayName)
+                        contentItem: AppIcon {
+                            name: "copy"
+                            color: Theme.textSoft
+                        }
+                        background: Rectangle {
+                            radius: width / 2
+                            color: copyPathButton.down ? Theme.controlPressed : copyPathButton.hovered ? Theme.controlHover : "transparent"
+                        }
+                        AppToolTip {
+                            text: qsTr("Copy target path")
+                        }
+                    }
+
+                    ToolButton {
+                        id: openTargetButton
+
+                        objectName: "transferOpenTarget_" + taskDelegate.modelData.id
+
+                        visible: taskDelegate.modelData.direction === "download" && taskDelegate.modelData.status === "completed"
+                        Layout.preferredWidth: visible ? 30 : 0
+                        Layout.preferredHeight: 30
+                        hoverEnabled: true
+                        onClicked: center.controller.openTransferTarget(taskDelegate.modelData.id)
+                        Accessible.name: qsTr("Open target folder for %1").arg(taskDelegate.modelData.displayName)
+                        contentItem: AppIcon {
+                            name: "folder"
+                            color: Theme.textSoft
+                        }
+                        background: Rectangle {
+                            radius: width / 2
+                            color: openTargetButton.down ? Theme.controlPressed : openTargetButton.hovered ? Theme.controlHover : "transparent"
+                        }
+                        AppToolTip {
+                            text: qsTr("Open target folder")
+                        }
+                    }
                 }
                 HoverHandler {
                     id: taskHover
+                }
+
+                DragHandler {
+                    id: completedFileDrag
+
+                    objectName: "transferDrag_" + taskDelegate.modelData.id
+
+                    enabled: taskDelegate.modelData.direction === "download" && taskDelegate.modelData.status === "completed"
+                    target: null
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                 }
             }
 
