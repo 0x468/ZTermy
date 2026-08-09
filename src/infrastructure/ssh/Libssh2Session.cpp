@@ -363,6 +363,14 @@ Libssh2Session::~Libssh2Session()
     {
         libssh2_channel_free(static_cast<LIBSSH2_CHANNEL *>(m_directTcpipChannel));
     }
+    for (const auto &entry : m_forwardingChannels)
+    {
+        libssh2_channel_free(static_cast<LIBSSH2_CHANNEL *>(entry.channel));
+    }
+    for (const auto &entry : m_remoteForwardListeners)
+    {
+        libssh2_channel_forward_cancel(static_cast<LIBSSH2_LISTENER *>(entry.listener));
+    }
     if (m_session != nullptr)
     {
         libssh2_session_free(static_cast<LIBSSH2_SESSION *>(m_session));
@@ -372,6 +380,18 @@ Libssh2Session::~Libssh2Session()
 bool Libssh2Session::usesTransport(const SshByteTransport &transport) const noexcept
 {
     return m_transport == &transport && transport.valid();
+}
+
+void *Libssh2Session::forwardingChannel(const std::uint64_t id) const noexcept
+{
+    const auto entry = std::ranges::find(m_forwardingChannels, id, &ForwardingChannelEntry::id);
+    return entry == m_forwardingChannels.end() ? nullptr : entry->channel;
+}
+
+void *Libssh2Session::remoteForwardListener(const std::uint64_t id) const noexcept
+{
+    const auto entry = std::ranges::find(m_remoteForwardListeners, id, &RemoteForwardListenerEntry::id);
+    return entry == m_remoteForwardListeners.end() ? nullptr : entry->listener;
 }
 
 std::expected<void, SshTransportError> Libssh2Session::handshake(SshByteTransport &transport,
@@ -883,6 +903,395 @@ std::expected<void, SshTransportError> Libssh2Session::closeDirectTcpip(SshByteT
 bool Libssh2Session::directTcpipOpen() const noexcept
 {
     return m_directTcpipChannel != nullptr;
+}
+
+std::expected<SshForwardingChannel, SshTransportError>
+Libssh2Session::openForwardingChannel(SshByteTransport &transport, const std::string_view host,
+                                      const std::uint16_t port, const std::string_view originatorHost,
+                                      const std::uint16_t originatorPort, const std::chrono::milliseconds timeout,
+                                      const std::stop_token &stopToken) noexcept
+{
+    constexpr std::size_t maximumHostBytes = 1'024;
+    if (host.empty() || port == 0 || host.size() > maximumHostBytes || host.find('\0') != std::string_view::npos
+        || originatorHost.empty() || originatorHost.size() > maximumHostBytes
+        || originatorHost.find('\0') != std::string_view::npos)
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
+    }
+    if (m_session == nullptr || !m_authenticated || !usesTransport(transport))
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
+    }
+    if (m_nextForwardingResourceId == 0)
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InitializationFailed});
+    }
+    if (timeout <= std::chrono::milliseconds::zero())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::TimedOut});
+    }
+    if (stopToken.stop_requested())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::Cancelled});
+    }
+    std::string targetHost;
+    std::string sourceHost;
+    try
+    {
+        targetHost = host;
+        sourceHost = originatorHost;
+    }
+    catch (const std::bad_alloc &)
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InitializationFailed});
+    }
+
+    auto *session = static_cast<LIBSSH2_SESSION *>(m_session);
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (true)
+    {
+        auto *channel =
+            libssh2_channel_direct_tcpip_ex(session, targetHost.c_str(), port, sourceHost.c_str(), originatorPort);
+        if (channel != nullptr)
+        {
+            const SshForwardingChannel result{.id = m_nextForwardingResourceId++};
+            try
+            {
+                m_forwardingChannels.push_back(ForwardingChannelEntry{.id = result.id, .channel = channel});
+            }
+            catch (const std::bad_alloc &)
+            {
+                libssh2_channel_free(channel);
+                return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InitializationFailed});
+            }
+            return result;
+        }
+        const int error = libssh2_session_last_errno(session);
+        if (error != LIBSSH2_ERROR_EAGAIN)
+        {
+            return std::unexpected(mapChannelError(error));
+        }
+        auto ready = waitForSessionIo(transport, session, deadline, stopToken);
+        if (!ready)
+        {
+            return std::unexpected(ready.error());
+        }
+    }
+}
+
+std::expected<std::size_t, SshByteTransportError>
+Libssh2Session::readForwardingChannel(const SshForwardingChannel forwarding, const std::span<char> output) noexcept
+{
+    auto *channel = static_cast<LIBSSH2_CHANNEL *>(forwardingChannel(forwarding.id));
+    if (channel == nullptr)
+    {
+        return std::unexpected(
+            SshByteTransportError{.kind = SshByteTransportErrorKind::SystemError, .nativeCode = LIBSSH2_ERROR_BAD_USE});
+    }
+    if (output.empty())
+    {
+        return std::size_t{0};
+    }
+    const auto length = (std::min)(output.size(), static_cast<std::size_t>((std::numeric_limits<int>::max)()));
+    const ssize_t result = libssh2_channel_read_ex(channel, 0, output.data(), length);
+    if (result >= 0)
+    {
+        return static_cast<std::size_t>(result);
+    }
+    if (result == LIBSSH2_ERROR_EAGAIN)
+    {
+        return std::unexpected(SshByteTransportError{.kind = SshByteTransportErrorKind::WouldBlock});
+    }
+    return std::unexpected(SshByteTransportError{.kind = libssh2_channel_eof(channel) != 0
+                                                             ? SshByteTransportErrorKind::Closed
+                                                             : SshByteTransportErrorKind::SystemError,
+                                                 .nativeCode = static_cast<int>(result)});
+}
+
+std::expected<std::size_t, SshByteTransportError>
+Libssh2Session::writeForwardingChannel(const SshForwardingChannel forwarding,
+                                       const std::span<const char> input) noexcept
+{
+    auto *channel = static_cast<LIBSSH2_CHANNEL *>(forwardingChannel(forwarding.id));
+    if (channel == nullptr)
+    {
+        return std::unexpected(
+            SshByteTransportError{.kind = SshByteTransportErrorKind::SystemError, .nativeCode = LIBSSH2_ERROR_BAD_USE});
+    }
+    if (input.empty())
+    {
+        return std::size_t{0};
+    }
+    const auto length = (std::min)(input.size(), static_cast<std::size_t>((std::numeric_limits<int>::max)()));
+    const ssize_t result = libssh2_channel_write_ex(channel, 0, input.data(), length);
+    if (result >= 0)
+    {
+        return static_cast<std::size_t>(result);
+    }
+    if (result == LIBSSH2_ERROR_EAGAIN)
+    {
+        return std::unexpected(SshByteTransportError{.kind = SshByteTransportErrorKind::WouldBlock});
+    }
+    return std::unexpected(SshByteTransportError{.kind = libssh2_channel_eof(channel) != 0
+                                                             ? SshByteTransportErrorKind::Closed
+                                                             : SshByteTransportErrorKind::SystemError,
+                                                 .nativeCode = static_cast<int>(result)});
+}
+
+bool Libssh2Session::forwardingChannelEof(const SshForwardingChannel forwarding) const noexcept
+{
+    auto *channel = static_cast<LIBSSH2_CHANNEL *>(forwardingChannel(forwarding.id));
+    return channel == nullptr || libssh2_channel_eof(channel) != 0;
+}
+
+std::expected<void, SshTransportError>
+Libssh2Session::sendForwardingChannelEof(SshByteTransport &transport, const SshForwardingChannel forwarding,
+                                         const std::chrono::milliseconds timeout,
+                                         const std::stop_token &stopToken) noexcept
+{
+    auto *channel = static_cast<LIBSSH2_CHANNEL *>(forwardingChannel(forwarding.id));
+    if (m_session == nullptr || channel == nullptr || !usesTransport(transport))
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
+    }
+    if (timeout <= std::chrono::milliseconds::zero())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::TimedOut});
+    }
+    if (stopToken.stop_requested())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::Cancelled});
+    }
+    auto *session = static_cast<LIBSSH2_SESSION *>(m_session);
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (true)
+    {
+        const int result = libssh2_channel_send_eof(channel);
+        if (result == 0)
+        {
+            return {};
+        }
+        if (result != LIBSSH2_ERROR_EAGAIN)
+        {
+            return std::unexpected(mapChannelError(result));
+        }
+        auto ready = waitForSessionIo(transport, session, deadline, stopToken);
+        if (!ready)
+        {
+            return std::unexpected(ready.error());
+        }
+    }
+}
+
+std::expected<void, SshTransportError> Libssh2Session::closeForwardingChannel(SshByteTransport &transport,
+                                                                              const SshForwardingChannel forwarding,
+                                                                              const std::chrono::milliseconds timeout,
+                                                                              const std::stop_token &stopToken) noexcept
+{
+    const auto entry = std::ranges::find(m_forwardingChannels, forwarding.id, &ForwardingChannelEntry::id);
+    if (m_session == nullptr || entry == m_forwardingChannels.end() || !usesTransport(transport))
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
+    }
+    if (timeout <= std::chrono::milliseconds::zero())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::TimedOut});
+    }
+    if (stopToken.stop_requested())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::Cancelled});
+    }
+    auto *session = static_cast<LIBSSH2_SESSION *>(m_session);
+    auto *channel = static_cast<LIBSSH2_CHANNEL *>(entry->channel);
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (true)
+    {
+        const int result = libssh2_channel_close(channel);
+        if (result == 0)
+        {
+            break;
+        }
+        if (result != LIBSSH2_ERROR_EAGAIN)
+        {
+            libssh2_channel_free(channel);
+            m_forwardingChannels.erase(entry);
+            return std::unexpected(mapChannelError(result));
+        }
+        auto ready = waitForSessionIo(transport, session, deadline, stopToken);
+        if (!ready)
+        {
+            return std::unexpected(ready.error());
+        }
+    }
+    const int freeResult = libssh2_channel_free(channel);
+    m_forwardingChannels.erase(entry);
+    if (freeResult != 0)
+    {
+        return std::unexpected(mapChannelError(freeResult));
+    }
+    return {};
+}
+
+std::expected<SshRemoteForwardListener, SshTransportError> Libssh2Session::openRemoteForwardListener(
+    SshByteTransport &transport, const std::string_view bindHost, const std::uint16_t port,
+    const std::uint32_t queueSize, const std::chrono::milliseconds timeout, const std::stop_token &stopToken) noexcept
+{
+    constexpr std::size_t maximumHostBytes = 1'024;
+    constexpr std::uint32_t maximumQueueSize = 128;
+    if (bindHost.empty() || bindHost.size() > maximumHostBytes || bindHost.find('\0') != std::string_view::npos
+        || queueSize == 0 || queueSize > maximumQueueSize)
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
+    }
+    if (m_session == nullptr || !m_authenticated || !usesTransport(transport))
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
+    }
+    if (m_nextForwardingResourceId == 0)
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InitializationFailed});
+    }
+    if (timeout <= std::chrono::milliseconds::zero())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::TimedOut});
+    }
+    if (stopToken.stop_requested())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::Cancelled});
+    }
+    std::string address;
+    try
+    {
+        address = bindHost;
+    }
+    catch (const std::bad_alloc &)
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InitializationFailed});
+    }
+    auto *session = static_cast<LIBSSH2_SESSION *>(m_session);
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (true)
+    {
+        int boundPort = 0;
+        auto *listener =
+            libssh2_channel_forward_listen_ex(session, address.c_str(), port, &boundPort, static_cast<int>(queueSize));
+        if (listener != nullptr)
+        {
+            if (boundPort <= 0 || boundPort > (std::numeric_limits<std::uint16_t>::max)())
+            {
+                libssh2_channel_forward_cancel(listener);
+                return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::ProtocolError});
+            }
+            const SshRemoteForwardListener result{.id = m_nextForwardingResourceId++,
+                                                  .boundPort = static_cast<std::uint16_t>(boundPort)};
+            try
+            {
+                m_remoteForwardListeners.push_back(RemoteForwardListenerEntry{.id = result.id, .listener = listener});
+            }
+            catch (const std::bad_alloc &)
+            {
+                libssh2_channel_forward_cancel(listener);
+                return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InitializationFailed});
+            }
+            return result;
+        }
+        const int error = libssh2_session_last_errno(session);
+        if (error != LIBSSH2_ERROR_EAGAIN)
+        {
+            return std::unexpected(mapChannelError(error));
+        }
+        auto ready = waitForSessionIo(transport, session, deadline, stopToken);
+        if (!ready)
+        {
+            return std::unexpected(ready.error());
+        }
+    }
+}
+
+std::expected<std::optional<SshForwardingChannel>, SshTransportError>
+Libssh2Session::acceptRemoteForwardingChannel(const SshRemoteForwardListener remote) noexcept
+{
+    auto *listener = static_cast<LIBSSH2_LISTENER *>(remoteForwardListener(remote.id));
+    auto *session = static_cast<LIBSSH2_SESSION *>(m_session);
+    if (session == nullptr || listener == nullptr || remote.boundPort == 0 || m_nextForwardingResourceId == 0)
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
+    }
+    auto *channel = libssh2_channel_forward_accept(listener);
+    if (channel == nullptr)
+    {
+        const int error = libssh2_session_last_errno(session);
+        if (error == LIBSSH2_ERROR_EAGAIN)
+        {
+            return std::optional<SshForwardingChannel>{};
+        }
+        return std::unexpected(mapChannelError(error));
+    }
+    const SshForwardingChannel result{.id = m_nextForwardingResourceId++};
+    try
+    {
+        m_forwardingChannels.push_back(ForwardingChannelEntry{.id = result.id, .channel = channel});
+    }
+    catch (const std::bad_alloc &)
+    {
+        libssh2_channel_free(channel);
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InitializationFailed});
+    }
+    return std::optional{result};
+}
+
+std::expected<void, SshTransportError>
+Libssh2Session::closeRemoteForwardListener(SshByteTransport &transport, const SshRemoteForwardListener remote,
+                                           const std::chrono::milliseconds timeout,
+                                           const std::stop_token &stopToken) noexcept
+{
+    const auto entry = std::ranges::find(m_remoteForwardListeners, remote.id, &RemoteForwardListenerEntry::id);
+    if (m_session == nullptr || entry == m_remoteForwardListeners.end() || !usesTransport(transport))
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
+    }
+    if (timeout <= std::chrono::milliseconds::zero())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::TimedOut});
+    }
+    if (stopToken.stop_requested())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::Cancelled});
+    }
+    auto *session = static_cast<LIBSSH2_SESSION *>(m_session);
+    auto *listener = static_cast<LIBSSH2_LISTENER *>(entry->listener);
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (true)
+    {
+        const int result = libssh2_channel_forward_cancel(listener);
+        if (result == 0)
+        {
+            m_remoteForwardListeners.erase(entry);
+            return {};
+        }
+        if (result != LIBSSH2_ERROR_EAGAIN)
+        {
+            return std::unexpected(mapChannelError(result));
+        }
+        auto ready = waitForSessionIo(transport, session, deadline, stopToken);
+        if (!ready)
+        {
+            return std::unexpected(ready.error());
+        }
+    }
+}
+
+std::expected<void, SshByteTransportError>
+Libssh2Session::waitForwardingIo(SshByteTransport &transport, const std::chrono::steady_clock::time_point deadline,
+                                 const std::stop_token &stopToken, const std::uintptr_t interruptHandle) noexcept
+{
+    if (m_session == nullptr || !usesTransport(transport))
+    {
+        return std::unexpected(
+            SshByteTransportError{.kind = SshByteTransportErrorKind::SystemError, .nativeCode = LIBSSH2_ERROR_BAD_USE});
+    }
+    return transport.waitUntilReady(blockedInterest(static_cast<LIBSSH2_SESSION *>(m_session)), deadline, stopToken,
+                                    interruptHandle);
 }
 
 std::expected<void, SshTransportError>

@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <expected>
 #include <memory>
+#include <optional>
 #include <span>
 #include <stop_token>
 #include <string>
@@ -73,6 +74,21 @@ struct SshTerminalEnvironment final
     std::string_view value;
 };
 
+struct SshForwardingChannel final
+{
+    std::uint64_t id = 0;
+
+    [[nodiscard]] friend bool operator==(const SshForwardingChannel &, const SshForwardingChannel &) = default;
+};
+
+struct SshRemoteForwardListener final
+{
+    std::uint64_t id = 0;
+    std::uint16_t boundPort = 0;
+
+    [[nodiscard]] friend bool operator==(const SshRemoteForwardListener &, const SshRemoteForwardListener &) = default;
+};
+
 class Libssh2Session final
 {
 public:
@@ -119,6 +135,34 @@ public:
     closeDirectTcpip(SshByteTransport &transport, std::chrono::milliseconds timeout,
                      const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] bool directTcpipOpen() const noexcept;
+
+    [[nodiscard]] std::expected<SshForwardingChannel, SshTransportError>
+    openForwardingChannel(SshByteTransport &transport, std::string_view host, std::uint16_t port,
+                          std::string_view originatorHost, std::uint16_t originatorPort,
+                          std::chrono::milliseconds timeout, const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] std::expected<std::size_t, SshByteTransportError>
+    readForwardingChannel(SshForwardingChannel channel, std::span<char> output) noexcept;
+    [[nodiscard]] std::expected<std::size_t, SshByteTransportError>
+    writeForwardingChannel(SshForwardingChannel channel, std::span<const char> input) noexcept;
+    [[nodiscard]] bool forwardingChannelEof(SshForwardingChannel channel) const noexcept;
+    [[nodiscard]] std::expected<void, SshTransportError>
+    sendForwardingChannelEof(SshByteTransport &transport, SshForwardingChannel channel,
+                             std::chrono::milliseconds timeout, const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] std::expected<void, SshTransportError>
+    closeForwardingChannel(SshByteTransport &transport, SshForwardingChannel channel, std::chrono::milliseconds timeout,
+                           const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] std::expected<SshRemoteForwardListener, SshTransportError>
+    openRemoteForwardListener(SshByteTransport &transport, std::string_view bindHost, std::uint16_t port,
+                              std::uint32_t queueSize, std::chrono::milliseconds timeout,
+                              const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] std::expected<std::optional<SshForwardingChannel>, SshTransportError>
+    acceptRemoteForwardingChannel(SshRemoteForwardListener listener) noexcept;
+    [[nodiscard]] std::expected<void, SshTransportError>
+    closeRemoteForwardListener(SshByteTransport &transport, SshRemoteForwardListener listener,
+                               std::chrono::milliseconds timeout, const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] std::expected<void, SshByteTransportError>
+    waitForwardingIo(SshByteTransport &transport, std::chrono::steady_clock::time_point deadline,
+                     const std::stop_token &stopToken = {}, std::uintptr_t interruptHandle = 0) noexcept;
 
     [[nodiscard]] std::expected<void, SshTransportError>
     openTerminal(SshByteTransport &transport, std::uint32_t columns, std::uint32_t rows, std::string_view terminalType,
@@ -200,6 +244,18 @@ public:
     [[nodiscard]] bool auxiliaryCommandActive() const noexcept;
 
 private:
+    struct ForwardingChannelEntry final
+    {
+        std::uint64_t id = 0;
+        void *channel = nullptr;
+    };
+
+    struct RemoteForwardListenerEntry final
+    {
+        std::uint64_t id = 0;
+        void *listener = nullptr;
+    };
+
     enum class AuxiliaryCommandPhase : std::uint8_t
     {
         Idle,
@@ -212,6 +268,8 @@ private:
 
     Libssh2Session(std::unique_ptr<Libssh2Runtime> runtime, void *session) noexcept;
     [[nodiscard]] bool usesTransport(const SshByteTransport &transport) const noexcept;
+    [[nodiscard]] void *forwardingChannel(std::uint64_t id) const noexcept;
+    [[nodiscard]] void *remoteForwardListener(std::uint64_t id) const noexcept;
 
     std::unique_ptr<Libssh2Runtime> m_runtime;
     void *m_session = nullptr;
@@ -224,6 +282,9 @@ private:
     std::string m_auxiliaryCommand;
     AuxiliaryCommandPhase m_auxiliaryPhase = AuxiliaryCommandPhase::Idle;
     int m_auxiliaryExitStatus = 0;
+    std::vector<ForwardingChannelEntry> m_forwardingChannels;
+    std::vector<RemoteForwardListenerEntry> m_remoteForwardListeners;
+    std::uint64_t m_nextForwardingResourceId = 1;
     bool m_handshakeComplete = false;
     bool m_hostKeyVerified = false;
     bool m_authenticated = false;

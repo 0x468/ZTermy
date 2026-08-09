@@ -60,6 +60,7 @@ private slots:
     void rejectsInvalidPrivateKeyCredentials();
     void rejectsPrivateKeyAuthenticationBeforeHandshake();
     void rejectsTerminalOperationsBeforeAuthentication();
+    void rejectsForwardingOperationsBeforeAuthentication();
 };
 
 void SshHandshakeTests::createsNonBlockingSession()
@@ -286,6 +287,44 @@ void SshHandshakeTests::rejectsTerminalOperationsBeforeAuthentication()
     QVERIFY(!close);
     QCOMPARE(close.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidState);
     QVERIFY(!(*session)->terminalOpen());
+}
+
+void SshHandshakeTests::rejectsForwardingOperationsBeforeAuthentication()
+{
+    ztermy::ssh::WindowsTcpSocket socket;
+    auto session = ztermy::ssh::Libssh2Session::create();
+    if (!session)
+    {
+        QFAIL("libssh2 session creation failed");
+    }
+
+    auto invalidDestination = (*session)->openForwardingChannel(socket, {}, 22, "127.0.0.1", 0, 2s);
+    QVERIFY(!invalidDestination);
+    QCOMPARE(invalidDestination.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidArgument);
+
+    auto direct = (*session)->openForwardingChannel(socket, "127.0.0.1", 22, "127.0.0.1", 0, 2s);
+    QVERIFY(!direct);
+    QCOMPARE(direct.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidState);
+
+    auto invalidListener = (*session)->openRemoteForwardListener(socket, "127.0.0.1", 0, 0, 2s);
+    QVERIFY(!invalidListener);
+    QCOMPARE(invalidListener.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidArgument);
+
+    auto listener = (*session)->openRemoteForwardListener(socket, "127.0.0.1", 0, 16, 2s);
+    QVERIFY(!listener);
+    QCOMPARE(listener.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidState);
+
+    constexpr ztermy::ssh::SshForwardingChannel unknownChannel{.id = 42};
+    std::array<char, 16> output{};
+    auto read = (*session)->readForwardingChannel(unknownChannel, output);
+    QVERIFY(!read);
+    QCOMPARE(read.error().kind, ztermy::ssh::SshByteTransportErrorKind::SystemError);
+    QVERIFY((*session)->forwardingChannelEof(unknownChannel));
+
+    constexpr ztermy::ssh::SshRemoteForwardListener unknownListener{.id = 43, .boundPort = 22};
+    auto accepted = (*session)->acceptRemoteForwardingChannel(unknownListener);
+    QVERIFY(!accepted);
+    QCOMPARE(accepted.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidState);
 }
 
 QTEST_GUILESS_MAIN(SshHandshakeTests)
