@@ -278,6 +278,8 @@ add_library(ztermy_remote_telemetry STATIC
 add_library(ztermy_sftp_domain STATIC
     src/domain/sftp/SftpTypes.cpp
     src/domain/sftp/SftpTypes.h
+    src/domain/sftp/TransferBatch.cpp
+    src/domain/sftp/TransferBatch.h
     src/domain/sftp/TransferQueue.cpp
     src/domain/sftp/TransferQueue.h
 )
@@ -1509,6 +1511,27 @@ if(BUILD_TESTING)
 
     add_test(NAME transfer-queue COMMAND ztermy_transfer_queue_tests)
 
+    qt_add_executable(ztermy_transfer_batch_tests
+        tests/transfer_batch_tests.cpp
+    )
+
+    target_compile_features(ztermy_transfer_batch_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_transfer_batch_tests PRIVATE
+        ztermy_sftp_domain
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_transfer_batch_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME transfer-batch COMMAND ztermy_transfer_batch_tests)
+
     qt_add_executable(ztermy_sftp_session_tests
         tests/sftp_session_tests.cpp
     )
@@ -2386,6 +2409,7 @@ if(BUILD_TESTING)
             ztermy_port_forwarding_real_host_tests
             ztermy_session_log_writer_tests
             ztermy_transfer_queue_tests
+            ztermy_transfer_batch_tests
             ztermy_sftp_session_tests
             ztermy_sftp_directory_model_tests
             ztermy_transfer_executor_tests
