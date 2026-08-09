@@ -44,7 +44,7 @@ namespace
 
 [[nodiscard]] std::string ipv6Address(const std::span<const std::byte, 16> address)
 {
-    constexpr char digits[] = "0123456789abcdef";
+    constexpr std::string_view digits = "0123456789abcdef";
     std::string result;
     result.reserve(39);
     for (std::size_t group = 0; group < 8; ++group)
@@ -53,7 +53,7 @@ namespace
         {
             result.push_back(':');
         }
-        const std::uint16_t value =
+        const auto value =
             static_cast<std::uint16_t>((byteValue(address[group * 2]) << 8U) | byteValue(address[group * 2 + 1]));
         bool emitted = false;
         for (int shift = 12; shift >= 0; shift -= 4)
@@ -104,7 +104,7 @@ Socks5Handshake::consume(const std::span<const std::byte> input) noexcept
     }
 }
 
-std::expected<Socks5HandshakeResult, Socks5ProtocolError> Socks5Handshake::consumeGreeting() noexcept
+std::expected<Socks5HandshakeResult, Socks5ProtocolError> Socks5Handshake::consumeGreeting()
 {
     if (m_buffer.size() < 2)
     {
@@ -136,7 +136,7 @@ std::expected<Socks5HandshakeResult, Socks5ProtocolError> Socks5Handshake::consu
                                  .response = bytes({0x05U, 0x00U})};
 }
 
-std::expected<Socks5HandshakeResult, Socks5ProtocolError> Socks5Handshake::consumeRequest() noexcept
+std::expected<Socks5HandshakeResult, Socks5ProtocolError> Socks5Handshake::consumeRequest()
 {
     if (m_buffer.size() < 4)
     {
@@ -219,7 +219,7 @@ std::expected<Socks5HandshakeResult, Socks5ProtocolError> Socks5Handshake::consu
                                          .response = reply(Socks5ReplyCode::AddressTypeNotSupported)};
         }
     }
-    const std::uint16_t port =
+    const auto port =
         static_cast<std::uint16_t>((byteValue(m_buffer[frameSize - 2]) << 8U) | byteValue(m_buffer[frameSize - 1]));
     if (port == 0)
     {

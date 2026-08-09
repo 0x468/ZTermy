@@ -1,6 +1,6 @@
 # V2.10 scope: native SSH port forwarding
 
-Status: approved implementation scope for `0.2.10`
+Status: implemented in `0.2.10`; manual acceptance remains tracked separately
 
 V2.10 adds owned native forwarding jobs on top of the V2.9 authenticated SSH
 bootstrap. NetCatty supplies the compact rule-list and right-side editor

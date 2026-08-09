@@ -17,6 +17,7 @@ namespace
 {
 
 using Clock = std::chrono::steady_clock;
+constexpr SOCKET invalidNativeSocket = (std::numeric_limits<SOCKET>::max)();
 
 class WinsockListenerRuntime final
 {
@@ -60,20 +61,21 @@ private:
     }
 }
 
-[[nodiscard]] std::optional<std::wstring> utf8ToWide(const std::string_view value) noexcept
+[[nodiscard]] std::optional<std::wstring> utf8ToWide(const std::string_view value)
 {
     if (value.empty() || value.size() > static_cast<std::size_t>((std::numeric_limits<int>::max)()))
     {
         return std::nullopt;
     }
-    const int sourceSize = static_cast<int>(value.size());
-    const int required = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data(), sourceSize, nullptr, 0);
+    const std::string utf8(value);
+    const int sourceSize = static_cast<int>(utf8.size());
+    const int required = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, utf8.c_str(), sourceSize, nullptr, 0);
     if (required <= 0)
     {
         return std::nullopt;
     }
     std::wstring wide(static_cast<std::size_t>(required), L'\0');
-    if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data(), sourceSize, wide.data(), required) != required)
+    if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, utf8.c_str(), sourceSize, wide.data(), required) != required)
     {
         return std::nullopt;
     }
@@ -167,7 +169,7 @@ WindowsTcpListener::listen(const std::string_view host, const std::uint16_t port
         {
             const SOCKET rawSocket = WSASocketW(address->ai_family, address->ai_socktype, address->ai_protocol, nullptr,
                                                 0, WSA_FLAG_NO_HANDLE_INHERIT);
-            if (rawSocket == INVALID_SOCKET)
+            if (rawSocket == invalidNativeSocket)
             {
                 lastError = mapListenError(WSAGetLastError());
                 continue;
@@ -261,7 +263,7 @@ std::expected<std::optional<WindowsTcpSocket>, TcpListenError> WindowsTcpListene
         return std::unexpected(TcpListenError{.kind = TcpListenErrorKind::SystemError, .nativeCode = WSAENOTSOCK});
     }
     const SOCKET accepted = ::accept(static_cast<SOCKET>(m_socket), nullptr, nullptr);
-    if (accepted == INVALID_SOCKET)
+    if (accepted == invalidNativeSocket)
     {
         const int nativeCode = WSAGetLastError();
         if (nativeCode == WSAEWOULDBLOCK)
@@ -275,11 +277,6 @@ std::expected<std::optional<WindowsTcpSocket>, TcpListenError> WindowsTcpListene
     if (ioctlsocket(accepted, FIONBIO, &nonBlocking) == SOCKET_ERROR)
     {
         return std::unexpected(mapListenError(WSAGetLastError()));
-    }
-    if (!SetHandleInformation(reinterpret_cast<HANDLE>(accepted), HANDLE_FLAG_INHERIT, 0))
-    {
-        return std::unexpected(
-            TcpListenError{.kind = TcpListenErrorKind::SystemError, .nativeCode = static_cast<int>(GetLastError())});
     }
     return std::optional<WindowsTcpSocket>{std::move(socket)};
 }

@@ -177,7 +177,10 @@ connection pipeline rather than adding UI-only profile fields.
 
 ## V2.10 — native SSH port forwarding (`0.2.10`)
 
-Status: planned.
+Status: implemented. The frozen contract is recorded in `V2_10_SCOPE.md`, the
+owned-job and resource-boundary decision in ADR 0049, and the automated,
+real-host, release, and retained manual matrix in
+`testing/V2_10_ACCEPTANCE.md`.
 
 - implement local, remote, and dynamic SOCKS forwarding as owned native jobs;
 - persist rules separately from credentials, expose start/stop/error state, and

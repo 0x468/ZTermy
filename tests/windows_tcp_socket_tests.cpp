@@ -107,10 +107,16 @@ void WindowsTcpSocketTests::transfersBytesThroughInterface()
     QVERIFY(server.listen(QHostAddress::LocalHost, 0));
 
     auto socket = ztermy::ssh::WindowsTcpSocket::connect("127.0.0.1", server.serverPort(), 2s);
-    QVERIFY(socket);
+    if (!socket)
+    {
+        QFAIL("loopback connection failed");
+    }
     QVERIFY(server.waitForNewConnection(1000));
     QTcpSocket *peer = server.nextPendingConnection();
-    QVERIFY(peer != nullptr);
+    if (peer == nullptr)
+    {
+        QFAIL("loopback peer was not accepted");
+    }
     ztermy::ssh::SshByteTransport &transport = *socket;
 
     const QByteArray outbound = QByteArrayLiteral("transport-write");
@@ -178,16 +184,23 @@ void WindowsTcpSocketTests::listenerAcceptsLoopbackClient()
     QVERIFY(client.waitForConnected(1000));
     QVERIFY(listener->waitForClient(std::chrono::steady_clock::now() + 1s));
     auto accepted = listener->accept();
-    QVERIFY(accepted);
-    QVERIFY(accepted->has_value());
-    QVERIFY((*accepted)->valid());
+    if (!accepted)
+    {
+        QFAIL("listener accept failed");
+    }
+    if (!accepted->has_value())
+    {
+        QFAIL("listener did not return a pending client");
+    }
+    ztermy::ssh::WindowsTcpSocket &acceptedSocket = accepted->value();
+    QVERIFY(acceptedSocket.valid());
 
     const QByteArray payload = QByteArrayLiteral("accepted-socket");
     QCOMPARE(client.write(payload), payload.size());
     QVERIFY(client.waitForBytesWritten(1000));
-    QVERIFY((*accepted)->waitUntilReady(ztermy::ssh::SocketIoInterest::Read, std::chrono::steady_clock::now() + 1s));
+    QVERIFY(acceptedSocket.waitUntilReady(ztermy::ssh::SocketIoInterest::Read, std::chrono::steady_clock::now() + 1s));
     std::array<char, 64> buffer{};
-    const auto read = (*accepted)->read(buffer);
+    const auto read = acceptedSocket.read(buffer);
     QVERIFY(read);
     QCOMPARE(QByteArray(buffer.data(), static_cast<qsizetype>(*read)), payload);
 }

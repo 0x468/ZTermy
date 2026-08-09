@@ -18,7 +18,7 @@ namespace
 {
 
 constexpr qint64 currentSchemaVersion = 1;
-constexpr qint64 maximumFileSize = 512 * 1024;
+constexpr qint64 maximumFileSize = qint64{512} * 1024;
 
 [[nodiscard]] QString typeName(const PortForwardingType type)
 {
@@ -73,7 +73,7 @@ constexpr qint64 maximumFileSize = 512 * 1024;
         return std::nullopt;
     }
     const qint64 port = portValue.toInteger(-1);
-    if (port < 0 || port > std::numeric_limits<std::uint16_t>::max())
+    if (!std::in_range<std::uint16_t>(port))
     {
         return std::nullopt;
     }
@@ -190,7 +190,7 @@ std::expected<std::vector<PortForwardingRule>, PortForwardingRuleStoreError> Por
     }
     std::vector<PortForwardingRule> rules;
     rules.reserve(static_cast<std::size_t>(values.size()));
-    for (const QJsonValue &value : values)
+    for (const auto &value : values)
     {
         auto rule = parseRule(value);
         if (!rule)

@@ -20,7 +20,8 @@ namespace ztermy::forwarding
 namespace
 {
 
-constexpr std::size_t maximumBufferedBytesPerDirection = 256U * 1'024U;
+constexpr std::size_t maximumBufferedBytesPerDirection = std::size_t{256} * 1'024U;
+constexpr std::size_t transferBufferSize = std::size_t{32} * 1'024U;
 constexpr auto channelOperationTimeout = 3s;
 constexpr auto idlePollInterval = 8ms;
 
@@ -146,7 +147,7 @@ void rejectSocksClient(ForwardingClient &client, const Socks5ReplyCode replyCode
                                          std::uint64_t &bytesFromClients, std::uint64_t &bytesToClients,
                                          const std::stop_token &stopToken) noexcept
 {
-    std::array<char, 32U * 1'024U> buffer{};
+    std::array<char, transferBufferSize> buffer{};
     if (!client.clientReadClosed && client.toRemote.size() < maximumBufferedBytesPerDirection)
     {
         auto read = client.socket.read(buffer);
@@ -255,7 +256,8 @@ void closeClient(ForwardingClient &client, ssh::AuthenticatedSshConnection &conn
 {
     if (client.channel)
     {
-        (void)connection.session->closeForwardingChannel(*connection.transport, *client.channel, 100ms);
+        [[maybe_unused]] const auto closeResult =
+            connection.session->closeForwardingChannel(*connection.transport, *client.channel, 100ms);
         client.channel.reset();
     }
     client.socket.close();
@@ -278,7 +280,12 @@ void closeClient(ForwardingClient &client, ssh::AuthenticatedSshConnection &conn
     {
         return false;
     }
-    auto consumed = client.socksHandshake->consume(std::as_bytes(std::span(buffer).first(*read)));
+    Socks5Handshake *handshake = client.socksHandshake ? &*client.socksHandshake : nullptr;
+    if (handshake == nullptr)
+    {
+        return false;
+    }
+    auto consumed = handshake->consume(std::as_bytes(std::span(buffer).first(*read)));
     while (true)
     {
         if (!consumed)
@@ -300,9 +307,16 @@ void closeClient(ForwardingClient &client, ssh::AuthenticatedSshConnection &conn
         }
         if (consumed->status == Socks5HandshakeStatus::DestinationReady)
         {
-            auto channel = connection.session->openForwardingChannel(*connection.transport, consumed->destination->host,
-                                                                     consumed->destination->port, "127.0.0.1", 0,
-                                                                     channelOperationTimeout, stopToken);
+            if (!consumed->destination)
+            {
+                ++rejectedClients;
+                rejectSocksClient(client, Socks5ReplyCode::GeneralFailure);
+                return true;
+            }
+            const Socks5Destination &destination = *consumed->destination;
+            auto channel =
+                connection.session->openForwardingChannel(*connection.transport, destination.host, destination.port,
+                                                          "127.0.0.1", 0, channelOperationTimeout, stopToken);
             if (!channel)
             {
                 ++rejectedClients;
@@ -318,7 +332,7 @@ void closeClient(ForwardingClient &client, ssh::AuthenticatedSshConnection &conn
         {
             return true;
         }
-        consumed = client.socksHandshake->consume({});
+        consumed = handshake->consume({});
     }
 }
 
@@ -396,7 +410,7 @@ std::expected<void, PortForwardingJobStartError> PortForwardingJob::start(PortFo
     {
         m_worker = std::jthread([this, rule = std::move(rule), request = std::move(request),
                                  callbacks = std::move(callbacks)](const std::stop_token &stopToken) mutable {
-            run(std::move(rule), std::move(request), std::move(callbacks), stopToken);
+            run(rule, request, callbacks, stopToken);
         });
     }
     catch (const std::system_error &)
@@ -448,6 +462,7 @@ void PortForwardingJob::publish(const PortForwardingJobState state, const PortFo
         }
         catch (...)
         {
+            return;
         }
     }
 }
@@ -470,12 +485,13 @@ void PortForwardingJob::publishCounters(const std::size_t activeClients) noexcep
         }
         catch (...)
         {
+            return;
         }
     }
 }
 
-void PortForwardingJob::run(PortForwardingRule rule, ssh::SshConnectionRequest request,
-                            ssh::SshConnectionCallbacks callbacks, const std::stop_token &stopToken) noexcept
+void PortForwardingJob::run(const PortForwardingRule &rule, ssh::SshConnectionRequest &request,
+                            const ssh::SshConnectionCallbacks &callbacks, const std::stop_token &stopToken) noexcept
 {
     try
     {
@@ -578,8 +594,8 @@ void PortForwardingJob::run(PortForwardingRule rule, ssh::SshConnectionRequest r
                     if (!socket)
                     {
                         ++rejectedClients;
-                        (void)connection->session->closeForwardingChannel(*connection->transport, **accepted, 100ms,
-                                                                          stopToken);
+                        [[maybe_unused]] const auto closeResult = connection->session->closeForwardingChannel(
+                            *connection->transport, **accepted, 100ms, stopToken);
                         continue;
                     }
                     ForwardingClient client{.socket = std::move(*socket)};
@@ -635,7 +651,8 @@ void PortForwardingJob::run(PortForwardingRule rule, ssh::SshConnectionRequest r
         }
         if (remoteListener)
         {
-            (void)connection->session->closeRemoteForwardListener(*connection->transport, *remoteListener, 100ms);
+            [[maybe_unused]] const auto closeResult =
+                connection->session->closeRemoteForwardListener(*connection->transport, *remoteListener, 100ms);
         }
         publish(PortForwardingJobState::Stopped, PortForwardingJobFailure::None);
     }

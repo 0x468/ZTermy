@@ -95,6 +95,7 @@ private slots:
     void persistsAndPreservesSessionOptions();
     void managesExplicitProxyProfilesAndCredentials();
     void managesOrderedJumpHostProfiles();
+    void managesPortForwardingRules();
     void rejectsInvalidProfiles();
     void agentProfilesNeverStoreCredentials();
     void managesSavedCredentialsAndPortableVault();
@@ -180,6 +181,62 @@ void AppControllerTests::savesUpdatesReloadsAndDeletesProfiles()
 
     ztermy::AppController emptyReload(path);
     QVERIFY(emptyReload.hostProfiles().isEmpty());
+}
+
+void AppControllerTests::managesPortForwardingRules()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("profiles.json"));
+
+    ztermy::AppController controller(path);
+    QVERIFY(controller.saveHostProfile({}, QStringLiteral("Forward host"), QStringLiteral("host.example.test"), 22,
+                                       QStringLiteral("operator"), QStringLiteral("agent"), {}, false, {}));
+    const QString profileId = controller.hostProfiles().constFirst().toMap().value(QStringLiteral("id")).toString();
+    QVERIFY(!profileId.isEmpty());
+
+    QSignalSpy changes(&controller, &ztermy::AppController::portForwardingRulesChanged);
+    QVERIFY(controller.savePortForwardingRule({}, QStringLiteral("Database"), profileId, QStringLiteral("local"),
+                                              QStringLiteral("127.0.0.1"), 15432, QStringLiteral("database.internal"),
+                                              5432, false));
+    QVERIFY(changes.count() >= 1);
+    QCOMPARE(controller.portForwardingRules().size(), 1);
+    const QVariantMap local = controller.portForwardingRules().constFirst().toMap();
+    const QString localId = local.value(QStringLiteral("id")).toString();
+    QVERIFY(!localId.isEmpty());
+    QCOMPARE(local.value(QStringLiteral("profileName")).toString(), QStringLiteral("Forward host"));
+    QCOMPARE(local.value(QStringLiteral("type")).toString(), QStringLiteral("local"));
+    QCOMPARE(local.value(QStringLiteral("state")).toString(), QStringLiteral("stopped"));
+
+    QVERIFY(controller.savePortForwardingRule({}, QStringLiteral("SOCKS"), profileId, QStringLiteral("dynamic"),
+                                              QStringLiteral("127.0.0.1"), 11080, {}, 0, true));
+    QCOMPARE(controller.portForwardingRules().size(), 2);
+    const QString dynamicId =
+        controller.portForwardingRules().constLast().toMap().value(QStringLiteral("id")).toString();
+    QVERIFY(!dynamicId.isEmpty());
+
+    QVERIFY(controller.duplicatePortForwardingRule(dynamicId));
+    QCOMPARE(controller.portForwardingRules().size(), 3);
+    const QVariantMap duplicate = controller.portForwardingRules().constLast().toMap();
+    const QString duplicateId = duplicate.value(QStringLiteral("id")).toString();
+    QVERIFY(!duplicateId.isEmpty());
+    QVERIFY(duplicateId != dynamicId);
+    QCOMPARE(duplicate.value(QStringLiteral("label")).toString(), QStringLiteral("SOCKS copy"));
+    QCOMPARE(duplicate.value(QStringLiteral("autoStart")).toBool(), false);
+
+    QVERIFY(!controller.savePortForwardingRule({}, QStringLiteral("Invalid"), profileId, QStringLiteral("remote"),
+                                               QStringLiteral("127.0.0.1"), 2200, {}, 0, false));
+    QVERIFY(!controller.portForwardingOperationError().isEmpty());
+    QVERIFY(!controller.deleteHostProfile(profileId));
+
+    ztermy::AppController reloaded(path);
+    QCOMPARE(reloaded.portForwardingRules().size(), 3);
+    QCOMPARE(reloaded.portForwardingRules().at(1).toMap().value(QStringLiteral("autoStart")).toBool(), true);
+
+    QVERIFY(controller.deletePortForwardingRule(localId));
+    QVERIFY(controller.deletePortForwardingRule(dynamicId));
+    QVERIFY(controller.deletePortForwardingRule(duplicateId));
+    QVERIFY(controller.deleteHostProfile(profileId));
 }
 
 void AppControllerTests::persistsAndPreservesSessionOptions()

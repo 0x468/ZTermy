@@ -73,8 +73,8 @@ public:
     [[nodiscard]] PortForwardingJobSnapshot snapshot() const noexcept;
 
 private:
-    void run(PortForwardingRule rule, ssh::SshConnectionRequest request, ssh::SshConnectionCallbacks callbacks,
-             const std::stop_token &stopToken) noexcept;
+    void run(const PortForwardingRule &rule, ssh::SshConnectionRequest &request,
+             const ssh::SshConnectionCallbacks &callbacks, const std::stop_token &stopToken) noexcept;
     void publish(PortForwardingJobState state, PortForwardingJobFailure failure) noexcept;
     void publishCounters(std::size_t activeClients) noexcept;
 

@@ -73,8 +73,8 @@ private:
         Failed,
     };
 
-    [[nodiscard]] std::expected<Socks5HandshakeResult, Socks5ProtocolError> consumeGreeting() noexcept;
-    [[nodiscard]] std::expected<Socks5HandshakeResult, Socks5ProtocolError> consumeRequest() noexcept;
+    [[nodiscard]] std::expected<Socks5HandshakeResult, Socks5ProtocolError> consumeGreeting();
+    [[nodiscard]] std::expected<Socks5HandshakeResult, Socks5ProtocolError> consumeRequest();
 
     State m_state = State::Greeting;
     std::vector<std::byte> m_buffer;

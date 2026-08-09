@@ -425,6 +425,7 @@ Rectangle {
     }
 
     function beginNewProfile() {
+        forwardingPane.closeEditor();
         clearEditor();
         editorExpanded = true;
         showStatus(qsTr("Create a reusable SSH profile or connect now."), false);
@@ -448,6 +449,7 @@ Rectangle {
     }
 
     function editProfile(profile) {
+        forwardingPane.closeEditor();
         editorExpanded = true;
         editingProfileId = profile.id;
         nameField.text = profile.name;
@@ -615,7 +617,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        anchors.rightMargin: profileEditor.width + (8 * (1.0 - profileEditor.reveal))
+        anchors.rightMargin: Math.max(profileEditor.width, forwardingPane.editorWidth) + (8 * (1.0 - Math.max(profileEditor.reveal, forwardingPane.editorReveal)))
         contentWidth: availableWidth
         contentHeight: contentColumn.implicitHeight + 76
 
@@ -1149,6 +1151,16 @@ Rectangle {
                         }
                     }
                 }
+            }
+
+            PortForwardingPane {
+                id: forwardingPane
+
+                Layout.fillWidth: true
+                controller: pane.controller
+                overlayParent: pane
+                compactLayout: pane.compactLayout
+                onEditorOpening: pane.dismissEditor(false)
             }
 
             Item {

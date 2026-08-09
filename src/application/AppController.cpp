@@ -87,6 +87,11 @@ constexpr std::size_t maximumRecentHostProfiles = 6;
     return QFileInfo(profileStorePath).dir().filePath(QStringLiteral("credentials.zvlt"));
 }
 
+[[nodiscard]] QString siblingPortForwardingFile(const QString &profileStorePath)
+{
+    return QFileInfo(profileStorePath).dir().filePath(QStringLiteral("port_forwarding.json"));
+}
+
 [[nodiscard]] QString siblingQuickCommandsFile(const QString &settingsPath)
 {
     return QFileInfo(settingsPath).dir().filePath(QStringLiteral("quick_commands.json"));
@@ -120,6 +125,74 @@ constexpr std::size_t maximumRecentHostProfiles = 6;
             return QStringLiteral("agent");
     }
     return {};
+}
+
+[[nodiscard]] QString forwardingTypeToken(const ztermy::forwarding::PortForwardingType type)
+{
+    switch (type)
+    {
+        case ztermy::forwarding::PortForwardingType::Local:
+            return QStringLiteral("local");
+        case ztermy::forwarding::PortForwardingType::Remote:
+            return QStringLiteral("remote");
+        case ztermy::forwarding::PortForwardingType::Dynamic:
+            return QStringLiteral("dynamic");
+    }
+    return {};
+}
+
+[[nodiscard]] std::optional<ztermy::forwarding::PortForwardingType> parseForwardingType(const QString &value)
+{
+    if (value == QStringLiteral("local"))
+    {
+        return ztermy::forwarding::PortForwardingType::Local;
+    }
+    if (value == QStringLiteral("remote"))
+    {
+        return ztermy::forwarding::PortForwardingType::Remote;
+    }
+    if (value == QStringLiteral("dynamic"))
+    {
+        return ztermy::forwarding::PortForwardingType::Dynamic;
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] QString forwardingStateToken(const ztermy::forwarding::PortForwardingJobState state)
+{
+    switch (state)
+    {
+        case ztermy::forwarding::PortForwardingJobState::Stopped:
+            return QStringLiteral("stopped");
+        case ztermy::forwarding::PortForwardingJobState::Starting:
+            return QStringLiteral("starting");
+        case ztermy::forwarding::PortForwardingJobState::Running:
+            return QStringLiteral("running");
+        case ztermy::forwarding::PortForwardingJobState::Failed:
+            return QStringLiteral("failed");
+    }
+    return QStringLiteral("stopped");
+}
+
+[[nodiscard]] QString forwardingFailureToken(const ztermy::forwarding::PortForwardingJobFailure failure)
+{
+    using ztermy::forwarding::PortForwardingJobFailure;
+    switch (failure)
+    {
+        case PortForwardingJobFailure::None:
+            return {};
+        case PortForwardingJobFailure::Connection:
+            return QStringLiteral("connection");
+        case PortForwardingJobFailure::Listener:
+            return QStringLiteral("listener");
+        case PortForwardingJobFailure::RemoteListener:
+            return QStringLiteral("remote-listener");
+        case PortForwardingJobFailure::Transport:
+            return QStringLiteral("transport");
+        case PortForwardingJobFailure::ResourceLimit:
+            return QStringLiteral("resource-limit");
+    }
+    return QStringLiteral("transport");
 }
 
 [[nodiscard]] std::optional<ztermy::ssh::SshAuthenticationMethod> parseAuthenticationToken(const QString &value)
@@ -1183,6 +1256,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     : QObject(parent),
       m_localSessionFactory(std::move(localSessionFactory)),
       m_profileStore(std::move(profileStorePath)),
+      m_portForwardingStore(siblingPortForwardingFile(m_profileStore.filePath())),
       m_settingsStore(settingsPath.isEmpty() ? siblingSettingsFile(m_profileStore.filePath())
                                              : std::move(settingsPath)),
       m_quickCommandStore(siblingQuickCommandsFile(m_settingsStore.filePath())),
@@ -1201,7 +1275,9 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     qRegisterMetaType<ShellHistoryEntries>();
     QObject::connect(this, &AppController::terminalHistoryTaskCompleted, this,
                      &AppController::applyTerminalHistoryTaskResult, Qt::QueuedConnection);
+    initializePortForwardingSignalBridges();
     loadHostProfiles();
+    loadPortForwardingRules();
     loadApplicationSettings();
     initializeActionRegistry();
     initializeTransferManager();
@@ -1227,6 +1303,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     : QObject(parent),
       m_localSessionFactory(std::move(localSessionFactory)),
       m_profileStore(std::move(profileStorePath)),
+      m_portForwardingStore(siblingPortForwardingFile(m_profileStore.filePath())),
       m_settingsStore(settingsPath.isEmpty() ? siblingSettingsFile(m_profileStore.filePath())
                                              : std::move(settingsPath)),
       m_quickCommandStore(siblingQuickCommandsFile(m_settingsStore.filePath())),
@@ -1248,7 +1325,9 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     qRegisterMetaType<ShellHistoryEntries>();
     QObject::connect(this, &AppController::terminalHistoryTaskCompleted, this,
                      &AppController::applyTerminalHistoryTaskResult, Qt::QueuedConnection);
+    initializePortForwardingSignalBridges();
     loadHostProfiles();
+    loadPortForwardingRules();
     loadApplicationSettings();
     initializeActionRegistry();
     initializeTransferManager();
@@ -1259,6 +1338,46 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
 AppController::~AppController()
 {
     shutdown();
+}
+
+void AppController::initializePortForwardingSignalBridges()
+{
+    QObject::connect(
+        this, &AppController::portForwardingSnapshotReady, this,
+        [this](const QString &ruleId, const int state, const int failure, const qulonglong activeClients,
+               const qulonglong bytesFromClients, const qulonglong bytesToClients, const qulonglong rejectedClients) {
+            applyPortForwardingSnapshot(ruleId.toUtf8().toStdString(),
+                                        forwarding::PortForwardingJobSnapshot{
+                                            .state = static_cast<forwarding::PortForwardingJobState>(state),
+                                            .failure = static_cast<forwarding::PortForwardingJobFailure>(failure),
+                                            .activeClients = static_cast<std::size_t>(activeClients),
+                                            .bytesFromClients = static_cast<std::uint64_t>(bytesFromClients),
+                                            .bytesToClients = static_cast<std::uint64_t>(bytesToClients),
+                                            .rejectedClients = static_cast<std::uint64_t>(rejectedClients),
+                                        });
+        },
+        Qt::QueuedConnection);
+    QObject::connect(
+        this, &AppController::portForwardingHostKeyPromptRequested, this,
+        [this](const QString &ruleId, const QString &endpoint, const QString &algorithm, const QString &fingerprint,
+               const bool changed) {
+            PortForwardingRuntime *runtime = findPortForwardingRuntime(ruleId.toUtf8().toStdString());
+            if (runtime == nullptr)
+            {
+                return;
+            }
+            if (m_shutdownStarted || m_hostKeyPromptVisible)
+            {
+                if (!changed)
+                {
+                    resolvePortForwardingHostKey(*runtime, ssh::UnknownHostKeyDecision::Reject);
+                }
+                return;
+            }
+            m_hostKeyForwardingRuleId = ruleId;
+            setHostKeyPrompt(endpoint, algorithm, fingerprint, changed);
+        },
+        Qt::QueuedConnection);
 }
 
 void AppController::attachTerminal(ui::TerminalItem *terminal)
@@ -1283,6 +1402,7 @@ void AppController::shutdown() noexcept
         return;
     }
     m_shutdownStarted = true;
+    stopAllPortForwardingRules();
     clearHostKeyPrompt();
 
     if (m_transferManager)
@@ -2053,6 +2173,47 @@ bool AppController::portableVaultLocked() const noexcept
 QString AppController::credentialOperationError() const
 {
     return m_credentialOperationError;
+}
+
+QVariantList AppController::portForwardingRules() const
+{
+    QVariantList result;
+    result.reserve(static_cast<qsizetype>(m_portForwardingRules.size()));
+    for (const forwarding::PortForwardingRule &rule : m_portForwardingRules)
+    {
+        const auto profile = std::ranges::find(m_profiles, rule.profileId, &ssh::SshProfile::id);
+        const PortForwardingRuntime *runtime = findPortForwardingRuntime(rule.id);
+        const forwarding::PortForwardingJobSnapshot snapshot =
+            runtime != nullptr && runtime->job ? runtime->job->snapshot() : forwarding::PortForwardingJobSnapshot{};
+        const bool waitingForPortableVault = rule.autoStart && runtime == nullptr
+                                             && snapshot.state == forwarding::PortForwardingJobState::Stopped
+                                             && portableVaultLocked();
+        result.append(QVariantMap{
+            {QStringLiteral("id"), utf8QString(rule.id)},
+            {QStringLiteral("label"), utf8QString(rule.label)},
+            {QStringLiteral("profileId"), utf8QString(rule.profileId)},
+            {QStringLiteral("profileName"), profile == m_profiles.end() ? QString{} : utf8QString(profile->name)},
+            {QStringLiteral("type"), forwardingTypeToken(rule.type)},
+            {QStringLiteral("bindHost"), utf8QString(rule.bind.host)},
+            {QStringLiteral("bindPort"), rule.bind.port},
+            {QStringLiteral("destinationHost"), utf8QString(rule.destination.host)},
+            {QStringLiteral("destinationPort"), rule.destination.port},
+            {QStringLiteral("autoStart"), rule.autoStart},
+            {QStringLiteral("state"),
+             waitingForPortableVault ? QStringLiteral("waiting") : forwardingStateToken(snapshot.state)},
+            {QStringLiteral("failure"), forwardingFailureToken(snapshot.failure)},
+            {QStringLiteral("activeClients"), static_cast<qulonglong>(snapshot.activeClients)},
+            {QStringLiteral("bytesFromClients"), static_cast<qulonglong>(snapshot.bytesFromClients)},
+            {QStringLiteral("bytesToClients"), static_cast<qulonglong>(snapshot.bytesToClients)},
+            {QStringLiteral("rejectedClients"), static_cast<qulonglong>(snapshot.rejectedClients)},
+        });
+    }
+    return result;
+}
+
+QString AppController::portForwardingOperationError() const
+{
+    return m_portForwardingOperationError;
 }
 
 QString AppController::startLocalTerminal()
@@ -4439,6 +4600,11 @@ bool AppController::deleteHostProfile(const QString &id)
                                         .arg(utf8QString(dependent->name)));
         return false;
     }
+    if (forwarding::portForwardingRulesReferenceProfile(m_portForwardingRules, profileId))
+    {
+        setCredentialOperationError(tr("Delete the port forwarding rules that use this host before deleting it."));
+        return false;
+    }
     const std::optional<security::CredentialKey> key =
         profile->credentialReference ? std::optional{security::CredentialKey{.profileId = *profile->credentialReference,
                                                                              .kind = credentialKind(*profile)}}
@@ -4925,6 +5091,13 @@ bool AppController::initializePortableCredentialVault(const QString &masterPassw
     setCredentialOperationError({});
     emit hostProfilesChanged();
     emit credentialVaultChanged();
+    for (const forwarding::PortForwardingRule &rule : m_portForwardingRules)
+    {
+        if (rule.autoStart && findPortForwardingRuntime(rule.id) == nullptr)
+        {
+            (void)startPortForwardingRule(utf8QString(rule.id));
+        }
+    }
     return true;
 }
 
@@ -4939,6 +5112,13 @@ bool AppController::unlockPortableCredentialVault(const QString &masterPassword)
     setCredentialOperationError({});
     emit hostProfilesChanged();
     emit credentialVaultChanged();
+    for (const forwarding::PortForwardingRule &rule : m_portForwardingRules)
+    {
+        if (rule.autoStart && findPortForwardingRuntime(rule.id) == nullptr)
+        {
+            (void)startPortForwardingRule(utf8QString(rule.id));
+        }
+    }
     return true;
 }
 
@@ -5093,6 +5273,284 @@ bool AppController::clearCredentialStorage(const QString &target)
     return true;
 }
 
+bool AppController::savePortForwardingRule(const QString &id, const QString &label, const QString &profileId,
+                                           const QString &type, const QString &bindHost, const int bindPort,
+                                           const QString &destinationHost, const int destinationPort,
+                                           const bool autoStart)
+{
+    const auto parsedType = parseForwardingType(type.trimmed());
+    const std::string resolvedProfileId = utf8String(profileId.trimmed());
+    if (!parsedType || bindPort < 1 || bindPort > 65'535 || resolvedProfileId.empty()
+        || std::ranges::find(m_profiles, resolvedProfileId, &ssh::SshProfile::id) == m_profiles.end())
+    {
+        m_portForwardingOperationError = tr("Choose a valid host profile, forwarding type, and bind port.");
+        emit portForwardingRulesChanged();
+        return false;
+    }
+    if (*parsedType != forwarding::PortForwardingType::Dynamic
+        && (destinationPort < 1 || destinationPort > 65'535 || destinationHost.trimmed().isEmpty()))
+    {
+        m_portForwardingOperationError = tr("Enter a destination host and port for this forwarding rule.");
+        emit portForwardingRulesChanged();
+        return false;
+    }
+
+    forwarding::PortForwardingRule rule{
+        .id = id.trimmed().isEmpty() ? utf8String(QUuid::createUuid().toString(QUuid::WithoutBraces))
+                                     : utf8String(id.trimmed()),
+        .label = utf8String(label.trimmed()),
+        .profileId = resolvedProfileId,
+        .type = *parsedType,
+        .bind = {.host = utf8String(bindHost.trimmed()), .port = static_cast<std::uint16_t>(bindPort)},
+        .destination = *parsedType == forwarding::PortForwardingType::Dynamic
+                           ? forwarding::PortForwardingEndpoint{}
+                           : forwarding::PortForwardingEndpoint{.host = utf8String(destinationHost.trimmed()),
+                                                                .port = static_cast<std::uint16_t>(destinationPort)},
+        .autoStart = autoStart,
+    };
+    if (!forwarding::validPortForwardingRule(rule))
+    {
+        m_portForwardingOperationError = tr("Complete the forwarding rule with valid names and endpoints.");
+        emit portForwardingRulesChanged();
+        return false;
+    }
+
+    std::vector<forwarding::PortForwardingRule> candidate = m_portForwardingRules;
+    const auto existing = std::ranges::find(candidate, rule.id, &forwarding::PortForwardingRule::id);
+    if (existing == candidate.end())
+    {
+        candidate.push_back(rule);
+    }
+    else
+    {
+        *existing = rule;
+    }
+    if (!persistPortForwardingRules(candidate))
+    {
+        return false;
+    }
+    stopPortForwardingRule(utf8QString(rule.id));
+    m_portForwardingRules = std::move(candidate);
+    m_portForwardingOperationError.clear();
+    emit portForwardingRulesChanged();
+    return true;
+}
+
+bool AppController::duplicatePortForwardingRule(const QString &id)
+{
+    const std::string ruleId = utf8String(id.trimmed());
+    const auto existing = std::ranges::find(m_portForwardingRules, ruleId, &forwarding::PortForwardingRule::id);
+    if (existing == m_portForwardingRules.end())
+    {
+        m_portForwardingOperationError = tr("The forwarding rule no longer exists.");
+        emit portForwardingRulesChanged();
+        return false;
+    }
+
+    forwarding::PortForwardingRule duplicate = *existing;
+    duplicate.id = utf8String(QUuid::createUuid().toString(QUuid::WithoutBraces));
+    duplicate.label = utf8String(tr("%1 copy").arg(utf8QString(existing->label)));
+    duplicate.autoStart = false;
+    std::vector<forwarding::PortForwardingRule> candidate = m_portForwardingRules;
+    candidate.push_back(std::move(duplicate));
+    if (!persistPortForwardingRules(candidate))
+    {
+        return false;
+    }
+    m_portForwardingRules = std::move(candidate);
+    m_portForwardingOperationError.clear();
+    emit portForwardingRulesChanged();
+    return true;
+}
+
+bool AppController::copyPortForwardingBindEndpoint(const QString &id)
+{
+    const std::string ruleId = utf8String(id.trimmed());
+    const auto rule = std::ranges::find(m_portForwardingRules, ruleId, &forwarding::PortForwardingRule::id);
+    if (rule == m_portForwardingRules.end())
+    {
+        return false;
+    }
+    QString host = utf8QString(rule->bind.host);
+    if (host.contains(QLatin1Char(':')) && !host.startsWith(QLatin1Char('[')))
+    {
+        host = QStringLiteral("[%1]").arg(host);
+    }
+    QGuiApplication::clipboard()->setText(QStringLiteral("%1:%2").arg(host).arg(rule->bind.port));
+    return true;
+}
+
+bool AppController::deletePortForwardingRule(const QString &id)
+{
+    const std::string ruleId = utf8String(id.trimmed());
+    std::vector<forwarding::PortForwardingRule> candidate = m_portForwardingRules;
+    const auto rule = std::ranges::find(candidate, ruleId, &forwarding::PortForwardingRule::id);
+    if (rule == candidate.end())
+    {
+        return false;
+    }
+    candidate.erase(rule);
+    if (!persistPortForwardingRules(candidate))
+    {
+        return false;
+    }
+    stopPortForwardingRule(id);
+    m_portForwardingRules = std::move(candidate);
+    m_portForwardingOperationError.clear();
+    emit portForwardingRulesChanged();
+    return true;
+}
+
+bool AppController::startPortForwardingRule(const QString &id)
+{
+    const std::string ruleId = utf8String(id.trimmed());
+    const auto rule = std::ranges::find(m_portForwardingRules, ruleId, &forwarding::PortForwardingRule::id);
+    if (rule == m_portForwardingRules.end())
+    {
+        m_portForwardingOperationError = tr("The forwarding rule no longer exists.");
+        emit portForwardingRulesChanged();
+        return false;
+    }
+
+    if (PortForwardingRuntime *existing = findPortForwardingRuntime(ruleId); existing != nullptr)
+    {
+        const auto state = existing->job->snapshot().state;
+        if (state == forwarding::PortForwardingJobState::Starting
+            || state == forwarding::PortForwardingJobState::Running)
+        {
+            return true;
+        }
+        stopPortForwardingRule(id);
+    }
+    if (m_portForwardingRuntimes.size() >= forwarding::maximumActivePortForwardingRuleCount)
+    {
+        m_portForwardingOperationError = tr("Stop another forwarding rule before starting this one.");
+        emit portForwardingRulesChanged();
+        return false;
+    }
+
+    const auto profile = std::ranges::find(m_profiles, rule->profileId, &ssh::SshProfile::id);
+    if (profile == m_profiles.end())
+    {
+        m_portForwardingOperationError = tr("The host profile used by this forwarding rule no longer exists.");
+        emit portForwardingRulesChanged();
+        return false;
+    }
+    auto request = connectionRequestForProfile(*profile);
+    if (!request)
+    {
+        m_portForwardingOperationError = m_credentialOperationError;
+        emit portForwardingRulesChanged();
+        return false;
+    }
+
+    PortForwardingRuntime *runtimePointer = nullptr;
+    try
+    {
+        auto runtime = std::make_unique<PortForwardingRuntime>();
+        runtime->ruleId = ruleId;
+        runtime->job = std::make_unique<forwarding::PortForwardingJob>();
+        runtimePointer = runtime.get();
+        m_portForwardingRuntimes.push_back(std::move(runtime));
+    }
+    catch (const std::bad_alloc &)
+    {
+        m_portForwardingOperationError = tr("Unable to allocate the forwarding worker.");
+        emit portForwardingRulesChanged();
+        return false;
+    }
+
+    const QString qRuleId = utf8QString(ruleId);
+    ssh::SshConnectionCallbacks callbacks{
+        .confirmUnknownHostKey =
+            [this, runtimePointer, qRuleId](const QString &endpoint, const QString &algorithm,
+                                            const QString &fingerprint) {
+                {
+                    std::scoped_lock lock(runtimePointer->hostKeyMutex);
+                    runtimePointer->hostKeyDecision.reset();
+                    runtimePointer->awaitingHostKey = true;
+                }
+                try
+                {
+                    emit portForwardingHostKeyPromptRequested(qRuleId, endpoint, algorithm, fingerprint, false);
+                }
+                catch (...)
+                {
+                    resolvePortForwardingHostKey(*runtimePointer, ssh::UnknownHostKeyDecision::Reject);
+                }
+                std::unique_lock lock(runtimePointer->hostKeyMutex);
+                runtimePointer->hostKeyAvailable.wait(lock, [runtimePointer] {
+                    return runtimePointer->hostKeyDecision.has_value();
+                });
+                const ssh::UnknownHostKeyDecision decision = *runtimePointer->hostKeyDecision;
+                runtimePointer->hostKeyDecision.reset();
+                runtimePointer->awaitingHostKey = false;
+                return decision;
+            },
+        .hostKeyChanged =
+            [this, qRuleId](const QString &endpoint, const QString &algorithm, const QString &fingerprint) {
+                try
+                {
+                    emit portForwardingHostKeyPromptRequested(qRuleId, endpoint, algorithm, fingerprint, true);
+                }
+                catch (...)
+                {
+                    return;
+                }
+            },
+    };
+    auto started = runtimePointer->job->start(
+        *rule, std::move(*request), std::move(callbacks),
+        [this, qRuleId](const forwarding::PortForwardingJobSnapshot &snapshot) noexcept {
+            try
+            {
+                emit portForwardingSnapshotReady(
+                    qRuleId, static_cast<int>(snapshot.state), static_cast<int>(snapshot.failure),
+                    static_cast<qulonglong>(snapshot.activeClients), static_cast<qulonglong>(snapshot.bytesFromClients),
+                    static_cast<qulonglong>(snapshot.bytesToClients),
+                    static_cast<qulonglong>(snapshot.rejectedClients));
+            }
+            catch (...)
+            {
+                return;
+            }
+        });
+    if (!started)
+    {
+        m_portForwardingRuntimes.erase(std::ranges::find(m_portForwardingRuntimes, runtimePointer,
+                                                         [](const std::unique_ptr<PortForwardingRuntime> &candidate) {
+                                                             return candidate.get();
+                                                         }));
+        m_portForwardingOperationError = tr("Unable to start the forwarding worker.");
+        emit portForwardingRulesChanged();
+        return false;
+    }
+    m_portForwardingOperationError.clear();
+    emit portForwardingRulesChanged();
+    return true;
+}
+
+void AppController::stopPortForwardingRule(const QString &id)
+{
+    const std::string ruleId = utf8String(id.trimmed());
+    const auto runtime = std::ranges::find(m_portForwardingRuntimes, ruleId,
+                                           [](const std::unique_ptr<PortForwardingRuntime> &candidate) {
+                                               return candidate->ruleId;
+                                           });
+    if (runtime == m_portForwardingRuntimes.end())
+    {
+        return;
+    }
+    resolvePortForwardingHostKey(**runtime, ssh::UnknownHostKeyDecision::Reject);
+    (*runtime)->job->stop();
+    if (m_hostKeyForwardingRuleId == id)
+    {
+        clearHostKeyPrompt();
+    }
+    m_portForwardingRuntimes.erase(runtime);
+    emit portForwardingRulesChanged();
+}
+
 void AppController::acceptHostKey(const bool remember)
 {
     if (!m_hostKeyPromptVisible || m_hostKeyChangedWarning)
@@ -5102,8 +5560,18 @@ void AppController::acceptHostKey(const bool remember)
     TerminalTab *tab = findTab(m_hostKeyTabId);
     const bool forSftp = m_hostKeyForSftp;
     const QString transferTaskId = m_hostKeyTransferTaskId;
+    const QString forwardingRuleId = m_hostKeyForwardingRuleId;
     clearHostKeyPrompt();
-    if (!transferTaskId.isEmpty() && m_transferManager != nullptr)
+    if (!forwardingRuleId.isEmpty())
+    {
+        if (PortForwardingRuntime *runtime = findPortForwardingRuntime(utf8String(forwardingRuleId));
+            runtime != nullptr)
+        {
+            resolvePortForwardingHostKey(*runtime, remember ? ssh::UnknownHostKeyDecision::AcceptAndRemember
+                                                            : ssh::UnknownHostKeyDecision::AcceptOnce);
+        }
+    }
+    else if (!transferTaskId.isEmpty() && m_transferManager != nullptr)
     {
         m_transferManager->confirmHostKey(transferTaskId, remember);
     }
@@ -5126,8 +5594,17 @@ void AppController::rejectHostKey()
     TerminalTab *tab = findTab(m_hostKeyTabId);
     const bool forSftp = m_hostKeyForSftp;
     const QString transferTaskId = m_hostKeyTransferTaskId;
+    const QString forwardingRuleId = m_hostKeyForwardingRuleId;
     clearHostKeyPrompt();
-    if (!transferTaskId.isEmpty() && m_transferManager != nullptr)
+    if (!forwardingRuleId.isEmpty())
+    {
+        if (PortForwardingRuntime *runtime = findPortForwardingRuntime(utf8String(forwardingRuleId));
+            runtime != nullptr)
+        {
+            resolvePortForwardingHostKey(*runtime, ssh::UnknownHostKeyDecision::Reject);
+        }
+    }
+    else if (!transferTaskId.isEmpty() && m_transferManager != nullptr)
     {
         m_transferManager->rejectHostKey(transferTaskId);
     }
@@ -5980,7 +6457,8 @@ void AppController::setHostKeyPrompt(QString endpoint, QString algorithm, QStrin
 void AppController::clearHostKeyPrompt()
 {
     if (!m_hostKeyPromptVisible && m_hostKeyTabId.isEmpty() && m_hostKeyTransferTaskId.isEmpty()
-        && m_hostKeyEndpoint.isEmpty() && m_hostKeyAlgorithm.isEmpty() && m_hostKeyFingerprint.isEmpty())
+        && m_hostKeyForwardingRuleId.isEmpty() && m_hostKeyEndpoint.isEmpty() && m_hostKeyAlgorithm.isEmpty()
+        && m_hostKeyFingerprint.isEmpty())
     {
         return;
     }
@@ -5988,11 +6466,128 @@ void AppController::clearHostKeyPrompt()
     m_hostKeyChangedWarning = false;
     m_hostKeyForSftp = false;
     m_hostKeyTransferTaskId.clear();
+    m_hostKeyForwardingRuleId.clear();
     m_hostKeyTabId.clear();
     m_hostKeyEndpoint.clear();
     m_hostKeyAlgorithm.clear();
     m_hostKeyFingerprint.clear();
     emit hostKeyPromptChanged();
+}
+
+void AppController::loadPortForwardingRules()
+{
+    auto rules = m_portForwardingStore.load();
+    if (!rules)
+    {
+        qCWarning(appControllerLog) << "Unable to load port forwarding rules";
+        m_portForwardingOperationError = tr("Unable to load the saved port forwarding rules.");
+        m_portForwardingRules.clear();
+        return;
+    }
+    m_portForwardingRules = std::move(*rules);
+    QTimer::singleShot(0, this, [this] {
+        if (m_shutdownStarted || portableVaultLocked())
+        {
+            return;
+        }
+        std::vector<QString> autoStartIds;
+        autoStartIds.reserve(m_portForwardingRules.size());
+        for (const forwarding::PortForwardingRule &rule : m_portForwardingRules)
+        {
+            if (rule.autoStart)
+            {
+                autoStartIds.push_back(utf8QString(rule.id));
+            }
+        }
+        for (const QString &id : autoStartIds)
+        {
+            (void)startPortForwardingRule(id);
+        }
+    });
+}
+
+bool AppController::persistPortForwardingRules(const std::vector<forwarding::PortForwardingRule> &rules)
+{
+    if (const auto saved = m_portForwardingStore.save(rules); !saved)
+    {
+        m_portForwardingOperationError = tr("Unable to save the port forwarding rules.");
+        emit portForwardingRulesChanged();
+        return false;
+    }
+    return true;
+}
+
+void AppController::applyPortForwardingSnapshot(const std::string &ruleId,
+                                                const forwarding::PortForwardingJobSnapshot &snapshot)
+{
+    PortForwardingRuntime *runtime = findPortForwardingRuntime(ruleId);
+    if (runtime == nullptr || !runtime->job || runtime->job->snapshot() != snapshot)
+    {
+        return;
+    }
+    if (snapshot.state == forwarding::PortForwardingJobState::Failed)
+    {
+        switch (snapshot.failure)
+        {
+            case forwarding::PortForwardingJobFailure::Connection:
+                m_portForwardingOperationError = tr("The SSH connection for the forwarding rule failed.");
+                break;
+            case forwarding::PortForwardingJobFailure::Listener:
+                m_portForwardingOperationError = tr("The local bind address or port is unavailable.");
+                break;
+            case forwarding::PortForwardingJobFailure::RemoteListener:
+                m_portForwardingOperationError = tr("The SSH server rejected the remote listener.");
+                break;
+            case forwarding::PortForwardingJobFailure::Transport:
+                m_portForwardingOperationError = tr("The forwarding transport was disconnected.");
+                break;
+            case forwarding::PortForwardingJobFailure::ResourceLimit:
+                m_portForwardingOperationError = tr("The forwarding worker exhausted an internal resource.");
+                break;
+            case forwarding::PortForwardingJobFailure::None:
+                break;
+        }
+    }
+    emit portForwardingRulesChanged();
+}
+
+AppController::PortForwardingRuntime *AppController::findPortForwardingRuntime(const std::string_view ruleId) noexcept
+{
+    const auto runtime = std::ranges::find(m_portForwardingRuntimes, ruleId,
+                                           [](const std::unique_ptr<PortForwardingRuntime> &candidate) {
+                                               return std::string_view(candidate->ruleId);
+                                           });
+    return runtime == m_portForwardingRuntimes.end() ? nullptr : runtime->get();
+}
+
+const AppController::PortForwardingRuntime *
+AppController::findPortForwardingRuntime(const std::string_view ruleId) const noexcept
+{
+    const auto runtime = std::ranges::find(m_portForwardingRuntimes, ruleId,
+                                           [](const std::unique_ptr<PortForwardingRuntime> &candidate) {
+                                               return std::string_view(candidate->ruleId);
+                                           });
+    return runtime == m_portForwardingRuntimes.end() ? nullptr : runtime->get();
+}
+
+void AppController::resolvePortForwardingHostKey(PortForwardingRuntime &runtime,
+                                                 const ssh::UnknownHostKeyDecision decision) noexcept
+{
+    {
+        std::scoped_lock lock(runtime.hostKeyMutex);
+        runtime.hostKeyDecision = decision;
+    }
+    runtime.hostKeyAvailable.notify_all();
+}
+
+void AppController::stopAllPortForwardingRules() noexcept
+{
+    for (const auto &runtime : m_portForwardingRuntimes)
+    {
+        resolvePortForwardingHostKey(*runtime, ssh::UnknownHostKeyDecision::Reject);
+        runtime->job->stop();
+    }
+    m_portForwardingRuntimes.clear();
 }
 
 void AppController::loadHostProfiles()

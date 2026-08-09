@@ -1,6 +1,7 @@
 #pragma once
 
 #include "application/actions/ActionRegistry.h"
+#include "application/forwarding/PortForwardingJob.h"
 #include "application/security/CredentialVaultCoordinator.h"
 #include "application/sftp/SftpDirectoryModel.h"
 #include "application/sftp/TransferManager.h"
@@ -9,6 +10,7 @@
 #include "core/config/ApplicationPaths.h"
 #include "core/config/ApplicationSettings.h"
 #include "domain/workbench/ScriptRecorder.h"
+#include "infrastructure/forwarding/PortForwardingRuleStore.h"
 #include "infrastructure/logging/SessionLogWriter.h"
 #include "infrastructure/ssh/SshProfileStore.h"
 #include "infrastructure/workbench/PowerShellHistoryReader.h"
@@ -22,12 +24,16 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <expected>
 #include <functional>
 #include <memory>
+#include <mutex>
+#include <optional>
+#include <string_view>
 #include <vector>
 
 namespace ztermy::ui
@@ -118,6 +124,8 @@ class AppController final : public QObject
     Q_PROPERTY(bool portableVaultInitialized READ portableVaultInitialized NOTIFY credentialVaultChanged)
     Q_PROPERTY(bool portableVaultLocked READ portableVaultLocked NOTIFY credentialVaultChanged)
     Q_PROPERTY(QString credentialOperationError READ credentialOperationError NOTIFY credentialVaultChanged)
+    Q_PROPERTY(QVariantList portForwardingRules READ portForwardingRules NOTIFY portForwardingRulesChanged)
+    Q_PROPERTY(QString portForwardingOperationError READ portForwardingOperationError NOTIFY portForwardingRulesChanged)
 
 public:
     using LocalTerminalSessionFactory = std::function<std::unique_ptr<terminal::LocalTerminalSessionBackend>()>;
@@ -212,6 +220,8 @@ public:
     [[nodiscard]] bool portableVaultInitialized() const noexcept;
     [[nodiscard]] bool portableVaultLocked() const noexcept;
     [[nodiscard]] QString credentialOperationError() const;
+    [[nodiscard]] QVariantList portForwardingRules() const;
+    [[nodiscard]] QString portForwardingOperationError() const;
 
     Q_INVOKABLE QString startLocalTerminal();
     Q_INVOKABLE bool activateTerminalTab(const QString &id);
@@ -346,6 +356,14 @@ public:
     Q_INVOKABLE bool migrateCredentialStorage(const QString &target, bool removeSource);
     Q_INVOKABLE bool removeAllSavedCredentials();
     Q_INVOKABLE bool clearCredentialStorage(const QString &target);
+    Q_INVOKABLE bool savePortForwardingRule(const QString &id, const QString &label, const QString &profileId,
+                                            const QString &type, const QString &bindHost, int bindPort,
+                                            const QString &destinationHost, int destinationPort, bool autoStart);
+    Q_INVOKABLE bool duplicatePortForwardingRule(const QString &id);
+    Q_INVOKABLE bool copyPortForwardingBindEndpoint(const QString &id);
+    Q_INVOKABLE bool deletePortForwardingRule(const QString &id);
+    Q_INVOKABLE bool startPortForwardingRule(const QString &id);
+    Q_INVOKABLE void stopPortForwardingRule(const QString &id);
     Q_INVOKABLE void acceptHostKey(bool remember);
     Q_INVOKABLE void rejectHostKey();
 
@@ -368,10 +386,17 @@ signals:
     void remoteTelemetryChanged();
     void applicationSettingsChanged();
     void credentialVaultChanged();
+    void portForwardingRulesChanged();
 
 private:
     Q_SIGNAL void terminalHistoryTaskCompleted(const QString &tabId, quint64 requestId, ShellHistoryEntries entries,
                                                const QString &error);
+    Q_SIGNAL void portForwardingSnapshotReady(const QString &ruleId, int state, int failure, qulonglong activeClients,
+                                              qulonglong bytesFromClients, qulonglong bytesToClients,
+                                              qulonglong rejectedClients);
+    Q_SIGNAL void portForwardingHostKeyPromptRequested(const QString &ruleId, const QString &endpoint,
+                                                       const QString &algorithm, const QString &fingerprint,
+                                                       bool changed);
 
     enum class TerminalTabKind : std::uint8_t
     {
@@ -457,6 +482,16 @@ private:
         std::optional<ssh::SshFailureKind> sshFailure;
     };
 
+    struct PortForwardingRuntime final
+    {
+        std::string ruleId;
+        std::unique_ptr<forwarding::PortForwardingJob> job;
+        std::mutex hostKeyMutex;
+        std::condition_variable hostKeyAvailable;
+        std::optional<ssh::UnknownHostKeyDecision> hostKeyDecision;
+        bool awaitingHostKey = false;
+    };
+
     void connectTerminalSignals();
     void connectLocalTabSignals(TerminalTab &tab);
     void connectSshTabSignals(TerminalTab &tab);
@@ -476,6 +511,14 @@ private:
     void setHostKeyPrompt(QString endpoint, QString algorithm, QString fingerprint, bool changed);
     void clearHostKeyPrompt();
     void loadHostProfiles();
+    void loadPortForwardingRules();
+    void initializePortForwardingSignalBridges();
+    [[nodiscard]] bool persistPortForwardingRules(const std::vector<forwarding::PortForwardingRule> &rules);
+    void applyPortForwardingSnapshot(const std::string &ruleId, const forwarding::PortForwardingJobSnapshot &snapshot);
+    [[nodiscard]] PortForwardingRuntime *findPortForwardingRuntime(std::string_view ruleId) noexcept;
+    [[nodiscard]] const PortForwardingRuntime *findPortForwardingRuntime(std::string_view ruleId) const noexcept;
+    void resolvePortForwardingHostKey(PortForwardingRuntime &runtime, ssh::UnknownHostKeyDecision decision) noexcept;
+    void stopAllPortForwardingRules() noexcept;
     void loadApplicationSettings();
     void loadQuickCommands();
     void loadWorkspaceState();
@@ -529,6 +572,7 @@ private:
     ui::TerminalItem *m_terminal = nullptr;
     LocalTerminalSessionFactory m_localSessionFactory;
     ssh::SshProfileStore m_profileStore;
+    forwarding::PortForwardingRuleStore m_portForwardingStore;
     config::ApplicationSettingsStore m_settingsStore;
     config::ApplicationSettings m_settings;
     actions::ActionRegistry m_actionRegistry;
@@ -544,6 +588,9 @@ private:
     QString m_credentialOperationError;
     QString m_knownHostsPath;
     std::vector<ssh::SshProfile> m_profiles;
+    std::vector<forwarding::PortForwardingRule> m_portForwardingRules;
+    std::vector<std::unique_ptr<PortForwardingRuntime>> m_portForwardingRuntimes;
+    QString m_portForwardingOperationError;
     std::vector<std::unique_ptr<TerminalTab>> m_tabs;
     std::vector<std::unique_ptr<sftp::SftpSession>> m_stoppingSftpSessions;
     QString m_activeTabId;
@@ -558,6 +605,7 @@ private:
     bool m_shutdownStarted = false;
     bool m_terminalTelemetryVisible = false;
     QString m_hostKeyTransferTaskId;
+    QString m_hostKeyForwardingRuleId;
 };
 
 } // namespace ztermy

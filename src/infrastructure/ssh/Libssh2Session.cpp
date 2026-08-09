@@ -1177,7 +1177,7 @@ std::expected<SshRemoteForwardListener, SshTransportError> Libssh2Session::openR
             libssh2_channel_forward_listen_ex(session, address.c_str(), port, &boundPort, static_cast<int>(queueSize));
         if (listener != nullptr)
         {
-            if (boundPort <= 0 || boundPort > (std::numeric_limits<std::uint16_t>::max)())
+            if (!std::in_range<std::uint16_t>(boundPort) || boundPort == 0)
             {
                 libssh2_channel_forward_cancel(listener);
                 return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::ProtocolError});

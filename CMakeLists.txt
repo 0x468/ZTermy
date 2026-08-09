@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 
 project(
     ztermy
-    VERSION 0.2.9
+    VERSION 0.2.10
     DESCRIPTION "A native Windows SSH terminal"
     LANGUAGES C CXX RC
 )
@@ -758,6 +758,10 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS HostConnectionPane.qml
 )
 set_source_files_properties(
+    src/ui/qml/PortForwardingPane.qml
+    PROPERTIES QT_RESOURCE_ALIAS PortForwardingPane.qml
+)
+set_source_files_properties(
     src/ui/qml/HostKeyPrompt.qml
     PROPERTIES QT_RESOURCE_ALIAS HostKeyPrompt.qml
 )
@@ -833,6 +837,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/CommandPalette.qml
         src/ui/qml/FontPicker.qml
         src/ui/qml/HostConnectionPane.qml
+        src/ui/qml/PortForwardingPane.qml
         src/ui/qml/HostKeyPrompt.qml
         src/ui/qml/KeyboardAction.qml
         src/ui/qml/Main.qml
@@ -924,6 +929,8 @@ target_link_libraries(ztermy PRIVATE
     ztermy_application_diagnostics
     ztermy_credential_vault
     ztermy_core_config
+    ztermy_forwarding_persistence
+    ztermy_forwarding_session
     ztermy_ssh_persistence
     ztermy_ssh_session
     ztermy_sftp_session
@@ -2135,6 +2142,8 @@ if(BUILD_TESTING)
         ztermy_application_actions
         ztermy_credential_vault
         ztermy_core_config
+        ztermy_forwarding_persistence
+        ztermy_forwarding_session
         ztermy_ssh_persistence
         ztermy_ssh_session
         ztermy_sftp_session

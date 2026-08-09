@@ -153,7 +153,7 @@ struct RealHostConfiguration final
         {
             break;
         }
-        (void)socket.waitUntilReady(ztermy::ssh::SocketIoInterest::Read, deadline);
+        [[maybe_unused]] const auto ready = socket.waitUntilReady(ztermy::ssh::SocketIoInterest::Read, deadline);
     }
     return result;
 }
