@@ -1750,6 +1750,21 @@ bool AppController::sshActive() const noexcept
     return tab != nullptr && tab->kind == TerminalTabKind::Ssh;
 }
 
+QString AppController::startupRecoveryNotice() const
+{
+    return m_startupRecoveryNotice;
+}
+
+void AppController::dismissStartupRecoveryNotice()
+{
+    if (m_startupRecoveryNotice.isEmpty())
+    {
+        return;
+    }
+    m_startupRecoveryNotice.clear();
+    emit startupRecoveryNoticeChanged();
+}
+
 bool AppController::hostKeyPromptVisible() const noexcept
 {
     return m_hostKeyPromptVisible;
@@ -8378,6 +8393,7 @@ void AppController::loadHostProfiles()
     if (m_profileStore.lastLoadRecoveredFromBackup())
     {
         qCWarning(appControllerLog) << "Recovered SSH profiles from the last-known-good backup";
+        recordPersistenceRecovery();
     }
 }
 
@@ -8393,6 +8409,7 @@ void AppController::loadApplicationSettings()
     if (m_settingsStore.lastLoadRecoveredFromBackup())
     {
         qCWarning(appControllerLog) << "Recovered application settings from the last-known-good backup";
+        recordPersistenceRecovery();
     }
     security::CredentialStorage selected = m_defaultCredentialStorage;
     switch (m_settings.credentialStorage)
@@ -8457,6 +8474,7 @@ void AppController::loadQuickCommands()
     if (m_scriptStore.lastLoadRecoveredFromBackup())
     {
         qCWarning(appControllerLog) << "Recovered scripts from the last-known-good backup";
+        recordPersistenceRecovery();
     }
 }
 
@@ -8472,8 +8490,19 @@ void AppController::loadWorkspaceState()
     if (m_workspaceStateStore.lastLoadRecoveredFromBackup())
     {
         qCWarning(appControllerLog) << "Recovered workspace state from the last-known-good backup";
+        recordPersistenceRecovery();
     }
     restoreTerminalWorkspaces();
+}
+
+void AppController::recordPersistenceRecovery()
+{
+    if (!m_startupRecoveryNotice.isEmpty())
+    {
+        return;
+    }
+    m_startupRecoveryNotice =
+        tr("Some local settings were recovered from a last-known-good backup. Review them before continuing.");
 }
 
 void AppController::restoreTerminalWorkspaces()

@@ -121,6 +121,7 @@ private slots:
     void restoresSavedSshWorkspaceWithoutConnecting();
     void managesSessionAppearanceAndStructuredRecording();
     void orderlyShutdownStopsAllLocalTabsOnce();
+    void exposesAndDismissesStartupRecoveryNotice();
     void persistsQuickCommandsAndPerTabWorkbenchState();
     void importsAndExportsScriptLibraryWithoutOverwritingIds();
     void rendersAndRunsScriptAgainstFixedTerminal();
@@ -1286,6 +1287,43 @@ void AppControllerTests::orderlyShutdownStopsAllLocalTabsOnce()
 
     controller.shutdown();
     QCOMPARE(sessionState->stops, 2);
+}
+
+void AppControllerTests::exposesAndDismissesStartupRecoveryNotice()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString profilesPath = directory.filePath(QStringLiteral("profiles.json"));
+    ztermy::ssh::SshProfile first{
+        .id = "recoverable-profile",
+        .name = "Last known good",
+        .host = "192.0.2.44",
+        .username = "operator",
+        .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
+        .privateKeyPath = "unused-test-key",
+    };
+    auto second = first;
+    second.name = "Damaged generation";
+    const std::array firstGeneration{first};
+    const std::array secondGeneration{second};
+    const ztermy::ssh::SshProfileStore store(profilesPath);
+    QVERIFY(store.save(firstGeneration));
+    QVERIFY(store.save(secondGeneration));
+
+    QFile primary(profilesPath);
+    QVERIFY(primary.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    QCOMPARE(primary.write("{truncated"), qint64{10});
+    primary.close();
+
+    ztermy::AppController controller(profilesPath);
+    QCOMPARE(controller.hostProfiles().size(), 1);
+    QCOMPARE(controller.hostProfiles().constFirst().toMap().value(QStringLiteral("name")).toString(),
+             QStringLiteral("Last known good"));
+    QVERIFY(!controller.startupRecoveryNotice().isEmpty());
+    QSignalSpy noticeChanged(&controller, &ztermy::AppController::startupRecoveryNoticeChanged);
+    controller.dismissStartupRecoveryNotice();
+    QVERIFY(controller.startupRecoveryNotice().isEmpty());
+    QCOMPARE(noticeChanged.count(), 1);
 }
 
 void AppControllerTests::persistsQuickCommandsAndPerTabWorkbenchState()

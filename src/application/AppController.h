@@ -65,6 +65,7 @@ class AppController final : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(bool sshActive READ sshActive NOTIFY sshActiveChanged)
+    Q_PROPERTY(QString startupRecoveryNotice READ startupRecoveryNotice NOTIFY startupRecoveryNoticeChanged)
     Q_PROPERTY(bool hostKeyPromptVisible READ hostKeyPromptVisible NOTIFY hostKeyPromptChanged)
     Q_PROPERTY(QString hostKeyEndpoint READ hostKeyEndpoint NOTIFY hostKeyPromptChanged)
     Q_PROPERTY(QString hostKeyAlgorithm READ hostKeyAlgorithm NOTIFY hostKeyPromptChanged)
@@ -169,8 +170,10 @@ public:
     Q_INVOKABLE void attachTerminalViewport(const QString &paneId, QObject *viewport);
     Q_INVOKABLE void detachTerminalViewport(const QString &paneId, QObject *viewport);
     void shutdown() noexcept;
+    Q_INVOKABLE void dismissStartupRecoveryNotice();
 
     [[nodiscard]] bool sshActive() const noexcept;
+    [[nodiscard]] QString startupRecoveryNotice() const;
     [[nodiscard]] bool hostKeyPromptVisible() const noexcept;
     [[nodiscard]] QString hostKeyEndpoint() const;
     [[nodiscard]] QString hostKeyAlgorithm() const;
@@ -449,6 +452,7 @@ signals:
     void applicationSettingsChanged();
     void credentialVaultChanged();
     void portForwardingRulesChanged();
+    void startupRecoveryNoticeChanged();
 
 private:
     Q_SIGNAL void terminalHistoryTaskCompleted(const QString &tabId, quint64 requestId, ShellHistoryEntries entries,
@@ -582,6 +586,7 @@ private:
     void copySelection();
     void setHostKeyPrompt(QString endpoint, QString algorithm, QString fingerprint, bool changed);
     void clearHostKeyPrompt();
+    void recordPersistenceRecovery();
     void loadHostProfiles();
     void loadPortForwardingRules();
     void initializePortForwardingSignalBridges();
@@ -665,6 +670,7 @@ private:
     forwarding::PortForwardingRuleStore m_portForwardingStore;
     config::ApplicationSettingsStore m_settingsStore;
     config::ApplicationSettings m_settings;
+    QString m_startupRecoveryNotice;
     actions::ActionRegistry m_actionRegistry;
     workbench::ScriptStore m_scriptStore;
     QString m_legacyQuickCommandPath;

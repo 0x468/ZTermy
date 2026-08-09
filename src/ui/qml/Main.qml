@@ -1042,6 +1042,81 @@ Rectangle {
         }
     }
 
+    Rectangle {
+        id: recoveryBanner
+
+        objectName: "startupRecoveryBanner"
+        anchors.top: titleBar.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        height: root.controller.startupRecoveryNotice.length > 0 ? 42 : 0
+        visible: height > 0
+        clip: true
+        color: Qt.rgba(Theme.warning.r, Theme.warning.g, Theme.warning.b, Theme.dark ? 0.14 : 0.1)
+        border.color: Qt.rgba(Theme.warning.r, Theme.warning.g, Theme.warning.b, 0.38)
+        z: 3
+
+        Behavior on height {
+            NumberAnimation {
+                duration: Theme.motionMedium
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 14
+            anchors.rightMargin: 8
+            spacing: 10
+
+            AppIcon {
+                Layout.preferredWidth: 16
+                Layout.preferredHeight: 16
+                name: "warning"
+                color: Theme.warning
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: root.controller.startupRecoveryNotice
+                color: Theme.text
+                elide: Text.ElideRight
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.textLabel
+                Accessible.role: Accessible.AlertMessage
+                Accessible.name: text
+            }
+
+            ToolButton {
+                id: dismissRecoveryButton
+
+                objectName: "dismissStartupRecoveryButton"
+                Layout.preferredWidth: 30
+                Layout.preferredHeight: 30
+                hoverEnabled: true
+                focusPolicy: Qt.StrongFocus
+                Accessible.name: qsTr("Dismiss recovery notice")
+                onClicked: root.controller.dismissStartupRecoveryNotice()
+
+                background: Rectangle {
+                    radius: Theme.radiusSmall
+                    color: dismissRecoveryButton.down ? Theme.controlPressed : dismissRecoveryButton.hovered ? Theme.controlHover : "transparent"
+                    border.color: dismissRecoveryButton.activeFocus ? Theme.focus : "transparent"
+                    border.width: dismissRecoveryButton.activeFocus ? 2 : 0
+                }
+
+                contentItem: AppIcon {
+                    name: "close"
+                    color: Theme.textSoft
+                }
+
+                HoverHandler {
+                    cursorShape: Qt.PointingHandCursor
+                }
+            }
+        }
+    }
+
     CommandPalette {
         id: commandPalette
 
@@ -1095,7 +1170,7 @@ Rectangle {
     }
 
     RowLayout {
-        anchors.top: titleBar.bottom
+        anchors.top: recoveryBanner.bottom
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom

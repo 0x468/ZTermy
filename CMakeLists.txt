@@ -663,6 +663,7 @@ set(ZTERMY_INTERFACE_ICON_FILES
     resources/icons/tree.svg
     resources/icons/trash.svg
     resources/icons/upload.svg
+    resources/icons/warning.svg
     resources/icons/activity.svg
 )
 foreach(icon_file IN LISTS ZTERMY_INTERFACE_ICON_FILES)
