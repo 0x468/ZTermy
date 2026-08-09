@@ -214,7 +214,8 @@ acceptance matrix.
 
 ## V2.13 — scripts and local notes (`0.2.13`)
 
-Status: planned.
+Status: scope frozen; implementation in progress. The bounded data, execution,
+and local-file contracts are recorded in `V2_13_SCOPE.md` and ADR 0052.
 
 - evolve snippets into versioned multi-line scripts with typed variables,
   explicit target selection, reviewable execution, and bounded output triggers;
