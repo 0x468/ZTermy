@@ -20,7 +20,37 @@ namespace
 constexpr qint64 maximumFileSize = qint64{1024} * 1024;
 constexpr qsizetype maximumProfileCount = 128;
 constexpr qint64 legacySchemaVersion = 1;
-constexpr qint64 currentSchemaVersion = 2;
+constexpr qint64 credentialSchemaVersion = 2;
+constexpr qint64 currentSchemaVersion = 3;
+
+[[nodiscard]] std::optional<ztermy::ssh::SshKeywordHighlightRule> parseKeywordRule(const QJsonValue &value)
+{
+    if (!value.isObject())
+    {
+        return std::nullopt;
+    }
+    const QJsonObject object = value.toObject();
+    const QJsonValue id = object.value(QStringLiteral("id"));
+    const QJsonValue pattern = object.value(QStringLiteral("pattern"));
+    const QJsonValue foreground = object.value(QStringLiteral("foreground"));
+    const QJsonValue background = object.value(QStringLiteral("background"));
+    const QJsonValue enabled = object.value(QStringLiteral("enabled"));
+    const QJsonValue caseSensitive = object.value(QStringLiteral("caseSensitive"));
+    if (!id.isString() || !pattern.isString() || !foreground.isString() || !background.isString()
+        || (!enabled.isUndefined() && !enabled.isBool()) || (!caseSensitive.isUndefined() && !caseSensitive.isBool()))
+    {
+        return std::nullopt;
+    }
+    ztermy::ssh::SshKeywordHighlightRule rule{
+        .id = id.toString().toStdString(),
+        .pattern = pattern.toString().toStdString(),
+        .foreground = foreground.toString().toStdString(),
+        .background = background.toString().toStdString(),
+        .enabled = enabled.toBool(true),
+        .caseSensitive = caseSensitive.toBool(false),
+    };
+    return ztermy::ssh::validKeywordHighlightRule(rule) ? std::optional{std::move(rule)} : std::nullopt;
+}
 
 [[nodiscard]] std::optional<ztermy::ssh::SshAuthenticationMethod> parseAuthentication(const QString &value)
 {
@@ -66,13 +96,17 @@ constexpr qint64 currentSchemaVersion = 2;
     const QJsonValue passphraseRequiredValue = object.value(QStringLiteral("privateKeyPassphraseRequired"));
     const QJsonValue lastConnectedValue = object.value(QStringLiteral("lastConnectedUtcMs"));
     const QJsonValue credentialReferenceValue = object.value(QStringLiteral("credentialReference"));
+    const QJsonValue keywordEnabledValue = object.value(QStringLiteral("keywordHighlightEnabled"));
+    const QJsonValue keywordRulesValue = object.value(QStringLiteral("keywordHighlightRules"));
     if (!idValue.isString() || !nameValue.isString() || (!groupValue.isUndefined() && !groupValue.isString())
         || !hostValue.isString() || !portValue.isDouble() || !usernameValue.isString()
         || !authenticationValue.isString() || !privateKeyPathValue.isString()
         || (!passphraseRequiredValue.isUndefined() && !passphraseRequiredValue.isBool())
         || (!lastConnectedValue.isUndefined() && !lastConnectedValue.isDouble())
-        || (version >= currentSchemaVersion && !credentialReferenceValue.isUndefined()
-            && !credentialReferenceValue.isString()))
+        || (version >= credentialSchemaVersion && !credentialReferenceValue.isUndefined()
+            && !credentialReferenceValue.isString())
+        || (version >= currentSchemaVersion && !keywordEnabledValue.isUndefined() && !keywordEnabledValue.isBool())
+        || (version >= currentSchemaVersion && !keywordRulesValue.isUndefined() && !keywordRulesValue.isArray()))
     {
         return std::nullopt;
     }
@@ -101,6 +135,26 @@ constexpr qint64 currentSchemaVersion = 2;
         lastConnectedUtcMs = timestamp;
     }
 
+    std::vector<ztermy::ssh::SshKeywordHighlightRule> keywordRules;
+    if (keywordRulesValue.isArray())
+    {
+        const QJsonArray values = keywordRulesValue.toArray();
+        if (values.size() > 16)
+        {
+            return std::nullopt;
+        }
+        keywordRules.reserve(static_cast<std::size_t>(values.size()));
+        for (const auto &ruleValue : values)
+        {
+            auto rule = parseKeywordRule(ruleValue);
+            if (!rule)
+            {
+                return std::nullopt;
+            }
+            keywordRules.push_back(std::move(*rule));
+        }
+    }
+
     ztermy::ssh::SshProfile profile{
         .id = idValue.toString().toStdString(),
         .name = nameValue.toString().toStdString(),
@@ -115,6 +169,8 @@ constexpr qint64 currentSchemaVersion = 2;
                                    ? std::optional{credentialReferenceValue.toString().toStdString()}
                                    : std::nullopt,
         .lastConnectedUtcMs = lastConnectedUtcMs,
+        .keywordHighlightRules = std::move(keywordRules),
+        .keywordHighlightEnabled = keywordEnabledValue.toBool(true),
     };
     return ztermy::ssh::validSshProfile(profile) ? std::optional{std::move(profile)} : std::nullopt;
 }
@@ -140,6 +196,20 @@ constexpr qint64 currentSchemaVersion = 2;
     {
         object.insert(QStringLiteral("credentialReference"), QString::fromStdString(*profile.credentialReference));
     }
+    object.insert(QStringLiteral("keywordHighlightEnabled"), profile.keywordHighlightEnabled);
+    QJsonArray keywordRules;
+    for (const ztermy::ssh::SshKeywordHighlightRule &rule : profile.keywordHighlightRules)
+    {
+        keywordRules.append(QJsonObject{
+            {QStringLiteral("id"), QString::fromStdString(rule.id)},
+            {QStringLiteral("pattern"), QString::fromStdString(rule.pattern)},
+            {QStringLiteral("foreground"), QString::fromStdString(rule.foreground)},
+            {QStringLiteral("background"), QString::fromStdString(rule.background)},
+            {QStringLiteral("enabled"), rule.enabled},
+            {QStringLiteral("caseSensitive"), rule.caseSensitive},
+        });
+    }
+    object.insert(QStringLiteral("keywordHighlightRules"), keywordRules);
     return object;
 }
 
@@ -200,7 +270,8 @@ std::expected<std::vector<SshProfile>, SshProfileStoreError> SshProfileStore::lo
     const QJsonValue versionValue = root.value(QStringLiteral("version"));
     const QJsonValue profilesValue = root.value(QStringLiteral("profiles"));
     if (!versionValue.isDouble()
-        || (versionValue.toInteger() != legacySchemaVersion && versionValue.toInteger() != currentSchemaVersion))
+        || (versionValue.toInteger() != legacySchemaVersion && versionValue.toInteger() != credentialSchemaVersion
+            && versionValue.toInteger() != currentSchemaVersion))
     {
         return std::unexpected(versionValue.isDouble() ? SshProfileStoreError::UnsupportedVersion
                                                        : SshProfileStoreError::InvalidFormat);

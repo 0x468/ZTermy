@@ -1268,6 +1268,31 @@ Rectangle {
                             }
 
                             TerminalToolbarButton {
+                                id: keywordHighlightButton
+
+                                objectName: "terminalKeywordHighlightAction"
+                                Layout.preferredWidth: 28
+                                Layout.preferredHeight: 22
+                                checkable: true
+                                checked: root.activeTerminalTab !== null && root.activeTerminalTab.keywordHighlightEnabled && root.activeTerminalTab.keywordHighlightRules.length > 0
+                                selected: checked
+                                visible: root.width >= 980 && root.activeTerminalTab !== null && root.activeTerminalTab.kind === "ssh"
+                                enabled: root.activeTerminalTab !== null
+                                onClicked: keywordHighlightPopover.openFor(keywordHighlightButton)
+                                Keys.onReturnPressed: click()
+                                Keys.onEnterPressed: click()
+                                Accessible.name: qsTr("Host keyword highlighting")
+                                contentItem: AppIcon {
+                                    name: "highlight"
+                                    color: keywordHighlightButton.checked ? Theme.accent : root.mutedColor
+                                }
+                                AppToolTip {
+                                    visible: keywordHighlightButton.hovered && !keywordHighlightPopover.visible
+                                    text: qsTr("Host keyword highlighting")
+                                }
+                            }
+
+                            TerminalToolbarButton {
                                 id: sftpToolbarButton
 
                                 objectName: "terminalSftpAction"
@@ -1276,6 +1301,7 @@ Rectangle {
                                 checkable: true
                                 checked: root.activeTerminalTab !== null && root.activeTerminalTab.workbenchOpen && root.activeTerminalTab.workbenchPage === "sftp"
                                 selected: checked
+                                visible: root.width >= 900
                                 enabled: root.activeTerminalTab !== null && root.activeTerminalTab.connected
                                 onClicked: root.controller.toggleTerminalWorkbench("sftp")
                                 Keys.onReturnPressed: click()
@@ -1300,6 +1326,7 @@ Rectangle {
                                 checkable: true
                                 checked: root.activeTerminalTab !== null && root.activeTerminalTab.composerOpen
                                 selected: checked
+                                visible: root.width >= 820
                                 enabled: root.activeTerminalTab !== null
                                 onClicked: {
                                     const opening = root.activeTerminalTab !== null && !root.activeTerminalTab.composerOpen;
@@ -1330,6 +1357,7 @@ Rectangle {
                                 objectName: "terminalFindAction"
                                 Layout.preferredWidth: 28
                                 Layout.preferredHeight: 22
+                                visible: root.width >= 700
                                 enabled: root.activeTerminalTab !== null
                                 onClicked: root.toggleTerminalSearch()
                                 Keys.onReturnPressed: click()
@@ -1353,6 +1381,7 @@ Rectangle {
                                 checkable: true
                                 checked: root.activeTerminalTab !== null && (root.activeTerminalTab.logState === "active" || root.activeTerminalTab.logState === "starting")
                                 selected: checked
+                                visible: root.width >= 860
                                 enabled: root.activeTerminalTab !== null
                                 onClicked: root.toggleSessionLog()
                                 Accessible.name: checked ? qsTr("Stop session log") : qsTr("Start session log")
@@ -1375,6 +1404,7 @@ Rectangle {
                                 checkable: true
                                 checked: root.activeTerminalTab !== null && root.activeTerminalTab.workbenchOpen && root.activeTerminalTab.workbenchPage === "scripts"
                                 selected: checked
+                                visible: root.width >= 940
                                 enabled: root.activeTerminalTab !== null
                                 onClicked: root.controller.toggleTerminalWorkbench("scripts")
                                 Keys.onReturnPressed: click()
@@ -1387,6 +1417,47 @@ Rectangle {
                                 AppToolTip {
                                     visible: scriptsToolbarButton.hovered
                                     text: qsTr("Command snippets")
+                                }
+                            }
+
+                            TerminalToolbarButton {
+                                id: scriptRecordingIndicator
+
+                                objectName: "terminalScriptRecordingIndicator"
+                                Layout.preferredWidth: root.activeTerminalTab !== null && root.activeTerminalTab.scriptRecordingState === "review" ? 42 : 50
+                                Layout.preferredHeight: 22
+                                visible: root.activeTerminalTab !== null && root.activeTerminalTab.scriptRecordingState !== "idle"
+                                selected: root.activeTerminalTab !== null && root.activeTerminalTab.scriptRecordingState !== "review"
+                                onClicked: {
+                                    if (root.activeTerminalTab.scriptRecordingState === "recording")
+                                        root.controller.pauseTerminalScriptRecording();
+                                    else if (root.activeTerminalTab.scriptRecordingState === "paused")
+                                        root.controller.resumeTerminalScriptRecording();
+                                    else
+                                        terminalRecordingPopover.openFor(scriptRecordingIndicator);
+                                }
+                                contentItem: Row {
+                                    anchors.centerIn: parent
+                                    spacing: 5
+                                    Rectangle {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: 7
+                                        height: 7
+                                        radius: 4
+                                        color: Theme.danger
+                                    }
+                                    Text {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: root.activeTerminalTab !== null && root.activeTerminalTab.scriptRecordingState === "review" ? root.activeTerminalTab.scriptRecordingSteps.length : "REC"
+                                        color: root.textColor
+                                        font.family: Theme.uiFont
+                                        font.pixelSize: Theme.textCompact
+                                        font.weight: Font.DemiBold
+                                    }
+                                }
+                                AppToolTip {
+                                    visible: scriptRecordingIndicator.hovered && !terminalRecordingPopover.visible
+                                    text: root.activeTerminalTab !== null && root.activeTerminalTab.scriptRecordingState === "recording" ? qsTr("Pause script recording") : root.activeTerminalTab !== null && root.activeTerminalTab.scriptRecordingState === "paused" ? qsTr("Resume script recording") : qsTr("Review recorded commands")
                                 }
                             }
 
@@ -1423,8 +1494,109 @@ Rectangle {
                                     }
 
                                     AppMenuItem {
-                                        text: qsTr("Terminal settings")
-                                        onTriggered: root.openSettingsTab()
+                                        text: qsTr("Host keyword highlighting")
+                                        visible: !keywordHighlightButton.visible && root.activeTerminalTab !== null && root.activeTerminalTab.kind === "ssh"
+                                        onTriggered: keywordHighlightPopover.openFor(terminalMoreButton)
+                                    }
+
+                                    AppMenuItem {
+                                        text: qsTr("Open SFTP")
+                                        visible: !sftpToolbarButton.visible
+                                        enabled: root.activeTerminalTab !== null && root.activeTerminalTab.connected
+                                        onTriggered: root.controller.toggleTerminalWorkbench("sftp")
+                                    }
+
+                                    AppMenuItem {
+                                        text: qsTr("Command composer")
+                                        visible: !composerToolbarButton.visible
+                                        onTriggered: {
+                                            const opening = root.activeTerminalTab !== null && !root.activeTerminalTab.composerOpen;
+                                            root.controller.toggleTerminalComposer();
+                                            if (opening)
+                                                terminalComposer.focusEditor();
+                                        }
+                                    }
+
+                                    AppMenuItem {
+                                        text: qsTr("Find in terminal")
+                                        visible: !terminalFindButton.visible
+                                        onTriggered: root.toggleTerminalSearch()
+                                    }
+
+                                    AppMenuItem {
+                                        text: sessionLogToolbarButton.checked ? qsTr("Stop session log") : qsTr("Start session log")
+                                        visible: !sessionLogToolbarButton.visible
+                                        onTriggered: root.toggleSessionLog()
+                                    }
+
+                                    AppMenuItem {
+                                        text: qsTr("Command snippets")
+                                        visible: !scriptsToolbarButton.visible
+                                        onTriggered: root.controller.toggleTerminalWorkbench("scripts")
+                                    }
+
+                                    AppMenuItem {
+                                        text: qsTr("Follow terminal directory")
+                                        checkable: true
+                                        checked: root.controller.activeSftpFollowTerminalDirectory
+                                        enabled: root.activeTerminalTab !== null && root.activeTerminalTab.connected
+                                        onTriggered: root.controller.setSftpFollowTerminalDirectory(checked)
+                                    }
+
+                                    AppMenuItem {
+                                        text: qsTr("Session terminal settings")
+                                        onTriggered: terminalSessionSettingsPopover.openFor(terminalMoreButton)
+                                    }
+
+                                    AppMenuSeparator {}
+
+                                    AppMenuItem {
+                                        text: qsTr("Start script recording")
+                                        visible: root.activeTerminalTab !== null && (root.activeTerminalTab.scriptRecordingState === "idle" || root.activeTerminalTab.scriptRecordingState === "review")
+                                        enabled: root.activeTerminalTab !== null && root.activeTerminalTab.running
+                                        onTriggered: root.controller.startTerminalScriptRecording()
+                                    }
+                                    AppMenuItem {
+                                        text: root.activeTerminalTab !== null && root.activeTerminalTab.scriptRecordingState === "paused" ? qsTr("Resume script recording") : qsTr("Pause script recording")
+                                        visible: root.activeTerminalTab !== null && (root.activeTerminalTab.scriptRecordingState === "recording" || root.activeTerminalTab.scriptRecordingState === "paused")
+                                        onTriggered: {
+                                            if (root.activeTerminalTab.scriptRecordingState === "paused")
+                                                root.controller.resumeTerminalScriptRecording();
+                                            else
+                                                root.controller.pauseTerminalScriptRecording();
+                                        }
+                                    }
+                                    AppMenuItem {
+                                        text: qsTr("Stop script recording")
+                                        visible: root.activeTerminalTab !== null && (root.activeTerminalTab.scriptRecordingState === "recording" || root.activeTerminalTab.scriptRecordingState === "paused")
+                                        onTriggered: {
+                                            if (root.controller.stopTerminalScriptRecording())
+                                                terminalRecordingPopover.openFor(terminalMoreButton);
+                                        }
+                                    }
+                                    AppMenuItem {
+                                        text: qsTr("Review recorded commands")
+                                        visible: root.activeTerminalTab !== null && root.activeTerminalTab.scriptRecordingState === "review"
+                                        onTriggered: terminalRecordingPopover.openFor(terminalMoreButton)
+                                    }
+
+                                    AppMenuSeparator {}
+
+                                    AppMenu {
+                                        title: qsTr("Terminal encoding")
+
+                                        AppMenuItem {
+                                            text: qsTr("UTF-8")
+                                            checkable: true
+                                            checked: root.activeTerminalTab !== null && root.activeTerminalTab.terminalEncoding === "utf-8"
+                                            onTriggered: root.controller.setActiveTerminalEncoding("utf-8")
+                                        }
+                                        AppMenuItem {
+                                            text: qsTr("GB18030")
+                                            checkable: true
+                                            checked: root.activeTerminalTab !== null && root.activeTerminalTab.terminalEncoding === "gb18030"
+                                            onTriggered: root.controller.setActiveTerminalEncoding("gb18030")
+                                        }
                                     }
                                 }
                             }
@@ -1446,11 +1618,13 @@ Rectangle {
                             anchors.rightMargin: root.activeTerminalWorkbenchSide === "right" ? root.activeTerminalWorkbenchWidth : 0
                             anchors.bottomMargin: root.activeTerminalComposerHeight
                             focus: true
-                            fontFamily: root.controller.terminalFontFamily
-                            fontPixelSize: root.controller.terminalFontSize
-                            ligaturesEnabled: root.controller.terminalLigatures
-                            backgroundOpacity: root.controller.terminalBackgroundOpacity
-                            cursorPreference: root.controller.cursorPreference
+                            fontFamily: root.activeTerminalTab !== null && root.activeTerminalTab.sessionFontFamily.length > 0 ? root.activeTerminalTab.sessionFontFamily : root.controller.terminalFontFamily
+                            fontPixelSize: root.activeTerminalTab !== null && root.activeTerminalTab.sessionFontSize > 0 ? root.activeTerminalTab.sessionFontSize : root.controller.terminalFontSize
+                            ligaturesEnabled: root.activeTerminalTab !== null && root.activeTerminalTab.sessionFontSize > 0 ? root.activeTerminalTab.sessionLigatures : root.controller.terminalLigatures
+                            backgroundOpacity: root.activeTerminalTab !== null && root.activeTerminalTab.sessionBackgroundOpacity >= 0 ? root.activeTerminalTab.sessionBackgroundOpacity : root.controller.terminalBackgroundOpacity
+                            cursorPreference: root.activeTerminalTab !== null && root.activeTerminalTab.sessionCursor.length > 0 ? root.activeTerminalTab.sessionCursor : root.controller.cursorPreference
+                            foregroundOverride: root.activeTerminalTab !== null ? root.activeTerminalTab.sessionForeground : ""
+                            backgroundOverride: root.activeTerminalTab !== null ? root.activeTerminalTab.sessionBackground : ""
                             cursorBlink: root.controller.cursorBlink
                             copyOnSelect: root.controller.copyOnSelect
                             confirmMultilinePaste: root.controller.confirmMultilinePaste
@@ -1481,6 +1655,24 @@ Rectangle {
                                     easing.type: Easing.OutCubic
                                 }
                             }
+                        }
+
+                        TerminalKeywordPopover {
+                            id: keywordHighlightPopover
+                            controller: root.controller
+                            terminalTab: root.activeTerminalTab
+                        }
+
+                        TerminalSessionSettingsPopover {
+                            id: terminalSessionSettingsPopover
+                            controller: root.controller
+                            terminalTab: root.activeTerminalTab
+                        }
+
+                        TerminalRecordingPopover {
+                            id: terminalRecordingPopover
+                            controller: root.controller
+                            terminalTab: root.activeTerminalTab
                         }
 
                         Item {

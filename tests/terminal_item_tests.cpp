@@ -1,4 +1,5 @@
 #include "ui/terminal/TerminalItem.h"
+#include "ui/terminal/TerminalKeywordHighlighter.h"
 #include "ui/terminal/TerminalTextLayout.h"
 
 #include <QColor>
@@ -67,7 +68,71 @@ private slots:
     void exposesScrollbarAndRequestsAbsoluteScroll();
     void rendersStyledWideCellsAndCursorPixels();
     void rendersImeAcrossResizeAndShutdown();
+    void highlightsWideAndCaseInsensitiveKeywords();
 };
+
+void TerminalItemTests::highlightsWideAndCaseInsensitiveKeywords()
+{
+    auto snapshot = snapshotAt(0, 0);
+    snapshot->columns = 14;
+    snapshot->rows = 1;
+    snapshot->cells.assign(snapshot->columns, {});
+    snapshot->cells[0].grapheme = {U'E'};
+    snapshot->cells[1].grapheme = {U'R'};
+    snapshot->cells[2].grapheme = {U'R'};
+    snapshot->cells[3].grapheme = {U'O'};
+    snapshot->cells[4].grapheme = {U'R'};
+    snapshot->cells[6].grapheme = {U'错'};
+    snapshot->cells[6].displayWidth = 2;
+    snapshot->cells[7].displayWidth = 0;
+    snapshot->cells[8].grapheme = {U'误'};
+    snapshot->cells[8].displayWidth = 2;
+    snapshot->cells[9].displayWidth = 0;
+    snapshot->cells[11].grapheme = {U'A'};
+    snapshot->cells[13].grapheme = {U'B'};
+
+    const std::vector<ztermy::ui::TerminalKeywordRule> rules{
+        {.id = QStringLiteral("error"),
+         .pattern = QStringLiteral("error"),
+         .foreground = {},
+         .background = QColor(QStringLiteral("#d13438")),
+         .enabled = true,
+         .caseSensitive = false},
+        {.id = QStringLiteral("overlap"),
+         .pattern = QStringLiteral("err"),
+         .foreground = QColor(QStringLiteral("#00ffff")),
+         .background = {},
+         .enabled = true,
+         .caseSensitive = false},
+        {.id = QStringLiteral("wide"),
+         .pattern = QStringLiteral("错误"),
+         .foreground = QColor(QStringLiteral("#111111")),
+         .background = QColor(QStringLiteral("#ffcc00")),
+         .enabled = true,
+         .caseSensitive = true},
+        {.id = QStringLiteral("no-blank-bridge"),
+         .pattern = QStringLiteral("AB"),
+         .foreground = {},
+         .background = QColor(QStringLiteral("#00ff00")),
+         .enabled = true,
+         .caseSensitive = true},
+    };
+    const auto styles = ztermy::ui::highlightTerminalKeywords(*snapshot, rules);
+    QCOMPARE(styles.size(), std::size_t{14});
+    for (std::size_t column = 0; column < 5; ++column)
+    {
+        QCOMPARE(styles[column].background, QColor(QStringLiteral("#d13438")));
+        QVERIFY(!styles[column].foreground.isValid());
+    }
+    for (std::size_t column = 6; column < 10; ++column)
+    {
+        QCOMPARE(styles[column].background, QColor(QStringLiteral("#ffcc00")));
+    }
+    QVERIFY(!styles[5].background.isValid());
+    QVERIFY(!styles[10].background.isValid());
+    QVERIFY(!styles[11].background.isValid());
+    QVERIFY(!styles[13].background.isValid());
+}
 
 void TerminalItemTests::positionsImeAtTerminalCursor()
 {

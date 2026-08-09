@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 
 project(
     ztermy
-    VERSION 0.2.6
+    VERSION 0.2.7
     DESCRIPTION "A native Windows SSH terminal"
     LANGUAGES C CXX RC
 )
@@ -287,6 +287,8 @@ add_library(ztermy_workbench_domain STATIC
     src/domain/workbench/QuickCommand.h
     src/domain/workbench/ShellHistory.cpp
     src/domain/workbench/ShellHistory.h
+    src/domain/workbench/ScriptRecorder.cpp
+    src/domain/workbench/ScriptRecorder.h
     src/domain/workbench/WorkspaceState.cpp
     src/domain/workbench/WorkspaceState.h
 )
@@ -364,6 +366,8 @@ add_library(ztermy_terminal_session STATIC
 add_library(ztermy_ssh_session STATIC
     src/application/ssh/SshTerminalSession.cpp
     src/application/ssh/SshTerminalSession.h
+    src/platform/windows/WindowsTerminalTextCodec.cpp
+    src/platform/windows/WindowsTerminalTextCodec.h
 )
 
 add_library(ztermy_ssh_connection STATIC
@@ -407,6 +411,12 @@ target_link_libraries(ztermy_terminal_session
 
 target_compile_features(ztermy_ssh_session PUBLIC cxx_std_23)
 target_include_directories(ztermy_ssh_session PUBLIC src)
+target_compile_definitions(ztermy_ssh_session PRIVATE
+    NOMINMAX
+    UNICODE
+    WIN32_LEAN_AND_MEAN
+    _UNICODE
+)
 target_compile_features(ztermy_ssh_connection PUBLIC cxx_std_23)
 target_include_directories(ztermy_ssh_connection PUBLIC src)
 target_link_libraries(ztermy_ssh_connection
@@ -442,6 +452,8 @@ target_link_libraries(ztermy_ssh_session
 add_library(ztermy_terminal_ui STATIC
     src/ui/terminal/TerminalItem.cpp
     src/ui/terminal/TerminalItem.h
+    src/ui/terminal/TerminalKeywordHighlighter.cpp
+    src/ui/terminal/TerminalKeywordHighlighter.h
     src/ui/terminal/TerminalTextLayout.cpp
     src/ui/terminal/TerminalTextLayout.h
 )
@@ -540,6 +552,7 @@ set(ZTERMY_INTERFACE_ICON_FILES
     resources/icons/folder.svg
     resources/icons/follow.svg
     resources/icons/history.svg
+    resources/icons/highlight.svg
     resources/icons/home.svg
     resources/icons/hosts.svg
     resources/icons/lock.svg
@@ -722,6 +735,18 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS TerminalComposer.qml
 )
 set_source_files_properties(
+    src/ui/qml/TerminalKeywordPopover.qml
+    PROPERTIES QT_RESOURCE_ALIAS TerminalKeywordPopover.qml
+)
+set_source_files_properties(
+    src/ui/qml/TerminalSessionSettingsPopover.qml
+    PROPERTIES QT_RESOURCE_ALIAS TerminalSessionSettingsPopover.qml
+)
+set_source_files_properties(
+    src/ui/qml/TerminalRecordingPopover.qml
+    PROPERTIES QT_RESOURCE_ALIAS TerminalRecordingPopover.qml
+)
+set_source_files_properties(
     src/ui/qml/TransferCenter.qml
     PROPERTIES QT_RESOURCE_ALIAS TransferCenter.qml
 )
@@ -770,6 +795,9 @@ qt_add_qml_module(ztermy
         src/ui/qml/TerminalTabAction.qml
         src/ui/qml/TelemetrySparkline.qml
         src/ui/qml/TerminalComposer.qml
+        src/ui/qml/TerminalKeywordPopover.qml
+        src/ui/qml/TerminalSessionSettingsPopover.qml
+        src/ui/qml/TerminalRecordingPopover.qml
         src/ui/qml/TerminalWorkbench.qml
         src/ui/qml/TransferCenter.qml
         src/ui/qml/TransferToast.qml
@@ -1152,6 +1180,24 @@ endif()
 
 if(BUILD_TESTING)
     find_package(Qt6 6.8 REQUIRED COMPONENTS Network Test)
+
+    qt_add_executable(ztermy_terminal_text_codec_tests
+        tests/terminal_text_codec_tests.cpp
+    )
+    target_compile_features(ztermy_terminal_text_codec_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_terminal_text_codec_tests PRIVATE
+        ztermy_ssh_session
+        Qt6::Test
+    )
+    if(MSVC)
+        target_compile_options(ztermy_terminal_text_codec_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+    add_test(NAME terminal-text-codec COMMAND ztermy_terminal_text_codec_tests)
 
     qt_add_executable(ztermy_remote_telemetry_tests
         tests/remote_telemetry_tests.cpp

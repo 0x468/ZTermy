@@ -8,6 +8,7 @@
 #include "application/terminal/LocalTerminalSession.h"
 #include "core/config/ApplicationPaths.h"
 #include "core/config/ApplicationSettings.h"
+#include "domain/workbench/ScriptRecorder.h"
 #include "infrastructure/logging/SessionLogWriter.h"
 #include "infrastructure/ssh/SshProfileStore.h"
 #include "infrastructure/workbench/PowerShellHistoryReader.h"
@@ -213,6 +214,23 @@ public:
     Q_INVOKABLE bool runTerminalCommand(const QString &command);
     Q_INVOKABLE bool startTerminalLog(const QString &localFileUrl);
     Q_INVOKABLE void stopTerminalLog();
+    Q_INVOKABLE bool setActiveKeywordHighlightEnabled(bool enabled);
+    Q_INVOKABLE bool saveActiveKeywordHighlightRule(const QString &id, const QString &pattern,
+                                                    const QString &foreground, const QString &background, bool enabled,
+                                                    bool caseSensitive);
+    Q_INVOKABLE bool deleteActiveKeywordHighlightRule(const QString &id);
+    Q_INVOKABLE bool setActiveTerminalEncoding(const QString &encoding);
+    Q_INVOKABLE bool setActiveTerminalAppearance(const QString &fontFamily, int fontSize, bool ligatures,
+                                                 qreal backgroundOpacity, const QString &cursor,
+                                                 const QString &foreground, const QString &background);
+    Q_INVOKABLE bool resetActiveTerminalAppearance();
+    Q_INVOKABLE bool startTerminalScriptRecording();
+    Q_INVOKABLE bool pauseTerminalScriptRecording();
+    Q_INVOKABLE bool resumeTerminalScriptRecording();
+    Q_INVOKABLE bool stopTerminalScriptRecording();
+    Q_INVOKABLE bool replayTerminalScriptRecording();
+    Q_INVOKABLE bool copyTerminalScriptRecording();
+    Q_INVOKABLE void clearTerminalScriptRecording();
     Q_INVOKABLE bool saveQuickCommand(const QString &id, const QString &name, const QString &command,
                                       const QString &description, const QString &shellScope);
     Q_INVOKABLE bool deleteQuickCommand(const QString &id);
@@ -325,26 +343,34 @@ private:
 
     struct TerminalTab final
     {
-        QString id;
-        QString title;
-        QString status;
-        TerminalTabKind kind = TerminalTabKind::Local;
-        ssh::SshConnectionPhase sshPhase = ssh::SshConnectionPhase::Disconnected;
-        std::optional<ssh::SshFailureKind> sshFailure;
-        terminal::TerminalSnapshotPtr snapshot;
         std::unique_ptr<terminal::LocalTerminalSessionBackend> local;
         std::unique_ptr<ssh::SshTerminalSession> ssh;
         std::unique_ptr<sftp::SftpSession> sftpSession;
         std::unique_ptr<sftp::SftpDirectoryModel> sftpModel;
+        qint64 connectedUtcMs = 0;
+        qreal sessionBackgroundOpacity = -1.0;
+        qint64 recordingStartedUtcMs = 0;
+        std::uint64_t scriptPlaybackGeneration = 0;
+        std::uint64_t historyRequestId = 0;
+        std::uint64_t sftpRequestId = 0;
+        std::uint64_t sftpGeneration = 0;
+        std::uint64_t sftpTreeRequestId = 0;
+        qreal workbenchWidth = 520.0;
+        qreal composerHeight = 132.0;
+        terminal::TerminalSnapshotPtr snapshot;
         std::shared_ptr<logging::SessionLogWriter> sessionLog;
+        QString id;
+        QString title;
+        QString status;
         QString searchQuery;
         QString sourceProfileId;
         QString identity;
         QString address;
-        qint64 connectedUtcMs = 0;
-        std::uint32_t searchCurrent = 0;
-        std::uint32_t searchTotal = 0;
-        bool searchCaseSensitive = false;
+        QString terminalEncoding = QStringLiteral("utf-8");
+        QString sessionFontFamily;
+        QString sessionCursor;
+        QString sessionForeground;
+        QString sessionBackground;
         QString workbenchPage = QStringLiteral("history");
         QString workbenchSide = QStringLiteral("left");
         QString historyState = QStringLiteral("idle");
@@ -356,25 +382,31 @@ private:
         QString sftpError;
         QString sftpViewMode = QStringLiteral("list");
         QString terminalWorkingDirectory;
-        bool followTerminalDirectory = false;
-        bool sftpHasListing = false;
+        QByteArray inputHistoryBuffer;
+        QString telemetryState = QStringLiteral("paused");
+        std::vector<ssh::SshKeywordHighlightRule> keywordHighlightRules;
         std::vector<workbench::ShellHistoryEntry> history;
         std::vector<workbench::ShellHistoryEntry> capturedHistory;
-        QByteArray inputHistoryBuffer;
+        std::deque<telemetry::Sample> telemetryHistory;
+        workbench::ScriptRecorder scriptRecorder;
+        std::optional<telemetry::Sample> telemetrySample;
+        std::uint32_t searchCurrent = 0;
+        std::uint32_t searchTotal = 0;
+        int sessionFontSize = 0;
+        TerminalTabKind kind = TerminalTabKind::Local;
+        ssh::SshConnectionPhase sshPhase = ssh::SshConnectionPhase::Disconnected;
+        bool searchCaseSensitive = false;
+        bool keywordHighlightEnabled = true;
+        bool sessionLigatures = true;
+        bool scriptPlaybackActive = false;
+        bool followTerminalDirectory = false;
+        bool sftpHasListing = false;
         bool inputHistoryBufferReliable = true;
-        std::uint64_t historyRequestId = 0;
-        std::uint64_t sftpRequestId = 0;
-        std::uint64_t sftpGeneration = 0;
-        std::uint64_t sftpTreeRequestId = 0;
-        qreal workbenchWidth = 520.0;
-        qreal composerHeight = 132.0;
         bool workbenchOpen = false;
         bool composerOpen = false;
         bool running = false;
         bool recentConnectionRecorded = false;
-        QString telemetryState = QStringLiteral("paused");
-        std::optional<telemetry::Sample> telemetrySample;
-        std::deque<telemetry::Sample> telemetryHistory;
+        std::optional<ssh::SshFailureKind> sshFailure;
     };
 
     void connectTerminalSignals();
@@ -430,6 +462,10 @@ private:
     [[nodiscard]] TerminalTab *findTab(const QString &id);
     [[nodiscard]] const TerminalTab *findTab(const QString &id) const;
     void showActiveTab();
+    [[nodiscard]] QVariantList keywordRulesVariant(const TerminalTab &tab) const;
+    [[nodiscard]] bool persistKeywordRules(TerminalTab &tab);
+    [[nodiscard]] QVariantList recordedScriptStepsVariant(const TerminalTab &tab) const;
+    void replayRecordedScriptStep(const QString &tabId, std::size_t index, std::uint64_t generation);
     void updateTelemetryVisibility();
 
     static constexpr std::size_t maximumTerminalTabs = 32;

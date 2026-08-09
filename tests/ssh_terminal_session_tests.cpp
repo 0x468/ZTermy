@@ -228,6 +228,7 @@ private slots:
     void connectsAfterExplicitHostKeyConfirmation();
     void readsRemoteShellHistoryOnRealHost();
     void collectsRemoteTelemetryOnRealHost();
+    void switchesTerminalEncodingOnRealHost();
     void reportsAuthenticationRejectionOnRealHost();
     void reportsRemoteCloseOnRealHost();
     void authenticatesWithInteractivePasswordOnRealHost();
@@ -691,6 +692,73 @@ void SshTerminalSessionTests::collectsRemoteTelemetryOnRealHost()
     const qsizetype pausedCount = telemetrySpy.count();
     QTest::qWait(5500);
     QCOMPARE(telemetrySpy.count(), pausedCount);
+    session.stop();
+}
+
+void SshTerminalSessionTests::switchesTerminalEncodingOnRealHost()
+{
+    if (qgetenv("ZTERMY_TEST_SSH_ENCODING") != QByteArrayLiteral("1"))
+    {
+        QSKIP("Set ZTERMY_TEST_SSH_ENCODING=1 to run the SSH encoding gate");
+    }
+
+    const QByteArray host = qgetenv("ZTERMY_TEST_SSH_HOST");
+    const QByteArray username = qgetenv("ZTERMY_TEST_SSH_USERNAME");
+    const QByteArray privateKey = qgetenv("ZTERMY_TEST_SSH_PRIVATE_KEY");
+    const QByteArray expectedFingerprint = qgetenv("ZTERMY_TEST_SSH_EXPECTED_FINGERPRINT");
+    if (host.isEmpty() || username.isEmpty() || privateKey.isEmpty() || expectedFingerprint.isEmpty())
+    {
+        QSKIP("Set the real-host private-key gate variables to run the SSH encoding gate");
+    }
+
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ztermy::ssh::SshTerminalSession session;
+    QSignalSpy confirmationSpy(&session, &ztermy::ssh::SshTerminalSession::hostKeyConfirmationRequired);
+    QSignalSpy runningSpy(&session, &ztermy::ssh::SshTerminalSession::runningChanged);
+    QSignalSpy snapshotSpy(&session, &ztermy::ssh::SshTerminalSession::snapshotReady);
+    ztermy::ssh::SshConnectionRequest request{
+        .host = QString::fromUtf8(host),
+        .port = 22,
+        .username = QString::fromUtf8(username),
+        .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
+        .privateKeyPath = QString::fromUtf8(privateKey),
+        .knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json")),
+    };
+
+    QVERIFY(!session.start(std::move(request), {.columns = 80, .rows = 24}));
+    QTRY_COMPARE_WITH_TIMEOUT(confirmationSpy.count(), 1, 10s);
+    QCOMPARE(confirmationSpy.constFirst().at(1).toString(), QString::fromLatin1(expectedFingerprint));
+    session.confirmHostKey(true);
+    QTRY_VERIFY_WITH_TIMEOUT(std::ranges::any_of(runningSpy,
+                                                 [](const QList<QVariant> &arguments) {
+                                                     return !arguments.isEmpty() && arguments.constFirst().toBool();
+                                                 }),
+                             20s);
+
+    const auto snapshotsContain = [&snapshotSpy](const QString &needle) {
+        return std::ranges::any_of(snapshotSpy, [&needle](const QList<QVariant> &arguments) {
+            const auto snapshot = qvariant_cast<ztermy::terminal::TerminalSnapshotPtr>(arguments.constFirst());
+            if (!snapshot)
+            {
+                return false;
+            }
+            QString text;
+            for (const ztermy::terminal::TerminalCell &cell : snapshot->cells)
+            {
+                text += QString::fromStdU32String(cell.grapheme);
+            }
+            return text.contains(needle);
+        });
+    };
+
+    session.setEncoding(QStringLiteral("gb18030"));
+    session.queueInput(QByteArrayLiteral("printf '\\304\\343\\272\\303\\n'\r"));
+    QTRY_VERIFY_WITH_TIMEOUT(snapshotsContain(QStringLiteral("你好")), 10s);
+
+    session.setEncoding(QStringLiteral("utf-8"));
+    session.queueInput(QByteArrayLiteral("printf '\\344\\270\\226\\347\\225\\214\\n'\r"));
+    QTRY_VERIFY_WITH_TIMEOUT(snapshotsContain(QStringLiteral("世界")), 10s);
     session.stop();
 }
 

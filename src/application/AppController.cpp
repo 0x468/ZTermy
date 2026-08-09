@@ -4,11 +4,17 @@
 #include "infrastructure/security/InMemoryCredentialVault.h"
 #include "ui/terminal/TerminalItem.h"
 
+#include <QClipboard>
+#include <QColor>
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QHash>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLoggingCategory>
 #include <QMetaObject>
 #include <QPointer>
@@ -21,6 +27,7 @@
 #include <QVariantMap>
 
 #include <algorithm>
+#include <chrono>
 #include <functional>
 #include <new>
 #include <optional>
@@ -34,6 +41,28 @@ namespace
 {
 
 constexpr std::size_t maximumRecentHostProfiles = 6;
+
+[[nodiscard]] ztermy::workbench::ScriptRecorder::TimePoint recorderNow()
+{
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch());
+}
+
+[[nodiscard]] QString scriptRecorderStateToken(const ztermy::workbench::ScriptRecorderState state)
+{
+    using ztermy::workbench::ScriptRecorderState;
+    switch (state)
+    {
+        case ScriptRecorderState::Idle:
+            return QStringLiteral("idle");
+        case ScriptRecorderState::Recording:
+            return QStringLiteral("recording");
+        case ScriptRecorderState::Paused:
+            return QStringLiteral("paused");
+        case ScriptRecorderState::Review:
+            return QStringLiteral("review");
+    }
+    return QStringLiteral("idle");
+}
 
 [[nodiscard]] QString applicationDataFile(const QString &fileName)
 {
@@ -915,6 +944,20 @@ QVariantList AppController::terminalTabs() const
             {QStringLiteral("workbenchWidth"), tab->workbenchWidth},
             {QStringLiteral("composerOpen"), tab->composerOpen},
             {QStringLiteral("composerHeight"), tab->composerHeight},
+            {QStringLiteral("keywordHighlightEnabled"), tab->keywordHighlightEnabled},
+            {QStringLiteral("keywordHighlightRules"), keywordRulesVariant(*tab)},
+            {QStringLiteral("terminalEncoding"), tab->terminalEncoding},
+            {QStringLiteral("sessionFontFamily"), tab->sessionFontFamily},
+            {QStringLiteral("sessionFontSize"), tab->sessionFontSize},
+            {QStringLiteral("sessionLigatures"), tab->sessionLigatures},
+            {QStringLiteral("sessionBackgroundOpacity"), tab->sessionBackgroundOpacity},
+            {QStringLiteral("sessionCursor"), tab->sessionCursor},
+            {QStringLiteral("sessionForeground"), tab->sessionForeground},
+            {QStringLiteral("sessionBackground"), tab->sessionBackground},
+            {QStringLiteral("scriptRecordingState"), scriptRecorderStateToken(tab->scriptRecorder.state())},
+            {QStringLiteral("scriptRecordingSteps"), recordedScriptStepsVariant(*tab)},
+            {QStringLiteral("scriptRecordingStartedUtcMs"), tab->recordingStartedUtcMs},
+            {QStringLiteral("scriptPlaybackActive"), tab->scriptPlaybackActive},
         });
     }
     return result;
@@ -1760,6 +1803,11 @@ bool AppController::runTerminalCommand(const QString &command)
         bytes.append('\r');
     }
     appendCapturedHistory(*tab, normalized);
+    if (tab->scriptRecorder.state() == workbench::ScriptRecorderState::Recording
+        && tab->scriptRecorder.recordCommand(utf8String(normalized), recorderNow()))
+    {
+        emit terminalTabsChanged();
+    }
     tab->inputHistoryBuffer.clear();
     tab->inputHistoryBufferReliable = true;
     dispatchInput(*tab, bytes);
@@ -1797,6 +1845,258 @@ void AppController::stopTerminalLog()
         return;
     }
     tab->sessionLog->stop();
+    emit terminalTabsChanged();
+}
+
+bool AppController::setActiveKeywordHighlightEnabled(const bool enabled)
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || tab->kind != TerminalTabKind::Ssh || tab->keywordHighlightEnabled == enabled)
+    {
+        return tab != nullptr && tab->kind == TerminalTabKind::Ssh;
+    }
+    const bool previous = tab->keywordHighlightEnabled;
+    tab->keywordHighlightEnabled = enabled;
+    if (!persistKeywordRules(*tab))
+    {
+        tab->keywordHighlightEnabled = previous;
+        return false;
+    }
+    showActiveTab();
+    emit terminalTabsChanged();
+    return true;
+}
+
+bool AppController::saveActiveKeywordHighlightRule(const QString &id, const QString &pattern, const QString &foreground,
+                                                   const QString &background, const bool enabled,
+                                                   const bool caseSensitive)
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || tab->kind != TerminalTabKind::Ssh)
+    {
+        return false;
+    }
+    ssh::SshKeywordHighlightRule rule{
+        .id = utf8String(id.trimmed().isEmpty() ? QUuid::createUuid().toString(QUuid::WithoutBraces) : id.trimmed()),
+        .pattern = utf8String(pattern),
+        .foreground = utf8String(foreground.trimmed()),
+        .background = utf8String(background.trimmed()),
+        .enabled = enabled,
+        .caseSensitive = caseSensitive,
+    };
+    if (!ssh::validKeywordHighlightRule(rule))
+    {
+        return false;
+    }
+    const std::vector<ssh::SshKeywordHighlightRule> previous = tab->keywordHighlightRules;
+    const auto existing = std::ranges::find(tab->keywordHighlightRules, rule.id, &ssh::SshKeywordHighlightRule::id);
+    if (existing == tab->keywordHighlightRules.end())
+    {
+        if (tab->keywordHighlightRules.size() >= ui::maximumKeywordRules)
+        {
+            return false;
+        }
+        tab->keywordHighlightRules.push_back(std::move(rule));
+    }
+    else
+    {
+        *existing = std::move(rule);
+    }
+    if (!persistKeywordRules(*tab))
+    {
+        tab->keywordHighlightRules = previous;
+        return false;
+    }
+    showActiveTab();
+    emit terminalTabsChanged();
+    return true;
+}
+
+bool AppController::deleteActiveKeywordHighlightRule(const QString &id)
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || tab->kind != TerminalTabKind::Ssh)
+    {
+        return false;
+    }
+    const std::string normalizedId = utf8String(id.trimmed());
+    const auto existing =
+        std::ranges::find(tab->keywordHighlightRules, normalizedId, &ssh::SshKeywordHighlightRule::id);
+    if (existing == tab->keywordHighlightRules.end())
+    {
+        return false;
+    }
+    const std::vector<ssh::SshKeywordHighlightRule> previous = tab->keywordHighlightRules;
+    tab->keywordHighlightRules.erase(existing);
+    if (!persistKeywordRules(*tab))
+    {
+        tab->keywordHighlightRules = previous;
+        return false;
+    }
+    showActiveTab();
+    emit terminalTabsChanged();
+    return true;
+}
+
+bool AppController::setActiveTerminalEncoding(const QString &encoding)
+{
+    TerminalTab *tab = activeTab();
+    const auto parsed = terminal::terminalEncodingFromToken(encoding);
+    if (tab == nullptr || !tab->ssh || !parsed)
+    {
+        return false;
+    }
+    tab->terminalEncoding = terminal::terminalEncodingToken(*parsed);
+    tab->ssh->setEncoding(tab->terminalEncoding);
+    emit terminalTabsChanged();
+    return true;
+}
+
+bool AppController::setActiveTerminalAppearance(const QString &fontFamily, const int fontSize, const bool ligatures,
+                                                const qreal backgroundOpacity, const QString &cursor,
+                                                const QString &foreground, const QString &background)
+{
+    TerminalTab *tab = activeTab();
+    const QString normalizedCursor = cursor.trimmed().toLower();
+    const QColor foregroundColor(foreground);
+    const QColor backgroundColor(background);
+    if (tab == nullptr || fontFamily.trimmed().isEmpty() || fontSize < 8 || fontSize > 32 || backgroundOpacity < 0.0
+        || backgroundOpacity > 1.0
+        || (normalizedCursor != QStringLiteral("terminal") && normalizedCursor != QStringLiteral("block")
+            && normalizedCursor != QStringLiteral("bar") && normalizedCursor != QStringLiteral("underline"))
+        || !foregroundColor.isValid() || !backgroundColor.isValid())
+    {
+        return false;
+    }
+    tab->sessionFontFamily = fontFamily.trimmed();
+    tab->sessionFontSize = fontSize;
+    tab->sessionLigatures = ligatures;
+    tab->sessionBackgroundOpacity = backgroundOpacity;
+    tab->sessionCursor = normalizedCursor;
+    tab->sessionForeground = foregroundColor.name(QColor::HexRgb);
+    tab->sessionBackground = backgroundColor.name(QColor::HexRgb);
+    emit terminalTabsChanged();
+    return true;
+}
+
+bool AppController::resetActiveTerminalAppearance()
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr)
+    {
+        return false;
+    }
+    tab->sessionFontFamily.clear();
+    tab->sessionFontSize = 0;
+    tab->sessionLigatures = m_settings.terminalLigatures;
+    tab->sessionBackgroundOpacity = -1.0;
+    tab->sessionCursor.clear();
+    tab->sessionForeground.clear();
+    tab->sessionBackground.clear();
+    emit terminalTabsChanged();
+    return true;
+}
+
+bool AppController::startTerminalScriptRecording()
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || !tab->running || !tab->scriptRecorder.start(recorderNow()))
+    {
+        return false;
+    }
+    ++tab->scriptPlaybackGeneration;
+    tab->scriptPlaybackActive = false;
+    tab->recordingStartedUtcMs = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
+    emit terminalTabsChanged();
+    return true;
+}
+
+bool AppController::pauseTerminalScriptRecording()
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || !tab->scriptRecorder.pause())
+    {
+        return false;
+    }
+    emit terminalTabsChanged();
+    return true;
+}
+
+bool AppController::resumeTerminalScriptRecording()
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || !tab->scriptRecorder.resume(recorderNow()))
+    {
+        return false;
+    }
+    emit terminalTabsChanged();
+    return true;
+}
+
+bool AppController::stopTerminalScriptRecording()
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || !tab->scriptRecorder.stop())
+    {
+        return false;
+    }
+    emit terminalTabsChanged();
+    return true;
+}
+
+bool AppController::replayTerminalScriptRecording()
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || !tab->running || tab->scriptRecorder.state() != workbench::ScriptRecorderState::Review
+        || tab->scriptRecorder.steps().empty() || tab->scriptPlaybackActive)
+    {
+        return false;
+    }
+    tab->scriptPlaybackActive = true;
+    const std::uint64_t generation = ++tab->scriptPlaybackGeneration;
+    const QString tabId = tab->id;
+    emit terminalTabsChanged();
+    replayRecordedScriptStep(tabId, 0, generation);
+    return true;
+}
+
+bool AppController::copyTerminalScriptRecording()
+{
+    const TerminalTab *tab = activeTab();
+    if (tab == nullptr || tab->scriptRecorder.steps().empty())
+    {
+        return false;
+    }
+    QJsonArray steps;
+    for (const workbench::RecordedScriptStep &step : tab->scriptRecorder.steps())
+    {
+        if (step.kind == workbench::RecordedScriptStepKind::Send)
+        {
+            steps.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("send")},
+                                     {QStringLiteral("value"), utf8QString(step.command)}});
+        }
+        else
+        {
+            steps.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("delay")},
+                                     {QStringLiteral("milliseconds"), static_cast<qint64>(step.delayMilliseconds)}});
+        }
+    }
+    const QJsonDocument document(QJsonObject{{QStringLiteral("version"), 1}, {QStringLiteral("steps"), steps}});
+    QGuiApplication::clipboard()->setText(QString::fromUtf8(document.toJson(QJsonDocument::Indented)));
+    return true;
+}
+
+void AppController::clearTerminalScriptRecording()
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr)
+    {
+        return;
+    }
+    ++tab->scriptPlaybackGeneration;
+    tab->scriptPlaybackActive = false;
+    tab->recordingStartedUtcMs = 0;
+    tab->scriptRecorder.clear();
     emit terminalTabsChanged();
 }
 
@@ -2537,6 +2837,11 @@ bool AppController::startSshConnection(ssh::SshConnectionRequest request, QStrin
     tab->status = tr("Starting SSH connection...");
     tab->kind = TerminalTabKind::Ssh;
     tab->sourceProfileId = std::move(sourceProfileId);
+    if (sourceProfile != m_profiles.end())
+    {
+        tab->keywordHighlightRules = sourceProfile->keywordHighlightRules;
+        tab->keywordHighlightEnabled = sourceProfile->keywordHighlightEnabled;
+    }
     applyWorkspaceState(*tab);
     tab->sshPhase = ssh::SshConnectionPhase::Resolving;
     tab->ssh = std::make_unique<ssh::SshTerminalSession>();
@@ -4440,11 +4745,111 @@ void AppController::showActiveTab()
     {
         m_terminal->setSnapshot({});
         m_terminal->setStatusText(tr("No terminal session"));
+        m_terminal->setKeywordHighlightRules({});
         return;
     }
     m_terminal->setSnapshot(tab->snapshot);
     m_terminal->setStatusText(tab->status);
+    m_terminal->setKeywordHighlightRules(tab->keywordHighlightEnabled ? keywordRulesVariant(*tab) : QVariantList{});
     m_terminal->requestCurrentSize();
+}
+
+QVariantList AppController::keywordRulesVariant(const TerminalTab &tab) const
+{
+    QVariantList rules;
+    rules.reserve(static_cast<qsizetype>(tab.keywordHighlightRules.size()));
+    for (const ssh::SshKeywordHighlightRule &rule : tab.keywordHighlightRules)
+    {
+        rules.append(QVariantMap{
+            {QStringLiteral("id"), utf8QString(rule.id)},
+            {QStringLiteral("pattern"), utf8QString(rule.pattern)},
+            {QStringLiteral("foreground"), utf8QString(rule.foreground)},
+            {QStringLiteral("background"), utf8QString(rule.background)},
+            {QStringLiteral("enabled"), rule.enabled},
+            {QStringLiteral("caseSensitive"), rule.caseSensitive},
+        });
+    }
+    return rules;
+}
+
+bool AppController::persistKeywordRules(TerminalTab &tab)
+{
+    if (tab.sourceProfileId.isEmpty())
+    {
+        return true;
+    }
+    std::vector<ssh::SshProfile> candidate = m_profiles;
+    const std::string profileId = utf8String(tab.sourceProfileId);
+    const auto profile = std::ranges::find(candidate, profileId, &ssh::SshProfile::id);
+    if (profile == candidate.end())
+    {
+        return false;
+    }
+    profile->keywordHighlightRules = tab.keywordHighlightRules;
+    profile->keywordHighlightEnabled = tab.keywordHighlightEnabled;
+    if (const auto saved = m_profileStore.save(candidate); !saved)
+    {
+        return false;
+    }
+    m_profiles = std::move(candidate);
+    emit hostProfilesChanged();
+    return true;
+}
+
+QVariantList AppController::recordedScriptStepsVariant(const TerminalTab &tab) const
+{
+    QVariantList result;
+    result.reserve(static_cast<qsizetype>(tab.scriptRecorder.steps().size()));
+    for (const workbench::RecordedScriptStep &step : tab.scriptRecorder.steps())
+    {
+        result.append(step.kind == workbench::RecordedScriptStepKind::Send
+                          ? QVariantMap{{QStringLiteral("type"), QStringLiteral("send")},
+                                        {QStringLiteral("command"), utf8QString(step.command)}}
+                          : QVariantMap{{QStringLiteral("type"), QStringLiteral("delay")},
+                                        {QStringLiteral("milliseconds"), step.delayMilliseconds}});
+    }
+    return result;
+}
+
+void AppController::replayRecordedScriptStep(const QString &tabId, const std::size_t index,
+                                             const std::uint64_t generation)
+{
+    TerminalTab *tab = findTab(tabId);
+    if (tab == nullptr || !tab->scriptPlaybackActive || tab->scriptPlaybackGeneration != generation
+        || tab->scriptRecorder.state() != workbench::ScriptRecorderState::Review || !tab->running)
+    {
+        return;
+    }
+    const auto &steps = tab->scriptRecorder.steps();
+    if (index >= steps.size())
+    {
+        tab->scriptPlaybackActive = false;
+        emit terminalTabsChanged();
+        return;
+    }
+
+    const workbench::RecordedScriptStep &step = steps[index];
+    if (step.kind == workbench::RecordedScriptStepKind::Delay)
+    {
+        const int delay = static_cast<int>(std::min<std::uint32_t>(step.delayMilliseconds, 60'000));
+        QTimer::singleShot(delay, this, [this, tabId, index, generation] {
+            replayRecordedScriptStep(tabId, index + 1, generation);
+        });
+        return;
+    }
+
+    const QString command = utf8QString(step.command);
+    QByteArray bytes = command.toUtf8();
+    bytes.replace('\n', '\r');
+    if (bytes.isEmpty() || bytes.back() != '\r')
+    {
+        bytes.append('\r');
+    }
+    appendCapturedHistory(*tab, command);
+    dispatchInput(*tab, bytes);
+    QTimer::singleShot(0, this, [this, tabId, index, generation] {
+        replayRecordedScriptStep(tabId, index + 1, generation);
+    });
 }
 
 void AppController::setHostKeyPrompt(QString algorithm, QString fingerprint, const bool changed)

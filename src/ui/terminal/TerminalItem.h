@@ -1,12 +1,15 @@
 #pragma once
 
 #include "domain/terminal/TerminalEngine.h"
+#include "ui/terminal/TerminalKeywordHighlighter.h"
 
 #include <QByteArray>
+#include <QColor>
 #include <QFont>
 #include <QQuickItem>
 #include <QString>
 #include <QTimer>
+#include <QVariantList>
 #include <QtQmlIntegration/qqmlintegration.h>
 
 #include <cstdint>
@@ -38,6 +41,12 @@ class TerminalItem : public QQuickItem
     Q_PROPERTY(bool scrollbarVisible READ scrollbarVisible NOTIFY scrollbarChanged)
     Q_PROPERTY(qreal scrollbarPosition READ scrollbarPosition NOTIFY scrollbarChanged)
     Q_PROPERTY(qreal scrollbarPageRatio READ scrollbarPageRatio NOTIFY scrollbarChanged)
+    Q_PROPERTY(QVariantList keywordHighlightRules READ keywordHighlightRules WRITE setKeywordHighlightRules NOTIFY
+                   keywordHighlightRulesChanged)
+    Q_PROPERTY(
+        QColor foregroundOverride READ foregroundOverride WRITE setForegroundOverride NOTIFY paletteOverrideChanged)
+    Q_PROPERTY(
+        QColor backgroundOverride READ backgroundOverride WRITE setBackgroundOverride NOTIFY paletteOverrideChanged)
 
 public:
     explicit TerminalItem(QQuickItem *parent = nullptr);
@@ -54,6 +63,9 @@ public:
     [[nodiscard]] bool scrollbarVisible() const noexcept;
     [[nodiscard]] qreal scrollbarPosition() const noexcept;
     [[nodiscard]] qreal scrollbarPageRatio() const noexcept;
+    [[nodiscard]] QVariantList keywordHighlightRules() const;
+    [[nodiscard]] QColor foregroundOverride() const;
+    [[nodiscard]] QColor backgroundOverride() const;
 
 public slots:
     void setSnapshot(ztermy::terminal::TerminalSnapshotPtr snapshot);
@@ -68,6 +80,9 @@ public slots:
     void setCursorBlink(bool enabled);
     void setCopyOnSelect(bool enabled);
     void setConfirmMultilinePaste(bool enabled);
+    void setKeywordHighlightRules(const QVariantList &rules);
+    void setForegroundOverride(const QColor &color);
+    void setBackgroundOverride(const QColor &color);
     Q_INVOKABLE void resolveMultilinePaste(bool accepted);
     Q_INVOKABLE void scrollToFraction(qreal fraction);
 
@@ -86,6 +101,8 @@ signals:
     void copyOnSelectChanged();
     void confirmMultilinePasteChanged();
     void scrollbarChanged();
+    void keywordHighlightRulesChanged();
+    void paletteOverrideChanged();
     void multilinePasteConfirmationRequested(int lineCount);
 
 protected:
@@ -132,6 +149,10 @@ private:
     bool m_ligaturesEnabled = true;
     bool m_copyOnSelect = false;
     bool m_confirmMultilinePaste = true;
+    QVariantList m_keywordHighlightRuleValues;
+    std::vector<TerminalKeywordRule> m_keywordHighlightRules;
+    QColor m_foregroundOverride;
+    QColor m_backgroundOverride;
     int m_wheelRemainder = 0;
 };
 

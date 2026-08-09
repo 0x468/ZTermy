@@ -25,6 +25,13 @@ namespace
         .privateKeyPassphraseRequired = true,
         .credentialReference = "profile-1",
         .lastConnectedUtcMs = 1'754'000'000'123,
+        .keywordHighlightRules = {{.id = "failure",
+                                   .pattern = "failed",
+                                   .foreground = "#FFFFFF",
+                                   .background = "#D13438",
+                                   .enabled = true,
+                                   .caseSensitive = false}},
+        .keywordHighlightEnabled = true,
     };
 }
 
@@ -93,6 +100,8 @@ void SshProfileStoreTests::savesAndLoadsNonSecretProfiles()
     QVERIFY(persisted.contains("\"lastConnectedUtcMs\": 1754000000123"));
     QVERIFY(persisted.contains("\"group\": \"Development\""));
     QVERIFY(persisted.contains("\"credentialReference\": \"profile-1\""));
+    QVERIFY(persisted.contains("\"keywordHighlightRules\""));
+    QVERIFY(persisted.contains("\"pattern\": \"failed\""));
     QVERIFY(!persisted.contains("privateKeyContent"));
 }
 
@@ -114,6 +123,8 @@ void SshProfileStoreTests::loadsProfilesWrittenBeforePassphraseMetadata()
     QVERIFY(!profiles->front().lastConnectedUtcMs);
     QVERIFY(profiles->front().group.empty());
     QVERIFY(!profiles->front().credentialReference);
+    QVERIFY(profiles->front().keywordHighlightRules.empty());
+    QVERIFY(profiles->front().keywordHighlightEnabled);
 }
 
 void SshProfileStoreTests::createsMissingParentDirectory()
@@ -175,7 +186,7 @@ void SshProfileStoreTests::rejectsMalformedAndUnsupportedDocuments()
     QVERIFY(!malformed);
     QCOMPARE(malformed.error(), ztermy::ssh::SshProfileStoreError::InvalidFormat);
 
-    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":3,"profiles":[]})")));
+    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":4,"profiles":[]})")));
     auto unsupported = store.load();
     QVERIFY(!unsupported);
     QCOMPARE(unsupported.error(), ztermy::ssh::SshProfileStoreError::UnsupportedVersion);

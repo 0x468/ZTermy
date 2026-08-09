@@ -97,6 +97,12 @@ private:
     return {terminalColor.red, terminalColor.green, terminalColor.blue};
 }
 
+[[nodiscard]] bool sameColor(const ztermy::terminal::TerminalColor left,
+                             const ztermy::terminal::TerminalColor right) noexcept
+{
+    return left.red == right.red && left.green == right.green && left.blue == right.blue;
+}
+
 constexpr std::array<QFont::Tag, 4> ligatureFeatures{
     QFont::Tag{"liga"},
     QFont::Tag{"clig"},
@@ -294,6 +300,21 @@ qreal TerminalItem::scrollbarPageRatio() const noexcept
         static_cast<qreal>(m_snapshot->scrollbar.visible) / static_cast<qreal>(m_snapshot->scrollbar.total), 0.0, 1.0);
 }
 
+QVariantList TerminalItem::keywordHighlightRules() const
+{
+    return m_keywordHighlightRuleValues;
+}
+
+QColor TerminalItem::foregroundOverride() const
+{
+    return m_foregroundOverride;
+}
+
+QColor TerminalItem::backgroundOverride() const
+{
+    return m_backgroundOverride;
+}
+
 void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
 {
     if (!snapshot)
@@ -445,6 +466,71 @@ void TerminalItem::setConfirmMultilinePaste(const bool enabled)
     emit confirmMultilinePasteChanged();
 }
 
+void TerminalItem::setKeywordHighlightRules(const QVariantList &rules)
+{
+    if (m_keywordHighlightRuleValues == rules)
+    {
+        return;
+    }
+    m_keywordHighlightRuleValues = rules;
+    m_keywordHighlightRules.clear();
+    m_keywordHighlightRules.reserve(std::min<std::size_t>(static_cast<std::size_t>(rules.size()), maximumKeywordRules));
+    for (const QVariant &value : rules)
+    {
+        if (m_keywordHighlightRules.size() >= maximumKeywordRules)
+        {
+            break;
+        }
+        const QVariantMap map = value.toMap();
+        const QString pattern = map.value(QStringLiteral("pattern")).toString();
+        if (pattern.isEmpty() || pattern.size() > maximumKeywordPatternLength)
+        {
+            continue;
+        }
+        const QColor foreground(map.value(QStringLiteral("foreground")).toString());
+        const QColor background(map.value(QStringLiteral("background")).toString());
+        if (!foreground.isValid() && !background.isValid())
+        {
+            continue;
+        }
+        m_keywordHighlightRules.push_back(TerminalKeywordRule{
+            .id = map.value(QStringLiteral("id")).toString(),
+            .pattern = pattern,
+            .foreground = foreground,
+            .background = background,
+            .enabled = map.value(QStringLiteral("enabled"), true).toBool(),
+            .caseSensitive = map.value(QStringLiteral("caseSensitive"), false).toBool(),
+        });
+    }
+    ++m_revision;
+    update();
+    emit keywordHighlightRulesChanged();
+}
+
+void TerminalItem::setForegroundOverride(const QColor &value)
+{
+    if (m_foregroundOverride == value)
+    {
+        return;
+    }
+    m_foregroundOverride = value;
+    ++m_revision;
+    update();
+    emit paletteOverrideChanged();
+}
+
+void TerminalItem::setBackgroundOverride(const QColor &value)
+{
+    if (m_backgroundOverride == value)
+    {
+        return;
+    }
+    m_backgroundOverride = value;
+    ++m_revision;
+    update();
+    emit paletteOverrideChanged();
+}
+
 void TerminalItem::resolveMultilinePaste(const bool accepted)
 {
     QByteArray pending = std::move(m_pendingMultilinePaste);
@@ -520,7 +606,7 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 
     QImage image(pixelSize, QImage::Format_ARGB32_Premultiplied);
     image.setDevicePixelRatio(devicePixelRatio);
-    QColor defaultBackgroundColor = color(defaultBackground);
+    QColor defaultBackgroundColor = m_backgroundOverride.isValid() ? m_backgroundOverride : color(defaultBackground);
     defaultBackgroundColor.setAlphaF(static_cast<float>(m_backgroundOpacity));
     image.fill(defaultBackgroundColor);
 
@@ -537,6 +623,8 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         const bool terminalCursorVisible =
             preeditClusters.empty() && m_snapshot->cursor.visible && (!m_cursorBlink || m_cursorBlinkPhase)
             && m_snapshot->cursor.column < m_snapshot->columns && m_snapshot->cursor.row < m_snapshot->rows;
+        const std::vector<TerminalKeywordCellStyle> keywordStyles =
+            highlightTerminalKeywords(*m_snapshot, m_keywordHighlightRules);
 
         for (quint16 row = 0; row < m_snapshot->rows; ++row)
         {
@@ -560,6 +648,12 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                 if (cell.selected)
                 {
                     painter.fillRect(cellRect, selectionBackground);
+                }
+                else if (const TerminalKeywordCellStyle &style =
+                             keywordStyles[(static_cast<std::size_t>(row) * m_snapshot->columns) + column];
+                         style.background.isValid())
+                {
+                    painter.fillRect(cellRect, style.background);
                 }
                 else if (cell.explicitBackground)
                 {
@@ -593,7 +687,15 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                 cellFont.setStrikeOut(cell.strikethrough);
                 cellFont.setOverline(cell.overline);
                 painter.setFont(cellFont);
-                painter.setPen(cell.selected ? selectionForeground : color(cell.foreground));
+                const TerminalKeywordCellStyle &keywordStyle =
+                    keywordStyles[(static_cast<std::size_t>(row) * m_snapshot->columns) + column];
+                const QColor cellForeground =
+                    m_foregroundOverride.isValid() && sameColor(cell.foreground, defaultForeground)
+                        ? m_foregroundOverride
+                        : color(cell.foreground);
+                painter.setPen(cell.selected                       ? selectionForeground
+                               : keywordStyle.foreground.isValid() ? keywordStyle.foreground
+                                                                   : cellForeground);
 
                 QString grapheme =
                     QString::fromUcs4(cell.grapheme.data(), static_cast<qsizetype>(cell.grapheme.size()));
@@ -691,7 +793,9 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                         cursorFont.setStrikeOut(cell.strikethrough);
                         cursorFont.setOverline(cell.overline);
                         painter.setFont(cursorFont);
-                        painter.setPen(color(cell.background));
+                        painter.setPen(m_backgroundOverride.isValid() && sameColor(cell.background, defaultBackground)
+                                           ? m_backgroundOverride
+                                           : color(cell.background));
                         painter.drawText(
                             QPointF(cursorCell.left(), cursorCell.top() + metrics.ascent()),
                             QString::fromUcs4(cell.grapheme.data(), static_cast<qsizetype>(cell.grapheme.size())));

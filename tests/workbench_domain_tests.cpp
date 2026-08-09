@@ -1,3 +1,4 @@
+#include "domain/workbench/ScriptRecorder.h"
 #include "domain/workbench/ShellHistory.h"
 #include "domain/workbench/WorkspaceState.h"
 
@@ -17,7 +18,33 @@ private slots:
     void parsesFishHistoryEscapes();
     void parsesPowerShellContinuationsAndCapsNewestEntries();
     void recordsBoundedRecentRemotePaths();
+    void recordsOnlyStructuredCommandsWithBoundedDelays();
 };
+
+void WorkbenchDomainTests::recordsOnlyStructuredCommandsWithBoundedDelays()
+{
+    using namespace std::chrono_literals;
+    ztermy::workbench::ScriptRecorder recorder;
+    QVERIFY(recorder.start(0ms));
+    QVERIFY(recorder.recordCommand("echo first", 100ms));
+    QVERIFY(recorder.recordCommand("echo second", 2'500ms));
+    QVERIFY(recorder.pause());
+    QVERIFY(!recorder.recordCommand("password", 3'000ms));
+    QVERIFY(recorder.resume(20'000ms));
+    QVERIFY(recorder.recordCommand("pwd", 20'100ms));
+    QVERIFY(recorder.stop());
+
+    QCOMPARE(recorder.state(), ztermy::workbench::ScriptRecorderState::Review);
+    QCOMPARE(recorder.steps().size(), std::size_t{4});
+    QCOMPARE(recorder.steps()[0].kind, ztermy::workbench::RecordedScriptStepKind::Send);
+    QCOMPARE(recorder.steps()[1].kind, ztermy::workbench::RecordedScriptStepKind::Delay);
+    QCOMPARE(recorder.steps()[1].delayMilliseconds, std::uint32_t{2'400});
+    QCOMPARE(recorder.steps()[2].command, std::string("echo second"));
+    QCOMPARE(recorder.steps()[3].command, std::string("pwd"));
+    recorder.clear();
+    QCOMPARE(recorder.state(), ztermy::workbench::ScriptRecorderState::Idle);
+    QVERIFY(recorder.steps().empty());
+}
 
 void WorkbenchDomainTests::parsesTimestampedBashAndMultilineEntries()
 {

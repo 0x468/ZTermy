@@ -114,6 +114,28 @@ auxiliary-channel decision in ADR 0041, and the evidence/manual matrix in
 V2.6 must ship a capability/error state that is unobtrusive when unsupported;
 it must never inject commands into the interactive shell or block terminal I/O.
 
+## V2.7 — terminal productivity controls (`0.2.7`)
+
+Status: implemented. The frozen contract is recorded in `V2_7_SCOPE.md`, the
+security and rendering boundaries in ADR 0042, and the verification matrix in
+`testing/V2_7_ACCEPTANCE.md`.
+
+- add persisted, host-owned literal keyword highlighting with bounded visible
+  viewport matching and deterministic first-rule priority;
+- add temporary per-tab terminal appearance overrides without creating a
+  profile-level appearance hierarchy;
+- implement real SSH transport conversion for UTF-8 and GB18030, including
+  streaming remote decode across packet boundaries;
+- distinguish structured script recording from session logging: only commands
+  executed from trusted application command surfaces are recorded, reviewed,
+  exported, and replayed;
+- align the terminal action hierarchy and progressively move less-used actions
+  into overflow at narrow widths while preserving tooltips and keyboard access.
+
+V2.7 does not add arbitrary regular expressions on the paint path, raw-input
+recording, a general-purpose script runtime, per-profile appearance, or terminal
+video capture. Those would require separate performance and security contracts.
+
 ## V3 decision gate (`0.3.0`)
 
 V3 starts only after the owner chooses a coherent major direction and records
@@ -122,7 +144,7 @@ file-management workspace, or deeper remote-development workflows. Cloud sync,
 collaboration, AI, serial support, and remote editing remain separate decisions
 and are not implied by V3.
 
-After V2.6, compatible daily-use work may continue through the planned
+After V2.7, compatible daily-use work may continue through the planned
 `0.2.x` line (including richer transfer and workspace workflows). The V3
 direction is still chosen explicitly at the decision gate rather than by
 automatically incrementing to `0.3.0`.

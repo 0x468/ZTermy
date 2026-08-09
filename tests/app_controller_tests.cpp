@@ -103,6 +103,7 @@ private slots:
     void persistsApplicationSettings();
     void managesActionShortcutsAndDispatchContext();
     void managesMultipleLocalTerminalTabs();
+    void managesSessionAppearanceAndStructuredRecording();
     void orderlyShutdownStopsAllLocalTabsOnce();
     void persistsQuickCommandsAndPerTabWorkbenchState();
     void importsAndExportsScriptLibraryWithoutOverwritingIds();
@@ -796,6 +797,63 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
     QCOMPARE(sessionState->stops, 2);
     QVERIFY(tabsChanged.count() >= 4);
     QVERIFY(activeChanged.count() >= 4);
+}
+
+void AppControllerTests::managesSessionAppearanceAndStructuredRecording()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const auto sessionState = std::make_shared<FakeLocalSessionState>();
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
+                                     directory.filePath(QStringLiteral("known_hosts.json")), [sessionState] {
+                                         return std::make_unique<FakeLocalTerminalSession>(sessionState);
+                                     });
+
+    QVERIFY(!controller.startLocalTerminal().isEmpty());
+    QVERIFY(!controller.setActiveTerminalEncoding(QStringLiteral("gb18030")));
+    QVERIFY(controller.setActiveTerminalAppearance(QStringLiteral("Cascadia Mono"), 16, false, 0.55,
+                                                   QStringLiteral("bar"), QStringLiteral("#FFEEDD"),
+                                                   QStringLiteral("#112233")));
+
+    QVariantMap tab = controller.terminalTabs().constFirst().toMap();
+    QCOMPARE(tab.value(QStringLiteral("sessionFontFamily")).toString(), QStringLiteral("Cascadia Mono"));
+    QCOMPARE(tab.value(QStringLiteral("sessionFontSize")).toInt(), 16);
+    QVERIFY(!tab.value(QStringLiteral("sessionLigatures")).toBool());
+    QCOMPARE(tab.value(QStringLiteral("sessionBackgroundOpacity")).toDouble(), 0.55);
+    QCOMPARE(tab.value(QStringLiteral("sessionCursor")).toString(), QStringLiteral("bar"));
+    QCOMPARE(tab.value(QStringLiteral("sessionForeground")).toString(), QStringLiteral("#ffeedd"));
+    QCOMPARE(tab.value(QStringLiteral("sessionBackground")).toString(), QStringLiteral("#112233"));
+    QVERIFY(!controller.setActiveTerminalAppearance(QString(), 16, false, 0.55, QStringLiteral("bar"),
+                                                    QStringLiteral("#FFEEDD"), QStringLiteral("#112233")));
+    QVERIFY(!controller.setActiveTerminalAppearance(QStringLiteral("Cascadia Mono"), 16, false, 1.1,
+                                                    QStringLiteral("bar"), QStringLiteral("#FFEEDD"),
+                                                    QStringLiteral("#112233")));
+    QVERIFY(controller.resetActiveTerminalAppearance());
+    tab = controller.terminalTabs().constFirst().toMap();
+    QVERIFY(tab.value(QStringLiteral("sessionFontFamily")).toString().isEmpty());
+    QCOMPARE(tab.value(QStringLiteral("sessionFontSize")).toInt(), 0);
+    QCOMPARE(tab.value(QStringLiteral("sessionBackgroundOpacity")).toDouble(), -1.0);
+
+    QVERIFY(controller.startTerminalScriptRecording());
+    QVERIFY(controller.runTerminalCommand(QStringLiteral("Get-Process")));
+    QVERIFY(controller.pauseTerminalScriptRecording());
+    QVERIFY(controller.runTerminalCommand(QStringLiteral("not-recorded-while-paused")));
+    QVERIFY(controller.resumeTerminalScriptRecording());
+    QVERIFY(controller.runTerminalCommand(QStringLiteral("Get-Date")));
+    QVERIFY(controller.stopTerminalScriptRecording());
+
+    tab = controller.terminalTabs().constFirst().toMap();
+    QCOMPARE(tab.value(QStringLiteral("scriptRecordingState")).toString(), QStringLiteral("review"));
+    const QVariantList steps = tab.value(QStringLiteral("scriptRecordingSteps")).toList();
+    QCOMPARE(steps.size(), 2);
+    QCOMPARE(steps.at(0).toMap().value(QStringLiteral("command")).toString(), QStringLiteral("Get-Process"));
+    QCOMPARE(steps.at(1).toMap().value(QStringLiteral("command")).toString(), QStringLiteral("Get-Date"));
+    QCOMPARE(sessionState->inputs.size(), 3);
+
+    controller.clearTerminalScriptRecording();
+    tab = controller.terminalTabs().constFirst().toMap();
+    QCOMPARE(tab.value(QStringLiteral("scriptRecordingState")).toString(), QStringLiteral("idle"));
+    QVERIFY(tab.value(QStringLiteral("scriptRecordingSteps")).toList().isEmpty());
 }
 
 void AppControllerTests::orderlyShutdownStopsAllLocalTabsOnce()

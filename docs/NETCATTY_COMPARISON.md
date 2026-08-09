@@ -1,12 +1,12 @@
 # NetCatty and ztermy product comparison
 
-Status: V2.6 implementation complete
+Status: V2.7 implementation complete
 
 ## Purpose and evidence
 
 This document prevents reference drift. It compares the locally installed
 NetCatty `1.1.75` runtime, the offered `1.1.76` update, the reference source at
-`D:/tmp/Netcatty`, and ztermy `0.2.6`. Runtime behavior wins when
+`D:/tmp/Netcatty`, and ztermy `0.2.7`. Runtime behavior wins when
 the installed binary and source snapshot differ.
 
 The source review identified the following reference boundaries:
@@ -42,7 +42,7 @@ and remote editing are explicitly excluded.
 
 ## Detailed matrix
 
-| Area | NetCatty reference | ztermy 0.2.6 | Decision / remaining gap |
+| Area | NetCatty reference | ztermy 0.2.7 | Decision / remaining gap |
 | --- | --- | --- | --- |
 | Product shell | Persistent work tabs, compact title chrome, global utility actions, and terminal tabs share one task hierarchy. | Hosts, Settings, and terminal sessions share the custom native tab bar; Settings is an on-demand singleton tab. | Aligned in workflow. ztermy retains native Windows caption/Snap behavior and its own brand. |
 | Startup | Opens into the host/vault workflow rather than forcing an unsolicited shell. | Opens Hosts and does not create a local terminal automatically. | Aligned. Session restoration remains later work. |
@@ -51,13 +51,15 @@ and remote editing are explicitly excluded.
 | Host editor | Right-side `HostDetailsPanel` reduces the host-list width; fields are organized as an inspector rather than a modal card. | New/Edit host uses a fixed right inspector and keeps the list visible. Generated profile name, group suggestions, credentials, Escape, and focus restoration are retained. | Main interaction aligned. NetCatty's richer advanced host options are deferred unless an SSH use case justifies them. |
 | Credentials | Vault state is integrated into the connection workflow. | Installed builds use Windows Credential Manager; portable builds use the encrypted portable vault, with visible lock state and unlock entry points. | Deliberate native/security difference. No plaintext fallback. |
 | Terminal identity row | Compact session identity/state on the left; CPU, memory, disk, network, and latency values expose richer hover details. | Compact identity plus bounded Linux CPU, memory, root-disk, network, and auxiliary SSH latency metrics; keyboard/click/hover details show recent trends, cores, processes, mounts, and interfaces. | V2.6 aligned at the product level. ztermy deliberately polls only the visible active tab, gives history priority, and suspends bounded failures; macOS/remote Windows collectors remain later adapters. |
-| Toolbar order | Keyword highlight, SFTP, composer, find, session log, scripts, then overflow; unsupported/less-used actions progressively move into overflow. | SFTP, composer, find, session log, command snippets, and overflow are available without covering the viewport. History is reached through overflow/workbench. | Supported actions converged. Keyword highlighting, directory tracking, recording, encoding, and richer terminal settings remain gaps. |
+| Toolbar order | Keyword highlight, SFTP, composer, find, session log, scripts, then overflow; unsupported/less-used actions progressively move into overflow. | Keyword highlight, SFTP, composer, find, session log, command snippets, recorder state, and overflow follow the same task hierarchy; lower-priority actions progressively move into overflow at narrow widths. | V2.7 aligns the supported action hierarchy without adding inert controls. |
 | Terminal side panels | File transfer, scripts, history, theme, system information, notes, and AI can occupy a movable terminal-adjacent surface. | SFTP, command history, command snippets, search, and composer use one movable/resizable workbench. | Correct shared-panel model. Theme/system/notes are deferred; AI is excluded. |
 | Command history | Search, current-host/global scope, counts, refresh, and command reuse actions. | Search, current-profile/global scope, counts, refresh, Run, Insert, and Save as snippet are implemented. | Functionally aligned for supported shells. History adapters and large-history performance need broader real-world coverage. |
-| Scripts | Reusable scripts include metadata and execution-oriented behavior. | Existing reusable commands are named **command snippets** and support insert/run; no fake script semantics are claimed. | Honest partial parity. A real script runtime, triggers, variables, and management model are V2.3 candidates. |
+| Scripts | Reusable scripts include metadata, recording, and execution-oriented behavior. | Command snippets remain reusable single commands. Structured recording captures only commands run from composer/history/snippets, supports pause/review/JSON export and timed replay, and never records raw terminal input. | V2.7 establishes a safe recorder foundation. Variables, triggers, persistent script management, and a general runtime remain deferred. |
 | Composer | Dedicated bottom input; Enter sends and Shift+Enter inserts a line break; nearby reusable commands accelerate entry. | Same keyboard contract and terminal focus restoration. | Aligned. |
 | Find | Compact terminal search integrated with the toolbar. | Toolbar find with keyboard route and close/focus restoration. | Aligned at core level; advanced match/navigation polish remains possible. |
 | Session logging | Manual logging is a first-class toolbar action with generated session-oriented names and backend state. | Start/stop logging is integrated and produces a generated `.log` path. | Core behavior aligned; export formats and richer log management are later work. |
+| Keyword highlighting | Per-host rules can emphasize matching terminal text. | Saved SSH profiles own enabled literal rules and colors; quick connections keep rules session-local. Matching is bounded to the visible snapshot, supports wide characters and case policy, and gives the first rule priority. | V2.7 aligns the workflow while deliberately excluding unbounded regular expressions from the paint path. |
+| Session terminal settings | Per-session terminal controls and encoding are reachable from terminal actions. | Temporary font, size, ligature, opacity, cursor, and default-color overrides are discarded with the tab. SSH encoding switches real transport conversion between UTF-8 and GB18030. | V2.7 aligned for the supported contract; global defaults remain the only persistent appearance policy. |
 | SFTP opening path | Integrated SFTP resolves the remote user's home directory and remains attached to the terminal session. | Opens the remote home directory and shares the terminal workbench. | Aligned; the read-only real-host GUI smoke proves the visible toolbar-to-home-listing path. |
 | SFTP navigation | Home, parent, breadcrumb/editable path, bookmarks, terminal-directory locate/follow, copy path, list/tree modes, filter, hidden files, refresh, overflow, and `..`. | The same core navigation is implemented, including event-driven terminal CWD locate/follow and a lazily loaded tree. Bookmarks, list/tree mode, and follow preference are per profile. | Core workflow aligned. Breadcrumb segments, filename encoding, configurable columns, and terminal-directory availability still depend on their respective platform/shell contracts. |
 | SFTP file actions | Upload, download, new folder/file, rename, delete, drag/drop, context actions, encoding, and detailed columns/sorting. | Upload, download, new folder/file, rename, delete, drag upload, name/type/size/time columns, and permission-preserving error state are implemented. | Partial parity. Drag-out download, filename encoding, column customization, directory-first control, and broader keyboard shortcuts remain gaps. |

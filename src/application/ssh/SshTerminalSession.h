@@ -8,6 +8,7 @@
 #include "domain/terminal/TerminalEngine.h"
 #include "domain/terminal/TerminalOutputSink.h"
 #include "infrastructure/ssh/WindowsTcpSocket.h"
+#include "platform/windows/WindowsTerminalTextCodec.h"
 
 #include <QByteArray>
 #include <QObject>
@@ -62,6 +63,7 @@ public slots:
     void copySelection();
     void search(const QString &query, bool backwards, bool caseSensitive);
     void clearSearch();
+    void setEncoding(const QString &encoding);
     void requestShellHistory(quint64 requestId);
     void setRemoteTelemetryVisible(bool visible);
     void refreshRemoteTelemetry();
@@ -124,6 +126,10 @@ private:
     struct ClearSearchCommand final
     {
     };
+    struct EncodingCommand final
+    {
+        terminal::TerminalEncoding encoding = terminal::TerminalEncoding::Utf8;
+    };
     struct HistoryCommand final
     {
         quint64 requestId = 0;
@@ -137,8 +143,8 @@ private:
     };
 
     using Command = std::variant<InputCommand, PasteCommand, terminal::TerminalGeometry, ScrollCommand,
-                                 SelectionCommand, CopyCommand, SearchCommand, ClearSearchCommand, HistoryCommand,
-                                 TelemetryVisibilityCommand, TelemetryRefreshCommand>;
+                                 SelectionCommand, CopyCommand, SearchCommand, ClearSearchCommand, EncodingCommand,
+                                 HistoryCommand, TelemetryVisibilityCommand, TelemetryRefreshCommand>;
 
     void queueByteCommand(Command command, std::size_t byteCount);
     void run(SshConnectionRequest &request, terminal::TerminalGeometry geometry, const std::stop_token &stopToken);

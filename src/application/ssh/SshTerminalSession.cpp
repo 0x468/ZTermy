@@ -385,6 +385,16 @@ void SshTerminalSession::clearSearch()
     signalCommandWake();
 }
 
+void SshTerminalSession::setEncoding(const QString &encoding)
+{
+    const auto parsed = terminal::terminalEncodingFromToken(encoding);
+    if (!parsed || !m_running.load())
+    {
+        return;
+    }
+    queueByteCommand(EncodingCommand{.encoding = *parsed}, 0);
+}
+
 void SshTerminalSession::requestShellHistory(const quint64 requestId)
 {
     if (requestId == 0 || !m_running.load())
@@ -523,6 +533,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     bool suppressHistoryResult = false;
     telemetry::Scheduler telemetryScheduler;
     telemetry::Accumulator telemetryAccumulator;
+    terminal::WindowsTerminalTextCodec textCodec;
     bool activeTelemetry = false;
     bool activeTelemetryIncludesDetails = false;
     QByteArray remoteTelemetryOutput;
@@ -561,6 +572,11 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
 
         for (const Command &command : commands)
         {
+            if (const auto *encoding = std::get_if<EncodingCommand>(&command))
+            {
+                textCodec.setEncoding(encoding->encoding);
+                continue;
+            }
             if (const auto *input = std::get_if<InputCommand>(&command))
             {
                 m_inputQueueLatency.record(std::chrono::steady_clock::now() - input->enqueuedAt);
@@ -573,7 +589,13 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                 }
                 publishSnapshot();
 
-                const auto bytes = std::span(input->bytes.constData(), static_cast<std::size_t>(input->bytes.size()));
+                const auto encodedInput = textCodec.encodeRemote(input->bytes);
+                if (!encodedInput)
+                {
+                    postStatus(tr("Terminal input could not be converted to the selected encoding."));
+                    continue;
+                }
+                const auto bytes = std::span(encodedInput->constData(), static_cast<std::size_t>(encodedInput->size()));
                 auto written = session->writeTerminal(socket, bytes, 10s, stopToken);
                 if (!written)
                 {
@@ -604,7 +626,16 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                 }
                 publishSnapshot();
 
-                const auto encodedBytes = std::span(reinterpret_cast<const char *>(encoded->data()), encoded->size());
+                const QByteArray utf8Paste(reinterpret_cast<const char *>(encoded->data()),
+                                           static_cast<qsizetype>(encoded->size()));
+                const auto remotePaste = textCodec.encodeRemote(utf8Paste);
+                if (!remotePaste)
+                {
+                    postStatus(tr("Terminal paste could not be converted to the selected encoding."));
+                    continue;
+                }
+                const auto encodedBytes =
+                    std::span(remotePaste->constData(), static_cast<std::size_t>(remotePaste->size()));
                 auto written = session->writeTerminal(socket, encodedBytes, 10s, stopToken);
                 if (!written)
                 {
@@ -937,7 +968,10 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
             return;
         }
 
-        const auto bytes = std::as_bytes(std::span(readBuffer).first(*read));
+        const auto remoteBytes = std::as_bytes(std::span(readBuffer).first(*read));
+        const QByteArray decodedBytes = textCodec.decodeRemote(remoteBytes);
+        const auto bytes =
+            std::as_bytes(std::span(decodedBytes.constData(), static_cast<std::size_t>(decodedBytes.size())));
         if (m_outputSink)
         {
             m_outputSink->append(bytes);
