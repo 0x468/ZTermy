@@ -1,11 +1,10 @@
 #include "core/config/ApplicationSettings.h"
 
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
+#include "core/persistence/LastKnownGoodFile.h"
+
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QSaveFile>
+#include <QJsonParseError>
 
 #include <algorithm>
 #include <optional>
@@ -324,6 +323,46 @@ template <>
     return settings;
 }
 
+[[nodiscard]] std::expected<ApplicationSettings, ApplicationSettingsStoreError>
+parseSettingsPayload(const QByteArrayView payload)
+{
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(payload.toByteArray(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isObject())
+    {
+        return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
+    }
+    return parseSettings(document.object());
+}
+
+[[nodiscard]] ztermy::persistence::PayloadValidation validateSettingsPayload(const QByteArrayView payload)
+{
+    const auto parsed = parseSettingsPayload(payload);
+    if (parsed)
+    {
+        return ztermy::persistence::PayloadValidation::valid;
+    }
+    return parsed.error() == ApplicationSettingsStoreError::unsupportedVersion
+               ? ztermy::persistence::PayloadValidation::unsupportedVersion
+               : ztermy::persistence::PayloadValidation::invalid;
+}
+
+[[nodiscard]] ApplicationSettingsStoreError settingsStoreError(const ztermy::persistence::LastKnownGoodError error)
+{
+    switch (error)
+    {
+        case ztermy::persistence::LastKnownGoodError::invalidPath:
+            return ApplicationSettingsStoreError::invalidPath;
+        case ztermy::persistence::LastKnownGoodError::io:
+            return ApplicationSettingsStoreError::ioError;
+        case ztermy::persistence::LastKnownGoodError::unsupportedVersion:
+            return ApplicationSettingsStoreError::unsupportedVersion;
+        case ztermy::persistence::LastKnownGoodError::invalidFormat:
+        default:
+            return ApplicationSettingsStoreError::invalidFormat;
+    }
+}
+
 } // namespace
 
 namespace ztermy::config
@@ -336,31 +375,25 @@ const QString &ApplicationSettingsStore::filePath() const noexcept
     return m_filePath;
 }
 
+bool ApplicationSettingsStore::lastLoadRecoveredFromBackup() const noexcept
+{
+    return m_lastLoadRecoveredFromBackup;
+}
+
 std::expected<ApplicationSettings, ApplicationSettingsStoreError> ApplicationSettingsStore::load() const
 {
-    if (m_filePath.isEmpty())
+    m_lastLoadRecoveredFromBackup = false;
+    auto loaded = ztermy::persistence::loadLastKnownGood(m_filePath, maximumSettingsFileSize, validateSettingsPayload);
+    if (!loaded)
     {
-        return std::unexpected(ApplicationSettingsStoreError::invalidPath);
+        return std::unexpected(settingsStoreError(loaded.error()));
     }
-
-    QFile file(m_filePath);
-    if (!file.exists())
+    if (!loaded->has_value())
     {
         return ApplicationSettings{};
     }
-    if (!file.open(QIODevice::ReadOnly) || file.size() < 0 || file.size() > maximumSettingsFileSize)
-    {
-        return std::unexpected(file.size() > maximumSettingsFileSize ? ApplicationSettingsStoreError::invalidFormat
-                                                                     : ApplicationSettingsStoreError::ioError);
-    }
-
-    QJsonParseError parseError;
-    const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !document.isObject())
-    {
-        return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
-    }
-    return parseSettings(document.object());
+    m_lastLoadRecoveredFromBackup = loaded->value().recoveredFromBackup;
+    return parseSettingsPayload(loaded->value().bytes);
 }
 
 std::expected<void, ApplicationSettingsStoreError>
@@ -373,12 +406,6 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
     if (!validSettings(settings))
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
-    }
-
-    const QFileInfo fileInfo(m_filePath);
-    if (!QDir().mkpath(fileInfo.absolutePath()))
-    {
-        return std::unexpected(ApplicationSettingsStoreError::ioError);
     }
 
     QJsonObject shortcutOverrides;
@@ -411,15 +438,12 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
         {QStringLiteral("shortcutOverrides"), shortcutOverrides},
     };
 
-    QSaveFile file(m_filePath);
-    if (!file.open(QIODevice::WriteOnly))
-    {
-        return std::unexpected(ApplicationSettingsStoreError::ioError);
-    }
     const QByteArray data = QJsonDocument(root).toJson(QJsonDocument::Indented);
-    if (file.write(data) != data.size() || !file.commit())
+    if (const auto saved =
+            ztermy::persistence::saveLastKnownGood(m_filePath, data, maximumSettingsFileSize, validateSettingsPayload);
+        !saved)
     {
-        return std::unexpected(ApplicationSettingsStoreError::ioError);
+        return std::unexpected(settingsStoreError(saved.error()));
     }
     return {};
 }

@@ -168,6 +168,11 @@ add_library(ztermy_core_config STATIC
     src/core/config/ApplicationSettings.h
 )
 
+add_library(ztermy_core_persistence STATIC
+    src/core/persistence/LastKnownGoodFile.cpp
+    src/core/persistence/LastKnownGoodFile.h
+)
+
 add_library(ztermy_application_actions STATIC
     src/application/actions/ActionRegistry.cpp
     src/application/actions/ActionRegistry.h
@@ -227,7 +232,11 @@ target_include_directories(ztermy_core_diagnostics PUBLIC src)
 
 target_compile_features(ztermy_core_config PUBLIC cxx_std_23)
 target_include_directories(ztermy_core_config PUBLIC src)
-target_link_libraries(ztermy_core_config PUBLIC Qt6::Core)
+target_link_libraries(ztermy_core_config PUBLIC ztermy_core_persistence Qt6::Core)
+
+target_compile_features(ztermy_core_persistence PUBLIC cxx_std_23)
+target_include_directories(ztermy_core_persistence PUBLIC src)
+target_link_libraries(ztermy_core_persistence PUBLIC Qt6::Core)
 
 add_library(ztermy_terminal_transport STATIC
     src/infrastructure/terminal/ConPtyProcess.cpp
@@ -345,7 +354,7 @@ target_compile_features(ztermy_workbench_persistence PUBLIC cxx_std_23)
 target_include_directories(ztermy_workbench_persistence PUBLIC src)
 target_link_libraries(ztermy_workbench_persistence
     PUBLIC ztermy_workbench_domain
-    PRIVATE Qt6::Core
+    PRIVATE ztermy_core_persistence Qt6::Core
 )
 
 target_compile_features(ztermy_ssh_domain PUBLIC cxx_std_23)
@@ -363,7 +372,7 @@ target_compile_features(ztermy_forwarding_persistence PUBLIC cxx_std_23)
 target_include_directories(ztermy_forwarding_persistence PUBLIC src)
 target_link_libraries(ztermy_forwarding_persistence
     PUBLIC ztermy_forwarding_domain
-    PRIVATE Qt6::Core
+    PRIVATE ztermy_core_persistence Qt6::Core
 )
 
 target_compile_features(ztermy_forwarding_session PUBLIC cxx_std_23)
@@ -387,7 +396,7 @@ target_compile_features(ztermy_ssh_persistence PUBLIC cxx_std_23)
 target_include_directories(ztermy_ssh_persistence PUBLIC src)
 target_link_libraries(ztermy_ssh_persistence
     PUBLIC ztermy_ssh_domain
-    PRIVATE Qt6::Core
+    PRIVATE ztermy_core_persistence Qt6::Core
 )
 
 target_compile_features(ztermy_ssh_transport PUBLIC cxx_std_23)
@@ -1396,6 +1405,27 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME application-settings COMMAND ztermy_application_settings_tests)
+
+    qt_add_executable(ztermy_last_known_good_file_tests
+        tests/last_known_good_file_tests.cpp
+    )
+
+    target_compile_features(ztermy_last_known_good_file_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_last_known_good_file_tests PRIVATE
+        ztermy_core_persistence
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_last_known_good_file_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME last-known-good-file COMMAND ztermy_last_known_good_file_tests)
 
     qt_add_executable(ztermy_action_registry_tests
         tests/action_registry_tests.cpp
@@ -2609,6 +2639,7 @@ if(BUILD_TESTING)
             ztermy_diagnostic_reporter_tests
             ztermy_application_paths_tests
             ztermy_application_settings_tests
+            ztermy_last_known_good_file_tests
             ztermy_localization_manager_tests
             ztermy_latency_histogram_tests
             ztermy_window_hit_test_tests

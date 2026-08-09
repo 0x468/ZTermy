@@ -243,6 +243,7 @@ void WorkspaceStateStoreTests::recoversTheLastKnownGoodStateFromBackup()
     const auto recovered = store.load();
     QVERIFY(recovered.has_value());
     QCOMPARE(*recovered, first);
+    QVERIFY(store.lastLoadRecoveredFromBackup());
 }
 
 void WorkspaceStateStoreTests::refusesToOverwriteANewerWorkspaceSchema()

@@ -48,6 +48,7 @@ private slots:
     void savesAndLoadsVersionTwoInStableOrder();
     void migratesLegacyQuickCommandsOnce();
     void rejectsMalformedUnsupportedAndDuplicateDocuments();
+    void recoversLastKnownGoodScripts();
 };
 
 void ScriptStoreTests::savesAndLoadsVersionTwoInStableOrder()
@@ -122,6 +123,28 @@ void ScriptStoreTests::rejectsMalformedUnsupportedAndDuplicateDocuments()
     const auto duplicate = store.save(duplicates);
     QVERIFY(!duplicate);
     QCOMPARE(duplicate.error(), ztermy::workbench::ScriptStoreError::invalidFormat);
+}
+
+void ScriptStoreTests::recoversLastKnownGoodScripts()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("scripts.json"));
+    const ztermy::workbench::ScriptStore store(path);
+
+    const auto first = sampleScript();
+    auto second = first;
+    second.name = "Updated deploy";
+    const std::array firstGeneration{first};
+    const std::array secondGeneration{second};
+    QVERIFY(store.save(firstGeneration));
+    QVERIFY(store.save(secondGeneration));
+    QVERIFY(writeFile(path, QByteArrayLiteral("{truncated")));
+
+    const auto loaded = store.load();
+    QVERIFY(loaded);
+    QCOMPARE(*loaded, std::vector<ztermy::workbench::ScriptDefinition>{first});
+    QVERIFY(store.lastLoadRecoveredFromBackup());
 }
 
 QTEST_GUILESS_MAIN(ScriptStoreTests)

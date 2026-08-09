@@ -30,6 +30,7 @@ private slots:
     void migratesFontOptionsSchema();
     void rejectsMalformedUnsupportedAndIncompleteDocuments();
     void rejectsOutOfRangeValues();
+    void recoversLastKnownGoodSettings();
     void createsMissingParentDirectory();
 };
 
@@ -355,6 +356,27 @@ void ApplicationSettingsTests::createsMissingParentDirectory()
 
     QVERIFY(store.save(ztermy::config::ApplicationSettings{}));
     QVERIFY(QFile::exists(path));
+}
+
+void ApplicationSettingsTests::recoversLastKnownGoodSettings()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("settings.json"));
+    const ztermy::config::ApplicationSettingsStore store(path);
+
+    auto first = ztermy::config::ApplicationSettings{};
+    first.terminalFontSize = 15;
+    auto second = first;
+    second.terminalFontSize = 18;
+    QVERIFY(store.save(first));
+    QVERIFY(store.save(second));
+    QVERIFY(writeFile(path, QByteArrayLiteral("{truncated")));
+
+    const auto loaded = store.load();
+    QVERIFY(loaded);
+    QCOMPARE(*loaded, first);
+    QVERIFY(store.lastLoadRecoveredFromBackup());
 }
 
 QTEST_APPLESS_MAIN(ApplicationSettingsTests)

@@ -26,6 +26,7 @@ public:
     explicit ScriptStore(QString filePath);
 
     [[nodiscard]] const QString &filePath() const noexcept;
+    [[nodiscard]] bool lastLoadRecoveredFromBackup() const noexcept;
     [[nodiscard]] std::expected<std::vector<ScriptDefinition>, ScriptStoreError> load() const;
     [[nodiscard]] std::expected<std::vector<ScriptDefinition>, ScriptStoreError>
     loadOrMigrate(const QString &legacyQuickCommandPath) const;
@@ -33,6 +34,7 @@ public:
 
 private:
     QString m_filePath;
+    mutable bool m_lastLoadRecoveredFromBackup = false;
 };
 
 } // namespace ztermy::workbench

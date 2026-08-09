@@ -95,11 +95,13 @@ public:
     explicit ApplicationSettingsStore(QString filePath);
 
     [[nodiscard]] const QString &filePath() const noexcept;
+    [[nodiscard]] bool lastLoadRecoveredFromBackup() const noexcept;
     [[nodiscard]] std::expected<ApplicationSettings, ApplicationSettingsStoreError> load() const;
     [[nodiscard]] std::expected<void, ApplicationSettingsStoreError> save(const ApplicationSettings &settings) const;
 
 private:
     QString m_filePath;
+    mutable bool m_lastLoadRecoveredFromBackup = false;
 };
 
 [[nodiscard]] QString themePreferenceToken(ThemePreference preference);

@@ -1,13 +1,11 @@
 #include "infrastructure/ssh/SshProfileStore.h"
 
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
+#include "core/persistence/LastKnownGoodFile.h"
+
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
-#include <QSaveFile>
 
 #include <algorithm>
 #include <limits>
@@ -521,6 +519,85 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
     });
 }
 
+[[nodiscard]] std::expected<std::vector<ztermy::ssh::SshProfile>, ztermy::ssh::SshProfileStoreError>
+parseProfilesPayload(const QByteArrayView payload)
+{
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(payload.toByteArray(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isObject())
+    {
+        return std::unexpected(ztermy::ssh::SshProfileStoreError::InvalidFormat);
+    }
+
+    const QJsonObject root = document.object();
+    const QJsonValue versionValue = root.value(QStringLiteral("version"));
+    const QJsonValue profilesValue = root.value(QStringLiteral("profiles"));
+    if (!versionValue.isDouble()
+        || (versionValue.toInteger() != legacySchemaVersion && versionValue.toInteger() != credentialSchemaVersion
+            && versionValue.toInteger() != keywordSchemaVersion
+            && versionValue.toInteger() != sessionOptionsSchemaVersion && versionValue.toInteger() != proxySchemaVersion
+            && versionValue.toInteger() != currentSchemaVersion))
+    {
+        return std::unexpected(versionValue.isDouble() ? ztermy::ssh::SshProfileStoreError::UnsupportedVersion
+                                                       : ztermy::ssh::SshProfileStoreError::InvalidFormat);
+    }
+    if (!profilesValue.isArray())
+    {
+        return std::unexpected(ztermy::ssh::SshProfileStoreError::InvalidFormat);
+    }
+
+    const QJsonArray profileValues = profilesValue.toArray();
+    if (profileValues.size() > maximumProfileCount)
+    {
+        return std::unexpected(ztermy::ssh::SshProfileStoreError::InvalidFormat);
+    }
+
+    std::vector<ztermy::ssh::SshProfile> profiles;
+    profiles.reserve(static_cast<std::size_t>(profileValues.size()));
+    for (const auto &value : profileValues)
+    {
+        auto profile = parseProfile(value, versionValue.toInteger());
+        if (!profile)
+        {
+            return std::unexpected(ztermy::ssh::SshProfileStoreError::InvalidFormat);
+        }
+        profiles.push_back(std::move(*profile));
+    }
+    if (duplicateIds(profiles) || missingJumpProfiles(profiles))
+    {
+        return std::unexpected(ztermy::ssh::SshProfileStoreError::InvalidFormat);
+    }
+    return profiles;
+}
+
+[[nodiscard]] ztermy::persistence::PayloadValidation validateProfilesPayload(const QByteArrayView payload)
+{
+    const auto parsed = parseProfilesPayload(payload);
+    if (parsed)
+    {
+        return ztermy::persistence::PayloadValidation::valid;
+    }
+    return parsed.error() == ztermy::ssh::SshProfileStoreError::UnsupportedVersion
+               ? ztermy::persistence::PayloadValidation::unsupportedVersion
+               : ztermy::persistence::PayloadValidation::invalid;
+}
+
+[[nodiscard]] ztermy::ssh::SshProfileStoreError profileStoreError(const ztermy::persistence::LastKnownGoodError error)
+{
+    switch (error)
+    {
+        case ztermy::persistence::LastKnownGoodError::invalidPath:
+            return ztermy::ssh::SshProfileStoreError::InvalidPath;
+        case ztermy::persistence::LastKnownGoodError::io:
+            return ztermy::ssh::SshProfileStoreError::IoError;
+        case ztermy::persistence::LastKnownGoodError::unsupportedVersion:
+            return ztermy::ssh::SshProfileStoreError::UnsupportedVersion;
+        case ztermy::persistence::LastKnownGoodError::invalidFormat:
+        default:
+            return ztermy::ssh::SshProfileStoreError::InvalidFormat;
+    }
+}
+
 } // namespace
 
 namespace ztermy::ssh
@@ -533,70 +610,25 @@ const QString &SshProfileStore::filePath() const noexcept
     return m_filePath;
 }
 
+bool SshProfileStore::lastLoadRecoveredFromBackup() const noexcept
+{
+    return m_lastLoadRecoveredFromBackup;
+}
+
 std::expected<std::vector<SshProfile>, SshProfileStoreError> SshProfileStore::load() const
 {
-    if (m_filePath.isEmpty())
+    m_lastLoadRecoveredFromBackup = false;
+    auto loaded = ztermy::persistence::loadLastKnownGood(m_filePath, maximumFileSize, validateProfilesPayload);
+    if (!loaded)
     {
-        return std::unexpected(SshProfileStoreError::InvalidPath);
+        return std::unexpected(profileStoreError(loaded.error()));
     }
-
-    QFile file(m_filePath);
-    if (!file.exists())
+    if (!loaded->has_value())
     {
         return std::vector<SshProfile>{};
     }
-    if (!file.open(QIODevice::ReadOnly) || file.size() < 0 || file.size() > maximumFileSize)
-    {
-        return std::unexpected(file.size() > maximumFileSize ? SshProfileStoreError::InvalidFormat
-                                                             : SshProfileStoreError::IoError);
-    }
-
-    QJsonParseError parseError;
-    const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !document.isObject())
-    {
-        return std::unexpected(SshProfileStoreError::InvalidFormat);
-    }
-
-    const QJsonObject root = document.object();
-    const QJsonValue versionValue = root.value(QStringLiteral("version"));
-    const QJsonValue profilesValue = root.value(QStringLiteral("profiles"));
-    if (!versionValue.isDouble()
-        || (versionValue.toInteger() != legacySchemaVersion && versionValue.toInteger() != credentialSchemaVersion
-            && versionValue.toInteger() != keywordSchemaVersion
-            && versionValue.toInteger() != sessionOptionsSchemaVersion && versionValue.toInteger() != proxySchemaVersion
-            && versionValue.toInteger() != currentSchemaVersion))
-    {
-        return std::unexpected(versionValue.isDouble() ? SshProfileStoreError::UnsupportedVersion
-                                                       : SshProfileStoreError::InvalidFormat);
-    }
-    if (!profilesValue.isArray())
-    {
-        return std::unexpected(SshProfileStoreError::InvalidFormat);
-    }
-
-    const QJsonArray profileValues = profilesValue.toArray();
-    if (profileValues.size() > maximumProfileCount)
-    {
-        return std::unexpected(SshProfileStoreError::InvalidFormat);
-    }
-
-    std::vector<SshProfile> profiles;
-    profiles.reserve(static_cast<std::size_t>(profileValues.size()));
-    for (const auto &value : profileValues)
-    {
-        auto profile = parseProfile(value, versionValue.toInteger());
-        if (!profile)
-        {
-            return std::unexpected(SshProfileStoreError::InvalidFormat);
-        }
-        profiles.push_back(std::move(*profile));
-    }
-    if (duplicateIds(profiles) || missingJumpProfiles(profiles))
-    {
-        return std::unexpected(SshProfileStoreError::InvalidFormat);
-    }
-    return profiles;
+    m_lastLoadRecoveredFromBackup = loaded->value().recoveredFromBackup;
+    return parseProfilesPayload(loaded->value().bytes);
 }
 
 std::expected<void, SshProfileStoreError> SshProfileStore::save(const std::span<const SshProfile> profiles) const
@@ -619,27 +651,16 @@ std::expected<void, SshProfileStoreError> SshProfileStore::save(const std::span<
         profileValues.append(serializeProfile(profile));
     }
 
-    const QFileInfo fileInfo(m_filePath);
-    if (!fileInfo.absoluteDir().mkpath(QStringLiteral(".")))
-    {
-        return std::unexpected(SshProfileStoreError::IoError);
-    }
-
-    QSaveFile file(m_filePath);
-    if (!file.open(QIODevice::WriteOnly))
-    {
-        return std::unexpected(SshProfileStoreError::IoError);
-    }
-
     const QJsonDocument document(QJsonObject{
         {QStringLiteral("version"), currentSchemaVersion},
         {QStringLiteral("profiles"), profileValues},
     });
     const QByteArray data = document.toJson(QJsonDocument::Indented);
-    if (file.write(data) != data.size() || !file.commit())
+    if (const auto saved =
+            ztermy::persistence::saveLastKnownGood(m_filePath, data, maximumFileSize, validateProfilesPayload);
+        !saved)
     {
-        file.cancelWriting();
-        return std::unexpected(SshProfileStoreError::IoError);
+        return std::unexpected(profileStoreError(saved.error()));
     }
     return {};
 }

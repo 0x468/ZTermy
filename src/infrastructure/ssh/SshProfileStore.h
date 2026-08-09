@@ -26,11 +26,13 @@ public:
     explicit SshProfileStore(QString filePath);
 
     [[nodiscard]] const QString &filePath() const noexcept;
+    [[nodiscard]] bool lastLoadRecoveredFromBackup() const noexcept;
     [[nodiscard]] std::expected<std::vector<SshProfile>, SshProfileStoreError> load() const;
     [[nodiscard]] std::expected<void, SshProfileStoreError> save(std::span<const SshProfile> profiles) const;
 
 private:
     QString m_filePath;
+    mutable bool m_lastLoadRecoveredFromBackup = false;
 };
 
 } // namespace ztermy::ssh

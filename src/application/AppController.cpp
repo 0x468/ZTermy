@@ -8257,6 +8257,10 @@ void AppController::loadPortForwardingRules()
         return;
     }
     m_portForwardingRules = std::move(*rules);
+    if (m_portForwardingStore.lastLoadRecoveredFromBackup())
+    {
+        qCWarning(appControllerLog) << "Recovered port forwarding rules from the last-known-good backup";
+    }
     QTimer::singleShot(0, this, [this] {
         if (m_shutdownStarted || portableVaultLocked())
         {
@@ -8371,6 +8375,10 @@ void AppController::loadHostProfiles()
         return;
     }
     m_profiles = std::move(*profiles);
+    if (m_profileStore.lastLoadRecoveredFromBackup())
+    {
+        qCWarning(appControllerLog) << "Recovered SSH profiles from the last-known-good backup";
+    }
 }
 
 void AppController::loadApplicationSettings()
@@ -8382,6 +8390,10 @@ void AppController::loadApplicationSettings()
         return;
     }
     m_settings = std::move(*settings);
+    if (m_settingsStore.lastLoadRecoveredFromBackup())
+    {
+        qCWarning(appControllerLog) << "Recovered application settings from the last-known-good backup";
+    }
     security::CredentialStorage selected = m_defaultCredentialStorage;
     switch (m_settings.credentialStorage)
     {
@@ -8442,6 +8454,10 @@ void AppController::loadQuickCommands()
         return;
     }
     m_scripts = std::move(*scripts);
+    if (m_scriptStore.lastLoadRecoveredFromBackup())
+    {
+        qCWarning(appControllerLog) << "Recovered scripts from the last-known-good backup";
+    }
 }
 
 void AppController::loadWorkspaceState()
@@ -8453,6 +8469,10 @@ void AppController::loadWorkspaceState()
         return;
     }
     m_workspaceState = std::move(*state);
+    if (m_workspaceStateStore.lastLoadRecoveredFromBackup())
+    {
+        qCWarning(appControllerLog) << "Recovered workspace state from the last-known-good backup";
+    }
     restoreTerminalWorkspaces();
 }
 

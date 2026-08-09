@@ -75,6 +75,7 @@ private slots:
     void rejectsMalformedSessionOptions();
     void rejectsMalformedProxyOptions();
     void savesAndValidatesJumpHostChains();
+    void recoversLastKnownGoodProfiles();
 };
 
 void SshProfileStoreTests::missingFileLoadsAsEmpty()
@@ -200,6 +201,28 @@ void SshProfileStoreTests::createsMissingParentDirectory()
 
     QVERIFY(store.save(profiles));
     QVERIFY(QFile::exists(path));
+}
+
+void SshProfileStoreTests::recoversLastKnownGoodProfiles()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("profiles.json"));
+    const ztermy::ssh::SshProfileStore store(path);
+
+    auto first = privateKeyProfile();
+    auto second = first;
+    second.name = "Updated server";
+    const std::array firstGeneration{first};
+    const std::array secondGeneration{second};
+    QVERIFY(store.save(firstGeneration));
+    QVERIFY(store.save(secondGeneration));
+    QVERIFY(writeFile(path, QByteArrayLiteral("{truncated")));
+
+    const auto loaded = store.load();
+    QVERIFY(loaded);
+    QCOMPARE(*loaded, std::vector<ztermy::ssh::SshProfile>{first});
+    QVERIFY(store.lastLoadRecoveredFromBackup());
 }
 
 void SshProfileStoreTests::rejectsInvalidProfilesAndDuplicateIds()

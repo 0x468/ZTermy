@@ -437,8 +437,14 @@ const QString &WorkspaceStateStore::filePath() const noexcept
     return m_filePath;
 }
 
+bool WorkspaceStateStore::lastLoadRecoveredFromBackup() const noexcept
+{
+    return m_lastLoadRecoveredFromBackup;
+}
+
 std::expected<WorkspaceState, WorkspaceStateStoreError> WorkspaceStateStore::load() const
 {
+    m_lastLoadRecoveredFromBackup = false;
     const QString backupPath = m_filePath + QStringLiteral(".bak");
     if (!QFileInfo::exists(m_filePath))
     {
@@ -447,7 +453,9 @@ std::expected<WorkspaceState, WorkspaceStateStoreError> WorkspaceStateStore::loa
             auto backupPayload = readWorkspacePayload(backupPath);
             if (backupPayload)
             {
-                return parseWorkspacePayload(*backupPayload);
+                auto backup = parseWorkspacePayload(*backupPayload);
+                m_lastLoadRecoveredFromBackup = backup.has_value();
+                return backup;
             }
         }
         return WorkspaceState{};
@@ -467,6 +475,7 @@ std::expected<WorkspaceState, WorkspaceStateStoreError> WorkspaceStateStore::loa
         auto backup = parseWorkspacePayload(*backupPayload);
         if (backup)
         {
+            m_lastLoadRecoveredFromBackup = true;
             return backup;
         }
     }

@@ -1,12 +1,11 @@
 #include "infrastructure/forwarding/PortForwardingRuleStore.h"
 
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
+#include "core/persistence/LastKnownGoodFile.h"
+
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QSaveFile>
+#include <QJsonParseError>
 
 #include <limits>
 #include <optional>
@@ -142,32 +141,11 @@ constexpr qint64 maximumFileSize = qint64{512} * 1024;
     return validPortForwardingRule(rule) ? std::optional<PortForwardingRule>{std::move(rule)} : std::nullopt;
 }
 
-} // namespace
-
-PortForwardingRuleStore::PortForwardingRuleStore(QString filePath) : m_filePath(std::move(filePath)) {}
-
-QString PortForwardingRuleStore::filePath() const
+[[nodiscard]] std::expected<std::vector<PortForwardingRule>, PortForwardingRuleStoreError>
+parseRulesPayload(const QByteArrayView payload)
 {
-    return m_filePath;
-}
-
-std::expected<std::vector<PortForwardingRule>, PortForwardingRuleStoreError> PortForwardingRuleStore::load() const
-{
-    if (m_filePath.isEmpty())
-    {
-        return std::unexpected(PortForwardingRuleStoreError::InvalidPath);
-    }
-    QFile file(m_filePath);
-    if (!file.exists())
-    {
-        return std::vector<PortForwardingRule>{};
-    }
-    if (!file.open(QIODevice::ReadOnly) || file.size() > maximumFileSize)
-    {
-        return std::unexpected(PortForwardingRuleStoreError::Io);
-    }
     QJsonParseError parseError;
-    const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &parseError);
+    const QJsonDocument document = QJsonDocument::fromJson(payload.toByteArray(), &parseError);
     if (parseError.error != QJsonParseError::NoError || !document.isObject())
     {
         return std::unexpected(PortForwardingRuleStoreError::InvalidDocument);
@@ -177,7 +155,8 @@ std::expected<std::vector<PortForwardingRule>, PortForwardingRuleStoreError> Por
     const QJsonValue rulesValue = root.value(QStringLiteral("rules"));
     if (!version.isDouble() || version.toInteger(-1) != currentSchemaVersion)
     {
-        return std::unexpected(PortForwardingRuleStoreError::UnsupportedVersion);
+        return std::unexpected(version.isDouble() ? PortForwardingRuleStoreError::UnsupportedVersion
+                                                  : PortForwardingRuleStoreError::InvalidDocument);
     }
     if (!rulesValue.isArray())
     {
@@ -206,6 +185,64 @@ std::expected<std::vector<PortForwardingRule>, PortForwardingRuleStoreError> Por
     return rules;
 }
 
+[[nodiscard]] ztermy::persistence::PayloadValidation validateRulesPayload(const QByteArrayView payload)
+{
+    const auto parsed = parseRulesPayload(payload);
+    if (parsed)
+    {
+        return ztermy::persistence::PayloadValidation::valid;
+    }
+    return parsed.error() == PortForwardingRuleStoreError::UnsupportedVersion
+               ? ztermy::persistence::PayloadValidation::unsupportedVersion
+               : ztermy::persistence::PayloadValidation::invalid;
+}
+
+[[nodiscard]] PortForwardingRuleStoreError ruleStoreError(const ztermy::persistence::LastKnownGoodError error)
+{
+    switch (error)
+    {
+        case ztermy::persistence::LastKnownGoodError::invalidPath:
+            return PortForwardingRuleStoreError::InvalidPath;
+        case ztermy::persistence::LastKnownGoodError::io:
+            return PortForwardingRuleStoreError::Io;
+        case ztermy::persistence::LastKnownGoodError::unsupportedVersion:
+            return PortForwardingRuleStoreError::UnsupportedVersion;
+        case ztermy::persistence::LastKnownGoodError::invalidFormat:
+        default:
+            return PortForwardingRuleStoreError::InvalidDocument;
+    }
+}
+
+} // namespace
+
+PortForwardingRuleStore::PortForwardingRuleStore(QString filePath) : m_filePath(std::move(filePath)) {}
+
+QString PortForwardingRuleStore::filePath() const
+{
+    return m_filePath;
+}
+
+bool PortForwardingRuleStore::lastLoadRecoveredFromBackup() const noexcept
+{
+    return m_lastLoadRecoveredFromBackup;
+}
+
+std::expected<std::vector<PortForwardingRule>, PortForwardingRuleStoreError> PortForwardingRuleStore::load() const
+{
+    m_lastLoadRecoveredFromBackup = false;
+    auto loaded = ztermy::persistence::loadLastKnownGood(m_filePath, maximumFileSize, validateRulesPayload);
+    if (!loaded)
+    {
+        return std::unexpected(ruleStoreError(loaded.error()));
+    }
+    if (!loaded->has_value())
+    {
+        return std::vector<PortForwardingRule>{};
+    }
+    m_lastLoadRecoveredFromBackup = loaded->value().recoveredFromBackup;
+    return parseRulesPayload(loaded->value().bytes);
+}
+
 std::expected<void, PortForwardingRuleStoreError>
 PortForwardingRuleStore::save(const std::span<const PortForwardingRule> rules) const
 {
@@ -217,13 +254,6 @@ PortForwardingRuleStore::save(const std::span<const PortForwardingRule> rules) c
     {
         return std::unexpected(PortForwardingRuleStoreError::InvalidDocument);
     }
-    const QFileInfo info(m_filePath);
-    QDir directory = info.absoluteDir();
-    if (!directory.exists() && !directory.mkpath(QStringLiteral(".")))
-    {
-        return std::unexpected(PortForwardingRuleStoreError::Io);
-    }
-
     QJsonArray values;
     for (const PortForwardingRule &rule : rules)
     {
@@ -231,16 +261,12 @@ PortForwardingRuleStore::save(const std::span<const PortForwardingRule> rules) c
     }
     const QJsonDocument document(
         QJsonObject{{QStringLiteral("schemaVersion"), currentSchemaVersion}, {QStringLiteral("rules"), values}});
-    QSaveFile file(m_filePath);
-    if (!file.open(QIODevice::WriteOnly))
-    {
-        return std::unexpected(PortForwardingRuleStoreError::Io);
-    }
     const QByteArray payload = document.toJson(QJsonDocument::Indented);
-    if (file.write(payload) != payload.size() || !file.commit())
+    if (const auto saved =
+            ztermy::persistence::saveLastKnownGood(m_filePath, payload, maximumFileSize, validateRulesPayload);
+        !saved)
     {
-        file.cancelWriting();
-        return std::unexpected(PortForwardingRuleStoreError::Io);
+        return std::unexpected(ruleStoreError(saved.error()));
     }
     return {};
 }

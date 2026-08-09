@@ -35,6 +35,7 @@ private slots:
     void savesAndLoadsOrderedNonSecretRules();
     void missingFileLoadsEmptyAndFutureSchemaIsRejected();
     void rejectsMalformedAndDuplicateRules();
+    void recoversLastKnownGoodRules();
 };
 
 void PortForwardingRuleStoreTests::validatesTypedRulesAndReferences()
@@ -146,6 +147,31 @@ void PortForwardingRuleStoreTests::rejectsMalformedAndDuplicateRules()
     const auto saved = store.save(invalidRules);
     QVERIFY(!saved.has_value());
     QCOMPARE(saved.error(), PortForwardingRuleStoreError::InvalidDocument);
+}
+
+void PortForwardingRuleStoreTests::recoversLastKnownGoodRules()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("port-forwarding.json"));
+    PortForwardingRuleStore store(path);
+
+    const PortForwardingRule first = localRule();
+    PortForwardingRule second = first;
+    second.label = "Updated PostgreSQL";
+    const std::vector firstGeneration{first};
+    const std::vector secondGeneration{second};
+    QVERIFY(store.save(firstGeneration));
+    QVERIFY(store.save(secondGeneration));
+    QFile damaged(path);
+    QVERIFY(damaged.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    QCOMPARE(damaged.write("{truncated"), qint64{10});
+    damaged.close();
+
+    const auto loaded = store.load();
+    QVERIFY(loaded);
+    QCOMPARE(*loaded, firstGeneration);
+    QVERIFY(store.lastLoadRecoveredFromBackup());
 }
 
 } // namespace

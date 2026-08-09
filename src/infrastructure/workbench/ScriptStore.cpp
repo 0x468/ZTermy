@@ -1,15 +1,14 @@
 #include "infrastructure/workbench/ScriptStore.h"
 
+#include "core/persistence/LastKnownGoodFile.h"
 #include "infrastructure/workbench/QuickCommandStore.h"
 
-#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
-#include <QSaveFile>
 
 #include <algorithm>
 #include <cmath>
@@ -320,6 +319,74 @@ scriptStoreError(const ztermy::workbench::QuickCommandStoreError error)
     }
 }
 
+[[nodiscard]] std::expected<std::vector<ztermy::workbench::ScriptDefinition>, ztermy::workbench::ScriptStoreError>
+parseScriptsPayload(const QByteArrayView payload)
+{
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(payload.toByteArray(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isObject())
+    {
+        return std::unexpected(ztermy::workbench::ScriptStoreError::invalidFormat);
+    }
+    const QJsonObject root = document.object();
+    const QJsonValue version = root.value(QStringLiteral("version"));
+    if (!version.isDouble() || version.toInteger(-1) != currentSchemaVersion
+        || version.toDouble() != static_cast<double>(currentSchemaVersion))
+    {
+        return std::unexpected(version.isDouble() ? ztermy::workbench::ScriptStoreError::unsupportedVersion
+                                                  : ztermy::workbench::ScriptStoreError::invalidFormat);
+    }
+    const QJsonValue values = root.value(QStringLiteral("scripts"));
+    if (!values.isArray() || values.toArray().size() > static_cast<qsizetype>(ztermy::workbench::maximumScriptCount))
+    {
+        return std::unexpected(ztermy::workbench::ScriptStoreError::invalidFormat);
+    }
+    std::vector<ztermy::workbench::ScriptDefinition> scripts;
+    scripts.reserve(static_cast<std::size_t>(values.toArray().size()));
+    for (const QJsonValue value : values.toArray())
+    {
+        auto script = parseScript(value);
+        if (!script)
+        {
+            return std::unexpected(ztermy::workbench::ScriptStoreError::invalidFormat);
+        }
+        scripts.push_back(std::move(*script));
+    }
+    if (containsDuplicateIds(scripts))
+    {
+        return std::unexpected(ztermy::workbench::ScriptStoreError::invalidFormat);
+    }
+    return scripts;
+}
+
+[[nodiscard]] ztermy::persistence::PayloadValidation validateScriptsPayload(const QByteArrayView payload)
+{
+    const auto parsed = parseScriptsPayload(payload);
+    if (parsed)
+    {
+        return ztermy::persistence::PayloadValidation::valid;
+    }
+    return parsed.error() == ztermy::workbench::ScriptStoreError::unsupportedVersion
+               ? ztermy::persistence::PayloadValidation::unsupportedVersion
+               : ztermy::persistence::PayloadValidation::invalid;
+}
+
+[[nodiscard]] ztermy::workbench::ScriptStoreError scriptStoreError(const ztermy::persistence::LastKnownGoodError error)
+{
+    switch (error)
+    {
+        case ztermy::persistence::LastKnownGoodError::invalidPath:
+            return ztermy::workbench::ScriptStoreError::invalidPath;
+        case ztermy::persistence::LastKnownGoodError::io:
+            return ztermy::workbench::ScriptStoreError::ioError;
+        case ztermy::persistence::LastKnownGoodError::unsupportedVersion:
+            return ztermy::workbench::ScriptStoreError::unsupportedVersion;
+        case ztermy::persistence::LastKnownGoodError::invalidFormat:
+        default:
+            return ztermy::workbench::ScriptStoreError::invalidFormat;
+    }
+}
+
 } // namespace
 
 namespace ztermy::workbench
@@ -332,57 +399,25 @@ const QString &ScriptStore::filePath() const noexcept
     return m_filePath;
 }
 
+bool ScriptStore::lastLoadRecoveredFromBackup() const noexcept
+{
+    return m_lastLoadRecoveredFromBackup;
+}
+
 std::expected<std::vector<ScriptDefinition>, ScriptStoreError> ScriptStore::load() const
 {
-    if (m_filePath.isEmpty())
+    m_lastLoadRecoveredFromBackup = false;
+    auto loaded = ztermy::persistence::loadLastKnownGood(m_filePath, maximumFileSize, validateScriptsPayload);
+    if (!loaded)
     {
-        return std::unexpected(ScriptStoreError::invalidPath);
+        return std::unexpected(scriptStoreError(loaded.error()));
     }
-    QFile file(m_filePath);
-    if (!file.exists())
+    if (!loaded->has_value())
     {
         return std::vector<ScriptDefinition>{};
     }
-    if (!file.open(QIODevice::ReadOnly) || file.size() < 0 || file.size() > maximumFileSize)
-    {
-        return std::unexpected(file.size() > maximumFileSize ? ScriptStoreError::invalidFormat
-                                                             : ScriptStoreError::ioError);
-    }
-    QJsonParseError parseError;
-    const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !document.isObject())
-    {
-        return std::unexpected(ScriptStoreError::invalidFormat);
-    }
-    const QJsonObject root = document.object();
-    const QJsonValue version = root.value(QStringLiteral("version"));
-    if (!version.isDouble() || version.toInteger(-1) != currentSchemaVersion
-        || version.toDouble() != static_cast<double>(currentSchemaVersion))
-    {
-        return std::unexpected(version.isDouble() ? ScriptStoreError::unsupportedVersion
-                                                  : ScriptStoreError::invalidFormat);
-    }
-    const QJsonValue values = root.value(QStringLiteral("scripts"));
-    if (!values.isArray() || values.toArray().size() > static_cast<qsizetype>(maximumScriptCount))
-    {
-        return std::unexpected(ScriptStoreError::invalidFormat);
-    }
-    std::vector<ScriptDefinition> scripts;
-    scripts.reserve(static_cast<std::size_t>(values.toArray().size()));
-    for (const QJsonValue value : values.toArray())
-    {
-        auto script = parseScript(value);
-        if (!script)
-        {
-            return std::unexpected(ScriptStoreError::invalidFormat);
-        }
-        scripts.push_back(std::move(*script));
-    }
-    if (containsDuplicateIds(scripts))
-    {
-        return std::unexpected(ScriptStoreError::invalidFormat);
-    }
-    return scripts;
+    m_lastLoadRecoveredFromBackup = loaded->value().recoveredFromBackup;
+    return parseScriptsPayload(loaded->value().bytes);
 }
 
 std::expected<std::vector<ScriptDefinition>, ScriptStoreError>
@@ -433,16 +468,11 @@ std::expected<void, ScriptStoreError> ScriptStore::save(const std::span<const Sc
     {
         return std::unexpected(ScriptStoreError::invalidFormat);
     }
-    const QFileInfo fileInfo(m_filePath);
-    if (!fileInfo.absoluteDir().mkpath(QStringLiteral(".")))
+    if (const auto saved =
+            ztermy::persistence::saveLastKnownGood(m_filePath, data, maximumFileSize, validateScriptsPayload);
+        !saved)
     {
-        return std::unexpected(ScriptStoreError::ioError);
-    }
-    QSaveFile file(m_filePath);
-    if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size() || !file.commit())
-    {
-        file.cancelWriting();
-        return std::unexpected(ScriptStoreError::ioError);
+        return std::unexpected(scriptStoreError(saved.error()));
     }
     return {};
 }
