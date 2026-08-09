@@ -92,6 +92,7 @@ class AppControllerTests final : public QObject
 
 private slots:
     void savesUpdatesReloadsAndDeletesProfiles();
+    void persistsAndPreservesSessionOptions();
     void rejectsInvalidProfiles();
     void managesSavedCredentialsAndPortableVault();
     void sessionCredentialDoesNotAppearStoredAfterRestart();
@@ -175,6 +176,57 @@ void AppControllerTests::savesUpdatesReloadsAndDeletesProfiles()
 
     ztermy::AppController emptyReload(path);
     QVERIFY(emptyReload.hostProfiles().isEmpty());
+}
+
+void AppControllerTests::persistsAndPreservesSessionOptions()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("profiles.json"));
+    ztermy::AppController controller(path);
+
+    const QVariantMap options{
+        {QStringLiteral("terminalType"), QStringLiteral("screen-256color")},
+        {QStringLiteral("keepaliveIntervalSeconds"), 45},
+        {QStringLiteral("keepaliveFailureThreshold"), 4},
+        {QStringLiteral("startupCommand"), QStringLiteral("uname -a")},
+        {QStringLiteral("startupCommandMode"), QStringLiteral("line-delay")},
+        {QStringLiteral("startupLineDelayMilliseconds"), 125},
+        {QStringLiteral("environment"),
+         QVariantList{QVariantMap{{QStringLiteral("name"), QStringLiteral("LANG")},
+                                  {QStringLiteral("value"), QStringLiteral("C.UTF-8")}}}},
+    };
+    QVERIFY(controller.saveHostProfileWithCredential(
+        {}, QStringLiteral("Advanced"), QStringLiteral("server.example.test"), 22, QStringLiteral("operator"),
+        QStringLiteral("password"), {}, false, QStringLiteral("Lab"), {}, false, options));
+
+    const QVariantMap saved = controller.hostProfiles().constFirst().toMap();
+    const QString id = saved.value(QStringLiteral("id")).toString();
+    const QVariantMap savedOptions = saved.value(QStringLiteral("sessionOptions")).toMap();
+    QCOMPARE(savedOptions.value(QStringLiteral("terminalType")).toString(), QStringLiteral("screen-256color"));
+    QCOMPARE(savedOptions.value(QStringLiteral("keepaliveIntervalSeconds")).toInt(), 45);
+    QCOMPARE(savedOptions.value(QStringLiteral("startupCommandMode")).toString(), QStringLiteral("line-delay"));
+    QCOMPARE(
+        savedOptions.value(QStringLiteral("environment")).toList().constFirst().toMap().value(QStringLiteral("value")),
+        QStringLiteral("C.UTF-8"));
+
+    QVERIFY(controller.saveHostProfile(id, QStringLiteral("Renamed"), QStringLiteral("server.example.test"), 22,
+                                       QStringLiteral("operator"), QStringLiteral("password"), {}, false,
+                                       QStringLiteral("Lab")));
+    QCOMPARE(controller.hostProfiles().constFirst().toMap().value(QStringLiteral("sessionOptions")).toMap(),
+             savedOptions);
+
+    QVariantMap invalid = options;
+    invalid.insert(QStringLiteral("keepaliveIntervalSeconds"), 4000);
+    QVERIFY(!controller.saveHostProfileWithCredential(
+        id, QStringLiteral("Invalid"), QStringLiteral("server.example.test"), 22, QStringLiteral("operator"),
+        QStringLiteral("password"), {}, false, QStringLiteral("Lab"), {}, false, invalid));
+    QCOMPARE(controller.hostProfiles().constFirst().toMap().value(QStringLiteral("name")).toString(),
+             QStringLiteral("Renamed"));
+
+    ztermy::AppController reloaded(path);
+    QCOMPARE(reloaded.hostProfiles().constFirst().toMap().value(QStringLiteral("sessionOptions")).toMap(),
+             savedOptions);
 }
 
 void AppControllerTests::rejectsInvalidProfiles()

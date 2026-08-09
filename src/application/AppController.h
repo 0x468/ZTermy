@@ -301,12 +301,13 @@ public:
     Q_INVOKABLE bool saveHostProfileWithCredential(const QString &id, const QString &name, const QString &host,
                                                    int port, const QString &username, const QString &authentication,
                                                    const QString &privateKeyPath, bool privateKeyPassphraseRequired,
-                                                   const QString &group, const QString &secret,
-                                                   bool rememberCredential);
+                                                   const QString &group, const QString &secret, bool rememberCredential,
+                                                   const QVariantMap &sessionOptions = {});
     Q_INVOKABLE bool saveAndConnectHostProfile(const QString &id, const QString &name, const QString &host, int port,
                                                const QString &username, const QString &authentication,
                                                const QString &privateKeyPath, bool privateKeyPassphraseRequired,
-                                               const QString &group, const QString &secret, bool rememberCredential);
+                                               const QString &group, const QString &secret, bool rememberCredential,
+                                               const QVariantMap &sessionOptions = {});
     Q_INVOKABLE bool duplicateHostProfile(const QString &id);
     Q_INVOKABLE bool deleteHostProfile(const QString &id);
     Q_INVOKABLE bool clearRecentHostProfiles();
@@ -474,7 +475,7 @@ private:
                                                const QString &username, const QString &authentication,
                                                const QString &privateKeyPath, bool privateKeyPassphraseRequired,
                                                const QString &group, const QString &secret, bool rememberCredential,
-                                               bool manageCredential);
+                                               bool manageCredential, const QVariantMap &sessionOptions = {});
     void setCredentialOperationError(QString message);
     [[nodiscard]] bool startSshConnection(ssh::SshConnectionRequest request, QString sourceProfileId = {});
     [[nodiscard]] bool startSftpSession(TerminalTab &tab);

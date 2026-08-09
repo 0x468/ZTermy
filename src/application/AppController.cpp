@@ -30,10 +30,12 @@
 #include <algorithm>
 #include <chrono>
 #include <functional>
+#include <limits>
 #include <new>
 #include <optional>
 #include <string_view>
 #include <system_error>
+#include <type_traits>
 #include <utility>
 
 Q_LOGGING_CATEGORY(appControllerLog, "ztermy.application.controller")
@@ -267,6 +269,97 @@ void removeLastUtf8CodePoint(QByteArray &value)
     return std::ranges::find(*availableKeys, key) != availableKeys->end();
 }
 
+[[nodiscard]] QVariantMap sessionOptionsVariantMap(const ztermy::ssh::SshSessionOptions &options)
+{
+    QVariantList environment;
+    environment.reserve(static_cast<qsizetype>(options.environment.size()));
+    for (const ztermy::ssh::SshEnvironmentVariable &variable : options.environment)
+    {
+        environment.push_back(QVariantMap{{QStringLiteral("name"), utf8QString(variable.name)},
+                                          {QStringLiteral("value"), utf8QString(variable.value)}});
+    }
+    return {
+        {QStringLiteral("terminalType"), utf8QString(options.terminalType)},
+        {QStringLiteral("keepaliveIntervalSeconds"), options.keepaliveIntervalSeconds},
+        {QStringLiteral("keepaliveFailureThreshold"), options.keepaliveFailureThreshold},
+        {QStringLiteral("startupCommand"), utf8QString(options.startupCommand)},
+        {QStringLiteral("startupCommandMode"),
+         options.startupCommandMode == ztermy::ssh::SshStartupCommandMode::LineDelay ? QStringLiteral("line-delay")
+                                                                                     : QStringLiteral("paste")},
+        {QStringLiteral("startupLineDelayMilliseconds"), options.startupLineDelayMilliseconds},
+        {QStringLiteral("environment"), environment},
+    };
+}
+
+[[nodiscard]] std::optional<ztermy::ssh::SshSessionOptions> mergeSessionOptions(const QVariantMap &overrides,
+                                                                                ztermy::ssh::SshSessionOptions options)
+{
+    const auto integerOverride = [&overrides](const QString &key, auto &target) {
+        using Target = std::remove_cvref_t<decltype(target)>;
+        if (!overrides.contains(key))
+        {
+            return true;
+        }
+        bool valid = false;
+        const int value = overrides.value(key).toInt(&valid);
+        if (!valid || value < 0 || std::cmp_greater(value, (std::numeric_limits<Target>::max)()))
+        {
+            return false;
+        }
+        target = static_cast<Target>(value);
+        return true;
+    };
+
+    if (overrides.contains(QStringLiteral("terminalType")))
+    {
+        options.terminalType = utf8String(overrides.value(QStringLiteral("terminalType")).toString().trimmed());
+    }
+    if (overrides.contains(QStringLiteral("startupCommand")))
+    {
+        options.startupCommand = utf8String(overrides.value(QStringLiteral("startupCommand")).toString());
+    }
+    if (overrides.contains(QStringLiteral("startupCommandMode")))
+    {
+        const QString mode = overrides.value(QStringLiteral("startupCommandMode")).toString();
+        if (mode == QStringLiteral("paste"))
+        {
+            options.startupCommandMode = ztermy::ssh::SshStartupCommandMode::Paste;
+        }
+        else if (mode == QStringLiteral("line-delay"))
+        {
+            options.startupCommandMode = ztermy::ssh::SshStartupCommandMode::LineDelay;
+        }
+        else
+        {
+            return std::nullopt;
+        }
+    }
+    if (!integerOverride(QStringLiteral("keepaliveIntervalSeconds"), options.keepaliveIntervalSeconds)
+        || !integerOverride(QStringLiteral("keepaliveFailureThreshold"), options.keepaliveFailureThreshold)
+        || !integerOverride(QStringLiteral("startupLineDelayMilliseconds"), options.startupLineDelayMilliseconds))
+    {
+        return std::nullopt;
+    }
+    if (overrides.contains(QStringLiteral("environment")))
+    {
+        const QVariantList values = overrides.value(QStringLiteral("environment")).toList();
+        options.environment.clear();
+        options.environment.reserve(static_cast<std::size_t>(values.size()));
+        for (const QVariant &value : values)
+        {
+            const QVariantMap variable = value.toMap();
+            if (!variable.contains(QStringLiteral("name")) || !variable.contains(QStringLiteral("value")))
+            {
+                return std::nullopt;
+            }
+            options.environment.push_back(
+                {.name = utf8String(variable.value(QStringLiteral("name")).toString().trimmed()),
+                 .value = utf8String(variable.value(QStringLiteral("value")).toString())});
+        }
+    }
+    return ztermy::ssh::validSshSessionOptions(options) ? std::optional{std::move(options)} : std::nullopt;
+}
+
 [[nodiscard]] QVariantMap profileVariantMap(const ztermy::ssh::SshProfile &profile, const bool credentialStored)
 {
     QVariantMap result{
@@ -282,6 +375,7 @@ void removeLastUtf8CodePoint(QByteArray &value)
         {QStringLiteral("privateKeyPath"), utf8QString(profile.privateKeyPath)},
         {QStringLiteral("privateKeyPassphraseRequired"), profile.privateKeyPassphraseRequired},
         {QStringLiteral("credentialStored"), credentialStored},
+        {QStringLiteral("sessionOptions"), sessionOptionsVariantMap(profile.sessionOptions)},
     };
     if (profile.lastConnectedUtcMs)
     {
@@ -3430,22 +3524,24 @@ bool AppController::saveHostProfileWithCredential(const QString &id, const QStri
                                                   const int port, const QString &username,
                                                   const QString &authentication, const QString &privateKeyPath,
                                                   const bool privateKeyPassphraseRequired, const QString &group,
-                                                  const QString &secret, const bool rememberCredential)
+                                                  const QString &secret, const bool rememberCredential,
+                                                  const QVariantMap &sessionOptions)
 {
     return saveHostProfileInternal(id, name, host, port, username, authentication, privateKeyPath,
-                                   privateKeyPassphraseRequired, group, secret, rememberCredential, true);
+                                   privateKeyPassphraseRequired, group, secret, rememberCredential, true,
+                                   sessionOptions);
 }
 
 bool AppController::saveAndConnectHostProfile(const QString &id, const QString &name, const QString &host,
                                               const int port, const QString &username, const QString &authentication,
                                               const QString &privateKeyPath, const bool privateKeyPassphraseRequired,
                                               const QString &group, const QString &secret,
-                                              const bool rememberCredential)
+                                              const bool rememberCredential, const QVariantMap &sessionOptions)
 {
     const QString profileId =
         id.trimmed().isEmpty() ? QUuid::createUuid().toString(QUuid::WithoutBraces) : id.trimmed();
     if (!saveHostProfileInternal(profileId, name, host, port, username, authentication, privateKeyPath,
-                                 privateKeyPassphraseRequired, group, secret, rememberCredential, true))
+                                 privateKeyPassphraseRequired, group, secret, rememberCredential, true, sessionOptions))
     {
         return false;
     }
@@ -3464,7 +3560,7 @@ bool AppController::saveHostProfileInternal(const QString &id, const QString &na
                                             const QString &username, const QString &authentication,
                                             const QString &privateKeyPath, const bool privateKeyPassphraseRequired,
                                             const QString &group, const QString &secret, const bool rememberCredential,
-                                            const bool manageCredential)
+                                            const bool manageCredential, const QVariantMap &sessionOptions)
 {
     const QString normalizedHost = host.trimmed();
     const QString normalizedName = name.trimmed().isEmpty() ? normalizedHost : name.trimmed();
@@ -3481,8 +3577,22 @@ bool AppController::saveHostProfileInternal(const QString &id, const QString &na
         return false;
     }
 
+    const std::string storedProfileId = utf8String(profileId);
+    const auto storedProfile = std::ranges::find(m_profiles, storedProfileId, &ssh::SshProfile::id);
+    ssh::SshSessionOptions resolvedSessionOptions =
+        storedProfile == m_profiles.end() ? ssh::SshSessionOptions{} : storedProfile->sessionOptions;
+    if (!sessionOptions.isEmpty())
+    {
+        auto merged = mergeSessionOptions(sessionOptions, std::move(resolvedSessionOptions));
+        if (!merged)
+        {
+            return false;
+        }
+        resolvedSessionOptions = std::move(*merged);
+    }
+
     ssh::SshProfile profile{
-        .id = utf8String(profileId),
+        .id = storedProfileId,
         .name = utf8String(normalizedName),
         .group = utf8String(normalizedGroup),
         .host = utf8String(normalizedHost),
@@ -3494,6 +3604,7 @@ bool AppController::saveHostProfileInternal(const QString &id, const QString &na
                               : std::string{},
         .privateKeyPassphraseRequired =
             *authenticationMethod == ssh::SshAuthenticationMethod::PrivateKey && privateKeyPassphraseRequired,
+        .sessionOptions = std::move(resolvedSessionOptions),
     };
     if (!ssh::validSshProfile(profile))
     {

@@ -30,6 +30,7 @@ Rectangle {
     property bool quickConnectMessageIsError: false
     property bool statusIsError: false
     property bool editorExpanded: false
+    property bool advancedExpanded: false
     readonly property bool compactLayout: width < Theme.narrowWindowWidth
     readonly property int contentInset: compactLayout ? 8 : 12
     readonly property int profileCardColumns: scrollView.availableWidth < 540 ? 1 : (scrollView.availableWidth < 840 ? 2 : (scrollView.availableWidth < 1140 ? 3 : 4))
@@ -62,6 +63,58 @@ Rectangle {
 
     function authenticationToken() {
         return authenticationBox.currentIndex === 0 ? "private-key" : "password";
+    }
+
+    function sessionOptionsMap() {
+        const keepaliveInterval = Number(keepaliveIntervalField.text);
+        const keepaliveThreshold = Number(keepaliveThresholdField.text);
+        const startupDelay = Number(startupDelayField.text);
+        if (!Number.isInteger(keepaliveInterval) || keepaliveInterval < 0 || keepaliveInterval > 3600) {
+            showStatus(qsTr("Keepalive interval must be between 0 and 3600 seconds."), true);
+            return null;
+        }
+        if (!Number.isInteger(keepaliveThreshold) || keepaliveThreshold < 1 || keepaliveThreshold > 10) {
+            showStatus(qsTr("Keepalive failure limit must be between 1 and 10."), true);
+            return null;
+        }
+        if (!Number.isInteger(startupDelay) || startupDelay < 0 || startupDelay > 5000) {
+            showStatus(qsTr("Startup line delay must be between 0 and 5000 milliseconds."), true);
+            return null;
+        }
+        const environment = [];
+        const lines = environmentField.text.split(/\r?\n/);
+        for (const sourceLine of lines) {
+            const line = sourceLine.trim();
+            if (line.length === 0) {
+                continue;
+            }
+            const separator = line.indexOf("=");
+            const name = separator < 0 ? "" : line.slice(0, separator).trim();
+            if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+                showStatus(qsTr("Environment entries must use NAME=value with a valid variable name."), true);
+                return null;
+            }
+            environment.push({
+                name: name,
+                value: line.slice(separator + 1)
+            });
+        }
+        return {
+            terminalType: terminalTypeField.text.trim(),
+            keepaliveIntervalSeconds: keepaliveInterval,
+            keepaliveFailureThreshold: keepaliveThreshold,
+            startupCommand: startupCommandField.text,
+            startupCommandMode: startupModeBox.currentIndex === 1 ? "line-delay" : "paste",
+            startupLineDelayMilliseconds: startupDelay,
+            environment: environment
+        };
+    }
+
+    function environmentText(options) {
+        if (!options || !options.environment) {
+            return "";
+        }
+        return options.environment.map(variable => variable.name + "=" + variable.value).join("\n");
     }
 
     function formatRecentConnection(timestamp) {
@@ -179,6 +232,14 @@ Rectangle {
         rememberCredentialSwitch.checked = true;
         nameWasAutoFilled = false;
         editingCredentialStored = false;
+        terminalTypeField.text = "xterm-256color";
+        keepaliveIntervalField.text = "0";
+        keepaliveThresholdField.text = "3";
+        startupCommandField.text = "";
+        startupModeBox.currentIndex = 0;
+        startupDelayField.text = "100";
+        environmentField.text = "";
+        advancedExpanded = false;
     }
 
     function dismissEditor(announce) {
@@ -244,6 +305,15 @@ Rectangle {
         rememberCredentialSwitch.checked = true;
         nameWasAutoFilled = false;
         editingCredentialStored = profile.credentialStored;
+        const options = profile.sessionOptions || {};
+        terminalTypeField.text = options.terminalType || "xterm-256color";
+        keepaliveIntervalField.text = String(options.keepaliveIntervalSeconds === undefined ? 0 : options.keepaliveIntervalSeconds);
+        keepaliveThresholdField.text = String(options.keepaliveFailureThreshold === undefined ? 3 : options.keepaliveFailureThreshold);
+        startupCommandField.text = options.startupCommand || "";
+        startupModeBox.currentIndex = options.startupCommandMode === "line-delay" ? 1 : 0;
+        startupDelayField.text = String(options.startupLineDelayMilliseconds === undefined ? 100 : options.startupLineDelayMilliseconds);
+        environmentField.text = environmentText(options);
+        advancedExpanded = false;
         showStatus(qsTr("Editing \"%1\".").arg(profile.name), false);
         Qt.callLater(pane.refreshEditingCredential);
         Qt.callLater(nameField.forceActiveFocus);
@@ -254,7 +324,12 @@ Rectangle {
         if (!validate(false, false)) {
             return;
         }
-        if (controller.saveHostProfileWithCredential(editingProfileId, nameField.text, hostField.text, portNumber(), usernameField.text, authenticationToken(), keyPathField.text, passphraseRequiredBox.checked, groupField.text, credentialField.text, rememberCredentialSwitch.checked)) {
+        const sessionOptions = sessionOptionsMap();
+        if (!sessionOptions) {
+            advancedExpanded = true;
+            return;
+        }
+        if (controller.saveHostProfileWithCredential(editingProfileId, nameField.text, hostField.text, portNumber(), usernameField.text, authenticationToken(), keyPathField.text, passphraseRequiredBox.checked, groupField.text, credentialField.text, rememberCredentialSwitch.checked, sessionOptions)) {
             clearEditor();
             editorExpanded = false;
             showStatus(qsTr("Profile and credential preferences saved."), false);
@@ -268,9 +343,14 @@ Rectangle {
         if (!validate(false, true)) {
             return;
         }
+        const sessionOptions = sessionOptionsMap();
+        if (!sessionOptions) {
+            advancedExpanded = true;
+            return;
+        }
         const secret = credentialField.text;
         credentialField.text = "";
-        const started = controller.saveAndConnectHostProfile(editingProfileId, nameField.text, hostField.text, portNumber(), usernameField.text, authenticationToken(), keyPathField.text, passphraseRequiredBox.checked, groupField.text, secret, rememberCredentialSwitch.checked);
+        const started = controller.saveAndConnectHostProfile(editingProfileId, nameField.text, hostField.text, portNumber(), usernameField.text, authenticationToken(), keyPathField.text, passphraseRequiredBox.checked, groupField.text, secret, rememberCredentialSwitch.checked, sessionOptions);
         if (started) {
             clearEditor();
             editorExpanded = false;
@@ -1153,6 +1233,246 @@ Rectangle {
                                     checked: true
                                     text: pane.editingCredentialStored && credentialField.text.length === 0 ? qsTr("Keep saved credential") : qsTr("Save credential securely")
                                     accessibleName: text
+                                }
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 0
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 42
+                                    radius: Theme.radiusSmall
+                                    color: advancedHeaderMouse.containsMouse ? Theme.controlHover : Theme.controlBackground
+                                    border.color: pane.advancedExpanded ? pane.accentColor : pane.borderColor
+
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 12
+                                        anchors.rightMargin: 10
+                                        spacing: Theme.spacingControl
+
+                                        Text {
+                                            text: qsTr("Advanced SSH options")
+                                            color: pane.textColor
+                                            font.family: Theme.uiFont
+                                            font.pixelSize: Theme.textBody
+                                            font.weight: Font.DemiBold
+                                        }
+                                        Item {
+                                            Layout.fillWidth: true
+                                        }
+                                        Text {
+                                            text: pane.advancedExpanded ? "−" : "+"
+                                            color: pane.mutedColor
+                                            font.family: Theme.uiFont
+                                            font.pixelSize: 18
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        id: advancedHeaderMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        Accessible.name: qsTr("Toggle advanced SSH options")
+                                        onClicked: pane.advancedExpanded = !pane.advancedExpanded
+                                    }
+                                }
+
+                                Rectangle {
+                                    property real revealHeight: pane.advancedExpanded ? advancedOptions.implicitHeight + 24 : 0
+
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: revealHeight
+                                    clip: true
+                                    enabled: pane.advancedExpanded
+                                    opacity: pane.advancedExpanded ? 1 : 0
+                                    color: "transparent"
+                                    border.color: pane.advancedExpanded ? pane.borderColor : "transparent"
+                                    radius: Theme.radiusSmall
+
+                                    Behavior on revealHeight {
+                                        NumberAnimation {
+                                            duration: Theme.motionMedium
+                                            easing.type: Easing.OutCubic
+                                        }
+                                    }
+
+                                    ColumnLayout {
+                                        id: advancedOptions
+                                        x: 12
+                                        y: 12
+                                        width: Math.max(0, parent.width - 24)
+                                        spacing: 10
+
+                                        GridLayout {
+                                            Layout.fillWidth: true
+                                            columns: pane.compactLayout ? 1 : 2
+                                            columnSpacing: 14
+                                            rowSpacing: 10
+
+                                            Label {
+                                                text: qsTr("Terminal type")
+                                                color: pane.textColor
+                                            }
+                                            AppTextField {
+                                                id: terminalTypeField
+                                                objectName: "hostTerminalType"
+                                                Layout.fillWidth: true
+                                                text: "xterm-256color"
+                                                placeholderText: "xterm-256color"
+                                                accessibleName: qsTr("SSH terminal type")
+                                                selectByMouse: true
+                                            }
+
+                                            Label {
+                                                text: qsTr("Keepalive interval")
+                                                color: pane.textColor
+                                            }
+                                            AppTextField {
+                                                id: keepaliveIntervalField
+                                                objectName: "hostKeepaliveInterval"
+                                                Layout.fillWidth: true
+                                                text: "0"
+                                                placeholderText: qsTr("0 disables keepalive")
+                                                accessibleName: qsTr("SSH keepalive interval in seconds")
+                                                inputMethodHints: Qt.ImhDigitsOnly
+                                                validator: IntValidator {
+                                                    bottom: 0
+                                                    top: 3600
+                                                }
+                                                selectByMouse: true
+                                            }
+
+                                            Label {
+                                                text: qsTr("Failure limit")
+                                                color: pane.textColor
+                                            }
+                                            AppTextField {
+                                                id: keepaliveThresholdField
+                                                objectName: "hostKeepaliveFailureLimit"
+                                                Layout.fillWidth: true
+                                                text: "3"
+                                                accessibleName: qsTr("SSH keepalive consecutive failure limit")
+                                                inputMethodHints: Qt.ImhDigitsOnly
+                                                validator: IntValidator {
+                                                    bottom: 1
+                                                    top: 10
+                                                }
+                                                selectByMouse: true
+                                            }
+
+                                            Label {
+                                                text: qsTr("Startup mode")
+                                                color: pane.textColor
+                                            }
+                                            AppComboBox {
+                                                id: startupModeBox
+                                                objectName: "hostStartupMode"
+                                                Layout.fillWidth: true
+                                                model: [qsTr("Send at once"), qsTr("Send line by line")]
+                                                accessibleName: qsTr("SSH startup command mode")
+                                            }
+
+                                            Label {
+                                                text: qsTr("Line delay")
+                                                color: pane.textColor
+                                                visible: startupModeBox.currentIndex === 1
+                                            }
+                                            AppTextField {
+                                                id: startupDelayField
+                                                objectName: "hostStartupLineDelay"
+                                                Layout.fillWidth: true
+                                                visible: startupModeBox.currentIndex === 1
+                                                text: "100"
+                                                placeholderText: qsTr("Milliseconds")
+                                                accessibleName: qsTr("SSH startup command line delay in milliseconds")
+                                                inputMethodHints: Qt.ImhDigitsOnly
+                                                validator: IntValidator {
+                                                    bottom: 0
+                                                    top: 5000
+                                                }
+                                                selectByMouse: true
+                                            }
+                                        }
+
+                                        Label {
+                                            text: qsTr("Startup command")
+                                            color: pane.textColor
+                                        }
+                                        Rectangle {
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 92
+                                            radius: Theme.radiusSmall
+                                            color: Theme.controlBackground
+                                            border.color: startupCommandField.activeFocus ? Theme.focus : pane.borderColor
+
+                                            ScrollView {
+                                                anchors.fill: parent
+                                                anchors.margins: 6
+                                                clip: true
+
+                                                TextArea {
+                                                    id: startupCommandField
+                                                    objectName: "hostStartupCommand"
+                                                    placeholderText: qsTr("Commands to run after the shell opens")
+                                                    color: pane.textColor
+                                                    placeholderTextColor: pane.mutedColor
+                                                    selectionColor: pane.accentColor
+                                                    selectedTextColor: Theme.accentText
+                                                    wrapMode: TextEdit.WrapAnywhere
+                                                    font.family: Theme.terminalFont
+                                                    font.pixelSize: Theme.textBody
+                                                    Accessible.name: qsTr("SSH startup command")
+                                                    background: null
+                                                }
+                                            }
+                                        }
+
+                                        Label {
+                                            text: qsTr("Environment")
+                                            color: pane.textColor
+                                        }
+                                        Rectangle {
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 86
+                                            radius: Theme.radiusSmall
+                                            color: Theme.controlBackground
+                                            border.color: environmentField.activeFocus ? Theme.focus : pane.borderColor
+
+                                            ScrollView {
+                                                anchors.fill: parent
+                                                anchors.margins: 6
+                                                clip: true
+
+                                                TextArea {
+                                                    id: environmentField
+                                                    objectName: "hostEnvironment"
+                                                    placeholderText: qsTr("One NAME=value entry per line")
+                                                    color: pane.textColor
+                                                    placeholderTextColor: pane.mutedColor
+                                                    selectionColor: pane.accentColor
+                                                    selectedTextColor: Theme.accentText
+                                                    wrapMode: TextEdit.NoWrap
+                                                    font.family: Theme.terminalFont
+                                                    font.pixelSize: Theme.textBody
+                                                    Accessible.name: qsTr("SSH environment variables")
+                                                    background: null
+                                                }
+                                            }
+                                        }
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: qsTr("Environment values are stored with the profile. Do not use this field for secrets.")
+                                            color: pane.mutedColor
+                                            font.family: Theme.uiFont
+                                            font.pixelSize: Theme.textCaption
+                                            wrapMode: Text.Wrap
+                                        }
+                                    }
                                 }
                             }
 

@@ -65,7 +65,7 @@ foreach ($message in $messages) {
 
 $allowedQmlLiterals = [System.Collections.Generic.HashSet[string]]::new(
     [string[]] @('user@host[:port]', 'server.example.com or 192.0.2.10', '#22C55E', 'Cascadia Mono', 'ZTERMY',
-                 'UTF-8', 'Aa'))
+                 'UTF-8', 'Aa', 'xterm-256color'))
 $qmlPattern = '(?:text|placeholderText|Accessible\.name|title|description|toolTip|statusText)\s*:\s*"([^"]*[A-Za-z][^"]*)"'
 foreach ($qmlFile in Get-ChildItem -LiteralPath (Join-Path $sourceDirectory 'src/ui/qml') -Filter '*.qml') {
     $lineNumber = 0
