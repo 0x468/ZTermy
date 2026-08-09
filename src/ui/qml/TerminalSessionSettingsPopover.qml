@@ -21,20 +21,24 @@ Popup {
         cursorBox.currentIndex = Math.max(0, cursorBox.model.indexOf(cursor));
         foregroundField.text = terminalTab.sessionForeground.length > 0 ? terminalTab.sessionForeground : "#F8FAFC";
         backgroundField.text = terminalTab.sessionBackground.length > 0 ? terminalTab.sessionBackground : "#0B1017";
-        const point = item.mapToItem(parent, item.width - width, item.height + 6);
-        x = Math.max(8, Math.min(point.x, parent.width - width - 8));
-        y = Math.max(8, Math.min(point.y, parent.height - height - 8));
+        const overlay = Overlay.overlay;
+        const point = item.mapToItem(overlay, item.width - width, item.height + 6);
+        const targetX = Math.max(8, Math.min(point.x, overlay.width - width - 8));
+        const targetY = Math.max(8, Math.min(point.y, overlay.height - height - 8));
+        const localPoint = overlay.mapToItem(item, targetX, targetY);
+        parent = item;
+        x = localPoint.x;
+        y = localPoint.y;
         open();
         fontField.forceActiveFocus();
     }
 
-    parent: Overlay.overlay
     width: 390
     height: contentColumn.implicitHeight + 28
     padding: 14
     modal: false
     focus: true
-    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
 
     background: Rectangle {
         radius: Theme.radiusPanel

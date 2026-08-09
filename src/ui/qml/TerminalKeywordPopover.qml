@@ -10,11 +10,17 @@ Popup {
     required property var controller
     property var terminalTab: null
     property string editingId: ""
+    readonly property real maximumRulesHeight: 160
 
     function openFor(item) {
-        const point = item.mapToItem(parent, 0, item.height + 6);
-        x = Math.max(8, Math.min(point.x, parent.width - width - 8));
-        y = Math.max(8, Math.min(point.y, parent.height - height - 8));
+        const overlay = Overlay.overlay;
+        const point = item.mapToItem(overlay, 0, item.height + 6);
+        const targetX = Math.max(8, Math.min(point.x, overlay.width - width - 8));
+        const targetY = Math.max(8, Math.min(point.y, overlay.height - height - 8));
+        const localPoint = overlay.mapToItem(item, targetX, targetY);
+        parent = item;
+        x = localPoint.x;
+        y = localPoint.y;
         open();
         patternField.forceActiveFocus();
     }
@@ -39,13 +45,12 @@ Popup {
         caseSwitch.checked = false;
     }
 
-    parent: Overlay.overlay
     width: 390
     height: Math.min(540, contentColumn.implicitHeight + 28)
     padding: 14
     modal: false
     focus: true
-    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
 
     background: Rectangle {
         radius: Theme.radiusPanel
@@ -100,14 +105,30 @@ Popup {
         }
 
         ScrollView {
+            id: rulesScrollView
+
+            objectName: "keywordRulesScrollView"
             Layout.fillWidth: true
-            Layout.preferredHeight: Math.min(150, rulesColumn.implicitHeight)
+            Layout.preferredHeight: Math.min(popover.maximumRulesHeight, Math.ceil(rulesColumn.implicitHeight) + 4)
             visible: popover.terminalTab !== null && popover.terminalTab.keywordHighlightRules.length > 0
             clip: true
+            contentWidth: availableWidth
+            contentHeight: rulesColumn.implicitHeight
+            rightPadding: rulesScrollBar.visible ? rulesScrollBar.width + 4 : 0
+
+            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+            ScrollBar.vertical: ScrollBar {
+                id: rulesScrollBar
+
+                objectName: "keywordRulesScrollBar"
+                policy: rulesColumn.implicitHeight > rulesScrollView.availableHeight ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff
+            }
 
             Column {
                 id: rulesColumn
-                width: parent.width
+
+                objectName: "keywordRulesColumn"
+                width: rulesScrollView.availableWidth
                 spacing: 3
 
                 Repeater {

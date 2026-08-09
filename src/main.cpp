@@ -1773,21 +1773,70 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     }
 
     auto *keywordHighlightPopover = rootObject->findChild<QObject *>(QStringLiteral("keywordHighlightPopover"));
+    QQuickItem *keywordHighlightAction = quickItem(rootObject, "terminalKeywordHighlightAction");
     QQuickItem *keywordHighlightCloseAction = quickItem(rootObject, "keywordHighlightCloseAction");
     QQuickItem *keywordOutsideTarget = quickItem(rootObject, "terminalViewport");
-    const auto openKeywordHighlightPopover = [keywordHighlightPopover] {
-        return keywordHighlightPopover != nullptr
-               && QMetaObject::invokeMethod(keywordHighlightPopover, "open", Qt::DirectConnection);
+    const auto keywordTerminalFixture = [](const int ruleCount) {
+        QVariantList rules;
+        rules.reserve(ruleCount);
+        for (int index = 0; index < ruleCount; ++index)
+        {
+            const QString pattern = index == 0   ? QStringLiteral("docker")
+                                    : index == 1 ? QStringLiteral("root")
+                                                 : QStringLiteral("rule-%1").arg(index + 1);
+            rules.append(QVariantMap{{QStringLiteral("id"), QStringLiteral("rule-id-%1").arg(index + 1)},
+                                     {QStringLiteral("pattern"), pattern},
+                                     {QStringLiteral("foreground"), QStringLiteral("#FFFFFF")},
+                                     {QStringLiteral("background"), QStringLiteral("#D13438")},
+                                     {QStringLiteral("enabled"), true},
+                                     {QStringLiteral("caseSensitive"), false}});
+        }
+        return QVariantMap{{QStringLiteral("kind"), QStringLiteral("ssh")},
+                           {QStringLiteral("keywordHighlightEnabled"), true},
+                           {QStringLiteral("keywordHighlightRules"), rules}};
     };
     const auto keywordPopoverVisible = [keywordHighlightPopover] {
         return keywordHighlightPopover != nullptr && keywordHighlightPopover->property("visible").toBool();
     };
+    const auto clickKeywordHighlightAction = [&window, keywordHighlightAction] {
+        if (keywordHighlightAction == nullptr)
+        {
+            return false;
+        }
+        sendMouseClick(window, *keywordHighlightAction,
+                       QPointF{keywordHighlightAction->width() / 2.0, keywordHighlightAction->height() / 2.0});
+        return true;
+    };
+    if (keywordHighlightPopover == nullptr || keywordHighlightAction == nullptr
+        || !keywordHighlightPopover->setProperty("terminalTab", keywordTerminalFixture(2)))
+    {
+        qCWarning(applicationLog) << "Keyword-highlight runtime fixture could not be prepared";
+        return false;
+    }
+    keywordHighlightAction->setVisible(true);
+    keywordHighlightAction->setEnabled(true);
+    processWindowEventsFor(std::chrono::milliseconds{100});
     const bool keywordPopoverOpened =
-        openKeywordHighlightPopover() && processWindowEventsUntil(keywordPopoverVisible, std::chrono::seconds{1});
+        clickKeywordHighlightAction() && processWindowEventsUntil(keywordPopoverVisible, std::chrono::seconds{1});
+    QQuickItem *keywordRulesScrollView = quickItem(rootObject, "keywordRulesScrollView");
+    QQuickItem *keywordRulesColumn = quickItem(rootObject, "keywordRulesColumn");
+    const bool twoRuleViewportFits =
+        keywordRulesScrollView != nullptr && keywordRulesColumn != nullptr
+        && keywordRulesScrollView->property("availableHeight").toReal() + 0.5 >= keywordRulesColumn->height();
     const bool keywordPopoverCaptured =
-        keywordPopoverOpened && captureLayout(window, outputDirectory, QStringLiteral("terminal-keyword-popover"));
+        keywordPopoverOpened && twoRuleViewportFits
+        && captureLayout(window, outputDirectory, QStringLiteral("terminal-keyword-popover-two-rules"));
+    const bool keywordToggledClosed = clickKeywordHighlightAction()
+                                      && processWindowEventsUntil(
+                                          [&keywordPopoverVisible] {
+                                              return !keywordPopoverVisible();
+                                          },
+                                          std::chrono::seconds{1});
+
+    const bool keywordReopenedForButton =
+        clickKeywordHighlightAction() && processWindowEventsUntil(keywordPopoverVisible, std::chrono::seconds{1});
     const bool keywordCloseFocused =
-        keywordPopoverOpened
+        keywordReopenedForButton
         && focusItem(window, keywordHighlightCloseAction, QStringLiteral("keywordHighlightCloseAction"));
     if (keywordCloseFocused)
     {
@@ -1800,7 +1849,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
                                            },
                                            std::chrono::seconds{1});
     const bool keywordReopenedForOutside =
-        openKeywordHighlightPopover() && processWindowEventsUntil(keywordPopoverVisible, std::chrono::seconds{1});
+        clickKeywordHighlightAction() && processWindowEventsUntil(keywordPopoverVisible, std::chrono::seconds{1});
     if (keywordReopenedForOutside && keywordOutsideTarget != nullptr)
     {
         sendMouseClick(window, *keywordOutsideTarget, QPointF{20.0, keywordOutsideTarget->height() / 2.0});
@@ -1812,7 +1861,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
                                           },
                                           std::chrono::seconds{1});
     const bool keywordReopenedForEscape =
-        openKeywordHighlightPopover() && processWindowEventsUntil(keywordPopoverVisible, std::chrono::seconds{1});
+        clickKeywordHighlightAction() && processWindowEventsUntil(keywordPopoverVisible, std::chrono::seconds{1});
     if (keywordReopenedForEscape)
     {
         sendKey(window, Qt::Key_Escape);
@@ -1823,12 +1872,30 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
                                                return !keywordPopoverVisible();
                                            },
                                            std::chrono::seconds{1});
-    if (!keywordPopoverCaptured || !keywordClosedByButton || !keywordClosedOutside || !keywordClosedByEscape)
+    const bool manyRuleFixtureApplied = keywordHighlightPopover->setProperty("terminalTab", keywordTerminalFixture(8));
+    const bool keywordReopenedForScroll = manyRuleFixtureApplied && clickKeywordHighlightAction()
+                                          && processWindowEventsUntil(keywordPopoverVisible, std::chrono::seconds{1});
+    processWindowEventsFor(std::chrono::milliseconds{100});
+    QQuickItem *keywordRulesScrollBar = quickItem(rootObject, "keywordRulesScrollBar");
+    const qreal maximumRulesHeight = keywordHighlightPopover->property("maximumRulesHeight").toReal();
+    const bool manyRulesScroll =
+        keywordReopenedForScroll && keywordRulesScrollView != nullptr && keywordRulesColumn != nullptr
+        && keywordRulesScrollBar != nullptr && keywordRulesScrollView->height() <= maximumRulesHeight + 0.5
+        && keywordRulesColumn->height() > keywordRulesScrollView->property("availableHeight").toReal()
+        && keywordRulesScrollBar->isVisible()
+        && captureLayout(window, outputDirectory, QStringLiteral("terminal-keyword-popover-scroll"));
+    if (keywordReopenedForScroll)
+    {
+        sendKey(window, Qt::Key_Escape);
+    }
+    if (!keywordPopoverCaptured || !keywordToggledClosed || !keywordClosedByButton || !keywordClosedOutside
+        || !keywordClosedByEscape || !manyRulesScroll)
     {
         qCWarning(applicationLog) << "Keyword-highlight popover close contract failed"
                                   << "opened=" << keywordPopoverOpened << "captured=" << keywordPopoverCaptured
-                                  << "button=" << keywordClosedByButton << "outside=" << keywordClosedOutside
-                                  << "escape=" << keywordClosedByEscape;
+                                  << "toggle=" << keywordToggledClosed << "button=" << keywordClosedByButton
+                                  << "outside=" << keywordClosedOutside << "escape=" << keywordClosedByEscape
+                                  << "twoRuleFits=" << twoRuleViewportFits << "manyRuleScroll=" << manyRulesScroll;
         return false;
     }
 

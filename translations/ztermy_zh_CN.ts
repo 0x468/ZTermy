@@ -3074,87 +3074,87 @@
 <context>
     <name>TerminalKeywordPopover</name>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="67"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="72"/>
         <source>Host keyword highlighting</source>
         <translation>主机关键字高亮</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="78"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="83"/>
         <source>Enable host keyword highlighting</source>
         <translation>启用主机关键字高亮</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="88"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="93"/>
         <source>Close host keyword highlighting</source>
         <translation>关闭主机关键字高亮</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="95"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="100"/>
         <source>%1 rule(s); the first matching rule wins.</source>
         <translation>%1 条规则；首条匹配规则优先。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="95"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="100"/>
         <source>Add a literal keyword and choose its terminal colors.</source>
         <translation>添加文字关键字并选择其终端颜色。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="136"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="157"/>
         <source>A</source>
         <translation>A</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="156"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="177"/>
         <source>Delete keyword rule</source>
         <translation>删除关键字规则</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="178"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="199"/>
         <source>Keyword</source>
         <translation>关键字</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="188"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="209"/>
         <source>#FFFFFF</source>
         <translation>#FFFFFF</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="189"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="210"/>
         <source>Text color</source>
         <translation>文字颜色</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="195"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="216"/>
         <source>#D13438</source>
         <translation>#D13438</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="196"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="217"/>
         <source>Background color</source>
         <translation>背景颜色</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="205"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="226"/>
         <source>Enabled</source>
         <translation>启用</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="210"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="231"/>
         <source>Match case</source>
         <translation>区分大小写</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="223"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="244"/>
         <source>New</source>
         <translation>新建</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="227"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="248"/>
         <source>Update</source>
         <translation>更新</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="227"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="248"/>
         <source>Add</source>
         <translation>添加</translation>
     </message>
@@ -3162,42 +3162,42 @@
 <context>
     <name>TerminalRecordingPopover</name>
     <message>
-        <location filename="../src/ui/qml/TerminalRecordingPopover.qml" line="51"/>
+        <location filename="../src/ui/qml/TerminalRecordingPopover.qml" line="55"/>
         <source>Recorded command actions</source>
         <translation>已录制的命令操作</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalRecordingPopover.qml" line="58"/>
+        <location filename="../src/ui/qml/TerminalRecordingPopover.qml" line="62"/>
         <source>%1 step(s)</source>
         <translation>%1 个步骤</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalRecordingPopover.qml" line="67"/>
+        <location filename="../src/ui/qml/TerminalRecordingPopover.qml" line="71"/>
         <source>Only commands run from the composer, history, or command snippets are captured. Raw keyboard input and password prompts are never recorded.</source>
         <translation>仅录制从命令撰写栏、历史记录或命令片段运行的命令。不会录制原始键盘输入和密码提示。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalRecordingPopover.qml" line="101"/>
+        <location filename="../src/ui/qml/TerminalRecordingPopover.qml" line="105"/>
         <source>Wait %1 ms</source>
         <translation>等待 %1 毫秒</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalRecordingPopover.qml" line="115"/>
+        <location filename="../src/ui/qml/TerminalRecordingPopover.qml" line="119"/>
         <source>Clear</source>
         <translation>清除</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalRecordingPopover.qml" line="125"/>
+        <location filename="../src/ui/qml/TerminalRecordingPopover.qml" line="129"/>
         <source>Copy JSON</source>
         <translation>复制 JSON</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalRecordingPopover.qml" line="130"/>
+        <location filename="../src/ui/qml/TerminalRecordingPopover.qml" line="134"/>
         <source>Running…</source>
         <translation>正在运行…</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalRecordingPopover.qml" line="130"/>
+        <location filename="../src/ui/qml/TerminalRecordingPopover.qml" line="134"/>
         <source>Replay</source>
         <translation>重放</translation>
     </message>
@@ -3205,52 +3205,52 @@
 <context>
     <name>TerminalSessionSettingsPopover</name>
     <message>
-        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="51"/>
+        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="55"/>
         <source>Session terminal settings</source>
         <translation>会话终端设置</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="59"/>
+        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="63"/>
         <source>Overrides apply only to this tab and are discarded when it closes.</source>
         <translation>覆盖设置仅应用于此标签页，并会在关闭时丢弃。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="69"/>
+        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="73"/>
         <source>Font family</source>
         <translation>字体</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="75"/>
+        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="79"/>
         <source>Font size</source>
         <translation>字号</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="91"/>
+        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="95"/>
         <source>Font ligatures</source>
         <translation>字体连字</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="94"/>
+        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="98"/>
         <source>Terminal background opacity: %1%</source>
         <translation>终端背景不透明度：%1%</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="117"/>
+        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="121"/>
         <source>Default text color</source>
         <translation>默认文字颜色</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="123"/>
+        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="127"/>
         <source>Default background color</source>
         <translation>默认背景颜色</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="133"/>
+        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="137"/>
         <source>Use global defaults</source>
         <translation>使用全局默认值</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="140"/>
+        <location filename="../src/ui/qml/TerminalSessionSettingsPopover.qml" line="144"/>
         <source>Apply</source>
         <translation>应用</translation>
     </message>
