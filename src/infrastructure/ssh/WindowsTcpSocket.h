@@ -1,5 +1,7 @@
 #pragma once
 
+#include "infrastructure/ssh/SshByteTransport.h"
+
 #include <chrono>
 #include <cstdint>
 #include <expected>
@@ -18,13 +20,6 @@ enum class TcpConnectErrorKind : std::uint8_t
     Cancelled,
     NetworkUnreachable,
     SystemError,
-};
-
-enum class SocketIoInterest : std::uint8_t
-{
-    Read,
-    Write,
-    ReadWrite,
 };
 
 struct TcpConnectError final
@@ -55,11 +50,11 @@ private:
     std::uintptr_t m_event = 0;
 };
 
-class WindowsTcpSocket final
+class WindowsTcpSocket final : public SshByteTransport
 {
 public:
     WindowsTcpSocket() noexcept = default;
-    ~WindowsTcpSocket();
+    ~WindowsTcpSocket() override;
 
     WindowsTcpSocket(const WindowsTcpSocket &) = delete;
     WindowsTcpSocket &operator=(const WindowsTcpSocket &) = delete;
@@ -71,12 +66,14 @@ public:
     connect(std::string_view host, std::uint16_t port, std::chrono::milliseconds timeout,
             const std::stop_token &stopToken = {}) noexcept;
 
-    [[nodiscard]] bool valid() const noexcept;
+    [[nodiscard]] bool valid() const noexcept override;
     [[nodiscard]] std::uintptr_t nativeHandle() const noexcept;
-    [[nodiscard]] std::expected<void, TcpConnectError> waitUntilReady(SocketIoInterest interest,
-                                                                      std::chrono::steady_clock::time_point deadline,
-                                                                      const std::stop_token &stopToken = {},
-                                                                      std::uintptr_t interruptEvent = 0) const noexcept;
+    [[nodiscard]] std::expected<std::size_t, SshByteTransportError> read(std::span<char> buffer) noexcept override;
+    [[nodiscard]] std::expected<std::size_t, SshByteTransportError>
+    write(std::span<const char> buffer) noexcept override;
+    [[nodiscard]] std::expected<void, SshByteTransportError>
+    waitUntilReady(SocketIoInterest interest, std::chrono::steady_clock::time_point deadline,
+                   const std::stop_token &stopToken = {}, std::uintptr_t interruptHandle = 0) noexcept override;
 
     void close() noexcept;
 

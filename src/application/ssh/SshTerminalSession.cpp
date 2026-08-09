@@ -554,7 +554,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
         finishFailure(connection.error().failure, status);
         return;
     }
-    auto socket = std::move(connection->socket);
+    auto transport = std::move(connection->transport);
     auto session = std::move(connection->session);
     terminal::WindowsTerminalTextCodec textCodec;
 
@@ -578,7 +578,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     advanceState(state, SshConnectionPhase::OpeningChannel);
     postPhase(state.phase());
     postStatus(tr("Opening SSH terminal"));
-    auto open = session->openTerminal(socket, geometry.columns, geometry.rows, request.sessionOptions.terminalType,
+    auto open = session->openTerminal(*transport, geometry.columns, geometry.rows, request.sessionOptions.terminalType,
                                       terminalEnvironment, 10s, stopToken);
     if (!open)
     {
@@ -597,7 +597,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
             return;
         }
         const auto bytes = std::span(encoded->constData(), static_cast<std::size_t>(encoded->size()));
-        auto written = session->writeTerminal(socket, bytes, 10s, stopToken);
+        auto written = session->writeTerminal(*transport, bytes, 10s, stopToken);
         if (!written)
         {
             finishFailure(sshFailureFromTransport(written.error()), tr("SSH startup command failed"));
@@ -695,7 +695,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                     continue;
                 }
                 const auto bytes = std::span(encodedInput->constData(), static_cast<std::size_t>(encodedInput->size()));
-                auto written = session->writeTerminal(socket, bytes, 10s, stopToken);
+                auto written = session->writeTerminal(*transport, bytes, 10s, stopToken);
                 if (!written)
                 {
                     const SshFailureKind failure = sshFailureFromTransport(written.error());
@@ -735,7 +735,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                 }
                 const auto encodedBytes =
                     std::span(remotePaste->constData(), static_cast<std::size_t>(remotePaste->size()));
-                auto written = session->writeTerminal(socket, encodedBytes, 10s, stopToken);
+                auto written = session->writeTerminal(*transport, encodedBytes, 10s, stopToken);
                 if (!written)
                 {
                     const SshFailureKind failure = sshFailureFromTransport(written.error());
@@ -855,7 +855,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
             }
 
             const auto requested = std::get<terminal::TerminalGeometry>(command);
-            auto resized = session->resizeTerminal(socket, requested.columns, requested.rows, 5s, stopToken);
+            auto resized = session->resizeTerminal(*transport, requested.columns, requested.rows, 5s, stopToken);
             if (!resized)
             {
                 const SshFailureKind failure = sshFailureFromTransport(resized.error());
@@ -1063,7 +1063,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
             }
         }
 
-        auto read = session->readTerminal(socket, readBuffer, 25ms, stopToken, m_commandWakeEvent.nativeHandle());
+        auto read = session->readTerminal(*transport, readBuffer, 25ms, stopToken, m_commandWakeEvent.nativeHandle());
         if (!read)
         {
             if (read.error().kind == SshTransportErrorKind::TimedOut)
@@ -1108,7 +1108,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     postPhase(state.phase());
     if (session->terminalOpen())
     {
-        const auto close = session->closeTerminal(socket, 2s);
+        const auto close = session->closeTerminal(*transport, 2s);
         if (!close)
         {
             postStatus(tr("SSH terminal closed without a complete channel shutdown"));

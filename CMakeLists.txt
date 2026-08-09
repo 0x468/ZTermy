@@ -248,6 +248,7 @@ add_library(ztermy_ssh_transport STATIC
     src/infrastructure/ssh/Libssh2Runtime.h
     src/infrastructure/ssh/Libssh2Session.cpp
     src/infrastructure/ssh/Libssh2Session.h
+    src/infrastructure/ssh/SshByteTransport.h
     src/infrastructure/ssh/WindowsTcpSocket.cpp
     src/infrastructure/ssh/WindowsTcpSocket.h
 )

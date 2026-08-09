@@ -70,7 +70,11 @@ the next transport is introduced.
   reconnects. The authorized host passed the explicit unavailable-agent gate.
   The opt-in success gate is defined; it remains pending on a Windows agent
   service with an accepted identity loaded.
-- Phases 5–6 remain before V2.9 acceptance.
+- Phase 5 foundation is complete: all libssh2 traffic, including direct SSH,
+  now uses the cancellable byte-transport callback boundary and owns the
+  transport on the heap for stable session lifetime. Explicit proxy and
+  ProxyJump composition remain.
+- Phase 6 remains after phase 5 composition before V2.9 acceptance.
 
 ## Acceptance boundary
 

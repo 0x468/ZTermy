@@ -22,20 +22,23 @@ public:
     {
         if (m_connection.session != nullptr && m_connection.session->sftpOpen())
         {
-            [[maybe_unused]] const auto closed = m_connection.session->closeSftp(m_connection.socket, operationTimeout);
+            [[maybe_unused]] const auto closed =
+                m_connection.session->closeSftp(*m_connection.transport, operationTimeout);
         }
     }
 
     [[nodiscard]] std::expected<std::string, ssh::SshTransportError>
     canonicalizePath(const std::string_view remotePath, const std::stop_token &stopToken) noexcept override
     {
-        return m_connection.session->canonicalizeSftpPath(m_connection.socket, remotePath, operationTimeout, stopToken);
+        return m_connection.session->canonicalizeSftpPath(*m_connection.transport, remotePath, operationTimeout,
+                                                          stopToken);
     }
 
     [[nodiscard]] std::expected<std::vector<DirectoryEntry>, ssh::SshTransportError>
     listDirectory(const std::string_view remotePath, const std::stop_token &stopToken) noexcept override
     {
-        return m_connection.session->listSftpDirectory(m_connection.socket, remotePath, operationTimeout, stopToken);
+        return m_connection.session->listSftpDirectory(*m_connection.transport, remotePath, operationTimeout,
+                                                       stopToken);
     }
 
     [[nodiscard]] std::expected<std::optional<DirectoryEntry>, ssh::SshTransportError>
@@ -60,14 +63,15 @@ public:
     [[nodiscard]] std::expected<void, ssh::SshTransportError>
     createDirectory(const std::string_view remotePath, const std::stop_token &stopToken) noexcept override
     {
-        return m_connection.session->createSftpDirectory(m_connection.socket, remotePath, operationTimeout, stopToken);
+        return m_connection.session->createSftpDirectory(*m_connection.transport, remotePath, operationTimeout,
+                                                         stopToken);
     }
 
     [[nodiscard]] std::expected<void, ssh::SshTransportError>
     renameEntry(const std::string_view sourcePath, const std::string_view destinationPath, const bool replace,
                 const std::stop_token &stopToken) noexcept override
     {
-        return m_connection.session->renameSftpEntry(m_connection.socket, sourcePath, destinationPath,
+        return m_connection.session->renameSftpEntry(*m_connection.transport, sourcePath, destinationPath,
                                                      replace ? ssh::SftpRenameDisposition::ReplaceAtomically
                                                              : ssh::SftpRenameDisposition::NoReplace,
                                                      operationTimeout, stopToken);
@@ -79,23 +83,24 @@ public:
     {
         if (directory)
         {
-            return m_connection.session->removeSftpDirectory(m_connection.socket, remotePath, operationTimeout,
+            return m_connection.session->removeSftpDirectory(*m_connection.transport, remotePath, operationTimeout,
                                                              stopToken);
         }
-        return m_connection.session->removeSftpFile(m_connection.socket, remotePath, operationTimeout, stopToken);
+        return m_connection.session->removeSftpFile(*m_connection.transport, remotePath, operationTimeout, stopToken);
     }
 
     [[nodiscard]] std::expected<void, ssh::SshTransportError>
     openFileForRead(const std::string_view remotePath, const std::stop_token &stopToken) noexcept override
     {
-        return m_connection.session->openSftpFileForRead(m_connection.socket, remotePath, operationTimeout, stopToken);
+        return m_connection.session->openSftpFileForRead(*m_connection.transport, remotePath, operationTimeout,
+                                                         stopToken);
     }
 
     [[nodiscard]] std::expected<void, ssh::SshTransportError>
     openFileForWrite(const std::string_view remotePath, const bool replace,
                      const std::stop_token &stopToken) noexcept override
     {
-        return m_connection.session->openSftpFileForWrite(m_connection.socket, remotePath,
+        return m_connection.session->openSftpFileForWrite(*m_connection.transport, remotePath,
                                                           replace ? ssh::SftpWriteDisposition::Replace
                                                                   : ssh::SftpWriteDisposition::CreateNew,
                                                           operationTimeout, stopToken);
@@ -105,7 +110,7 @@ public:
     openFileForResume(const std::string_view remotePath, const std::stop_token &stopToken) noexcept override
     {
         return m_connection.session->openSftpFileForWrite(
-            m_connection.socket, remotePath, ssh::SftpWriteDisposition::OpenOrCreate, operationTimeout, stopToken);
+            *m_connection.transport, remotePath, ssh::SftpWriteDisposition::OpenOrCreate, operationTimeout, stopToken);
     }
 
     [[nodiscard]] std::expected<void, ssh::SshTransportError> seekFile(const std::uint64_t offset) noexcept override
@@ -116,19 +121,19 @@ public:
     [[nodiscard]] std::expected<std::size_t, ssh::SshTransportError>
     readFile(const std::span<char> output, const std::stop_token &stopToken) noexcept override
     {
-        return m_connection.session->readSftpFile(m_connection.socket, output, operationTimeout, stopToken);
+        return m_connection.session->readSftpFile(*m_connection.transport, output, operationTimeout, stopToken);
     }
 
     [[nodiscard]] std::expected<void, ssh::SshTransportError>
     writeFile(const std::span<const char> input, const std::stop_token &stopToken) noexcept override
     {
-        return m_connection.session->writeSftpFile(m_connection.socket, input, operationTimeout, stopToken);
+        return m_connection.session->writeSftpFile(*m_connection.transport, input, operationTimeout, stopToken);
     }
 
     [[nodiscard]] std::expected<void, ssh::SshTransportError>
     closeFile(const std::stop_token &stopToken) noexcept override
     {
-        return m_connection.session->closeSftpFile(m_connection.socket, operationTimeout, stopToken);
+        return m_connection.session->closeSftpFile(*m_connection.transport, operationTimeout, stopToken);
     }
 
 private:
@@ -147,7 +152,7 @@ createSftpClient(ssh::SshConnectionRequest &request, const ssh::SshConnectionCal
         return std::unexpected(connection.error());
     }
 
-    auto opened = connection->session->openSftp(connection->socket, operationTimeout, stopToken);
+    auto opened = connection->session->openSftp(*connection->transport, operationTimeout, stopToken);
     if (!opened)
     {
         return std::unexpected(ssh::SshBootstrapError{

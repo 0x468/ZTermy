@@ -2,10 +2,12 @@
 
 #include "domain/ssh/SshHostKey.h"
 #include "infrastructure/ssh/KnownHostsStore.h"
+#include "infrastructure/ssh/WindowsTcpSocket.h"
 
 #include <QByteArray>
 
 #include <chrono>
+#include <new>
 #include <string>
 #include <utility>
 #include <vector>
@@ -101,10 +103,20 @@ establishAuthenticatedSshConnection(SshConnectionRequest &request, const SshConn
     publishPhase(callbacks, SshConnectionPhase::Connecting);
     const QByteArray hostUtf8 = request.host.trimmed().toUtf8();
     const std::string host(hostUtf8.constData(), static_cast<std::size_t>(hostUtf8.size()));
-    auto socket = WindowsTcpSocket::connect(host, request.port, 10s, stopToken);
-    if (!socket)
+    auto directSocket = WindowsTcpSocket::connect(host, request.port, 10s, stopToken);
+    if (!directSocket)
     {
-        return std::unexpected(connectionError(failureFromTcp(socket.error().kind)));
+        return std::unexpected(connectionError(failureFromTcp(directSocket.error().kind)));
+    }
+
+    std::unique_ptr<SshByteTransport> transport;
+    try
+    {
+        transport = std::make_unique<WindowsTcpSocket>(std::move(*directSocket));
+    }
+    catch (const std::bad_alloc &)
+    {
+        return std::unexpected(connectionError(SshFailureKind::ProtocolError));
     }
 
     auto session = Libssh2Session::create();
@@ -114,7 +126,7 @@ establishAuthenticatedSshConnection(SshConnectionRequest &request, const SshConn
     }
 
     publishPhase(callbacks, SshConnectionPhase::Handshaking);
-    auto handshake = (*session)->handshake(*socket, 10s, stopToken);
+    auto handshake = (*session)->handshake(*transport, 10s, stopToken);
     if (!handshake)
     {
         return std::unexpected(connectionError(sshFailureFromTransport(handshake.error())));
@@ -188,15 +200,15 @@ establishAuthenticatedSshConnection(SshConnectionRequest &request, const SshConn
     switch (request.authentication)
     {
         case SshAuthenticationMethod::PrivateKey:
-            authentication = (*session)->authenticateWithPrivateKeyFile(*socket, username, privateKeyPath,
+            authentication = (*session)->authenticateWithPrivateKeyFile(*transport, username, privateKeyPath,
                                                                         request.secret.view(), 15s, stopToken);
             break;
         case SshAuthenticationMethod::Password:
             authentication =
-                (*session)->authenticateWithPassword(*socket, username, request.secret.view(), 15s, stopToken);
+                (*session)->authenticateWithPassword(*transport, username, request.secret.view(), 15s, stopToken);
             break;
         case SshAuthenticationMethod::Agent:
-            authentication = (*session)->authenticateWithAgent(*socket, username, 15s, stopToken);
+            authentication = (*session)->authenticateWithAgent(*transport, username, 15s, stopToken);
             break;
     }
     if (!authentication)
@@ -205,7 +217,7 @@ establishAuthenticatedSshConnection(SshConnectionRequest &request, const SshConn
     }
 
     return AuthenticatedSshConnection{
-        .socket = std::move(*socket),
+        .transport = std::move(transport),
         .session = std::move(*session),
     };
 }

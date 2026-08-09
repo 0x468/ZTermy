@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cerrno>
 #include <chrono>
 #include <limits>
 #include <new>
@@ -50,16 +51,75 @@ namespace
     return ztermy::ssh::SocketIoInterest::ReadWrite;
 }
 
+[[nodiscard]] ztermy::ssh::SshByteTransport *callbackTransport(void **abstract) noexcept
+{
+    return abstract == nullptr ? nullptr : static_cast<ztermy::ssh::SshByteTransport *>(*abstract);
+}
+
+ssize_t transportSend(libssh2_socket_t, const void *buffer, const size_t length, int, void **abstract) noexcept
+{
+    auto *transport = callbackTransport(abstract);
+    if (transport == nullptr)
+    {
+        return -1;
+    }
+    if (length == 0)
+    {
+        return 0;
+    }
+    if (buffer == nullptr)
+    {
+        return -1;
+    }
+
+    const auto bytes = std::span(static_cast<const char *>(buffer), length);
+    auto written = transport->write(bytes);
+    if (written)
+    {
+        return static_cast<ssize_t>(*written);
+    }
+    return written.error().kind == ztermy::ssh::SshByteTransportErrorKind::WouldBlock ? -EAGAIN : -1;
+}
+
+ssize_t transportReceive(libssh2_socket_t, void *buffer, const size_t length, int, void **abstract) noexcept
+{
+    auto *transport = callbackTransport(abstract);
+    if (transport == nullptr)
+    {
+        return -1;
+    }
+    if (length == 0)
+    {
+        return 0;
+    }
+    if (buffer == nullptr)
+    {
+        return -1;
+    }
+
+    const auto bytes = std::span(static_cast<char *>(buffer), length);
+    auto received = transport->read(bytes);
+    if (received)
+    {
+        return static_cast<ssize_t>(*received);
+    }
+    if (received.error().kind == ztermy::ssh::SshByteTransportErrorKind::WouldBlock)
+    {
+        return -EAGAIN;
+    }
+    return received.error().kind == ztermy::ssh::SshByteTransportErrorKind::Closed ? 0 : -1;
+}
+
 [[nodiscard]] std::expected<void, ztermy::ssh::SshTransportError>
-waitForSessionIo(ztermy::ssh::WindowsTcpSocket &socket, LIBSSH2_SESSION *session,
+waitForSessionIo(ztermy::ssh::SshByteTransport &transport, LIBSSH2_SESSION *session,
                  const std::chrono::steady_clock::time_point deadline, const std::stop_token &stopToken,
                  const std::uintptr_t interruptEvent = 0) noexcept
 {
+    using ztermy::ssh::SshByteTransportErrorKind;
     using ztermy::ssh::SshTransportError;
     using ztermy::ssh::SshTransportErrorKind;
-    using ztermy::ssh::TcpConnectErrorKind;
 
-    auto ready = socket.waitUntilReady(blockedInterest(session), deadline, stopToken, interruptEvent);
+    auto ready = transport.waitUntilReady(blockedInterest(session), deadline, stopToken, interruptEvent);
     if (ready)
     {
         return {};
@@ -67,15 +127,13 @@ waitForSessionIo(ztermy::ssh::WindowsTcpSocket &socket, LIBSSH2_SESSION *session
 
     switch (ready.error().kind)
     {
-        case TcpConnectErrorKind::TimedOut:
+        case SshByteTransportErrorKind::TimedOut:
             return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::TimedOut});
-        case TcpConnectErrorKind::Cancelled:
+        case SshByteTransportErrorKind::Cancelled:
             return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::Cancelled});
-        case TcpConnectErrorKind::InvalidEndpoint:
-        case TcpConnectErrorKind::NameResolutionFailed:
-        case TcpConnectErrorKind::ConnectionRefused:
-        case TcpConnectErrorKind::NetworkUnreachable:
-        case TcpConnectErrorKind::SystemError:
+        case SshByteTransportErrorKind::WouldBlock:
+        case SshByteTransportErrorKind::Closed:
+        case SshByteTransportErrorKind::SystemError:
             return std::unexpected(SshTransportError{
                 .kind = SshTransportErrorKind::ConnectionLost,
                 .nativeCode = ready.error().nativeCode,
@@ -307,11 +365,16 @@ Libssh2Session::~Libssh2Session()
     }
 }
 
-std::expected<void, SshTransportError> Libssh2Session::handshake(WindowsTcpSocket &socket,
+bool Libssh2Session::usesTransport(const SshByteTransport &transport) const noexcept
+{
+    return m_transport == &transport && transport.valid();
+}
+
+std::expected<void, SshTransportError> Libssh2Session::handshake(SshByteTransport &transport,
                                                                  const std::chrono::milliseconds timeout,
                                                                  const std::stop_token &stopToken) noexcept
 {
-    if (m_session == nullptr || !socket.valid() || m_handshakeComplete)
+    if (m_session == nullptr || !transport.valid() || m_transport != nullptr || m_handshakeComplete)
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
     }
@@ -325,10 +388,16 @@ std::expected<void, SshTransportError> Libssh2Session::handshake(WindowsTcpSocke
     }
 
     auto *session = static_cast<LIBSSH2_SESSION *>(m_session);
+    *libssh2_session_abstract(session) = &transport;
+    (void)libssh2_session_callback_set2(session, LIBSSH2_CALLBACK_SEND,
+                                        reinterpret_cast<libssh2_cb_generic *>(transportSend));
+    (void)libssh2_session_callback_set2(session, LIBSSH2_CALLBACK_RECV,
+                                        reinterpret_cast<libssh2_cb_generic *>(transportReceive));
+    m_transport = &transport;
     const auto deadline = std::chrono::steady_clock::now() + timeout;
     while (true)
     {
-        const int result = libssh2_session_handshake(session, static_cast<libssh2_socket_t>(socket.nativeHandle()));
+        const int result = libssh2_session_handshake(session, libssh2_socket_t{0});
         if (result == 0)
         {
             m_handshakeComplete = true;
@@ -339,7 +408,7 @@ std::expected<void, SshTransportError> Libssh2Session::handshake(WindowsTcpSocke
             return std::unexpected(mapHandshakeError(result));
         }
 
-        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        auto ready = waitForSessionIo(transport, session, deadline, stopToken);
         if (!ready)
         {
             return std::unexpected(ready.error());
@@ -405,7 +474,7 @@ Libssh2Session::verifyHostKey(const SshEndpoint &endpoint, const std::span<const
 }
 
 std::expected<void, SshTransportError>
-Libssh2Session::authenticateWithPassword(WindowsTcpSocket &socket, const std::string_view username,
+Libssh2Session::authenticateWithPassword(SshByteTransport &transport, const std::string_view username,
                                          const std::string_view password, const std::chrono::milliseconds timeout,
                                          const std::stop_token &stopToken) noexcept
 {
@@ -415,7 +484,8 @@ Libssh2Session::authenticateWithPassword(WindowsTcpSocket &socket, const std::st
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
     }
-    if (m_session == nullptr || !socket.valid() || !m_handshakeComplete || !m_hostKeyVerified || m_authenticated)
+    if (m_session == nullptr || !usesTransport(transport) || !m_handshakeComplete || !m_hostKeyVerified
+        || m_authenticated)
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
     }
@@ -445,7 +515,7 @@ Libssh2Session::authenticateWithPassword(WindowsTcpSocket &socket, const std::st
             return std::unexpected(mapAuthenticationError(result));
         }
 
-        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        auto ready = waitForSessionIo(transport, session, deadline, stopToken);
         if (!ready)
         {
             return std::unexpected(ready.error());
@@ -454,7 +524,7 @@ Libssh2Session::authenticateWithPassword(WindowsTcpSocket &socket, const std::st
 }
 
 std::expected<void, SshTransportError>
-Libssh2Session::authenticateWithPrivateKeyFile(WindowsTcpSocket &socket, const std::string_view username,
+Libssh2Session::authenticateWithPrivateKeyFile(SshByteTransport &transport, const std::string_view username,
                                                const std::string_view privateKeyPath, const std::string_view passphrase,
                                                const std::chrono::milliseconds timeout,
                                                const std::stop_token &stopToken) noexcept
@@ -465,7 +535,8 @@ Libssh2Session::authenticateWithPrivateKeyFile(WindowsTcpSocket &socket, const s
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
     }
-    if (m_session == nullptr || !socket.valid() || !m_handshakeComplete || !m_hostKeyVerified || m_authenticated)
+    if (m_session == nullptr || !usesTransport(transport) || !m_handshakeComplete || !m_hostKeyVerified
+        || m_authenticated)
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
     }
@@ -499,7 +570,7 @@ Libssh2Session::authenticateWithPrivateKeyFile(WindowsTcpSocket &socket, const s
                 return std::unexpected(mapPrivateKeyAuthenticationError(result));
             }
 
-            auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+            auto ready = waitForSessionIo(transport, session, deadline, stopToken);
             if (!ready)
             {
                 return std::unexpected(ready.error());
@@ -512,7 +583,7 @@ Libssh2Session::authenticateWithPrivateKeyFile(WindowsTcpSocket &socket, const s
     }
 }
 
-std::expected<void, SshTransportError> Libssh2Session::authenticateWithAgent(WindowsTcpSocket &socket,
+std::expected<void, SshTransportError> Libssh2Session::authenticateWithAgent(SshByteTransport &transport,
                                                                              const std::string_view username,
                                                                              const std::chrono::milliseconds timeout,
                                                                              const std::stop_token &stopToken) noexcept
@@ -522,7 +593,8 @@ std::expected<void, SshTransportError> Libssh2Session::authenticateWithAgent(Win
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
     }
-    if (m_session == nullptr || !socket.valid() || !m_handshakeComplete || !m_hostKeyVerified || m_authenticated)
+    if (m_session == nullptr || !usesTransport(transport) || !m_handshakeComplete || !m_hostKeyVerified
+        || m_authenticated)
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
     }
@@ -622,7 +694,7 @@ std::expected<void, SshTransportError> Libssh2Session::authenticateWithAgent(Win
             {
                 return std::unexpected(mapPrivateKeyAuthenticationError(result));
             }
-            auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+            auto ready = waitForSessionIo(transport, session, deadline, stopToken);
             if (!ready)
             {
                 return std::unexpected(ready.error());
@@ -637,16 +709,16 @@ bool Libssh2Session::authenticated() const noexcept
 }
 
 std::expected<void, SshTransportError>
-Libssh2Session::openTerminal(WindowsTcpSocket &socket, const std::uint32_t columns, const std::uint32_t rows,
+Libssh2Session::openTerminal(SshByteTransport &transport, const std::uint32_t columns, const std::uint32_t rows,
                              const std::string_view terminalType, const std::chrono::milliseconds timeout,
                              const std::stop_token &stopToken) noexcept
 {
-    return openTerminal(socket, columns, rows, terminalType, std::span<const SshTerminalEnvironment>{}, timeout,
+    return openTerminal(transport, columns, rows, terminalType, std::span<const SshTerminalEnvironment>{}, timeout,
                         stopToken);
 }
 
 std::expected<void, SshTransportError>
-Libssh2Session::openTerminal(WindowsTcpSocket &socket, const std::uint32_t columns, const std::uint32_t rows,
+Libssh2Session::openTerminal(SshByteTransport &transport, const std::uint32_t columns, const std::uint32_t rows,
                              const std::string_view terminalType,
                              const std::span<const SshTerminalEnvironment> environment,
                              const std::chrono::milliseconds timeout, const std::stop_token &stopToken) noexcept
@@ -657,7 +729,7 @@ Libssh2Session::openTerminal(WindowsTcpSocket &socket, const std::uint32_t colum
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
     }
-    if (m_session == nullptr || !socket.valid() || !m_authenticated || m_terminalChannel != nullptr
+    if (m_session == nullptr || !usesTransport(transport) || !m_authenticated || m_terminalChannel != nullptr
         || m_sftp != nullptr)
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
@@ -686,7 +758,7 @@ Libssh2Session::openTerminal(WindowsTcpSocket &socket, const std::uint32_t colum
         {
             return std::unexpected(mapChannelError(error));
         }
-        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        auto ready = waitForSessionIo(transport, session, deadline, stopToken);
         if (!ready)
         {
             return std::unexpected(ready.error());
@@ -713,7 +785,7 @@ Libssh2Session::openTerminal(WindowsTcpSocket &socket, const std::uint32_t colum
             releaseChannel();
             return std::unexpected(error);
         }
-        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        auto ready = waitForSessionIo(transport, session, deadline, stopToken);
         if (!ready)
         {
             const SshTransportError error = ready.error();
@@ -747,7 +819,7 @@ Libssh2Session::openTerminal(WindowsTcpSocket &socket, const std::uint32_t colum
                 releaseChannel();
                 return std::unexpected(error);
             }
-            auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+            auto ready = waitForSessionIo(transport, session, deadline, stopToken);
             if (!ready)
             {
                 const SshTransportError error = ready.error();
@@ -771,7 +843,7 @@ Libssh2Session::openTerminal(WindowsTcpSocket &socket, const std::uint32_t colum
             releaseChannel();
             return std::unexpected(error);
         }
-        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        auto ready = waitForSessionIo(transport, session, deadline, stopToken);
         if (!ready)
         {
             const SshTransportError error = ready.error();
@@ -806,7 +878,7 @@ std::expected<int, SshTransportError> Libssh2Session::sendKeepalive() noexcept
     return secondsToNext;
 }
 
-std::expected<std::size_t, SshTransportError> Libssh2Session::readTerminal(WindowsTcpSocket &socket,
+std::expected<std::size_t, SshTransportError> Libssh2Session::readTerminal(SshByteTransport &transport,
                                                                            const std::span<char> output,
                                                                            const std::chrono::milliseconds timeout,
                                                                            const std::stop_token &stopToken,
@@ -816,7 +888,7 @@ std::expected<std::size_t, SshTransportError> Libssh2Session::readTerminal(Windo
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
     }
-    if (m_session == nullptr || m_terminalChannel == nullptr || !socket.valid())
+    if (m_session == nullptr || m_terminalChannel == nullptr || !usesTransport(transport))
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
     }
@@ -843,7 +915,7 @@ std::expected<std::size_t, SshTransportError> Libssh2Session::readTerminal(Windo
         {
             return std::unexpected(mapChannelError(static_cast<int>(result)));
         }
-        auto ready = waitForSessionIo(socket, session, deadline, stopToken, interruptEvent);
+        auto ready = waitForSessionIo(transport, session, deadline, stopToken, interruptEvent);
         if (!ready)
         {
             return std::unexpected(ready.error());
@@ -851,7 +923,7 @@ std::expected<std::size_t, SshTransportError> Libssh2Session::readTerminal(Windo
     }
 }
 
-std::expected<void, SshTransportError> Libssh2Session::writeTerminal(WindowsTcpSocket &socket,
+std::expected<void, SshTransportError> Libssh2Session::writeTerminal(SshByteTransport &transport,
                                                                      const std::span<const char> input,
                                                                      const std::chrono::milliseconds timeout,
                                                                      const std::stop_token &stopToken) noexcept
@@ -860,7 +932,7 @@ std::expected<void, SshTransportError> Libssh2Session::writeTerminal(WindowsTcpS
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
     }
-    if (m_session == nullptr || m_terminalChannel == nullptr || !socket.valid())
+    if (m_session == nullptr || m_terminalChannel == nullptr || !usesTransport(transport))
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
     }
@@ -889,7 +961,7 @@ std::expected<void, SshTransportError> Libssh2Session::writeTerminal(WindowsTcpS
         {
             return std::unexpected(mapChannelError(static_cast<int>(result)));
         }
-        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        auto ready = waitForSessionIo(transport, session, deadline, stopToken);
         if (!ready)
         {
             return std::unexpected(ready.error());
@@ -899,14 +971,14 @@ std::expected<void, SshTransportError> Libssh2Session::writeTerminal(WindowsTcpS
 }
 
 std::expected<void, SshTransportError>
-Libssh2Session::resizeTerminal(WindowsTcpSocket &socket, const std::uint32_t columns, const std::uint32_t rows,
+Libssh2Session::resizeTerminal(SshByteTransport &transport, const std::uint32_t columns, const std::uint32_t rows,
                                const std::chrono::milliseconds timeout, const std::stop_token &stopToken) noexcept
 {
     if (!validTerminalDimensions(columns, rows))
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
     }
-    if (m_session == nullptr || m_terminalChannel == nullptr || !socket.valid())
+    if (m_session == nullptr || m_terminalChannel == nullptr || !usesTransport(transport))
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
     }
@@ -933,7 +1005,7 @@ Libssh2Session::resizeTerminal(WindowsTcpSocket &socket, const std::uint32_t col
         {
             return std::unexpected(mapChannelError(result));
         }
-        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        auto ready = waitForSessionIo(transport, session, deadline, stopToken);
         if (!ready)
         {
             return std::unexpected(ready.error());
@@ -941,11 +1013,11 @@ Libssh2Session::resizeTerminal(WindowsTcpSocket &socket, const std::uint32_t col
     }
 }
 
-std::expected<void, SshTransportError> Libssh2Session::closeTerminal(WindowsTcpSocket &socket,
+std::expected<void, SshTransportError> Libssh2Session::closeTerminal(SshByteTransport &transport,
                                                                      const std::chrono::milliseconds timeout,
                                                                      const std::stop_token &stopToken) noexcept
 {
-    if (m_session == nullptr || m_terminalChannel == nullptr || !socket.valid())
+    if (m_session == nullptr || m_terminalChannel == nullptr || !usesTransport(transport))
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
     }
@@ -973,7 +1045,7 @@ std::expected<void, SshTransportError> Libssh2Session::closeTerminal(WindowsTcpS
         {
             return std::unexpected(mapChannelError(result));
         }
-        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        auto ready = waitForSessionIo(transport, session, deadline, stopToken);
         if (!ready)
         {
             return std::unexpected(ready.error());
@@ -994,12 +1066,12 @@ bool Libssh2Session::terminalOpen() const noexcept
     return m_terminalChannel != nullptr;
 }
 
-std::expected<void, SshTransportError> Libssh2Session::openSftp(WindowsTcpSocket &socket,
+std::expected<void, SshTransportError> Libssh2Session::openSftp(SshByteTransport &transport,
                                                                 const std::chrono::milliseconds timeout,
                                                                 const std::stop_token &stopToken) noexcept
 {
-    if (m_session == nullptr || !socket.valid() || !m_authenticated || m_sftp != nullptr || m_terminalChannel != nullptr
-        || m_auxiliaryChannel != nullptr)
+    if (m_session == nullptr || !usesTransport(transport) || !m_authenticated || m_sftp != nullptr
+        || m_terminalChannel != nullptr || m_auxiliaryChannel != nullptr)
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
     }
@@ -1027,7 +1099,7 @@ std::expected<void, SshTransportError> Libssh2Session::openSftp(WindowsTcpSocket
         {
             return std::unexpected(mapSftpError(session, nullptr, error));
         }
-        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        auto ready = waitForSessionIo(transport, session, deadline, stopToken);
         if (!ready)
         {
             return std::unexpected(ready.error());
@@ -1036,14 +1108,14 @@ std::expected<void, SshTransportError> Libssh2Session::openSftp(WindowsTcpSocket
 }
 
 std::expected<std::vector<sftp::DirectoryEntry>, SshTransportError>
-Libssh2Session::listSftpDirectory(WindowsTcpSocket &socket, const std::string_view remotePath,
+Libssh2Session::listSftpDirectory(SshByteTransport &transport, const std::string_view remotePath,
                                   const std::chrono::milliseconds timeout, const std::stop_token &stopToken) noexcept
 {
     if (!validSftpPath(remotePath))
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
     }
-    if (m_session == nullptr || m_sftp == nullptr || m_sftpFile != nullptr || !socket.valid())
+    if (m_session == nullptr || m_sftp == nullptr || m_sftpFile != nullptr || !usesTransport(transport))
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
     }
@@ -1073,7 +1145,7 @@ Libssh2Session::listSftpDirectory(WindowsTcpSocket &socket, const std::string_vi
         {
             return std::unexpected(mapSftpError(session, sftpHandle, error));
         }
-        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        auto ready = waitForSessionIo(transport, session, deadline, stopToken);
         if (!ready)
         {
             return std::unexpected(ready.error());
@@ -1093,7 +1165,7 @@ Libssh2Session::listSftpDirectory(WindowsTcpSocket &socket, const std::string_vi
             {
                 return;
             }
-            if (!waitForSessionIo(socket, session, deadline, {}).has_value())
+            if (!waitForSessionIo(transport, session, deadline, {}).has_value())
             {
                 return;
             }
@@ -1147,7 +1219,7 @@ Libssh2Session::listSftpDirectory(WindowsTcpSocket &socket, const std::string_vi
                 closeDirectory();
                 return std::unexpected(error);
             }
-            auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+            auto ready = waitForSessionIo(transport, session, deadline, stopToken);
             if (!ready)
             {
                 const SshTransportError error = ready.error();
@@ -1164,14 +1236,14 @@ Libssh2Session::listSftpDirectory(WindowsTcpSocket &socket, const std::string_vi
 }
 
 std::expected<std::string, SshTransportError>
-Libssh2Session::canonicalizeSftpPath(WindowsTcpSocket &socket, const std::string_view remotePath,
+Libssh2Session::canonicalizeSftpPath(SshByteTransport &transport, const std::string_view remotePath,
                                      const std::chrono::milliseconds timeout, const std::stop_token &stopToken) noexcept
 {
     if (remotePath.empty() || remotePath.find('\0') != std::string_view::npos)
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
     }
-    if (m_session == nullptr || m_sftp == nullptr || m_sftpFile != nullptr || !socket.valid())
+    if (m_session == nullptr || m_sftp == nullptr || m_sftpFile != nullptr || !usesTransport(transport))
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
     }
@@ -1203,7 +1275,7 @@ Libssh2Session::canonicalizeSftpPath(WindowsTcpSocket &socket, const std::string
         {
             return std::unexpected(mapSftpError(session, sftpHandle, result));
         }
-        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        auto ready = waitForSessionIo(transport, session, deadline, stopToken);
         if (!ready)
         {
             return std::unexpected(ready.error());
@@ -1211,7 +1283,7 @@ Libssh2Session::canonicalizeSftpPath(WindowsTcpSocket &socket, const std::string
     }
 }
 
-std::expected<void, SshTransportError> Libssh2Session::createSftpDirectory(WindowsTcpSocket &socket,
+std::expected<void, SshTransportError> Libssh2Session::createSftpDirectory(SshByteTransport &transport,
                                                                            const std::string_view remotePath,
                                                                            const std::chrono::milliseconds timeout,
                                                                            const std::stop_token &stopToken) noexcept
@@ -1220,7 +1292,7 @@ std::expected<void, SshTransportError> Libssh2Session::createSftpDirectory(Windo
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
     }
-    if (m_session == nullptr || m_sftp == nullptr || m_sftpFile != nullptr || !socket.valid())
+    if (m_session == nullptr || m_sftp == nullptr || m_sftpFile != nullptr || !usesTransport(transport))
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
     }
@@ -1247,7 +1319,7 @@ std::expected<void, SshTransportError> Libssh2Session::createSftpDirectory(Windo
         {
             return std::unexpected(mapSftpError(session, sftpHandle, result));
         }
-        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        auto ready = waitForSessionIo(transport, session, deadline, stopToken);
         if (!ready)
         {
             return std::unexpected(ready.error());
@@ -1256,7 +1328,7 @@ std::expected<void, SshTransportError> Libssh2Session::createSftpDirectory(Windo
 }
 
 std::expected<void, SshTransportError>
-Libssh2Session::renameSftpEntry(WindowsTcpSocket &socket, const std::string_view sourcePath,
+Libssh2Session::renameSftpEntry(SshByteTransport &transport, const std::string_view sourcePath,
                                 const std::string_view destinationPath, const SftpRenameDisposition disposition,
                                 const std::chrono::milliseconds timeout, const std::stop_token &stopToken) noexcept
 {
@@ -1264,7 +1336,7 @@ Libssh2Session::renameSftpEntry(WindowsTcpSocket &socket, const std::string_view
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
     }
-    if (m_session == nullptr || m_sftp == nullptr || m_sftpFile != nullptr || !socket.valid())
+    if (m_session == nullptr || m_sftp == nullptr || m_sftpFile != nullptr || !usesTransport(transport))
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
     }
@@ -1295,7 +1367,7 @@ Libssh2Session::renameSftpEntry(WindowsTcpSocket &socket, const std::string_view
         {
             return std::unexpected(mapSftpError(session, sftpHandle, result));
         }
-        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        auto ready = waitForSessionIo(transport, session, deadline, stopToken);
         if (!ready)
         {
             return std::unexpected(ready.error());
@@ -1303,7 +1375,7 @@ Libssh2Session::renameSftpEntry(WindowsTcpSocket &socket, const std::string_view
     }
 }
 
-std::expected<void, SshTransportError> Libssh2Session::removeSftpFile(WindowsTcpSocket &socket,
+std::expected<void, SshTransportError> Libssh2Session::removeSftpFile(SshByteTransport &transport,
                                                                       const std::string_view remotePath,
                                                                       const std::chrono::milliseconds timeout,
                                                                       const std::stop_token &stopToken) noexcept
@@ -1312,7 +1384,7 @@ std::expected<void, SshTransportError> Libssh2Session::removeSftpFile(WindowsTcp
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
     }
-    if (m_session == nullptr || m_sftp == nullptr || m_sftpFile != nullptr || !socket.valid())
+    if (m_session == nullptr || m_sftp == nullptr || m_sftpFile != nullptr || !usesTransport(transport))
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
     }
@@ -1339,7 +1411,7 @@ std::expected<void, SshTransportError> Libssh2Session::removeSftpFile(WindowsTcp
         {
             return std::unexpected(mapSftpError(session, sftpHandle, result));
         }
-        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        auto ready = waitForSessionIo(transport, session, deadline, stopToken);
         if (!ready)
         {
             return std::unexpected(ready.error());
@@ -1347,7 +1419,7 @@ std::expected<void, SshTransportError> Libssh2Session::removeSftpFile(WindowsTcp
     }
 }
 
-std::expected<void, SshTransportError> Libssh2Session::removeSftpDirectory(WindowsTcpSocket &socket,
+std::expected<void, SshTransportError> Libssh2Session::removeSftpDirectory(SshByteTransport &transport,
                                                                            const std::string_view remotePath,
                                                                            const std::chrono::milliseconds timeout,
                                                                            const std::stop_token &stopToken) noexcept
@@ -1356,7 +1428,7 @@ std::expected<void, SshTransportError> Libssh2Session::removeSftpDirectory(Windo
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
     }
-    if (m_session == nullptr || m_sftp == nullptr || m_sftpFile != nullptr || !socket.valid())
+    if (m_session == nullptr || m_sftp == nullptr || m_sftpFile != nullptr || !usesTransport(transport))
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
     }
@@ -1383,7 +1455,7 @@ std::expected<void, SshTransportError> Libssh2Session::removeSftpDirectory(Windo
         {
             return std::unexpected(mapSftpError(session, sftpHandle, result));
         }
-        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        auto ready = waitForSessionIo(transport, session, deadline, stopToken);
         if (!ready)
         {
             return std::unexpected(ready.error());
@@ -1391,7 +1463,7 @@ std::expected<void, SshTransportError> Libssh2Session::removeSftpDirectory(Windo
     }
 }
 
-std::expected<void, SshTransportError> Libssh2Session::openSftpFileForRead(WindowsTcpSocket &socket,
+std::expected<void, SshTransportError> Libssh2Session::openSftpFileForRead(SshByteTransport &transport,
                                                                            const std::string_view remotePath,
                                                                            const std::chrono::milliseconds timeout,
                                                                            const std::stop_token &stopToken) noexcept
@@ -1400,7 +1472,7 @@ std::expected<void, SshTransportError> Libssh2Session::openSftpFileForRead(Windo
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
     }
-    if (m_session == nullptr || m_sftp == nullptr || m_sftpFile != nullptr || !socket.valid())
+    if (m_session == nullptr || m_sftp == nullptr || m_sftpFile != nullptr || !usesTransport(transport))
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
     }
@@ -1431,7 +1503,7 @@ std::expected<void, SshTransportError> Libssh2Session::openSftpFileForRead(Windo
         {
             return std::unexpected(mapSftpError(session, sftpHandle, error));
         }
-        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        auto ready = waitForSessionIo(transport, session, deadline, stopToken);
         if (!ready)
         {
             return std::unexpected(ready.error());
@@ -1439,7 +1511,7 @@ std::expected<void, SshTransportError> Libssh2Session::openSftpFileForRead(Windo
     }
 }
 
-std::expected<void, SshTransportError> Libssh2Session::openSftpFileForWrite(WindowsTcpSocket &socket,
+std::expected<void, SshTransportError> Libssh2Session::openSftpFileForWrite(SshByteTransport &transport,
                                                                             const std::string_view remotePath,
                                                                             const SftpWriteDisposition disposition,
                                                                             const std::chrono::milliseconds timeout,
@@ -1449,7 +1521,7 @@ std::expected<void, SshTransportError> Libssh2Session::openSftpFileForWrite(Wind
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
     }
-    if (m_session == nullptr || m_sftp == nullptr || m_sftpFile != nullptr || !socket.valid())
+    if (m_session == nullptr || m_sftp == nullptr || m_sftpFile != nullptr || !usesTransport(transport))
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
     }
@@ -1484,7 +1556,7 @@ std::expected<void, SshTransportError> Libssh2Session::openSftpFileForWrite(Wind
         {
             return std::unexpected(mapSftpError(session, sftpHandle, error));
         }
-        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        auto ready = waitForSessionIo(transport, session, deadline, stopToken);
         if (!ready)
         {
             return std::unexpected(ready.error());
@@ -1492,7 +1564,7 @@ std::expected<void, SshTransportError> Libssh2Session::openSftpFileForWrite(Wind
     }
 }
 
-std::expected<std::size_t, SshTransportError> Libssh2Session::readSftpFile(WindowsTcpSocket &socket,
+std::expected<std::size_t, SshTransportError> Libssh2Session::readSftpFile(SshByteTransport &transport,
                                                                            const std::span<char> output,
                                                                            const std::chrono::milliseconds timeout,
                                                                            const std::stop_token &stopToken) noexcept
@@ -1501,7 +1573,7 @@ std::expected<std::size_t, SshTransportError> Libssh2Session::readSftpFile(Windo
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
     }
-    if (m_session == nullptr || m_sftp == nullptr || m_sftpFile == nullptr || !socket.valid())
+    if (m_session == nullptr || m_sftp == nullptr || m_sftpFile == nullptr || !usesTransport(transport))
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
     }
@@ -1529,7 +1601,7 @@ std::expected<std::size_t, SshTransportError> Libssh2Session::readSftpFile(Windo
         {
             return std::unexpected(mapSftpError(session, sftpHandle, static_cast<int>(result)));
         }
-        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        auto ready = waitForSessionIo(transport, session, deadline, stopToken);
         if (!ready)
         {
             return std::unexpected(ready.error());
@@ -1537,7 +1609,7 @@ std::expected<std::size_t, SshTransportError> Libssh2Session::readSftpFile(Windo
     }
 }
 
-std::expected<void, SshTransportError> Libssh2Session::writeSftpFile(WindowsTcpSocket &socket,
+std::expected<void, SshTransportError> Libssh2Session::writeSftpFile(SshByteTransport &transport,
                                                                      const std::span<const char> input,
                                                                      const std::chrono::milliseconds timeout,
                                                                      const std::stop_token &stopToken) noexcept
@@ -1546,7 +1618,7 @@ std::expected<void, SshTransportError> Libssh2Session::writeSftpFile(WindowsTcpS
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
     }
-    if (m_session == nullptr || m_sftp == nullptr || m_sftpFile == nullptr || !socket.valid())
+    if (m_session == nullptr || m_sftp == nullptr || m_sftpFile == nullptr || !usesTransport(transport))
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
     }
@@ -1576,7 +1648,7 @@ std::expected<void, SshTransportError> Libssh2Session::writeSftpFile(WindowsTcpS
         {
             return std::unexpected(mapSftpError(session, sftpHandle, static_cast<int>(result)));
         }
-        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        auto ready = waitForSessionIo(transport, session, deadline, stopToken);
         if (!ready)
         {
             return std::unexpected(ready.error());
@@ -1585,11 +1657,11 @@ std::expected<void, SshTransportError> Libssh2Session::writeSftpFile(WindowsTcpS
     return {};
 }
 
-std::expected<void, SshTransportError> Libssh2Session::closeSftpFile(WindowsTcpSocket &socket,
+std::expected<void, SshTransportError> Libssh2Session::closeSftpFile(SshByteTransport &transport,
                                                                      const std::chrono::milliseconds timeout,
                                                                      const std::stop_token &stopToken) noexcept
 {
-    if (m_session == nullptr || m_sftp == nullptr || m_sftpFile == nullptr || !socket.valid())
+    if (m_session == nullptr || m_sftp == nullptr || m_sftpFile == nullptr || !usesTransport(transport))
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
     }
@@ -1618,7 +1690,7 @@ std::expected<void, SshTransportError> Libssh2Session::closeSftpFile(WindowsTcpS
         {
             return std::unexpected(mapSftpError(session, sftpHandle, result));
         }
-        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        auto ready = waitForSessionIo(transport, session, deadline, stopToken);
         if (!ready)
         {
             return std::unexpected(ready.error());
@@ -1641,11 +1713,11 @@ bool Libssh2Session::sftpFileOpen() const noexcept
     return m_sftpFile != nullptr;
 }
 
-std::expected<void, SshTransportError> Libssh2Session::closeSftp(WindowsTcpSocket &socket,
+std::expected<void, SshTransportError> Libssh2Session::closeSftp(SshByteTransport &transport,
                                                                  const std::chrono::milliseconds timeout,
                                                                  const std::stop_token &stopToken) noexcept
 {
-    if (m_session == nullptr || m_sftp == nullptr || m_sftpFile != nullptr || !socket.valid())
+    if (m_session == nullptr || m_sftp == nullptr || m_sftpFile != nullptr || !usesTransport(transport))
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
     }
@@ -1672,7 +1744,7 @@ std::expected<void, SshTransportError> Libssh2Session::closeSftp(WindowsTcpSocke
         {
             return std::unexpected(mapSftpError(session, sftpHandle, result));
         }
-        auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+        auto ready = waitForSessionIo(transport, session, deadline, stopToken);
         if (!ready)
         {
             return std::unexpected(ready.error());

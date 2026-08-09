@@ -2,10 +2,13 @@
 
 #include <QHostAddress>
 #include <QTcpServer>
+#include <QTcpSocket>
 #include <QTest>
 
+#include <array>
 #include <chrono>
 #include <future>
+#include <span>
 #include <stop_token>
 #include <utility>
 
@@ -21,6 +24,7 @@ private slots:
     void honorsPreRequestedCancellation();
     void rejectsInvalidEndpoint();
     void moveTransfersSocketOwnership();
+    void transfersBytesThroughInterface();
     void interruptEventWakesPendingRead();
 };
 
@@ -94,6 +98,40 @@ void WindowsTcpSocketTests::moveTransfersSocketOwnership()
     QVERIFY(!moved.valid());
 }
 
+void WindowsTcpSocketTests::transfersBytesThroughInterface()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+
+    auto socket = ztermy::ssh::WindowsTcpSocket::connect("127.0.0.1", server.serverPort(), 2s);
+    QVERIFY(socket);
+    QVERIFY(server.waitForNewConnection(1000));
+    QTcpSocket *peer = server.nextPendingConnection();
+    QVERIFY(peer != nullptr);
+    ztermy::ssh::SshByteTransport &transport = *socket;
+
+    const QByteArray outbound = QByteArrayLiteral("transport-write");
+    auto written = transport.write(std::span(outbound.constData(), static_cast<std::size_t>(outbound.size())));
+    if (!written && written.error().kind == ztermy::ssh::SshByteTransportErrorKind::WouldBlock)
+    {
+        QVERIFY(transport.waitUntilReady(ztermy::ssh::SocketIoInterest::Write, std::chrono::steady_clock::now() + 2s));
+        written = transport.write(std::span(outbound.constData(), static_cast<std::size_t>(outbound.size())));
+    }
+    QVERIFY(written);
+    QCOMPARE(*written, static_cast<std::size_t>(outbound.size()));
+    QVERIFY(peer->waitForReadyRead(1000));
+    QCOMPARE(peer->readAll(), outbound);
+
+    const QByteArray inbound = QByteArrayLiteral("transport-read");
+    QCOMPARE(peer->write(inbound), inbound.size());
+    QVERIFY(peer->waitForBytesWritten(1000));
+    QVERIFY(transport.waitUntilReady(ztermy::ssh::SocketIoInterest::Read, std::chrono::steady_clock::now() + 2s));
+    std::array<char, 64> buffer{};
+    auto received = transport.read(buffer);
+    QVERIFY(received);
+    QCOMPARE(QByteArray(buffer.data(), static_cast<qsizetype>(*received)), inbound);
+}
+
 void WindowsTcpSocketTests::interruptEventWakesPendingRead()
 {
     QTcpServer server;
@@ -116,7 +154,7 @@ void WindowsTcpSocketTests::interruptEventWakesPendingRead()
     QCOMPARE(pending.wait_for(500ms), std::future_status::ready);
     const auto result = pending.get();
     QVERIFY(!result);
-    QCOMPARE(result.error().kind, ztermy::ssh::TcpConnectErrorKind::Cancelled);
+    QCOMPARE(result.error().kind, ztermy::ssh::SshByteTransportErrorKind::Cancelled);
     QVERIFY(std::chrono::steady_clock::now() - started < 500ms);
 }
 

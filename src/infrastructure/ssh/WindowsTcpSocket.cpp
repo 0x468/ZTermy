@@ -19,6 +19,8 @@ namespace
 
 using Clock = std::chrono::steady_clock;
 using ztermy::ssh::SocketIoInterest;
+using ztermy::ssh::SshByteTransportError;
+using ztermy::ssh::SshByteTransportErrorKind;
 using ztermy::ssh::TcpConnectError;
 using ztermy::ssh::TcpConnectErrorKind;
 
@@ -134,6 +136,22 @@ static_assert(mapSocketError(WSAECONNREFUSED).kind == TcpConnectErrorKind::Conne
 static_assert(mapSocketError(WSAETIMEDOUT).kind == TcpConnectErrorKind::TimedOut);
 static_assert(mapSocketError(WSAENETUNREACH).kind == TcpConnectErrorKind::NetworkUnreachable);
 static_assert(mapSocketError(WSAEHOSTUNREACH).kind == TcpConnectErrorKind::NetworkUnreachable);
+
+[[nodiscard]] constexpr SshByteTransportError mapIoError(const int error) noexcept
+{
+    switch (error)
+    {
+        case WSAEWOULDBLOCK:
+            return {.kind = SshByteTransportErrorKind::WouldBlock, .nativeCode = error};
+        case WSAECONNABORTED:
+        case WSAECONNRESET:
+        case WSAENOTCONN:
+        case WSAESHUTDOWN:
+            return {.kind = SshByteTransportErrorKind::Closed, .nativeCode = error};
+        default:
+            return {.kind = SshByteTransportErrorKind::SystemError, .nativeCode = error};
+    }
+}
 
 [[nodiscard]] std::expected<std::wstring, TcpConnectError> utf8ToWide(const std::string_view text)
 {
@@ -648,29 +666,74 @@ std::uintptr_t WindowsTcpSocket::nativeHandle() const noexcept
     return m_socket;
 }
 
-std::expected<void, TcpConnectError>
-WindowsTcpSocket::waitUntilReady(const SocketIoInterest interest, const std::chrono::steady_clock::time_point deadline,
-                                 const std::stop_token &stopToken, const std::uintptr_t interruptEvent) const noexcept
+std::expected<std::size_t, SshByteTransportError> WindowsTcpSocket::read(const std::span<char> buffer) noexcept
 {
     if (!valid())
     {
-        return std::unexpected(TcpConnectError{.kind = TcpConnectErrorKind::SystemError, .nativeCode = WSAENOTSOCK});
+        return std::unexpected(
+            SshByteTransportError{.kind = SshByteTransportErrorKind::SystemError, .nativeCode = WSAENOTSOCK});
+    }
+    if (buffer.empty())
+    {
+        return std::size_t{0};
+    }
+
+    const int length =
+        static_cast<int>((std::min)(buffer.size(), static_cast<std::size_t>((std::numeric_limits<int>::max)())));
+    const int result = ::recv(static_cast<SOCKET>(m_socket), buffer.data(), length, 0);
+    if (result >= 0)
+    {
+        return static_cast<std::size_t>(result);
+    }
+    return std::unexpected(mapIoError(WSAGetLastError()));
+}
+
+std::expected<std::size_t, SshByteTransportError> WindowsTcpSocket::write(const std::span<const char> buffer) noexcept
+{
+    if (!valid())
+    {
+        return std::unexpected(
+            SshByteTransportError{.kind = SshByteTransportErrorKind::SystemError, .nativeCode = WSAENOTSOCK});
+    }
+    if (buffer.empty())
+    {
+        return std::size_t{0};
+    }
+
+    const int length =
+        static_cast<int>((std::min)(buffer.size(), static_cast<std::size_t>((std::numeric_limits<int>::max)())));
+    const int result = ::send(static_cast<SOCKET>(m_socket), buffer.data(), length, 0);
+    if (result >= 0)
+    {
+        return static_cast<std::size_t>(result);
+    }
+    return std::unexpected(mapIoError(WSAGetLastError()));
+}
+
+std::expected<void, SshByteTransportError>
+WindowsTcpSocket::waitUntilReady(const SocketIoInterest interest, const std::chrono::steady_clock::time_point deadline,
+                                 const std::stop_token &stopToken, const std::uintptr_t interruptHandle) noexcept
+{
+    if (!valid())
+    {
+        return std::unexpected(
+            SshByteTransportError{.kind = SshByteTransportErrorKind::SystemError, .nativeCode = WSAENOTSOCK});
     }
 
     const WaitResult waitResult =
-        waitForIo(static_cast<SOCKET>(m_socket), interest, deadline, stopToken, interruptEvent);
+        waitForIo(static_cast<SOCKET>(m_socket), interest, deadline, stopToken, interruptHandle);
     switch (waitResult.outcome)
     {
         case WaitOutcome::Ready:
             return {};
         case WaitOutcome::TimedOut:
-            return std::unexpected(TcpConnectError{.kind = TcpConnectErrorKind::TimedOut});
+            return std::unexpected(SshByteTransportError{.kind = SshByteTransportErrorKind::TimedOut});
         case WaitOutcome::Cancelled:
-            return std::unexpected(TcpConnectError{.kind = TcpConnectErrorKind::Cancelled});
+            return std::unexpected(SshByteTransportError{.kind = SshByteTransportErrorKind::Cancelled});
         case WaitOutcome::Failed:
-            return std::unexpected(mapSocketError(waitResult.nativeCode));
+            return std::unexpected(mapIoError(waitResult.nativeCode));
     }
-    return std::unexpected(TcpConnectError{.kind = TcpConnectErrorKind::SystemError});
+    return std::unexpected(SshByteTransportError{.kind = SshByteTransportErrorKind::SystemError});
 }
 
 void WindowsTcpSocket::close() noexcept

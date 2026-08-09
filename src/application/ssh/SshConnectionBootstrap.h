@@ -3,7 +3,6 @@
 #include "application/ssh/SshConnectionRequest.h"
 #include "domain/ssh/SshConnectionState.h"
 #include "infrastructure/ssh/Libssh2Session.h"
-#include "infrastructure/ssh/WindowsTcpSocket.h"
 
 #include <QString>
 
@@ -46,7 +45,7 @@ struct SshBootstrapError final
 
 struct AuthenticatedSshConnection final
 {
-    WindowsTcpSocket socket;
+    std::unique_ptr<SshByteTransport> transport;
     std::unique_ptr<Libssh2Session> session;
 };
 

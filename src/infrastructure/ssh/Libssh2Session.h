@@ -3,7 +3,7 @@
 #include "domain/sftp/SftpTypes.h"
 #include "domain/ssh/SshHostKey.h"
 #include "infrastructure/ssh/Libssh2Runtime.h"
-#include "infrastructure/ssh/WindowsTcpSocket.h"
+#include "infrastructure/ssh/SshByteTransport.h"
 
 #include <chrono>
 #include <cstdint>
@@ -85,7 +85,7 @@ public:
     Libssh2Session(Libssh2Session &&) = delete;
     Libssh2Session &operator=(Libssh2Session &&) = delete;
 
-    [[nodiscard]] std::expected<void, SshTransportError> handshake(WindowsTcpSocket &socket,
+    [[nodiscard]] std::expected<void, SshTransportError> handshake(SshByteTransport &transport,
                                                                    std::chrono::milliseconds timeout,
                                                                    const std::stop_token &stopToken = {}) noexcept;
 
@@ -95,85 +95,84 @@ public:
     verifyHostKey(const SshEndpoint &endpoint, std::span<const KnownHostEntry> knownHosts) noexcept;
 
     [[nodiscard]] std::expected<void, SshTransportError>
-    authenticateWithPassword(WindowsTcpSocket &socket, std::string_view username, std::string_view password,
+    authenticateWithPassword(SshByteTransport &transport, std::string_view username, std::string_view password,
                              std::chrono::milliseconds timeout, const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] std::expected<void, SshTransportError>
-    authenticateWithPrivateKeyFile(WindowsTcpSocket &socket, std::string_view username, std::string_view privateKeyPath,
-                                   std::string_view passphrase, std::chrono::milliseconds timeout,
-                                   const std::stop_token &stopToken = {}) noexcept;
+    authenticateWithPrivateKeyFile(SshByteTransport &transport, std::string_view username,
+                                   std::string_view privateKeyPath, std::string_view passphrase,
+                                   std::chrono::milliseconds timeout, const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] std::expected<void, SshTransportError>
-    authenticateWithAgent(WindowsTcpSocket &socket, std::string_view username, std::chrono::milliseconds timeout,
+    authenticateWithAgent(SshByteTransport &transport, std::string_view username, std::chrono::milliseconds timeout,
                           const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] bool authenticated() const noexcept;
 
-    [[nodiscard]] std::expected<void, SshTransportError> openTerminal(WindowsTcpSocket &socket, std::uint32_t columns,
-                                                                      std::uint32_t rows, std::string_view terminalType,
-                                                                      std::chrono::milliseconds timeout,
-                                                                      const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] std::expected<void, SshTransportError>
-    openTerminal(WindowsTcpSocket &socket, std::uint32_t columns, std::uint32_t rows, std::string_view terminalType,
+    openTerminal(SshByteTransport &transport, std::uint32_t columns, std::uint32_t rows, std::string_view terminalType,
+                 std::chrono::milliseconds timeout, const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] std::expected<void, SshTransportError>
+    openTerminal(SshByteTransport &transport, std::uint32_t columns, std::uint32_t rows, std::string_view terminalType,
                  std::span<const SshTerminalEnvironment> environment, std::chrono::milliseconds timeout,
                  const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] std::expected<void, SshTransportError> configureKeepalive(std::uint32_t intervalSeconds) noexcept;
     [[nodiscard]] std::expected<int, SshTransportError> sendKeepalive() noexcept;
     [[nodiscard]] std::expected<std::size_t, SshTransportError>
-    readTerminal(WindowsTcpSocket &socket, std::span<char> output, std::chrono::milliseconds timeout,
+    readTerminal(SshByteTransport &transport, std::span<char> output, std::chrono::milliseconds timeout,
                  const std::stop_token &stopToken = {}, std::uintptr_t interruptEvent = 0) noexcept;
-    [[nodiscard]] std::expected<void, SshTransportError> writeTerminal(WindowsTcpSocket &socket,
+    [[nodiscard]] std::expected<void, SshTransportError> writeTerminal(SshByteTransport &transport,
                                                                        std::span<const char> input,
                                                                        std::chrono::milliseconds timeout,
                                                                        const std::stop_token &stopToken = {}) noexcept;
-    [[nodiscard]] std::expected<void, SshTransportError> resizeTerminal(WindowsTcpSocket &socket, std::uint32_t columns,
-                                                                        std::uint32_t rows,
+    [[nodiscard]] std::expected<void, SshTransportError> resizeTerminal(SshByteTransport &transport,
+                                                                        std::uint32_t columns, std::uint32_t rows,
                                                                         std::chrono::milliseconds timeout,
                                                                         const std::stop_token &stopToken = {}) noexcept;
-    [[nodiscard]] std::expected<void, SshTransportError> closeTerminal(WindowsTcpSocket &socket,
+    [[nodiscard]] std::expected<void, SshTransportError> closeTerminal(SshByteTransport &transport,
                                                                        std::chrono::milliseconds timeout,
                                                                        const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] bool terminalOpen() const noexcept;
 
-    [[nodiscard]] std::expected<void, SshTransportError> openSftp(WindowsTcpSocket &socket,
+    [[nodiscard]] std::expected<void, SshTransportError> openSftp(SshByteTransport &transport,
                                                                   std::chrono::milliseconds timeout,
                                                                   const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] std::expected<std::string, SshTransportError>
-    canonicalizeSftpPath(WindowsTcpSocket &socket, std::string_view remotePath, std::chrono::milliseconds timeout,
+    canonicalizeSftpPath(SshByteTransport &transport, std::string_view remotePath, std::chrono::milliseconds timeout,
                          const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] std::expected<std::vector<sftp::DirectoryEntry>, SshTransportError>
-    listSftpDirectory(WindowsTcpSocket &socket, std::string_view remotePath, std::chrono::milliseconds timeout,
+    listSftpDirectory(SshByteTransport &transport, std::string_view remotePath, std::chrono::milliseconds timeout,
                       const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] std::expected<void, SshTransportError>
-    createSftpDirectory(WindowsTcpSocket &socket, std::string_view remotePath, std::chrono::milliseconds timeout,
+    createSftpDirectory(SshByteTransport &transport, std::string_view remotePath, std::chrono::milliseconds timeout,
                         const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] std::expected<void, SshTransportError>
-    renameSftpEntry(WindowsTcpSocket &socket, std::string_view sourcePath, std::string_view destinationPath,
+    renameSftpEntry(SshByteTransport &transport, std::string_view sourcePath, std::string_view destinationPath,
                     SftpRenameDisposition disposition, std::chrono::milliseconds timeout,
                     const std::stop_token &stopToken = {}) noexcept;
-    [[nodiscard]] std::expected<void, SshTransportError> removeSftpFile(WindowsTcpSocket &socket,
+    [[nodiscard]] std::expected<void, SshTransportError> removeSftpFile(SshByteTransport &transport,
                                                                         std::string_view remotePath,
                                                                         std::chrono::milliseconds timeout,
                                                                         const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] std::expected<void, SshTransportError>
-    removeSftpDirectory(WindowsTcpSocket &socket, std::string_view remotePath, std::chrono::milliseconds timeout,
+    removeSftpDirectory(SshByteTransport &transport, std::string_view remotePath, std::chrono::milliseconds timeout,
                         const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] std::expected<void, SshTransportError>
-    openSftpFileForRead(WindowsTcpSocket &socket, std::string_view remotePath, std::chrono::milliseconds timeout,
+    openSftpFileForRead(SshByteTransport &transport, std::string_view remotePath, std::chrono::milliseconds timeout,
                         const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] std::expected<void, SshTransportError>
-    openSftpFileForWrite(WindowsTcpSocket &socket, std::string_view remotePath, SftpWriteDisposition disposition,
+    openSftpFileForWrite(SshByteTransport &transport, std::string_view remotePath, SftpWriteDisposition disposition,
                          std::chrono::milliseconds timeout, const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] std::expected<std::size_t, SshTransportError>
-    readSftpFile(WindowsTcpSocket &socket, std::span<char> output, std::chrono::milliseconds timeout,
+    readSftpFile(SshByteTransport &transport, std::span<char> output, std::chrono::milliseconds timeout,
                  const std::stop_token &stopToken = {}) noexcept;
-    [[nodiscard]] std::expected<void, SshTransportError> writeSftpFile(WindowsTcpSocket &socket,
+    [[nodiscard]] std::expected<void, SshTransportError> writeSftpFile(SshByteTransport &transport,
                                                                        std::span<const char> input,
                                                                        std::chrono::milliseconds timeout,
                                                                        const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] std::expected<void, SshTransportError> seekSftpFile(std::uint64_t offset) noexcept;
-    [[nodiscard]] std::expected<void, SshTransportError> closeSftpFile(WindowsTcpSocket &socket,
+    [[nodiscard]] std::expected<void, SshTransportError> closeSftpFile(SshByteTransport &transport,
                                                                        std::chrono::milliseconds timeout,
                                                                        const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] bool sftpFileOpen() const noexcept;
-    [[nodiscard]] std::expected<void, SshTransportError> closeSftp(WindowsTcpSocket &socket,
+    [[nodiscard]] std::expected<void, SshTransportError> closeSftp(SshByteTransport &transport,
                                                                    std::chrono::milliseconds timeout,
                                                                    const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] bool sftpOpen() const noexcept;
@@ -198,9 +197,11 @@ private:
     };
 
     Libssh2Session(std::unique_ptr<Libssh2Runtime> runtime, void *session) noexcept;
+    [[nodiscard]] bool usesTransport(const SshByteTransport &transport) const noexcept;
 
     std::unique_ptr<Libssh2Runtime> m_runtime;
     void *m_session = nullptr;
+    SshByteTransport *m_transport = nullptr;
     void *m_terminalChannel = nullptr;
     void *m_auxiliaryChannel = nullptr;
     void *m_sftp = nullptr;

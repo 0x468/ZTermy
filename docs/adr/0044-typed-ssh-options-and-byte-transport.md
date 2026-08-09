@@ -47,3 +47,13 @@ persistence, and worker threads.
   and cancellation at each hop.
 - The typed model prevents unsupported fields from becoming inert UI and keeps
   secrets outside persistent option structures.
+
+## Implementation note
+
+libssh2 is configured with its non-blocking send/receive callbacks for every
+session, including direct TCP. The callbacks address a heap-owned
+`SshByteTransport`; that stable object outlives the libssh2 session and converts
+would-block, close, timeout, cancellation, and system failures at one boundary.
+`WindowsTcpSocket` is the direct implementation. This means direct SSH exercises
+the same callback path that a later ProxyJump channel will use instead of
+retaining a second socket-only fast path.
