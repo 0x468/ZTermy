@@ -62,7 +62,17 @@ Rectangle {
     }
 
     function authenticationToken() {
-        return authenticationBox.currentIndex === 0 ? "private-key" : "password";
+        if (authenticationBox.currentIndex === 0) {
+            return "private-key";
+        }
+        return authenticationBox.currentIndex === 1 ? "password" : "agent";
+    }
+
+    function authenticationSummary() {
+        if (authenticationBox.currentIndex === 0) {
+            return qsTr("Private-key authentication");
+        }
+        return authenticationBox.currentIndex === 1 ? qsTr("Password authentication") : qsTr("SSH agent authentication");
     }
 
     function sessionOptionsMap() {
@@ -166,10 +176,11 @@ Rectangle {
     }
 
     function connectQuickTarget() {
-        const secret = quickCredential.text;
+        const agent = quickAuthentication.currentIndex === 2;
+        const secret = agent ? "" : quickCredential.text;
         quickCredential.text = "";
-        const authentication = quickAuthentication.currentIndex === 0 ? "private-key" : "password";
-        const started = controller.connectQuick(quickConnectTarget.text, authentication, quickKeyPath.text, quickPassphraseRequired.checked, secret, quickSaveProfile.checked, quickProfileName.text, quickGroup.text);
+        const authentication = quickAuthentication.currentIndex === 0 ? "private-key" : (quickAuthentication.currentIndex === 1 ? "password" : "agent");
+        const started = controller.connectQuick(quickConnectTarget.text, authentication, agent ? "" : quickKeyPath.text, agent ? false : quickPassphraseRequired.checked, secret, quickSaveProfile.checked, quickProfileName.text, quickGroup.text);
         if (started) {
             quickConnectDialog.close();
             quickConnectTarget.text = "";
@@ -208,7 +219,8 @@ Rectangle {
     }
 
     function validate(requireName, requireCredential) {
-        const privateKey = authenticationToken() === "private-key";
+        const authentication = authenticationToken();
+        const privateKey = authentication === "private-key";
         if ((requireName && nameField.text.trim().length === 0) || hostField.text.trim().length === 0 || usernameField.text.trim().length === 0 || (privateKey && keyPathField.text.trim().length === 0) || portField.text.length === 0) {
             showStatus(qsTr("Complete every required field."), true);
             return false;
@@ -218,7 +230,8 @@ Rectangle {
             showStatus(qsTr("Port must be between 1 and 65535."), true);
             return false;
         }
-        if (requireCredential && (!privateKey || passphraseRequiredBox.checked) && credentialField.text.length === 0) {
+        const needsCredential = authentication === "password" || (privateKey && passphraseRequiredBox.checked);
+        if (requireCredential && needsCredential && credentialField.text.length === 0) {
             showStatus(privateKey ? qsTr("Enter the private-key passphrase.") : qsTr("Enter the SSH password."), true);
             return false;
         }
@@ -314,7 +327,7 @@ Rectangle {
         hostField.text = profile.host;
         portField.text = String(profile.port);
         usernameField.text = profile.username;
-        authenticationBox.currentIndex = profile.authentication === "password" ? 1 : 0;
+        authenticationBox.currentIndex = profile.authentication === "password" ? 1 : (profile.authentication === "agent" ? 2 : 0);
         keyPathField.text = profile.privateKeyPath;
         passphraseRequiredBox.checked = profile.privateKeyPassphraseRequired;
         credentialField.text = "";
@@ -1044,7 +1057,7 @@ Rectangle {
                                 }
 
                                 Text {
-                                    text: authenticationBox.currentIndex === 0 ? qsTr("Private-key authentication") : qsTr("Password authentication")
+                                    text: pane.authenticationSummary()
                                     color: pane.mutedColor
                                     font.family: Theme.uiFont
                                     font.pixelSize: 11
@@ -1060,7 +1073,7 @@ Rectangle {
                             RowLayout {
                                 Layout.fillWidth: true
                                 spacing: Theme.spacingControl
-                                visible: pane.controller.effectiveCredentialStorage === "portable" && (!pane.controller.portableVaultInitialized || pane.controller.portableVaultLocked)
+                                visible: authenticationBox.currentIndex !== 2 && pane.controller.effectiveCredentialStorage === "portable" && (!pane.controller.portableVaultInitialized || pane.controller.portableVaultLocked)
 
                                 StatusMessage {
                                     Layout.fillWidth: true
@@ -1184,14 +1197,25 @@ Rectangle {
                                     id: authenticationBox
                                     objectName: "hostAuthentication"
                                     Layout.fillWidth: true
-                                    model: [qsTr("Private key"), qsTr("Password")]
+                                    model: [qsTr("Private key"), qsTr("Password"), qsTr("SSH agent")]
                                     accessibleName: qsTr("SSH authentication method")
                                     onCurrentIndexChanged: {
                                         credentialField.text = "";
-                                        if (currentIndex === 1) {
+                                        if (currentIndex !== 0) {
                                             passphraseRequiredBox.checked = false;
                                         }
                                     }
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    Layout.columnSpan: pane.compactLayout ? 1 : 2
+                                    visible: authenticationBox.currentIndex === 2
+                                    text: qsTr("Uses identities already loaded in your Windows SSH agent. ztermy never reads the private-key material.")
+                                    color: pane.mutedColor
+                                    wrapMode: Text.WordWrap
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.textLabel
                                 }
 
                                 Label {
@@ -1728,14 +1752,24 @@ Rectangle {
 
                     objectName: "quickAuthentication"
                     Layout.fillWidth: true
-                    model: [qsTr("Private key"), qsTr("Password")]
+                    model: [qsTr("Private key"), qsTr("Password"), qsTr("SSH agent")]
                     accessibleName: qsTr("Quick connect authentication method")
                     onCurrentIndexChanged: {
                         quickCredential.text = "";
-                        if (currentIndex === 1) {
+                        if (currentIndex !== 0) {
                             quickPassphraseRequired.checked = false;
                         }
                     }
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    visible: quickAuthentication.currentIndex === 2
+                    text: qsTr("Uses identities already loaded in your Windows SSH agent. ztermy never reads the private-key material.")
+                    color: pane.mutedColor
+                    wrapMode: Text.WordWrap
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.textLabel
                 }
 
                 AppTextField {
@@ -1837,7 +1871,7 @@ Rectangle {
                         objectName: "quickConnectConfirm"
                         text: qsTr("Connect")
                         accessibleName: qsTr("Start quick SSH connection")
-                        enabled: (quickAuthentication.currentIndex === 1 || quickKeyPath.text.trim().length > 0) && (quickAuthentication.currentIndex === 0 || quickCredential.text.length > 0) && (!quickPassphraseRequired.checked || quickCredential.text.length > 0) && (!quickSaveProfile.checked || quickProfileName.text.trim().length > 0)
+                        enabled: (quickAuthentication.currentIndex === 2 || quickAuthentication.currentIndex === 1 || quickKeyPath.text.trim().length > 0) && (quickAuthentication.currentIndex === 2 || quickAuthentication.currentIndex === 0 || quickCredential.text.length > 0) && (quickAuthentication.currentIndex === 2 || !quickPassphraseRequired.checked || quickCredential.text.length > 0) && (!quickSaveProfile.checked || quickProfileName.text.trim().length > 0)
                         variant: "primary"
                         KeyNavigation.left: quickConnectCancel
                         onClicked: pane.connectQuickTarget()

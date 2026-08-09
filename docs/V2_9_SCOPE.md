@@ -65,7 +65,12 @@ the next transport is introduced.
 - Phase 3 is complete: reconnect eligibility, bounded backoff, stable-session
   budget reset, cancellation, manual retry, localized UI states, and the
   authorized real-host reconnect gate are implemented.
-- Phases 4–6 remain before V2.9 acceptance.
+- Phase 4 implementation is complete: Agent is a secret-free authentication
+  method across profiles, quick connections, terminals, SFTP, transfers, and
+  reconnects. The authorized host passed the explicit unavailable-agent gate.
+  The opt-in success gate is defined; it remains pending on a Windows agent
+  service with an accepted identity loaded.
+- Phases 5–6 remain before V2.9 acceptance.
 
 ## Acceptance boundary
 

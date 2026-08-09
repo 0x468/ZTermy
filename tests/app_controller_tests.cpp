@@ -94,6 +94,7 @@ private slots:
     void savesUpdatesReloadsAndDeletesProfiles();
     void persistsAndPreservesSessionOptions();
     void rejectsInvalidProfiles();
+    void agentProfilesNeverStoreCredentials();
     void managesSavedCredentialsAndPortableVault();
     void sessionCredentialDoesNotAppearStoredAfterRestart();
     void installedControllerPersistsCredentialAcrossRestart();
@@ -252,11 +253,36 @@ void AppControllerTests::rejectsInvalidProfiles()
                                         QStringLiteral("private-key"), QStringLiteral("key"), false, {}));
     QVERIFY(!controller.saveHostProfile({}, QStringLiteral("Name"), QStringLiteral("host"), 22, {},
                                         QStringLiteral("private-key"), {}, false, {}));
-    QVERIFY(!controller.saveHostProfile({}, QStringLiteral("Name"), QStringLiteral("host"), 22, QStringLiteral("user"),
-                                        QStringLiteral("agent"), {}, false, {}));
+    QVERIFY(controller.saveHostProfile({}, QStringLiteral("Agent"), QStringLiteral("agent-host"), 22,
+                                       QStringLiteral("user"), QStringLiteral("agent"), {}, false, {}));
     QVERIFY(!controller.duplicateHostProfile(QStringLiteral("missing")));
-    QCOMPARE(changes.count(), 1);
-    QCOMPARE(controller.hostProfiles().size(), 1);
+    QCOMPARE(changes.count(), 2);
+    QCOMPARE(controller.hostProfiles().size(), 2);
+}
+
+void AppControllerTests::agentProfilesNeverStoreCredentials()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")));
+    const QString id = QStringLiteral("agent-profile");
+
+    QVERIFY(controller.saveHostProfileWithCredential(
+        id, QStringLiteral("Password profile"), QStringLiteral("server.example.test"), 22, QStringLiteral("developer"),
+        QStringLiteral("password"), {}, false, QStringLiteral("Lab"), QStringLiteral("saved-password"), true));
+    QCOMPARE(controller.readHostCredential(id), QStringLiteral("saved-password"));
+
+    QVERIFY(controller.saveHostProfileWithCredential(
+        id, QStringLiteral("Agent profile"), QStringLiteral("server.example.test"), 22, QStringLiteral("developer"),
+        QStringLiteral("agent"), QStringLiteral("must-be-cleared"), true, QStringLiteral("Lab"),
+        QStringLiteral("must-not-be-stored"), true));
+    const QVariantMap profile = controller.hostProfiles().constFirst().toMap();
+    QCOMPARE(profile.value(QStringLiteral("authentication")).toString(), QStringLiteral("agent"));
+    QVERIFY(profile.value(QStringLiteral("privateKeyPath")).toString().isEmpty());
+    QVERIFY(!profile.value(QStringLiteral("privateKeyPassphraseRequired")).toBool());
+    QVERIFY(!profile.value(QStringLiteral("credentialStored")).toBool());
+    QVERIFY(controller.readHostCredential(id).isEmpty());
+    QVERIFY(!controller.saveHostCredential(id, QStringLiteral("must-not-be-stored")));
 }
 
 void AppControllerTests::managesSavedCredentialsAndPortableVault()

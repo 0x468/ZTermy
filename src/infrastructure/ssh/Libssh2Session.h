@@ -101,6 +101,9 @@ public:
     authenticateWithPrivateKeyFile(WindowsTcpSocket &socket, std::string_view username, std::string_view privateKeyPath,
                                    std::string_view passphrase, std::chrono::milliseconds timeout,
                                    const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] std::expected<void, SshTransportError>
+    authenticateWithAgent(WindowsTcpSocket &socket, std::string_view username, std::chrono::milliseconds timeout,
+                          const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] bool authenticated() const noexcept;
 
     [[nodiscard]] std::expected<void, SshTransportError> openTerminal(WindowsTcpSocket &socket, std::uint32_t columns,

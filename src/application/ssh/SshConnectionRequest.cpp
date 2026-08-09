@@ -16,6 +16,8 @@ bool validSshConnectionRequest(const SshConnectionRequest &request) noexcept
             return !request.privateKeyPath.isEmpty();
         case SshAuthenticationMethod::Password:
             return request.privateKeyPath.isEmpty() && !request.secret.empty();
+        case SshAuthenticationMethod::Agent:
+            return request.privateKeyPath.isEmpty() && request.secret.empty();
     }
     return false;
 }

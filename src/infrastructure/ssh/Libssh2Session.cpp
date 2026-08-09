@@ -512,6 +512,125 @@ Libssh2Session::authenticateWithPrivateKeyFile(WindowsTcpSocket &socket, const s
     }
 }
 
+std::expected<void, SshTransportError> Libssh2Session::authenticateWithAgent(WindowsTcpSocket &socket,
+                                                                             const std::string_view username,
+                                                                             const std::chrono::milliseconds timeout,
+                                                                             const std::stop_token &stopToken) noexcept
+{
+    if (username.empty() || username.find('\0') != std::string_view::npos
+        || username.size() > static_cast<std::size_t>((std::numeric_limits<unsigned int>::max)()))
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
+    }
+    if (m_session == nullptr || !socket.valid() || !m_handshakeComplete || !m_hostKeyVerified || m_authenticated)
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
+    }
+    if (timeout <= std::chrono::milliseconds::zero())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::TimedOut});
+    }
+    if (stopToken.stop_requested())
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::Cancelled});
+    }
+
+    std::string usernameCopy;
+    try
+    {
+        usernameCopy.assign(username);
+    }
+    catch (const std::bad_alloc &)
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InitializationFailed});
+    }
+
+    struct AgentGuard final
+    {
+        LIBSSH2_AGENT *agent = nullptr;
+        bool connected = false;
+
+        ~AgentGuard()
+        {
+            if (connected)
+            {
+                (void)libssh2_agent_disconnect(agent);
+            }
+            if (agent != nullptr)
+            {
+                libssh2_agent_free(agent);
+            }
+        }
+    };
+
+    auto *session = static_cast<LIBSSH2_SESSION *>(m_session);
+    AgentGuard guard{.agent = libssh2_agent_init(session)};
+    if (guard.agent == nullptr)
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InitializationFailed});
+    }
+    if (const int result = libssh2_agent_connect(guard.agent); result != 0)
+    {
+        return std::unexpected(
+            SshTransportError{.kind = SshTransportErrorKind::AuthenticationUnavailable, .libssh2Code = result});
+    }
+    guard.connected = true;
+    if (const int result = libssh2_agent_list_identities(guard.agent); result != 0)
+    {
+        return std::unexpected(
+            SshTransportError{.kind = SshTransportErrorKind::AuthenticationUnavailable, .libssh2Code = result});
+    }
+
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    libssh2_agent_publickey *previous = nullptr;
+    bool offeredIdentity = false;
+    while (true)
+    {
+        libssh2_agent_publickey *identity = nullptr;
+        const int identityResult = libssh2_agent_get_identity(guard.agent, &identity, previous);
+        if (identityResult == 1)
+        {
+            return std::unexpected(SshTransportError{.kind = offeredIdentity
+                                                                 ? SshTransportErrorKind::AuthenticationRejected
+                                                                 : SshTransportErrorKind::AuthenticationUnavailable});
+        }
+        if (identityResult != 0 || identity == nullptr)
+        {
+            return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::AuthenticationUnavailable,
+                                                     .libssh2Code = identityResult});
+        }
+        offeredIdentity = true;
+        previous = identity;
+
+        while (true)
+        {
+            if (stopToken.stop_requested())
+            {
+                return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::Cancelled});
+            }
+            const int result = libssh2_agent_userauth(guard.agent, usernameCopy.c_str(), identity);
+            if (result == 0)
+            {
+                m_authenticated = true;
+                return {};
+            }
+            if (result == LIBSSH2_ERROR_AUTHENTICATION_FAILED || result == LIBSSH2_ERROR_PUBLICKEY_UNVERIFIED)
+            {
+                break;
+            }
+            if (result != LIBSSH2_ERROR_EAGAIN)
+            {
+                return std::unexpected(mapPrivateKeyAuthenticationError(result));
+            }
+            auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+            if (!ready)
+            {
+                return std::unexpected(ready.error());
+            }
+        }
+    }
+}
+
 bool Libssh2Session::authenticated() const noexcept
 {
     return m_authenticated;

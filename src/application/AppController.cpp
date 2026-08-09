@@ -108,6 +108,37 @@ constexpr std::size_t maximumRecentHostProfiles = 6;
     return {bytes.constData(), static_cast<std::size_t>(bytes.size())};
 }
 
+[[nodiscard]] QString authenticationToken(const ztermy::ssh::SshAuthenticationMethod authentication)
+{
+    switch (authentication)
+    {
+        case ztermy::ssh::SshAuthenticationMethod::PrivateKey:
+            return QStringLiteral("private-key");
+        case ztermy::ssh::SshAuthenticationMethod::Password:
+            return QStringLiteral("password");
+        case ztermy::ssh::SshAuthenticationMethod::Agent:
+            return QStringLiteral("agent");
+    }
+    return {};
+}
+
+[[nodiscard]] std::optional<ztermy::ssh::SshAuthenticationMethod> parseAuthenticationToken(const QString &value)
+{
+    if (value == QStringLiteral("private-key"))
+    {
+        return ztermy::ssh::SshAuthenticationMethod::PrivateKey;
+    }
+    if (value == QStringLiteral("password"))
+    {
+        return ztermy::ssh::SshAuthenticationMethod::Password;
+    }
+    if (value == QStringLiteral("agent"))
+    {
+        return ztermy::ssh::SshAuthenticationMethod::Agent;
+    }
+    return std::nullopt;
+}
+
 [[nodiscard]] QString utf8QString(const std::string &value)
 {
     return QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size()));
@@ -249,6 +280,10 @@ void removeLastUtf8CodePoint(QByteArray &value)
 [[nodiscard]] bool profileHasStoredCredential(const ztermy::ssh::SshProfile &profile,
                                               const std::vector<ztermy::security::CredentialKey> *availableKeys)
 {
+    if (profile.authentication == ztermy::ssh::SshAuthenticationMethod::Agent)
+    {
+        return false;
+    }
     if (!profile.credentialReference)
     {
         return false;
@@ -394,9 +429,7 @@ void removeLastUtf8CodePoint(QByteArray &value)
         {QStringLiteral("host"), utf8QString(profile.host)},
         {QStringLiteral("port"), profile.port},
         {QStringLiteral("username"), utf8QString(profile.username)},
-        {QStringLiteral("authentication"), profile.authentication == ztermy::ssh::SshAuthenticationMethod::PrivateKey
-                                               ? QStringLiteral("private-key")
-                                               : QStringLiteral("password")},
+        {QStringLiteral("authentication"), authenticationToken(profile.authentication)},
         {QStringLiteral("privateKeyPath"), utf8QString(profile.privateKeyPath)},
         {QStringLiteral("privateKeyPassphraseRequired"), profile.privateKeyPassphraseRequired},
         {QStringLiteral("credentialStored"), credentialStored},
@@ -3720,14 +3753,13 @@ bool AppController::saveHostProfileInternal(const QString &id, const QString &na
     const QString normalizedUsername = username.trimmed();
     const QString normalizedPrivateKeyPath = privateKeyPath.trimmed();
     const QString profileId = id.isEmpty() ? QUuid::createUuid().toString(QUuid::WithoutBraces) : id.trimmed();
-    const std::optional<ssh::SshAuthenticationMethod> authenticationMethod =
-        authentication == QStringLiteral("private-key") ? std::optional{ssh::SshAuthenticationMethod::PrivateKey}
-        : authentication == QStringLiteral("password")  ? std::optional{ssh::SshAuthenticationMethod::Password}
-                                                        : std::nullopt;
+    const std::optional<ssh::SshAuthenticationMethod> authenticationMethod = parseAuthenticationToken(authentication);
     if (!authenticationMethod)
     {
         return false;
     }
+    const bool supportsCredential = *authenticationMethod != ssh::SshAuthenticationMethod::Agent;
+    const bool effectiveRememberCredential = rememberCredential && supportsCredential;
 
     const std::string storedProfileId = utf8String(profileId);
     const auto storedProfile = std::ranges::find(m_profiles, storedProfileId, &ssh::SshProfile::id);
@@ -3778,8 +3810,8 @@ bool AppController::saveHostProfileInternal(const QString &id, const QString &na
             previousKey =
                 security::CredentialKey{.profileId = *existing->credentialReference, .kind = credentialKind(*existing)};
         }
-        if (!manageCredential
-            || (rememberCredential && secret.isEmpty() && existing->authentication == profile.authentication))
+        if ((!manageCredential && existing->authentication == profile.authentication)
+            || (effectiveRememberCredential && secret.isEmpty() && existing->authentication == profile.authentication))
         {
             profile.credentialReference = existing->credentialReference;
         }
@@ -3787,7 +3819,7 @@ bool AppController::saveHostProfileInternal(const QString &id, const QString &na
     }
 
     const security::CredentialKey desiredKey{.profileId = profile.id, .kind = credentialKind(profile)};
-    const bool shouldStore = manageCredential && rememberCredential && !secret.isEmpty();
+    const bool shouldStore = manageCredential && effectiveRememberCredential && !secret.isEmpty();
     if (shouldStore && m_credentialVaults->storage() == security::CredentialStorage::Portable
         && !m_credentialVaults->portableInitialized())
     {
@@ -3795,10 +3827,10 @@ bool AppController::saveHostProfileInternal(const QString &id, const QString &na
             tr("Create the portable credential vault in Settings > Security before saving a secret."));
         return false;
     }
-    const bool shouldRemovePrevious =
-        manageCredential && previousKey
-        && (!rememberCredential || (shouldStore && *previousKey != desiredKey)
-            || (rememberCredential && secret.isEmpty() && profile.credentialReference != previousKey->profileId));
+    const bool shouldRemovePrevious = manageCredential && previousKey
+                                      && (!effectiveRememberCredential || (shouldStore && *previousKey != desiredKey)
+                                          || (effectiveRememberCredential && secret.isEmpty()
+                                              && profile.credentialReference != previousKey->profileId));
     std::optional<security::SensitiveByteArray> previousDesiredSecret;
     std::optional<security::SensitiveByteArray> removedPreviousSecret;
 
@@ -4084,16 +4116,15 @@ bool AppController::forgetHostCredential(const QString &id)
 bool AppController::saveHostCredential(const QString &id, const QString &secret)
 {
     const auto profile = std::ranges::find(m_profiles, utf8String(id.trimmed()), &ssh::SshProfile::id);
-    if (profile == m_profiles.end() || secret.isEmpty())
+    if (profile == m_profiles.end() || profile->authentication == ssh::SshAuthenticationMethod::Agent
+        || secret.isEmpty())
     {
         return false;
     }
-    return saveHostProfileWithCredential(
-        id, utf8QString(profile->name), utf8QString(profile->host), profile->port, utf8QString(profile->username),
-        profile->authentication == ssh::SshAuthenticationMethod::PrivateKey ? QStringLiteral("private-key")
-                                                                            : QStringLiteral("password"),
-        utf8QString(profile->privateKeyPath), profile->privateKeyPassphraseRequired, utf8QString(profile->group),
-        secret, true);
+    return saveHostProfileWithCredential(id, utf8QString(profile->name), utf8QString(profile->host), profile->port,
+                                         utf8QString(profile->username), authenticationToken(profile->authentication),
+                                         utf8QString(profile->privateKeyPath), profile->privateKeyPassphraseRequired,
+                                         utf8QString(profile->group), secret, true);
 }
 
 QString AppController::readHostCredential(const QString &id)
@@ -4122,7 +4153,9 @@ QString AppController::readHostCredential(const QString &id)
 std::optional<ssh::SshConnectionRequest> AppController::connectionRequestForProfile(const ssh::SshProfile &profile,
                                                                                     const QString &secret)
 {
-    security::SensitiveByteArray connectionSecret(secret.toUtf8());
+    security::SensitiveByteArray connectionSecret = profile.authentication == ssh::SshAuthenticationMethod::Agent
+                                                        ? security::SensitiveByteArray{}
+                                                        : security::SensitiveByteArray(secret.toUtf8());
     if (connectionSecret.empty() && profile.credentialReference)
     {
         auto stored = m_credentialVaults->active().read(
@@ -4193,10 +4226,7 @@ bool AppController::connectQuick(const QString &target, const QString &authentic
                                  const bool shouldSaveProfile, const QString &profileName, const QString &group)
 {
     const auto parsed = ssh::parseSshTarget(utf8String(target));
-    const auto authenticationMethod =
-        authentication == QStringLiteral("private-key") ? std::optional{ssh::SshAuthenticationMethod::PrivateKey}
-        : authentication == QStringLiteral("password")  ? std::optional{ssh::SshAuthenticationMethod::Password}
-                                                        : std::nullopt;
+    const auto authenticationMethod = parseAuthenticationToken(authentication);
     if (!parsed || !authenticationMethod)
     {
         return false;
@@ -4230,7 +4260,9 @@ bool AppController::connectQuick(const QString &target, const QString &authentic
         .authentication = *authenticationMethod,
         .privateKeyPath =
             *authenticationMethod == ssh::SshAuthenticationMethod::PrivateKey ? normalizedKeyPath : QString{},
-        .secret = security::SensitiveByteArray(secret.toUtf8()),
+        .secret = *authenticationMethod == ssh::SshAuthenticationMethod::Agent
+                      ? security::SensitiveByteArray{}
+                      : security::SensitiveByteArray(secret.toUtf8()),
         .knownHostsPath = m_knownHostsPath,
     };
     return startSshConnection(std::move(request));

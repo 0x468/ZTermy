@@ -187,6 +187,9 @@ bool validSshProfile(const SshProfile &profile) noexcept
             return nonEmptyWithin(profile.privateKeyPath, maximumPrivateKeyPathLength);
         case SshAuthenticationMethod::Password:
             return profile.privateKeyPath.empty() && !profile.privateKeyPassphraseRequired;
+        case SshAuthenticationMethod::Agent:
+            return profile.privateKeyPath.empty() && !profile.privateKeyPassphraseRequired
+                   && !profile.credentialReference.has_value();
     }
     return false;
 }

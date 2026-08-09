@@ -95,7 +95,16 @@ void SshProfileStoreTests::savesAndLoadsNonSecretProfiles()
         .username = "operator",
         .authentication = ztermy::ssh::SshAuthenticationMethod::Password,
     };
-    const std::array profiles{privateKeyProfile(), passwordProfile};
+    ztermy::ssh::SshProfile agentProfile{
+        .id = "profile-3",
+        .name = "Agent host",
+        .group = "Production",
+        .host = "agent.example.test",
+        .port = 22,
+        .username = "operator",
+        .authentication = ztermy::ssh::SshAuthenticationMethod::Agent,
+    };
+    const std::array profiles{privateKeyProfile(), passwordProfile, agentProfile};
     const QString path = directory.filePath(QStringLiteral("profiles.json"));
     const ztermy::ssh::SshProfileStore store(path);
 
@@ -118,6 +127,7 @@ void SshProfileStoreTests::savesAndLoadsNonSecretProfiles()
     QVERIFY(persisted.contains("\"sessionOptions\""));
     QVERIFY(persisted.contains("\"terminalType\": \"screen-256color\""));
     QVERIFY(persisted.contains("\"reconnectPolicy\": \"transport-failure\""));
+    QVERIFY(persisted.contains("\"authentication\": \"agent\""));
     QVERIFY(!persisted.contains("privateKeyContent"));
 }
 
@@ -267,7 +277,7 @@ void SshProfileStoreTests::rejectsFractionalPortsAndUnknownAuthentication()
     QVERIFY(writeFile(
         path,
         QByteArrayLiteral(
-            R"({"version":1,"profiles":[{"id":"p","name":"n","host":"h","port":22,"username":"u","authentication":"agent","privateKeyPath":""}]})")));
+            R"({"version":1,"profiles":[{"id":"p","name":"n","host":"h","port":22,"username":"u","authentication":"keyboard-interactive","privateKeyPath":""}]})")));
     auto unknownAuthentication = store.load();
     QVERIFY(!unknownAuthentication);
     QCOMPARE(unknownAuthentication.error(), ztermy::ssh::SshProfileStoreError::InvalidFormat);

@@ -195,6 +195,9 @@ establishAuthenticatedSshConnection(SshConnectionRequest &request, const SshConn
             authentication =
                 (*session)->authenticateWithPassword(*socket, username, request.secret.view(), 15s, stopToken);
             break;
+        case SshAuthenticationMethod::Agent:
+            authentication = (*session)->authenticateWithAgent(*socket, username, 15s, stopToken);
+            break;
     }
     if (!authentication)
     {

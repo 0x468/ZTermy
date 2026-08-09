@@ -233,6 +233,8 @@ private slots:
     void reportsAuthenticationRejectionOnRealHost();
     void reportsRemoteCloseOnRealHost();
     void authenticatesWithInteractivePasswordOnRealHost();
+    void reportsUnavailableAgentOnRealHost();
+    void authenticatesWithAgentOnRealHost();
     void measuresInteractiveInputQueueLatency();
     void survivesRepeatedConnectDisconnectCycles();
 };
@@ -993,6 +995,103 @@ void SshTerminalSessionTests::authenticatesWithInteractivePasswordOnRealHost()
                                                      return !arguments.isEmpty() && !arguments.constFirst().toBool();
                                                  }),
                              5s);
+}
+
+void SshTerminalSessionTests::authenticatesWithAgentOnRealHost()
+{
+    const bool invokedDirectly =
+        QCoreApplication::arguments().contains(QStringLiteral("authenticatesWithAgentOnRealHost"));
+    if (!invokedDirectly || qgetenv("ZTERMY_TEST_SSH_AGENT_INTERACTIVE") != QByteArrayLiteral("1"))
+    {
+        QSKIP("Set ZTERMY_TEST_SSH_AGENT_INTERACTIVE=1 and invoke this test directly");
+    }
+
+    const QByteArray host = qgetenv("ZTERMY_TEST_SSH_HOST");
+    const QByteArray username = qgetenv("ZTERMY_TEST_SSH_USERNAME");
+    const QByteArray expectedFingerprint = qgetenv("ZTERMY_TEST_SSH_EXPECTED_FINGERPRINT");
+    if (host.isEmpty() || username.isEmpty() || expectedFingerprint.isEmpty())
+    {
+        QSKIP("Set the real-host identity variables to run SSH-agent authentication");
+    }
+
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ztermy::ssh::SshTerminalSession session;
+    QSignalSpy confirmationSpy(&session, &ztermy::ssh::SshTerminalSession::hostKeyConfirmationRequired);
+    QSignalSpy runningSpy(&session, &ztermy::ssh::SshTerminalSession::runningChanged);
+    ztermy::ssh::SshConnectionRequest request{
+        .host = QString::fromUtf8(host),
+        .port = 22,
+        .username = QString::fromUtf8(username),
+        .authentication = ztermy::ssh::SshAuthenticationMethod::Agent,
+        .knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json")),
+    };
+
+    QVERIFY(!session.start(std::move(request), {.columns = 80, .rows = 24}));
+    QTRY_COMPARE_WITH_TIMEOUT(confirmationSpy.count(), 1, 10s);
+    QCOMPARE(confirmationSpy.constFirst().at(1).toString(), QString::fromLatin1(expectedFingerprint));
+    session.confirmHostKey(true);
+    QTRY_VERIFY_WITH_TIMEOUT(std::ranges::any_of(runningSpy,
+                                                 [](const QList<QVariant> &arguments) {
+                                                     return !arguments.isEmpty() && arguments.constFirst().toBool();
+                                                 }),
+                             20s);
+    runningSpy.clear();
+    session.stop();
+    QTRY_VERIFY_WITH_TIMEOUT(std::ranges::any_of(runningSpy,
+                                                 [](const QList<QVariant> &arguments) {
+                                                     return !arguments.isEmpty() && !arguments.constFirst().toBool();
+                                                 }),
+                             5s);
+}
+
+void SshTerminalSessionTests::reportsUnavailableAgentOnRealHost()
+{
+    const bool invokedDirectly =
+        QCoreApplication::arguments().contains(QStringLiteral("reportsUnavailableAgentOnRealHost"));
+    if (!invokedDirectly || qgetenv("ZTERMY_TEST_SSH_AGENT_EXPECT_UNAVAILABLE") != QByteArrayLiteral("1"))
+    {
+        QSKIP("Set ZTERMY_TEST_SSH_AGENT_EXPECT_UNAVAILABLE=1 and invoke this test directly");
+    }
+
+    const QByteArray host = qgetenv("ZTERMY_TEST_SSH_HOST");
+    const QByteArray username = qgetenv("ZTERMY_TEST_SSH_USERNAME");
+    const QByteArray expectedFingerprint = qgetenv("ZTERMY_TEST_SSH_EXPECTED_FINGERPRINT");
+    if (host.isEmpty() || username.isEmpty() || expectedFingerprint.isEmpty())
+    {
+        QSKIP("Set the real-host identity variables to run the unavailable-agent gate");
+    }
+
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ztermy::ssh::SshTerminalSession session;
+    QSignalSpy confirmationSpy(&session, &ztermy::ssh::SshTerminalSession::hostKeyConfirmationRequired);
+    QSignalSpy failureSpy(&session, &ztermy::ssh::SshTerminalSession::failureOccurred);
+    QSignalSpy statusSpy(&session, &ztermy::ssh::SshTerminalSession::statusChanged);
+    ztermy::ssh::SshConnectionRequest request{
+        .host = QString::fromUtf8(host),
+        .port = 22,
+        .username = QString::fromUtf8(username),
+        .authentication = ztermy::ssh::SshAuthenticationMethod::Agent,
+        .knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json")),
+    };
+
+    QVERIFY(!session.start(std::move(request), {.columns = 80, .rows = 24}));
+    QTRY_COMPARE_WITH_TIMEOUT(confirmationSpy.count(), 1, 10s);
+    QCOMPARE(confirmationSpy.constFirst().at(1).toString(), QString::fromLatin1(expectedFingerprint));
+    session.confirmHostKey(true);
+    QTRY_VERIFY_WITH_TIMEOUT(
+        std::ranges::any_of(failureSpy,
+                            [](const QList<QVariant> &arguments) {
+                                return !arguments.isEmpty()
+                                       && qvariant_cast<ztermy::ssh::SshFailureKind>(arguments.constFirst())
+                                              == ztermy::ssh::SshFailureKind::AuthenticationUnavailable;
+                            }),
+        20s);
+    QVERIFY(!statusSpy.isEmpty());
+    QCOMPARE(statusSpy.constLast().constFirst().toString(),
+             ztermy::ssh::sshFailureStatus(ztermy::ssh::SshFailureKind::AuthenticationUnavailable));
+    session.stop();
 }
 
 void SshTerminalSessionTests::measuresInteractiveInputQueueLatency()

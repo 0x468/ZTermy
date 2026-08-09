@@ -44,6 +44,21 @@ void SshConnectionBootstrapTests::validatesReusableConnectionRequests()
     };
     QVERIFY(ztermy::ssh::validSshConnectionRequest(privateKey));
 
+    ztermy::ssh::SshConnectionRequest agent{
+        .host = QStringLiteral("example.test"),
+        .port = 22,
+        .username = QStringLiteral("tester"),
+        .authentication = ztermy::ssh::SshAuthenticationMethod::Agent,
+        .knownHostsPath = QStringLiteral("known_hosts"),
+    };
+    QVERIFY(ztermy::ssh::validSshConnectionRequest(agent));
+
+    agent.privateKeyPath = QStringLiteral("id_ed25519");
+    QVERIFY(!ztermy::ssh::validSshConnectionRequest(agent));
+    agent.privateKeyPath.clear();
+    agent.secret = ztermy::security::SensitiveByteArray(QByteArray("must-not-enter-agent-flow"));
+    QVERIFY(!ztermy::ssh::validSshConnectionRequest(agent));
+
     password.host.clear();
     QVERIFY(!ztermy::ssh::validSshConnectionRequest(password));
     privateKey.privateKeyPath.clear();

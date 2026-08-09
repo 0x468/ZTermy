@@ -115,7 +115,7 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
         return std::nullopt;
     }
     variables.reserve(static_cast<std::size_t>(values.size()));
-    for (const QJsonValue &variableValue : values)
+    for (const auto variableValue : values)
     {
         if (!variableValue.isObject())
         {
@@ -207,6 +207,10 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
     {
         return ztermy::ssh::SshAuthenticationMethod::Password;
     }
+    if (value == QStringLiteral("agent"))
+    {
+        return ztermy::ssh::SshAuthenticationMethod::Agent;
+    }
     return std::nullopt;
 }
 
@@ -218,6 +222,8 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
             return QStringLiteral("private-key");
         case ztermy::ssh::SshAuthenticationMethod::Password:
             return QStringLiteral("password");
+        case ztermy::ssh::SshAuthenticationMethod::Agent:
+            return QStringLiteral("agent");
     }
     return {};
 }

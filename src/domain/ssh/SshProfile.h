@@ -14,6 +14,7 @@ enum class SshAuthenticationMethod : std::uint8_t
 {
     PrivateKey,
     Password,
+    Agent,
 };
 
 enum class SshStartupCommandMode : std::uint8_t
