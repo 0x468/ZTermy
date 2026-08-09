@@ -1,6 +1,6 @@
 # V2.11 scope: terminal workspace continuity
 
-Status: approved implementation scope for `0.2.11`
+Status: implemented in `0.2.11`; manual acceptance remains tracked separately
 
 V2.11 turns the existing tab/session model into a bounded native terminal
 workspace. Each visible pane remains one custom terminal item backed by one C++

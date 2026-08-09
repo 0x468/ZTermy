@@ -1324,6 +1324,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     Q_ASSERT(m_localSessionFactory);
     Q_ASSERT(m_credentialVaults);
     qRegisterMetaType<ShellHistoryEntries>();
+    QObject::connect(this, &AppController::terminalTabsChanged, this, &AppController::terminalWorkspaceChanged);
     QObject::connect(this, &AppController::terminalHistoryTaskCompleted, this,
                      &AppController::applyTerminalHistoryTaskResult, Qt::QueuedConnection);
     initializePortForwardingSignalBridges();
@@ -1625,7 +1626,7 @@ QVariantList AppController::terminalTabs() const
             QVariantMap value = terminalTabValue(*tab, utf8QString(workspace.id));
             value.insert(QStringLiteral("title"), utf8QString(workspace.title));
             value.insert(QStringLiteral("paneCount"), static_cast<int>(workspace.restoreIntents.size()));
-            result.append(std::move(value));
+            result.append(value);
         }
     }
     return result;
@@ -2759,7 +2760,7 @@ bool AppController::swapActiveTerminalPane(const int offset)
     }
     const auto index = static_cast<std::ptrdiff_t>(std::distance(panes.begin(), current));
     const auto targetIndex = index + (offset < 0 ? -1 : 1);
-    if (targetIndex < 0 || targetIndex >= static_cast<std::ptrdiff_t>(panes.size()))
+    if (targetIndex < 0 || static_cast<std::size_t>(targetIndex) >= panes.size())
     {
         return false;
     }

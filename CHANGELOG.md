@@ -8,6 +8,10 @@ The project has not published a release.
 
 ### Added
 
+- Persistent terminal workspaces with bounded horizontal and vertical split
+  trees, independent native terminal sessions, keyboard focus/resize/swap,
+  pane duplication and close, ratio persistence, fresh local restoration, and
+  explicit no-network SSH reconnect placeholders
 - Initial Qt Quick application shell and dark terminal-oriented visual baseline
 - Windows 11 custom title bar with native non-client hit testing
 - Snap Layout-compatible maximize-button hit region

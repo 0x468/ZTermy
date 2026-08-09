@@ -190,7 +190,9 @@ real-host, release, and retained manual matrix in
 
 ## V2.11 — terminal workspace continuity (`0.2.11`)
 
-Status: planned.
+Status: implemented. The frozen contract is recorded in `V2_11_SCOPE.md`, the
+bounded split-tree decision in ADR 0050, and the automated, runtime, release,
+and retained manual matrix in `testing/V2_11_ACCEPTANCE.md`.
 
 - add a persistent split-pane tree, keyboard resizing/focus, and session move,
   duplicate, and close operations;

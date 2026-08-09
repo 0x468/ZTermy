@@ -794,6 +794,33 @@ struct ResizeHitRuntimeCase
     return {};
 }
 
+[[nodiscard]] bool terminalViewportHasFocus(const ztermy::NativeWindow &window)
+{
+    const QString focusName = namedFocusItem(window);
+    return focusName == QStringLiteral("terminalViewport") || focusName.startsWith(QStringLiteral("terminalViewport-"));
+}
+
+[[nodiscard]] QQuickItem *terminalViewportItem(QQuickItem *rootObject)
+{
+    if (rootObject == nullptr)
+    {
+        return nullptr;
+    }
+    std::vector<QQuickItem *> pending{rootObject};
+    for (std::size_t index = 0; index < pending.size(); ++index)
+    {
+        QQuickItem *candidate = pending[index];
+        const QString name = candidate->objectName();
+        if (name == QStringLiteral("terminalViewport") || name.startsWith(QStringLiteral("terminalViewport-")))
+        {
+            return candidate;
+        }
+        const QList<QQuickItem *> children = candidate->childItems();
+        pending.insert(pending.end(), children.cbegin(), children.cend());
+    }
+    return nullptr;
+}
+
 void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::KeyboardModifiers modifiers = {})
 {
     qt_handleKeyEvent(&window, QEvent::KeyPress, key, modifiers);
@@ -1714,7 +1741,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     processWindowEventsFor(std::chrono::milliseconds{250});
     const bool oneTabCreated = controller.terminalTabs().size() == initialTabCount + 1
                                && rootObject->property("currentPage").toString() == QStringLiteral("terminal")
-                               && namedFocusItem(window) == QStringLiteral("terminalViewport");
+                               && terminalViewportHasFocus(window);
     if (!oneTabCreated)
     {
         qCWarning(applicationLog) << "Enter did not create exactly one focused local terminal"
@@ -1726,22 +1753,21 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     }
 
     sendKey(window, Qt::Key_F, Qt::ControlModifier);
-    const bool controlFindPreservedForTerminal = !rootObject->property("terminalSearchVisible").toBool()
-                                                 && namedFocusItem(window) == QStringLiteral("terminalViewport");
+    const bool controlFindPreservedForTerminal =
+        !rootObject->property("terminalSearchVisible").toBool() && terminalViewportHasFocus(window);
     const QVariantMap unbindFind = controller.setActionShortcut(QStringLiteral("terminal.find"), QString{});
     sendKey(window, Qt::Key_F, Qt::ControlModifier | Qt::ShiftModifier);
     const bool unboundFindPreservedForTerminal = unbindFind.value(QStringLiteral("valid")).toBool()
                                                  && !rootObject->property("terminalSearchVisible").toBool()
-                                                 && namedFocusItem(window) == QStringLiteral("terminalViewport");
+                                                 && terminalViewportHasFocus(window);
     const bool findShortcutReset = controller.resetActionShortcut(QStringLiteral("terminal.find"));
     sendKey(window, Qt::Key_F, Qt::ControlModifier | Qt::ShiftModifier);
     const bool terminalSearchOpened = findShortcutReset && rootObject->property("terminalSearchVisible").toBool()
                                       && namedFocusItem(window) == QStringLiteral("terminalSearchQuery");
     sendKey(window, Qt::Key_Escape);
-    const bool terminalSearchKeyboard = controlFindPreservedForTerminal && unboundFindPreservedForTerminal
-                                        && terminalSearchOpened
-                                        && !rootObject->property("terminalSearchVisible").toBool()
-                                        && namedFocusItem(window) == QStringLiteral("terminalViewport");
+    const bool terminalSearchKeyboard =
+        controlFindPreservedForTerminal && unboundFindPreservedForTerminal && terminalSearchOpened
+        && !rootObject->property("terminalSearchVisible").toBool() && terminalViewportHasFocus(window);
     if (!terminalSearchKeyboard)
     {
         qCWarning(applicationLog) << "Terminal search shortcut routing failed"
@@ -1766,10 +1792,10 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
         return false;
     }
     sendKey(window, Qt::Key_Return);
-    const bool terminalFindActionClosed = !rootObject->property("terminalSearchVisible").toBool()
-                                          && namedFocusItem(window) == QStringLiteral("terminalViewport");
+    const bool terminalFindActionClosed =
+        !rootObject->property("terminalSearchVisible").toBool() && terminalViewportHasFocus(window);
     if (!terminalFindActionOpened || !terminalFindCaptured || !terminalFindActionClosed
-        || namedFocusItem(window) != QStringLiteral("terminalViewport"))
+        || !terminalViewportHasFocus(window))
     {
         qCWarning(applicationLog) << "Terminal Find action keyboard routing failed"
                                   << "opened=" << terminalFindActionOpened << "focus=" << namedFocusItem(window);
@@ -1779,7 +1805,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     auto *keywordHighlightPopover = rootObject->findChild<QObject *>(QStringLiteral("keywordHighlightPopover"));
     QQuickItem *keywordHighlightAction = quickItem(rootObject, "terminalKeywordHighlightAction");
     QQuickItem *keywordHighlightCloseAction = quickItem(rootObject, "keywordHighlightCloseAction");
-    QQuickItem *keywordOutsideTarget = quickItem(rootObject, "terminalViewport");
+    QQuickItem *keywordOutsideTarget = terminalViewportItem(rootObject);
     const auto keywordTerminalFixture = [](const int ruleCount) {
         QVariantList rules;
         rules.reserve(ruleCount);
@@ -1998,7 +2024,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     const bool workbenchClosed = processWindowEventsUntil(
         [&] {
             return !activeTerminalState().value(QStringLiteral("workbenchOpen")).toBool()
-                   && namedFocusItem(window) == QStringLiteral("terminalViewport");
+                   && terminalViewportHasFocus(window);
         },
         std::chrono::seconds{1});
 
@@ -2028,7 +2054,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     const bool scriptsWorkbenchClosed = processWindowEventsUntil(
         [&] {
             return !activeTerminalState().value(QStringLiteral("workbenchOpen")).toBool()
-                   && namedFocusItem(window) == QStringLiteral("terminalViewport");
+                   && terminalViewportHasFocus(window);
         },
         std::chrono::seconds{1});
 
@@ -2074,7 +2100,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
                                   && processWindowEventsUntil(
                                       [&] {
                                           return !activeTerminalState().value(QStringLiteral("composerOpen")).toBool()
-                                                 && namedFocusItem(window) == QStringLiteral("terminalViewport");
+                                                 && terminalViewportHasFocus(window);
                                       },
                                       std::chrono::seconds{1});
     if (!composerKeyboard)
@@ -2117,7 +2143,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     controller.activateTerminalTab(overflowTabs.first().toMap().value(QStringLiteral("id")).toString());
     processWindowEventsFor(std::chrono::milliseconds{250});
 
-    QQuickItem *terminalViewport = quickItem(rootObject, "terminalViewport");
+    QQuickItem *terminalViewport = terminalViewportItem(rootObject);
     const bool dialogOpened = terminalViewport != nullptr
                               && QMetaObject::invokeMethod(terminalViewport, "multilinePasteConfirmationRequested",
                                                            Qt::DirectConnection, Q_ARG(int, 2));
@@ -2127,8 +2153,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     const bool arrowMovedDialogFocus = namedFocusItem(window) == QStringLiteral("multilinePasteAccept");
     sendKey(window, Qt::Key_Escape);
     processWindowEventsFor(std::chrono::milliseconds{180});
-    const bool dialogKeyboard =
-        safeDialogFocus && arrowMovedDialogFocus && namedFocusItem(window) == QStringLiteral("terminalViewport");
+    const bool dialogKeyboard = safeDialogFocus && arrowMovedDialogFocus && terminalViewportHasFocus(window);
     if (!dialogKeyboard)
     {
         qCWarning(applicationLog) << "Multiline-paste dialog keyboard route failed"
@@ -2598,7 +2623,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     const bool workbenchClosed = processWindowEventsUntil(
         [&] {
             return !activeTabState().value(QStringLiteral("workbenchOpen")).toBool()
-                   && namedFocusItem(window) == QStringLiteral("terminalViewport");
+                   && terminalViewportHasFocus(window);
         },
         std::chrono::seconds{2});
     const QString tabId = activeTabState().value(QStringLiteral("id")).toString();

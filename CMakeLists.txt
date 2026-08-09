@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 
 project(
     ztermy
-    VERSION 0.2.10
+    VERSION 0.2.11
     DESCRIPTION "A native Windows SSH terminal"
     LANGUAGES C CXX RC
 )

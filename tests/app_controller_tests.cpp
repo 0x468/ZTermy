@@ -1,6 +1,7 @@
 #include "application/AppController.h"
 #include "infrastructure/security/PortableCredentialVault.h"
 #include "infrastructure/ssh/SshProfileStore.h"
+#include "infrastructure/workbench/WorkspaceStateStore.h"
 #include "platform/windows/WindowsCredentialVault.h"
 
 #include <QSet>
@@ -109,6 +110,7 @@ private slots:
     void managesActionShortcutsAndDispatchContext();
     void managesMultipleLocalTerminalTabs();
     void managesPersistentTerminalWorkspaceSplits();
+    void restoresSavedSshWorkspaceWithoutConnecting();
     void managesSessionAppearanceAndStructuredRecording();
     void orderlyShutdownStopsAllLocalTabsOnce();
     void persistsQuickCommandsAndPerTabWorkbenchState();
@@ -1125,6 +1127,61 @@ void AppControllerTests::managesPersistentTerminalWorkspaceSplits()
     QVERIFY(restored.closeTerminalTab(restored.activeTerminalTabId()));
     QVERIFY(restored.terminalTabs().isEmpty());
     QCOMPARE(restoredState->stops, 2);
+}
+
+void AppControllerTests::restoresSavedSshWorkspaceWithoutConnecting()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString profilesPath = directory.filePath(QStringLiteral("profiles.json"));
+    const QString knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json"));
+    const QString settingsPath = directory.filePath(QStringLiteral("settings.json"));
+    const QString credentialsPath = directory.filePath(QStringLiteral("credentials.json"));
+
+    const std::array profiles{ztermy::ssh::SshProfile{
+        .id = "saved-ssh",
+        .name = "Saved SSH",
+        .host = "192.0.2.44",
+        .username = "operator",
+        .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
+        .privateKeyPath = "unused-test-key",
+    }};
+    QVERIFY(ztermy::ssh::SshProfileStore(profilesPath).save(profiles));
+
+    ztermy::workbench::WorkspaceState persisted;
+    persisted.terminalWorkspaces.push_back(ztermy::workbench::makeSinglePaneTerminalWorkspace(
+        "ssh-workspace", "ssh-pane",
+        ztermy::workbench::TerminalRestoreIntent{
+            .id = "ssh-intent",
+            .profileId = "saved-ssh",
+            .title = "Saved SSH",
+            .kind = ztermy::workbench::TerminalRestoreKind::SshProfile,
+        }));
+    persisted.activeTerminalWorkspaceId = "ssh-workspace";
+    QVERIFY(ztermy::workbench::WorkspaceStateStore(directory.filePath(QStringLiteral("workspace_state.json")))
+                .save(persisted));
+
+    const auto localState = std::make_shared<FakeLocalSessionState>();
+    ztermy::AppController controller(profilesPath, knownHostsPath, settingsPath, credentialsPath,
+                                     ztermy::config::StorageMode::installed, [localState] {
+                                         return std::make_unique<FakeLocalTerminalSession>(localState);
+                                     });
+    QCOMPARE(localState->starts, 0);
+    QCOMPARE(controller.terminalTabs().size(), 1);
+    QCOMPARE(controller.activeTerminalTabId(), QStringLiteral("ssh-workspace"));
+    QCOMPARE(controller.activeTerminalWorkspace().value(QStringLiteral("paneCount")).toInt(), 1);
+    QVariantMap tab = controller.terminalTabs().constFirst().toMap();
+    QCOMPARE(tab.value(QStringLiteral("kind")).toString(), QStringLiteral("ssh"));
+    QVERIFY(!tab.value(QStringLiteral("running")).toBool());
+    QVERIFY(!tab.value(QStringLiteral("connecting")).toBool());
+    QVERIFY(!tab.value(QStringLiteral("reconnecting")).toBool());
+    QVERIFY(tab.value(QStringLiteral("status")).toString().contains(QStringLiteral("reconnect"), Qt::CaseInsensitive));
+    QVERIFY(!controller.hostKeyPromptVisible());
+
+    QSignalSpy workspaceChanged(&controller, &ztermy::AppController::terminalWorkspaceChanged);
+    QVERIFY(!controller.startLocalTerminal().isEmpty());
+    QVERIFY(workspaceChanged.count() >= 1);
+    QCOMPARE(localState->starts, 1);
 }
 
 void AppControllerTests::managesSessionAppearanceAndStructuredRecording()
