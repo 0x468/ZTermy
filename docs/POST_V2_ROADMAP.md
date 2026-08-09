@@ -227,7 +227,9 @@ human checks remain in `testing/V2_13_ACCEPTANCE.md`.
 
 ## V2.14 — pre-V3 stable baseline (`0.2.14`)
 
-Status: planned final `0.2.x` milestone.
+Status: in progress as the final `0.2.x` milestone. The frozen implementation
+boundary is recorded in `V2_14_SCOPE.md`, ADR 0053, and
+`testing/V2_14_ACCEPTANCE.md`.
 
 - perform long-duration, multi-session, multi-transfer, reconnect, forwarding,
   workspace-recovery, and shutdown stress passes with measured budgets;
