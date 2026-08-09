@@ -315,6 +315,8 @@ add_library(ztermy_workbench_domain STATIC
     src/domain/workbench/QuickCommand.h
     src/domain/workbench/ScriptDefinition.cpp
     src/domain/workbench/ScriptDefinition.h
+    src/domain/workbench/ScriptExecution.cpp
+    src/domain/workbench/ScriptExecution.h
     src/domain/workbench/ShellHistory.cpp
     src/domain/workbench/ShellHistory.h
     src/domain/workbench/ScriptRecorder.cpp
@@ -1828,6 +1830,27 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME script-store COMMAND ztermy_script_store_tests)
+
+    qt_add_executable(ztermy_script_execution_tests
+        tests/script_execution_tests.cpp
+    )
+
+    target_compile_features(ztermy_script_execution_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_script_execution_tests PRIVATE
+        ztermy_workbench_domain
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_script_execution_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /WX
+        )
+    endif()
+
+    add_test(NAME script-execution COMMAND ztermy_script_execution_tests)
 
     qt_add_executable(ztermy_workspace_state_store_tests
         tests/workspace_state_store_tests.cpp
