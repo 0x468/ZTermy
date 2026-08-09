@@ -19,6 +19,8 @@ private slots:
     void parsesPowerShellContinuationsAndCapsNewestEntries();
     void recordsBoundedRecentRemotePaths();
     void recordsOnlyStructuredCommandsWithBoundedDelays();
+    void mutatesBoundedTerminalWorkspaceTreeAtomically();
+    void rejectsInvalidTerminalWorkspaceTopology();
 };
 
 void WorkbenchDomainTests::recordsOnlyStructuredCommandsWithBoundedDelays()
@@ -100,6 +102,69 @@ void WorkbenchDomainTests::recordsBoundedRecentRemotePaths()
     QCOMPARE(profile.lastRemotePath, std::string("/srv/path-10"));
     QVERIFY(ztermy::workbench::validProfileWorkspaceState(profile));
     QCOMPARE(ztermy::workbench::findProfileWorkspaceState(workspace, "profile-1"), &profile);
+}
+
+void WorkbenchDomainTests::mutatesBoundedTerminalWorkspaceTreeAtomically()
+{
+    using namespace ztermy::workbench;
+    TerminalWorkspaceLayout layout = makeSinglePaneTerminalWorkspace(
+        "workspace", "pane-a", TerminalRestoreIntent{.id = "intent-a", .title = "PowerShell"});
+    QVERIFY(validTerminalWorkspaceLayout(layout));
+
+    QVERIFY(splitTerminalPane(layout, "pane-a", "split-root", "pane-b",
+                              TerminalRestoreIntent{
+                                  .id = "intent-b",
+                                  .profileId = "profile-b",
+                                  .title = "Host B",
+                                  .kind = TerminalRestoreKind::SshProfile,
+                              },
+                              TerminalSplitOrientation::Vertical, 0.6));
+    QVERIFY(splitTerminalPane(layout, "pane-b", "split-right", "pane-c",
+                              TerminalRestoreIntent{.id = "intent-c", .title = "PowerShell 2"},
+                              TerminalSplitOrientation::Horizontal, 0.4, false));
+    QCOMPARE(terminalPaneOrder(layout), std::vector<std::string>({"pane-a", "pane-c", "pane-b"}));
+    QCOMPARE(layout.activePaneId, std::string("pane-c"));
+
+    QVERIFY(resizeTerminalSplit(layout, "split-root", 0.55));
+    QVERIFY(!resizeTerminalSplit(layout, "split-root", 0.1));
+    QVERIFY(swapTerminalPanes(layout, "pane-a", "pane-b"));
+    QVERIFY(closeTerminalPane(layout, "pane-c"));
+    QCOMPARE(terminalPaneOrder(layout), std::vector<std::string>({"pane-a", "pane-b"}));
+    QVERIFY(validTerminalWorkspaceLayout(layout));
+
+    const TerminalWorkspaceLayout unchanged = layout;
+    QVERIFY(!closeTerminalPane(layout, "missing"));
+    QCOMPARE(layout, unchanged);
+}
+
+void WorkbenchDomainTests::rejectsInvalidTerminalWorkspaceTopology()
+{
+    using namespace ztermy::workbench;
+    TerminalWorkspaceLayout layout = makeSinglePaneTerminalWorkspace(
+        "workspace", "pane-a", TerminalRestoreIntent{.id = "intent-a", .title = "PowerShell"});
+    QVERIFY(validTerminalWorkspaceLayout(layout));
+
+    TerminalWorkspaceLayout orphaned = layout;
+    orphaned.nodes.push_back(TerminalLayoutNode{.id = "orphan", .restoreIntentId = "intent-a"});
+    QVERIFY(!validTerminalWorkspaceLayout(orphaned));
+
+    TerminalWorkspaceLayout cyclic = layout;
+    cyclic.nodes.front() = TerminalLayoutNode{
+        .id = "pane-a",
+        .firstChildId = "pane-a",
+        .secondChildId = "pane-a",
+        .kind = TerminalLayoutNodeKind::Split,
+    };
+    QVERIFY(!validTerminalWorkspaceLayout(cyclic));
+
+    TerminalWorkspaceLayout duplicateIntent = layout;
+    duplicateIntent.restoreIntents.push_back(duplicateIntent.restoreIntents.front());
+    QVERIFY(!validTerminalWorkspaceLayout(duplicateIntent));
+
+    WorkspaceState state{.terminalWorkspaces = {layout}, .activeTerminalWorkspaceId = "workspace"};
+    QVERIFY(validWorkspaceState(state));
+    state.activeTerminalWorkspaceId = "missing";
+    QVERIFY(!validWorkspaceState(state));
 }
 
 QTEST_GUILESS_MAIN(WorkbenchDomainTests)

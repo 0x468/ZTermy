@@ -17,8 +17,10 @@ private slots:
     void migratesVersionOneWithoutHostCollapseState();
     void migratesVersionTwoWithoutSftpBookmarks();
     void migratesVersionThreeWithoutSftpNavigationPreferences();
+    void migratesVersionFiveWithoutTerminalWorkspaces();
     void togglesAndBoundsSftpBookmarks();
     void rejectsMalformedDuplicateAndInvalidState();
+    void rejectsMalformedTerminalWorkspaceTopology();
     void recoversTheLastKnownGoodStateFromBackup();
     void refusesToOverwriteANewerWorkspaceSchema();
 };
@@ -60,6 +62,17 @@ void WorkspaceStateStoreTests::savesAndLoadsVersionedNonSecretState()
         .composerHeight = 160.0,
     });
     expected.collapsedHostSections = {"recent", "group:Lab"};
+    auto workspace = ztermy::workbench::makeSinglePaneTerminalWorkspace("workspace-a", "pane-a",
+                                                                        {.id = "intent-a", .title = "PowerShell"});
+    workspace.title = "Operations";
+    QVERIFY(ztermy::workbench::splitTerminalPane(workspace, "pane-a", "split-a", "pane-b",
+                                                 {.id = "intent-b",
+                                                  .profileId = "host-a",
+                                                  .title = "host-a",
+                                                  .kind = ztermy::workbench::TerminalRestoreKind::SshProfile},
+                                                 ztermy::workbench::TerminalSplitOrientation::Vertical, 0.5, true));
+    expected.terminalWorkspaces.push_back(std::move(workspace));
+    expected.activeTerminalWorkspaceId = "workspace-a";
 
     QVERIFY(store.save(expected).has_value());
     const auto loaded = store.load();
@@ -70,8 +83,27 @@ void WorkspaceStateStoreTests::savesAndLoadsVersionedNonSecretState()
     QVERIFY(file.open(QIODevice::ReadOnly));
     const QByteArray payload = file.readAll();
     QVERIFY(payload.contains("schemaVersion"));
+    QVERIFY(payload.contains("terminalWorkspaces"));
+    QVERIFY(payload.contains("activeTerminalWorkspaceId"));
     QVERIFY(!payload.contains("password"));
     QVERIFY(!payload.contains("secret"));
+}
+
+void WorkspaceStateStoreTests::migratesVersionFiveWithoutTerminalWorkspaces()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("workspace.json"));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(R"({"schemaVersion":5,"profiles":[],"collapsedHostSections":[]})");
+    file.close();
+
+    const ztermy::workbench::WorkspaceStateStore store(path);
+    const auto loaded = store.load();
+    QVERIFY(loaded.has_value());
+    QVERIFY(loaded->terminalWorkspaces.empty());
+    QVERIFY(loaded->activeTerminalWorkspaceId.empty());
 }
 
 void WorkspaceStateStoreTests::migratesVersionThreeWithoutSftpNavigationPreferences()
@@ -169,6 +201,23 @@ void WorkspaceStateStoreTests::rejectsMalformedDuplicateAndInvalidState()
     const auto saved = store.save(invalid);
     QVERIFY(!saved.has_value());
     QCOMPARE(saved.error(), ztermy::workbench::WorkspaceStateStoreError::InvalidDocument);
+}
+
+void WorkspaceStateStoreTests::rejectsMalformedTerminalWorkspaceTopology()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("workspace.json"));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(
+        R"({"schemaVersion":6,"profiles":[],"collapsedHostSections":[],"activeTerminalWorkspaceId":"workspace","terminalWorkspaces":[{"id":"workspace","title":"Broken","rootNodeId":"root","activePaneId":"pane","nodes":[{"id":"root","kind":"split","restoreIntentId":"","firstChildId":"pane","secondChildId":"root","orientation":"horizontal","ratio":0.5},{"id":"pane","kind":"leaf","restoreIntentId":"intent","firstChildId":"","secondChildId":"","orientation":"horizontal","ratio":0.5}],"restoreIntents":[{"id":"intent","kind":"local","profileId":"","title":"PowerShell"}]}]})");
+    file.close();
+
+    const ztermy::workbench::WorkspaceStateStore store(path);
+    const auto loaded = store.load();
+    QVERIFY(!loaded.has_value());
+    QCOMPARE(loaded.error(), ztermy::workbench::WorkspaceStateStoreError::InvalidDocument);
 }
 
 void WorkspaceStateStoreTests::recoversTheLastKnownGoodStateFromBackup()

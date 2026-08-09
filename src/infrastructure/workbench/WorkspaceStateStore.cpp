@@ -17,7 +17,7 @@ namespace ztermy::workbench
 namespace
 {
 
-constexpr int currentSchemaVersion = 5;
+constexpr int currentSchemaVersion = 6;
 
 QString text(const std::string &value)
 {
@@ -28,6 +28,187 @@ std::string bytes(const QString &value)
 {
     const QByteArray encoded = value.toUtf8();
     return {encoded.constData(), static_cast<std::size_t>(encoded.size())};
+}
+
+QString restoreKindToken(const TerminalRestoreKind kind)
+{
+    return kind == TerminalRestoreKind::Local ? QStringLiteral("local") : QStringLiteral("ssh-profile");
+}
+
+QString nodeKindToken(const TerminalLayoutNodeKind kind)
+{
+    return kind == TerminalLayoutNodeKind::Leaf ? QStringLiteral("leaf") : QStringLiteral("split");
+}
+
+QString orientationToken(const TerminalSplitOrientation orientation)
+{
+    return orientation == TerminalSplitOrientation::Horizontal ? QStringLiteral("horizontal")
+                                                               : QStringLiteral("vertical");
+}
+
+QJsonObject serializeTerminalWorkspace(const TerminalWorkspaceLayout &layout)
+{
+    QJsonArray nodes;
+    for (const TerminalLayoutNode &node : layout.nodes)
+    {
+        nodes.push_back(QJsonObject{
+            {QStringLiteral("id"), text(node.id)},
+            {QStringLiteral("kind"), nodeKindToken(node.kind)},
+            {QStringLiteral("restoreIntentId"), text(node.restoreIntentId)},
+            {QStringLiteral("firstChildId"), text(node.firstChildId)},
+            {QStringLiteral("secondChildId"), text(node.secondChildId)},
+            {QStringLiteral("orientation"), orientationToken(node.orientation)},
+            {QStringLiteral("ratio"), node.ratio},
+        });
+    }
+    QJsonArray intents;
+    for (const TerminalRestoreIntent &intent : layout.restoreIntents)
+    {
+        intents.push_back(QJsonObject{
+            {QStringLiteral("id"), text(intent.id)},
+            {QStringLiteral("kind"), restoreKindToken(intent.kind)},
+            {QStringLiteral("profileId"), text(intent.profileId)},
+            {QStringLiteral("title"), text(intent.title)},
+        });
+    }
+    return {
+        {QStringLiteral("id"), text(layout.id)},
+        {QStringLiteral("title"), text(layout.title)},
+        {QStringLiteral("rootNodeId"), text(layout.rootNodeId)},
+        {QStringLiteral("activePaneId"), text(layout.activePaneId)},
+        {QStringLiteral("nodes"), nodes},
+        {QStringLiteral("restoreIntents"), intents},
+    };
+}
+
+std::optional<TerminalRestoreKind> parseRestoreKind(const QJsonValue &value)
+{
+    if (!value.isString())
+    {
+        return std::nullopt;
+    }
+    const QString token = value.toString();
+    if (token == QStringLiteral("local"))
+    {
+        return TerminalRestoreKind::Local;
+    }
+    if (token == QStringLiteral("ssh-profile"))
+    {
+        return TerminalRestoreKind::SshProfile;
+    }
+    return std::nullopt;
+}
+
+std::optional<TerminalLayoutNodeKind> parseNodeKind(const QJsonValue &value)
+{
+    if (!value.isString())
+    {
+        return std::nullopt;
+    }
+    const QString token = value.toString();
+    if (token == QStringLiteral("leaf"))
+    {
+        return TerminalLayoutNodeKind::Leaf;
+    }
+    if (token == QStringLiteral("split"))
+    {
+        return TerminalLayoutNodeKind::Split;
+    }
+    return std::nullopt;
+}
+
+std::optional<TerminalSplitOrientation> parseOrientation(const QJsonValue &value)
+{
+    if (!value.isString())
+    {
+        return std::nullopt;
+    }
+    const QString token = value.toString();
+    if (token == QStringLiteral("horizontal"))
+    {
+        return TerminalSplitOrientation::Horizontal;
+    }
+    if (token == QStringLiteral("vertical"))
+    {
+        return TerminalSplitOrientation::Vertical;
+    }
+    return std::nullopt;
+}
+
+std::optional<TerminalWorkspaceLayout> parseTerminalWorkspace(const QJsonValue &value)
+{
+    if (!value.isObject())
+    {
+        return std::nullopt;
+    }
+    const QJsonObject object = value.toObject();
+    const QJsonValue nodesValue = object.value(QStringLiteral("nodes"));
+    const QJsonValue intentsValue = object.value(QStringLiteral("restoreIntents"));
+    if (!object.value(QStringLiteral("id")).isString() || !object.value(QStringLiteral("title")).isString()
+        || !object.value(QStringLiteral("rootNodeId")).isString()
+        || !object.value(QStringLiteral("activePaneId")).isString() || !nodesValue.isArray() || !intentsValue.isArray())
+    {
+        return std::nullopt;
+    }
+    TerminalWorkspaceLayout layout{
+        .id = bytes(object.value(QStringLiteral("id")).toString()),
+        .title = bytes(object.value(QStringLiteral("title")).toString()),
+        .rootNodeId = bytes(object.value(QStringLiteral("rootNodeId")).toString()),
+        .activePaneId = bytes(object.value(QStringLiteral("activePaneId")).toString()),
+    };
+    const QJsonArray nodes = nodesValue.toArray();
+    layout.nodes.reserve(static_cast<std::size_t>(nodes.size()));
+    for (const QJsonValue nodeValue : nodes)
+    {
+        if (!nodeValue.isObject())
+        {
+            return std::nullopt;
+        }
+        const QJsonObject node = nodeValue.toObject();
+        const auto kind = parseNodeKind(node.value(QStringLiteral("kind")));
+        const auto orientation = parseOrientation(node.value(QStringLiteral("orientation")));
+        if (!kind || !orientation || !node.value(QStringLiteral("id")).isString()
+            || !node.value(QStringLiteral("restoreIntentId")).isString()
+            || !node.value(QStringLiteral("firstChildId")).isString()
+            || !node.value(QStringLiteral("secondChildId")).isString()
+            || !node.value(QStringLiteral("ratio")).isDouble())
+        {
+            return std::nullopt;
+        }
+        layout.nodes.push_back({
+            .id = bytes(node.value(QStringLiteral("id")).toString()),
+            .restoreIntentId = bytes(node.value(QStringLiteral("restoreIntentId")).toString()),
+            .firstChildId = bytes(node.value(QStringLiteral("firstChildId")).toString()),
+            .secondChildId = bytes(node.value(QStringLiteral("secondChildId")).toString()),
+            .kind = *kind,
+            .orientation = *orientation,
+            .ratio = node.value(QStringLiteral("ratio")).toDouble(),
+        });
+    }
+    const QJsonArray intents = intentsValue.toArray();
+    layout.restoreIntents.reserve(static_cast<std::size_t>(intents.size()));
+    for (const QJsonValue intentValue : intents)
+    {
+        if (!intentValue.isObject())
+        {
+            return std::nullopt;
+        }
+        const QJsonObject intent = intentValue.toObject();
+        const auto kind = parseRestoreKind(intent.value(QStringLiteral("kind")));
+        if (!kind || !intent.value(QStringLiteral("id")).isString()
+            || !intent.value(QStringLiteral("profileId")).isString()
+            || !intent.value(QStringLiteral("title")).isString())
+        {
+            return std::nullopt;
+        }
+        layout.restoreIntents.push_back({
+            .id = bytes(intent.value(QStringLiteral("id")).toString()),
+            .profileId = bytes(intent.value(QStringLiteral("profileId")).toString()),
+            .title = bytes(intent.value(QStringLiteral("title")).toString()),
+            .kind = *kind,
+        });
+    }
+    return validTerminalWorkspaceLayout(layout) ? std::optional{std::move(layout)} : std::nullopt;
 }
 
 QJsonObject serializeProfile(const ProfileWorkspaceState &state)
@@ -189,6 +370,27 @@ std::expected<WorkspaceState, WorkspaceStateStoreError> parseWorkspacePayload(co
             state.collapsedHostSections.push_back(bytes(section.toString()));
         }
     }
+    if (schemaVersion >= 6)
+    {
+        const QJsonValue workspacesValue = root.value(QStringLiteral("terminalWorkspaces"));
+        const QJsonValue activeWorkspaceValue = root.value(QStringLiteral("activeTerminalWorkspaceId"));
+        if (!workspacesValue.isArray() || !activeWorkspaceValue.isString())
+        {
+            return std::unexpected(WorkspaceStateStoreError::InvalidDocument);
+        }
+        const QJsonArray workspaces = workspacesValue.toArray();
+        state.terminalWorkspaces.reserve(static_cast<std::size_t>(workspaces.size()));
+        for (const QJsonValue workspaceValue : workspaces)
+        {
+            auto workspace = parseTerminalWorkspace(workspaceValue);
+            if (!workspace)
+            {
+                return std::unexpected(WorkspaceStateStoreError::InvalidDocument);
+            }
+            state.terminalWorkspaces.push_back(std::move(*workspace));
+        }
+        state.activeTerminalWorkspaceId = bytes(activeWorkspaceValue.toString());
+    }
     return validWorkspaceState(state) ? std::expected<WorkspaceState, WorkspaceStateStoreError>{std::move(state)}
                                       : std::unexpected(WorkspaceStateStoreError::InvalidDocument);
 }
@@ -300,10 +502,18 @@ std::expected<void, WorkspaceStateStoreError> WorkspaceStateStore::save(const Wo
     {
         collapsedSections.push_back(text(section));
     }
-    const QByteArray payload = QJsonDocument(QJsonObject{{QStringLiteral("schemaVersion"), currentSchemaVersion},
-                                                         {QStringLiteral("profiles"), profiles},
-                                                         {QStringLiteral("collapsedHostSections"), collapsedSections}})
-                                   .toJson(QJsonDocument::Indented);
+    QJsonArray terminalWorkspaces;
+    for (const TerminalWorkspaceLayout &workspace : state.terminalWorkspaces)
+    {
+        terminalWorkspaces.push_back(serializeTerminalWorkspace(workspace));
+    }
+    const QByteArray payload =
+        QJsonDocument(QJsonObject{{QStringLiteral("schemaVersion"), currentSchemaVersion},
+                                  {QStringLiteral("profiles"), profiles},
+                                  {QStringLiteral("collapsedHostSections"), collapsedSections},
+                                  {QStringLiteral("terminalWorkspaces"), terminalWorkspaces},
+                                  {QStringLiteral("activeTerminalWorkspaceId"), text(state.activeTerminalWorkspaceId)}})
+            .toJson(QJsonDocument::Indented);
     return writeWorkspacePayload(m_filePath, payload);
 }
 
