@@ -10,6 +10,7 @@
 #include "application/terminal/LocalTerminalSession.h"
 #include "core/config/ApplicationPaths.h"
 #include "core/config/ApplicationSettings.h"
+#include "domain/workbench/ScriptExecution.h"
 #include "domain/workbench/ScriptRecorder.h"
 #include "infrastructure/forwarding/PortForwardingRuleStore.h"
 #include "infrastructure/logging/SessionLogWriter.h"
@@ -24,6 +25,7 @@
 #include <QPointer>
 #include <QString>
 #include <QStringList>
+#include <QTimer>
 #include <QVariantList>
 #include <QVariantMap>
 
@@ -275,6 +277,10 @@ public:
     Q_INVOKABLE void clearTerminalScriptRecording();
     Q_INVOKABLE bool saveQuickCommand(const QString &id, const QString &name, const QString &command,
                                       const QString &description, const QString &shellScope);
+    Q_INVOKABLE bool saveScript(const QVariantMap &script);
+    [[nodiscard]] Q_INVOKABLE QVariantMap renderScript(const QString &id, const QVariantMap &values) const;
+    Q_INVOKABLE bool runScript(const QString &id, const QVariantMap &values, const QString &targetSessionId);
+    Q_INVOKABLE bool cancelScript(const QString &targetSessionId);
     Q_INVOKABLE bool deleteQuickCommand(const QString &id);
     Q_INVOKABLE bool moveQuickCommand(const QString &id, int targetIndex);
     Q_INVOKABLE bool importQuickCommands(const QString &localFileUrl);
@@ -448,6 +454,7 @@ private:
         qreal composerHeight = 132.0;
         terminal::TerminalSnapshotPtr snapshot;
         std::shared_ptr<logging::SessionLogWriter> sessionLog;
+        std::shared_ptr<terminal::TerminalOutputSink> outputSink;
         QString id;
         QString workspaceId;
         QString paneId;
@@ -482,6 +489,7 @@ private:
         std::vector<workbench::ShellHistoryEntry> capturedHistory;
         std::deque<telemetry::Sample> telemetryHistory;
         workbench::ScriptRecorder scriptRecorder;
+        workbench::ScriptExecution scriptExecution;
         std::optional<telemetry::Sample> telemetrySample;
         std::uint32_t searchCurrent = 0;
         std::uint32_t searchTotal = 0;
@@ -524,6 +532,10 @@ private:
     void connectSshTabSignals(TerminalTab &tab);
     void connectSftpTabSignals(TerminalTab &tab);
     void initializeSessionLog(TerminalTab &tab);
+    void initializeTerminalOutputSink(TerminalTab &tab);
+    void observeScriptOutput(const QString &tabId, const QByteArray &bytes);
+    void dispatchScriptCommands(TerminalTab &tab, const std::vector<std::string> &commands);
+    void initializeScriptExecutionTimer();
     void queueInput(const QByteArray &bytes);
     void queuePaste(const QByteArray &bytes);
     void dispatchInput(TerminalTab &tab, const QByteArray &bytes);
@@ -651,6 +663,7 @@ private:
     bool m_hostKeyForSftp = false;
     bool m_shutdownStarted = false;
     bool m_terminalTelemetryVisible = false;
+    QTimer m_scriptExecutionTimer;
     QString m_hostKeyTransferTaskId;
     QString m_hostKeyForwardingRuleId;
 };

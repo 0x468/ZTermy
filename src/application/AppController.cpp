@@ -47,7 +47,46 @@ namespace
 
 constexpr std::size_t maximumRecentHostProfiles = 6;
 
+class TerminalOutputFanout final : public ztermy::terminal::TerminalOutputSink
+{
+public:
+    using Observer = std::function<void(std::span<const std::byte>)>;
+
+    TerminalOutputFanout(std::shared_ptr<ztermy::terminal::TerminalOutputSink> primary, Observer observer)
+        : m_primary(std::move(primary)), m_observer(std::move(observer))
+    {
+    }
+
+    void append(const std::span<const std::byte> bytes) noexcept override
+    {
+        try
+        {
+            if (m_primary)
+            {
+                m_primary->append(bytes);
+            }
+            if (m_observer)
+            {
+                m_observer(bytes);
+            }
+        }
+        catch (...)
+        {
+            // Terminal output must never be allowed to unwind into a session worker.
+        }
+    }
+
+private:
+    std::shared_ptr<ztermy::terminal::TerminalOutputSink> m_primary;
+    Observer m_observer;
+};
+
 [[nodiscard]] ztermy::workbench::ScriptRecorder::TimePoint recorderNow()
+{
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch());
+}
+
+[[nodiscard]] ztermy::workbench::ScriptExecution::TimePoint scriptExecutionNow()
 {
     return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch());
 }
@@ -336,6 +375,84 @@ constexpr std::size_t maximumRecentHostProfiles = 6;
 {
     return continuation == ztermy::workbench::ScriptContinuation::literalOutput ? QStringLiteral("literal-output")
                                                                                 : QStringLiteral("immediate");
+}
+
+[[nodiscard]] std::optional<ztermy::workbench::ScriptVariableType> parseScriptVariableType(const QString &value)
+{
+    using ztermy::workbench::ScriptVariableType;
+    if (value == QStringLiteral("text"))
+    {
+        return ScriptVariableType::text;
+    }
+    if (value == QStringLiteral("integer"))
+    {
+        return ScriptVariableType::integer;
+    }
+    if (value == QStringLiteral("boolean"))
+    {
+        return ScriptVariableType::boolean;
+    }
+    if (value == QStringLiteral("choice"))
+    {
+        return ScriptVariableType::choice;
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] std::optional<ztermy::workbench::ScriptContinuation> parseScriptContinuation(const QString &value)
+{
+    using ztermy::workbench::ScriptContinuation;
+    if (value == QStringLiteral("immediate"))
+    {
+        return ScriptContinuation::immediate;
+    }
+    if (value == QStringLiteral("literal-output"))
+    {
+        return ScriptContinuation::literalOutput;
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] QString scriptExecutionStateToken(const ztermy::workbench::ScriptExecutionState state)
+{
+    using ztermy::workbench::ScriptExecutionState;
+    switch (state)
+    {
+        case ScriptExecutionState::running:
+            return QStringLiteral("running");
+        case ScriptExecutionState::waitingForOutput:
+            return QStringLiteral("waiting-output");
+        case ScriptExecutionState::completed:
+            return QStringLiteral("completed");
+        case ScriptExecutionState::cancelled:
+            return QStringLiteral("cancelled");
+        case ScriptExecutionState::timedOut:
+            return QStringLiteral("timed-out");
+        case ScriptExecutionState::idle:
+        default:
+            return QStringLiteral("idle");
+    }
+}
+
+[[nodiscard]] QString scriptRenderErrorToken(const ztermy::workbench::ScriptRenderError error)
+{
+    using ztermy::workbench::ScriptRenderError;
+    switch (error)
+    {
+        case ScriptRenderError::missingVariable:
+            return QStringLiteral("missing-variable");
+        case ScriptRenderError::invalidVariableValue:
+            return QStringLiteral("invalid-variable-value");
+        case ScriptRenderError::invalidTemplate:
+            return QStringLiteral("invalid-template");
+        case ScriptRenderError::unknownTemplateVariable:
+            return QStringLiteral("unknown-template-variable");
+        case ScriptRenderError::renderedTooLarge:
+            return QStringLiteral("rendered-too-large");
+        case ScriptRenderError::invalidDefinition:
+        default:
+            return QStringLiteral("invalid-definition");
+    }
 }
 
 [[nodiscard]] QString shellKindToken(const ztermy::workbench::ShellKind value)
@@ -1377,6 +1494,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     loadApplicationSettings();
     initializeActionRegistry();
     initializeTransferManager();
+    initializeScriptExecutionTimer();
     loadQuickCommands();
     loadWorkspaceState();
 }
@@ -1429,6 +1547,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     loadApplicationSettings();
     initializeActionRegistry();
     initializeTransferManager();
+    initializeScriptExecutionTimer();
     loadQuickCommands();
     loadWorkspaceState();
 }
@@ -1544,6 +1663,7 @@ void AppController::shutdown() noexcept
         return;
     }
     m_shutdownStarted = true;
+    m_scriptExecutionTimer.stop();
     stopAllPortForwardingRules();
     clearHostKeyPrompt();
 
@@ -1736,6 +1856,7 @@ QVariantList AppController::terminalTabs() const
 
 QVariantMap AppController::terminalTabValue(const TerminalTab &tab, const QString &publicId) const
 {
+    const workbench::ScriptExecutionSnapshot execution = tab.scriptExecution.snapshot();
     return {
         {QStringLiteral("id"), publicId},
         {QStringLiteral("sessionId"), tab.id},
@@ -1789,6 +1910,11 @@ QVariantMap AppController::terminalTabValue(const TerminalTab &tab, const QStrin
         {QStringLiteral("scriptRecordingSteps"), recordedScriptStepsVariant(tab)},
         {QStringLiteral("scriptRecordingStartedUtcMs"), tab.recordingStartedUtcMs},
         {QStringLiteral("scriptPlaybackActive"), tab.scriptPlaybackActive},
+        {QStringLiteral("scriptExecutionState"), scriptExecutionStateToken(execution.state)},
+        {QStringLiteral("scriptExecutionId"), utf8QString(execution.scriptId)},
+        {QStringLiteral("scriptExecutionName"), utf8QString(execution.scriptName)},
+        {QStringLiteral("scriptExecutionDispatchedSteps"), static_cast<qulonglong>(execution.dispatchedSteps)},
+        {QStringLiteral("scriptExecutionTotalSteps"), static_cast<qulonglong>(execution.totalSteps)},
     };
 }
 
@@ -2495,7 +2621,7 @@ QString AppController::startLocalTerminal()
         return {};
     }
     initializeSessionLog(*tab);
-    tab->local->setOutputSink(tab->sessionLog);
+    initializeTerminalOutputSink(*tab);
     QString tabId = tab->id;
     auto workspace = workbench::makeSinglePaneTerminalWorkspace(
         utf8String(tab->workspaceId), utf8String(tab->paneId),
@@ -2732,14 +2858,15 @@ bool AppController::splitActiveTerminal(const QString &orientation, const bool d
     }
     workspace->activePaneId = utf8String(paneId);
     initializeSessionLog(*tab);
+    initializeTerminalOutputSink(*tab);
     if (tab->local)
     {
-        tab->local->setOutputSink(tab->sessionLog);
+        tab->local->setOutputSink(tab->outputSink);
         connectLocalTabSignals(*tab);
     }
     else
     {
-        tab->ssh->setOutputSink(tab->sessionLog);
+        tab->ssh->setOutputSink(tab->outputSink);
         connectSshTabSignals(*tab);
     }
     m_tabs.push_back(std::move(tab));
@@ -3432,6 +3559,193 @@ void AppController::clearTerminalScriptRecording()
     tab->recordingStartedUtcMs = 0;
     tab->scriptRecorder.clear();
     emit terminalTabsChanged();
+}
+
+bool AppController::saveScript(const QVariantMap &value)
+{
+    const auto shellScope = quickCommandShellScope(value.value(QStringLiteral("shell")).toString());
+    const QVariantList variableValues = value.value(QStringLiteral("variables")).toList();
+    const QVariantList stepValues = value.value(QStringLiteral("steps")).toList();
+    if (!shellScope || variableValues.size() > static_cast<qsizetype>(workbench::maximumScriptVariableCount)
+        || stepValues.size() > static_cast<qsizetype>(workbench::maximumScriptStepCount))
+    {
+        setQuickCommandOperationError(tr("The script definition is invalid."));
+        return false;
+    }
+
+    const QString suppliedId = value.value(QStringLiteral("id")).toString().trimmed();
+    const std::int64_t now = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
+    workbench::ScriptDefinition script{
+        .id = suppliedId.isEmpty() ? QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString()
+                                   : utf8String(suppliedId),
+        .name = utf8String(value.value(QStringLiteral("name")).toString().trimmed()),
+        .description = utf8String(value.value(QStringLiteral("description")).toString().trimmed()),
+        .shellScope = *shellScope,
+        .createdUtcMs = now,
+        .modifiedUtcMs = now,
+    };
+    script.variables.reserve(static_cast<std::size_t>(variableValues.size()));
+    for (const QVariant &entry : variableValues)
+    {
+        const QVariantMap variableValue = entry.toMap();
+        const auto type = parseScriptVariableType(variableValue.value(QStringLiteral("type")).toString());
+        if (!type)
+        {
+            setQuickCommandOperationError(tr("The script contains an invalid variable."));
+            return false;
+        }
+        std::vector<std::string> choices;
+        const QVariantList choiceValues = variableValue.value(QStringLiteral("choices")).toList();
+        choices.reserve(static_cast<std::size_t>(choiceValues.size()));
+        for (const QVariant &choice : choiceValues)
+        {
+            choices.push_back(utf8String(choice.toString()));
+        }
+        script.variables.push_back({
+            .name = utf8String(variableValue.value(QStringLiteral("name")).toString().trimmed()),
+            .label = utf8String(variableValue.value(QStringLiteral("label")).toString().trimmed()),
+            .type = *type,
+            .defaultValue = utf8String(variableValue.value(QStringLiteral("defaultValue")).toString()),
+            .choices = std::move(choices),
+            .required = variableValue.value(QStringLiteral("required")).toBool(),
+        });
+    }
+    script.steps.reserve(static_cast<std::size_t>(stepValues.size()));
+    for (const QVariant &entry : stepValues)
+    {
+        const QVariantMap stepValue = entry.toMap();
+        const auto continuation = parseScriptContinuation(stepValue.value(QStringLiteral("continuation")).toString());
+        bool validTimeout = false;
+        const qlonglong timeout = stepValue.value(QStringLiteral("timeoutMs")).toLongLong(&validTimeout);
+        if (!continuation || !validTimeout || timeout < 0
+            || timeout > static_cast<qlonglong>(std::numeric_limits<std::uint32_t>::max()))
+        {
+            setQuickCommandOperationError(tr("The script contains an invalid step."));
+            return false;
+        }
+        script.steps.push_back({
+            .command = utf8String(normalizedQuickCommandText(stepValue.value(QStringLiteral("command")).toString())),
+            .continuation = *continuation,
+            .outputMarker = utf8String(stepValue.value(QStringLiteral("outputMarker")).toString()),
+            .timeoutMs = static_cast<std::uint32_t>(timeout),
+        });
+    }
+    if (!workbench::validScriptDefinition(script))
+    {
+        setQuickCommandOperationError(tr("The script definition is invalid."));
+        return false;
+    }
+
+    std::vector<workbench::ScriptDefinition> candidate = m_scripts;
+    if (suppliedId.isEmpty())
+    {
+        if (candidate.size() >= workbench::maximumScriptCount)
+        {
+            setQuickCommandOperationError(tr("The script library has reached its 256 item limit."));
+            return false;
+        }
+        candidate.push_back(std::move(script));
+    }
+    else
+    {
+        const auto existing = std::ranges::find(candidate, script.id, &workbench::ScriptDefinition::id);
+        if (existing == candidate.end())
+        {
+            setQuickCommandOperationError(tr("The script no longer exists."));
+            return false;
+        }
+        script.createdUtcMs = existing->createdUtcMs;
+        *existing = std::move(script);
+    }
+    if (!m_scriptStore.save(candidate))
+    {
+        setQuickCommandOperationError(tr("The script could not be saved."));
+        return false;
+    }
+    m_scripts = std::move(candidate);
+    m_quickCommandOperationError.clear();
+    emit quickCommandsChanged();
+    return true;
+}
+
+QVariantMap AppController::renderScript(const QString &id, const QVariantMap &values) const
+{
+    const auto existing = std::ranges::find(m_scripts, utf8String(id), &workbench::ScriptDefinition::id);
+    if (existing == m_scripts.end())
+    {
+        return {{QStringLiteral("ok"), false}, {QStringLiteral("error"), QStringLiteral("not-found")}};
+    }
+    workbench::ScriptVariableValues variables;
+    variables.reserve(static_cast<std::size_t>(values.size()));
+    for (auto iterator = values.constBegin(); iterator != values.constEnd(); ++iterator)
+    {
+        variables.emplace(utf8String(iterator.key()), utf8String(iterator.value().toString()));
+    }
+    const auto rendered = workbench::renderScript(*existing, variables);
+    if (!rendered)
+    {
+        return {{QStringLiteral("ok"), false}, {QStringLiteral("error"), scriptRenderErrorToken(rendered.error())}};
+    }
+    QVariantList steps;
+    steps.reserve(static_cast<qsizetype>(rendered->steps.size()));
+    for (const workbench::RenderedScriptStep &step : rendered->steps)
+    {
+        steps.append(QVariantMap{{QStringLiteral("command"), utf8QString(step.command)},
+                                 {QStringLiteral("continuation"), scriptContinuationToken(step.continuation)},
+                                 {QStringLiteral("outputMarker"), utf8QString(step.outputMarker)},
+                                 {QStringLiteral("timeoutMs"), step.timeoutMs}});
+    }
+    return {{QStringLiteral("ok"), true},
+            {QStringLiteral("id"), utf8QString(rendered->id)},
+            {QStringLiteral("name"), utf8QString(rendered->name)},
+            {QStringLiteral("steps"), steps}};
+}
+
+bool AppController::runScript(const QString &id, const QVariantMap &values, const QString &targetSessionId)
+{
+    TerminalTab *tab = findTab(targetSessionId);
+    const auto existing = std::ranges::find(m_scripts, utf8String(id), &workbench::ScriptDefinition::id);
+    if (tab == nullptr || !tab->running || existing == m_scripts.end())
+    {
+        setQuickCommandOperationError(tr("Choose a running target terminal for the script."));
+        return false;
+    }
+    workbench::ScriptVariableValues variables;
+    variables.reserve(static_cast<std::size_t>(values.size()));
+    for (auto iterator = values.constBegin(); iterator != values.constEnd(); ++iterator)
+    {
+        variables.emplace(utf8String(iterator.key()), utf8String(iterator.value().toString()));
+    }
+    auto rendered = workbench::renderScript(*existing, variables);
+    if (!rendered)
+    {
+        setQuickCommandOperationError(tr("Fill every required script variable with a valid value."));
+        return false;
+    }
+    auto commands = tab->scriptExecution.start(std::move(*rendered), utf8String(tab->id), scriptExecutionNow());
+    if (!commands)
+    {
+        setQuickCommandOperationError(tab->scriptExecution.active()
+                                          ? tr("A script is already running in this terminal.")
+                                          : tr("The script could not be started."));
+        return false;
+    }
+    m_quickCommandOperationError.clear();
+    dispatchScriptCommands(*tab, *commands);
+    emit quickCommandsChanged();
+    emit terminalTabsChanged();
+    return true;
+}
+
+bool AppController::cancelScript(const QString &targetSessionId)
+{
+    TerminalTab *tab = findTab(targetSessionId);
+    if (tab == nullptr || !tab->scriptExecution.cancel())
+    {
+        return false;
+    }
+    emit terminalTabsChanged();
+    return true;
 }
 
 bool AppController::saveQuickCommand(const QString &id, const QString &name, const QString &command,
@@ -4516,7 +4830,7 @@ bool AppController::startSshConnection(ssh::SshConnectionRequest request, QStrin
     tab->ssh = std::make_unique<ssh::SshTerminalSession>();
     const QString tabId = tab->id;
     initializeSessionLog(*tab);
-    tab->ssh->setOutputSink(tab->sessionLog);
+    initializeTerminalOutputSink(*tab);
     auto workspace = workbench::makeSinglePaneTerminalWorkspace(
         utf8String(tab->workspaceId), utf8String(tab->paneId),
         {.id = utf8String(tab->id),
@@ -6482,6 +6796,93 @@ void AppController::initializeSessionLog(TerminalTab &tab)
     });
 }
 
+void AppController::initializeTerminalOutputSink(TerminalTab &tab)
+{
+    const QString tabId = tab.id;
+    tab.outputSink =
+        std::make_shared<TerminalOutputFanout>(tab.sessionLog, [this, tabId](const std::span<const std::byte> bytes) {
+            if (bytes.empty())
+            {
+                return;
+            }
+            const QByteArray copy(reinterpret_cast<const char *>(bytes.data()), static_cast<qsizetype>(bytes.size()));
+            QMetaObject::invokeMethod(
+                this,
+                [this, tabId, copy] {
+                    observeScriptOutput(tabId, copy);
+                },
+                Qt::QueuedConnection);
+        });
+    if (tab.local)
+    {
+        tab.local->setOutputSink(tab.outputSink);
+    }
+    else if (tab.ssh)
+    {
+        tab.ssh->setOutputSink(tab.outputSink);
+    }
+}
+
+void AppController::observeScriptOutput(const QString &tabId, const QByteArray &bytes)
+{
+    TerminalTab *tab = findTab(tabId);
+    if (tab == nullptr || bytes.isEmpty() || !tab->scriptExecution.active())
+    {
+        return;
+    }
+    const workbench::ScriptExecutionSnapshot before = tab->scriptExecution.snapshot();
+    const auto view = std::span(bytes.constData(), static_cast<std::size_t>(bytes.size()));
+    const std::vector<std::string> commands =
+        tab->scriptExecution.observeOutput(std::as_bytes(view), scriptExecutionNow());
+    dispatchScriptCommands(*tab, commands);
+    if (tab->scriptExecution.snapshot() != before)
+    {
+        emit terminalTabsChanged();
+    }
+}
+
+void AppController::dispatchScriptCommands(TerminalTab &tab, const std::vector<std::string> &commands)
+{
+    for (const std::string &command : commands)
+    {
+        const QString normalized = normalizedQuickCommandText(utf8QString(command));
+        if (!validTerminalCommand(normalized))
+        {
+            static_cast<void>(tab.scriptExecution.cancel());
+            return;
+        }
+        QByteArray bytes = normalized.toUtf8();
+        bytes.replace('\n', '\r');
+        if (bytes.isEmpty() || bytes.back() != '\r')
+        {
+            bytes.append('\r');
+        }
+        appendCapturedHistory(tab, normalized);
+        tab.inputHistoryBuffer.clear();
+        tab.inputHistoryBufferReliable = true;
+        dispatchInput(tab, bytes);
+    }
+}
+
+void AppController::initializeScriptExecutionTimer()
+{
+    m_scriptExecutionTimer.setInterval(100);
+    m_scriptExecutionTimer.setTimerType(Qt::CoarseTimer);
+    QObject::connect(&m_scriptExecutionTimer, &QTimer::timeout, this, [this] {
+        bool changed = false;
+        const auto now = scriptExecutionNow();
+        for (const auto &tab : m_tabs)
+        {
+            changed = tab->scriptExecution.tick(now) || changed;
+        }
+        if (changed)
+        {
+            emit terminalTabsChanged();
+        }
+    });
+    m_scriptExecutionTimer.start();
+}
+
 void AppController::connectLocalTabSignals(TerminalTab &tab)
 {
     const QString tabId = tab.id;
@@ -7741,7 +8142,7 @@ void AppController::restoreTerminalWorkspaces()
                     continue;
                 }
                 initializeSessionLog(*tab);
-                tab->local->setOutputSink(tab->sessionLog);
+                initializeTerminalOutputSink(*tab);
                 connectLocalTabSignals(*tab);
                 const QString tabId = tab->id;
                 m_tabs.push_back(std::move(tab));
@@ -7779,7 +8180,7 @@ void AppController::restoreTerminalWorkspaces()
             applyWorkspaceState(*tab);
             tab->ssh = std::make_unique<ssh::SshTerminalSession>();
             initializeSessionLog(*tab);
-            tab->ssh->setOutputSink(tab->sessionLog);
+            initializeTerminalOutputSink(*tab);
             connectSshTabSignals(*tab);
             m_tabs.push_back(std::move(tab));
         }

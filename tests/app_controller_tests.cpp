@@ -13,6 +13,8 @@
 #include <QVariantMap>
 
 #include <array>
+#include <ranges>
+#include <span>
 #include <vector>
 
 namespace
@@ -24,6 +26,7 @@ struct FakeLocalSessionState final
     int stops = 0;
     QList<QByteArray> inputs;
     QList<QByteArray> pastes;
+    std::shared_ptr<ztermy::terminal::TerminalOutputSink> outputSink;
 };
 
 class FakeLocalTerminalSession final : public ztermy::terminal::LocalTerminalSessionBackend
@@ -53,6 +56,10 @@ public:
 
     void queueInput(const QByteArray &bytes) override { m_state->inputs.append(bytes); }
     void queuePaste(const QByteArray &bytes) override { m_state->pastes.append(bytes); }
+    void setOutputSink(const std::shared_ptr<ztermy::terminal::TerminalOutputSink> &sink) override
+    {
+        m_state->outputSink = sink;
+    }
     void requestResize(quint16, quint16, quint32, quint32) override {}
     void requestScroll(int) override {}
     void requestSelection(quint16, quint16, quint16, quint16, bool) override {}
@@ -115,6 +122,7 @@ private slots:
     void orderlyShutdownStopsAllLocalTabsOnce();
     void persistsQuickCommandsAndPerTabWorkbenchState();
     void importsAndExportsScriptLibraryWithoutOverwritingIds();
+    void rendersAndRunsScriptAgainstFixedTerminal();
     void loadsRecentProfilesAndParsesQuickTargets();
     void reconnectsSavedKeyProfileOnRealHost();
 };
@@ -1336,6 +1344,87 @@ void AppControllerTests::importsAndExportsScriptLibraryWithoutOverwritingIds()
     QCOMPARE(target.quickCommands().constFirst().toMap().value(QStringLiteral("name")).toString(),
              QStringLiteral("Disk usage"));
     QVERIFY(target.quickCommandOperationError().isEmpty());
+}
+
+void AppControllerTests::rendersAndRunsScriptAgainstFixedTerminal()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    QList<std::shared_ptr<FakeLocalSessionState>> sessions;
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
+                                     directory.filePath(QStringLiteral("known_hosts.json")),
+                                     directory.filePath(QStringLiteral("settings.json")), [&sessions] {
+                                         auto state = std::make_shared<FakeLocalSessionState>();
+                                         sessions.append(state);
+                                         return std::make_unique<FakeLocalTerminalSession>(std::move(state));
+                                     });
+
+    QVERIFY(!controller.startLocalTerminal().isEmpty());
+    const QString firstSessionId =
+        controller.terminalTabs().constFirst().toMap().value(QStringLiteral("sessionId")).toString();
+    QVERIFY(!controller.startLocalTerminal().isEmpty());
+    QCOMPARE(sessions.size(), 2);
+
+    const QVariantMap script{
+        {QStringLiteral("name"), QStringLiteral("Readiness gate")},
+        {QStringLiteral("description"), QStringLiteral("Waits for output before continuing")},
+        {QStringLiteral("shell"), QStringLiteral("any")},
+        {QStringLiteral("variables"), QVariantList{QVariantMap{{QStringLiteral("name"), QStringLiteral("target")},
+                                                               {QStringLiteral("label"), QStringLiteral("Target")},
+                                                               {QStringLiteral("type"), QStringLiteral("text")},
+                                                               {QStringLiteral("defaultValue"), QString{}},
+                                                               {QStringLiteral("choices"), QVariantList{}},
+                                                               {QStringLiteral("required"), true}}}},
+        {QStringLiteral("steps"),
+         QVariantList{
+             QVariantMap{{QStringLiteral("command"), QStringLiteral("echo ${target}")},
+                         {QStringLiteral("continuation"), QStringLiteral("literal-output")},
+                         {QStringLiteral("outputMarker"), QStringLiteral("READY:${target}")},
+                         {QStringLiteral("timeoutMs"), 5000}},
+             QVariantMap{{QStringLiteral("command"), QStringLiteral("echo done")},
+                         {QStringLiteral("continuation"), QStringLiteral("immediate")},
+                         {QStringLiteral("outputMarker"), QString{}},
+                         {QStringLiteral("timeoutMs"), 30000}},
+         }},
+    };
+    QVERIFY(controller.saveScript(script));
+    const QVariantMap saved = controller.quickCommands().constFirst().toMap();
+    const QString scriptId = saved.value(QStringLiteral("id")).toString();
+    QVERIFY(!scriptId.isEmpty());
+    QVERIFY(!controller.renderScript(scriptId, {}).value(QStringLiteral("ok")).toBool());
+    const QVariantMap variables{{QStringLiteral("target"), QStringLiteral("ztermy")}};
+    const QVariantMap preview = controller.renderScript(scriptId, variables);
+    QVERIFY(preview.value(QStringLiteral("ok")).toBool());
+    QCOMPARE(preview.value(QStringLiteral("steps")).toList().size(), 2);
+    QVERIFY(!controller.runScript(scriptId, variables, QStringLiteral("missing-session")));
+
+    QVERIFY(controller.runScript(scriptId, variables, firstSessionId));
+    QCOMPARE(sessions.at(0)->inputs, QList<QByteArray>{QByteArray("echo ztermy\r")});
+    QVERIFY(sessions.at(1)->inputs.isEmpty());
+    const auto firstTab = [&controller, &firstSessionId] {
+        const QVariantList tabs = controller.terminalTabs();
+        const auto found = std::ranges::find(tabs, firstSessionId, [](const QVariant &value) {
+            return value.toMap().value(QStringLiteral("sessionId")).toString();
+        });
+        return found == tabs.end() ? QVariantMap{} : found->toMap();
+    };
+    QCOMPARE(firstTab().value(QStringLiteral("scriptExecutionState")).toString(), QStringLiteral("waiting-output"));
+    QVERIFY(!controller.runScript(scriptId, variables, firstSessionId));
+    QVERIFY(sessions.at(0)->outputSink != nullptr);
+    const QByteArray prefix("REA");
+    sessions.at(0)->outputSink->append(std::span<const std::byte>(
+        reinterpret_cast<const std::byte *>(prefix.constData()), static_cast<std::size_t>(prefix.size())));
+    const QByteArray suffix("DY:ztermy");
+    sessions.at(0)->outputSink->append(std::span<const std::byte>(
+        reinterpret_cast<const std::byte *>(suffix.constData()), static_cast<std::size_t>(suffix.size())));
+    QTRY_COMPARE(sessions.at(0)->inputs.size(), 2);
+    QCOMPARE(sessions.at(0)->inputs.constLast(), QByteArray("echo done\r"));
+    QCOMPARE(firstTab().value(QStringLiteral("scriptExecutionState")).toString(), QStringLiteral("completed"));
+
+    QVERIFY(controller.runScript(scriptId, variables, firstSessionId));
+    QVERIFY(controller.cancelScript(firstSessionId));
+    QCOMPARE(firstTab().value(QStringLiteral("scriptExecutionState")).toString(), QStringLiteral("cancelled"));
+    QVERIFY(!controller.cancelScript(firstSessionId));
 }
 
 void AppControllerTests::reconnectsSavedKeyProfileOnRealHost()
