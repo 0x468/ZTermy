@@ -1,5 +1,7 @@
 #include "domain/ssh/SshProfile.h"
 
+#include "domain/ssh/SshConnectionState.h"
+
 #include <algorithm>
 #include <cctype>
 #include <cstddef>
@@ -122,6 +124,47 @@ bool validSshSessionOptions(const SshSessionOptions &options) noexcept
         }
     }
     return true;
+}
+
+bool shouldReconnectAfter(const SshReconnectPolicy policy, const SshFailureKind failure) noexcept
+{
+    if (policy != SshReconnectPolicy::OnTransportFailure)
+    {
+        return false;
+    }
+    switch (failure)
+    {
+        case SshFailureKind::NameResolutionFailed:
+        case SshFailureKind::ConnectionRefused:
+        case SshFailureKind::TimedOut:
+        case SshFailureKind::TransportError:
+        case SshFailureKind::RemoteClosed:
+            return true;
+        case SshFailureKind::HostKeyChanged:
+        case SshFailureKind::HostKeyInvalid:
+        case SshFailureKind::AuthenticationRejected:
+        case SshFailureKind::AuthenticationUnavailable:
+        case SshFailureKind::ChannelOpenFailed:
+        case SshFailureKind::Cancelled:
+        case SshFailureKind::ProtocolError:
+            return false;
+    }
+    return false;
+}
+
+std::uint32_t reconnectBackoffMilliseconds(const SshSessionOptions &options, const std::uint8_t attempt) noexcept
+{
+    if (attempt == 0)
+    {
+        return 0;
+    }
+    constexpr std::uint32_t maximumBackoffMilliseconds = 30'000;
+    std::uint32_t delay = options.reconnectInitialBackoffMilliseconds;
+    for (std::uint8_t index = 1; index < attempt && delay < maximumBackoffMilliseconds; ++index)
+    {
+        delay = (std::min)(delay * 2U, maximumBackoffMilliseconds);
+    }
+    return delay;
 }
 
 bool validSshProfile(const SshProfile &profile) noexcept

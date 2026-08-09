@@ -109,6 +109,7 @@ private slots:
     void persistsQuickCommandsAndPerTabWorkbenchState();
     void importsAndExportsScriptLibraryWithoutOverwritingIds();
     void loadsRecentProfilesAndParsesQuickTargets();
+    void reconnectsSavedKeyProfileOnRealHost();
 };
 
 void AppControllerTests::savesUpdatesReloadsAndDeletesProfiles()
@@ -192,6 +193,9 @@ void AppControllerTests::persistsAndPreservesSessionOptions()
         {QStringLiteral("startupCommand"), QStringLiteral("uname -a")},
         {QStringLiteral("startupCommandMode"), QStringLiteral("line-delay")},
         {QStringLiteral("startupLineDelayMilliseconds"), 125},
+        {QStringLiteral("reconnectPolicy"), QStringLiteral("transport-failure")},
+        {QStringLiteral("reconnectMaximumAttempts"), 5},
+        {QStringLiteral("reconnectInitialBackoffMilliseconds"), 750},
         {QStringLiteral("environment"),
          QVariantList{QVariantMap{{QStringLiteral("name"), QStringLiteral("LANG")},
                                   {QStringLiteral("value"), QStringLiteral("C.UTF-8")}}}},
@@ -206,6 +210,8 @@ void AppControllerTests::persistsAndPreservesSessionOptions()
     QCOMPARE(savedOptions.value(QStringLiteral("terminalType")).toString(), QStringLiteral("screen-256color"));
     QCOMPARE(savedOptions.value(QStringLiteral("keepaliveIntervalSeconds")).toInt(), 45);
     QCOMPARE(savedOptions.value(QStringLiteral("startupCommandMode")).toString(), QStringLiteral("line-delay"));
+    QCOMPARE(savedOptions.value(QStringLiteral("reconnectPolicy")).toString(), QStringLiteral("transport-failure"));
+    QCOMPARE(savedOptions.value(QStringLiteral("reconnectMaximumAttempts")).toInt(), 5);
     QCOMPARE(
         savedOptions.value(QStringLiteral("environment")).toList().constFirst().toMap().value(QStringLiteral("value")),
         QStringLiteral("C.UTF-8"));
@@ -1003,6 +1009,68 @@ void AppControllerTests::importsAndExportsScriptLibraryWithoutOverwritingIds()
     QCOMPARE(target.quickCommands().constFirst().toMap().value(QStringLiteral("name")).toString(),
              QStringLiteral("Disk usage"));
     QVERIFY(target.quickCommandOperationError().isEmpty());
+}
+
+void AppControllerTests::reconnectsSavedKeyProfileOnRealHost()
+{
+    if (qEnvironmentVariable("ZTERMY_TEST_SSH_RECONNECT_INTERACTIVE") != QStringLiteral("1"))
+    {
+        QSKIP("Set ZTERMY_TEST_SSH_RECONNECT_INTERACTIVE=1 to run the real-host reconnect gate.");
+    }
+    const QString host = qEnvironmentVariable("ZTERMY_TEST_SSH_HOST");
+    const QString username = qEnvironmentVariable("ZTERMY_TEST_SSH_USERNAME");
+    const QString keyPath = qEnvironmentVariable("ZTERMY_TEST_SSH_KEY_PATH");
+    const QString expectedFingerprint = qEnvironmentVariable("ZTERMY_TEST_SSH_EXPECTED_FINGERPRINT");
+    QVERIFY(!host.isEmpty());
+    QVERIFY(!username.isEmpty());
+    QVERIFY(!keyPath.isEmpty());
+    QVERIFY(!expectedFingerprint.isEmpty());
+
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")));
+    const QVariantMap options{
+        {QStringLiteral("terminalType"), QStringLiteral("xterm-256color")},
+        {QStringLiteral("keepaliveIntervalSeconds"), 0},
+        {QStringLiteral("keepaliveFailureThreshold"), 3},
+        {QStringLiteral("startupCommand"), QStringLiteral("exit")},
+        {QStringLiteral("startupCommandMode"), QStringLiteral("paste")},
+        {QStringLiteral("startupLineDelayMilliseconds"), 100},
+        {QStringLiteral("environment"), QVariantList{}},
+        {QStringLiteral("reconnectPolicy"), QStringLiteral("transport-failure")},
+        {QStringLiteral("reconnectMaximumAttempts"), 2},
+        {QStringLiteral("reconnectInitialBackoffMilliseconds"), 250},
+    };
+    QVERIFY(controller.saveHostProfileWithCredential({}, QStringLiteral("Reconnect gate"), host, 22, username,
+                                                     QStringLiteral("private-key"), keyPath, false, {}, {}, false,
+                                                     options));
+    const QString profileId = controller.hostProfiles().constFirst().toMap().value(QStringLiteral("id")).toString();
+    QVERIFY(controller.connectHostProfile(profileId, {}));
+
+    bool fingerprintMismatch = false;
+    const auto reconnectBudgetExhausted = [&] {
+        if (controller.hostKeyPromptVisible())
+        {
+            if (controller.hostKeyFingerprint() != expectedFingerprint)
+            {
+                fingerprintMismatch = true;
+                controller.rejectHostKey();
+                return true;
+            }
+            controller.acceptHostKey(false);
+        }
+        const QVariantList tabs = controller.terminalTabs();
+        if (tabs.isEmpty())
+        {
+            return false;
+        }
+        const QVariantMap tab = tabs.constFirst().toMap();
+        return tab.value(QStringLiteral("reconnectAttempt")).toInt() == 2
+               && !tab.value(QStringLiteral("reconnecting")).toBool()
+               && (tab.value(QStringLiteral("failed")).toBool() || tab.value(QStringLiteral("remoteClosed")).toBool());
+    };
+    QTRY_VERIFY_WITH_TIMEOUT(reconnectBudgetExhausted(), 20'000);
+    QVERIFY(!fingerprintMismatch);
 }
 
 QTEST_GUILESS_MAIN(AppControllerTests)

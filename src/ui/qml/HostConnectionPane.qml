@@ -69,6 +69,8 @@ Rectangle {
         const keepaliveInterval = Number(keepaliveIntervalField.text);
         const keepaliveThreshold = Number(keepaliveThresholdField.text);
         const startupDelay = Number(startupDelayField.text);
+        const reconnectAttempts = Number(reconnectAttemptsField.text);
+        const reconnectBackoff = Number(reconnectBackoffField.text);
         if (!Number.isInteger(keepaliveInterval) || keepaliveInterval < 0 || keepaliveInterval > 3600) {
             showStatus(qsTr("Keepalive interval must be between 0 and 3600 seconds."), true);
             return null;
@@ -79,6 +81,14 @@ Rectangle {
         }
         if (!Number.isInteger(startupDelay) || startupDelay < 0 || startupDelay > 5000) {
             showStatus(qsTr("Startup line delay must be between 0 and 5000 milliseconds."), true);
+            return null;
+        }
+        if (!Number.isInteger(reconnectAttempts) || reconnectAttempts < 1 || reconnectAttempts > 10) {
+            showStatus(qsTr("Reconnect attempts must be between 1 and 10."), true);
+            return null;
+        }
+        if (!Number.isInteger(reconnectBackoff) || reconnectBackoff < 250 || reconnectBackoff > 30000) {
+            showStatus(qsTr("Reconnect delay must be between 250 and 30000 milliseconds."), true);
             return null;
         }
         const environment = [];
@@ -106,7 +116,10 @@ Rectangle {
             startupCommand: startupCommandField.text,
             startupCommandMode: startupModeBox.currentIndex === 1 ? "line-delay" : "paste",
             startupLineDelayMilliseconds: startupDelay,
-            environment: environment
+            environment: environment,
+            reconnectPolicy: reconnectPolicyBox.currentIndex === 1 ? "transport-failure" : "never",
+            reconnectMaximumAttempts: reconnectAttempts,
+            reconnectInitialBackoffMilliseconds: reconnectBackoff
         };
     }
 
@@ -239,6 +252,9 @@ Rectangle {
         startupModeBox.currentIndex = 0;
         startupDelayField.text = "100";
         environmentField.text = "";
+        reconnectPolicyBox.currentIndex = 0;
+        reconnectAttemptsField.text = "3";
+        reconnectBackoffField.text = "1000";
         advancedExpanded = false;
     }
 
@@ -313,6 +329,9 @@ Rectangle {
         startupModeBox.currentIndex = options.startupCommandMode === "line-delay" ? 1 : 0;
         startupDelayField.text = String(options.startupLineDelayMilliseconds === undefined ? 100 : options.startupLineDelayMilliseconds);
         environmentField.text = environmentText(options);
+        reconnectPolicyBox.currentIndex = options.reconnectPolicy === "transport-failure" ? 1 : 0;
+        reconnectAttemptsField.text = String(options.reconnectMaximumAttempts === undefined ? 3 : options.reconnectMaximumAttempts);
+        reconnectBackoffField.text = String(options.reconnectInitialBackoffMilliseconds === undefined ? 1000 : options.reconnectInitialBackoffMilliseconds);
         advancedExpanded = false;
         showStatus(qsTr("Editing \"%1\".").arg(profile.name), false);
         Qt.callLater(pane.refreshEditingCredential);
@@ -1360,6 +1379,59 @@ Rectangle {
                                                 validator: IntValidator {
                                                     bottom: 1
                                                     top: 10
+                                                }
+                                                selectByMouse: true
+                                            }
+
+                                            Label {
+                                                text: qsTr("Automatic reconnect")
+                                                color: pane.textColor
+                                            }
+                                            AppComboBox {
+                                                id: reconnectPolicyBox
+                                                objectName: "hostReconnectPolicy"
+                                                Layout.fillWidth: true
+                                                model: [qsTr("Never"), qsTr("After transport failures")]
+                                                accessibleName: qsTr("SSH automatic reconnect policy")
+                                            }
+
+                                            Label {
+                                                text: qsTr("Reconnect attempts")
+                                                color: pane.textColor
+                                                visible: reconnectPolicyBox.currentIndex === 1
+                                            }
+                                            AppTextField {
+                                                id: reconnectAttemptsField
+                                                objectName: "hostReconnectAttempts"
+                                                Layout.fillWidth: true
+                                                visible: reconnectPolicyBox.currentIndex === 1
+                                                text: "3"
+                                                accessibleName: qsTr("Maximum automatic reconnect attempts")
+                                                inputMethodHints: Qt.ImhDigitsOnly
+                                                validator: IntValidator {
+                                                    bottom: 1
+                                                    top: 10
+                                                }
+                                                selectByMouse: true
+                                            }
+
+                                            Label {
+                                                text: qsTr("Initial reconnect delay")
+                                                color: pane.textColor
+                                                visible: reconnectPolicyBox.currentIndex === 1
+                                            }
+                                            AppTextField {
+                                                id: reconnectBackoffField
+                                                objectName: "hostReconnectDelay"
+                                                Layout.fillWidth: true
+                                                visible: reconnectPolicyBox.currentIndex === 1
+                                                text: "1000"
+                                                placeholderText: qsTr("Milliseconds")
+                                                accessibleName: qsTr("Initial automatic reconnect delay in milliseconds")
+                                                inputMethodHints: Qt.ImhDigitsOnly
+                                                validator: IntValidator {
+                                                    bottom: 250
+                                                    top: 30000
                                                 }
                                                 selectByMouse: true
                                             }

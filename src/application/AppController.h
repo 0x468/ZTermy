@@ -316,6 +316,8 @@ public:
     Q_INVOKABLE bool saveHostCredential(const QString &id, const QString &secret);
     [[nodiscard]] Q_INVOKABLE QString readHostCredential(const QString &id);
     Q_INVOKABLE bool connectHostProfile(const QString &id, const QString &secret);
+    Q_INVOKABLE bool reconnectTerminalTab(const QString &id);
+    Q_INVOKABLE bool cancelTerminalReconnect(const QString &id);
     [[nodiscard]] Q_INVOKABLE QVariantMap parseQuickConnectTarget(const QString &target) const;
     Q_INVOKABLE bool connectQuick(const QString &target, const QString &authentication, const QString &privateKeyPath,
                                   bool privateKeyPassphraseRequired, const QString &secret, bool saveProfile,
@@ -378,6 +380,7 @@ private:
         qreal sessionBackgroundOpacity = -1.0;
         qint64 recordingStartedUtcMs = 0;
         std::uint64_t scriptPlaybackGeneration = 0;
+        std::uint64_t reconnectGeneration = 0;
         std::uint64_t historyRequestId = 0;
         std::uint64_t sftpRequestId = 0;
         std::uint64_t sftpGeneration = 0;
@@ -421,6 +424,7 @@ private:
         std::optional<telemetry::Sample> telemetrySample;
         std::uint32_t searchCurrent = 0;
         std::uint32_t searchTotal = 0;
+        std::uint8_t reconnectAttempt = 0;
         int sessionFontSize = 0;
         TerminalTabKind kind = TerminalTabKind::Local;
         ssh::SshConnectionPhase sshPhase = ssh::SshConnectionPhase::Disconnected;
@@ -440,6 +444,7 @@ private:
         bool composerOpen = false;
         bool running = false;
         bool recentConnectionRecorded = false;
+        bool reconnectPending = false;
         std::optional<ssh::SshFailureKind> sshFailure;
     };
 
@@ -478,6 +483,10 @@ private:
                                                bool manageCredential, const QVariantMap &sessionOptions = {});
     void setCredentialOperationError(QString message);
     [[nodiscard]] bool startSshConnection(ssh::SshConnectionRequest request, QString sourceProfileId = {});
+    [[nodiscard]] std::optional<ssh::SshConnectionRequest> connectionRequestForProfile(const ssh::SshProfile &profile,
+                                                                                       const QString &secret = {});
+    void scheduleSshReconnect(TerminalTab &tab, ssh::SshFailureKind failure);
+    void attemptSshReconnect(const QString &tabId, std::uint64_t generation);
     [[nodiscard]] bool startSftpSession(TerminalTab &tab);
     [[nodiscard]] std::expected<ssh::SshConnectionRequest, sftp::TransferCredentialError>
     sftpConnectionRequest(const TerminalTab &tab);

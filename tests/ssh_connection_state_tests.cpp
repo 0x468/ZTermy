@@ -1,4 +1,5 @@
 #include "domain/ssh/SshConnectionState.h"
+#include "domain/ssh/SshProfile.h"
 
 #include <QTest>
 
@@ -35,6 +36,7 @@ private slots:
     void preservesDistinctFailureKinds();
     void rejectsOutOfOrderTransitions();
     void closesAndReconnects();
+    void boundsAutomaticReconnectPolicy();
 };
 
 void SshConnectionStateTests::completesKnownHostConnection()
@@ -109,6 +111,27 @@ void SshConnectionStateTests::closesAndReconnects()
 
     QVERIFY(state.start());
     QCOMPARE(state.phase(), SshConnectionPhase::Resolving);
+}
+
+void SshConnectionStateTests::boundsAutomaticReconnectPolicy()
+{
+    using ztermy::ssh::SshReconnectPolicy;
+    using ztermy::ssh::SshSessionOptions;
+
+    QVERIFY(ztermy::ssh::shouldReconnectAfter(SshReconnectPolicy::OnTransportFailure, SshFailureKind::TransportError));
+    QVERIFY(ztermy::ssh::shouldReconnectAfter(SshReconnectPolicy::OnTransportFailure, SshFailureKind::RemoteClosed));
+    QVERIFY(!ztermy::ssh::shouldReconnectAfter(SshReconnectPolicy::Never, SshFailureKind::TransportError));
+    QVERIFY(!ztermy::ssh::shouldReconnectAfter(SshReconnectPolicy::OnTransportFailure,
+                                               SshFailureKind::AuthenticationRejected));
+    QVERIFY(!ztermy::ssh::shouldReconnectAfter(SshReconnectPolicy::OnTransportFailure, SshFailureKind::HostKeyChanged));
+
+    SshSessionOptions options;
+    options.reconnectInitialBackoffMilliseconds = 1000;
+    QCOMPARE(ztermy::ssh::reconnectBackoffMilliseconds(options, 0), 0U);
+    QCOMPARE(ztermy::ssh::reconnectBackoffMilliseconds(options, 1), 1000U);
+    QCOMPARE(ztermy::ssh::reconnectBackoffMilliseconds(options, 2), 2000U);
+    QCOMPARE(ztermy::ssh::reconnectBackoffMilliseconds(options, 6), 30000U);
+    QCOMPARE(ztermy::ssh::reconnectBackoffMilliseconds(options, 10), 30000U);
 }
 
 QTEST_GUILESS_MAIN(SshConnectionStateTests)

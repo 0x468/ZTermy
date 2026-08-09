@@ -8,6 +8,8 @@
 namespace ztermy::ssh
 {
 
+enum class SshFailureKind : std::uint8_t;
+
 enum class SshAuthenticationMethod : std::uint8_t
 {
     PrivateKey,
@@ -85,5 +87,8 @@ struct SshProfile
 [[nodiscard]] bool validSshProfile(const SshProfile &profile) noexcept;
 [[nodiscard]] bool validKeywordHighlightRule(const SshKeywordHighlightRule &rule) noexcept;
 [[nodiscard]] bool validSshSessionOptions(const SshSessionOptions &options) noexcept;
+[[nodiscard]] bool shouldReconnectAfter(SshReconnectPolicy policy, SshFailureKind failure) noexcept;
+[[nodiscard]] std::uint32_t reconnectBackoffMilliseconds(const SshSessionOptions &options,
+                                                         std::uint8_t attempt) noexcept;
 
 } // namespace ztermy::ssh

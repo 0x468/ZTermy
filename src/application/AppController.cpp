@@ -288,6 +288,12 @@ void removeLastUtf8CodePoint(QByteArray &value)
                                                                                      : QStringLiteral("paste")},
         {QStringLiteral("startupLineDelayMilliseconds"), options.startupLineDelayMilliseconds},
         {QStringLiteral("environment"), environment},
+        {QStringLiteral("reconnectPolicy"),
+         options.reconnectPolicy == ztermy::ssh::SshReconnectPolicy::OnTransportFailure
+             ? QStringLiteral("transport-failure")
+             : QStringLiteral("never")},
+        {QStringLiteral("reconnectMaximumAttempts"), options.reconnectMaximumAttempts},
+        {QStringLiteral("reconnectInitialBackoffMilliseconds"), options.reconnectInitialBackoffMilliseconds},
     };
 }
 
@@ -334,9 +340,28 @@ void removeLastUtf8CodePoint(QByteArray &value)
             return std::nullopt;
         }
     }
+    if (overrides.contains(QStringLiteral("reconnectPolicy")))
+    {
+        const QString policy = overrides.value(QStringLiteral("reconnectPolicy")).toString();
+        if (policy == QStringLiteral("never"))
+        {
+            options.reconnectPolicy = ztermy::ssh::SshReconnectPolicy::Never;
+        }
+        else if (policy == QStringLiteral("transport-failure"))
+        {
+            options.reconnectPolicy = ztermy::ssh::SshReconnectPolicy::OnTransportFailure;
+        }
+        else
+        {
+            return std::nullopt;
+        }
+    }
     if (!integerOverride(QStringLiteral("keepaliveIntervalSeconds"), options.keepaliveIntervalSeconds)
         || !integerOverride(QStringLiteral("keepaliveFailureThreshold"), options.keepaliveFailureThreshold)
-        || !integerOverride(QStringLiteral("startupLineDelayMilliseconds"), options.startupLineDelayMilliseconds))
+        || !integerOverride(QStringLiteral("startupLineDelayMilliseconds"), options.startupLineDelayMilliseconds)
+        || !integerOverride(QStringLiteral("reconnectMaximumAttempts"), options.reconnectMaximumAttempts)
+        || !integerOverride(QStringLiteral("reconnectInitialBackoffMilliseconds"),
+                            options.reconnectInitialBackoffMilliseconds))
     {
         return std::nullopt;
     }
@@ -1025,6 +1050,10 @@ QVariantList AppController::terminalTabs() const
             {QStringLiteral("logDroppedBytes"),
              QVariant::fromValue<qulonglong>(tab->sessionLog ? tab->sessionLog->droppedBytes() : 0)},
             {QStringLiteral("running"), tab->running},
+            {QStringLiteral("reconnecting"), tab->reconnectPending},
+            {QStringLiteral("reconnectAttempt"), static_cast<int>(tab->reconnectAttempt)},
+            {QStringLiteral("canReconnect"),
+             tab->kind == TerminalTabKind::Ssh && !tab->sourceProfileId.isEmpty() && !tab->running},
             {QStringLiteral("connected"),
              tab->kind == TerminalTabKind::Ssh && tab->sshPhase == ssh::SshConnectionPhase::Connected},
             {QStringLiteral("connecting"), tab->kind == TerminalTabKind::Ssh
@@ -1032,10 +1061,10 @@ QVariantList AppController::terminalTabs() const
                                                && tab->sshPhase != ssh::SshConnectionPhase::Connected
                                                && tab->sshPhase != ssh::SshConnectionPhase::Closing
                                                && tab->sshPhase != ssh::SshConnectionPhase::Failed},
-            {QStringLiteral("failed"), tab->kind == TerminalTabKind::Ssh
+            {QStringLiteral("failed"), !tab->reconnectPending && tab->kind == TerminalTabKind::Ssh
                                            && tab->sshPhase == ssh::SshConnectionPhase::Failed
                                            && tab->sshFailure != ssh::SshFailureKind::RemoteClosed},
-            {QStringLiteral("remoteClosed"), tab->kind == TerminalTabKind::Ssh
+            {QStringLiteral("remoteClosed"), !tab->reconnectPending && tab->kind == TerminalTabKind::Ssh
                                                  && tab->sshPhase == ssh::SshConnectionPhase::Failed
                                                  && tab->sshFailure == ssh::SshFailureKind::RemoteClosed},
             {QStringLiteral("workbenchOpen"), tab->workbenchOpen},
@@ -1572,6 +1601,10 @@ void AppController::retranslateUiState()
                                                                      "Local PowerShell connected")
                                        : QCoreApplication::translate("ztermy::terminal::LocalTerminalSession",
                                                                      "Local terminal stopped");
+        }
+        else if (tab->reconnectPending)
+        {
+            tab->status = QCoreApplication::translate("AppController", "Waiting to reconnect to the SSH host...");
         }
         else
         {
@@ -3171,6 +3204,125 @@ bool AppController::startSshConnection(ssh::SshConnectionRequest request, QStrin
     return true;
 }
 
+void AppController::scheduleSshReconnect(TerminalTab &tab, const ssh::SshFailureKind failure)
+{
+    if (tab.reconnectPending || tab.sourceProfileId.isEmpty())
+    {
+        return;
+    }
+    const auto profile = std::ranges::find(m_profiles, utf8String(tab.sourceProfileId), &ssh::SshProfile::id);
+    if (profile == m_profiles.end() || !ssh::shouldReconnectAfter(profile->sessionOptions.reconnectPolicy, failure))
+    {
+        return;
+    }
+
+    constexpr qint64 stableConnectionMilliseconds = 30'000;
+    const qint64 now = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
+    if (tab.connectedUtcMs > 0 && now - tab.connectedUtcMs >= stableConnectionMilliseconds)
+    {
+        tab.reconnectAttempt = 0;
+    }
+    if (tab.reconnectAttempt >= profile->sessionOptions.reconnectMaximumAttempts)
+    {
+        tab.status = tr("Automatic reconnect stopped after %1 attempt(s).")
+                         .arg(static_cast<int>(profile->sessionOptions.reconnectMaximumAttempts));
+        emit terminalTabsChanged();
+        return;
+    }
+
+    ++tab.reconnectAttempt;
+    ++tab.reconnectGeneration;
+    tab.reconnectPending = true;
+    const std::uint32_t delay = ssh::reconnectBackoffMilliseconds(profile->sessionOptions, tab.reconnectAttempt);
+    tab.status = tr("SSH connection lost. Reconnecting in %1 second(s) (attempt %2 of %3).")
+                     .arg((delay + 999U) / 1000U)
+                     .arg(static_cast<int>(tab.reconnectAttempt))
+                     .arg(static_cast<int>(profile->sessionOptions.reconnectMaximumAttempts));
+    const QString tabId = tab.id;
+    const std::uint64_t generation = tab.reconnectGeneration;
+    QTimer::singleShot(static_cast<int>(delay), this, [this, tabId, generation] {
+        attemptSshReconnect(tabId, generation);
+    });
+    emit terminalTabsChanged();
+}
+
+void AppController::attemptSshReconnect(const QString &tabId, const std::uint64_t generation)
+{
+    TerminalTab *tab = findTab(tabId);
+    if (tab == nullptr || tab->kind != TerminalTabKind::Ssh || tab->ssh == nullptr || !tab->reconnectPending
+        || tab->reconnectGeneration != generation)
+    {
+        return;
+    }
+    tab->reconnectPending = false;
+    const auto profile = std::ranges::find(m_profiles, utf8String(tab->sourceProfileId), &ssh::SshProfile::id);
+    if (profile == m_profiles.end())
+    {
+        tab->status = tr("SSH reconnect stopped because the saved host no longer exists.");
+        emit terminalTabsChanged();
+        return;
+    }
+    auto request = connectionRequestForProfile(*profile);
+    if (!request)
+    {
+        tab->status = tr("SSH reconnect needs an available saved credential.");
+        emit terminalTabsChanged();
+        return;
+    }
+
+    tab->sshFailure.reset();
+    tab->sshPhase = ssh::SshConnectionPhase::Resolving;
+    tab->status = tr("Reconnecting to SSH host...");
+    emit terminalTabsChanged();
+    const std::error_code error = tab->ssh->start(std::move(*request), {.columns = 100, .rows = 30});
+    if (error)
+    {
+        tab->sshPhase = ssh::SshConnectionPhase::Failed;
+        tab->sshFailure = ssh::SshFailureKind::ProtocolError;
+        tab->status = tr("SSH reconnect could not start.");
+        emit terminalTabsChanged();
+        return;
+    }
+    if (m_terminal != nullptr && m_activeTabId == tabId)
+    {
+        m_terminal->requestCurrentSize();
+    }
+}
+
+bool AppController::reconnectTerminalTab(const QString &id)
+{
+    TerminalTab *tab = findTab(id);
+    if (tab == nullptr || tab->kind != TerminalTabKind::Ssh || tab->ssh == nullptr || tab->running
+        || tab->sourceProfileId.isEmpty())
+    {
+        return false;
+    }
+    const auto profile = std::ranges::find(m_profiles, utf8String(tab->sourceProfileId), &ssh::SshProfile::id);
+    if (profile == m_profiles.end())
+    {
+        return false;
+    }
+    ++tab->reconnectGeneration;
+    tab->reconnectAttempt = 0;
+    tab->reconnectPending = true;
+    attemptSshReconnect(tab->id, tab->reconnectGeneration);
+    return true;
+}
+
+bool AppController::cancelTerminalReconnect(const QString &id)
+{
+    TerminalTab *tab = findTab(id);
+    if (tab == nullptr || !tab->reconnectPending)
+    {
+        return false;
+    }
+    tab->reconnectPending = false;
+    ++tab->reconnectGeneration;
+    tab->status = tr("Automatic SSH reconnect cancelled.");
+    emit terminalTabsChanged();
+    return true;
+}
+
 std::expected<ssh::SshConnectionRequest, sftp::TransferCredentialError>
 AppController::sftpConnectionRequest(const TerminalTab &tab)
 {
@@ -3967,6 +4119,39 @@ QString AppController::readHostCredential(const QString &id)
     return result;
 }
 
+std::optional<ssh::SshConnectionRequest> AppController::connectionRequestForProfile(const ssh::SshProfile &profile,
+                                                                                    const QString &secret)
+{
+    security::SensitiveByteArray connectionSecret(secret.toUtf8());
+    if (connectionSecret.empty() && profile.credentialReference)
+    {
+        auto stored = m_credentialVaults->active().read(
+            {.profileId = *profile.credentialReference, .kind = credentialKind(profile)});
+        if (!stored)
+        {
+            setCredentialOperationError(credentialVaultErrorMessage(stored.error()));
+            return std::nullopt;
+        }
+        connectionSecret = std::move(*stored);
+    }
+    if ((profile.authentication == ssh::SshAuthenticationMethod::Password || profile.privateKeyPassphraseRequired)
+        && connectionSecret.empty())
+    {
+        setCredentialOperationError(tr("Enter the credential required by this host."));
+        return std::nullopt;
+    }
+    return ssh::SshConnectionRequest{
+        .host = utf8QString(profile.host),
+        .port = profile.port,
+        .username = utf8QString(profile.username),
+        .authentication = profile.authentication,
+        .privateKeyPath = utf8QString(profile.privateKeyPath),
+        .secret = std::move(connectionSecret),
+        .knownHostsPath = m_knownHostsPath,
+        .sessionOptions = profile.sessionOptions,
+    };
+}
+
 bool AppController::connectHostProfile(const QString &id, const QString &secret)
 {
     const std::string profileId = utf8String(id);
@@ -3975,36 +4160,13 @@ bool AppController::connectHostProfile(const QString &id, const QString &secret)
     {
         return false;
     }
-    security::SensitiveByteArray connectionSecret(secret.toUtf8());
-    if (connectionSecret.empty() && profile->credentialReference)
+    auto request = connectionRequestForProfile(*profile, secret);
+    if (!request)
     {
-        auto stored = m_credentialVaults->active().read(
-            {.profileId = *profile->credentialReference, .kind = credentialKind(*profile)});
-        if (!stored)
-        {
-            setCredentialOperationError(credentialVaultErrorMessage(stored.error()));
-            return false;
-        }
-        connectionSecret = std::move(*stored);
-    }
-    if ((profile->authentication == ssh::SshAuthenticationMethod::Password || profile->privateKeyPassphraseRequired)
-        && connectionSecret.empty())
-    {
-        setCredentialOperationError(tr("Enter the credential required by this host."));
         return false;
     }
-    ssh::SshConnectionRequest request{
-        .host = utf8QString(profile->host),
-        .port = profile->port,
-        .username = utf8QString(profile->username),
-        .authentication = profile->authentication,
-        .privateKeyPath = utf8QString(profile->privateKeyPath),
-        .secret = std::move(connectionSecret),
-        .knownHostsPath = m_knownHostsPath,
-        .sessionOptions = profile->sessionOptions,
-    };
     setCredentialOperationError({});
-    return startSshConnection(std::move(request), id);
+    return startSshConnection(std::move(*request), id);
 }
 
 QVariantMap AppController::parseQuickConnectTarget(const QString &target) const
@@ -4514,8 +4676,14 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
                              updated->sshPhase = phase;
                              if (phase == ssh::SshConnectionPhase::Connected)
                              {
+                                 updated->reconnectPending = false;
+                                 updated->sshFailure.reset();
                                  updated->connectedUtcMs = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
                                  recordRecentConnection(*updated);
+                             }
+                             else if (phase == ssh::SshConnectionPhase::Failed && updated->sshFailure)
+                             {
+                                 scheduleSshReconnect(*updated, *updated->sshFailure);
                              }
                              emit terminalTabsChanged();
                          }

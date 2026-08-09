@@ -57,6 +57,16 @@ reference; ztermy does not copy its renderer, bridges, persistence, or assets.
 The order is architectural: each phase must preserve direct SSH behavior before
 the next transport is introduced.
 
+## Progress
+
+- Phases 1–2 are complete: typed schema v4 options, migration, profile editor,
+  terminal type, environment requests, startup commands, and keepalive are
+  implemented and tested.
+- Phase 3 is complete: reconnect eligibility, bounded backoff, stable-session
+  budget reset, cancellation, manual retry, localized UI states, and the
+  authorized real-host reconnect gate are implemented.
+- Phases 4–6 remain before V2.9 acceptance.
+
 ## Acceptance boundary
 
 - Unit and migration tests cover defaults, malformed limits, every new state,

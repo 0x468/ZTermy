@@ -56,6 +56,7 @@ Rectangle {
     }
     readonly property bool activeSshFailure: activeTerminalTab !== null && activeTerminalTab.kind === "ssh" && activeTerminalTab.failed
     readonly property bool activeSshConnecting: activeTerminalTab !== null && activeTerminalTab.kind === "ssh" && activeTerminalTab.connecting
+    readonly property bool activeSshReconnecting: activeTerminalTab !== null && activeTerminalTab.kind === "ssh" && activeTerminalTab.reconnecting
     readonly property bool activeSshDisconnected: activeTerminalTab !== null && activeTerminalTab.kind === "ssh" && activeTerminalTab.remoteClosed
     readonly property string activeTerminalWorkbenchSide: activeTerminalTab !== null ? activeTerminalTab.workbenchSide : "left"
     readonly property real activeTerminalWorkbenchWidth: activeTerminalTab !== null && activeTerminalTab.workbenchOpen ? Math.min(activeTerminalTab.workbenchWidth, Math.max(0, terminalBody.width - 240)) : 0
@@ -1985,12 +1986,41 @@ Rectangle {
                         StatePanel {
                             anchors.centerIn: parent
                             width: Math.min(520, parent.width - 48)
+                            visible: root.activeSshReconnecting
+                            z: 9
+                            kind: "loading"
+                            heading: qsTr("Reconnecting to SSH host")
+                            description: root.activeTerminalTab ? root.activeTerminalTab.status : ""
+                            detail: qsTr("Automatic retries use bounded exponential backoff and never retain credentials in the terminal tab.")
+
+                            ActionButton {
+                                text: qsTr("Cancel reconnect")
+                                accessibleName: qsTr("Cancel automatic SSH reconnect")
+                                onClicked: {
+                                    if (root.activeTerminalTab) {
+                                        root.controller.cancelTerminalReconnect(root.activeTerminalTab.id);
+                                    }
+                                }
+                            }
+                        }
+
+                        StatePanel {
+                            anchors.centerIn: parent
+                            width: Math.min(520, parent.width - 48)
                             visible: root.activeSshDisconnected
                             z: 9
                             kind: "disconnected"
                             heading: qsTr("SSH session ended")
                             description: root.activeTerminalTab ? root.activeTerminalTab.status : ""
-                            detail: qsTr("The remote host closed the terminal connection. Credentials are not retained for automatic reconnection.")
+                            detail: qsTr("The remote host closed the terminal connection. Reconnect is available for saved host profiles.")
+
+                            ActionButton {
+                                visible: root.activeTerminalTab !== null && root.activeTerminalTab.canReconnect
+                                text: qsTr("Reconnect")
+                                accessibleName: qsTr("Reconnect saved SSH terminal tab")
+                                variant: "primary"
+                                onClicked: root.controller.reconnectTerminalTab(root.activeTerminalTab.id)
+                            }
 
                             ActionButton {
                                 text: qsTr("Close tab")
@@ -2005,7 +2035,6 @@ Rectangle {
                             ActionButton {
                                 text: qsTr("Review host")
                                 accessibleName: qsTr("Return to SSH host profiles")
-                                variant: "primary"
                                 onClicked: root.currentPage = "hosts"
                             }
                         }
@@ -2018,7 +2047,15 @@ Rectangle {
                             kind: "error"
                             heading: qsTr("SSH session unavailable")
                             description: root.activeTerminalTab ? root.activeTerminalTab.status : ""
-                            detail: qsTr("Review the host and authentication settings before starting a new connection. Credentials are not retained for retry.")
+                            detail: qsTr("Review the saved host and authentication settings, or retry the connection.")
+
+                            ActionButton {
+                                visible: root.activeTerminalTab !== null && root.activeTerminalTab.canReconnect
+                                text: qsTr("Reconnect")
+                                accessibleName: qsTr("Reconnect saved SSH terminal tab")
+                                variant: "primary"
+                                onClicked: root.controller.reconnectTerminalTab(root.activeTerminalTab.id)
+                            }
 
                             ActionButton {
                                 text: qsTr("Close tab")
@@ -2033,7 +2070,6 @@ Rectangle {
                             ActionButton {
                                 text: qsTr("Review host")
                                 Accessible.name: qsTr("Return to SSH host profiles")
-                                variant: "primary"
                                 onClicked: root.currentPage = "hosts"
                             }
                         }
