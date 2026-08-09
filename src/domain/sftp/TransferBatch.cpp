@@ -36,14 +36,19 @@ namespace
                    || to == TransferPlanEntryStatus::Failed || to == TransferPlanEntryStatus::Cancelled
                    || to == TransferPlanEntryStatus::Completed;
         case TransferPlanEntryStatus::Queued:
-            return to == TransferPlanEntryStatus::Running || to == TransferPlanEntryStatus::Cancelled
+            return to == TransferPlanEntryStatus::Running || to == TransferPlanEntryStatus::Paused
+                   || to == TransferPlanEntryStatus::NeedsAttention || to == TransferPlanEntryStatus::Cancelled
                    || to == TransferPlanEntryStatus::Interrupted;
         case TransferPlanEntryStatus::Running:
-            return to == TransferPlanEntryStatus::Completed || to == TransferPlanEntryStatus::Failed
+            return to == TransferPlanEntryStatus::Paused || to == TransferPlanEntryStatus::NeedsAttention
+                   || to == TransferPlanEntryStatus::Completed || to == TransferPlanEntryStatus::Failed
                    || to == TransferPlanEntryStatus::Cancelled || to == TransferPlanEntryStatus::Interrupted;
+        case TransferPlanEntryStatus::Paused:
+        case TransferPlanEntryStatus::NeedsAttention:
         case TransferPlanEntryStatus::Interrupted:
         case TransferPlanEntryStatus::Failed:
-            return to == TransferPlanEntryStatus::Queued || to == TransferPlanEntryStatus::Cancelled;
+            return to == TransferPlanEntryStatus::Queued || to == TransferPlanEntryStatus::Running
+                   || to == TransferPlanEntryStatus::Cancelled;
         case TransferPlanEntryStatus::Completed:
         case TransferPlanEntryStatus::Skipped:
         case TransferPlanEntryStatus::Cancelled:
@@ -270,9 +275,12 @@ TransferBatchSummary summarizeTransferBatch(const TransferBatch &batch) noexcept
         summary.completedCount += entry.status == TransferPlanEntryStatus::Completed ? 1U : 0U;
         summary.skippedCount += entry.status == TransferPlanEntryStatus::Skipped ? 1U : 0U;
         summary.failedCount += entry.status == TransferPlanEntryStatus::Failed ? 1U : 0U;
-        summary.activeCount +=
-            entry.status == TransferPlanEntryStatus::Queued || entry.status == TransferPlanEntryStatus::Running ? 1U
-                                                                                                                : 0U;
+        summary.activeCount += entry.status == TransferPlanEntryStatus::Queued
+                                       || entry.status == TransferPlanEntryStatus::Running
+                                       || entry.status == TransferPlanEntryStatus::Paused
+                                       || entry.status == TransferPlanEntryStatus::NeedsAttention
+                                   ? 1U
+                                   : 0U;
         if (entry.kind == TransferPlanEntryKind::RegularFile)
         {
             summary.totalBytes = saturatedAdd(summary.totalBytes, entry.totalBytes);

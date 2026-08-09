@@ -30,6 +30,8 @@ enum class TransferPlanEntryStatus : std::uint8_t
     Pending,
     Queued,
     Running,
+    Paused,
+    NeedsAttention,
     Completed,
     Skipped,
     Failed,
