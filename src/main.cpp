@@ -1772,6 +1772,66 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
         return false;
     }
 
+    auto *keywordHighlightPopover = rootObject->findChild<QObject *>(QStringLiteral("keywordHighlightPopover"));
+    QQuickItem *keywordHighlightCloseAction = quickItem(rootObject, "keywordHighlightCloseAction");
+    QQuickItem *keywordOutsideTarget = quickItem(rootObject, "terminalViewport");
+    const auto openKeywordHighlightPopover = [keywordHighlightPopover] {
+        return keywordHighlightPopover != nullptr
+               && QMetaObject::invokeMethod(keywordHighlightPopover, "open", Qt::DirectConnection);
+    };
+    const auto keywordPopoverVisible = [keywordHighlightPopover] {
+        return keywordHighlightPopover != nullptr && keywordHighlightPopover->property("visible").toBool();
+    };
+    const bool keywordPopoverOpened =
+        openKeywordHighlightPopover() && processWindowEventsUntil(keywordPopoverVisible, std::chrono::seconds{1});
+    const bool keywordPopoverCaptured =
+        keywordPopoverOpened && captureLayout(window, outputDirectory, QStringLiteral("terminal-keyword-popover"));
+    const bool keywordCloseFocused =
+        keywordPopoverOpened
+        && focusItem(window, keywordHighlightCloseAction, QStringLiteral("keywordHighlightCloseAction"));
+    if (keywordCloseFocused)
+    {
+        sendKey(window, Qt::Key_Return);
+    }
+    const bool keywordClosedByButton = keywordCloseFocused
+                                       && processWindowEventsUntil(
+                                           [&keywordPopoverVisible] {
+                                               return !keywordPopoverVisible();
+                                           },
+                                           std::chrono::seconds{1});
+    const bool keywordReopenedForOutside =
+        openKeywordHighlightPopover() && processWindowEventsUntil(keywordPopoverVisible, std::chrono::seconds{1});
+    if (keywordReopenedForOutside && keywordOutsideTarget != nullptr)
+    {
+        sendMouseClick(window, *keywordOutsideTarget, QPointF{20.0, keywordOutsideTarget->height() / 2.0});
+    }
+    const bool keywordClosedOutside = keywordReopenedForOutside && keywordOutsideTarget != nullptr
+                                      && processWindowEventsUntil(
+                                          [&keywordPopoverVisible] {
+                                              return !keywordPopoverVisible();
+                                          },
+                                          std::chrono::seconds{1});
+    const bool keywordReopenedForEscape =
+        openKeywordHighlightPopover() && processWindowEventsUntil(keywordPopoverVisible, std::chrono::seconds{1});
+    if (keywordReopenedForEscape)
+    {
+        sendKey(window, Qt::Key_Escape);
+    }
+    const bool keywordClosedByEscape = keywordReopenedForEscape
+                                       && processWindowEventsUntil(
+                                           [&keywordPopoverVisible] {
+                                               return !keywordPopoverVisible();
+                                           },
+                                           std::chrono::seconds{1});
+    if (!keywordPopoverCaptured || !keywordClosedByButton || !keywordClosedOutside || !keywordClosedByEscape)
+    {
+        qCWarning(applicationLog) << "Keyword-highlight popover close contract failed"
+                                  << "opened=" << keywordPopoverOpened << "captured=" << keywordPopoverCaptured
+                                  << "button=" << keywordClosedByButton << "outside=" << keywordClosedOutside
+                                  << "escape=" << keywordClosedByEscape;
+        return false;
+    }
+
     const auto activeTerminalState = [&controller]() {
         const QVariantList tabs = controller.terminalTabs();
         return tabs.isEmpty() ? QVariantMap{} : tabs.constFirst().toMap();
@@ -1782,6 +1842,33 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
         return false;
     }
     sendKey(window, Qt::Key_Return);
+    QQuickItem *terminalKeywordMenuAction = quickItem(rootObject, "terminalKeywordMenuAction");
+    QQuickItem *terminalFollowDirectoryMenuAction = quickItem(rootObject, "terminalFollowDirectoryMenuAction");
+    QQuickItem *terminalPauseRecordingMenuAction = quickItem(rootObject, "terminalPauseRecordingMenuAction");
+    QQuickItem *terminalReviewRecordingMenuAction = quickItem(rootObject, "terminalReviewRecordingMenuAction");
+    const bool terminalMoreMenuCompacted =
+        terminalKeywordMenuAction != nullptr && !terminalKeywordMenuAction->isVisible()
+        && qFuzzyIsNull(terminalKeywordMenuAction->height()) && terminalPauseRecordingMenuAction != nullptr
+        && !terminalPauseRecordingMenuAction->isVisible() && qFuzzyIsNull(terminalPauseRecordingMenuAction->height())
+        && terminalReviewRecordingMenuAction != nullptr && !terminalReviewRecordingMenuAction->isVisible()
+        && qFuzzyIsNull(terminalReviewRecordingMenuAction->height()) && terminalFollowDirectoryMenuAction != nullptr
+        && !terminalFollowDirectoryMenuAction->property("checkable").toBool()
+        && captureLayout(window, outputDirectory, QStringLiteral("terminal-more-menu"));
+    if (!terminalMoreMenuCompacted)
+    {
+        qCWarning(applicationLog)
+            << "Terminal More menu retained hidden rows or an unwanted checkable indent"
+            << "keywordHeight=" << (terminalKeywordMenuAction == nullptr ? -1.0 : terminalKeywordMenuAction->height())
+            << "pauseHeight="
+            << (terminalPauseRecordingMenuAction == nullptr ? -1.0 : terminalPauseRecordingMenuAction->height())
+            << "reviewHeight="
+            << (terminalReviewRecordingMenuAction == nullptr ? -1.0 : terminalReviewRecordingMenuAction->height())
+            << "followCheckable="
+            << (terminalFollowDirectoryMenuAction == nullptr
+                    ? true
+                    : terminalFollowDirectoryMenuAction->property("checkable").toBool());
+        return false;
+    }
     QQuickItem *terminalHistoryMenuAction = quickItem(rootObject, "terminalHistoryMenuAction");
     if (!focusItem(window, terminalHistoryMenuAction, QStringLiteral("terminalHistoryMenuAction")))
     {

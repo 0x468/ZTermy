@@ -1284,41 +1284,41 @@
         <translation>已连接 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1492"/>
+        <location filename="../src/ui/qml/Main.qml" line="1499"/>
         <source>Command history</source>
         <translation>命令历史</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1342"/>
-        <location filename="../src/ui/qml/Main.qml" line="1350"/>
-        <location filename="../src/ui/qml/Main.qml" line="1510"/>
+        <location filename="../src/ui/qml/Main.qml" line="1347"/>
+        <location filename="../src/ui/qml/Main.qml" line="1355"/>
+        <location filename="../src/ui/qml/Main.qml" line="1518"/>
         <source>Command composer</source>
         <translation>命令撰写栏</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1387"/>
-        <location filename="../src/ui/qml/Main.qml" line="1394"/>
-        <location filename="../src/ui/qml/Main.qml" line="1527"/>
+        <location filename="../src/ui/qml/Main.qml" line="1392"/>
+        <location filename="../src/ui/qml/Main.qml" line="1399"/>
+        <location filename="../src/ui/qml/Main.qml" line="1535"/>
         <source>Stop session log</source>
         <translation>停止会话日志</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1387"/>
-        <location filename="../src/ui/qml/Main.qml" line="1394"/>
-        <location filename="../src/ui/qml/Main.qml" line="1527"/>
+        <location filename="../src/ui/qml/Main.qml" line="1392"/>
+        <location filename="../src/ui/qml/Main.qml" line="1399"/>
+        <location filename="../src/ui/qml/Main.qml" line="1535"/>
         <source>Start session log</source>
         <translation>开始会话日志</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1394"/>
+        <location filename="../src/ui/qml/Main.qml" line="1399"/>
         <source>Session log is incomplete: %1 byte(s) were dropped.</source>
         <translation>会话日志不完整：已丢弃 %1 字节。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1365"/>
-        <location filename="../src/ui/qml/Main.qml" line="1372"/>
-        <location filename="../src/ui/qml/Main.qml" line="1521"/>
-        <location filename="../src/ui/qml/Main.qml" line="1773"/>
+        <location filename="../src/ui/qml/Main.qml" line="1370"/>
+        <location filename="../src/ui/qml/Main.qml" line="1377"/>
+        <location filename="../src/ui/qml/Main.qml" line="1529"/>
+        <location filename="../src/ui/qml/Main.qml" line="1783"/>
         <source>Find in terminal</source>
         <translation>在终端中查找</translation>
     </message>
@@ -1348,74 +1348,74 @@
         <translation>传输</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1309"/>
-        <location filename="../src/ui/qml/Main.qml" line="1316"/>
-        <location filename="../src/ui/qml/Main.qml" line="1503"/>
+        <location filename="../src/ui/qml/Main.qml" line="1314"/>
+        <location filename="../src/ui/qml/Main.qml" line="1321"/>
+        <location filename="../src/ui/qml/Main.qml" line="1511"/>
         <source>Open SFTP</source>
         <translation>打开 SFTP</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1412"/>
-        <location filename="../src/ui/qml/Main.qml" line="1419"/>
-        <location filename="../src/ui/qml/Main.qml" line="1533"/>
+        <location filename="../src/ui/qml/Main.qml" line="1417"/>
+        <location filename="../src/ui/qml/Main.qml" line="1424"/>
+        <location filename="../src/ui/qml/Main.qml" line="1541"/>
         <source>Command snippets</source>
         <translation>命令片段</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1474"/>
-        <location filename="../src/ui/qml/Main.qml" line="1482"/>
+        <location filename="../src/ui/qml/Main.qml" line="1479"/>
+        <location filename="../src/ui/qml/Main.qml" line="1487"/>
         <source>More terminal actions</source>
         <translation>更多终端操作</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1774"/>
+        <location filename="../src/ui/qml/Main.qml" line="1784"/>
         <source>Terminal search query</source>
         <translation>终端搜索内容</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1811"/>
+        <location filename="../src/ui/qml/Main.qml" line="1821"/>
         <source>Match case</source>
         <translation>区分大小写</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1840"/>
+        <location filename="../src/ui/qml/Main.qml" line="1850"/>
         <source>Previous match</source>
         <translation>上一个匹配项</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1851"/>
+        <location filename="../src/ui/qml/Main.qml" line="1861"/>
         <source>Next match</source>
         <translation>下一个匹配项</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1862"/>
+        <location filename="../src/ui/qml/Main.qml" line="1872"/>
         <source>Close terminal search</source>
         <translation>关闭终端搜索</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1935"/>
+        <location filename="../src/ui/qml/Main.qml" line="1945"/>
         <source>No terminal sessions</source>
         <translation>没有终端会话</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1936"/>
+        <location filename="../src/ui/qml/Main.qml" line="1946"/>
         <source>Open a local PowerShell session or choose an SSH host from the Hosts workspace.</source>
         <translation>打开本地 PowerShell 会话，或从主机工作区选择 SSH 主机。</translation>
     </message>
     <message>
         <location filename="../src/ui/qml/Main.qml" line="772"/>
-        <location filename="../src/ui/qml/Main.qml" line="1941"/>
+        <location filename="../src/ui/qml/Main.qml" line="1951"/>
         <source>New terminal</source>
         <translation>新建终端</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1942"/>
+        <location filename="../src/ui/qml/Main.qml" line="1952"/>
         <source>Open a new local terminal</source>
         <translation>打开新的本地终端</translation>
     </message>
     <message>
         <location filename="../src/ui/qml/Main.qml" line="791"/>
-        <location filename="../src/ui/qml/Main.qml" line="1948"/>
+        <location filename="../src/ui/qml/Main.qml" line="1958"/>
         <source>Browse hosts</source>
         <translation>浏览主机</translation>
     </message>
@@ -1425,203 +1425,208 @@
         <translation>打开新建终端菜单</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1284"/>
-        <location filename="../src/ui/qml/Main.qml" line="1291"/>
-        <location filename="../src/ui/qml/Main.qml" line="1497"/>
+        <location filename="../src/ui/qml/Main.qml" line="1289"/>
+        <location filename="../src/ui/qml/Main.qml" line="1296"/>
+        <location filename="../src/ui/qml/Main.qml" line="1505"/>
         <source>Host keyword highlighting</source>
         <translation>主机关键字高亮</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1460"/>
-        <location filename="../src/ui/qml/Main.qml" line="1560"/>
+        <location filename="../src/ui/qml/Main.qml" line="1465"/>
+        <location filename="../src/ui/qml/Main.qml" line="1568"/>
         <source>Pause script recording</source>
         <translation>暂停脚本录制</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1460"/>
-        <location filename="../src/ui/qml/Main.qml" line="1560"/>
+        <location filename="../src/ui/qml/Main.qml" line="1465"/>
+        <location filename="../src/ui/qml/Main.qml" line="1568"/>
         <source>Resume script recording</source>
         <translation>继续脚本录制</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1460"/>
-        <location filename="../src/ui/qml/Main.qml" line="1578"/>
+        <location filename="../src/ui/qml/Main.qml" line="1465"/>
+        <location filename="../src/ui/qml/Main.qml" line="1587"/>
         <source>Review recorded commands</source>
         <translation>查看已录制命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1539"/>
+        <location filename="../src/ui/qml/Main.qml" line="1548"/>
         <source>Follow terminal directory</source>
         <translation>跟随终端目录</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1547"/>
+        <location filename="../src/ui/qml/Main.qml" line="1548"/>
+        <source>Stop following terminal directory</source>
+        <translation>停止跟随终端目录</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/Main.qml" line="1554"/>
         <source>Session terminal settings</source>
         <translation>会话终端设置</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1554"/>
+        <location filename="../src/ui/qml/Main.qml" line="1561"/>
         <source>Start script recording</source>
         <translation>开始脚本录制</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1570"/>
+        <location filename="../src/ui/qml/Main.qml" line="1578"/>
         <source>Stop script recording</source>
         <translation>停止脚本录制</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1586"/>
+        <location filename="../src/ui/qml/Main.qml" line="1595"/>
         <source>Terminal encoding</source>
         <translation>终端编码</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1589"/>
+        <location filename="../src/ui/qml/Main.qml" line="1598"/>
         <source>UTF-8</source>
         <translation>UTF-8</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1595"/>
+        <location filename="../src/ui/qml/Main.qml" line="1604"/>
         <source>GB18030</source>
         <translation>GB18030</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1949"/>
+        <location filename="../src/ui/qml/Main.qml" line="1959"/>
         <source>Browse saved SSH hosts</source>
         <translation>浏览已保存的 SSH 主机</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1960"/>
+        <location filename="../src/ui/qml/Main.qml" line="1970"/>
         <source>Connecting to SSH host</source>
         <translation>正在连接 SSH 主机</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1962"/>
+        <location filename="../src/ui/qml/Main.qml" line="1972"/>
         <source>Connection setup runs outside the interface thread. You can close this tab to cancel.</source>
         <translation>连接设置在界面线程之外执行。你可以关闭此标签页来取消。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1965"/>
+        <location filename="../src/ui/qml/Main.qml" line="1975"/>
         <source>Cancel connection</source>
         <translation>取消连接</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1966"/>
+        <location filename="../src/ui/qml/Main.qml" line="1976"/>
         <source>Cancel SSH connection and close tab</source>
         <translation>取消 SSH 连接并关闭标签页</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1981"/>
+        <location filename="../src/ui/qml/Main.qml" line="1991"/>
         <source>SSH session ended</source>
         <translation>SSH 会话已结束</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1983"/>
+        <location filename="../src/ui/qml/Main.qml" line="1993"/>
         <source>The remote host closed the terminal connection. Credentials are not retained for automatic reconnection.</source>
         <translation>远程主机关闭了终端连接。不会保留凭据用于自动重连。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1986"/>
-        <location filename="../src/ui/qml/Main.qml" line="2014"/>
+        <location filename="../src/ui/qml/Main.qml" line="1996"/>
+        <location filename="../src/ui/qml/Main.qml" line="2024"/>
         <source>Close tab</source>
         <translation>关闭标签页</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1987"/>
+        <location filename="../src/ui/qml/Main.qml" line="1997"/>
         <source>Close ended SSH terminal tab</source>
         <translation>关闭已结束的 SSH 终端标签页</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1996"/>
-        <location filename="../src/ui/qml/Main.qml" line="2024"/>
+        <location filename="../src/ui/qml/Main.qml" line="2006"/>
+        <location filename="../src/ui/qml/Main.qml" line="2034"/>
         <source>Review host</source>
         <translation>检查主机</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="1997"/>
-        <location filename="../src/ui/qml/Main.qml" line="2025"/>
+        <location filename="../src/ui/qml/Main.qml" line="2007"/>
+        <location filename="../src/ui/qml/Main.qml" line="2035"/>
         <source>Return to SSH host profiles</source>
         <translation>返回 SSH 主机配置</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2009"/>
+        <location filename="../src/ui/qml/Main.qml" line="2019"/>
         <source>SSH session unavailable</source>
         <translation>SSH 会话不可用</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2011"/>
+        <location filename="../src/ui/qml/Main.qml" line="2021"/>
         <source>Review the host and authentication settings before starting a new connection. Credentials are not retained for retry.</source>
         <translation>开始新连接前，请检查主机和身份验证设置。重试时不会保留凭据。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2015"/>
+        <location filename="../src/ui/qml/Main.qml" line="2025"/>
         <source>Close failed SSH terminal tab</source>
         <translation>关闭连接失败的 SSH 终端标签页</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2114"/>
-        <location filename="../src/ui/qml/Main.qml" line="2178"/>
+        <location filename="../src/ui/qml/Main.qml" line="2124"/>
+        <location filename="../src/ui/qml/Main.qml" line="2188"/>
         <source>Unlock portable credential vault</source>
         <translation>解锁便携凭据保险库</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2117"/>
+        <location filename="../src/ui/qml/Main.qml" line="2127"/>
         <source>Unlock portable vault</source>
         <translation>解锁便携保险库</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2126"/>
+        <location filename="../src/ui/qml/Main.qml" line="2136"/>
         <source>Unlock saved SSH passwords and private-key passphrases for this ztermy session. The master password is never stored.</source>
         <translation>解锁本次 ztermy 会话中保存的 SSH 密码和私钥口令。主密码永远不会被保存。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2138"/>
+        <location filename="../src/ui/qml/Main.qml" line="2148"/>
         <source>Master password (minimum 8 characters)</source>
         <translation>主密码（至少 8 个字符）</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2140"/>
+        <location filename="../src/ui/qml/Main.qml" line="2150"/>
         <source>Portable vault master password</source>
         <translation>便携保险库主密码</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2156"/>
+        <location filename="../src/ui/qml/Main.qml" line="2166"/>
         <source>Open Security</source>
         <translation>打开安全设置</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2157"/>
+        <location filename="../src/ui/qml/Main.qml" line="2167"/>
         <source>Open credential Security settings</source>
         <translation>打开凭据安全设置</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2169"/>
+        <location filename="../src/ui/qml/Main.qml" line="2179"/>
         <source>Not now</source>
         <translation>暂不</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2170"/>
+        <location filename="../src/ui/qml/Main.qml" line="2180"/>
         <source>Keep portable vault locked</source>
         <translation>保持便携保险库锁定</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2177"/>
+        <location filename="../src/ui/qml/Main.qml" line="2187"/>
         <source>Unlock</source>
         <translation>解锁</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2197"/>
+        <location filename="../src/ui/qml/Main.qml" line="2207"/>
         <source>Paste multiple lines?</source>
         <translation>粘贴多行？</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/ui/qml/Main.qml" line="2198"/>
+        <location filename="../src/ui/qml/Main.qml" line="2208"/>
         <source>The clipboard contains %n line(s). Pasting may execute commands immediately in the active terminal.</source>
         <translation>
             <numerusform>剪贴板包含 %n 行内容。粘贴后可能会立即在当前终端中执行命令。</numerusform>
         </translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/Main.qml" line="2199"/>
+        <location filename="../src/ui/qml/Main.qml" line="2209"/>
         <source>Paste</source>
         <translation>粘贴</translation>
     </message>
@@ -3079,72 +3084,77 @@
         <translation>启用主机关键字高亮</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="85"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="88"/>
+        <source>Close host keyword highlighting</source>
+        <translation>关闭主机关键字高亮</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="95"/>
         <source>%1 rule(s); the first matching rule wins.</source>
         <translation>%1 条规则；首条匹配规则优先。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="85"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="95"/>
         <source>Add a literal keyword and choose its terminal colors.</source>
         <translation>添加文字关键字并选择其终端颜色。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="124"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="136"/>
         <source>A</source>
         <translation>A</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="144"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="156"/>
         <source>Delete keyword rule</source>
         <translation>删除关键字规则</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="166"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="178"/>
         <source>Keyword</source>
         <translation>关键字</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="176"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="188"/>
         <source>#FFFFFF</source>
         <translation>#FFFFFF</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="177"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="189"/>
         <source>Text color</source>
         <translation>文字颜色</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="183"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="195"/>
         <source>#D13438</source>
         <translation>#D13438</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="184"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="196"/>
         <source>Background color</source>
         <translation>背景颜色</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="193"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="205"/>
         <source>Enabled</source>
         <translation>启用</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="198"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="210"/>
         <source>Match case</source>
         <translation>区分大小写</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="211"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="223"/>
         <source>New</source>
         <translation>新建</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="215"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="227"/>
         <source>Update</source>
         <translation>更新</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="215"/>
+        <location filename="../src/ui/qml/TerminalKeywordPopover.qml" line="227"/>
         <source>Add</source>
         <translation>添加</translation>
     </message>
@@ -3167,27 +3177,27 @@
         <translation>仅录制从命令撰写栏、历史记录或命令片段运行的命令。不会录制原始键盘输入和密码提示。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalRecordingPopover.qml" line="99"/>
+        <location filename="../src/ui/qml/TerminalRecordingPopover.qml" line="101"/>
         <source>Wait %1 ms</source>
         <translation>等待 %1 毫秒</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalRecordingPopover.qml" line="113"/>
+        <location filename="../src/ui/qml/TerminalRecordingPopover.qml" line="115"/>
         <source>Clear</source>
         <translation>清除</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalRecordingPopover.qml" line="123"/>
+        <location filename="../src/ui/qml/TerminalRecordingPopover.qml" line="125"/>
         <source>Copy JSON</source>
         <translation>复制 JSON</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalRecordingPopover.qml" line="128"/>
+        <location filename="../src/ui/qml/TerminalRecordingPopover.qml" line="130"/>
         <source>Running…</source>
         <translation>正在运行…</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalRecordingPopover.qml" line="128"/>
+        <location filename="../src/ui/qml/TerminalRecordingPopover.qml" line="130"/>
         <source>Replay</source>
         <translation>重放</translation>
     </message>

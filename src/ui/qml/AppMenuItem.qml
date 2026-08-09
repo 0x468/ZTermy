@@ -6,6 +6,7 @@ MenuItem {
 
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset, implicitContentWidth + leftPadding + rightPadding)
     implicitHeight: Math.max(34, implicitContentHeight + topPadding + bottomPadding, implicitIndicatorHeight + topPadding + bottomPadding)
+    height: visible ? implicitHeight : 0
     leftPadding: 10
     rightPadding: 10
     topPadding: 7

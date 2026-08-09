@@ -45,7 +45,7 @@ Popup {
     padding: 14
     modal: false
     focus: true
-    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
+    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
     background: Rectangle {
         radius: Theme.radiusPanel
@@ -77,6 +77,16 @@ Popup {
                 enabled: popover.terminalTab !== null && popover.terminalTab.kind === "ssh"
                 accessibleName: qsTr("Enable host keyword highlighting")
                 onToggled: popover.controller.setActiveKeywordHighlightEnabled(checked)
+            }
+
+            ActionButton {
+                objectName: "keywordHighlightCloseAction"
+                Layout.preferredWidth: 30
+                implicitWidth: 30
+                text: ""
+                iconName: "close"
+                accessibleName: qsTr("Close host keyword highlighting")
+                onClicked: popover.close()
             }
         }
 

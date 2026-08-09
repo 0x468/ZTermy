@@ -1278,7 +1278,12 @@ Rectangle {
                                 selected: checked
                                 visible: root.width >= 980 && root.activeTerminalTab !== null && root.activeTerminalTab.kind === "ssh"
                                 enabled: root.activeTerminalTab !== null
-                                onClicked: keywordHighlightPopover.openFor(keywordHighlightButton)
+                                onClicked: {
+                                    if (keywordHighlightPopover.visible)
+                                        keywordHighlightPopover.close();
+                                    else
+                                        keywordHighlightPopover.openFor(keywordHighlightButton);
+                                }
                                 Keys.onReturnPressed: click()
                                 Keys.onEnterPressed: click()
                                 Accessible.name: qsTr("Host keyword highlighting")
@@ -1485,6 +1490,8 @@ Rectangle {
                                 AppMenu {
                                     id: terminalMoreMenu
 
+                                    objectName: "terminalMoreMenu"
+
                                     y: terminalMoreButton.height
 
                                     AppMenuItem {
@@ -1494,6 +1501,7 @@ Rectangle {
                                     }
 
                                     AppMenuItem {
+                                        objectName: "terminalKeywordMenuAction"
                                         text: qsTr("Host keyword highlighting")
                                         visible: !keywordHighlightButton.visible && root.activeTerminalTab !== null && root.activeTerminalTab.kind === "ssh"
                                         onTriggered: keywordHighlightPopover.openFor(terminalMoreButton)
@@ -1536,11 +1544,10 @@ Rectangle {
                                     }
 
                                     AppMenuItem {
-                                        text: qsTr("Follow terminal directory")
-                                        checkable: true
-                                        checked: root.controller.activeSftpFollowTerminalDirectory
+                                        objectName: "terminalFollowDirectoryMenuAction"
+                                        text: root.controller.activeSftpFollowTerminalDirectory ? qsTr("Stop following terminal directory") : qsTr("Follow terminal directory")
                                         enabled: root.activeTerminalTab !== null && root.activeTerminalTab.connected
-                                        onTriggered: root.controller.setSftpFollowTerminalDirectory(checked)
+                                        onTriggered: root.controller.setSftpFollowTerminalDirectory(!root.controller.activeSftpFollowTerminalDirectory)
                                     }
 
                                     AppMenuItem {
@@ -1557,6 +1564,7 @@ Rectangle {
                                         onTriggered: root.controller.startTerminalScriptRecording()
                                     }
                                     AppMenuItem {
+                                        objectName: "terminalPauseRecordingMenuAction"
                                         text: root.activeTerminalTab !== null && root.activeTerminalTab.scriptRecordingState === "paused" ? qsTr("Resume script recording") : qsTr("Pause script recording")
                                         visible: root.activeTerminalTab !== null && (root.activeTerminalTab.scriptRecordingState === "recording" || root.activeTerminalTab.scriptRecordingState === "paused")
                                         onTriggered: {
@@ -1575,6 +1583,7 @@ Rectangle {
                                         }
                                     }
                                     AppMenuItem {
+                                        objectName: "terminalReviewRecordingMenuAction"
                                         text: qsTr("Review recorded commands")
                                         visible: root.activeTerminalTab !== null && root.activeTerminalTab.scriptRecordingState === "review"
                                         onTriggered: terminalRecordingPopover.openFor(terminalMoreButton)
@@ -1659,6 +1668,7 @@ Rectangle {
 
                         TerminalKeywordPopover {
                             id: keywordHighlightPopover
+                            objectName: "keywordHighlightPopover"
                             controller: root.controller
                             terminalTab: root.activeTerminalTab
                         }

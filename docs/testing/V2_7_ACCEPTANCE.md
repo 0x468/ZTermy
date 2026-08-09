@@ -7,7 +7,7 @@
 - C++ formatting and the complete Debug `clang-tidy` target passed with warnings
   treated as errors.
 - All 41 QML files passed formatting and `qmllint` without warnings.
-- The Simplified Chinese catalog contains 819 finished source messages and
+- The Simplified Chinese catalog contains 821 finished source messages and
   passed the translation-catalog gate.
 - Real-host UTF-8/GB18030 switching passed in Debug and static Release against
   the dedicated trusted key-authentication fixture. No credential material or

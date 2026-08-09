@@ -25,7 +25,7 @@ Popup {
     padding: 14
     modal: false
     focus: true
-    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
+    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
     background: Rectangle {
         radius: Theme.radiusPanel
