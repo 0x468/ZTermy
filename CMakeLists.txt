@@ -330,6 +330,8 @@ add_library(ztermy_workbench_persistence STATIC
     src/infrastructure/workbench/PowerShellHistoryReader.h
     src/infrastructure/workbench/QuickCommandStore.cpp
     src/infrastructure/workbench/QuickCommandStore.h
+    src/infrastructure/workbench/NoteStore.cpp
+    src/infrastructure/workbench/NoteStore.h
     src/infrastructure/workbench/ScriptStore.cpp
     src/infrastructure/workbench/ScriptStore.h
     src/infrastructure/workbench/WorkspaceStateStore.cpp
@@ -1840,6 +1842,27 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME script-store COMMAND ztermy_script_store_tests)
+
+    qt_add_executable(ztermy_note_store_tests
+        tests/note_store_tests.cpp
+    )
+
+    target_compile_features(ztermy_note_store_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_note_store_tests PRIVATE
+        ztermy_workbench_persistence
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_note_store_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /WX
+        )
+    endif()
+
+    add_test(NAME note-store COMMAND ztermy_note_store_tests)
 
     qt_add_executable(ztermy_script_execution_tests
         tests/script_execution_tests.cpp
