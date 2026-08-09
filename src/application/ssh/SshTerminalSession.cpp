@@ -31,6 +31,58 @@ constexpr std::string_view remoteShellHistoryCommand =
 constexpr qsizetype maximumRemoteHistoryBytes = qsizetype{2} * 1024 * 1024 + 256;
 constexpr std::string_view remoteHistoryMarker = "ZTERMY-HISTORY/1 ";
 
+[[nodiscard]] std::vector<QByteArray> startupCommandFrames(const ztermy::ssh::SshSessionOptions &options)
+{
+    if (options.startupCommand.empty())
+    {
+        return {};
+    }
+
+    QByteArray normalized = QByteArray::fromStdString(options.startupCommand);
+    normalized.replace("\r\n", "\n");
+    normalized.replace('\r', '\n');
+    if (options.startupCommandMode == ztermy::ssh::SshStartupCommandMode::Paste)
+    {
+        normalized.replace('\n', '\r');
+        if (!normalized.endsWith('\r'))
+        {
+            normalized.append('\r');
+        }
+        return {std::move(normalized)};
+    }
+
+    std::vector<QByteArray> frames;
+    const QList<QByteArray> lines = normalized.split('\n');
+    frames.reserve(static_cast<std::size_t>(lines.size()));
+    for (qsizetype index = 0; index < lines.size(); ++index)
+    {
+        if (index + 1 == lines.size() && lines[index].isEmpty())
+        {
+            break;
+        }
+        QByteArray frame = lines[index];
+        frame.append('\r');
+        frames.push_back(std::move(frame));
+    }
+    return frames;
+}
+
+[[nodiscard]] bool waitForStartupLineDelay(const std::chrono::milliseconds delay, const std::stop_token &stopToken)
+{
+    const auto deadline = std::chrono::steady_clock::now() + delay;
+    while (!stopToken.stop_requested())
+    {
+        const auto remaining =
+            std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
+        if (remaining <= 0ms)
+        {
+            return true;
+        }
+        QThread::msleep(static_cast<unsigned long>(std::min(remaining, 25ms).count()));
+    }
+    return false;
+}
+
 [[nodiscard]] QString failureStatus(const ztermy::ssh::SshFailureKind failure)
 {
     using ztermy::ssh::SshFailureKind;
@@ -504,16 +556,61 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     }
     auto socket = std::move(connection->socket);
     auto session = std::move(connection->session);
+    terminal::WindowsTerminalTextCodec textCodec;
+
+    std::vector<SshTerminalEnvironment> terminalEnvironment;
+    terminalEnvironment.reserve(request.sessionOptions.environment.size());
+    for (const SshEnvironmentVariable &variable : request.sessionOptions.environment)
+    {
+        terminalEnvironment.push_back({.name = variable.name, .value = variable.value});
+    }
+
+    if (request.sessionOptions.keepaliveIntervalSeconds > 0)
+    {
+        auto configured = session->configureKeepalive(request.sessionOptions.keepaliveIntervalSeconds);
+        if (!configured)
+        {
+            finishFailure(sshFailureFromTransport(configured.error()));
+            return;
+        }
+    }
 
     advanceState(state, SshConnectionPhase::OpeningChannel);
     postPhase(state.phase());
     postStatus(tr("Opening SSH terminal"));
-    auto open = session->openTerminal(socket, geometry.columns, geometry.rows, "xterm-256color", 10s, stopToken);
+    auto open = session->openTerminal(socket, geometry.columns, geometry.rows, request.sessionOptions.terminalType,
+                                      terminalEnvironment, 10s, stopToken);
     if (!open)
     {
         const SshFailureKind failure = sshFailureFromTransport(open.error(), true);
         finishFailure(failure);
         return;
+    }
+
+    const std::vector<QByteArray> startupFrames = startupCommandFrames(request.sessionOptions);
+    for (std::size_t index = 0; index < startupFrames.size(); ++index)
+    {
+        const auto encoded = textCodec.encodeRemote(startupFrames[index]);
+        if (!encoded)
+        {
+            finishFailure(SshFailureKind::ProtocolError, tr("SSH startup command could not be encoded"));
+            return;
+        }
+        const auto bytes = std::span(encoded->constData(), static_cast<std::size_t>(encoded->size()));
+        auto written = session->writeTerminal(socket, bytes, 10s, stopToken);
+        if (!written)
+        {
+            finishFailure(sshFailureFromTransport(written.error()), tr("SSH startup command failed"));
+            return;
+        }
+        if (request.sessionOptions.startupCommandMode == SshStartupCommandMode::LineDelay
+            && index + 1 < startupFrames.size()
+            && !waitForStartupLineDelay(std::chrono::milliseconds(request.sessionOptions.startupLineDelayMilliseconds),
+                                        stopToken))
+        {
+            finishFailure(SshFailureKind::Cancelled);
+            return;
+        }
     }
 
     advanceState(state, SshConnectionPhase::Connected);
@@ -533,12 +630,14 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     bool suppressHistoryResult = false;
     telemetry::Scheduler telemetryScheduler;
     telemetry::Accumulator telemetryAccumulator;
-    terminal::WindowsTerminalTextCodec textCodec;
     bool activeTelemetry = false;
     bool activeTelemetryIncludesDetails = false;
     QByteArray remoteTelemetryOutput;
     std::chrono::steady_clock::time_point remoteTelemetryStarted{};
     std::chrono::steady_clock::time_point remoteTelemetryDeadline{};
+    auto nextKeepalive =
+        std::chrono::steady_clock::now() + std::chrono::seconds(request.sessionOptions.keepaliveIntervalSeconds);
+    std::uint8_t consecutiveKeepaliveFailures = 0;
     telemetryScheduler.setVisible(m_telemetryRequestedVisible.load(), std::chrono::steady_clock::now());
     postRemoteTelemetryState(telemetryScheduler.visible() ? QStringLiteral("loading") : QStringLiteral("paused"));
 
@@ -940,6 +1039,27 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                     }
                     remoteTelemetryOutput.clear();
                 }
+            }
+        }
+
+        if (request.sessionOptions.keepaliveIntervalSeconds > 0 && std::chrono::steady_clock::now() >= nextKeepalive)
+        {
+            const auto now = std::chrono::steady_clock::now();
+            auto keepalive = session->sendKeepalive();
+            if (!keepalive)
+            {
+                ++consecutiveKeepaliveFailures;
+                if (consecutiveKeepaliveFailures >= request.sessionOptions.keepaliveFailureThreshold)
+                {
+                    finishFailure(sshFailureFromTransport(keepalive.error()), tr("SSH keepalive failed"));
+                    return;
+                }
+                nextKeepalive = now + std::chrono::seconds(request.sessionOptions.keepaliveIntervalSeconds);
+            }
+            else
+            {
+                consecutiveKeepaliveFailures = 0;
+                nextKeepalive = now + std::chrono::seconds((std::max)(*keepalive, 1));
             }
         }
 

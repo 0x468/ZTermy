@@ -522,6 +522,16 @@ Libssh2Session::openTerminal(WindowsTcpSocket &socket, const std::uint32_t colum
                              const std::string_view terminalType, const std::chrono::milliseconds timeout,
                              const std::stop_token &stopToken) noexcept
 {
+    return openTerminal(socket, columns, rows, terminalType, std::span<const SshTerminalEnvironment>{}, timeout,
+                        stopToken);
+}
+
+std::expected<void, SshTransportError>
+Libssh2Session::openTerminal(WindowsTcpSocket &socket, const std::uint32_t columns, const std::uint32_t rows,
+                             const std::string_view terminalType,
+                             const std::span<const SshTerminalEnvironment> environment,
+                             const std::chrono::milliseconds timeout, const std::stop_token &stopToken) noexcept
+{
     if (!validTerminalDimensions(columns, rows) || terminalType.empty()
         || terminalType.find('\0') != std::string_view::npos
         || terminalType.size() > static_cast<std::size_t>((std::numeric_limits<unsigned int>::max)()))
@@ -593,6 +603,41 @@ Libssh2Session::openTerminal(WindowsTcpSocket &socket, const std::uint32_t colum
         }
     }
 
+    for (const SshTerminalEnvironment &variable : environment)
+    {
+        if (variable.name.empty() || variable.name.find('\0') != std::string_view::npos
+            || variable.value.find('\0') != std::string_view::npos
+            || variable.name.size() > static_cast<std::size_t>((std::numeric_limits<unsigned int>::max)())
+            || variable.value.size() > static_cast<std::size_t>((std::numeric_limits<unsigned int>::max)()))
+        {
+            releaseChannel();
+            return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
+        }
+        while (true)
+        {
+            const int result = libssh2_channel_setenv_ex(
+                channel, variable.name.data(), static_cast<unsigned int>(variable.name.size()), variable.value.data(),
+                static_cast<unsigned int>(variable.value.size()));
+            if (result == 0)
+            {
+                break;
+            }
+            if (result != LIBSSH2_ERROR_EAGAIN)
+            {
+                const SshTransportError error = mapChannelError(result);
+                releaseChannel();
+                return std::unexpected(error);
+            }
+            auto ready = waitForSessionIo(socket, session, deadline, stopToken);
+            if (!ready)
+            {
+                const SshTransportError error = ready.error();
+                releaseChannel();
+                return std::unexpected(error);
+            }
+        }
+    }
+
     while (true)
     {
         const int result = libssh2_channel_shell(channel);
@@ -615,6 +660,31 @@ Libssh2Session::openTerminal(WindowsTcpSocket &socket, const std::uint32_t colum
             return std::unexpected(error);
         }
     }
+}
+
+std::expected<void, SshTransportError> Libssh2Session::configureKeepalive(const std::uint32_t intervalSeconds) noexcept
+{
+    if (m_session == nullptr || !m_authenticated)
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
+    }
+    libssh2_keepalive_config(static_cast<LIBSSH2_SESSION *>(m_session), 1, static_cast<unsigned int>(intervalSeconds));
+    return {};
+}
+
+std::expected<int, SshTransportError> Libssh2Session::sendKeepalive() noexcept
+{
+    if (m_session == nullptr || !m_authenticated)
+    {
+        return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidState});
+    }
+    int secondsToNext = 0;
+    const int result = libssh2_keepalive_send(static_cast<LIBSSH2_SESSION *>(m_session), &secondsToNext);
+    if (result != 0)
+    {
+        return std::unexpected(mapChannelError(result));
+    }
+    return secondsToNext;
 }
 
 std::expected<std::size_t, SshTransportError> Libssh2Session::readTerminal(WindowsTcpSocket &socket,

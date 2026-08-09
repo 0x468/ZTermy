@@ -18,6 +18,7 @@ constexpr std::size_t maximumEnvironmentVariableCount = 32;
 constexpr std::size_t maximumEnvironmentNameLength = 128;
 constexpr std::size_t maximumEnvironmentValueLength = 4096;
 constexpr std::size_t maximumStartupCommandLength = 32768;
+constexpr std::size_t maximumStartupCommandLineBreaks = 255;
 
 [[nodiscard]] bool nonEmptyWithin(const std::string &value, const std::size_t maximumLength) noexcept
 {
@@ -89,6 +90,11 @@ bool validSshSessionOptions(const SshSessionOptions &options) noexcept
     if (!validTerminalType(options.terminalType) || options.keepaliveIntervalSeconds > 3600
         || options.keepaliveFailureThreshold == 0 || options.keepaliveFailureThreshold > 10
         || !validBoundedText(options.startupCommand, maximumStartupCommandLength)
+        || std::cmp_greater(std::ranges::count_if(options.startupCommand,
+                                                  [](const char character) {
+                                                      return character == '\r' || character == '\n';
+                                                  }),
+                            maximumStartupCommandLineBreaks)
         || (options.startupCommandMode != SshStartupCommandMode::Paste
             && options.startupCommandMode != SshStartupCommandMode::LineDelay)
         || options.startupLineDelayMilliseconds > 5000 || options.environment.size() > maximumEnvironmentVariableCount

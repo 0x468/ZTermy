@@ -229,6 +229,7 @@ private slots:
     void readsRemoteShellHistoryOnRealHost();
     void collectsRemoteTelemetryOnRealHost();
     void switchesTerminalEncodingOnRealHost();
+    void appliesSessionOptionsOnRealHost();
     void reportsAuthenticationRejectionOnRealHost();
     void reportsRemoteCloseOnRealHost();
     void authenticatesWithInteractivePasswordOnRealHost();
@@ -262,6 +263,18 @@ void SshTerminalSessionTests::rejectsInvalidStartupConfiguration()
         .knownHostsPath = QStringLiteral("known_hosts.json"),
     };
     QCOMPARE(session.start(std::move(emptyPassword), {.columns = 80, .rows = 24}),
+             std::make_error_code(std::errc::invalid_argument));
+
+    ztermy::ssh::SshConnectionRequest excessiveStartupLines{
+        .host = QStringLiteral("server.example.test"),
+        .port = 22,
+        .username = QStringLiteral("user"),
+        .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
+        .privateKeyPath = QStringLiteral("key"),
+        .knownHostsPath = QStringLiteral("known_hosts.json"),
+    };
+    excessiveStartupLines.sessionOptions.startupCommand.assign(256, '\n');
+    QCOMPARE(session.start(std::move(excessiveStartupLines), {.columns = 80, .rows = 24}),
              std::make_error_code(std::errc::invalid_argument));
 }
 
@@ -759,6 +772,76 @@ void SshTerminalSessionTests::switchesTerminalEncodingOnRealHost()
     session.setEncoding(QStringLiteral("utf-8"));
     session.queueInput(QByteArrayLiteral("printf '\\344\\270\\226\\347\\225\\214\\n'\r"));
     QTRY_VERIFY_WITH_TIMEOUT(snapshotsContain(QStringLiteral("世界")), 10s);
+    session.stop();
+}
+
+void SshTerminalSessionTests::appliesSessionOptionsOnRealHost()
+{
+    if (qgetenv("ZTERMY_TEST_SSH_SESSION_OPTIONS") != QByteArrayLiteral("1"))
+    {
+        QSKIP("Set ZTERMY_TEST_SSH_SESSION_OPTIONS=1 to run the SSH session-options gate");
+    }
+
+    const QByteArray host = qgetenv("ZTERMY_TEST_SSH_HOST");
+    const QByteArray username = qgetenv("ZTERMY_TEST_SSH_USERNAME");
+    const QByteArray privateKey = qgetenv("ZTERMY_TEST_SSH_PRIVATE_KEY");
+    const QByteArray expectedFingerprint = qgetenv("ZTERMY_TEST_SSH_EXPECTED_FINGERPRINT");
+    if (host.isEmpty() || username.isEmpty() || privateKey.isEmpty() || expectedFingerprint.isEmpty())
+    {
+        QSKIP("Set the real-host private-key gate variables to run the SSH session-options gate");
+    }
+
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ztermy::ssh::SshTerminalSession session;
+    QSignalSpy confirmationSpy(&session, &ztermy::ssh::SshTerminalSession::hostKeyConfirmationRequired);
+    QSignalSpy runningSpy(&session, &ztermy::ssh::SshTerminalSession::runningChanged);
+    QSignalSpy snapshotSpy(&session, &ztermy::ssh::SshTerminalSession::snapshotReady);
+    ztermy::ssh::SshConnectionRequest request{
+        .host = QString::fromUtf8(host),
+        .port = 22,
+        .username = QString::fromUtf8(username),
+        .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
+        .privateKeyPath = QString::fromUtf8(privateKey),
+        .knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json")),
+        .sessionOptions = {.terminalType = "xterm-256color",
+                           .keepaliveIntervalSeconds = 2,
+                           .keepaliveFailureThreshold = 2,
+                           .startupCommand = R"(printf 'ZTERMY-SESSION-OPTIONS:%s\n' "$LANG")",
+                           .startupCommandMode = ztermy::ssh::SshStartupCommandMode::LineDelay,
+                           .startupLineDelayMilliseconds = 25,
+                           .environment = {{.name = "LANG", .value = "C"}}},
+    };
+
+    QVERIFY(!session.start(std::move(request), {.columns = 80, .rows = 24}));
+    QTRY_COMPARE_WITH_TIMEOUT(confirmationSpy.count(), 1, 10s);
+    QCOMPARE(confirmationSpy.constFirst().at(1).toString(), QString::fromLatin1(expectedFingerprint));
+    session.confirmHostKey(true);
+    QTRY_VERIFY_WITH_TIMEOUT(std::ranges::any_of(runningSpy,
+                                                 [](const QList<QVariant> &arguments) {
+                                                     return !arguments.isEmpty() && arguments.constFirst().toBool();
+                                                 }),
+                             20s);
+
+    const auto snapshotsContain = [&snapshotSpy](const QString &needle) {
+        return std::ranges::any_of(snapshotSpy, [&needle](const QList<QVariant> &arguments) {
+            const auto snapshot = qvariant_cast<ztermy::terminal::TerminalSnapshotPtr>(arguments.constFirst());
+            if (!snapshot)
+            {
+                return false;
+            }
+            QString text;
+            for (const ztermy::terminal::TerminalCell &cell : snapshot->cells)
+            {
+                text += QString::fromStdU32String(cell.grapheme);
+            }
+            return text.contains(needle);
+        });
+    };
+    QTRY_VERIFY_WITH_TIMEOUT(snapshotsContain(QStringLiteral("ZTERMY-SESSION-OPTIONS:C")), 10s);
+    QTest::qWait(2500);
+    QVERIFY(!runningSpy.isEmpty());
+    QVERIFY(runningSpy.constLast().constFirst().toBool());
     session.stop();
 }
 

@@ -67,6 +67,12 @@ enum class SftpRenameDisposition : std::uint8_t
     ReplaceAtomically,
 };
 
+struct SshTerminalEnvironment final
+{
+    std::string_view name;
+    std::string_view value;
+};
+
 class Libssh2Session final
 {
 public:
@@ -101,6 +107,12 @@ public:
                                                                       std::uint32_t rows, std::string_view terminalType,
                                                                       std::chrono::milliseconds timeout,
                                                                       const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] std::expected<void, SshTransportError>
+    openTerminal(WindowsTcpSocket &socket, std::uint32_t columns, std::uint32_t rows, std::string_view terminalType,
+                 std::span<const SshTerminalEnvironment> environment, std::chrono::milliseconds timeout,
+                 const std::stop_token &stopToken = {}) noexcept;
+    [[nodiscard]] std::expected<void, SshTransportError> configureKeepalive(std::uint32_t intervalSeconds) noexcept;
+    [[nodiscard]] std::expected<int, SshTransportError> sendKeepalive() noexcept;
     [[nodiscard]] std::expected<std::size_t, SshTransportError>
     readTerminal(WindowsTcpSocket &socket, std::span<char> output, std::chrono::milliseconds timeout,
                  const std::stop_token &stopToken = {}, std::uintptr_t interruptEvent = 0) noexcept;
