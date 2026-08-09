@@ -23,8 +23,11 @@ Rectangle {
     property string pendingConnectId: ""
     property string pendingConnectName: ""
     property string pendingConnectAuthentication: ""
+    property bool pendingConnectNeedsHostCredential: false
+    property bool pendingConnectNeedsProxyCredential: false
     property bool nameWasAutoFilled: false
     property bool editingCredentialStored: false
+    property bool editingProxyCredentialStored: false
     property var pendingQuickTarget: ({})
     property string quickConnectMessage: ""
     property bool quickConnectMessageIsError: false
@@ -73,6 +76,51 @@ Rectangle {
             return qsTr("Private-key authentication");
         }
         return authenticationBox.currentIndex === 1 ? qsTr("Password authentication") : qsTr("SSH agent authentication");
+    }
+
+    function pendingCredentialTitle() {
+        if (pendingConnectNeedsHostCredential && pendingConnectNeedsProxyCredential) {
+            return qsTr("Enter connection credentials");
+        }
+        if (pendingConnectNeedsProxyCredential) {
+            return qsTr("Enter proxy password");
+        }
+        return pendingConnectAuthentication === "password" ? qsTr("Enter SSH password") : qsTr("Enter key passphrase");
+    }
+
+    function proxyTypeToken() {
+        if (proxyTypeBox.currentIndex === 1) {
+            return "socks5";
+        }
+        return proxyTypeBox.currentIndex === 2 ? "http-connect" : "none";
+    }
+
+    function proxyOptionsMap() {
+        const type = proxyTypeToken();
+        if (type === "none") {
+            return {
+                type: type,
+                host: "",
+                port: 0,
+                username: ""
+            };
+        }
+        const host = proxyHostField.text.trim();
+        const port = Number(proxyPortField.text);
+        if (host.length === 0 || !Number.isInteger(port) || port < 1 || port > 65535) {
+            showStatus(qsTr("Complete the proxy host and use a port between 1 and 65535."), true);
+            return null;
+        }
+        if (proxyUsernameField.text.trim().length === 0 && proxyCredentialField.text.length > 0) {
+            showStatus(qsTr("Enter a proxy username before entering its password."), true);
+            return null;
+        }
+        return {
+            type: type,
+            host: host,
+            port: port,
+            username: proxyUsernameField.text.trim()
+        };
     }
 
     function sessionOptionsMap() {
@@ -235,6 +283,10 @@ Rectangle {
             showStatus(privateKey ? qsTr("Enter the private-key passphrase.") : qsTr("Enter the SSH password."), true);
             return false;
         }
+        if (requireCredential && proxyTypeBox.currentIndex > 0 && proxyUsernameField.text.trim().length > 0 && proxyCredentialField.text.length === 0 && !editingProxyCredentialStored) {
+            showStatus(qsTr("Enter the proxy password."), true);
+            return false;
+        }
         return true;
     }
 
@@ -258,6 +310,14 @@ Rectangle {
         rememberCredentialSwitch.checked = true;
         nameWasAutoFilled = false;
         editingCredentialStored = false;
+        proxyTypeBox.currentIndex = 0;
+        proxyHostField.text = "";
+        proxyPortField.text = "1080";
+        proxyUsernameField.text = "";
+        proxyCredentialField.text = "";
+        proxyCredentialField.passwordVisible = false;
+        rememberProxyCredentialSwitch.checked = true;
+        editingProxyCredentialStored = false;
         terminalTypeField.text = "xterm-256color";
         keepaliveIntervalField.text = "0";
         keepaliveThresholdField.text = "3";
@@ -280,19 +340,28 @@ Rectangle {
     }
 
     function refreshEditingCredential() {
-        if (!editorExpanded || editingProfileId.length === 0 || !editingCredentialStored) {
+        if (!editorExpanded || editingProfileId.length === 0) {
             return;
         }
         if (controller.effectiveCredentialStorage === "portable" && controller.portableVaultLocked) {
             return;
         }
-        const secret = controller.readHostCredential(editingProfileId);
-        if (secret.length > 0) {
-            credentialField.text = secret;
-            return;
+        if (editingCredentialStored && credentialField.text.length === 0) {
+            const secret = controller.readHostCredential(editingProfileId);
+            if (secret.length > 0) {
+                credentialField.text = secret;
+            } else if (controller.credentialOperationError.length > 0) {
+                showStatus(controller.credentialOperationError, true);
+                return;
+            }
         }
-        if (controller.credentialOperationError.length > 0) {
-            showStatus(controller.credentialOperationError, true);
+        if (editingProxyCredentialStored && proxyCredentialField.text.length === 0) {
+            const proxySecret = controller.readProxyCredential(editingProfileId);
+            if (proxySecret.length > 0) {
+                proxyCredentialField.text = proxySecret;
+            } else if (controller.credentialOperationError.length > 0) {
+                showStatus(controller.credentialOperationError, true);
+            }
         }
     }
 
@@ -313,7 +382,7 @@ Rectangle {
         target: pane.controller
 
         function onCredentialVaultChanged() {
-            if (pane.editorExpanded && pane.editingCredentialStored && credentialField.text.length === 0) {
+            if (pane.editorExpanded && ((pane.editingCredentialStored && credentialField.text.length === 0) || (pane.editingProxyCredentialStored && proxyCredentialField.text.length === 0))) {
                 Qt.callLater(pane.refreshEditingCredential);
             }
         }
@@ -334,6 +403,14 @@ Rectangle {
         rememberCredentialSwitch.checked = true;
         nameWasAutoFilled = false;
         editingCredentialStored = profile.credentialStored;
+        const proxy = profile.proxy || {};
+        proxyTypeBox.currentIndex = proxy.type === "socks5" ? 1 : (proxy.type === "http-connect" ? 2 : 0);
+        proxyHostField.text = proxy.host || "";
+        proxyPortField.text = String(proxy.port || 1080);
+        proxyUsernameField.text = proxy.username || "";
+        proxyCredentialField.text = "";
+        rememberProxyCredentialSwitch.checked = true;
+        editingProxyCredentialStored = proxy.credentialStored === true;
         const options = profile.sessionOptions || {};
         terminalTypeField.text = options.terminalType || "xterm-256color";
         keepaliveIntervalField.text = String(options.keepaliveIntervalSeconds === undefined ? 0 : options.keepaliveIntervalSeconds);
@@ -361,7 +438,12 @@ Rectangle {
             advancedExpanded = true;
             return;
         }
-        if (controller.saveHostProfileWithCredential(editingProfileId, nameField.text, hostField.text, portNumber(), usernameField.text, authenticationToken(), keyPathField.text, passphraseRequiredBox.checked, groupField.text, credentialField.text, rememberCredentialSwitch.checked, sessionOptions)) {
+        const proxyOptions = proxyOptionsMap();
+        if (!proxyOptions) {
+            advancedExpanded = true;
+            return;
+        }
+        if (controller.saveHostProfileWithCredential(editingProfileId, nameField.text, hostField.text, portNumber(), usernameField.text, authenticationToken(), keyPathField.text, passphraseRequiredBox.checked, groupField.text, credentialField.text, rememberCredentialSwitch.checked, sessionOptions, proxyOptions, proxyCredentialField.text, rememberProxyCredentialSwitch.checked)) {
             clearEditor();
             editorExpanded = false;
             showStatus(qsTr("Profile and credential preferences saved."), false);
@@ -380,9 +462,16 @@ Rectangle {
             advancedExpanded = true;
             return;
         }
+        const proxyOptions = proxyOptionsMap();
+        if (!proxyOptions) {
+            advancedExpanded = true;
+            return;
+        }
         const secret = credentialField.text;
+        const proxySecret = proxyCredentialField.text;
         credentialField.text = "";
-        const started = controller.saveAndConnectHostProfile(editingProfileId, nameField.text, hostField.text, portNumber(), usernameField.text, authenticationToken(), keyPathField.text, passphraseRequiredBox.checked, groupField.text, secret, rememberCredentialSwitch.checked, sessionOptions);
+        proxyCredentialField.text = "";
+        const started = controller.saveAndConnectHostProfile(editingProfileId, nameField.text, hostField.text, portNumber(), usernameField.text, authenticationToken(), keyPathField.text, passphraseRequiredBox.checked, groupField.text, secret, rememberCredentialSwitch.checked, sessionOptions, proxyOptions, proxySecret, rememberProxyCredentialSwitch.checked);
         if (started) {
             clearEditor();
             editorExpanded = false;
@@ -393,55 +482,60 @@ Rectangle {
     }
 
     function connectSaved(profile, sourceItem) {
-        if (profile.credentialStored) {
+        const needsHostCredential = (profile.authentication === "password" || profile.privateKeyPassphraseRequired) && !profile.credentialStored;
+        const proxy = profile.proxy || {};
+        const needsProxyCredential = proxy.type !== "none" && (proxy.username || "").length > 0 && !proxy.credentialStored;
+        pendingConnectId = profile.id;
+        pendingConnectName = profile.name;
+        pendingConnectAuthentication = profile.authentication;
+        pendingConnectNeedsHostCredential = needsHostCredential;
+        pendingConnectNeedsProxyCredential = needsProxyCredential;
+
+        if (profile.credentialStored || proxy.credentialStored === true) {
             if (controller.effectiveCredentialStorage === "portable" && controller.portableVaultLocked) {
-                pendingConnectId = profile.id;
-                pendingConnectName = profile.name;
-                pendingConnectAuthentication = profile.authentication;
                 portableUnlockDialog.focusRestoreItem = sourceItem;
                 portableUnlockPassword.text = "";
                 portableUnlockStatus.text = "";
                 portableUnlockDialog.open();
                 return;
             }
-            if (controller.connectHostProfile(profile.id, "")) {
-                connectionStarted();
-            } else {
-                showStatus(controller.credentialOperationError.length > 0 ? controller.credentialOperationError : qsTr("The saved profile could not be connected."), true);
-            }
-            return;
         }
-        if (profile.authentication === "password" || profile.privateKeyPassphraseRequired) {
-            pendingConnectId = profile.id;
-            pendingConnectName = profile.name;
-            pendingConnectAuthentication = profile.authentication;
+        if (needsHostCredential || needsProxyCredential) {
             credentialDialog.focusRestoreItem = sourceItem;
             savedCredentialField.text = "";
+            savedProxyCredentialField.text = "";
             savedCredentialRemember.checked = true;
+            savedProxyCredentialRemember.checked = true;
             credentialDialog.open();
             return;
         }
-        if (controller.connectHostProfile(profile.id, "")) {
+        if (controller.connectHostProfile(profile.id, "", "")) {
             connectionStarted();
         } else {
-            showStatus(qsTr("The saved profile could not be connected."), true);
+            showStatus(controller.credentialOperationError.length > 0 ? controller.credentialOperationError : qsTr("The saved profile could not be connected."), true);
         }
     }
 
     function connectPendingSaved() {
-        if (savedCredentialField.text.length === 0) {
+        if ((pendingConnectNeedsHostCredential && savedCredentialField.text.length === 0) || (pendingConnectNeedsProxyCredential && savedProxyCredentialField.text.length === 0)) {
             return;
         }
         const profileId = pendingConnectId;
         const secret = savedCredentialField.text;
-        let started = false;
-        if (savedCredentialRemember.checked) {
-            started = controller.saveHostCredential(profileId, secret) && controller.connectHostProfile(profileId, "");
-        } else {
-            started = controller.connectHostProfile(profileId, secret);
+        const proxySecret = savedProxyCredentialField.text;
+        let prepared = true;
+        if (pendingConnectNeedsHostCredential && savedCredentialRemember.checked) {
+            prepared = controller.saveHostCredential(profileId, secret);
         }
+        if (prepared && pendingConnectNeedsProxyCredential && savedProxyCredentialRemember.checked) {
+            prepared = controller.saveProxyCredential(profileId, proxySecret);
+        }
+        const connectionSecret = pendingConnectNeedsHostCredential && !savedCredentialRemember.checked ? secret : "";
+        const connectionProxySecret = pendingConnectNeedsProxyCredential && !savedProxyCredentialRemember.checked ? proxySecret : "";
+        const started = prepared && controller.connectHostProfile(profileId, connectionSecret, connectionProxySecret);
         if (started) {
             savedCredentialField.text = "";
+            savedProxyCredentialField.text = "";
             credentialDialog.close();
             connectionStarted();
         } else {
@@ -1350,6 +1444,148 @@ Rectangle {
                                         width: Math.max(0, parent.width - 24)
                                         spacing: 10
 
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: qsTr("Connection proxy")
+                                            color: pane.textColor
+                                            font.family: Theme.uiFont
+                                            font.pixelSize: Theme.textBody
+                                            font.weight: Font.DemiBold
+                                        }
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: qsTr("Connect directly, or establish the SSH transport through a SOCKS5 or HTTP CONNECT proxy.")
+                                            color: pane.mutedColor
+                                            font.family: Theme.uiFont
+                                            font.pixelSize: Theme.textLabel
+                                            wrapMode: Text.WordWrap
+                                        }
+
+                                        GridLayout {
+                                            Layout.fillWidth: true
+                                            columns: pane.compactLayout ? 1 : 2
+                                            columnSpacing: 14
+                                            rowSpacing: 10
+
+                                            Label {
+                                                text: qsTr("Proxy type")
+                                                color: pane.textColor
+                                            }
+                                            AppComboBox {
+                                                id: proxyTypeBox
+                                                objectName: "hostProxyType"
+                                                Layout.fillWidth: true
+                                                model: [qsTr("Direct"), qsTr("SOCKS5"), qsTr("HTTP CONNECT")]
+                                                accessibleName: qsTr("SSH connection proxy type")
+                                                onCurrentIndexChanged: {
+                                                    if (currentIndex === 0) {
+                                                        proxyCredentialField.text = "";
+                                                    }
+                                                }
+                                            }
+
+                                            Label {
+                                                text: qsTr("Proxy host")
+                                                color: pane.textColor
+                                                visible: proxyTypeBox.currentIndex > 0
+                                            }
+                                            AppTextField {
+                                                id: proxyHostField
+                                                objectName: "hostProxyAddress"
+                                                Layout.fillWidth: true
+                                                visible: proxyTypeBox.currentIndex > 0
+                                                placeholderText: qsTr("proxy.example.com or 192.0.2.20")
+                                                accessibleName: qsTr("Proxy host")
+                                                selectByMouse: true
+                                            }
+
+                                            Label {
+                                                text: qsTr("Proxy port")
+                                                color: pane.textColor
+                                                visible: proxyTypeBox.currentIndex > 0
+                                            }
+                                            AppTextField {
+                                                id: proxyPortField
+                                                objectName: "hostProxyPort"
+                                                Layout.fillWidth: true
+                                                visible: proxyTypeBox.currentIndex > 0
+                                                text: "1080"
+                                                inputMethodHints: Qt.ImhDigitsOnly
+                                                validator: IntValidator {
+                                                    bottom: 1
+                                                    top: 65535
+                                                }
+                                                accessibleName: qsTr("Proxy port")
+                                                selectByMouse: true
+                                            }
+
+                                            Label {
+                                                text: qsTr("Proxy username")
+                                                color: pane.textColor
+                                                visible: proxyTypeBox.currentIndex > 0
+                                            }
+                                            AppTextField {
+                                                id: proxyUsernameField
+                                                objectName: "hostProxyUsername"
+                                                Layout.fillWidth: true
+                                                visible: proxyTypeBox.currentIndex > 0
+                                                placeholderText: qsTr("Optional")
+                                                accessibleName: qsTr("Proxy username")
+                                                selectByMouse: true
+                                                onTextEdited: {
+                                                    if (text.trim().length === 0) {
+                                                        proxyCredentialField.text = "";
+                                                    }
+                                                }
+                                            }
+
+                                            Label {
+                                                text: qsTr("Proxy password")
+                                                color: pane.textColor
+                                                visible: proxyTypeBox.currentIndex > 0 && proxyUsernameField.text.trim().length > 0
+                                            }
+                                            AppTextField {
+                                                id: proxyCredentialField
+                                                objectName: "hostProxyCredential"
+                                                Layout.fillWidth: true
+                                                visible: proxyTypeBox.currentIndex > 0 && proxyUsernameField.text.trim().length > 0
+                                                placeholderText: qsTr("Proxy password")
+                                                passwordRevealable: true
+                                                accessibleName: qsTr("Proxy password")
+                                                selectByMouse: true
+                                            }
+
+                                            Item {
+                                                visible: !pane.compactLayout && proxyCredentialField.visible
+                                                implicitHeight: rememberProxyCredentialSwitch.implicitHeight
+                                            }
+                                            AppSwitch {
+                                                id: rememberProxyCredentialSwitch
+                                                objectName: "hostRememberProxyCredential"
+                                                Layout.fillWidth: true
+                                                visible: proxyCredentialField.visible
+                                                checked: true
+                                                text: pane.editingProxyCredentialStored && proxyCredentialField.text.length === 0 ? qsTr("Keep saved proxy credential") : qsTr("Save proxy credential securely")
+                                                accessibleName: text
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 1
+                                            color: pane.borderColor
+                                        }
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: qsTr("Terminal session")
+                                            color: pane.textColor
+                                            font.family: Theme.uiFont
+                                            font.pixelSize: Theme.textBody
+                                            font.weight: Font.DemiBold
+                                        }
+
                                         GridLayout {
                                             Layout.fillWidth: true
                                             columns: pane.compactLayout ? 1 : 2
@@ -1565,7 +1801,7 @@ Rectangle {
                                             text: qsTr("Environment values are stored with the profile. Do not use this field for secrets.")
                                             color: pane.mutedColor
                                             font.family: Theme.uiFont
-                                            font.pixelSize: Theme.textCaption
+                                            font.pixelSize: Theme.textLabel
                                             wrapMode: Text.Wrap
                                         }
                                     }
@@ -1885,6 +2121,7 @@ Rectangle {
         id: portableUnlockDialog
 
         property Item focusRestoreItem: null
+        property bool preservePendingConnection: false
 
         anchors.centerIn: parent
         modal: true
@@ -1898,10 +2135,14 @@ Rectangle {
             focusRestoreItem = null;
             portableUnlockPassword.text = "";
             portableUnlockStatus.text = "";
-            pane.pendingConnectId = "";
-            pane.pendingConnectName = "";
-            pane.pendingConnectAuthentication = "";
-            if (restoreItem && restoreItem.visible && restoreItem.enabled) {
+            if (!preservePendingConnection) {
+                pane.pendingConnectId = "";
+                pane.pendingConnectName = "";
+                pane.pendingConnectAuthentication = "";
+                pane.pendingConnectNeedsHostCredential = false;
+                pane.pendingConnectNeedsProxyCredential = false;
+            }
+            if (!preservePendingConnection && restoreItem && restoreItem.visible && restoreItem.enabled) {
                 Qt.callLater(() => restoreItem.forceActiveFocus());
             }
         }
@@ -1984,7 +2225,19 @@ Rectangle {
                             return;
                         }
                         portableUnlockPassword.text = "";
-                        if (pane.controller.connectHostProfile(pane.pendingConnectId, "")) {
+                        if (pane.pendingConnectNeedsHostCredential || pane.pendingConnectNeedsProxyCredential) {
+                            const restoreItem = portableUnlockDialog.focusRestoreItem;
+                            portableUnlockDialog.focusRestoreItem = null;
+                            portableUnlockDialog.preservePendingConnection = true;
+                            portableUnlockDialog.close();
+                            portableUnlockDialog.preservePendingConnection = false;
+                            credentialDialog.focusRestoreItem = restoreItem;
+                            savedCredentialField.text = "";
+                            savedProxyCredentialField.text = "";
+                            savedCredentialRemember.checked = true;
+                            savedProxyCredentialRemember.checked = true;
+                            credentialDialog.open();
+                        } else if (pane.controller.connectHostProfile(pane.pendingConnectId, "", "")) {
                             portableUnlockDialog.close();
                             pane.connectionStarted();
                         } else {
@@ -2007,14 +2260,23 @@ Rectangle {
         focus: true
         closePolicy: Popup.CloseOnEscape
         padding: 20
-        onAboutToShow: Qt.callLater(savedCredentialField.forceActiveFocus)
+        onAboutToShow: Qt.callLater(() => {
+            if (pane.pendingConnectNeedsHostCredential) {
+                savedCredentialField.forceActiveFocus();
+            } else {
+                savedProxyCredentialField.forceActiveFocus();
+            }
+        })
         onClosed: {
             const restoreItem = focusRestoreItem;
             focusRestoreItem = null;
             savedCredentialField.text = "";
+            savedProxyCredentialField.text = "";
             pane.pendingConnectId = "";
             pane.pendingConnectName = "";
             pane.pendingConnectAuthentication = "";
+            pane.pendingConnectNeedsHostCredential = false;
+            pane.pendingConnectNeedsProxyCredential = false;
             if (restoreItem && restoreItem.visible && restoreItem.enabled) {
                 Qt.callLater(() => restoreItem.forceActiveFocus());
             }
@@ -2064,10 +2326,10 @@ Rectangle {
         contentItem: ColumnLayout {
             spacing: 14
             Accessible.role: Accessible.Dialog
-            Accessible.name: pane.pendingConnectAuthentication === "password" ? qsTr("Enter SSH password") : qsTr("Enter key passphrase")
+            Accessible.name: pane.pendingCredentialTitle()
 
             Text {
-                text: pane.pendingConnectAuthentication === "password" ? qsTr("Enter SSH password") : qsTr("Enter key passphrase")
+                text: pane.pendingCredentialTitle()
                 color: pane.textColor
                 font.family: Theme.uiFont
                 font.pixelSize: 18
@@ -2088,11 +2350,18 @@ Rectangle {
 
                 objectName: "savedCredentialField"
                 Layout.fillWidth: true
+                visible: pane.pendingConnectNeedsHostCredential
                 placeholderText: pane.pendingConnectAuthentication === "password" ? qsTr("SSH password") : qsTr("Private-key passphrase")
-                echoMode: TextInput.Password
+                passwordRevealable: true
                 accessibleName: placeholderText
                 selectByMouse: true
-                onAccepted: pane.connectPendingSaved()
+                onAccepted: {
+                    if (pane.pendingConnectNeedsProxyCredential) {
+                        savedProxyCredentialField.forceActiveFocus();
+                    } else {
+                        pane.connectPendingSaved();
+                    }
+                }
             }
 
             AppSwitch {
@@ -2100,9 +2369,34 @@ Rectangle {
 
                 objectName: "savedCredentialRemember"
                 Layout.fillWidth: true
+                visible: pane.pendingConnectNeedsHostCredential
                 checked: true
                 text: qsTr("Save this credential securely")
                 accessibleName: qsTr("Save this credential in the active secure store")
+            }
+
+            AppTextField {
+                id: savedProxyCredentialField
+
+                objectName: "savedProxyCredentialField"
+                Layout.fillWidth: true
+                visible: pane.pendingConnectNeedsProxyCredential
+                placeholderText: qsTr("Proxy password")
+                passwordRevealable: true
+                accessibleName: placeholderText
+                selectByMouse: true
+                onAccepted: pane.connectPendingSaved()
+            }
+
+            AppSwitch {
+                id: savedProxyCredentialRemember
+
+                objectName: "savedProxyCredentialRemember"
+                Layout.fillWidth: true
+                visible: pane.pendingConnectNeedsProxyCredential
+                checked: true
+                text: qsTr("Save proxy credential securely")
+                accessibleName: qsTr("Save the proxy credential in the active secure store")
             }
 
             RowLayout {
@@ -2128,7 +2422,7 @@ Rectangle {
                     objectName: "savedCredentialConnect"
                     text: qsTr("Connect")
                     accessibleName: qsTr("Connect to saved SSH host")
-                    enabled: savedCredentialField.text.length > 0
+                    enabled: (!pane.pendingConnectNeedsHostCredential || savedCredentialField.text.length > 0) && (!pane.pendingConnectNeedsProxyCredential || savedProxyCredentialField.text.length > 0)
                     variant: "primary"
                     KeyNavigation.left: savedCredentialCancel
                     onClicked: pane.connectPendingSaved()

@@ -74,8 +74,11 @@ the next transport is introduced.
   now uses the cancellable byte-transport callback boundary and owns the
   transport on the heap for stable session lifetime. SOCKS5 and HTTP CONNECT
   handshakes, bounded protocol parsing, cancellation, separate proxy credential
-  storage, schema migration, and connection-bootstrap composition are complete
-  at the native layer. Profile UX and ProxyJump composition remain.
+  storage, schema migration, connection-bootstrap composition, compact profile
+  UX, saved-profile credential prompts, SFTP/transfer reuse, and Simplified
+  Chinese localization are complete. A live SOCKS5 gate authenticated to the
+  authorized host through a temporary OpenSSH dynamic forward. ProxyJump
+  composition remains.
 - Phase 6 remains after phase 5 composition before V2.9 acceptance.
 
 ## Acceptance boundary

@@ -281,10 +281,13 @@ void SshProfileStoreTests::rejectsMalformedProxyOptions()
         R"({"version":5,"profiles":[{"id":"p","name":"n","group":"","host":"h","port":22,"username":"u","authentication":"password","privateKeyPath":"","keywordHighlightEnabled":true,"keywordHighlightRules":[],"sessionOptions":{"terminalType":"xterm-256color","keepaliveIntervalSeconds":0,"keepaliveFailureThreshold":3,"startupCommand":"","startupCommandMode":"paste","startupLineDelayMilliseconds":100,"environment":[],"reconnectPolicy":"never","reconnectMaximumAttempts":3,"reconnectInitialBackoffMilliseconds":1000},"proxy":)");
 
     QVERIFY(writeFile(
-        path, prefix + QByteArrayLiteral(R"({"type":"socks5","host":"proxy","port":1080,"username":"user"}}]})")));
-    auto missingCredential = store.load();
-    QVERIFY(!missingCredential);
-    QCOMPARE(missingCredential.error(), ztermy::ssh::SshProfileStoreError::InvalidFormat);
+        path,
+        prefix
+            + QByteArrayLiteral(
+                R"({"type":"socks5","host":"proxy","port":1080,"username":"","credentialReference":"proxy-p"}}]})")));
+    auto credentialWithoutUsername = store.load();
+    QVERIFY(!credentialWithoutUsername);
+    QCOMPARE(credentialWithoutUsername.error(), ztermy::ssh::SshProfileStoreError::InvalidFormat);
 
     QVERIFY(writeFile(path,
                       prefix + QByteArrayLiteral(R"({"type":"unknown","host":"proxy","port":1080,"username":""}}]})")));

@@ -140,8 +140,7 @@ bool validSshProxyOptions(const SshProxyOptions &options) noexcept
             return nonEmptyWithin(options.host, maximumProxyHostLength) && options.port != 0
                    && options.username.size() <= maximumProxyUsernameLength
                    && validCredentialReference(options.credentialReference)
-                   && (options.username.empty() ? !options.credentialReference.has_value()
-                                                : options.credentialReference.has_value());
+                   && (!options.username.empty() || !options.credentialReference.has_value());
     }
     return false;
 }

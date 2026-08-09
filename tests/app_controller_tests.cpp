@@ -93,6 +93,7 @@ class AppControllerTests final : public QObject
 private slots:
     void savesUpdatesReloadsAndDeletesProfiles();
     void persistsAndPreservesSessionOptions();
+    void managesExplicitProxyProfilesAndCredentials();
     void rejectsInvalidProfiles();
     void agentProfilesNeverStoreCredentials();
     void managesSavedCredentialsAndPortableVault();
@@ -234,6 +235,59 @@ void AppControllerTests::persistsAndPreservesSessionOptions()
     ztermy::AppController reloaded(path);
     QCOMPARE(reloaded.hostProfiles().constFirst().toMap().value(QStringLiteral("sessionOptions")).toMap(),
              savedOptions);
+}
+
+void AppControllerTests::managesExplicitProxyProfilesAndCredentials()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString profilesPath = directory.filePath(QStringLiteral("profiles.json"));
+    ztermy::AppController controller(profilesPath);
+    const QVariantMap proxy{{QStringLiteral("type"), QStringLiteral("socks5")},
+                            {QStringLiteral("host"), QStringLiteral("proxy.example.test")},
+                            {QStringLiteral("port"), 1080},
+                            {QStringLiteral("username"), QStringLiteral("proxy-user")}};
+
+    QVERIFY(controller.saveHostProfileWithCredential(
+        QStringLiteral("proxied"), QStringLiteral("Proxied host"), QStringLiteral("server.example.test"), 22,
+        QStringLiteral("operator"), QStringLiteral("password"), {}, false, QStringLiteral("Lab"),
+        QStringLiteral("host-secret"), true, {}, proxy, QStringLiteral("proxy-secret"), true));
+    QVariantMap saved = controller.hostProfiles().constFirst().toMap();
+    const QVariantMap savedProxy = saved.value(QStringLiteral("proxy")).toMap();
+    QCOMPARE(savedProxy.value(QStringLiteral("type")).toString(), QStringLiteral("socks5"));
+    QCOMPARE(savedProxy.value(QStringLiteral("host")).toString(), QStringLiteral("proxy.example.test"));
+    QCOMPARE(savedProxy.value(QStringLiteral("port")).toInt(), 1080);
+    QCOMPARE(savedProxy.value(QStringLiteral("username")).toString(), QStringLiteral("proxy-user"));
+    QVERIFY(savedProxy.value(QStringLiteral("credentialStored")).toBool());
+    QCOMPARE(controller.readHostCredential(QStringLiteral("proxied")), QStringLiteral("host-secret"));
+    QCOMPARE(controller.readProxyCredential(QStringLiteral("proxied")), QStringLiteral("proxy-secret"));
+
+    QVERIFY(controller.saveProxyCredential(QStringLiteral("proxied"), QStringLiteral("updated-proxy-secret")));
+    QCOMPARE(controller.readProxyCredential(QStringLiteral("proxied")), QStringLiteral("updated-proxy-secret"));
+
+    QVERIFY(controller.saveHostProfileWithCredential(QStringLiteral("proxied"), QStringLiteral("Proxied host"),
+                                                     QStringLiteral("server.example.test"), 22,
+                                                     QStringLiteral("operator"), QStringLiteral("password"), {}, false,
+                                                     QStringLiteral("Lab"), {}, true, {}, proxy, {}, true));
+    saved = controller.hostProfiles().constFirst().toMap();
+    QVERIFY(saved.value(QStringLiteral("proxy")).toMap().value(QStringLiteral("credentialStored")).toBool());
+
+    const QVariantMap direct{{QStringLiteral("type"), QStringLiteral("none")}};
+    QVERIFY(controller.saveHostProfileWithCredential(QStringLiteral("proxied"), QStringLiteral("Direct host"),
+                                                     QStringLiteral("server.example.test"), 22,
+                                                     QStringLiteral("operator"), QStringLiteral("password"), {}, false,
+                                                     QStringLiteral("Lab"), {}, true, {}, direct, {}, false));
+    saved = controller.hostProfiles().constFirst().toMap();
+    QCOMPARE(saved.value(QStringLiteral("proxy")).toMap().value(QStringLiteral("type")).toString(),
+             QStringLiteral("none"));
+    QVERIFY(!saved.value(QStringLiteral("proxy")).toMap().value(QStringLiteral("credentialStored")).toBool());
+
+    QFile persisted(profilesPath);
+    QVERIFY(persisted.open(QIODevice::ReadOnly));
+    const QByteArray contents = persisted.readAll();
+    QVERIFY(!contents.contains("host-secret"));
+    QVERIFY(!contents.contains("proxy-secret"));
+    QVERIFY(!contents.contains("updated-proxy-secret"));
 }
 
 void AppControllerTests::rejectsInvalidProfiles()

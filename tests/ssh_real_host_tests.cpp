@@ -1,4 +1,5 @@
 #include "domain/ssh/SshHostKey.h"
+#include "infrastructure/ssh/ExplicitProxyTunnel.h"
 #include "infrastructure/ssh/Libssh2Session.h"
 #include "infrastructure/ssh/WindowsTcpSocket.h"
 
@@ -20,6 +21,7 @@ class SshRealHostTests final : public QObject
 private slots:
     void observesUnknownHostBeforeAuthentication();
     void authenticatesWithExplicitPrivateKey();
+    void authenticatesThroughConfiguredProxy();
     void opensAndClosesTerminalWithExplicitPrivateKey();
     void listsSftpDirectoryWithExplicitPrivateKey();
 };
@@ -183,6 +185,70 @@ void SshRealHostTests::authenticatesWithExplicitPrivateKey()
     }
     QVERIFY((*session)->authenticated());
     qInfo("Private-key authentication succeeded");
+}
+
+void SshRealHostTests::authenticatesThroughConfiguredProxy()
+{
+    const QByteArray proxyTypeValue = qgetenv("ZTERMY_TEST_SSH_PROXY_TYPE");
+    const QByteArray proxyHostValue = qgetenv("ZTERMY_TEST_SSH_PROXY_HOST");
+    const QByteArray hostValue = qgetenv("ZTERMY_TEST_SSH_HOST");
+    const QByteArray usernameValue = qgetenv("ZTERMY_TEST_SSH_USERNAME");
+    const QByteArray privateKeyValue = qgetenv("ZTERMY_TEST_SSH_PRIVATE_KEY");
+    const QByteArray expectedFingerprint = qgetenv("ZTERMY_TEST_SSH_EXPECTED_FINGERPRINT");
+    bool proxyPortValid = false;
+    const int configuredProxyPort = qEnvironmentVariableIntValue("ZTERMY_TEST_SSH_PROXY_PORT", &proxyPortValid);
+    if (proxyTypeValue.isEmpty() || proxyHostValue.isEmpty() || hostValue.isEmpty() || usernameValue.isEmpty()
+        || privateKeyValue.isEmpty() || expectedFingerprint.isEmpty() || !proxyPortValid || configuredProxyPort < 1
+        || configuredProxyPort > 65535)
+    {
+        QSKIP("Set the SSH proxy and real-host variables to run the proxied private-key gate");
+    }
+
+    const auto proxyType =
+        proxyTypeValue == "socks5" ? ztermy::ssh::SshProxyType::Socks5 : ztermy::ssh::SshProxyType::HttpConnect;
+    const std::string proxyHost(proxyHostValue.constData(), static_cast<std::size_t>(proxyHostValue.size()));
+    auto socket =
+        ztermy::ssh::WindowsTcpSocket::connect(proxyHost, static_cast<std::uint16_t>(configuredProxyPort), 5s);
+    QVERIFY(socket);
+
+    const std::uint16_t port = configuredPort();
+    const std::string host(hostValue.constData(), static_cast<std::size_t>(hostValue.size()));
+    const QByteArray proxyUsernameValue = qgetenv("ZTERMY_TEST_SSH_PROXY_USERNAME");
+    const QByteArray proxyPasswordValue = qgetenv("ZTERMY_TEST_SSH_PROXY_PASSWORD");
+    const std::string proxyUsername(proxyUsernameValue.constData(),
+                                    static_cast<std::size_t>(proxyUsernameValue.size()));
+    const std::string proxyPassword(proxyPasswordValue.constData(),
+                                    static_cast<std::size_t>(proxyPasswordValue.size()));
+    auto tunnel =
+        ztermy::ssh::establishExplicitProxyTunnel(*socket, proxyType, host, port, proxyUsername, proxyPassword, 5s, {});
+    if (!tunnel)
+    {
+        QFAIL(qPrintable(QStringLiteral("Proxy tunnel failed: kind=%1 protocol=%2")
+                             .arg(static_cast<int>(tunnel.error().kind))
+                             .arg(tunnel.error().protocolCode)));
+    }
+
+    auto session = ztermy::ssh::Libssh2Session::create();
+    QVERIFY(session);
+    QVERIFY((*session)->handshake(*socket, 5s));
+    auto hostKey = (*session)->hostKey();
+    QVERIFY(hostKey);
+    QCOMPARE(QByteArray::fromStdString(ztermy::ssh::sha256Fingerprint(*hostKey)), expectedFingerprint);
+
+    const ztermy::ssh::SshEndpoint endpoint{.host = host, .port = port};
+    const std::vector knownHosts{ztermy::ssh::KnownHostEntry{
+        .endpoint = endpoint,
+        .algorithm = hostKey->algorithm,
+        .encodedKey = hostKey->encodedKey,
+    }};
+    auto trust = (*session)->verifyHostKey(endpoint, knownHosts);
+    QVERIFY(trust);
+    QCOMPARE(*trust, ztermy::ssh::HostKeyTrust::Trusted);
+
+    const std::string username(usernameValue.constData(), static_cast<std::size_t>(usernameValue.size()));
+    const std::string privateKey(privateKeyValue.constData(), static_cast<std::size_t>(privateKeyValue.size()));
+    QVERIFY((*session)->authenticateWithPrivateKeyFile(*socket, username, privateKey, {}, 10s));
+    qInfo("Private-key authentication through the configured proxy succeeded");
 }
 
 void SshRealHostTests::opensAndClosesTerminalWithExplicitPrivateKey()

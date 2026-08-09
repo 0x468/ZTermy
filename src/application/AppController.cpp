@@ -139,6 +139,37 @@ constexpr std::size_t maximumRecentHostProfiles = 6;
     return std::nullopt;
 }
 
+[[nodiscard]] QString proxyTypeToken(const ztermy::ssh::SshProxyType type)
+{
+    switch (type)
+    {
+        case ztermy::ssh::SshProxyType::None:
+            return QStringLiteral("none");
+        case ztermy::ssh::SshProxyType::Socks5:
+            return QStringLiteral("socks5");
+        case ztermy::ssh::SshProxyType::HttpConnect:
+            return QStringLiteral("http-connect");
+    }
+    return {};
+}
+
+[[nodiscard]] std::optional<ztermy::ssh::SshProxyType> parseProxyTypeToken(const QString &value)
+{
+    if (value == QStringLiteral("none"))
+    {
+        return ztermy::ssh::SshProxyType::None;
+    }
+    if (value == QStringLiteral("socks5"))
+    {
+        return ztermy::ssh::SshProxyType::Socks5;
+    }
+    if (value == QStringLiteral("http-connect"))
+    {
+        return ztermy::ssh::SshProxyType::HttpConnect;
+    }
+    return std::nullopt;
+}
+
 [[nodiscard]] QString utf8QString(const std::string &value)
 {
     return QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size()));
@@ -304,6 +335,24 @@ void removeLastUtf8CodePoint(QByteArray &value)
     return std::ranges::find(*availableKeys, key) != availableKeys->end();
 }
 
+[[nodiscard]] bool profileHasStoredProxyCredential(const ztermy::ssh::SshProfile &profile,
+                                                   const std::vector<ztermy::security::CredentialKey> *availableKeys)
+{
+    if (!profile.proxy.credentialReference)
+    {
+        return false;
+    }
+    if (availableKeys == nullptr)
+    {
+        return true;
+    }
+    const ztermy::security::CredentialKey key{
+        .profileId = *profile.proxy.credentialReference,
+        .kind = ztermy::security::CredentialKind::ProxyPassword,
+    };
+    return std::ranges::find(*availableKeys, key) != availableKeys->end();
+}
+
 [[nodiscard]] QVariantMap sessionOptionsVariantMap(const ztermy::ssh::SshSessionOptions &options)
 {
     QVariantList environment;
@@ -420,7 +469,61 @@ void removeLastUtf8CodePoint(QByteArray &value)
     return ztermy::ssh::validSshSessionOptions(options) ? std::optional{std::move(options)} : std::nullopt;
 }
 
-[[nodiscard]] QVariantMap profileVariantMap(const ztermy::ssh::SshProfile &profile, const bool credentialStored)
+[[nodiscard]] QVariantMap proxyOptionsVariantMap(const ztermy::ssh::SshProxyOptions &options,
+                                                 const bool credentialStored)
+{
+    return {
+        {QStringLiteral("type"), proxyTypeToken(options.type)},
+        {QStringLiteral("host"), utf8QString(options.host)},
+        {QStringLiteral("port"), options.port},
+        {QStringLiteral("username"), utf8QString(options.username)},
+        {QStringLiteral("credentialStored"), credentialStored},
+    };
+}
+
+[[nodiscard]] std::optional<ztermy::ssh::SshProxyOptions> mergeProxyOptions(const QVariantMap &overrides,
+                                                                            ztermy::ssh::SshProxyOptions options)
+{
+    if (overrides.contains(QStringLiteral("type")))
+    {
+        const auto type = parseProxyTypeToken(overrides.value(QStringLiteral("type")).toString());
+        if (!type)
+        {
+            return std::nullopt;
+        }
+        options.type = *type;
+    }
+    if (options.type == ztermy::ssh::SshProxyType::None)
+    {
+        return ztermy::ssh::SshProxyOptions{};
+    }
+    if (overrides.contains(QStringLiteral("host")))
+    {
+        options.host = utf8String(overrides.value(QStringLiteral("host")).toString().trimmed());
+    }
+    if (overrides.contains(QStringLiteral("port")))
+    {
+        bool valid = false;
+        const int port = overrides.value(QStringLiteral("port")).toInt(&valid);
+        if (!valid || port <= 0 || port > 65535)
+        {
+            return std::nullopt;
+        }
+        options.port = static_cast<std::uint16_t>(port);
+    }
+    if (overrides.contains(QStringLiteral("username")))
+    {
+        options.username = utf8String(overrides.value(QStringLiteral("username")).toString().trimmed());
+        if (options.username.empty())
+        {
+            options.credentialReference.reset();
+        }
+    }
+    return ztermy::ssh::validSshProxyOptions(options) ? std::optional{std::move(options)} : std::nullopt;
+}
+
+[[nodiscard]] QVariantMap profileVariantMap(const ztermy::ssh::SshProfile &profile, const bool credentialStored,
+                                            const bool proxyCredentialStored)
 {
     QVariantMap result{
         {QStringLiteral("id"), utf8QString(profile.id)},
@@ -434,6 +537,7 @@ void removeLastUtf8CodePoint(QByteArray &value)
         {QStringLiteral("privateKeyPassphraseRequired"), profile.privateKeyPassphraseRequired},
         {QStringLiteral("credentialStored"), credentialStored},
         {QStringLiteral("sessionOptions"), sessionOptionsVariantMap(profile.sessionOptions)},
+        {QStringLiteral("proxy"), proxyOptionsVariantMap(profile.proxy, proxyCredentialStored)},
     };
     if (profile.lastConnectedUtcMs)
     {
@@ -536,6 +640,123 @@ void logCredentialRollbackResult(std::expected<void, ztermy::security::Credentia
                                     << "error=" << static_cast<int>(result.error());
     }
 }
+
+class CredentialMutation final
+{
+public:
+    explicit CredentialMutation(ztermy::security::CredentialVault &vault) noexcept : m_vault(vault) {}
+
+    ~CredentialMutation()
+    {
+        if (m_active)
+        {
+            rollback();
+        }
+    }
+
+    CredentialMutation(const CredentialMutation &) = delete;
+    CredentialMutation &operator=(const CredentialMutation &) = delete;
+
+    [[nodiscard]] std::expected<void, ztermy::security::CredentialVaultError>
+    apply(const ztermy::security::CredentialKey &desiredKey,
+          const std::optional<ztermy::security::CredentialKey> &previousKey, const bool shouldStore,
+          const bool shouldRemovePrevious, ztermy::security::SensitiveByteArray secret)
+    {
+        if (shouldStore)
+        {
+            auto previous = m_vault.read(desiredKey);
+            if (previous)
+            {
+                m_previousDesiredSecret = std::move(*previous);
+            }
+            else if (previous.error() != ztermy::security::CredentialVaultError::NotFound)
+            {
+                return std::unexpected(previous.error());
+            }
+            auto stored = m_vault.store(desiredKey, std::move(secret));
+            if (!stored)
+            {
+                return stored;
+            }
+            m_desiredKey = desiredKey;
+        }
+
+        if (shouldRemovePrevious && previousKey && (!m_desiredKey || *previousKey != *m_desiredKey))
+        {
+            auto previous = m_vault.read(*previousKey);
+            if (previous)
+            {
+                m_removedPreviousSecret = std::move(*previous);
+            }
+            else if (previous.error() != ztermy::security::CredentialVaultError::NotFound)
+            {
+                rollback();
+                return std::unexpected(previous.error());
+            }
+            auto removed = m_vault.remove(*previousKey);
+            if (!removed && removed.error() != ztermy::security::CredentialVaultError::NotFound)
+            {
+                rollback();
+                return removed;
+            }
+            if (m_removedPreviousSecret)
+            {
+                m_removedKey = *previousKey;
+            }
+        }
+        return {};
+    }
+
+    void commit() noexcept
+    {
+        m_active = false;
+        m_previousDesiredSecret.reset();
+        m_removedPreviousSecret.reset();
+    }
+
+private:
+    void rollback() noexcept
+    {
+        m_active = false;
+        try
+        {
+            if (m_removedKey && m_removedPreviousSecret)
+            {
+                const std::string_view bytes = m_removedPreviousSecret->view();
+                logCredentialRollbackResult(
+                    m_vault.store(*m_removedKey, ztermy::security::SensitiveByteArray(
+                                                     QByteArray(bytes.data(), static_cast<qsizetype>(bytes.size())))),
+                    "previous credential restore");
+            }
+            if (m_desiredKey)
+            {
+                if (m_previousDesiredSecret)
+                {
+                    const std::string_view bytes = m_previousDesiredSecret->view();
+                    logCredentialRollbackResult(
+                        m_vault.store(*m_desiredKey, ztermy::security::SensitiveByteArray(QByteArray(
+                                                         bytes.data(), static_cast<qsizetype>(bytes.size())))),
+                        "profile-save restore");
+                }
+                else
+                {
+                    logCredentialRollbackResult(m_vault.remove(*m_desiredKey), "profile-save removal");
+                }
+            }
+        }
+        catch (...)
+        {
+            qCWarning(appControllerLog) << "Credential rollback raised an unexpected exception";
+        }
+    }
+
+    ztermy::security::CredentialVault &m_vault;
+    std::optional<ztermy::security::CredentialKey> m_desiredKey;
+    std::optional<ztermy::security::CredentialKey> m_removedKey;
+    std::optional<ztermy::security::SensitiveByteArray> m_previousDesiredSecret;
+    std::optional<ztermy::security::SensitiveByteArray> m_removedPreviousSecret;
+    bool m_active = true;
+};
 
 [[nodiscard]] ztermy::security::CredentialKind credentialKind(const ztermy::ssh::SshProfile &profile) noexcept
 {
@@ -998,7 +1219,8 @@ QVariantList AppController::hostProfiles() const
     result.reserve(static_cast<qsizetype>(m_profiles.size()));
     for (const ssh::SshProfile &profile : m_profiles)
     {
-        result.append(profileVariantMap(profile, profileHasStoredCredential(profile, availableKeys)));
+        result.append(profileVariantMap(profile, profileHasStoredCredential(profile, availableKeys),
+                                        profileHasStoredProxyCredential(profile, availableKeys)));
     }
     return result;
 }
@@ -1028,7 +1250,8 @@ QVariantList AppController::recentHostProfiles() const
     result.reserve(static_cast<qsizetype>(recent.size()));
     for (const ssh::SshProfile *profile : recent)
     {
-        result.append(profileVariantMap(*profile, profileHasStoredCredential(*profile, availableKeys)));
+        result.append(profileVariantMap(*profile, profileHasStoredCredential(*profile, availableKeys),
+                                        profileHasStoredProxyCredential(*profile, availableKeys)));
     }
     return result;
 }
@@ -3388,6 +3611,23 @@ AppController::sftpConnectionRequest(const TerminalTab &tab)
     {
         return std::unexpected(sftp::TransferCredentialError::Unavailable);
     }
+    security::SensitiveByteArray proxySecret;
+    if (profile->proxy.credentialReference)
+    {
+        auto stored = m_credentialVaults->active().read(
+            {.profileId = *profile->proxy.credentialReference, .kind = security::CredentialKind::ProxyPassword});
+        if (!stored)
+        {
+            return std::unexpected(stored.error() == security::CredentialVaultError::Locked
+                                       ? sftp::TransferCredentialError::Locked
+                                       : sftp::TransferCredentialError::Unavailable);
+        }
+        proxySecret = std::move(*stored);
+    }
+    if (!profile->proxy.username.empty() && proxySecret.empty())
+    {
+        return std::unexpected(sftp::TransferCredentialError::Unavailable);
+    }
     return ssh::SshConnectionRequest{
         .host = utf8QString(profile->host),
         .port = profile->port,
@@ -3395,6 +3635,8 @@ AppController::sftpConnectionRequest(const TerminalTab &tab)
         .authentication = profile->authentication,
         .privateKeyPath = utf8QString(profile->privateKeyPath),
         .secret = std::move(secret),
+        .proxy = profile->proxy,
+        .proxySecret = std::move(proxySecret),
         .knownHostsPath = m_knownHostsPath,
         .sessionOptions = profile->sessionOptions,
     };
@@ -3435,6 +3677,23 @@ sftp::TransferRequestProvider AppController::transferRequestProvider(const QStri
             {
                 return std::unexpected(sftp::TransferCredentialError::Unavailable);
             }
+            security::SensitiveByteArray proxySecret;
+            if (profile.proxy.credentialReference)
+            {
+                auto stored = vault->read(
+                    {.profileId = *profile.proxy.credentialReference, .kind = security::CredentialKind::ProxyPassword});
+                if (!stored)
+                {
+                    return std::unexpected(stored.error() == security::CredentialVaultError::Locked
+                                               ? sftp::TransferCredentialError::Locked
+                                               : sftp::TransferCredentialError::Unavailable);
+                }
+                proxySecret = std::move(*stored);
+            }
+            if (!profile.proxy.username.empty() && proxySecret.empty())
+            {
+                return std::unexpected(sftp::TransferCredentialError::Unavailable);
+            }
             return ssh::SshConnectionRequest{
                 .host = utf8QString(profile.host),
                 .port = profile.port,
@@ -3442,6 +3701,8 @@ sftp::TransferRequestProvider AppController::transferRequestProvider(const QStri
                 .authentication = profile.authentication,
                 .privateKeyPath = utf8QString(profile.privateKeyPath),
                 .secret = std::move(secret),
+                .proxy = profile.proxy,
+                .proxySecret = std::move(proxySecret),
                 .knownHostsPath = knownHostsPath,
                 .sessionOptions = profile.sessionOptions,
             };
@@ -3710,29 +3971,39 @@ bool AppController::saveHostProfileWithCredential(const QString &id, const QStri
                                                   const QString &authentication, const QString &privateKeyPath,
                                                   const bool privateKeyPassphraseRequired, const QString &group,
                                                   const QString &secret, const bool rememberCredential,
-                                                  const QVariantMap &sessionOptions)
+                                                  const QVariantMap &sessionOptions, const QVariantMap &proxyOptions,
+                                                  const QString &proxySecret, const bool rememberProxyCredential)
 {
     return saveHostProfileInternal(id, name, host, port, username, authentication, privateKeyPath,
                                    privateKeyPassphraseRequired, group, secret, rememberCredential, true,
-                                   sessionOptions);
+                                   sessionOptions, proxyOptions, proxySecret, rememberProxyCredential, true);
 }
 
 bool AppController::saveAndConnectHostProfile(const QString &id, const QString &name, const QString &host,
                                               const int port, const QString &username, const QString &authentication,
                                               const QString &privateKeyPath, const bool privateKeyPassphraseRequired,
                                               const QString &group, const QString &secret,
-                                              const bool rememberCredential, const QVariantMap &sessionOptions)
+                                              const bool rememberCredential, const QVariantMap &sessionOptions,
+                                              const QVariantMap &proxyOptions, const QString &proxySecret,
+                                              const bool rememberProxyCredential)
 {
     const QString profileId =
         id.trimmed().isEmpty() ? QUuid::createUuid().toString(QUuid::WithoutBraces) : id.trimmed();
     if (!saveHostProfileInternal(profileId, name, host, port, username, authentication, privateKeyPath,
-                                 privateKeyPassphraseRequired, group, secret, rememberCredential, true, sessionOptions))
+                                 privateKeyPassphraseRequired, group, secret, rememberCredential, true, sessionOptions,
+                                 proxyOptions, proxySecret, rememberProxyCredential, true))
     {
         return false;
     }
-    if (connectHostProfile(profileId, rememberCredential ? QString{} : secret))
+    const auto profile = std::ranges::find(m_profiles, utf8String(profileId), &ssh::SshProfile::id);
+    if (profile != m_profiles.end())
     {
-        return true;
+        auto request = connectionRequestForProfile(*profile, rememberCredential ? QString{} : secret,
+                                                   rememberProxyCredential ? QString{} : proxySecret);
+        if (request && startSshConnection(std::move(*request), profileId))
+        {
+            return true;
+        }
     }
     if (m_credentialOperationError.isEmpty())
     {
@@ -3745,7 +4016,9 @@ bool AppController::saveHostProfileInternal(const QString &id, const QString &na
                                             const QString &username, const QString &authentication,
                                             const QString &privateKeyPath, const bool privateKeyPassphraseRequired,
                                             const QString &group, const QString &secret, const bool rememberCredential,
-                                            const bool manageCredential, const QVariantMap &sessionOptions)
+                                            const bool manageCredential, const QVariantMap &sessionOptions,
+                                            const QVariantMap &proxyOptions, const QString &proxySecret,
+                                            const bool rememberProxyCredential, const bool manageProxyCredential)
 {
     const QString normalizedHost = host.trimmed();
     const QString normalizedName = name.trimmed().isEmpty() ? normalizedHost : name.trimmed();
@@ -3774,6 +4047,17 @@ bool AppController::saveHostProfileInternal(const QString &id, const QString &na
         }
         resolvedSessionOptions = std::move(*merged);
     }
+    ssh::SshProxyOptions resolvedProxy =
+        storedProfile == m_profiles.end() ? ssh::SshProxyOptions{} : storedProfile->proxy;
+    if (!proxyOptions.isEmpty())
+    {
+        auto merged = mergeProxyOptions(proxyOptions, std::move(resolvedProxy));
+        if (!merged)
+        {
+            return false;
+        }
+        resolvedProxy = std::move(*merged);
+    }
 
     ssh::SshProfile profile{
         .id = storedProfileId,
@@ -3789,6 +4073,7 @@ bool AppController::saveHostProfileInternal(const QString &id, const QString &na
         .privateKeyPassphraseRequired =
             *authenticationMethod == ssh::SshAuthenticationMethod::PrivateKey && privateKeyPassphraseRequired,
         .sessionOptions = std::move(resolvedSessionOptions),
+        .proxy = std::move(resolvedProxy),
     };
     if (!ssh::validSshProfile(profile))
     {
@@ -3798,6 +4083,7 @@ bool AppController::saveHostProfileInternal(const QString &id, const QString &na
     std::vector<ssh::SshProfile> updated = m_profiles;
     const auto existing = std::ranges::find(updated, profile.id, &ssh::SshProfile::id);
     std::optional<security::CredentialKey> previousKey;
+    std::optional<security::CredentialKey> previousProxyKey;
     if (existing == updated.end())
     {
         updated.push_back(profile);
@@ -3810,17 +4096,39 @@ bool AppController::saveHostProfileInternal(const QString &id, const QString &na
             previousKey =
                 security::CredentialKey{.profileId = *existing->credentialReference, .kind = credentialKind(*existing)};
         }
+        if (existing->proxy.credentialReference)
+        {
+            previousProxyKey = security::CredentialKey{.profileId = *existing->proxy.credentialReference,
+                                                       .kind = security::CredentialKind::ProxyPassword};
+        }
         if ((!manageCredential && existing->authentication == profile.authentication)
             || (effectiveRememberCredential && secret.isEmpty() && existing->authentication == profile.authentication))
         {
             profile.credentialReference = existing->credentialReference;
+        }
+        const bool sameProxyIdentity =
+            existing->proxy.type == profile.proxy.type && existing->proxy.host == profile.proxy.host
+            && existing->proxy.port == profile.proxy.port && existing->proxy.username == profile.proxy.username;
+        if (!sameProxyIdentity)
+        {
+            profile.proxy.credentialReference.reset();
+        }
+        else if (!manageProxyCredential
+                 || (rememberProxyCredential && proxySecret.isEmpty() && !profile.proxy.username.empty()))
+        {
+            profile.proxy.credentialReference = existing->proxy.credentialReference;
         }
         *existing = profile;
     }
 
     const security::CredentialKey desiredKey{.profileId = profile.id, .kind = credentialKind(profile)};
     const bool shouldStore = manageCredential && effectiveRememberCredential && !secret.isEmpty();
-    if (shouldStore && m_credentialVaults->storage() == security::CredentialStorage::Portable
+    const bool effectiveRememberProxyCredential =
+        rememberProxyCredential && profile.proxy.type != ssh::SshProxyType::None && !profile.proxy.username.empty();
+    const security::CredentialKey desiredProxyKey{.profileId = profile.id,
+                                                  .kind = security::CredentialKind::ProxyPassword};
+    const bool shouldStoreProxy = manageProxyCredential && effectiveRememberProxyCredential && !proxySecret.isEmpty();
+    if ((shouldStore || shouldStoreProxy) && m_credentialVaults->storage() == security::CredentialStorage::Portable
         && !m_credentialVaults->portableInitialized())
     {
         setCredentialOperationError(
@@ -3831,91 +4139,57 @@ bool AppController::saveHostProfileInternal(const QString &id, const QString &na
                                       && (!effectiveRememberCredential || (shouldStore && *previousKey != desiredKey)
                                           || (effectiveRememberCredential && secret.isEmpty()
                                               && profile.credentialReference != previousKey->profileId));
-    std::optional<security::SensitiveByteArray> previousDesiredSecret;
-    std::optional<security::SensitiveByteArray> removedPreviousSecret;
-
+    const bool shouldRemovePreviousProxy =
+        manageProxyCredential && previousProxyKey
+        && (!effectiveRememberProxyCredential || (shouldStoreProxy && *previousProxyKey != desiredProxyKey)
+            || (effectiveRememberProxyCredential && proxySecret.isEmpty()
+                && profile.proxy.credentialReference != previousProxyKey->profileId));
     if (shouldStore)
     {
-        auto previous = m_credentialVaults->active().read(desiredKey);
-        if (previous)
-        {
-            previousDesiredSecret = std::move(*previous);
-        }
-        else if (previous.error() != security::CredentialVaultError::NotFound)
-        {
-            setCredentialOperationError(credentialVaultErrorMessage(previous.error()));
-            return false;
-        }
-        auto stored = m_credentialVaults->active().store(desiredKey, security::SensitiveByteArray(secret.toUtf8()));
-        if (!stored)
-        {
-            setCredentialOperationError(credentialVaultErrorMessage(stored.error()));
-            return false;
-        }
         profile.credentialReference = profile.id;
-        const auto target = std::ranges::find(updated, profile.id, &ssh::SshProfile::id);
-        Q_ASSERT(target != updated.end());
-        target->credentialReference = profile.credentialReference;
     }
-
-    const auto rollbackDesiredCredential = [&] {
-        if (!shouldStore)
-        {
-            return;
-        }
-        if (previousDesiredSecret)
-        {
-            const std::string_view bytes = previousDesiredSecret->view();
-            logCredentialRollbackResult(m_credentialVaults->active().store(
-                                            desiredKey, security::SensitiveByteArray(QByteArray(
-                                                            bytes.data(), static_cast<qsizetype>(bytes.size())))),
-                                        "profile-save restore");
-        }
-        else
-        {
-            logCredentialRollbackResult(m_credentialVaults->active().remove(desiredKey), "profile-save removal");
-        }
-    };
-
-    if (shouldRemovePrevious && previousKey)
+    else if (manageCredential && !effectiveRememberCredential)
     {
-        auto previous = m_credentialVaults->active().read(*previousKey);
-        if (previous)
-        {
-            removedPreviousSecret = std::move(*previous);
-        }
-        else if (previous.error() != security::CredentialVaultError::NotFound)
-        {
-            rollbackDesiredCredential();
-            setCredentialOperationError(credentialVaultErrorMessage(previous.error()));
-            return false;
-        }
-        const auto removed = m_credentialVaults->active().remove(*previousKey);
-        if (!removed && removed.error() != security::CredentialVaultError::NotFound)
-        {
-            rollbackDesiredCredential();
-            setCredentialOperationError(credentialVaultErrorMessage(removed.error()));
-            return false;
-        }
+        profile.credentialReference.reset();
+    }
+    if (shouldStoreProxy)
+    {
+        profile.proxy.credentialReference = profile.id;
+    }
+    else if (manageProxyCredential && !effectiveRememberProxyCredential)
+    {
+        profile.proxy.credentialReference.reset();
+    }
+    const auto target = std::ranges::find(updated, profile.id, &ssh::SshProfile::id);
+    Q_ASSERT(target != updated.end());
+    *target = profile;
+
+    CredentialMutation targetCredentialMutation(m_credentialVaults->active());
+    auto targetMutation = targetCredentialMutation.apply(desiredKey, previousKey, shouldStore, shouldRemovePrevious,
+                                                         shouldStore ? security::SensitiveByteArray(secret.toUtf8())
+                                                                     : security::SensitiveByteArray{});
+    if (!targetMutation)
+    {
+        setCredentialOperationError(credentialVaultErrorMessage(targetMutation.error()));
+        return false;
+    }
+    CredentialMutation proxyCredentialMutation(m_credentialVaults->active());
+    auto proxyMutation = proxyCredentialMutation.apply(
+        desiredProxyKey, previousProxyKey, shouldStoreProxy, shouldRemovePreviousProxy,
+        shouldStoreProxy ? security::SensitiveByteArray(proxySecret.toUtf8()) : security::SensitiveByteArray{});
+    if (!proxyMutation)
+    {
+        setCredentialOperationError(credentialVaultErrorMessage(proxyMutation.error()));
+        return false;
     }
 
     if (!m_profileStore.save(updated))
     {
-        if (shouldStore)
-        {
-            rollbackDesiredCredential();
-        }
-        if (shouldRemovePrevious && previousKey && removedPreviousSecret)
-        {
-            const std::string_view bytes = removedPreviousSecret->view();
-            logCredentialRollbackResult(m_credentialVaults->active().store(
-                                            *previousKey, security::SensitiveByteArray(QByteArray(
-                                                              bytes.data(), static_cast<qsizetype>(bytes.size())))),
-                                        "previous credential restore");
-        }
         qCWarning(appControllerLog) << "Unable to persist SSH profiles";
         return false;
     }
+    targetCredentialMutation.commit();
+    proxyCredentialMutation.commit();
     m_profiles = std::move(updated);
     setCredentialOperationError({});
     emit hostProfilesChanged();
@@ -3946,6 +4220,7 @@ bool AppController::duplicateHostProfile(const QString &id)
     copy.id = utf8String(QUuid::createUuid().toString(QUuid::WithoutBraces));
     copy.name = utf8String(copyName);
     copy.credentialReference.reset();
+    copy.proxy.credentialReference.reset();
     copy.lastConnectedUtcMs.reset();
     std::vector<ssh::SshProfile> updated = m_profiles;
     updated.push_back(std::move(copy));
@@ -3968,43 +4243,41 @@ bool AppController::deleteHostProfile(const QString &id)
     {
         return false;
     }
-    std::optional<security::CredentialKey> key;
-    std::optional<security::SensitiveByteArray> removedSecret;
-    if (profile->credentialReference)
+    const std::optional<security::CredentialKey> key =
+        profile->credentialReference ? std::optional{security::CredentialKey{.profileId = *profile->credentialReference,
+                                                                             .kind = credentialKind(*profile)}}
+                                     : std::nullopt;
+    const std::optional<security::CredentialKey> proxyKey =
+        profile->proxy.credentialReference
+            ? std::optional{security::CredentialKey{.profileId = *profile->proxy.credentialReference,
+                                                    .kind = security::CredentialKind::ProxyPassword}}
+            : std::nullopt;
+    CredentialMutation credentialMutation(m_credentialVaults->active());
+    const security::CredentialKey unusedTargetKey{.profileId = profile->id, .kind = credentialKind(*profile)};
+    auto mutation = credentialMutation.apply(unusedTargetKey, key, false, key.has_value(), {});
+    if (!mutation)
     {
-        key = security::CredentialKey{.profileId = *profile->credentialReference, .kind = credentialKind(*profile)};
-        auto current = m_credentialVaults->active().read(*key);
-        if (current)
-        {
-            removedSecret = std::move(*current);
-        }
-        else if (current.error() != security::CredentialVaultError::NotFound)
-        {
-            setCredentialOperationError(credentialVaultErrorMessage(current.error()));
-            return false;
-        }
-        const auto removed = m_credentialVaults->active().remove(*key);
-        if (!removed && removed.error() != security::CredentialVaultError::NotFound)
-        {
-            setCredentialOperationError(credentialVaultErrorMessage(removed.error()));
-            return false;
-        }
+        setCredentialOperationError(credentialVaultErrorMessage(mutation.error()));
+        return false;
+    }
+    CredentialMutation proxyCredentialMutation(m_credentialVaults->active());
+    const security::CredentialKey unusedProxyKey{.profileId = profile->id,
+                                                 .kind = security::CredentialKind::ProxyPassword};
+    mutation = proxyCredentialMutation.apply(unusedProxyKey, proxyKey, false, proxyKey.has_value(), {});
+    if (!mutation)
+    {
+        setCredentialOperationError(credentialVaultErrorMessage(mutation.error()));
+        return false;
     }
     updated.erase(profile);
 
     if (!m_profileStore.save(updated))
     {
-        if (key && removedSecret)
-        {
-            const std::string_view bytes = removedSecret->view();
-            logCredentialRollbackResult(
-                m_credentialVaults->active().store(
-                    *key, security::SensitiveByteArray(QByteArray(bytes.data(), static_cast<qsizetype>(bytes.size())))),
-                "deleted profile restore");
-        }
         qCWarning(appControllerLog) << "Unable to persist SSH profiles after deletion";
         return false;
     }
+    credentialMutation.commit();
+    proxyCredentialMutation.commit();
     m_profiles = std::move(updated);
     setCredentialOperationError({});
     emit hostProfilesChanged();
@@ -4127,6 +4400,22 @@ bool AppController::saveHostCredential(const QString &id, const QString &secret)
                                          utf8QString(profile->group), secret, true);
 }
 
+bool AppController::saveProxyCredential(const QString &id, const QString &secret)
+{
+    const auto profile = std::ranges::find(m_profiles, utf8String(id.trimmed()), &ssh::SshProfile::id);
+    if (profile == m_profiles.end() || profile->proxy.type == ssh::SshProxyType::None || profile->proxy.username.empty()
+        || secret.isEmpty())
+    {
+        return false;
+    }
+    return saveHostProfileWithCredential(id, utf8QString(profile->name), utf8QString(profile->host), profile->port,
+                                         utf8QString(profile->username), authenticationToken(profile->authentication),
+                                         utf8QString(profile->privateKeyPath), profile->privateKeyPassphraseRequired,
+                                         utf8QString(profile->group), {}, profile->credentialReference.has_value(),
+                                         sessionOptionsVariantMap(profile->sessionOptions),
+                                         proxyOptionsVariantMap(profile->proxy, false), secret, true);
+}
+
 QString AppController::readHostCredential(const QString &id)
 {
     const auto profile = std::ranges::find(m_profiles, utf8String(id.trimmed()), &ssh::SshProfile::id);
@@ -4150,8 +4439,32 @@ QString AppController::readHostCredential(const QString &id)
     return result;
 }
 
+QString AppController::readProxyCredential(const QString &id)
+{
+    const auto profile = std::ranges::find(m_profiles, utf8String(id.trimmed()), &ssh::SshProfile::id);
+    if (profile == m_profiles.end() || !profile->proxy.credentialReference)
+    {
+        setCredentialOperationError(tr("This host profile has no saved proxy credential."));
+        return {};
+    }
+
+    auto secret = m_credentialVaults->active().read(
+        {.profileId = *profile->proxy.credentialReference, .kind = security::CredentialKind::ProxyPassword});
+    if (!secret)
+    {
+        setCredentialOperationError(credentialVaultErrorMessage(secret.error()));
+        return {};
+    }
+
+    const std::string_view bytes = secret->view();
+    QString result = QString::fromUtf8(bytes.data(), static_cast<qsizetype>(bytes.size()));
+    setCredentialOperationError({});
+    return result;
+}
+
 std::optional<ssh::SshConnectionRequest> AppController::connectionRequestForProfile(const ssh::SshProfile &profile,
-                                                                                    const QString &secret)
+                                                                                    const QString &secret,
+                                                                                    const QString &proxySecret)
 {
     security::SensitiveByteArray connectionSecret = profile.authentication == ssh::SshAuthenticationMethod::Agent
                                                         ? security::SensitiveByteArray{}
@@ -4173,6 +4486,23 @@ std::optional<ssh::SshConnectionRequest> AppController::connectionRequestForProf
         setCredentialOperationError(tr("Enter the credential required by this host."));
         return std::nullopt;
     }
+    security::SensitiveByteArray connectionProxySecret(proxySecret.toUtf8());
+    if (!profile.proxy.username.empty() && connectionProxySecret.empty() && profile.proxy.credentialReference)
+    {
+        auto stored = m_credentialVaults->active().read(
+            {.profileId = *profile.proxy.credentialReference, .kind = security::CredentialKind::ProxyPassword});
+        if (!stored)
+        {
+            setCredentialOperationError(credentialVaultErrorMessage(stored.error()));
+            return std::nullopt;
+        }
+        connectionProxySecret = std::move(*stored);
+    }
+    if (!profile.proxy.username.empty() && connectionProxySecret.empty())
+    {
+        setCredentialOperationError(tr("Enter the credential required by this proxy."));
+        return std::nullopt;
+    }
     return ssh::SshConnectionRequest{
         .host = utf8QString(profile.host),
         .port = profile.port,
@@ -4180,12 +4510,14 @@ std::optional<ssh::SshConnectionRequest> AppController::connectionRequestForProf
         .authentication = profile.authentication,
         .privateKeyPath = utf8QString(profile.privateKeyPath),
         .secret = std::move(connectionSecret),
+        .proxy = profile.proxy,
+        .proxySecret = std::move(connectionProxySecret),
         .knownHostsPath = m_knownHostsPath,
         .sessionOptions = profile.sessionOptions,
     };
 }
 
-bool AppController::connectHostProfile(const QString &id, const QString &secret)
+bool AppController::connectHostProfile(const QString &id, const QString &secret, const QString &proxySecret)
 {
     const std::string profileId = utf8String(id);
     const auto profile = std::ranges::find(m_profiles, profileId, &ssh::SshProfile::id);
@@ -4193,7 +4525,7 @@ bool AppController::connectHostProfile(const QString &id, const QString &secret)
     {
         return false;
     }
-    auto request = connectionRequestForProfile(*profile, secret);
+    auto request = connectionRequestForProfile(*profile, secret, proxySecret);
     if (!request)
     {
         return false;

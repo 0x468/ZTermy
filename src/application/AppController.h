@@ -298,24 +298,28 @@ public:
                                      const QString &username, const QString &authentication,
                                      const QString &privateKeyPath, bool privateKeyPassphraseRequired,
                                      const QString &group);
-    Q_INVOKABLE bool saveHostProfileWithCredential(const QString &id, const QString &name, const QString &host,
-                                                   int port, const QString &username, const QString &authentication,
-                                                   const QString &privateKeyPath, bool privateKeyPassphraseRequired,
-                                                   const QString &group, const QString &secret, bool rememberCredential,
-                                                   const QVariantMap &sessionOptions = {});
+    Q_INVOKABLE bool saveHostProfileWithCredential(
+        const QString &id, const QString &name, const QString &host, int port, const QString &username,
+        const QString &authentication, const QString &privateKeyPath, bool privateKeyPassphraseRequired,
+        const QString &group, const QString &secret, bool rememberCredential, const QVariantMap &sessionOptions = {},
+        const QVariantMap &proxyOptions = {}, const QString &proxySecret = {}, bool rememberProxyCredential = false);
     Q_INVOKABLE bool saveAndConnectHostProfile(const QString &id, const QString &name, const QString &host, int port,
                                                const QString &username, const QString &authentication,
                                                const QString &privateKeyPath, bool privateKeyPassphraseRequired,
                                                const QString &group, const QString &secret, bool rememberCredential,
-                                               const QVariantMap &sessionOptions = {});
+                                               const QVariantMap &sessionOptions = {},
+                                               const QVariantMap &proxyOptions = {}, const QString &proxySecret = {},
+                                               bool rememberProxyCredential = false);
     Q_INVOKABLE bool duplicateHostProfile(const QString &id);
     Q_INVOKABLE bool deleteHostProfile(const QString &id);
     Q_INVOKABLE bool clearRecentHostProfiles();
     Q_INVOKABLE bool setHostSectionCollapsed(const QString &sectionId, bool collapsed);
     Q_INVOKABLE bool forgetHostCredential(const QString &id);
     Q_INVOKABLE bool saveHostCredential(const QString &id, const QString &secret);
+    Q_INVOKABLE bool saveProxyCredential(const QString &id, const QString &secret);
     [[nodiscard]] Q_INVOKABLE QString readHostCredential(const QString &id);
-    Q_INVOKABLE bool connectHostProfile(const QString &id, const QString &secret);
+    [[nodiscard]] Q_INVOKABLE QString readProxyCredential(const QString &id);
+    Q_INVOKABLE bool connectHostProfile(const QString &id, const QString &secret, const QString &proxySecret = {});
     Q_INVOKABLE bool reconnectTerminalTab(const QString &id);
     Q_INVOKABLE bool cancelTerminalReconnect(const QString &id);
     [[nodiscard]] Q_INVOKABLE QVariantMap parseQuickConnectTarget(const QString &target) const;
@@ -480,11 +484,15 @@ private:
                                                const QString &username, const QString &authentication,
                                                const QString &privateKeyPath, bool privateKeyPassphraseRequired,
                                                const QString &group, const QString &secret, bool rememberCredential,
-                                               bool manageCredential, const QVariantMap &sessionOptions = {});
+                                               bool manageCredential, const QVariantMap &sessionOptions = {},
+                                               const QVariantMap &proxyOptions = {}, const QString &proxySecret = {},
+                                               bool rememberProxyCredential = false,
+                                               bool manageProxyCredential = false);
     void setCredentialOperationError(QString message);
     [[nodiscard]] bool startSshConnection(ssh::SshConnectionRequest request, QString sourceProfileId = {});
     [[nodiscard]] std::optional<ssh::SshConnectionRequest> connectionRequestForProfile(const ssh::SshProfile &profile,
-                                                                                       const QString &secret = {});
+                                                                                       const QString &secret = {},
+                                                                                       const QString &proxySecret = {});
     void scheduleSshReconnect(TerminalTab &tab, ssh::SshFailureKind failure);
     void attemptSshReconnect(const QString &tabId, std::uint64_t generation);
     [[nodiscard]] bool startSftpSession(TerminalTab &tab);
