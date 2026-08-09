@@ -8,6 +8,7 @@ namespace
 {
 
 using ztermy::persistence::LastKnownGoodError;
+using ztermy::persistence::LastKnownGoodPayload;
 using ztermy::persistence::PayloadValidation;
 
 [[nodiscard]] PayloadValidation validatePayload(const QByteArrayView payload)
@@ -48,8 +49,9 @@ void LastKnownGoodFileTests::missingPrimaryUsesValidBackup()
     const auto loaded = ztermy::persistence::loadLastKnownGood(path, 128, validatePayload);
     QVERIFY(loaded);
     QVERIFY(loaded->has_value());
-    QVERIFY(loaded->value().recoveredFromBackup);
-    QCOMPARE(loaded->value().bytes, QByteArrayLiteral("valid:old"));
+    const LastKnownGoodPayload payload = loaded->value_or({});
+    QVERIFY(payload.recoveredFromBackup);
+    QCOMPARE(payload.bytes, QByteArrayLiteral("valid:old"));
 }
 
 void LastKnownGoodFileTests::malformedPrimaryUsesValidBackup()
@@ -62,8 +64,9 @@ void LastKnownGoodFileTests::malformedPrimaryUsesValidBackup()
 
     const auto loaded = ztermy::persistence::loadLastKnownGood(path, 128, validatePayload);
     QVERIFY(loaded && loaded->has_value());
-    QVERIFY(loaded->value().recoveredFromBackup);
-    QCOMPARE(loaded->value().bytes, QByteArrayLiteral("valid:old"));
+    const LastKnownGoodPayload payload = loaded->value_or({});
+    QVERIFY(payload.recoveredFromBackup);
+    QCOMPARE(payload.bytes, QByteArrayLiteral("valid:old"));
 }
 
 void LastKnownGoodFileTests::oversizedPrimaryUsesValidBackup()
@@ -76,8 +79,9 @@ void LastKnownGoodFileTests::oversizedPrimaryUsesValidBackup()
 
     const auto loaded = ztermy::persistence::loadLastKnownGood(path, 128, validatePayload);
     QVERIFY(loaded && loaded->has_value());
-    QVERIFY(loaded->value().recoveredFromBackup);
-    QCOMPARE(loaded->value().bytes, QByteArrayLiteral("valid:old"));
+    const LastKnownGoodPayload payload = loaded->value_or({});
+    QVERIFY(payload.recoveredFromBackup);
+    QCOMPARE(payload.bytes, QByteArrayLiteral("valid:old"));
 }
 
 void LastKnownGoodFileTests::invalidBackupDoesNotMaskPrimaryFailure()
