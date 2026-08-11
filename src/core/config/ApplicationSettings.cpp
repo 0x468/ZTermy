@@ -5,6 +5,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
+#include <QUrl>
 
 #include <algorithm>
 #include <optional>
@@ -24,9 +25,11 @@ constexpr qint64 fontOptionsSchemaVersion = 7;
 constexpr qint64 workbenchSchemaVersion = 8;
 constexpr qint64 shortcutSchemaVersion = 9;
 constexpr qint64 sftpSchemaVersion = 10;
-constexpr qint64 currentSchemaVersion = sftpSchemaVersion;
+constexpr qint64 aiProviderSchemaVersion = 11;
+constexpr qint64 currentSchemaVersion = aiProviderSchemaVersion;
 
 using ztermy::config::AccentPreference;
+using ztermy::config::AiProviderPreference;
 using ztermy::config::ApplicationSettings;
 using ztermy::config::ApplicationSettingsStoreError;
 using ztermy::config::BackdropPreference;
@@ -158,6 +161,24 @@ template <>
     return std::nullopt;
 }
 
+template <>
+[[nodiscard]] std::optional<AiProviderPreference> parsePreference(const QString &token)
+{
+    if (token == QStringLiteral("openai-responses"))
+    {
+        return AiProviderPreference::openAiResponses;
+    }
+    if (token == QStringLiteral("ollama"))
+    {
+        return AiProviderPreference::ollama;
+    }
+    if (token == QStringLiteral("openai-compatible"))
+    {
+        return AiProviderPreference::openAiCompatible;
+    }
+    return std::nullopt;
+}
+
 [[nodiscard]] bool validSettings(const ApplicationSettings &settings)
 {
     const QString fontFamily = settings.terminalFontFamily.trimmed();
@@ -175,10 +196,22 @@ template <>
                const auto &[id, shortcut] = entry;
                return !id.trimmed().isEmpty() && id.size() <= 128 && shortcut.size() <= 128;
            });
+    const QUrl aiBaseUrl(settings.aiBaseUrl.trimmed());
+    const bool validAiBaseUrl = aiBaseUrl.isValid() && !aiBaseUrl.host().isEmpty() && aiBaseUrl.userInfo().isEmpty()
+                                && (aiBaseUrl.scheme() == QStringLiteral("http")
+                                    || aiBaseUrl.scheme() == QStringLiteral("https"));
+    const QString credentialReference = settings.aiCredentialReference.trimmed();
+    const bool validCredentialReference = !credentialReference.isEmpty() && credentialReference.size() <= 128
+                                          && std::ranges::all_of(credentialReference, [](const QChar character) {
+                                                 return character.isLetterOrNumber() || character == QLatin1Char('-')
+                                                        || character == QLatin1Char('_');
+                                             });
     return settings.backdropOpacity >= 0.0 && settings.backdropOpacity <= 1.0
            && settings.terminalBackgroundOpacity >= 0.0 && settings.terminalBackgroundOpacity <= 1.0
            && uiFontFamily.size() <= 128 && !fontFamily.isEmpty() && fontFamily.size() <= 128
-           && settings.terminalFontSize >= 8 && settings.terminalFontSize <= 32 && validCustomAccent && validShortcuts;
+           && settings.terminalFontSize >= 8 && settings.terminalFontSize <= 32 && validCustomAccent && validShortcuts
+           && validAiBaseUrl && settings.aiBaseUrl.size() <= 2048 && settings.aiEndpointPath.size() <= 512
+           && settings.aiModel.size() <= 256 && validCredentialReference;
 }
 
 [[nodiscard]] std::expected<ApplicationSettings, ApplicationSettingsStoreError> parseSettings(const QJsonObject &root)
@@ -192,7 +225,8 @@ template <>
     if (version != legacySchemaVersion && version != materialSchemaVersion && version != terminalAppearanceSchemaVersion
         && version != accentSchemaVersion && version != credentialStorageSchemaVersion
         && version != localizationSchemaVersion && version != fontOptionsSchemaVersion
-        && version != workbenchSchemaVersion && version != shortcutSchemaVersion && version != currentSchemaVersion)
+        && version != workbenchSchemaVersion && version != shortcutSchemaVersion && version != sftpSchemaVersion
+        && version != currentSchemaVersion)
     {
         return std::unexpected(ApplicationSettingsStoreError::unsupportedVersion);
     }
@@ -218,6 +252,12 @@ template <>
     const QJsonValue credentialStorageValue = root.value(QStringLiteral("credentialStorage"));
     const QJsonValue languageValue = root.value(QStringLiteral("language"));
     const QJsonValue shortcutOverridesValue = root.value(QStringLiteral("shortcutOverrides"));
+    const QJsonValue aiProviderValue = root.value(QStringLiteral("aiProvider"));
+    const QJsonValue aiBaseUrlValue = root.value(QStringLiteral("aiBaseUrl"));
+    const QJsonValue aiEndpointPathValue = root.value(QStringLiteral("aiEndpointPath"));
+    const QJsonValue aiModelValue = root.value(QStringLiteral("aiModel"));
+    const QJsonValue aiCredentialReferenceValue = root.value(QStringLiteral("aiCredentialReference"));
+    const QJsonValue aiAutomaticContextValue = root.value(QStringLiteral("aiAutomaticContext"));
 
     if (!themeValue.isString() || !opacityValue.isDouble() || !backdropValue.isString() || !fontFamilyValue.isString()
         || !fontSizeValue.isDouble() || !cursorValue.isString() || !cursorBlinkValue.isBool()
@@ -254,6 +294,12 @@ template <>
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
+    if (version >= aiProviderSchemaVersion
+        && (!aiProviderValue.isString() || !aiBaseUrlValue.isString() || !aiEndpointPathValue.isString()
+            || !aiModelValue.isString() || !aiCredentialReferenceValue.isString() || !aiAutomaticContextValue.isBool()))
+    {
+        return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
+    }
     const auto theme = parsePreference<ThemePreference>(themeValue.toString());
     const auto backdrop = parsePreference<BackdropPreference>(backdropValue.toString());
     const auto accent = version >= accentSchemaVersion ? parsePreference<AccentPreference>(accentValue.toString())
@@ -265,8 +311,11 @@ template <>
     const auto language = version >= localizationSchemaVersion
                               ? parsePreference<LanguagePreference>(languageValue.toString())
                               : std::optional{LanguagePreference::system};
+    const auto aiProvider = version >= aiProviderSchemaVersion
+                                ? parsePreference<AiProviderPreference>(aiProviderValue.toString())
+                                : std::optional{AiProviderPreference::openAiResponses};
     const qint64 fontSize = fontSizeValue.toInteger(-1);
-    if (!theme || !backdrop || !accent || !cursor || !credentialStorage || !language
+    if (!theme || !backdrop || !accent || !cursor || !credentialStorage || !language || !aiProvider
         || fontSizeValue.toDouble() != static_cast<double>(fontSize))
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
@@ -312,6 +361,14 @@ template <>
         .credentialStorage = *credentialStorage,
         .language = *language,
         .shortcutOverrides = std::move(shortcutOverrides),
+        .aiProvider = *aiProvider,
+        .aiBaseUrl = version >= aiProviderSchemaVersion ? aiBaseUrlValue.toString()
+                                                        : QStringLiteral("https://api.openai.com/v1"),
+        .aiEndpointPath = version >= aiProviderSchemaVersion ? aiEndpointPathValue.toString() : QString{},
+        .aiModel = version >= aiProviderSchemaVersion ? aiModelValue.toString() : QString{},
+        .aiCredentialReference = version >= aiProviderSchemaVersion ? aiCredentialReferenceValue.toString()
+                                                                    : QStringLiteral("ai-default"),
+        .aiAutomaticContext = version < aiProviderSchemaVersion || aiAutomaticContextValue.toBool(),
     };
     if (!validSettings(settings))
     {
@@ -320,6 +377,10 @@ template <>
     settings.terminalFontFamily = settings.terminalFontFamily.trimmed();
     settings.uiFontFamily = settings.uiFontFamily.trimmed();
     settings.customAccent = settings.customAccent.trimmed().toUpper();
+    settings.aiBaseUrl = settings.aiBaseUrl.trimmed();
+    settings.aiEndpointPath = settings.aiEndpointPath.trimmed();
+    settings.aiModel = settings.aiModel.trimmed();
+    settings.aiCredentialReference = settings.aiCredentialReference.trimmed();
     return settings;
 }
 
@@ -436,6 +497,12 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
         {QStringLiteral("credentialStorage"), credentialStoragePreferenceToken(settings.credentialStorage)},
         {QStringLiteral("language"), languagePreferenceToken(settings.language)},
         {QStringLiteral("shortcutOverrides"), shortcutOverrides},
+        {QStringLiteral("aiProvider"), aiProviderPreferenceToken(settings.aiProvider)},
+        {QStringLiteral("aiBaseUrl"), settings.aiBaseUrl.trimmed()},
+        {QStringLiteral("aiEndpointPath"), settings.aiEndpointPath.trimmed()},
+        {QStringLiteral("aiModel"), settings.aiModel.trimmed()},
+        {QStringLiteral("aiCredentialReference"), settings.aiCredentialReference.trimmed()},
+        {QStringLiteral("aiAutomaticContext"), settings.aiAutomaticContext},
     };
 
     const QByteArray data = QJsonDocument(root).toJson(QJsonDocument::Indented);
@@ -539,6 +606,20 @@ QString languagePreferenceToken(const LanguagePreference preference)
     }
 }
 
+QString aiProviderPreferenceToken(const AiProviderPreference preference)
+{
+    switch (preference)
+    {
+        case AiProviderPreference::ollama:
+            return QStringLiteral("ollama");
+        case AiProviderPreference::openAiCompatible:
+            return QStringLiteral("openai-compatible");
+        case AiProviderPreference::openAiResponses:
+        default:
+            return QStringLiteral("openai-responses");
+    }
+}
+
 std::optional<ThemePreference> parseThemePreference(const QString &token)
 {
     return parsePreference<ThemePreference>(token);
@@ -567,6 +648,11 @@ std::optional<CredentialStoragePreference> parseCredentialStoragePreference(cons
 std::optional<LanguagePreference> parseLanguagePreference(const QString &token)
 {
     return parsePreference<LanguagePreference>(token);
+}
+
+std::optional<AiProviderPreference> parseAiProviderPreference(const QString &token)
+{
+    return parsePreference<AiProviderPreference>(token);
 }
 
 } // namespace ztermy::config

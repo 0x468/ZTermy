@@ -55,6 +55,13 @@ enum class LanguagePreference : std::uint8_t
     simplifiedChinese,
 };
 
+enum class AiProviderPreference : std::uint8_t
+{
+    openAiResponses,
+    ollama,
+    openAiCompatible,
+};
+
 struct ApplicationSettings final
 {
     ThemePreference theme = ThemePreference::dark;
@@ -77,6 +84,12 @@ struct ApplicationSettings final
     CredentialStoragePreference credentialStorage = CredentialStoragePreference::automatic;
     LanguagePreference language = LanguagePreference::system;
     QMap<QString, QString> shortcutOverrides;
+    AiProviderPreference aiProvider = AiProviderPreference::openAiResponses;
+    QString aiBaseUrl = QStringLiteral("https://api.openai.com/v1");
+    QString aiEndpointPath;
+    QString aiModel;
+    QString aiCredentialReference = QStringLiteral("ai-default");
+    bool aiAutomaticContext = true;
 
     [[nodiscard]] friend bool operator==(const ApplicationSettings &, const ApplicationSettings &) = default;
 };
@@ -110,11 +123,13 @@ private:
 [[nodiscard]] QString cursorPreferenceToken(CursorPreference preference);
 [[nodiscard]] QString credentialStoragePreferenceToken(CredentialStoragePreference preference);
 [[nodiscard]] QString languagePreferenceToken(LanguagePreference preference);
+[[nodiscard]] QString aiProviderPreferenceToken(AiProviderPreference preference);
 [[nodiscard]] std::optional<ThemePreference> parseThemePreference(const QString &token);
 [[nodiscard]] std::optional<BackdropPreference> parseBackdropPreference(const QString &token);
 [[nodiscard]] std::optional<AccentPreference> parseAccentPreference(const QString &token);
 [[nodiscard]] std::optional<CursorPreference> parseCursorPreference(const QString &token);
 [[nodiscard]] std::optional<CredentialStoragePreference> parseCredentialStoragePreference(const QString &token);
 [[nodiscard]] std::optional<LanguagePreference> parseLanguagePreference(const QString &token);
+[[nodiscard]] std::optional<AiProviderPreference> parseAiProviderPreference(const QString &token);
 
 } // namespace ztermy::config

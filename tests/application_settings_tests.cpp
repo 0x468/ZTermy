@@ -75,6 +75,12 @@ void ApplicationSettingsTests::savesAndLoadsEveryPreference()
         .credentialStorage = ztermy::config::CredentialStoragePreference::portable,
         .language = ztermy::config::LanguagePreference::simplifiedChinese,
         .shortcutOverrides = {{QStringLiteral("terminal.find"), QStringLiteral("Ctrl+Alt+F")}},
+        .aiProvider = ztermy::config::AiProviderPreference::openAiCompatible,
+        .aiBaseUrl = QStringLiteral("https://gateway.example.test/v1"),
+        .aiEndpointPath = QStringLiteral("/chat/completions"),
+        .aiModel = QStringLiteral("terminal-model"),
+        .aiCredentialReference = QStringLiteral("ai-custom"),
+        .aiAutomaticContext = false,
     };
     const ztermy::config::ApplicationSettingsStore store(directory.filePath(QStringLiteral("settings.json")));
 
@@ -116,7 +122,7 @@ void ApplicationSettingsTests::migratesLegacyWindowOpacityAndNoneBackdrop()
     QFile saved(path);
     QVERIFY(saved.open(QIODevice::ReadOnly));
     const QByteArray persisted = saved.readAll();
-    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 10")));
+    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 11")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdropOpacity\": 0.75")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdrop\": \"transparent\"")));
     QVERIFY(!persisted.contains(QByteArrayLiteral("windowOpacity")));
@@ -304,10 +310,15 @@ void ApplicationSettingsTests::migratesEveryIntermediateSchema()
             root.insert(QStringLiteral("shortcutOverrides"),
                         QJsonObject{{QStringLiteral("terminal.find"), QStringLiteral("Ctrl+Alt+F")}});
         }
+        if (version >= 10)
+        {
+            root.insert(QStringLiteral("sftpShowHiddenFiles"), false);
+            root.insert(QStringLiteral("sftpConfirmDelete"), true);
+        }
         return root;
     };
 
-    for (const int version : {4, 8, 9})
+    for (const int version : {4, 8, 9, 10})
     {
         const QString path = directory.filePath(QStringLiteral("settings-v%1.json").arg(version));
         QVERIFY(writeFile(path, QJsonDocument(base(version)).toJson(QJsonDocument::Compact)));
@@ -322,6 +333,11 @@ void ApplicationSettingsTests::migratesEveryIntermediateSchema()
         QCOMPARE(loaded->shortcutOverrides.size(), version >= 9 ? 1 : 0);
         QVERIFY(!loaded->sftpShowHiddenFiles);
         QVERIFY(loaded->sftpConfirmDelete);
+        QCOMPARE(loaded->aiProvider, ztermy::config::AiProviderPreference::openAiResponses);
+        QCOMPARE(loaded->aiBaseUrl, QStringLiteral("https://api.openai.com/v1"));
+        QVERIFY(loaded->aiModel.isEmpty());
+        QCOMPARE(loaded->aiCredentialReference, QStringLiteral("ai-default"));
+        QVERIFY(loaded->aiAutomaticContext);
     }
 }
 
@@ -337,7 +353,7 @@ void ApplicationSettingsTests::rejectsMalformedUnsupportedAndIncompleteDocuments
     QVERIFY(!malformed);
     QCOMPARE(malformed.error(), ztermy::config::ApplicationSettingsStoreError::invalidFormat);
 
-    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":11})")));
+    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":12})")));
     const auto unsupported = store.load();
     QVERIFY(!unsupported);
     QCOMPARE(unsupported.error(), ztermy::config::ApplicationSettingsStoreError::unsupportedVersion);
