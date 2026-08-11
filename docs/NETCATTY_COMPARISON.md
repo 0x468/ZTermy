@@ -1,6 +1,6 @@
 # NetCatty and ztermy product comparison
 
-Status: V2.8 implementation complete
+Status: V2 product comparison retained; AI boundary superseded by V3 program
 
 ## Purpose and evidence
 
@@ -33,12 +33,18 @@ dashboard, settings used large presentation cards for ordinary preferences,
 and terminal tools were added one feature at a time without preserving the
 reference action hierarchy. V2.2 corrects those structural problems.
 
-The current release aligns with NetCatty on the main task flow and information
+The V2 release aligns with NetCatty on the main task flow and information
 density, but it is not feature-complete relative to NetCatty. The largest
 remaining gaps are remote system telemetry, advanced SFTP navigation, a true
 script runtime, terminal keyword highlighting/recording/encoding, and richer
 transfer controls. Some are deferred; Serial, AI, cloud sync, collaboration,
 and remote editing are explicitly excluded.
+
+Later V2 milestones closed the listed telemetry, SFTP, script, terminal, and
+transfer gaps through V2.14. The owner has now selected AI integration for V3;
+`V3_AI_PROGRAM.md` and `research/AI_TERMINAL_LANDSCAPE.md` supersede this
+document's V2-only AI exclusion. Serial, cloud sync, collaboration, and remote
+editing remain excluded.
 
 ## Detailed matrix
 
@@ -79,7 +85,8 @@ and remote editing are explicitly excluded.
 The following NetCatty areas do not belong to the current ztermy product scope:
 
 - Serial, Telnet, and Mosh protocol surfaces;
-- AI assistant and provider configuration;
+- AI assistant and provider configuration in V2; these enter only through the
+  separately scoped V3 AI program;
 - cloud sync, collaboration, and account infrastructure;
 - remote text editing and remote-development workspace features;
 - inert placeholders for any unsupported module.

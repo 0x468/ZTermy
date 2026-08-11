@@ -1,16 +1,18 @@
 # Pre-V3 program: final Windows 11 daily-use baseline
 
-Status: completed through `0.2.14`; V3 direction pending owner decision
+Status: completed through `0.2.14`; owner selected AI integration for V3
 
 ## Objective
 
 Complete V2.9 through V2.14 on the `0.2.x` line, leaving ztermy as a highly
 available, complete, responsive, and maintainable personal Windows 11 SSH
-workspace. V3 does not begin automatically. After V2.14 the owner chooses
-whether `0.3.0` focuses on cross-platform support, AI integration, or another
-explicitly scoped direction.
+workspace. The owner subsequently selected native AI integration for `0.3.x`.
+The approved product program is recorded in `V3_AI_PROGRAM.md`, with architecture,
+security, research, and acceptance documents linked from that program.
 
 All `0.2.z` releases retain the codename `此` and the approved verse.
+The selected V3 direction provisionally uses codename `糸` and verse
+`「剪不断，理还乱，是离愁」` across the `0.3.z` line.
 
 ## Execution order
 
@@ -42,9 +44,10 @@ may not silently weaken its accepted behavior.
   terminal cells into QML object trees.
 - NetCatty is a workflow and density reference only. ztermy owns its C++/QML,
   assets, text, persistence, and Windows-native behavior.
-- Unsupported features have no inert controls. Deliberate exclusions remain
+- Unsupported features have no inert controls. Deliberate V2 exclusions remain
   Serial, Telnet, Mosh, EternalTerminal, cloud sync, collaboration, AI, and
-  remote editing until a later approved direction changes the boundary.
+  remote editing. V3 explicitly changes only the AI boundary; the other
+  exclusions remain in force.
 
 ## Milestone release gate
 

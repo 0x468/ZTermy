@@ -8,7 +8,10 @@ Accepted
 
 V1 kept SSH passwords and private-key passphrases in memory only. V1.2 needs
 explicit credential persistence without placing secrets in profile JSON,
-settings, logs, crash reports, or command histories. Installed and portable
+settings, logs, exported diagnostic report payloads, or command histories.
+Crash minidumps can contain transient process memory and are therefore treated
+as Secret artifacts, never attached or uploaded automatically; V3 adds bounded
+secret lifetime, dump filtering, and synthetic-marker scans. Installed and portable
 packages also have different user expectations: an installed application can
 use the current operating-system account, while a portable directory must be
 self-contained and usable on another computer.

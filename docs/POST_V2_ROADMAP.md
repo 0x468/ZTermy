@@ -11,6 +11,9 @@ automatic version after this release.
 Release codenames follow the `x.y` line rather than individual patch builds.
 All `0.2.z` releases retain the codename `此` and its approved verse; a new
 codename is selected only when the minor version changes.
+The provisional `0.3.x` codename is `糸`, with
+`「剪不断，理还乱，是离愁」`; final presentation is approved before the
+first `0.3.0` release candidate.
 
 ## V2.1 — daily-use stabilization (`0.2.1`)
 
@@ -240,14 +243,24 @@ implementation boundary and evidence are recorded in `V2_14_SCOPE.md`, ADR
 - deliver the final Windows 11 daily-use baseline before a separately approved
   V3 direction.
 
-## V3 decision gate (`0.3.0`)
+## V3 AI program (`0.3.0` and later)
 
-V3 starts only after the owner chooses a coherent major direction and records
-an ADR/scope. Candidate directions include Linux portability, a standalone
-file-management workspace, or deeper remote-development workflows. Cloud sync,
-collaboration, AI, serial support, and remote editing remain separate decisions
-and are not implied by V3.
+Status: direction selected; structured program proposed.
 
-The complete V2.9–V2.14 program, invariants, and release gates are recorded in
-`PRE_V3_PROGRAM.md`. The V3 direction is still chosen explicitly at the decision
-gate rather than by automatically incrementing to `0.3.0`.
+The owner selected native AI integration as the coherent `0.3.x` direction.
+The product scope and milestone order are in `V3_AI_PROGRAM.md`, the target
+design in `AI_ARCHITECTURE.md`, the security contract in
+`AI_SECURITY_AND_PRIVACY.md`, the evidence matrix in
+`testing/V3_AI_ACCEPTANCE.md`, and reference findings in
+`research/AI_TERMINAL_LANDSCAPE.md`. ADR 0054 records the top-level semantic,
+provider-independent terminal-agent decision; ADR 0055 covers shell activation;
+ADR 0056 covers replay-safe execution and session ownership. The first formal
+review disposition is in `reviews/V3_AI_ARCHITECTURE_REVIEW_2026-08-11.md`.
+
+Linux portability, a standalone file-management workspace, cloud collaboration,
+serial support, and remote editing remain separate future decisions and are not
+implied by the AI program.
+
+The complete V2.9–V2.14 program, invariants, and release gates remain recorded in
+`PRE_V3_PROGRAM.md`. V3 still begins through separately accepted milestone
+scopes; choosing the direction does not claim that `0.3.0` is implemented.

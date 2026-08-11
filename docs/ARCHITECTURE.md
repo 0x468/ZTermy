@@ -153,3 +153,33 @@ use a versioned AES-256-GCM vault whose key is derived from a user-supplied
 master password with scrypt; session-only storage remains available. A global
 coordinator performs copy, read-back verification, active-store switching, and
 optional source cleanup. See ADR 0021.
+
+## V3 AI extension
+
+The approved V3 direction adds a provider-independent AI layer without changing
+terminal ownership:
+
+```text
+TerminalOutputFanout + shell lifecycle + immutable terminal snapshots
+  -> CommandBlockStore / TerminalFrameSource
+  -> AiContextBroker (provenance, redaction, bounds, preview)
+  -> AiOrchestrator
+  -> AiProvider adapter over asynchronous Qt Network
+
+model tool proposal
+  -> schema and scope validation
+  -> AiPermissionPolicy
+  -> AiToolExecutionBroker
+  -> existing terminal / SSH / SFTP / telemetry / script / note service
+```
+
+Provider payloads, prompts, permissions, and tools remain C++ concerns. QML owns
+the AI panel and lightweight interaction only. Ordered semantic capture retains
+terminal output or marks an explicit coverage gap; derived frame/UI/provider
+observation may coalesce stale updates. Neither can backpressure terminal I/O.
+Provider keys reuse the installed/portable credential boundary; large transcript
+data never enters Windows Credential Manager.
+
+The detailed target design is in `AI_ARCHITECTURE.md`, the product milestones in
+`V3_AI_PROGRAM.md`, the top-level decision in ADR 0054, shell activation in ADR
+0055, and replay-safe agent execution/session ownership in ADR 0056.
