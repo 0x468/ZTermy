@@ -185,6 +185,25 @@ private:
     return ztermy::ai::AiProviderKind::openAiResponses;
 }
 
+[[nodiscard]] ztermy::ai::AiPermissionMode
+aiPermissionMode(const ztermy::config::AiPermissionPreference preference) noexcept
+{
+    switch (preference)
+    {
+        case ztermy::config::AiPermissionPreference::observer:
+            return ztermy::ai::AiPermissionMode::observer;
+        case ztermy::config::AiPermissionPreference::askFirstWrite:
+            return ztermy::ai::AiPermissionMode::askFirstWrite;
+        case ztermy::config::AiPermissionPreference::sessionAuto:
+            return ztermy::ai::AiPermissionMode::sessionAuto;
+        case ztermy::config::AiPermissionPreference::savedHostAuto:
+            return ztermy::ai::AiPermissionMode::savedHostAuto;
+        case ztermy::config::AiPermissionPreference::askEachWrite:
+            return ztermy::ai::AiPermissionMode::askEachWrite;
+    }
+    return ztermy::ai::AiPermissionMode::askEachWrite;
+}
+
 [[nodiscard]] QString semanticCapabilityToken(const ztermy::terminal::TerminalSemanticCapability capability)
 {
     switch (capability)
@@ -2720,6 +2739,11 @@ QString AppController::aiModel() const
 bool AppController::aiAutomaticContext() const noexcept
 {
     return m_settings.aiAutomaticContext;
+}
+
+QString AppController::aiPermissionPreference() const
+{
+    return config::aiPermissionPreferenceToken(m_settings.aiPermission);
 }
 
 bool AppController::aiApiKeyConfigured() const
@@ -6833,14 +6857,17 @@ bool AppController::saveApplicationSettings(const QString &theme, const qreal ba
         .aiModel = m_settings.aiModel,
         .aiCredentialReference = m_settings.aiCredentialReference,
         .aiAutomaticContext = m_settings.aiAutomaticContext,
+        .aiPermission = m_settings.aiPermission,
     });
 }
 
 bool AppController::saveAiProviderSettings(const QString &provider, const QString &baseUrl, const QString &endpointPath,
-                                           const QString &model, const bool automaticContext)
+                                           const QString &model, const bool automaticContext,
+                                           const QString &permissionMode)
 {
     const auto parsedProvider = config::parseAiProviderPreference(provider);
-    if (!parsedProvider)
+    const auto parsedPermission = config::parseAiPermissionPreference(permissionMode);
+    if (!parsedProvider || !parsedPermission)
     {
         return false;
     }
@@ -6850,6 +6877,7 @@ bool AppController::saveAiProviderSettings(const QString &provider, const QStrin
     candidate.aiEndpointPath = endpointPath.trimmed();
     candidate.aiModel = model.trimmed();
     candidate.aiAutomaticContext = automaticContext;
+    candidate.aiPermission = *parsedPermission;
     return persistApplicationSettings(candidate);
 }
 
@@ -7440,7 +7468,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                                             .turnId = target->aiTurnRunner->activeTurnId(),
                                             .target = {.sessionId = utf8String(target->id),
                                                        .sessionGeneration = target->reconnectGeneration},
-                                            .permissionMode = ai::AiPermissionMode::askEachWrite,
+                                            .permissionMode = aiPermissionMode(m_settings.aiPermission),
                                             .writable = target->running && (target->ssh || target->local),
                                             .savedHost = !target->sourceProfileId.isEmpty(),
                                             .firstWriteApproved = target->aiFirstWriteApproved},

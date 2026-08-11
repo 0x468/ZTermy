@@ -153,6 +153,14 @@ Rectangle {
         return aiProviderBox.currentIndex === 1 ? "ollama" : aiProviderBox.currentIndex === 2 ? "openai-compatible" : "openai-responses";
     }
 
+    function aiPermissionIndex(token) {
+        return token === "observer" ? 0 : token === "ask-first-write" ? 2 : token === "session-auto" ? 3 : token === "saved-host-auto" ? 4 : 1;
+    }
+
+    function aiPermissionToken() {
+        return ["observer", "ask-each-write", "ask-first-write", "session-auto", "saved-host-auto"][aiPermissionBox.currentIndex];
+    }
+
     function systemFontOptions(families) {
         const result = [""];
         for (let index = 0; index < families.length; ++index) {
@@ -288,6 +296,7 @@ Rectangle {
         credentialStorageBox.currentIndex = credentialStorageIndex(controller.effectiveCredentialStorage);
         credentialCleanupStorageBox.currentIndex = credentialStorageIndex(controller.effectiveCredentialStorage);
         aiProviderBox.currentIndex = aiProviderIndex(controller.aiProviderPreference);
+        aiPermissionBox.currentIndex = aiPermissionIndex(controller.aiPermissionPreference);
         aiBaseUrlDraft = controller.aiBaseUrl;
         aiEndpointPathDraft = controller.aiEndpointPath;
         aiModelDraft = controller.aiModel;
@@ -1156,6 +1165,20 @@ Rectangle {
                         }
 
                         Label {
+                            text: qsTr("Agent permissions")
+                            color: Theme.text
+                        }
+                        AppComboBox {
+                            id: aiPermissionBox
+
+                            objectName: "settingsAiPermission"
+                            Layout.fillWidth: true
+                            model: ["observer", "ask-each-write", "ask-first-write", "session-auto", "saved-host-auto"]
+                            displayTextModel: [qsTr("Observer only"), qsTr("Ask for every write"), qsTr("Ask for the first write"), qsTr("Automatic for this session"), qsTr("Automatic for saved hosts")]
+                            accessibleName: qsTr("AI terminal action permission mode")
+                        }
+
+                        Label {
                             text: qsTr("Base URL")
                             color: Theme.text
                         }
@@ -1212,6 +1235,21 @@ Rectangle {
                             text: qsTr("Attach bounded recent terminal context automatically")
                             accessibleName: text
                         }
+
+                        Item {
+                            visible: !pane.compactLayout
+                            implicitHeight: aiPermissionNote.implicitHeight
+                        }
+                        Text {
+                            id: aiPermissionNote
+
+                            Layout.fillWidth: true
+                            text: qsTr("High-risk commands always require explicit approval unless a separate high-risk session grant is active.")
+                            color: Theme.textMuted
+                            wrapMode: Text.WordWrap
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.textCompact
+                        }
                     }
 
                     RowLayout {
@@ -1232,7 +1270,7 @@ Rectangle {
                             accessibleName: qsTr("Save AI provider settings")
                             variant: "primary"
                             onClicked: {
-                                const saved = pane.controller.saveAiProviderSettings(pane.aiProviderToken(), pane.aiBaseUrlDraft, pane.aiEndpointPathDraft, pane.aiModelDraft, aiAutomaticContextSwitch.checked);
+                                const saved = pane.controller.saveAiProviderSettings(pane.aiProviderToken(), pane.aiBaseUrlDraft, pane.aiEndpointPathDraft, pane.aiModelDraft, aiAutomaticContextSwitch.checked, pane.aiPermissionToken());
                                 pane.presentStatus(saved ? qsTr("AI provider settings saved.") : qsTr("The provider URL or model settings are invalid."), !saved, saved);
                             }
                         }

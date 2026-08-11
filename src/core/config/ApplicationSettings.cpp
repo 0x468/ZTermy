@@ -26,9 +26,11 @@ constexpr qint64 workbenchSchemaVersion = 8;
 constexpr qint64 shortcutSchemaVersion = 9;
 constexpr qint64 sftpSchemaVersion = 10;
 constexpr qint64 aiProviderSchemaVersion = 11;
-constexpr qint64 currentSchemaVersion = aiProviderSchemaVersion;
+constexpr qint64 aiPermissionSchemaVersion = 12;
+constexpr qint64 currentSchemaVersion = aiPermissionSchemaVersion;
 
 using ztermy::config::AccentPreference;
+using ztermy::config::AiPermissionPreference;
 using ztermy::config::AiProviderPreference;
 using ztermy::config::ApplicationSettings;
 using ztermy::config::ApplicationSettingsStoreError;
@@ -179,6 +181,32 @@ template <>
     return std::nullopt;
 }
 
+template <>
+[[nodiscard]] std::optional<AiPermissionPreference> parsePreference(const QString &token)
+{
+    if (token == QStringLiteral("observer"))
+    {
+        return AiPermissionPreference::observer;
+    }
+    if (token == QStringLiteral("ask-each-write"))
+    {
+        return AiPermissionPreference::askEachWrite;
+    }
+    if (token == QStringLiteral("ask-first-write"))
+    {
+        return AiPermissionPreference::askFirstWrite;
+    }
+    if (token == QStringLiteral("session-auto"))
+    {
+        return AiPermissionPreference::sessionAuto;
+    }
+    if (token == QStringLiteral("saved-host-auto"))
+    {
+        return AiPermissionPreference::savedHostAuto;
+    }
+    return std::nullopt;
+}
+
 [[nodiscard]] bool validSettings(const ApplicationSettings &settings)
 {
     const QString fontFamily = settings.terminalFontFamily.trimmed();
@@ -226,7 +254,7 @@ template <>
         && version != accentSchemaVersion && version != credentialStorageSchemaVersion
         && version != localizationSchemaVersion && version != fontOptionsSchemaVersion
         && version != workbenchSchemaVersion && version != shortcutSchemaVersion && version != sftpSchemaVersion
-        && version != currentSchemaVersion)
+        && version != aiProviderSchemaVersion && version != currentSchemaVersion)
     {
         return std::unexpected(ApplicationSettingsStoreError::unsupportedVersion);
     }
@@ -258,6 +286,7 @@ template <>
     const QJsonValue aiModelValue = root.value(QStringLiteral("aiModel"));
     const QJsonValue aiCredentialReferenceValue = root.value(QStringLiteral("aiCredentialReference"));
     const QJsonValue aiAutomaticContextValue = root.value(QStringLiteral("aiAutomaticContext"));
+    const QJsonValue aiPermissionValue = root.value(QStringLiteral("aiPermission"));
 
     if (!themeValue.isString() || !opacityValue.isDouble() || !backdropValue.isString() || !fontFamilyValue.isString()
         || !fontSizeValue.isDouble() || !cursorValue.isString() || !cursorBlinkValue.isBool()
@@ -300,6 +329,10 @@ template <>
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
+    if (version >= aiPermissionSchemaVersion && !aiPermissionValue.isString())
+    {
+        return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
+    }
     const auto theme = parsePreference<ThemePreference>(themeValue.toString());
     const auto backdrop = parsePreference<BackdropPreference>(backdropValue.toString());
     const auto accent = version >= accentSchemaVersion ? parsePreference<AccentPreference>(accentValue.toString())
@@ -314,8 +347,11 @@ template <>
     const auto aiProvider = version >= aiProviderSchemaVersion
                                 ? parsePreference<AiProviderPreference>(aiProviderValue.toString())
                                 : std::optional{AiProviderPreference::openAiResponses};
+    const auto aiPermission = version >= aiPermissionSchemaVersion
+                                  ? parsePreference<AiPermissionPreference>(aiPermissionValue.toString())
+                                  : std::optional{AiPermissionPreference::askEachWrite};
     const qint64 fontSize = fontSizeValue.toInteger(-1);
-    if (!theme || !backdrop || !accent || !cursor || !credentialStorage || !language || !aiProvider
+    if (!theme || !backdrop || !accent || !cursor || !credentialStorage || !language || !aiProvider || !aiPermission
         || fontSizeValue.toDouble() != static_cast<double>(fontSize))
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
@@ -369,6 +405,7 @@ template <>
         .aiCredentialReference =
             version >= aiProviderSchemaVersion ? aiCredentialReferenceValue.toString() : QStringLiteral("ai-default"),
         .aiAutomaticContext = version < aiProviderSchemaVersion || aiAutomaticContextValue.toBool(),
+        .aiPermission = *aiPermission,
     };
     if (!validSettings(settings))
     {
@@ -503,6 +540,7 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
         {QStringLiteral("aiModel"), settings.aiModel.trimmed()},
         {QStringLiteral("aiCredentialReference"), settings.aiCredentialReference.trimmed()},
         {QStringLiteral("aiAutomaticContext"), settings.aiAutomaticContext},
+        {QStringLiteral("aiPermission"), aiPermissionPreferenceToken(settings.aiPermission)},
     };
 
     const QByteArray data = QJsonDocument(root).toJson(QJsonDocument::Indented);
@@ -620,6 +658,24 @@ QString aiProviderPreferenceToken(const AiProviderPreference preference)
     }
 }
 
+QString aiPermissionPreferenceToken(const AiPermissionPreference preference)
+{
+    switch (preference)
+    {
+        case AiPermissionPreference::observer:
+            return QStringLiteral("observer");
+        case AiPermissionPreference::askFirstWrite:
+            return QStringLiteral("ask-first-write");
+        case AiPermissionPreference::sessionAuto:
+            return QStringLiteral("session-auto");
+        case AiPermissionPreference::savedHostAuto:
+            return QStringLiteral("saved-host-auto");
+        case AiPermissionPreference::askEachWrite:
+        default:
+            return QStringLiteral("ask-each-write");
+    }
+}
+
 std::optional<ThemePreference> parseThemePreference(const QString &token)
 {
     return parsePreference<ThemePreference>(token);
@@ -653,6 +709,11 @@ std::optional<LanguagePreference> parseLanguagePreference(const QString &token)
 std::optional<AiProviderPreference> parseAiProviderPreference(const QString &token)
 {
     return parsePreference<AiProviderPreference>(token);
+}
+
+std::optional<AiPermissionPreference> parseAiPermissionPreference(const QString &token)
+{
+    return parsePreference<AiPermissionPreference>(token);
 }
 
 } // namespace ztermy::config

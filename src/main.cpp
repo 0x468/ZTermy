@@ -753,7 +753,7 @@ struct ResizeHitRuntimeCase
     }
     const bool aiProviderCleared =
         controller.saveAiProviderSettings(QStringLiteral("openai-responses"), QStringLiteral("https://api.openai.com"),
-                                          QStringLiteral("/v1/responses"), {}, true);
+                                          QStringLiteral("/v1/responses"), {}, true, QStringLiteral("ask-each-write"));
     const bool englishDark = applyUiLayoutSmokeTheme(controller, QStringLiteral("dark"), QStringLiteral("en"));
     const QString aiTerminalId = englishDark && aiProviderCleared ? controller.startLocalTerminal() : QString{};
     if (rootObject != nullptr)

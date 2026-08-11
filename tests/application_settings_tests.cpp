@@ -31,6 +31,7 @@ private slots:
     void migratesLocalizationSchemaWithFontDefaults();
     void migratesFontOptionsSchema();
     void migratesEveryIntermediateSchema();
+    void migratesAiProviderSchemaWithPermissionDefault();
     void rejectsMalformedUnsupportedAndIncompleteDocuments();
     void rejectsOutOfRangeValues();
     void recoversLastKnownGoodSettings();
@@ -81,6 +82,7 @@ void ApplicationSettingsTests::savesAndLoadsEveryPreference()
         .aiModel = QStringLiteral("terminal-model"),
         .aiCredentialReference = QStringLiteral("ai-custom"),
         .aiAutomaticContext = false,
+        .aiPermission = ztermy::config::AiPermissionPreference::savedHostAuto,
     };
     const ztermy::config::ApplicationSettingsStore store(directory.filePath(QStringLiteral("settings.json")));
 
@@ -122,7 +124,7 @@ void ApplicationSettingsTests::migratesLegacyWindowOpacityAndNoneBackdrop()
     QFile saved(path);
     QVERIFY(saved.open(QIODevice::ReadOnly));
     const QByteArray persisted = saved.readAll();
-    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 11")));
+    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 12")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdropOpacity\": 0.75")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdrop\": \"transparent\"")));
     QVERIFY(!persisted.contains(QByteArrayLiteral("windowOpacity")));
@@ -338,7 +340,36 @@ void ApplicationSettingsTests::migratesEveryIntermediateSchema()
         QVERIFY(loaded->aiModel.isEmpty());
         QCOMPARE(loaded->aiCredentialReference, QStringLiteral("ai-default"));
         QVERIFY(loaded->aiAutomaticContext);
+        QCOMPARE(loaded->aiPermission, ztermy::config::AiPermissionPreference::askEachWrite);
     }
+}
+
+void ApplicationSettingsTests::migratesAiProviderSchemaWithPermissionDefault()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("settings.json"));
+    const ztermy::config::ApplicationSettingsStore store(path);
+    auto legacy = ztermy::config::ApplicationSettings{};
+    legacy.aiProvider = ztermy::config::AiProviderPreference::ollama;
+    legacy.aiBaseUrl = QStringLiteral("http://127.0.0.1:11434");
+    legacy.aiEndpointPath = QStringLiteral("/api/chat");
+    legacy.aiModel = QStringLiteral("qwen3");
+    QVERIFY(store.save(legacy));
+
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    auto root = QJsonDocument::fromJson(file.readAll()).object();
+    file.close();
+    root.insert(QStringLiteral("version"), 11);
+    root.remove(QStringLiteral("aiPermission"));
+    QVERIFY(writeFile(path, QJsonDocument(root).toJson(QJsonDocument::Compact)));
+
+    const auto loaded = store.load();
+    QVERIFY2(loaded, qPrintable(QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact))));
+    QCOMPARE(loaded->aiProvider, ztermy::config::AiProviderPreference::ollama);
+    QCOMPARE(loaded->aiModel, QStringLiteral("qwen3"));
+    QCOMPARE(loaded->aiPermission, ztermy::config::AiPermissionPreference::askEachWrite);
 }
 
 void ApplicationSettingsTests::rejectsMalformedUnsupportedAndIncompleteDocuments()
@@ -353,7 +384,7 @@ void ApplicationSettingsTests::rejectsMalformedUnsupportedAndIncompleteDocuments
     QVERIFY(!malformed);
     QCOMPARE(malformed.error(), ztermy::config::ApplicationSettingsStoreError::invalidFormat);
 
-    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":12})")));
+    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":13})")));
     const auto unsupported = store.load();
     QVERIFY(!unsupported);
     QCOMPARE(unsupported.error(), ztermy::config::ApplicationSettingsStoreError::unsupportedVersion);

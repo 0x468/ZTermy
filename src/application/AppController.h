@@ -156,6 +156,7 @@ class AppController final : public QObject
     Q_PROPERTY(QString aiEndpointPath READ aiEndpointPath NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString aiModel READ aiModel NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool aiAutomaticContext READ aiAutomaticContext NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(QString aiPermissionPreference READ aiPermissionPreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool aiApiKeyConfigured READ aiApiKeyConfigured NOTIFY credentialVaultChanged)
     Q_PROPERTY(QObject *activeAiConversation READ activeAiConversation NOTIFY aiConversationChanged)
     Q_PROPERTY(QString activeAiState READ activeAiState NOTIFY aiConversationChanged)
@@ -276,6 +277,7 @@ public:
     [[nodiscard]] QString aiEndpointPath() const;
     [[nodiscard]] QString aiModel() const;
     [[nodiscard]] bool aiAutomaticContext() const noexcept;
+    [[nodiscard]] QString aiPermissionPreference() const;
     [[nodiscard]] bool aiApiKeyConfigured() const;
     [[nodiscard]] QObject *activeAiConversation() const noexcept;
     [[nodiscard]] QString activeAiState() const;
@@ -450,7 +452,8 @@ public:
                                              bool shouldConfirmMultilinePaste, const QString &language,
                                              bool shouldShowHiddenSftpFiles, bool shouldConfirmSftpDelete);
     Q_INVOKABLE bool saveAiProviderSettings(const QString &provider, const QString &baseUrl,
-                                            const QString &endpointPath, const QString &model, bool automaticContext);
+                                            const QString &endpointPath, const QString &model, bool automaticContext,
+                                            const QString &permissionMode);
     Q_INVOKABLE bool saveAiApiKey(const QString &apiKey);
     Q_INVOKABLE bool removeAiApiKey();
     Q_INVOKABLE bool sendAiMessage(const QString &prompt);

@@ -62,6 +62,15 @@ enum class AiProviderPreference : std::uint8_t
     openAiCompatible,
 };
 
+enum class AiPermissionPreference : std::uint8_t
+{
+    observer,
+    askEachWrite,
+    askFirstWrite,
+    sessionAuto,
+    savedHostAuto,
+};
+
 struct ApplicationSettings final
 {
     ThemePreference theme = ThemePreference::dark;
@@ -90,6 +99,7 @@ struct ApplicationSettings final
     QString aiModel;
     QString aiCredentialReference = QStringLiteral("ai-default");
     bool aiAutomaticContext = true;
+    AiPermissionPreference aiPermission = AiPermissionPreference::askEachWrite;
 
     [[nodiscard]] friend bool operator==(const ApplicationSettings &, const ApplicationSettings &) = default;
 };
@@ -124,6 +134,7 @@ private:
 [[nodiscard]] QString credentialStoragePreferenceToken(CredentialStoragePreference preference);
 [[nodiscard]] QString languagePreferenceToken(LanguagePreference preference);
 [[nodiscard]] QString aiProviderPreferenceToken(AiProviderPreference preference);
+[[nodiscard]] QString aiPermissionPreferenceToken(AiPermissionPreference preference);
 [[nodiscard]] std::optional<ThemePreference> parseThemePreference(const QString &token);
 [[nodiscard]] std::optional<BackdropPreference> parseBackdropPreference(const QString &token);
 [[nodiscard]] std::optional<AccentPreference> parseAccentPreference(const QString &token);
@@ -131,5 +142,6 @@ private:
 [[nodiscard]] std::optional<CredentialStoragePreference> parseCredentialStoragePreference(const QString &token);
 [[nodiscard]] std::optional<LanguagePreference> parseLanguagePreference(const QString &token);
 [[nodiscard]] std::optional<AiProviderPreference> parseAiProviderPreference(const QString &token);
+[[nodiscard]] std::optional<AiPermissionPreference> parseAiPermissionPreference(const QString &token);
 
 } // namespace ztermy::config
