@@ -140,7 +140,8 @@ std::expected<void, CommandBlockStoreError> CommandBlockStore::append(const Comm
 
 std::expected<void, CommandBlockStoreError> CommandBlockStore::finish(const CommandBlockId id,
                                                                       const std::optional<int> exitStatus,
-                                                                      const std::int64_t finishedUtcMs)
+                                                                      const std::int64_t finishedUtcMs,
+                                                                      const CommandCompletionReason reason)
 {
     CommandBlock *block = findMutable(id);
     if (block == nullptr)
@@ -155,6 +156,19 @@ std::expected<void, CommandBlockStoreError> CommandBlockStore::finish(const Comm
     block->state = CommandBlockState::finished;
     block->exitStatus = exitStatus;
     block->finishedUtcMs = finishedUtcMs;
+    block->completionReason = reason;
+    return {};
+}
+
+std::expected<void, CommandBlockStoreError> CommandBlockStore::markOutputUnknown(const CommandBlockId id)
+{
+    CommandBlock *block = findMutable(id);
+    if (block == nullptr)
+    {
+        return std::unexpected(CommandBlockStoreError::blockNotFound);
+    }
+    block->outputCoverageUncertain = true;
+    updateCoverage(*block);
     return {};
 }
 
@@ -274,7 +288,11 @@ void CommandBlockStore::recordGap(CommandBlock &block, const std::uint64_t begin
 
 void CommandBlockStore::updateCoverage(CommandBlock &block) noexcept
 {
-    if (block.missingOutputBytes > 0)
+    if (block.outputCoverageUncertain)
+    {
+        block.outputCoverage = CommandOutputCoverage::unknown;
+    }
+    else if (block.missingOutputBytes > 0)
     {
         block.outputCoverage = CommandOutputCoverage::gapped;
     }

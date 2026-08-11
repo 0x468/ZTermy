@@ -43,6 +43,14 @@ enum class CommandBlockState : std::uint8_t
     finished,
 };
 
+enum class CommandCompletionReason : std::uint8_t
+{
+    shellMarker,
+    promptRecovery,
+    disconnect,
+    decoderReset,
+};
+
 enum class CommandOutputCoverage : std::uint8_t
 {
     complete,
@@ -112,6 +120,7 @@ struct CommandBlock final
     std::int64_t startedUtcMs = 0;
     std::optional<std::int64_t> finishedUtcMs;
     std::optional<int> exitStatus;
+    std::optional<CommandCompletionReason> completionReason;
     std::vector<std::byte> retainedOutput;
     std::size_t retainedHeadBytes = 0;
     std::uint64_t observedOutputBytes = 0;
@@ -122,6 +131,7 @@ struct CommandBlock final
     std::uint64_t retainedTailStreamOffset = 0;
     std::vector<CommandOutputGap> outputGaps;
     bool hasInterleavedOutput = false;
+    bool outputCoverageUncertain = false;
 
     [[nodiscard]] std::span<const std::byte> retainedHead() const noexcept;
     [[nodiscard]] std::span<const std::byte> retainedTail() const noexcept;
@@ -140,8 +150,10 @@ public:
     [[nodiscard]] std::expected<CommandBlockId, CommandBlockStoreError> begin(CommandBlockStart start);
     [[nodiscard]] std::expected<void, CommandBlockStoreError> append(CommandBlockId id,
                                                                      CommandOutputObservation observation);
-    [[nodiscard]] std::expected<void, CommandBlockStoreError> finish(CommandBlockId id, std::optional<int> exitStatus,
-                                                                     std::int64_t finishedUtcMs);
+    [[nodiscard]] std::expected<void, CommandBlockStoreError>
+    finish(CommandBlockId id, std::optional<int> exitStatus, std::int64_t finishedUtcMs,
+           CommandCompletionReason reason = CommandCompletionReason::shellMarker);
+    [[nodiscard]] std::expected<void, CommandBlockStoreError> markOutputUnknown(CommandBlockId id);
     void clear() noexcept;
 
 private:
