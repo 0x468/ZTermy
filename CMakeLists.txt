@@ -441,6 +441,8 @@ add_library(ztermy_ai_context STATIC
     src/domain/ai/AiContextBroker.h
     src/domain/ai/AiContextRedactor.cpp
     src/domain/ai/AiContextRedactor.h
+    src/domain/ai/AiContextSerializer.cpp
+    src/domain/ai/AiContextSerializer.h
 )
 
 target_compile_features(ztermy_ai_context PUBLIC cxx_std_23)
@@ -2643,6 +2645,27 @@ if(BUILD_TESTING)
 
     add_test(NAME ai-context-redactor COMMAND ztermy_ai_context_redactor_tests)
 
+    qt_add_executable(ztermy_ai_context_serializer_tests
+        tests/ai_context_serializer_tests.cpp
+    )
+
+    target_compile_features(ztermy_ai_context_serializer_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ai_context_serializer_tests PRIVATE
+        ztermy_ai_context
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ai_context_serializer_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ai-context-serializer COMMAND ztermy_ai_context_serializer_tests)
+
     qt_add_executable(ztermy_local_terminal_session_tests
         tests/local_terminal_session_tests.cpp
     )
@@ -2951,6 +2974,7 @@ if(BUILD_TESTING)
             ztermy_provider_http_client_tests
             ztermy_ai_context_broker_tests
             ztermy_ai_context_redactor_tests
+            ztermy_ai_context_serializer_tests
             ztermy_local_terminal_session_tests
             ztermy_app_controller_tests
             ztermy_terminal_item_tests
