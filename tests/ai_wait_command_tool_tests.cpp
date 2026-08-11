@@ -1,0 +1,84 @@
+#include "application/ai/AiWaitCommandTool.h"
+
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QtTest/QTest>
+
+namespace
+{
+
+using ztermy::ai::AiTrackedCommand;
+using ztermy::ai::AiTrackedCommandState;
+using ztermy::ai::AiWaitCommandTool;
+
+[[nodiscard]] QJsonObject object(const std::string &value)
+{
+    return QJsonDocument::fromJson(QByteArray::fromStdString(value)).object();
+}
+
+[[nodiscard]] AiTrackedCommand command(const AiTrackedCommandState state)
+{
+    return AiTrackedCommand{.id = "9:call-1",
+                            .conversationId = "conversation-1",
+                            .target = {.sessionId = "session-1", .sessionGeneration = 3},
+                            .command = "pwd",
+                            .blockId = 12,
+                            .state = state,
+                            .exitStatus =
+                                state == AiTrackedCommandState::finished ? std::optional<int>{0} : std::nullopt};
+}
+
+class AiWaitCommandToolTests final : public QObject
+{
+    Q_OBJECT
+
+private slots:
+    void publishesAndParsesStrictContract();
+    void serializesLifecycleTimeoutAndUnknownOutcome();
+};
+
+void AiWaitCommandToolTests::publishesAndParsesStrictContract()
+{
+    const auto definition = AiWaitCommandTool::definition();
+    QCOMPARE(definition.name, std::string("wait_command"));
+    QVERIFY(QJsonDocument::fromJson(QByteArray::fromStdString(definition.parametersJson)).isObject());
+
+    const auto parsed = AiWaitCommandTool::parse(
+        R"({"command_id":"9:call-1","session_id":"session-1","session_generation":3,"timeout_ms":2500})");
+    QVERIFY(parsed.has_value());
+    QCOMPARE(parsed->commandId, std::string("9:call-1"));
+    QCOMPARE(parsed->target.sessionGeneration, std::uint64_t{3});
+    QCOMPARE(parsed->timeoutMilliseconds, std::uint32_t{2500});
+
+    QVERIFY(!AiWaitCommandTool::parse(
+                 R"({"command_id":"9:call-1","session_id":"session-1","session_generation":3,"timeout_ms":120001})")
+                 .has_value());
+    QVERIFY(
+        !AiWaitCommandTool::parse(
+             R"({"command_id":"9:call-1","session_id":"session-1","session_generation":3,"timeout_ms":1,"extra":true})")
+             .has_value());
+}
+
+void AiWaitCommandToolTests::serializesLifecycleTimeoutAndUnknownOutcome()
+{
+    auto finished = object(AiWaitCommandTool::result(command(AiTrackedCommandState::finished)));
+    QVERIFY(finished.value(QStringLiteral("ok")).toBool());
+    QCOMPARE(finished.value(QStringLiteral("command")).toObject().value(QStringLiteral("block_id")).toInt(), 12);
+    QCOMPARE(finished.value(QStringLiteral("command")).toObject().value(QStringLiteral("exit_status")).toInt(), 0);
+
+    const auto timedOut = object(AiWaitCommandTool::timeout(command(AiTrackedCommandState::running)));
+    QVERIFY(!timedOut.value(QStringLiteral("ok")).toBool(true));
+    QCOMPARE(timedOut.value(QStringLiteral("error")).toObject().value(QStringLiteral("code")).toString(),
+             QStringLiteral("timeout"));
+
+    const auto unknown = object(AiWaitCommandTool::result(command(AiTrackedCommandState::outcomeUnknown)));
+    QVERIFY(!unknown.value(QStringLiteral("ok")).toBool(true));
+    QCOMPARE(unknown.value(QStringLiteral("error")).toObject().value(QStringLiteral("code")).toString(),
+             QStringLiteral("outcome_unknown"));
+}
+
+} // namespace
+
+QTEST_GUILESS_MAIN(AiWaitCommandToolTests)
+
+#include "ai_wait_command_tool_tests.moc"

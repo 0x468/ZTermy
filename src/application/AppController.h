@@ -15,6 +15,7 @@
 #include "application/terminal/LocalTerminalSession.h"
 #include "core/config/ApplicationPaths.h"
 #include "core/config/ApplicationSettings.h"
+#include "domain/ai/AiCommandTracker.h"
 #include "domain/ai/AiContextBroker.h"
 #include "domain/terminal/SemanticTerminalObserver.h"
 #include "domain/workbench/ScriptExecution.h"
@@ -650,6 +651,8 @@ private:
     void acceptAiSelectedText(TerminalTab &tab, const QString &text);
     [[nodiscard]] bool sendAiMessage(TerminalTab &tab, const QString &prompt, bool preferLastFailure,
                                      bool appendPrompt = true, bool commandRequest = false);
+    [[nodiscard]] ai::AiTurnRunner::ToolHandlingResult handleAiWaitCommand(TerminalTab &tab, const QString &tabId,
+                                                                           const ai::AiToolCall &call);
     [[nodiscard]] std::string executeAiRunCommand(TerminalTab &tab, const ai::AiRunCommandAction &action);
     void observeScriptOutput(const QString &tabId, const QByteArray &bytes);
     void dispatchScriptCommands(TerminalTab &tab, const std::vector<std::string> &commands);
@@ -783,6 +786,7 @@ private:
     QString m_portForwardingOperationError;
     ai::ProviderHttpClient m_aiProviderClient;
     ai::AiContextBroker m_aiContextBroker;
+    ai::AiCommandTracker m_aiCommandTracker;
     ai::AiActionToolDispatcher m_aiActionToolDispatcher;
     ai::AiReadToolDispatcher m_aiReadToolDispatcher;
     std::vector<std::unique_ptr<TerminalTab>> m_tabs;

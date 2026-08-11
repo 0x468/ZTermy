@@ -449,6 +449,8 @@ target_compile_features(ztermy_ai_domain PUBLIC cxx_std_23)
 target_include_directories(ztermy_ai_domain PUBLIC src)
 
 add_library(ztermy_ai_context STATIC
+    src/domain/ai/AiCommandTracker.cpp
+    src/domain/ai/AiCommandTracker.h
     src/domain/ai/AiReadTools.cpp
     src/domain/ai/AiReadTools.h
     src/domain/ai/AiContextBroker.cpp
@@ -491,6 +493,8 @@ add_library(ztermy_ai_application STATIC
     src/application/ai/AiReadToolDispatcher.h
     src/application/ai/AiTurnRunner.cpp
     src/application/ai/AiTurnRunner.h
+    src/application/ai/AiWaitCommandTool.cpp
+    src/application/ai/AiWaitCommandTool.h
 )
 
 target_compile_features(ztermy_ai_application PUBLIC cxx_std_23)
@@ -2747,6 +2751,27 @@ if(BUILD_TESTING)
 
     add_test(NAME ai-agent-guard COMMAND ztermy_ai_agent_guard_tests)
 
+    qt_add_executable(ztermy_ai_command_tracker_tests
+        tests/ai_command_tracker_tests.cpp
+    )
+
+    target_compile_features(ztermy_ai_command_tracker_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ai_command_tracker_tests PRIVATE
+        ztermy_ai_context
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ai_command_tracker_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ai-command-tracker COMMAND ztermy_ai_command_tracker_tests)
+
     qt_add_executable(ztermy_ai_usage_reporting_tests
         tests/ai_usage_reporting_tests.cpp
     )
@@ -2810,6 +2835,27 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME ai-action-tool-dispatcher COMMAND ztermy_ai_action_tool_dispatcher_tests)
+
+    qt_add_executable(ztermy_ai_wait_command_tool_tests
+        tests/ai_wait_command_tool_tests.cpp
+    )
+
+    target_compile_features(ztermy_ai_wait_command_tool_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ai_wait_command_tool_tests PRIVATE
+        ztermy_ai_application
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ai_wait_command_tool_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ai-wait-command-tool COMMAND ztermy_ai_wait_command_tool_tests)
 
     qt_add_executable(ztermy_ai_conversation_model_tests
         tests/ai_conversation_model_tests.cpp
@@ -3276,7 +3322,9 @@ if(BUILD_TESTING)
             ztermy_ai_permission_policy_tests
             ztermy_ai_tool_dispatch_ledger_tests
             ztermy_ai_agent_guard_tests
+            ztermy_ai_command_tracker_tests
             ztermy_ai_action_tool_dispatcher_tests
+            ztermy_ai_wait_command_tool_tests
             ztermy_ai_turn_runner_tests
             ztermy_ai_conversation_model_tests
             ztermy_ai_read_tool_dispatcher_tests
