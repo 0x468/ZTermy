@@ -436,6 +436,18 @@ add_library(ztermy_ai_domain STATIC
 target_compile_features(ztermy_ai_domain PUBLIC cxx_std_23)
 target_include_directories(ztermy_ai_domain PUBLIC src)
 
+add_library(ztermy_ai_provider STATIC
+    src/infrastructure/ai/ProviderStreamMapper.cpp
+    src/infrastructure/ai/ProviderStreamMapper.h
+)
+
+target_compile_features(ztermy_ai_provider PUBLIC cxx_std_23)
+target_include_directories(ztermy_ai_provider PUBLIC src)
+target_link_libraries(ztermy_ai_provider
+    PUBLIC ztermy_ai_domain
+    PRIVATE Qt6::Core
+)
+
 add_library(ztermy_session_logging STATIC
     src/infrastructure/logging/SessionLogWriter.cpp
     src/infrastructure/logging/SessionLogWriter.h
@@ -2505,6 +2517,27 @@ if(BUILD_TESTING)
 
     add_test(NAME ai-stream-parser COMMAND ztermy_ai_stream_parser_tests)
 
+    qt_add_executable(ztermy_provider_stream_mapper_tests
+        tests/provider_stream_mapper_tests.cpp
+    )
+
+    target_compile_features(ztermy_provider_stream_mapper_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_provider_stream_mapper_tests PRIVATE
+        ztermy_ai_provider
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_provider_stream_mapper_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME provider-stream-mapper COMMAND ztermy_provider_stream_mapper_tests)
+
     qt_add_executable(ztermy_local_terminal_session_tests
         tests/local_terminal_session_tests.cpp
     )
@@ -2808,6 +2841,7 @@ if(BUILD_TESTING)
             ztermy_command_block_assembler_tests
             ztermy_semantic_terminal_observer_tests
             ztermy_ai_stream_parser_tests
+            ztermy_provider_stream_mapper_tests
             ztermy_local_terminal_session_tests
             ztermy_app_controller_tests
             ztermy_terminal_item_tests
