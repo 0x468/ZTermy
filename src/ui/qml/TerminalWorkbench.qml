@@ -139,7 +139,7 @@ Rectangle {
     focus: visible
     Keys.onEscapePressed: closeRequested()
     Accessible.role: Accessible.Pane
-    Accessible.name: currentPage === "sftp" ? qsTr("SFTP file browser") : currentPage === "history" ? qsTr("Command history") : currentPage === "notes" ? qsTr("Notes") : qsTr("Scripts")
+    Accessible.name: currentPage === "sftp" ? qsTr("SFTP file browser") : currentPage === "history" ? qsTr("Command history") : currentPage === "notes" ? qsTr("Notes") : currentPage === "ai" ? qsTr("Terminal AI assistant") : qsTr("Scripts")
     onVisibleChanged: {
         if (visible && currentPage === "history" && controller.terminalHistoryState === "idle") {
             controller.refreshTerminalHistory();
@@ -317,6 +317,28 @@ Rectangle {
                     }
                 }
 
+                WorkbenchToolButton {
+                    id: aiPageButton
+
+                    objectName: "terminalAiAssistantButton"
+                    Layout.alignment: Qt.AlignVCenter
+                    Layout.preferredWidth: 28
+                    Layout.preferredHeight: 28
+                    checkable: true
+                    checked: workbench.currentPage === "ai"
+                    selected: checked
+                    onClicked: workbench.controller.toggleTerminalWorkbench("ai")
+                    Accessible.name: qsTr("Terminal AI assistant")
+                    contentItem: AppIcon {
+                        name: "ai"
+                        color: aiPageButton.checked ? Theme.accent : Theme.textSoft
+                    }
+
+                    AppToolTip {
+                        text: qsTr("AI assistant")
+                    }
+                }
+
                 Item {
                     Layout.fillWidth: true
                 }
@@ -369,6 +391,14 @@ Rectangle {
                     Layout.fillHeight: true
                     visible: workbench.currentPage === "notes"
                     controller: workbench.controller
+                }
+
+                AiAssistantPane {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    visible: workbench.currentPage === "ai"
+                    controller: workbench.controller
+                    activeTab: workbench.activeTab
                 }
 
                 Item {

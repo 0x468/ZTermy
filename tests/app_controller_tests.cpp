@@ -994,6 +994,17 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
     QVERIFY(!first.isEmpty());
     QCOMPARE(controller.terminalTabs().size(), 1);
     QCOMPARE(controller.activeTerminalTabId(), first);
+    QVERIFY(controller.activeAiConversation() != nullptr);
+    QCOMPARE(controller.activeAiState(), QStringLiteral("idle"));
+    QVERIFY(controller.activeAiContextItems().isEmpty());
+    QVERIFY(controller.toggleTerminalWorkbench(QStringLiteral("ai")));
+    QCOMPARE(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("workbenchPage")).toString(),
+             QStringLiteral("ai"));
+    QVERIFY(!controller.sendAiMessage(QStringLiteral("Explain the terminal")));
+    QVERIFY(!controller.activeAiError().isEmpty());
+    QVERIFY(controller.toggleTerminalWorkbench(QStringLiteral("ai")));
+    QVERIFY(controller.toggleTerminalWorkbench(QStringLiteral("history")));
+    QVERIFY(controller.toggleTerminalWorkbench(QStringLiteral("history")));
     controller.setTerminalTelemetryVisible(true);
     controller.refreshRemoteTelemetry();
     QCOMPARE(controller.activeRemoteTelemetry().value(QStringLiteral("state")).toString(), QStringLiteral("paused"));

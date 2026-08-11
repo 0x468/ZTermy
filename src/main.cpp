@@ -751,9 +751,45 @@ struct ResizeHitRuntimeCase
     {
         static_cast<void>(QMetaObject::invokeMethod(commandPalette, "close", Qt::DirectConnection));
     }
+    const bool aiProviderCleared =
+        controller.saveAiProviderSettings(QStringLiteral("openai-responses"), QStringLiteral("https://api.openai.com"),
+                                          QStringLiteral("/v1/responses"), {}, true);
+    const bool englishDark = applyUiLayoutSmokeTheme(controller, QStringLiteral("dark"), QStringLiteral("en"));
+    const QString aiTerminalId = englishDark && aiProviderCleared ? controller.startLocalTerminal() : QString{};
+    if (rootObject != nullptr)
+    {
+        rootObject->setProperty("currentPage", QStringLiteral("terminal"));
+    }
+    const bool aiWorkbenchOpened = !aiTerminalId.isEmpty() && controller.toggleTerminalWorkbench(QStringLiteral("ai"));
+    processWindowEventsFor(std::chrono::milliseconds{300});
+    auto *aiAssistantPane =
+        rootObject == nullptr ? nullptr : rootObject->findChild<QQuickItem *>(QStringLiteral("aiAssistantPane"));
+    auto *aiPromptEditor =
+        rootObject == nullptr ? nullptr : rootObject->findChild<QQuickItem *>(QStringLiteral("aiPromptEditor"));
+    if (aiPromptEditor != nullptr)
+    {
+        aiPromptEditor->forceActiveFocus(Qt::TabFocusReason);
+        processWindowEventsFor(std::chrono::milliseconds{40});
+    }
+    const bool missingProviderShown =
+        !controller.sendAiMessage(QStringLiteral("Explain this terminal")) && !controller.activeAiError().isEmpty();
+    processWindowEventsFor(std::chrono::milliseconds{100});
+    const bool aiDarkCaptured =
+        aiWorkbenchOpened && aiAssistantPane != nullptr && aiAssistantPane->isVisible() && aiPromptEditor != nullptr
+        && aiPromptEditor->hasActiveFocus()
+        && captureLayout(window, outputDirectory, QStringLiteral("dark-regular-ai-assistant"));
+    const bool aiLightTheme = applyUiLayoutSmokeTheme(controller, QStringLiteral("light"), QStringLiteral("en"));
+    processWindowEventsFor(std::chrono::milliseconds{250});
+    const bool aiLightCaptured =
+        aiLightTheme && aiAssistantPane != nullptr && aiAssistantPane->isVisible()
+        && captureLayout(window, outputDirectory, QStringLiteral("light-regular-ai-assistant"));
     const bool restoredDark = applyUiLayoutSmokeTheme(controller, QStringLiteral("dark"), QStringLiteral("en"));
+    if (!aiTerminalId.isEmpty())
+    {
+        static_cast<void>(controller.closeTerminalTab(aiTerminalId));
+    }
     return titleBrandPalettePassed && lightCompactPassed && lightRegularPassed && chineseShortcuts && chinesePalette
-           && restoredDark;
+           && aiWorkbenchOpened && missingProviderShown && aiDarkCaptured && aiLightCaptured && restoredDark;
 }
 
 [[nodiscard]] QQuickItem *quickItem(QQuickItem *rootObject, const char *objectName)

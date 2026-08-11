@@ -1,7 +1,9 @@
 #pragma once
 
 #include "application/actions/ActionRegistry.h"
+#include "application/ai/AiConversationModel.h"
 #include "application/ai/AiSecretStore.h"
+#include "application/ai/AiTurnRunner.h"
 #include "application/forwarding/PortForwardingJob.h"
 #include "application/security/CredentialVaultCoordinator.h"
 #include "application/sftp/SftpDirectoryModel.h"
@@ -12,6 +14,7 @@
 #include "core/config/ApplicationPaths.h"
 #include "core/config/ApplicationSettings.h"
 #include "domain/terminal/SemanticTerminalObserver.h"
+#include "domain/ai/AiContextBroker.h"
 #include "domain/workbench/ScriptExecution.h"
 #include "domain/workbench/ScriptRecorder.h"
 #include "infrastructure/forwarding/PortForwardingRuleStore.h"
@@ -145,6 +148,11 @@ class AppController final : public QObject
     Q_PROPERTY(QString aiModel READ aiModel NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool aiAutomaticContext READ aiAutomaticContext NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool aiApiKeyConfigured READ aiApiKeyConfigured NOTIFY credentialVaultChanged)
+    Q_PROPERTY(QObject *activeAiConversation READ activeAiConversation NOTIFY aiConversationChanged)
+    Q_PROPERTY(QString activeAiState READ activeAiState NOTIFY aiConversationChanged)
+    Q_PROPERTY(QString activeAiError READ activeAiError NOTIFY aiConversationChanged)
+    Q_PROPERTY(QString activeAiContextPreview READ activeAiContextPreview NOTIFY aiConversationChanged)
+    Q_PROPERTY(QVariantList activeAiContextItems READ activeAiContextItems NOTIFY aiConversationChanged)
     Q_PROPERTY(QString credentialStoragePreference READ credentialStoragePreference NOTIFY credentialVaultChanged)
     Q_PROPERTY(QString effectiveCredentialStorage READ effectiveCredentialStorage NOTIFY credentialVaultChanged)
     Q_PROPERTY(bool portableVaultInitialized READ portableVaultInitialized NOTIFY credentialVaultChanged)
@@ -259,6 +267,11 @@ public:
     [[nodiscard]] QString aiModel() const;
     [[nodiscard]] bool aiAutomaticContext() const noexcept;
     [[nodiscard]] bool aiApiKeyConfigured() const;
+    [[nodiscard]] QObject *activeAiConversation() const noexcept;
+    [[nodiscard]] QString activeAiState() const;
+    [[nodiscard]] QString activeAiError() const;
+    [[nodiscard]] QString activeAiContextPreview() const;
+    [[nodiscard]] QVariantList activeAiContextItems() const;
     void retranslateUiState();
     [[nodiscard]] QString credentialStoragePreference() const;
     [[nodiscard]] QString effectiveCredentialStorage() const;
@@ -430,6 +443,10 @@ public:
                                             bool automaticContext);
     Q_INVOKABLE bool saveAiApiKey(const QString &apiKey);
     Q_INVOKABLE bool removeAiApiKey();
+    Q_INVOKABLE bool sendAiMessage(const QString &prompt);
+    Q_INVOKABLE bool explainAiLastFailure();
+    Q_INVOKABLE bool cancelAiMessage();
+    Q_INVOKABLE void clearAiConversation();
     Q_INVOKABLE bool resetApplicationSettings();
     Q_INVOKABLE bool initializePortableCredentialVault(const QString &masterPassword);
     Q_INVOKABLE bool unlockPortableCredentialVault(const QString &masterPassword);
@@ -470,6 +487,7 @@ signals:
     void remoteTelemetryChanged();
     void applicationSettingsChanged();
     void credentialVaultChanged();
+    void aiConversationChanged();
     void portForwardingRulesChanged();
     void startupRecoveryNoticeChanged();
 
@@ -497,6 +515,8 @@ private:
         std::unique_ptr<ssh::SshTerminalSession> ssh;
         std::unique_ptr<sftp::SftpSession> sftpSession;
         std::unique_ptr<sftp::SftpDirectoryModel> sftpModel;
+        std::unique_ptr<ai::AiConversationModel> aiConversation;
+        std::unique_ptr<ai::AiTurnRunner> aiTurnRunner;
         qint64 connectedUtcMs = 0;
         qreal sessionBackgroundOpacity = -1.0;
         qint64 recordingStartedUtcMs = 0;
@@ -541,6 +561,10 @@ private:
         QString terminalWorkingDirectory;
         QByteArray inputHistoryBuffer;
         QString telemetryState = QStringLiteral("paused");
+        QString aiState = QStringLiteral("idle");
+        QString aiError;
+        QString aiContextPreview;
+        QVariantList aiContextItems;
         std::vector<ssh::SshKeywordHighlightRule> keywordHighlightRules;
         std::vector<workbench::ShellHistoryEntry> history;
         std::vector<workbench::ShellHistoryEntry> capturedHistory;
@@ -548,6 +572,8 @@ private:
         workbench::ScriptRecorder scriptRecorder;
         workbench::ScriptExecution scriptExecution;
         std::optional<telemetry::Sample> telemetrySample;
+        std::optional<ai::AiTokenUsage> aiUsage;
+        std::uint64_t aiAssistantMessageId = 0;
         std::uint32_t searchCurrent = 0;
         std::uint32_t searchTotal = 0;
         std::uint8_t reconnectAttempt = 0;
@@ -590,6 +616,8 @@ private:
     void connectSftpTabSignals(TerminalTab &tab);
     void initializeSessionLog(TerminalTab &tab);
     void initializeTerminalOutputSink(TerminalTab &tab);
+    void initializeAiRuntime(TerminalTab &tab);
+    [[nodiscard]] bool sendAiMessage(TerminalTab &tab, const QString &prompt, bool preferLastFailure);
     void observeScriptOutput(const QString &tabId, const QByteArray &bytes);
     void dispatchScriptCommands(TerminalTab &tab, const std::vector<std::string> &commands);
     void initializeScriptExecutionTimer();
@@ -719,6 +747,8 @@ private:
     std::vector<forwarding::PortForwardingRule> m_portForwardingRules;
     std::vector<std::unique_ptr<PortForwardingRuntime>> m_portForwardingRuntimes;
     QString m_portForwardingOperationError;
+    ai::ProviderHttpClient m_aiProviderClient;
+    ai::AiContextBroker m_aiContextBroker;
     std::vector<std::unique_ptr<TerminalTab>> m_tabs;
     std::vector<std::unique_ptr<sftp::SftpSession>> m_stoppingSftpSessions;
     QString m_activeTabId;

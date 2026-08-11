@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -109,6 +110,8 @@ public:
 
     [[nodiscard]] const AiContextLimits &limits() const noexcept;
     [[nodiscard]] AiContextBundle build(const terminal::CommandBlockStore &store,
+                                        const AiContextRequest &request) const;
+    [[nodiscard]] AiContextBundle build(std::span<const terminal::CommandBlock> blocks,
                                         const AiContextRequest &request) const;
 
 private:

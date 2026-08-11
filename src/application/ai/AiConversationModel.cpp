@@ -79,6 +79,22 @@ const AiConversationLimits &AiConversationModel::limits() const noexcept
     return m_limits;
 }
 
+std::vector<AiChatMessage> AiConversationModel::providerMessages() const
+{
+    std::vector<AiChatMessage> messages;
+    messages.reserve(m_messages.size());
+    for (const auto &message : m_messages)
+    {
+        if (message.state == MessageState::streaming || message.state == MessageState::failed)
+        {
+            continue;
+        }
+        messages.push_back(AiChatMessage{.role = message.role,
+                                         .content = message.text.toUtf8().toStdString()});
+    }
+    return messages;
+}
+
 std::uint64_t AiConversationModel::appendUserMessage(QString text)
 {
     bool truncated = false;

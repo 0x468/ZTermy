@@ -737,6 +737,7 @@ set(ZTERMY_INTERFACE_ICON_FILES
     resources/icons/upload.svg
     resources/icons/warning.svg
     resources/icons/activity.svg
+    resources/icons/ai.svg
 )
 foreach(icon_file IN LISTS ZTERMY_INTERFACE_ICON_FILES)
     get_filename_component(icon_filename "${icon_file}" NAME)
@@ -889,6 +890,10 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS TelemetrySparkline.qml
 )
 set_source_files_properties(
+    src/ui/qml/AiAssistantPane.qml
+    PROPERTIES QT_RESOURCE_ALIAS AiAssistantPane.qml
+)
+set_source_files_properties(
     src/ui/qml/NotesPane.qml
     PROPERTIES QT_RESOURCE_ALIAS NotesPane.qml
 )
@@ -936,6 +941,7 @@ qt_add_qml_module(ztermy
         QtQuick
     QML_FILES
         src/ui/qml/ActionButton.qml
+        src/ui/qml/AiAssistantPane.qml
         src/ui/qml/AppCheckBox.qml
         src/ui/qml/AppComboBox.qml
         src/ui/qml/AppIcon.qml
@@ -1046,6 +1052,8 @@ if(ZTERMY_STATIC_BUILD)
 endif()
 
 target_link_libraries(ztermy PRIVATE
+    ztermy_ai_application
+    ztermy_ai_context
     ztermy_application_actions
     ztermy_application_diagnostics
     ztermy_credential_vault
@@ -2810,6 +2818,8 @@ if(BUILD_TESTING)
         _UNICODE
     )
     target_link_libraries(ztermy_app_controller_tests PRIVATE
+        ztermy_ai_application
+        ztermy_ai_context
         ztermy_application_actions
         ztermy_credential_vault
         ztermy_core_config

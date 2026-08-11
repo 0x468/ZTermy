@@ -101,6 +101,8 @@ void WorkbenchDomainTests::recordsBoundedRecentRemotePaths()
     QCOMPARE(profile.recentRemotePaths.front(), std::string("/srv/path-10"));
     QCOMPARE(profile.lastRemotePath, std::string("/srv/path-10"));
     QVERIFY(ztermy::workbench::validProfileWorkspaceState(profile));
+    profile.workbenchPage = "ai";
+    QVERIFY(ztermy::workbench::validProfileWorkspaceState(profile));
     QCOMPARE(ztermy::workbench::findProfileWorkspaceState(workspace, "profile-1"), &profile);
 }
 

@@ -19,7 +19,7 @@ bool validRemotePath(const std::string_view path) noexcept
 
 bool validPage(const std::string_view page) noexcept
 {
-    return page == "history" || page == "scripts" || page == "sftp" || page == "notes";
+    return page == "history" || page == "scripts" || page == "sftp" || page == "notes" || page == "ai";
 }
 
 bool uniqueRemotePaths(const std::vector<std::string> &paths) noexcept

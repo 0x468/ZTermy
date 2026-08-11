@@ -279,14 +279,14 @@ void finalizeItem(AiContextItem &item,
     return item;
 }
 
-[[nodiscard]] const terminal::CommandBlock *primaryBlock(const terminal::CommandBlockStore &store,
+[[nodiscard]] const terminal::CommandBlock *primaryBlock(const std::span<const terminal::CommandBlock> blocks,
                                                          const AiContextRequest &request)
 {
     if (request.primaryBlockId.has_value())
     {
-        return store.find(request.primaryBlockId.value());
+        const auto block = std::ranges::find(blocks, request.primaryBlockId.value(), &terminal::CommandBlock::id);
+        return block == blocks.end() ? nullptr : &*block;
     }
-    const auto &blocks = store.blocks();
     const auto iterator = std::ranges::find_if(blocks.rbegin(), blocks.rend(), [&request](const auto &block) {
         if (block.state != terminal::CommandBlockState::finished)
         {
@@ -317,6 +317,14 @@ const AiContextLimits &AiContextBroker::limits() const noexcept
 AiContextBundle AiContextBroker::build(const terminal::CommandBlockStore &store,
                                        const AiContextRequest &request) const
 {
+    const auto &storedBlocks = store.blocks();
+    const std::vector<terminal::CommandBlock> blocks(storedBlocks.begin(), storedBlocks.end());
+    return build(blocks, request);
+}
+
+AiContextBundle AiContextBroker::build(const std::span<const terminal::CommandBlock> blocks,
+                                       const AiContextRequest &request) const
+{
     std::vector<std::pair<int, AiContextItem>> candidates;
     AiContextRedactor redactor;
     std::unordered_set<std::string> invalidRuleIds;
@@ -339,7 +347,7 @@ AiContextBundle AiContextBroker::build(const terminal::CommandBlockStore &store,
         candidates.emplace_back(0, std::move(item));
     }
 
-    const auto *primary = primaryBlock(store, request);
+    const auto *primary = primaryBlock(blocks, request);
     if (primary != nullptr)
     {
         const auto id = blockId(*primary);
@@ -383,7 +391,6 @@ AiContextBundle AiContextBroker::build(const terminal::CommandBlockStore &store,
     if (request.automaticContextEnabled && primary != nullptr)
     {
         std::size_t included = 0;
-        const auto &blocks = store.blocks();
         const auto primaryPosition = std::ranges::find_if(blocks, [primary](const auto &block) {
             return block.id == primary->id;
         });
