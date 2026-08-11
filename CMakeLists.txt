@@ -431,6 +431,8 @@ add_library(ztermy_ai_domain STATIC
     src/domain/ai/AiProviderRetryPolicy.cpp
     src/domain/ai/AiProviderRetryPolicy.h
     src/domain/ai/AiProviderTypes.h
+    src/domain/ai/AiUsageReporting.cpp
+    src/domain/ai/AiUsageReporting.h
     src/domain/ai/NdjsonParser.cpp
     src/domain/ai/NdjsonParser.h
     src/domain/ai/ServerSentEventParser.cpp
@@ -2671,6 +2673,27 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME ai-provider-retry-policy COMMAND ztermy_ai_provider_retry_policy_tests)
+
+    qt_add_executable(ztermy_ai_usage_reporting_tests
+        tests/ai_usage_reporting_tests.cpp
+    )
+
+    target_compile_features(ztermy_ai_usage_reporting_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ai_usage_reporting_tests PRIVATE
+        ztermy_ai_domain
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ai_usage_reporting_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ai-usage-reporting COMMAND ztermy_ai_usage_reporting_tests)
 
     qt_add_executable(ztermy_ai_turn_runner_tests
         tests/ai_turn_runner_tests.cpp

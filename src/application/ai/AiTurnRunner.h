@@ -2,10 +2,12 @@
 
 #include "core/security/SensitiveByteArray.h"
 #include "domain/ai/AiProviderRetryPolicy.h"
+#include "domain/ai/AiUsageReporting.h"
 #include "infrastructure/ai/ProviderHttpClient.h"
 
 #include <QTimer>
 
+#include <chrono>
 #include <cstdint>
 #include <expected>
 #include <functional>
@@ -20,7 +22,7 @@ public:
     using TurnId = std::uint64_t;
     using SecretLoader = std::function<std::expected<security::SensitiveByteArray, AiProviderError>()>;
     using EventHandler = std::function<void(TurnId, const AiStreamEvent &)>;
-    using FinishedHandler = std::function<void(TurnId)>;
+    using FinishedHandler = std::function<void(TurnId, const AiTurnMetrics &)>;
     using RetryHandler = std::function<void(TurnId, std::uint32_t, std::uint64_t)>;
     using JitterSource = std::function<double()>;
 
@@ -64,6 +66,8 @@ private:
     TurnId m_turnId = 0;
     TurnId m_nextTurnId = 1;
     std::uint32_t m_completedRetries = 0;
+    std::chrono::steady_clock::time_point m_startedAt;
+    std::optional<std::chrono::steady_clock::time_point> m_firstTokenAt;
     bool m_visibleOutputObserved = false;
     bool m_cancelled = false;
 };

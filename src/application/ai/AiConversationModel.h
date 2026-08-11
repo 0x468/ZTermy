@@ -1,6 +1,7 @@
 #pragma once
 
 #include "domain/ai/AiProviderTypes.h"
+#include "domain/ai/AiUsageReporting.h"
 
 #include <QAbstractListModel>
 #include <QString>
@@ -37,6 +38,16 @@ public:
         TruncatedRole,
         InputTokensRole,
         OutputTokensRole,
+        CachedInputTokensRole,
+        ReasoningTokensRole,
+        UsageAvailableRole,
+        WallTimeMillisecondsRole,
+        FirstTokenMillisecondsRole,
+        RetryCountRole,
+        EstimatedCostKnownRole,
+        EstimatedCostUsdRole,
+        CostCatalogDateRole,
+        LongContextRatesRole,
     };
 
     explicit AiConversationModel(AiConversationLimits limits = {}, QObject *parent = nullptr);
@@ -53,6 +64,8 @@ public:
     [[nodiscard]] bool appendAssistantDelta(std::uint64_t messageId, QString delta);
     [[nodiscard]] bool completeAssistantMessage(std::uint64_t messageId,
                                                 std::optional<AiTokenUsage> usage = std::nullopt);
+    [[nodiscard]] bool setAssistantMetrics(std::uint64_t messageId, const AiTurnMetrics &metrics,
+                                           const AiCostEstimate &costEstimate = {});
     [[nodiscard]] bool failAssistantMessage(std::uint64_t messageId, QString error);
     Q_INVOKABLE void clear();
 
@@ -76,8 +89,12 @@ private:
         QString error;
         MessageState state = MessageState::complete;
         std::optional<AiTokenUsage> usage;
+        std::optional<AiTurnMetrics> metrics;
+        std::optional<double> estimatedCostUsd;
+        QString costCatalogDate;
         std::size_t bytes = 0;
         bool truncated = false;
+        bool longContextRates = false;
     };
 
     [[nodiscard]] static QString roleToken(AiMessageRole role);

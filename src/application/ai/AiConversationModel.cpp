@@ -50,6 +50,30 @@ QVariant AiConversationModel::data(const QModelIndex &index, const int role) con
             return QVariant::fromValue<qulonglong>(message.usage.has_value() ? message.usage->inputTokens : 0);
         case OutputTokensRole:
             return QVariant::fromValue<qulonglong>(message.usage.has_value() ? message.usage->outputTokens : 0);
+        case CachedInputTokensRole:
+            return QVariant::fromValue<qulonglong>(message.usage.has_value() ? message.usage->cachedInputTokens : 0);
+        case ReasoningTokensRole:
+            return QVariant::fromValue<qulonglong>(message.usage.has_value() ? message.usage->reasoningTokens : 0);
+        case UsageAvailableRole:
+            return message.usage.has_value();
+        case WallTimeMillisecondsRole:
+            return QVariant::fromValue<qulonglong>(message.metrics.has_value() ? message.metrics->wallTimeMilliseconds
+                                                                               : 0);
+        case FirstTokenMillisecondsRole:
+            return QVariant::fromValue<qlonglong>(message.metrics.has_value()
+                                                          && message.metrics->firstTokenMilliseconds.has_value()
+                                                      ? static_cast<qlonglong>(*message.metrics->firstTokenMilliseconds)
+                                                      : qlonglong{-1});
+        case RetryCountRole:
+            return message.metrics.has_value() ? message.metrics->retryCount : 0;
+        case EstimatedCostKnownRole:
+            return message.estimatedCostUsd.has_value();
+        case EstimatedCostUsdRole:
+            return message.estimatedCostUsd.value_or(0.0);
+        case CostCatalogDateRole:
+            return message.costCatalogDate;
+        case LongContextRatesRole:
+            return message.longContextRates;
         default:
             return {};
     }
@@ -64,7 +88,17 @@ QHash<int, QByteArray> AiConversationModel::roleNames() const
             {ErrorRole, "error"},
             {TruncatedRole, "truncated"},
             {InputTokensRole, "inputTokens"},
-            {OutputTokensRole, "outputTokens"}};
+            {OutputTokensRole, "outputTokens"},
+            {CachedInputTokensRole, "cachedInputTokens"},
+            {ReasoningTokensRole, "reasoningTokens"},
+            {UsageAvailableRole, "usageAvailable"},
+            {WallTimeMillisecondsRole, "wallTimeMilliseconds"},
+            {FirstTokenMillisecondsRole, "firstTokenMilliseconds"},
+            {RetryCountRole, "retryCount"},
+            {EstimatedCostKnownRole, "estimatedCostKnown"},
+            {EstimatedCostUsdRole, "estimatedCostUsd"},
+            {CostCatalogDateRole, "costCatalogDate"},
+            {LongContextRatesRole, "longContextRates"}};
 }
 
 bool AiConversationModel::streaming() const noexcept
@@ -159,8 +193,30 @@ bool AiConversationModel::completeAssistantMessage(const std::uint64_t messageId
     message->state = MessageState::complete;
     message->usage = usage;
     const auto row = indexOf(messageId);
-    emit dataChanged(index(row), index(row), {StateRole, InputTokensRole, OutputTokensRole});
+    emit dataChanged(
+        index(row), index(row),
+        {StateRole, InputTokensRole, OutputTokensRole, CachedInputTokensRole, ReasoningTokensRole, UsageAvailableRole});
     updateStreaming();
+    return true;
+}
+
+bool AiConversationModel::setAssistantMetrics(const std::uint64_t messageId, const AiTurnMetrics &metrics,
+                                              const AiCostEstimate &costEstimate)
+{
+    auto *message = find(messageId);
+    if (message == nullptr || message->role != AiMessageRole::assistant)
+    {
+        return false;
+    }
+    message->metrics = metrics;
+    message->estimatedCostUsd = costEstimate.usd;
+    message->costCatalogDate =
+        QString::fromLatin1(costEstimate.catalogDate.data(), static_cast<qsizetype>(costEstimate.catalogDate.size()));
+    message->longContextRates = costEstimate.longContextRatesApplied;
+    const auto row = indexOf(messageId);
+    emit dataChanged(index(row), index(row),
+                     {WallTimeMillisecondsRole, FirstTokenMillisecondsRole, RetryCountRole, EstimatedCostKnownRole,
+                      EstimatedCostUsdRole, CostCatalogDateRole, LongContextRatesRole});
     return true;
 }
 

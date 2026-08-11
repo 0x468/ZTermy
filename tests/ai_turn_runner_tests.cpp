@@ -25,6 +25,7 @@ using ztermy::ai::AiProviderRetryLimits;
 using ztermy::ai::AiProviderRetryPolicy;
 using ztermy::ai::AiStreamEvent;
 using ztermy::ai::AiStreamEventType;
+using ztermy::ai::AiTurnMetrics;
 using ztermy::ai::AiTurnRunner;
 using ztermy::ai::ProviderHttpClient;
 using ztermy::security::SensitiveByteArray;
@@ -191,6 +192,7 @@ void AiTurnRunnerTests::retriesBeforeVisibleOutput()
     AiTurnRunner runner(client, fastRetryPolicy());
     std::vector<AiStreamEvent> events;
     std::uint32_t retryCount = 0;
+    std::optional<AiTurnMetrics> metrics;
     bool finished = false;
 
     QVERIFY(runner
@@ -199,7 +201,8 @@ void AiTurnRunnerTests::retriesBeforeVisibleOutput()
                     [&events](const auto, const AiStreamEvent &event) {
                         events.push_back(event);
                     },
-                    [&finished](const auto) {
+                    [&finished, &metrics](const auto, const AiTurnMetrics &value) {
+                        metrics = value;
                         finished = true;
                     },
                     [&retryCount](const auto, const auto attempt, const auto) {
@@ -213,6 +216,12 @@ void AiTurnRunnerTests::retriesBeforeVisibleOutput()
     QTRY_VERIFY_WITH_TIMEOUT(finished, 1000);
     QCOMPARE(network.requestCount(), std::size_t{2});
     QCOMPARE(retryCount, std::uint32_t{1});
+    QVERIFY(metrics.has_value());
+    const auto observedMetrics = metrics.value_or(AiTurnMetrics{});
+    QCOMPARE(observedMetrics.retryCount, std::uint32_t{1});
+    QVERIFY(observedMetrics.firstTokenMilliseconds.has_value());
+    QVERIFY(observedMetrics.firstTokenMilliseconds.value_or(observedMetrics.wallTimeMilliseconds + 1)
+            <= observedMetrics.wallTimeMilliseconds);
     QCOMPARE(events.size(), std::size_t{3});
     QCOMPARE(events.at(0).type, AiStreamEventType::responseStarted);
     QCOMPARE(events.at(1).type, AiStreamEventType::textDelta);
@@ -238,7 +247,7 @@ void AiTurnRunnerTests::doesNotReplayAfterVisibleOutput()
                     [&events](const auto, const AiStreamEvent &event) {
                         events.push_back(event);
                     },
-                    [&finished](const auto) {
+                    [&finished](const auto, const AiTurnMetrics &) {
                         finished = true;
                     })
                 .has_value());
@@ -249,7 +258,7 @@ void AiTurnRunnerTests::doesNotReplayAfterVisibleOutput()
     QCOMPARE(events.at(0).type, AiStreamEventType::responseStarted);
     QCOMPARE(events.at(1).type, AiStreamEventType::textDelta);
     QCOMPARE(events.at(2).type, AiStreamEventType::responseFailed);
-    QCOMPARE(events.at(2).error->code, AiProviderErrorCode::protocol);
+    QCOMPARE(events.at(2).error.value_or(AiProviderError{}).code, AiProviderErrorCode::protocol);
 }
 
 void AiTurnRunnerTests::cancelsScheduledRetry()
@@ -268,7 +277,7 @@ void AiTurnRunnerTests::cancelsScheduledRetry()
                     [&events](const auto, const AiStreamEvent &event) {
                         events.push_back(event);
                     },
-                    [&finished](const auto) {
+                    [&finished](const auto, const AiTurnMetrics &) {
                         finished = true;
                     },
                     [&runner, &cancelled](const auto, const auto, const auto) {
@@ -281,7 +290,7 @@ void AiTurnRunnerTests::cancelsScheduledRetry()
     QCOMPARE(network.requestCount(), std::size_t{1});
     QCOMPARE(events.size(), std::size_t{1});
     QCOMPARE(events.front().type, AiStreamEventType::responseFailed);
-    QCOMPARE(events.front().error->code, AiProviderErrorCode::cancelled);
+    QCOMPARE(events.front().error.value_or(AiProviderError{}).code, AiProviderErrorCode::cancelled);
 }
 
 void AiTurnRunnerTests::destroyingRunnerCancelsSafely()
@@ -296,7 +305,7 @@ void AiTurnRunnerTests::destroyingRunnerCancelsSafely()
                         openAiConfiguration(), AiGenerationRequest{}, emptySecretLoader(),
                         [](const auto, const AiStreamEvent &) {
                         },
-                        [](const auto) {
+                        [](const auto, const AiTurnMetrics &) {
                         })
                     .has_value());
     }

@@ -370,6 +370,7 @@ Rectangle {
             delegate: Item {
                 id: messageItem
 
+                required property int index
                 required property string messageRole
                 required property string text
                 required property string state
@@ -377,6 +378,16 @@ Rectangle {
                 required property bool truncated
                 required property var inputTokens
                 required property var outputTokens
+                required property var cachedInputTokens
+                required property var reasoningTokens
+                required property bool usageAvailable
+                required property var wallTimeMilliseconds
+                required property var firstTokenMilliseconds
+                required property var retryCount
+                required property bool estimatedCostKnown
+                required property real estimatedCostUsd
+                required property string costCatalogDate
+                required property bool longContextRates
                 width: ListView.view.width
                 height: messageBubble.implicitHeight
 
@@ -385,7 +396,7 @@ Rectangle {
 
                     anchors.right: messageItem.messageRole === "user" ? parent.right : undefined
                     anchors.left: messageItem.messageRole === "user" ? undefined : parent.left
-                    width: Math.min(parent.width * 0.92, Math.max(150, messageText.implicitWidth + 24))
+                    width: messageItem.messageRole === "user" ? Math.min(parent.width * 0.92, Math.max(150, messageText.implicitWidth + 24)) : parent.width * 0.92
                     implicitHeight: messageColumn.implicitHeight + 18
                     radius: Theme.radiusPanel
                     color: messageItem.messageRole === "user" ? Theme.selectedBackground : Theme.elevatedBackground
@@ -425,21 +436,67 @@ Rectangle {
                         }
 
                         Text {
+                            Layout.fillWidth: true
                             Layout.alignment: Qt.AlignRight
-                            visible: Number(messageItem.inputTokens) + Number(messageItem.outputTokens) > 0
-                            text: qsTr("%1 in · %2 out").arg(messageItem.inputTokens).arg(messageItem.outputTokens)
+                            visible: messageItem.usageAvailable
+                            text: {
+                                let parts = [qsTr("%1 in").arg(messageItem.inputTokens), qsTr("%1 out").arg(messageItem.outputTokens)];
+                                if (Number(messageItem.cachedInputTokens) > 0)
+                                    parts.push(qsTr("%1 cached").arg(messageItem.cachedInputTokens));
+                                if (Number(messageItem.reasoningTokens) > 0)
+                                    parts.push(qsTr("%1 reasoning").arg(messageItem.reasoningTokens));
+                                return parts.join(" · ");
+                            }
                             color: Theme.textSubtle
+                            horizontalAlignment: Text.AlignRight
+                            wrapMode: Text.WordWrap
                             font.family: Theme.terminalFont
                             font.pixelSize: Theme.textCompact
                         }
 
-                        ActionButton {
+                        Text {
+                            Layout.fillWidth: true
                             Layout.alignment: Qt.AlignRight
-                            visible: messageItem.messageRole === "assistant" && messageItem.text.length > 0
-                            text: qsTr("Protected copy")
-                            iconName: "copy"
-                            accessibleName: qsTr("Copy without Windows clipboard history or cloud sync")
-                            onClicked: pane.controller.copyAiText(messageItem.text)
+                            visible: Number(messageItem.wallTimeMilliseconds) > 0 || Number(messageItem.retryCount) > 0
+                            text: Number(messageItem.firstTokenMilliseconds) >= 0 ? qsTr("%1 ms first · %2 ms total · %3 retries").arg(messageItem.firstTokenMilliseconds).arg(messageItem.wallTimeMilliseconds).arg(messageItem.retryCount) : qsTr("%1 ms total · %2 retries").arg(messageItem.wallTimeMilliseconds).arg(messageItem.retryCount)
+                            color: Theme.textSubtle
+                            horizontalAlignment: Text.AlignRight
+                            wrapMode: Text.WordWrap
+                            font.family: Theme.terminalFont
+                            font.pixelSize: Theme.textCompact
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignRight
+                            visible: messageItem.estimatedCostKnown
+                            text: (messageItem.longContextRates ? qsTr("Est. $%1 · long-context rates · catalog %2") : qsTr("Est. $%1 · catalog %2")).arg(Number(messageItem.estimatedCostUsd).toFixed(6)).arg(messageItem.costCatalogDate)
+                            color: Theme.textSubtle
+                            horizontalAlignment: Text.AlignRight
+                            wrapMode: Text.WordWrap
+                            font.family: Theme.terminalFont
+                            font.pixelSize: Theme.textCompact
+                        }
+
+                        RowLayout {
+                            Layout.alignment: Qt.AlignRight
+                            spacing: 6
+
+                            ActionButton {
+                                visible: messageItem.messageRole === "assistant" && messageItem.state === "failed" && messageItem.index === conversationList.count - 1
+                                text: qsTr("Retry")
+                                iconName: "refresh"
+                                accessibleName: qsTr("Retry the failed assistant response")
+                                onClicked: pane.controller.retryAiMessage()
+                            }
+
+                            ActionButton {
+                                visible: messageItem.messageRole === "assistant" && messageItem.text.length > 0
+                                text: qsTr("Protected copy")
+                                iconName: "copy"
+                                accessibleName: qsTr("Copy without Windows clipboard history or cloud sync")
+                                onClicked: pane.controller.copyAiText(messageItem.text)
+                            }
                         }
                     }
                 }

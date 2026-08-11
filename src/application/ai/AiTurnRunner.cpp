@@ -63,6 +63,8 @@ AiTurnRunner::start(AiProviderConfiguration configuration, AiGenerationRequest g
     m_jitterSource = std::move(jitterSource);
     m_turnId = m_nextTurnId++;
     m_completedRetries = 0;
+    m_startedAt = std::chrono::steady_clock::now();
+    m_firstTokenAt.reset();
     m_visibleOutputObserved = false;
     m_cancelled = false;
 
@@ -159,6 +161,10 @@ void AiTurnRunner::handleEvent(const ProviderHttpClient::RequestId requestId, co
     }
 
     emitBufferedStart();
+    if (event.type == AiStreamEventType::textDelta && !event.delta.empty() && !m_firstTokenAt.has_value())
+    {
+        m_firstTokenAt = std::chrono::steady_clock::now();
+    }
     m_visibleOutputObserved = true;
     m_eventHandler(m_turnId, event);
 }
@@ -221,11 +227,22 @@ void AiTurnRunner::finishWithError(AiProviderError error)
 void AiTurnRunner::finishTurn()
 {
     const auto turnId = m_turnId;
+    const auto finishedAt = std::chrono::steady_clock::now();
+    const auto elapsedMilliseconds = [](const auto start, const auto finish) {
+        return static_cast<std::uint64_t>(
+            std::max<std::int64_t>(0, std::chrono::duration_cast<std::chrono::milliseconds>(finish - start).count()));
+    };
+    const AiTurnMetrics metrics{.wallTimeMilliseconds = elapsedMilliseconds(m_startedAt, finishedAt),
+                                .firstTokenMilliseconds =
+                                    m_firstTokenAt.has_value()
+                                        ? std::optional{elapsedMilliseconds(m_startedAt, *m_firstTokenAt)}
+                                        : std::nullopt,
+                                .retryCount = m_completedRetries};
     auto finishedHandler = m_finishedHandler;
     clearTurn();
     if (finishedHandler)
     {
-        finishedHandler(turnId);
+        finishedHandler(turnId, metrics);
     }
 }
 
@@ -244,6 +261,8 @@ void AiTurnRunner::clearTurn()
     m_pendingError.reset();
     m_turnId = 0;
     m_completedRetries = 0;
+    m_startedAt = {};
+    m_firstTokenAt.reset();
     m_visibleOutputObserved = false;
     m_cancelled = false;
 }

@@ -451,6 +451,7 @@ public:
     Q_INVOKABLE bool sendAiMessage(const QString &prompt);
     Q_INVOKABLE bool explainAiLastFailure();
     Q_INVOKABLE bool cancelAiMessage();
+    Q_INVOKABLE bool retryAiMessage();
     Q_INVOKABLE void clearAiConversation();
     Q_INVOKABLE bool copyAiText(const QString &text);
     Q_INVOKABLE bool attachAiSelection();
@@ -573,6 +574,7 @@ private:
         QString telemetryState = QStringLiteral("paused");
         QString aiState = QStringLiteral("idle");
         QString aiError;
+        QString aiLastPrompt;
         QString aiContextPreview;
         QVariantList aiContextItems;
         std::unordered_set<std::string> aiExcludedContextIds;
@@ -605,6 +607,7 @@ private:
         bool sftpShowTypeColumn = false;
         bool sftpHasListing = false;
         bool inputHistoryBufferReliable = true;
+        bool aiLastPreferFailure = false;
         bool workbenchOpen = false;
         bool composerOpen = false;
         bool running = false;
@@ -632,7 +635,8 @@ private:
     void initializeAiRuntime(TerminalTab &tab);
     [[nodiscard]] ai::AiContextBundle buildAiContext(TerminalTab &tab, bool preferLastFailure);
     void acceptAiSelectedText(TerminalTab &tab, const QString &text);
-    [[nodiscard]] bool sendAiMessage(TerminalTab &tab, const QString &prompt, bool preferLastFailure);
+    [[nodiscard]] bool sendAiMessage(TerminalTab &tab, const QString &prompt, bool preferLastFailure,
+                                     bool appendPrompt = true);
     void observeScriptOutput(const QString &tabId, const QByteArray &bytes);
     void dispatchScriptCommands(TerminalTab &tab, const std::vector<std::string> &commands);
     void initializeScriptExecutionTimer();

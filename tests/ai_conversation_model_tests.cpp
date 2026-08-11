@@ -8,7 +8,9 @@ namespace
 
 using ztermy::ai::AiConversationLimits;
 using ztermy::ai::AiConversationModel;
+using ztermy::ai::AiCostEstimate;
 using ztermy::ai::AiTokenUsage;
+using ztermy::ai::AiTurnMetrics;
 
 class AiConversationModelTests final : public QObject
 {
@@ -31,12 +33,21 @@ void AiConversationModelTests::streamsAssistantMessageAndUsage()
     QVERIFY(model.appendAssistantDelta(assistantId, QStringLiteral("Hello ")));
     QVERIFY(model.appendAssistantDelta(assistantId, QStringLiteral("世界")));
     QVERIFY(model.completeAssistantMessage(assistantId, AiTokenUsage{.inputTokens = 12, .outputTokens = 3}));
+    QVERIFY(model.setAssistantMetrics(
+        assistantId, AiTurnMetrics{.wallTimeMilliseconds = 640, .firstTokenMilliseconds = 120, .retryCount = 1},
+        AiCostEstimate{.usd = 0.00031, .catalogDate = "2026-08-12", .longContextRatesApplied = false}));
 
     QCOMPARE(model.rowCount(), 2);
     QCOMPARE(model.data(model.index(1), AiConversationModel::TextRole).toString(), QStringLiteral("Hello 世界"));
     QCOMPARE(model.data(model.index(1), AiConversationModel::StateRole).toString(), QStringLiteral("complete"));
     QCOMPARE(model.data(model.index(1), AiConversationModel::InputTokensRole).toULongLong(), qulonglong{12});
     QCOMPARE(model.data(model.index(1), AiConversationModel::OutputTokensRole).toULongLong(), qulonglong{3});
+    QCOMPARE(model.data(model.index(1), AiConversationModel::WallTimeMillisecondsRole).toULongLong(), qulonglong{640});
+    QCOMPARE(model.data(model.index(1), AiConversationModel::FirstTokenMillisecondsRole).toLongLong(), qlonglong{120});
+    QCOMPARE(model.data(model.index(1), AiConversationModel::RetryCountRole).toUInt(), std::uint32_t{1});
+    QVERIFY(model.data(model.index(1), AiConversationModel::EstimatedCostKnownRole).toBool());
+    QCOMPARE(model.data(model.index(1), AiConversationModel::CostCatalogDateRole).toString(),
+             QStringLiteral("2026-08-12"));
     QVERIFY(!model.streaming());
     QCOMPARE(streamingSpy.count(), 2);
 }
