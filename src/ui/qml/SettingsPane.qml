@@ -20,6 +20,9 @@ Rectangle {
     property string languageDraft: "system"
     property string uiFontDraft: ""
     property string terminalFontDraft: "Cascadia Mono"
+    property string aiBaseUrlDraft: "https://api.openai.com/v1"
+    property string aiEndpointPathDraft: ""
+    property string aiModelDraft: ""
     property real contentReveal: 1.0
     readonly property bool shortcutRecording: shortcutSettings.recording
     readonly property bool draftDark: themeBox.currentIndex === 1 || (themeBox.currentIndex === 0 && Theme.systemDark)
@@ -142,6 +145,14 @@ Rectangle {
         return index === 1 ? "en" : index === 2 ? "zh_CN" : "system";
     }
 
+    function aiProviderIndex(token) {
+        return token === "ollama" ? 1 : token === "openai-compatible" ? 2 : 0;
+    }
+
+    function aiProviderToken() {
+        return aiProviderBox.currentIndex === 1 ? "ollama" : aiProviderBox.currentIndex === 2 ? "openai-compatible" : "openai-responses";
+    }
+
     function systemFontOptions(families) {
         const result = [""];
         for (let index = 0; index < families.length; ++index) {
@@ -245,6 +256,8 @@ Rectangle {
             shortcutsCategory.focusAction();
         } else if (currentCategory === "sftp") {
             sftpCategory.focusAction();
+        } else if (currentCategory === "ai") {
+            aiCategory.focusAction();
         } else if (currentCategory === "security") {
             securityCategory.focusAction();
         } else {
@@ -274,6 +287,12 @@ Rectangle {
         languageDraft = controller.languagePreference;
         credentialStorageBox.currentIndex = credentialStorageIndex(controller.effectiveCredentialStorage);
         credentialCleanupStorageBox.currentIndex = credentialStorageIndex(controller.effectiveCredentialStorage);
+        aiProviderBox.currentIndex = aiProviderIndex(controller.aiProviderPreference);
+        aiBaseUrlDraft = controller.aiBaseUrl;
+        aiEndpointPathDraft = controller.aiEndpointPath;
+        aiModelDraft = controller.aiModel;
+        aiAutomaticContextSwitch.checked = controller.aiAutomaticContext;
+        aiApiKeyField.text = "";
         loadingDraft = false;
         previewDraft();
     }
@@ -418,6 +437,17 @@ Rectangle {
             }
 
             CategoryButton {
+                id: aiCategory
+
+                Layout.fillWidth: true
+                title: qsTr("AI")
+                iconName: "activity"
+                actionObjectName: "settingsAiCategory"
+                selected: pane.currentCategory === "ai"
+                onActivated: pane.selectCategory("ai")
+            }
+
+            CategoryButton {
                 id: securityCategory
 
                 Layout.fillWidth: true
@@ -465,7 +495,7 @@ Rectangle {
             opacity: pane.contentReveal
 
             Text {
-                text: pane.currentCategory === "application" ? qsTr("Application") : pane.currentCategory === "appearance" ? qsTr("Appearance") : pane.currentCategory === "terminal" ? qsTr("Terminal") : pane.currentCategory === "shortcuts" ? qsTr("Shortcuts") : pane.currentCategory === "sftp" ? qsTr("SFTP") : qsTr("Security")
+                text: pane.currentCategory === "application" ? qsTr("Application") : pane.currentCategory === "appearance" ? qsTr("Appearance") : pane.currentCategory === "terminal" ? qsTr("Terminal") : pane.currentCategory === "shortcuts" ? qsTr("Shortcuts") : pane.currentCategory === "sftp" ? qsTr("SFTP") : pane.currentCategory === "ai" ? qsTr("AI") : qsTr("Security")
                 color: Theme.text
                 font.family: Theme.uiFont
                 font.pixelSize: 18
@@ -475,7 +505,7 @@ Rectangle {
             Text {
                 Layout.fillWidth: true
                 visible: pane.currentCategory !== "application"
-                text: pane.currentCategory === "appearance" ? qsTr("Choose the language, interface font, theme, and Windows backdrop used across ztermy.") : pane.currentCategory === "terminal" ? qsTr("Configure the global terminal font, background, cursor, selection, and paste behavior.") : pane.currentCategory === "shortcuts" ? qsTr("Search, record, unbind, and reset keyboard shortcuts for registered ztermy actions.") : pane.currentCategory === "sftp" ? qsTr("Choose the defaults applied when an SSH session opens its integrated file browser.") : qsTr("Choose where SSH passwords and key passphrases are stored, unlock the portable vault, or migrate credentials safely.")
+                text: pane.currentCategory === "appearance" ? qsTr("Choose the language, interface font, theme, and Windows backdrop used across ztermy.") : pane.currentCategory === "terminal" ? qsTr("Configure the global terminal font, background, cursor, selection, and paste behavior.") : pane.currentCategory === "shortcuts" ? qsTr("Search, record, unbind, and reset keyboard shortcuts for registered ztermy actions.") : pane.currentCategory === "sftp" ? qsTr("Choose the defaults applied when an SSH session opens its integrated file browser.") : pane.currentCategory === "ai" ? qsTr("Configure the model provider and the local privacy boundary used by the terminal assistant.") : qsTr("Choose where SSH passwords and key passphrases are stored, unlock the portable vault, or migrate credentials safely.")
                 color: Theme.textMuted
                 wrapMode: Text.WordWrap
                 font.family: Theme.uiFont
@@ -1082,6 +1112,194 @@ Rectangle {
                         wrapMode: Text.WordWrap
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.textLabel
+                    }
+                }
+            }
+
+            SectionCard {
+                Layout.fillWidth: true
+                visible: pane.currentCategory === "ai"
+                compact: true
+                heading: qsTr("Model provider")
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacingControl
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("Provider requests are streamed directly from this device. Terminal evidence is bounded, previewable, and redacted locally before it leaves ztermy.")
+                        color: Theme.textMuted
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
+                    }
+
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: pane.compactLayout ? 1 : 2
+                        columnSpacing: 18
+                        rowSpacing: 10
+
+                        Label {
+                            text: qsTr("Provider")
+                            color: Theme.text
+                        }
+                        AppComboBox {
+                            id: aiProviderBox
+
+                            objectName: "settingsAiProvider"
+                            Layout.fillWidth: true
+                            model: ["openai-responses", "ollama", "openai-compatible"]
+                            displayTextModel: [qsTr("OpenAI Responses"), qsTr("Ollama"), qsTr("OpenAI-compatible")]
+                            accessibleName: qsTr("AI model provider")
+                        }
+
+                        Label {
+                            text: qsTr("Base URL")
+                            color: Theme.text
+                        }
+                        AppTextField {
+                            id: aiBaseUrlField
+
+                            objectName: "settingsAiBaseUrl"
+                            Layout.fillWidth: true
+                            text: pane.aiBaseUrlDraft
+                            placeholderText: qsTr("https://api.openai.com/v1")
+                            accessibleName: qsTr("AI provider base URL")
+                            onTextEdited: pane.aiBaseUrlDraft = text
+                        }
+
+                        Label {
+                            text: qsTr("Endpoint override")
+                            color: Theme.text
+                        }
+                        AppTextField {
+                            id: aiEndpointPathField
+
+                            objectName: "settingsAiEndpointPath"
+                            Layout.fillWidth: true
+                            text: pane.aiEndpointPathDraft
+                            placeholderText: qsTr("Use provider default")
+                            accessibleName: qsTr("Optional AI provider endpoint path")
+                            onTextEdited: pane.aiEndpointPathDraft = text
+                        }
+
+                        Label {
+                            text: qsTr("Model")
+                            color: Theme.text
+                        }
+                        AppTextField {
+                            id: aiModelField
+
+                            objectName: "settingsAiModel"
+                            Layout.fillWidth: true
+                            text: pane.aiModelDraft
+                            placeholderText: qsTr("Model identifier")
+                            accessibleName: qsTr("AI model identifier")
+                            onTextEdited: pane.aiModelDraft = text
+                        }
+
+                        Item {
+                            visible: !pane.compactLayout
+                            implicitHeight: aiAutomaticContextSwitch.implicitHeight
+                        }
+                        AppSwitch {
+                            id: aiAutomaticContextSwitch
+
+                            objectName: "settingsAiAutomaticContext"
+                            Layout.fillWidth: true
+                            text: qsTr("Attach bounded recent terminal context automatically")
+                            accessibleName: text
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: qsTr("The last successfully saved provider and model are restored at startup.")
+                            color: Theme.textMuted
+                            wrapMode: Text.WordWrap
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.textCompact
+                        }
+
+                        ActionButton {
+                            objectName: "settingsAiProviderApply"
+                            text: qsTr("Save provider")
+                            accessibleName: qsTr("Save AI provider settings")
+                            variant: "primary"
+                            onClicked: {
+                                const saved = pane.controller.saveAiProviderSettings(pane.aiProviderToken(), pane.aiBaseUrlDraft, pane.aiEndpointPathDraft, pane.aiModelDraft, aiAutomaticContextSwitch.checked);
+                                pane.presentStatus(saved ? qsTr("AI provider settings saved.") : qsTr("The provider URL or model settings are invalid."), !saved, saved);
+                            }
+                        }
+                    }
+                }
+            }
+
+            SectionCard {
+                Layout.fillWidth: true
+                visible: pane.currentCategory === "ai"
+                compact: true
+                heading: qsTr("Provider credential")
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacingControl
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: pane.controller.aiApiKeyConfigured ? qsTr("An API key is stored in the active credential vault. Entering a new key replaces it; the saved value is never exposed back to QML.") : qsTr("No API key is stored. Ollama can normally be used without one.")
+                        color: pane.controller.aiApiKeyConfigured ? Theme.textSoft : Theme.textMuted
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
+                    }
+
+                    AppTextField {
+                        id: aiApiKeyField
+
+                        objectName: "settingsAiApiKey"
+                        Layout.fillWidth: true
+                        placeholderText: pane.controller.aiApiKeyConfigured ? qsTr("Enter a replacement API key") : qsTr("Enter API key")
+                        passwordRevealable: true
+                        accessibleName: qsTr("AI provider API key")
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+
+                        ActionButton {
+                            visible: pane.controller.aiApiKeyConfigured
+                            text: qsTr("Remove key")
+                            accessibleName: qsTr("Remove the stored AI provider API key")
+                            onClicked: {
+                                const removed = pane.controller.removeAiApiKey();
+                                pane.showCredentialResult(removed, qsTr("AI provider API key removed."));
+                            }
+                        }
+
+                        Item {
+                            Layout.fillWidth: true
+                        }
+
+                        ActionButton {
+                            objectName: "settingsAiApiKeySave"
+                            text: qsTr("Save key")
+                            accessibleName: qsTr("Save AI provider API key")
+                            variant: "primary"
+                            enabled: aiApiKeyField.text.length > 0
+                            onClicked: {
+                                const saved = pane.controller.saveAiApiKey(aiApiKeyField.text);
+                                pane.showCredentialResult(saved, qsTr("AI provider API key saved in the active credential vault."));
+                                if (saved) {
+                                    aiApiKeyField.text = "";
+                                }
+                            }
+                        }
                     }
                 }
             }
