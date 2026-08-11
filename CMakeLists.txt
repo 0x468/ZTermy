@@ -472,6 +472,17 @@ target_link_libraries(ztermy_ai_provider
     PRIVATE Qt6::Core
 )
 
+add_library(ztermy_ai_application STATIC
+    src/application/ai/AiTurnRunner.cpp
+    src/application/ai/AiTurnRunner.h
+)
+
+target_compile_features(ztermy_ai_application PUBLIC cxx_std_23)
+target_include_directories(ztermy_ai_application PUBLIC src)
+target_link_libraries(ztermy_ai_application
+    PUBLIC ztermy_ai_domain ztermy_ai_provider Qt6::Core
+)
+
 add_library(ztermy_session_logging STATIC
     src/infrastructure/logging/SessionLogWriter.cpp
     src/infrastructure/logging/SessionLogWriter.h
@@ -2628,6 +2639,28 @@ if(BUILD_TESTING)
 
     add_test(NAME ai-provider-retry-policy COMMAND ztermy_ai_provider_retry_policy_tests)
 
+    qt_add_executable(ztermy_ai_turn_runner_tests
+        tests/ai_turn_runner_tests.cpp
+    )
+
+    target_compile_features(ztermy_ai_turn_runner_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ai_turn_runner_tests PRIVATE
+        ztermy_ai_application
+        Qt6::Network
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ai_turn_runner_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ai-turn-runner COMMAND ztermy_ai_turn_runner_tests)
+
     qt_add_executable(ztermy_ai_context_broker_tests
         tests/ai_context_broker_tests.cpp
     )
@@ -2998,6 +3031,7 @@ if(BUILD_TESTING)
             ztermy_provider_request_factory_tests
             ztermy_provider_http_client_tests
             ztermy_ai_provider_retry_policy_tests
+            ztermy_ai_turn_runner_tests
             ztermy_ai_context_broker_tests
             ztermy_ai_context_redactor_tests
             ztermy_ai_context_serializer_tests

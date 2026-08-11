@@ -1,0 +1,292 @@
+#include "application/ai/AiTurnRunner.h"
+
+#include <QByteArray>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QTest>
+#include <QTimer>
+
+#include <algorithm>
+#include <cstring>
+#include <memory>
+#include <utility>
+#include <vector>
+
+namespace
+{
+
+using ztermy::ai::AiGenerationRequest;
+using ztermy::ai::AiProviderConfiguration;
+using ztermy::ai::AiProviderError;
+using ztermy::ai::AiProviderErrorCode;
+using ztermy::ai::AiProviderKind;
+using ztermy::ai::AiProviderRetryLimits;
+using ztermy::ai::AiProviderRetryPolicy;
+using ztermy::ai::AiStreamEvent;
+using ztermy::ai::AiStreamEventType;
+using ztermy::ai::AiTurnRunner;
+using ztermy::ai::ProviderHttpClient;
+using ztermy::security::SensitiveByteArray;
+
+struct FakeResponse final
+{
+    int status = 200;
+    QByteArray payload;
+    QByteArray retryAfter;
+    int delayMilliseconds = 0;
+};
+
+class FakeReply final : public QNetworkReply
+{
+public:
+    FakeReply(const QNetworkRequest &request, FakeResponse response, QObject *parent)
+        : QNetworkReply(parent), m_response(std::move(response))
+    {
+        setRequest(request);
+        setUrl(request.url());
+        setOperation(QNetworkAccessManager::PostOperation);
+        setAttribute(QNetworkRequest::HttpStatusCodeAttribute, m_response.status);
+        if (!m_response.retryAfter.isEmpty())
+        {
+            setRawHeader("Retry-After", m_response.retryAfter);
+        }
+        open(QIODevice::ReadOnly);
+        QTimer::singleShot(m_response.delayMilliseconds, this, [this] { deliver(); });
+    }
+
+    void abort() override
+    {
+        if (m_finished)
+        {
+            return;
+        }
+        m_aborted = true;
+        setError(QNetworkReply::OperationCanceledError, QStringLiteral("cancelled"));
+        QTimer::singleShot(0, this, [this] { complete(); });
+    }
+
+    [[nodiscard]] qint64 bytesAvailable() const override
+    {
+        return static_cast<qint64>(m_buffer.size()) + QNetworkReply::bytesAvailable();
+    }
+
+    [[nodiscard]] bool isSequential() const override { return true; }
+
+protected:
+    qint64 readData(char *data, const qint64 maximumSize) override
+    {
+        if (m_buffer.isEmpty())
+        {
+            return m_finished ? -1 : 0;
+        }
+        const auto count = std::min(maximumSize, static_cast<qint64>(m_buffer.size()));
+        std::memcpy(data, m_buffer.constData(), static_cast<std::size_t>(count));
+        m_buffer.remove(0, count);
+        return count;
+    }
+
+private:
+    void deliver()
+    {
+        if (m_aborted || m_finished)
+        {
+            return;
+        }
+        m_buffer = m_response.payload;
+        emit readyRead();
+        complete();
+    }
+
+    void complete()
+    {
+        if (m_finished)
+        {
+            return;
+        }
+        m_finished = true;
+        setFinished(true);
+        emit finished();
+    }
+
+    FakeResponse m_response;
+    QByteArray m_buffer;
+    bool m_aborted = false;
+    bool m_finished = false;
+};
+
+class FakeNetworkAccessManager final : public QNetworkAccessManager
+{
+public:
+    void enqueue(FakeResponse response) { m_responses.push_back(std::move(response)); }
+    [[nodiscard]] std::size_t requestCount() const noexcept { return m_requestCount; }
+
+protected:
+    QNetworkReply *createRequest(const Operation operation,
+                                 const QNetworkRequest &request,
+                                 QIODevice *outgoingData) override
+    {
+        static_cast<void>(operation);
+        static_cast<void>(outgoingData);
+        ++m_requestCount;
+        if (m_responses.empty())
+        {
+            return new FakeReply(request, FakeResponse{.status = 500}, this);
+        }
+        auto response = std::move(m_responses.front());
+        m_responses.erase(m_responses.begin());
+        return new FakeReply(request, std::move(response), this);
+    }
+
+private:
+    std::vector<FakeResponse> m_responses;
+    std::size_t m_requestCount = 0;
+};
+
+[[nodiscard]] AiProviderConfiguration openAiConfiguration()
+{
+    return AiProviderConfiguration{.kind = AiProviderKind::openAiResponses,
+                                   .baseUrl = "https://api.openai.test/v1",
+                                   .model = "model"};
+}
+
+[[nodiscard]] auto emptySecretLoader()
+{
+    return []() -> std::expected<SensitiveByteArray, AiProviderError> {
+        return SensitiveByteArray{};
+    };
+}
+
+[[nodiscard]] AiProviderRetryPolicy fastRetryPolicy()
+{
+    return AiProviderRetryPolicy(AiProviderRetryLimits{.maxRetries = 2,
+                                                        .baseDelayMilliseconds = 1,
+                                                        .maxDelayMilliseconds = 2,
+                                                        .jitterPercent = 0});
+}
+
+class AiTurnRunnerTests final : public QObject
+{
+    Q_OBJECT
+
+private slots:
+    void retriesBeforeVisibleOutput();
+    void doesNotReplayAfterVisibleOutput();
+    void cancelsScheduledRetry();
+    void destroyingRunnerCancelsSafely();
+};
+
+void AiTurnRunnerTests::retriesBeforeVisibleOutput()
+{
+    FakeNetworkAccessManager network;
+    network.enqueue(FakeResponse{.status = 500, .payload = "temporary"});
+    network.enqueue(FakeResponse{.payload =
+                                     "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\"}}\n\n"
+                                     "data: {\"type\":\"response.output_text.delta\",\"delta\":\"hi\"}\n\n"
+                                     "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\"}}\n\n"});
+    ProviderHttpClient client(&network);
+    AiTurnRunner runner(client, fastRetryPolicy());
+    std::vector<AiStreamEvent> events;
+    std::uint32_t retryCount = 0;
+    bool finished = false;
+
+    QVERIFY(runner.start(openAiConfiguration(),
+                         AiGenerationRequest{},
+                         emptySecretLoader(),
+                         [&events](const auto, const AiStreamEvent &event) { events.push_back(event); },
+                         [&finished](const auto) { finished = true; },
+                         [&retryCount](const auto, const auto attempt, const auto) {
+                             retryCount = attempt;
+                         },
+                         [] { return 0.5; })
+                .has_value());
+
+    QTRY_VERIFY_WITH_TIMEOUT(finished, 1000);
+    QCOMPARE(network.requestCount(), std::size_t{2});
+    QCOMPARE(retryCount, std::uint32_t{1});
+    QCOMPARE(events.size(), std::size_t{3});
+    QCOMPARE(events.at(0).type, AiStreamEventType::responseStarted);
+    QCOMPARE(events.at(1).type, AiStreamEventType::textDelta);
+    QCOMPARE(events.at(2).type, AiStreamEventType::responseCompleted);
+}
+
+void AiTurnRunnerTests::doesNotReplayAfterVisibleOutput()
+{
+    FakeNetworkAccessManager network;
+    network.enqueue(FakeResponse{.payload =
+                                     "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\"}}\n\n"
+                                     "data: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}\n\n"});
+    network.enqueue(FakeResponse{.payload =
+                                     "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_2\"}}\n\n"});
+    ProviderHttpClient client(&network);
+    AiTurnRunner runner(client, fastRetryPolicy());
+    std::vector<AiStreamEvent> events;
+    bool finished = false;
+
+    QVERIFY(runner.start(openAiConfiguration(),
+                         AiGenerationRequest{},
+                         emptySecretLoader(),
+                         [&events](const auto, const AiStreamEvent &event) { events.push_back(event); },
+                         [&finished](const auto) { finished = true; })
+                .has_value());
+
+    QTRY_VERIFY_WITH_TIMEOUT(finished, 1000);
+    QCOMPARE(network.requestCount(), std::size_t{1});
+    QCOMPARE(events.size(), std::size_t{3});
+    QCOMPARE(events.at(0).type, AiStreamEventType::responseStarted);
+    QCOMPARE(events.at(1).type, AiStreamEventType::textDelta);
+    QCOMPARE(events.at(2).type, AiStreamEventType::responseFailed);
+    QCOMPARE(events.at(2).error->code, AiProviderErrorCode::protocol);
+}
+
+void AiTurnRunnerTests::cancelsScheduledRetry()
+{
+    FakeNetworkAccessManager network;
+    network.enqueue(FakeResponse{.status = 429, .retryAfter = "1"});
+    ProviderHttpClient client(&network);
+    AiTurnRunner runner(client, fastRetryPolicy());
+    std::vector<AiStreamEvent> events;
+    bool cancelled = false;
+    bool finished = false;
+
+    QVERIFY(runner.start(openAiConfiguration(),
+                         AiGenerationRequest{},
+                         emptySecretLoader(),
+                         [&events](const auto, const AiStreamEvent &event) { events.push_back(event); },
+                         [&finished](const auto) { finished = true; },
+                         [&runner, &cancelled](const auto, const auto, const auto) {
+                             cancelled = runner.cancel();
+                         })
+                .has_value());
+
+    QTRY_VERIFY_WITH_TIMEOUT(finished, 1000);
+    QVERIFY(cancelled);
+    QCOMPARE(network.requestCount(), std::size_t{1});
+    QCOMPARE(events.size(), std::size_t{1});
+    QCOMPARE(events.front().type, AiStreamEventType::responseFailed);
+    QCOMPARE(events.front().error->code, AiProviderErrorCode::cancelled);
+}
+
+void AiTurnRunnerTests::destroyingRunnerCancelsSafely()
+{
+    FakeNetworkAccessManager network;
+    network.enqueue(FakeResponse{.payload = "data: ignored\n\n", .delayMilliseconds = 100});
+    ProviderHttpClient client(&network);
+    {
+        AiTurnRunner runner(client, fastRetryPolicy());
+        QVERIFY(runner.start(openAiConfiguration(),
+                             AiGenerationRequest{},
+                             emptySecretLoader(),
+                             [](const auto, const AiStreamEvent &) {},
+                             [](const auto) {})
+                    .has_value());
+    }
+    QTest::qWait(150);
+    QCOMPARE(network.requestCount(), std::size_t{1});
+}
+
+} // namespace
+
+QTEST_GUILESS_MAIN(AiTurnRunnerTests)
+
+#include "ai_turn_runner_tests.moc"
