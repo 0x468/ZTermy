@@ -999,6 +999,9 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
     QVERIFY(controller.activeAiConversation() != nullptr);
     QCOMPARE(controller.activeAiState(), QStringLiteral("idle"));
     QVERIFY(controller.activeAiContextItems().isEmpty());
+    QVERIFY(controller.activeAiToolApproval().isEmpty());
+    QVERIFY(!controller.approveAiTool());
+    QVERIFY(!controller.denyAiTool());
     QVERIFY(controller.toggleTerminalWorkbench(QStringLiteral("ai")));
     QCOMPARE(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("workbenchPage")).toString(),
              QStringLiteral("ai"));

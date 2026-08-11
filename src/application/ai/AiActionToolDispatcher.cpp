@@ -170,6 +170,11 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
     {
         return fail(QStringLiteral("scope_changed"), QStringLiteral("The target terminal session changed."));
     }
+    if (!context.writable)
+    {
+        return fail(QStringLiteral("session_unavailable"),
+                    QStringLiteral("The target terminal session is not writable."));
+    }
     const auto risk = AiPermissionPolicy::classifyCommand(command);
     const auto decision =
         m_permissionPolicy.decide(AiPermissionRequest{.mode = context.permissionMode,

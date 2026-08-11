@@ -19,6 +19,7 @@ struct AiActionToolContext final
     std::uint64_t turnId = 0;
     AiSessionTarget target;
     AiPermissionMode permissionMode = AiPermissionMode::askEachWrite;
+    bool writable = true;
     bool savedHost = false;
     bool firstWriteApproved = false;
     bool highRiskSessionGrant = false;
@@ -60,7 +61,7 @@ public:
 
 private:
     AiPermissionPolicy m_permissionPolicy;
-    AiToolDispatchLedger m_ledger;
+    AiToolDispatchLedger m_ledger{AiToolDispatchLimits{.maximumArgumentsBytes = std::size_t{20} * 1024}};
     AiSessionWriteOwnership m_ownership;
 };
 

@@ -365,6 +365,30 @@ private:
     return QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size()));
 }
 
+[[nodiscard]] std::string compactJson(const QJsonObject &value)
+{
+    const QByteArray encoded = QJsonDocument(value).toJson(QJsonDocument::Compact);
+    return {encoded.constData(), static_cast<std::size_t>(encoded.size())};
+}
+
+[[nodiscard]] std::string aiToolFailureJson(const QString &code, const QString &message)
+{
+    return compactJson(QJsonObject{
+        {QStringLiteral("ok"), false},
+        {QStringLiteral("error"), QJsonObject{{QStringLiteral("code"), code}, {QStringLiteral("message"), message}}}});
+}
+
+[[nodiscard]] std::string aiRunCommandAcceptedJson(const ztermy::ai::AiRunCommandAction &action)
+{
+    return compactJson(
+        QJsonObject{{QStringLiteral("ok"), true},
+                    {QStringLiteral("status"), QStringLiteral("accepted")},
+                    {QStringLiteral("command_id"), utf8QString(action.dispatchKey.toolCallId)},
+                    {QStringLiteral("session_id"), utf8QString(action.target.sessionId)},
+                    {QStringLiteral("session_generation"), static_cast<qint64>(action.target.sessionGeneration)},
+                    {QStringLiteral("completion_confirmed"), false}});
+}
+
 [[nodiscard]] QString normalizedTerminalWorkingDirectory(const std::string &value)
 {
     if (value.empty() || value.size() > 4096 || value.find('\0') != std::string::npos)
@@ -2701,6 +2725,23 @@ QVariantList AppController::activeAiContextItems() const
     return tab == nullptr ? QVariantList{} : tab->aiContextItems;
 }
 
+QVariantMap AppController::activeAiToolApproval() const
+{
+    const TerminalTab *tab = activeTab();
+    if (tab == nullptr || !tab->pendingAiRunCommand.has_value())
+    {
+        return {};
+    }
+    const auto &action = *tab->pendingAiRunCommand;
+    return {{QStringLiteral("visible"), true},
+            {QStringLiteral("toolCallId"), utf8QString(action.dispatchKey.toolCallId)},
+            {QStringLiteral("command"), utf8QString(action.command)},
+            {QStringLiteral("sessionId"), utf8QString(action.target.sessionId)},
+            {QStringLiteral("sessionGeneration"), QVariant::fromValue<qulonglong>(action.target.sessionGeneration)},
+            {QStringLiteral("highRisk"), action.risk.highRisk()},
+            {QStringLiteral("riskReason"), utf8QString(action.risk.reason)}};
+}
+
 void AppController::retranslateUiState()
 {
     for (const auto &tab : m_tabs)
@@ -2928,6 +2969,10 @@ bool AppController::closeTerminalTab(const QString &id)
         if (tab->sessionLog)
         {
             tab->sessionLog->stop();
+        }
+        if (!tab->aiConversationId.isEmpty())
+        {
+            m_aiActionToolDispatcher.clearConversation(utf8String(tab->aiConversationId));
         }
         stopSftpSession(*tab);
         m_terminalViewports.remove(tab->paneId);
@@ -6830,6 +6875,73 @@ bool AppController::cancelAiMessage()
     return true;
 }
 
+bool AppController::approveAiTool()
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || !tab->aiTurnRunner || !tab->pendingAiRunCommand.has_value())
+    {
+        return false;
+    }
+    const auto pendingCall = tab->aiTurnRunner->pendingToolCall();
+    const auto action = *tab->pendingAiRunCommand;
+    if (!pendingCall.has_value() || pendingCall->id != action.dispatchKey.toolCallId
+        || !m_aiActionToolDispatcher.approve(action))
+    {
+        return false;
+    }
+    tab->pendingAiRunCommand.reset();
+    std::string output;
+    if (action.target.sessionId != utf8String(tab->id) || action.target.sessionGeneration != tab->reconnectGeneration
+        || !tab->running || (!tab->ssh && !tab->local))
+    {
+        output = aiToolFailureJson(QStringLiteral("scope_changed"),
+                                   tr("The target terminal session changed before approval."));
+        static_cast<void>(m_aiActionToolDispatcher.complete(action, ai::AiToolDispatchState::failed, output));
+    }
+    else
+    {
+        output = executeAiRunCommand(*tab, action);
+        tab->aiFirstWriteApproved = true;
+        static_cast<void>(m_aiActionToolDispatcher.complete(action, ai::AiToolDispatchState::succeeded, output));
+    }
+    const bool resumed = tab->aiTurnRunner->completePendingTool(
+        ai::AiToolOutput{.callId = pendingCall->id, .name = pendingCall->name, .outputJson = std::move(output)});
+    if (!resumed)
+    {
+        tab->aiError = tr("The command result could not resume the AI turn.");
+        tab->aiState = QStringLiteral("error");
+    }
+    emit aiConversationChanged();
+    return resumed;
+}
+
+bool AppController::denyAiTool()
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || !tab->aiTurnRunner || !tab->pendingAiRunCommand.has_value())
+    {
+        return false;
+    }
+    const auto pendingCall = tab->aiTurnRunner->pendingToolCall();
+    const auto action = *tab->pendingAiRunCommand;
+    if (!pendingCall.has_value() || pendingCall->id != action.dispatchKey.toolCallId
+        || !m_aiActionToolDispatcher.deny(action))
+    {
+        return false;
+    }
+    tab->pendingAiRunCommand.reset();
+    const auto output = aiToolFailureJson(QStringLiteral("permission_denied"), tr("The user denied this command."));
+    const bool resumed = tab->aiTurnRunner->completePendingTool(
+        ai::AiToolOutput{.callId = pendingCall->id, .name = pendingCall->name, .outputJson = output});
+    if (!resumed)
+    {
+        tab->aiError = tr("The denied command result could not resume the AI turn.");
+        tab->aiState = QStringLiteral("error");
+    }
+    emit aiConversationChanged();
+    return resumed;
+}
+
 bool AppController::retryAiMessage()
 {
     TerminalTab *tab = activeTab();
@@ -6856,6 +6968,10 @@ void AppController::clearAiConversation()
     tab->aiLastCommandRequest = false;
     tab->aiContextPreview.clear();
     tab->aiContextItems.clear();
+    tab->aiFirstWriteApproved = false;
+    tab->aiTurnBudget.reset();
+    tab->pendingAiRunCommand.reset();
+    m_aiActionToolDispatcher.clearConversation(utf8String(tab->aiConversationId));
     emit aiConversationChanged();
 }
 
@@ -7122,9 +7238,15 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
             "exactly one runnable command in exactly one fenced code block tagged for the active shell. Do not place "
             "alternative commands in other code blocks.";
     }
+    auto toolDefinitions = ai::AiReadToolDispatcher::definitions();
+    auto actionDefinitions = ai::AiActionToolDispatcher::definitions();
+    toolDefinitions.insert(toolDefinitions.end(), std::make_move_iterator(actionDefinitions.begin()),
+                           std::make_move_iterator(actionDefinitions.end()));
     ai::AiGenerationRequest generation{.instructions = std::move(instructions),
                                        .messages = std::move(messages),
-                                       .tools = ai::AiReadToolDispatcher::definitions()};
+                                       .tools = std::move(toolDefinitions)};
+    tab.aiTurnBudget = std::make_unique<ai::AiAgentTurnBudget>();
+    tab.pendingAiRunCommand.reset();
 
     const auto started = tab.aiTurnRunner->start(
         configuration, std::move(generation),
@@ -7236,7 +7358,80 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
         {},
         [this, tabId = tab.id](
             const ai::AiToolCall &call) -> std::expected<ai::AiTurnRunner::ToolHandlingResult, ai::AiProviderError> {
-            const auto *target = findTab(tabId);
+            auto *target = findTab(tabId);
+            if (call.name == "run_command")
+            {
+                if (target == nullptr || !target->aiTurnRunner || !target->aiTurnBudget)
+                {
+                    return ai::AiTurnRunner::ToolHandlingResult{
+                        .output = ai::AiToolOutput{.callId = call.id,
+                                                   .name = call.name,
+                                                   .outputJson = aiToolFailureJson(
+                                                       QStringLiteral("session_unavailable"),
+                                                       tr("The target terminal session is unavailable."))},
+                        .sideEffecting = true};
+                }
+                const auto plan = m_aiActionToolDispatcher.prepare(
+                    call,
+                    ai::AiActionToolContext{.conversationId = utf8String(target->aiConversationId),
+                                            .turnId = target->aiTurnRunner->activeTurnId(),
+                                            .target = {.sessionId = utf8String(target->id),
+                                                       .sessionGeneration = target->reconnectGeneration},
+                                            .permissionMode = ai::AiPermissionMode::askEachWrite,
+                                            .writable = target->running && (target->ssh || target->local),
+                                            .savedHost = !target->sourceProfileId.isEmpty(),
+                                            .firstWriteApproved = target->aiFirstWriteApproved},
+                    *target->aiTurnBudget);
+                if (plan.disposition == ai::AiActionToolDisposition::respond || !plan.runCommand.has_value())
+                {
+                    return ai::AiTurnRunner::ToolHandlingResult{
+                        .output = ai::AiToolOutput{.callId = call.id, .name = call.name, .outputJson = plan.outputJson},
+                        .sideEffecting = plan.sideEffecting};
+                }
+                const auto action = *plan.runCommand;
+                if (plan.disposition == ai::AiActionToolDisposition::execute)
+                {
+                    const auto output = executeAiRunCommand(*target, action);
+                    static_cast<void>(
+                        m_aiActionToolDispatcher.complete(action, ai::AiToolDispatchState::succeeded, output));
+                    return ai::AiTurnRunner::ToolHandlingResult{
+                        .output = ai::AiToolOutput{.callId = call.id, .name = call.name, .outputJson = output},
+                        .sideEffecting = true};
+                }
+                target->pendingAiRunCommand = action;
+                if (m_activeTabId == tabId || m_focusedTabId == tabId)
+                {
+                    emit aiConversationChanged();
+                }
+                return ai::AiTurnRunner::ToolHandlingResult{
+                    .cancel =
+                        [this, tabId] noexcept {
+                            try
+                            {
+                                TerminalTab *cancelledTarget = findTab(tabId);
+                                if (cancelledTarget == nullptr || !cancelledTarget->pendingAiRunCommand.has_value())
+                                {
+                                    return;
+                                }
+                                const auto cancelledAction = *cancelledTarget->pendingAiRunCommand;
+                                static_cast<void>(m_aiActionToolDispatcher.complete(
+                                    cancelledAction, ai::AiToolDispatchState::cancelled,
+                                    aiToolFailureJson(QStringLiteral("cancelled"),
+                                                      tr("The pending command was cancelled."))));
+                                cancelledTarget->pendingAiRunCommand.reset();
+                                if (m_activeTabId == tabId || m_focusedTabId == tabId)
+                                {
+                                    emit aiConversationChanged();
+                                }
+                            }
+                            catch (...)
+                            {
+                                qCCritical(appControllerLog)
+                                    << "AI tool cancellation suppressed an exception for tab" << tabId;
+                            }
+                        },
+                    .sideEffecting = true};
+            }
             const auto snapshots =
                 target == nullptr ? std::vector<ai::AiTerminalReadSnapshot>{} : aiReadSnapshots(*target);
             return ai::AiTurnRunner::ToolHandlingResult{
@@ -7255,6 +7450,20 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
     }
     emit aiConversationChanged();
     return true;
+}
+
+std::string AppController::executeAiRunCommand(TerminalTab &tab, const ai::AiRunCommandAction &action)
+{
+    QByteArray bytes(action.command.data(), static_cast<qsizetype>(action.command.size()));
+    bytes.replace("\r\n", "\r");
+    bytes.replace('\n', '\r');
+    if (bytes.isEmpty() || bytes.back() != '\r')
+    {
+        bytes.append('\r');
+    }
+    observeTerminalInput(tab, bytes);
+    dispatchInput(tab, bytes);
+    return aiRunCommandAcceptedJson(action);
 }
 
 bool AppController::resetApplicationSettings()
@@ -7870,6 +8079,10 @@ void AppController::initializeTerminalOutputSink(TerminalTab &tab)
 
 void AppController::initializeAiRuntime(TerminalTab &tab)
 {
+    if (tab.aiConversationId.isEmpty())
+    {
+        tab.aiConversationId = tab.id + QLatin1Char(':') + QUuid::createUuid().toString(QUuid::WithoutBraces);
+    }
     if (!tab.aiConversation)
     {
         tab.aiConversation = std::make_unique<ai::AiConversationModel>();

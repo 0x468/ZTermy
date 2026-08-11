@@ -101,6 +101,14 @@ void AiActionToolDispatcherTests::rejectsScopeReplayAndObserverWrites()
              QStringLiteral("permission_denied"));
     QCOMPARE(observerBudget.writeActions(), std::uint32_t{0});
 
+    auto unavailableContext = context("unavailable", AiPermissionMode::sessionAuto);
+    unavailableContext.writable = false;
+    AiAgentTurnBudget unavailableBudget;
+    plan = dispatcher.prepare(commandCall("unavailable-call"), unavailableContext, unavailableBudget);
+    QCOMPARE(object(plan.outputJson).value(QStringLiteral("error")).toObject().value(QStringLiteral("code")).toString(),
+             QStringLiteral("session_unavailable"));
+    QCOMPARE(unavailableBudget.writeActions(), std::uint32_t{0});
+
     AiAgentTurnBudget mismatchBudget;
     const auto mismatch = dispatcher.prepare(commandCall("observer-call", "whoami"),
                                              context("observer", AiPermissionMode::observer), mismatchBudget);

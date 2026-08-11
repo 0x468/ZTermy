@@ -1,6 +1,7 @@
 #pragma once
 
 #include "application/actions/ActionRegistry.h"
+#include "application/ai/AiActionToolDispatcher.h"
 #include "application/ai/AiConversationModel.h"
 #include "application/ai/AiReadToolDispatcher.h"
 #include "application/ai/AiSecretStore.h"
@@ -160,6 +161,7 @@ class AppController final : public QObject
     Q_PROPERTY(QString activeAiError READ activeAiError NOTIFY aiConversationChanged)
     Q_PROPERTY(QString activeAiContextPreview READ activeAiContextPreview NOTIFY aiConversationChanged)
     Q_PROPERTY(QVariantList activeAiContextItems READ activeAiContextItems NOTIFY aiConversationChanged)
+    Q_PROPERTY(QVariantMap activeAiToolApproval READ activeAiToolApproval NOTIFY aiConversationChanged)
     Q_PROPERTY(QString credentialStoragePreference READ credentialStoragePreference NOTIFY credentialVaultChanged)
     Q_PROPERTY(QString effectiveCredentialStorage READ effectiveCredentialStorage NOTIFY credentialVaultChanged)
     Q_PROPERTY(bool portableVaultInitialized READ portableVaultInitialized NOTIFY credentialVaultChanged)
@@ -279,6 +281,7 @@ public:
     [[nodiscard]] QString activeAiError() const;
     [[nodiscard]] QString activeAiContextPreview() const;
     [[nodiscard]] QVariantList activeAiContextItems() const;
+    [[nodiscard]] QVariantMap activeAiToolApproval() const;
     void retranslateUiState();
     [[nodiscard]] QString credentialStoragePreference() const;
     [[nodiscard]] QString effectiveCredentialStorage() const;
@@ -453,6 +456,8 @@ public:
     Q_INVOKABLE bool sendAiCommandRequest(const QString &prompt);
     Q_INVOKABLE bool explainAiLastFailure();
     Q_INVOKABLE bool cancelAiMessage();
+    Q_INVOKABLE bool approveAiTool();
+    Q_INVOKABLE bool denyAiTool();
     Q_INVOKABLE bool retryAiMessage();
     Q_INVOKABLE void clearAiConversation();
     Q_INVOKABLE bool copyAiText(const QString &text);
@@ -530,6 +535,8 @@ private:
         std::unique_ptr<sftp::SftpDirectoryModel> sftpModel;
         std::unique_ptr<ai::AiConversationModel> aiConversation;
         std::unique_ptr<ai::AiTurnRunner> aiTurnRunner;
+        std::unique_ptr<ai::AiAgentTurnBudget> aiTurnBudget;
+        std::optional<ai::AiRunCommandAction> pendingAiRunCommand;
         qint64 connectedUtcMs = 0;
         qreal sessionBackgroundOpacity = -1.0;
         qint64 recordingStartedUtcMs = 0;
@@ -578,6 +585,7 @@ private:
         QString aiError;
         QString aiLastPrompt;
         QString aiContextPreview;
+        QString aiConversationId;
         QVariantList aiContextItems;
         std::unordered_set<std::string> aiExcludedContextIds;
         std::unordered_set<std::string> aiPinnedContextIds;
@@ -611,6 +619,7 @@ private:
         bool inputHistoryBufferReliable = true;
         bool aiLastPreferFailure = false;
         bool aiLastCommandRequest = false;
+        bool aiFirstWriteApproved = false;
         bool workbenchOpen = false;
         bool composerOpen = false;
         bool running = false;
@@ -641,6 +650,7 @@ private:
     void acceptAiSelectedText(TerminalTab &tab, const QString &text);
     [[nodiscard]] bool sendAiMessage(TerminalTab &tab, const QString &prompt, bool preferLastFailure,
                                      bool appendPrompt = true, bool commandRequest = false);
+    [[nodiscard]] std::string executeAiRunCommand(TerminalTab &tab, const ai::AiRunCommandAction &action);
     void observeScriptOutput(const QString &tabId, const QByteArray &bytes);
     void dispatchScriptCommands(TerminalTab &tab, const std::vector<std::string> &commands);
     void initializeScriptExecutionTimer();
@@ -773,6 +783,7 @@ private:
     QString m_portForwardingOperationError;
     ai::ProviderHttpClient m_aiProviderClient;
     ai::AiContextBroker m_aiContextBroker;
+    ai::AiActionToolDispatcher m_aiActionToolDispatcher;
     ai::AiReadToolDispatcher m_aiReadToolDispatcher;
     std::vector<std::unique_ptr<TerminalTab>> m_tabs;
     std::vector<std::unique_ptr<sftp::SftpSession>> m_stoppingSftpSessions;

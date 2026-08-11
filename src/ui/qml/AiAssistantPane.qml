@@ -12,6 +12,7 @@ Rectangle {
     required property var activeTab
     readonly property bool busy: controller.activeAiState === "starting" || controller.activeAiState === "retrying" || controller.activeAiState === "streaming" || controller.activeAiState === "cancelling"
     readonly property var conversation: controller.activeAiConversation
+    readonly property var toolApproval: controller.activeAiToolApproval
     property bool contextExpanded: false
     property bool commandRequest: false
 
@@ -351,6 +352,106 @@ Rectangle {
                         iconName: "refresh"
                         accessibleName: qsTr("Restore automatic context items")
                         onClicked: pane.controller.resetAiContextItems()
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            id: approvalCard
+
+            objectName: "aiToolApprovalCard"
+            Layout.fillWidth: true
+            Layout.leftMargin: 10
+            Layout.rightMargin: 10
+            Layout.topMargin: 6
+            Layout.preferredHeight: approvalContent.implicitHeight + 20
+            visible: pane.toolApproval.visible === true
+            radius: Theme.radiusPanel
+            color: pane.toolApproval.highRisk ? Theme.dangerSurface : Theme.raisedBackground
+            border.color: pane.toolApproval.highRisk ? Theme.dangerBorder : Theme.accent
+            border.width: 1
+            Accessible.role: Accessible.Pane
+            Accessible.name: qsTr("AI command approval")
+
+            ColumnLayout {
+                id: approvalContent
+
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 7
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 7
+
+                    AppIcon {
+                        Layout.preferredWidth: 17
+                        Layout.preferredHeight: 17
+                        name: pane.toolApproval.highRisk ? "warning" : "terminal"
+                        color: pane.toolApproval.highRisk ? Theme.dangerText : Theme.accent
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: pane.toolApproval.highRisk ? qsTr("High-risk command requires approval") : qsTr("Command requires approval")
+                        color: pane.toolApproval.highRisk ? Theme.dangerText : Theme.text
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textBody
+                        font.weight: Font.DemiBold
+                    }
+                }
+
+                TextEdit {
+                    Layout.fillWidth: true
+                    Layout.maximumHeight: 120
+                    text: pane.toolApproval.command || ""
+                    color: Theme.text
+                    readOnly: true
+                    selectByMouse: true
+                    wrapMode: TextEdit.WrapAnywhere
+                    textFormat: TextEdit.PlainText
+                    font.family: Theme.terminalFont
+                    font.pixelSize: Theme.textBody
+                    Accessible.name: qsTr("Command awaiting approval")
+
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: -6
+                        z: -1
+                        radius: Theme.radiusSmall
+                        color: Theme.controlBackground
+                        border.color: Theme.border
+                    }
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    visible: pane.toolApproval.highRisk && (pane.toolApproval.riskReason || "").length > 0
+                    text: pane.toolApproval.riskReason || ""
+                    color: Theme.dangerText
+                    wrapMode: Text.WordWrap
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.textCompact
+                }
+
+                RowLayout {
+                    Layout.alignment: Qt.AlignRight
+                    spacing: 7
+
+                    ActionButton {
+                        text: qsTr("Deny")
+                        iconName: "close"
+                        accessibleName: qsTr("Deny the pending AI command")
+                        onClicked: pane.controller.denyAiTool()
+                    }
+
+                    ActionButton {
+                        text: qsTr("Run command")
+                        iconName: "play"
+                        variant: pane.toolApproval.highRisk ? "destructive" : "primary"
+                        accessibleName: qsTr("Approve and run the pending AI command")
+                        onClicked: pane.controller.approveAiTool()
                     }
                 }
             }
