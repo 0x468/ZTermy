@@ -94,16 +94,112 @@ namespace
     return result;
 }
 
+[[nodiscard]] std::expected<QJsonArray, AiProviderError> toolDefinitions(const AiGenerationRequest &generation,
+                                                                         const bool responsesFormat)
+{
+    QJsonArray result;
+    for (const auto &definition : generation.tools)
+    {
+        QJsonParseError parseError;
+        const auto parameters = QJsonDocument::fromJson(
+            QByteArray(definition.parametersJson.data(), static_cast<qsizetype>(definition.parametersJson.size())),
+            &parseError);
+        if (definition.name.empty() || !parameters.isObject() || parseError.error != QJsonParseError::NoError)
+        {
+            return std::unexpected(
+                AiProviderError{.code = AiProviderErrorCode::invalidRequest,
+                                .message = "AI tool definitions must have a name and JSON object schema.",
+                                .retryable = false});
+        }
+        QJsonObject function{{QStringLiteral("name"), fromUtf8(definition.name)},
+                             {QStringLiteral("description"), fromUtf8(definition.description)},
+                             {QStringLiteral("parameters"), parameters.object()}};
+        if (responsesFormat)
+        {
+            function.insert(QStringLiteral("type"), QStringLiteral("function"));
+            function.insert(QStringLiteral("strict"), true);
+            result.append(function);
+        }
+        else
+        {
+            result.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("function")},
+                                      {QStringLiteral("function"), function}});
+        }
+    }
+    return result;
+}
+
+[[nodiscard]] QJsonArray conversationMessages(const AiGenerationRequest &generation, const bool objectArguments)
+{
+    auto result = messages(generation);
+    for (const auto &exchange : generation.toolHistory)
+    {
+        QJsonArray calls;
+        for (const auto &call : exchange.calls)
+        {
+            QJsonParseError parseError;
+            const auto arguments = QJsonDocument::fromJson(
+                QByteArray(call.argumentsJson.data(), static_cast<qsizetype>(call.argumentsJson.size())), &parseError);
+            const auto argumentsObject = arguments.isObject() && parseError.error == QJsonParseError::NoError
+                                             ? arguments.object()
+                                             : QJsonObject{};
+            const QJsonValue serializedArguments =
+                objectArguments
+                    ? QJsonValue{argumentsObject}
+                    : QJsonValue{QString::fromUtf8(QJsonDocument(argumentsObject).toJson(QJsonDocument::Compact))};
+            calls.append(QJsonObject{
+                {QStringLiteral("id"), fromUtf8(call.id)},
+                {QStringLiteral("type"), QStringLiteral("function")},
+                {QStringLiteral("function"), QJsonObject{{QStringLiteral("name"), fromUtf8(call.name)},
+                                                         {QStringLiteral("arguments"), serializedArguments}}}});
+        }
+        if (!calls.isEmpty())
+        {
+            result.append(QJsonObject{{QStringLiteral("role"), QStringLiteral("assistant")},
+                                      {QStringLiteral("content"), QJsonValue::Null},
+                                      {QStringLiteral("tool_calls"), calls}});
+        }
+        for (const auto &output : exchange.outputs)
+        {
+            result.append(QJsonObject{{QStringLiteral("role"), QStringLiteral("tool")},
+                                      {QStringLiteral("tool_call_id"), fromUtf8(output.callId)},
+                                      {QStringLiteral("name"), fromUtf8(output.name)},
+                                      {QStringLiteral("content"), fromUtf8(output.outputJson)}});
+        }
+    }
+    return result;
+}
+
+[[nodiscard]] QJsonArray responsesInput(const AiGenerationRequest &generation)
+{
+    if (generation.toolHistory.empty() || generation.toolHistory.back().outputs.empty())
+    {
+        return messages(generation);
+    }
+    QJsonArray result;
+    for (const auto &output : generation.toolHistory.back().outputs)
+    {
+        result.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("function_call_output")},
+                                  {QStringLiteral("call_id"), fromUtf8(output.callId)},
+                                  {QStringLiteral("output"), fromUtf8(output.outputJson)}});
+    }
+    return result;
+}
+
 [[nodiscard]] QJsonObject openAiBody(const AiProviderConfiguration &configuration,
-                                     const AiGenerationRequest &generation)
+                                     const AiGenerationRequest &generation, const QJsonArray &tools)
 {
     QJsonObject body{{QStringLiteral("model"), fromUtf8(configuration.model)},
-                     {QStringLiteral("input"), messages(generation)},
+                     {QStringLiteral("input"), responsesInput(generation)},
                      {QStringLiteral("stream"), true},
                      {QStringLiteral("store"), false}};
     if (!generation.instructions.empty())
     {
         body.insert(QStringLiteral("instructions"), fromUtf8(generation.instructions));
+    }
+    if (!tools.isEmpty())
+    {
+        body.insert(QStringLiteral("tools"), tools);
     }
     const auto previousResponseId = generation.previousResponseId.value_or(std::string{});
     if (!previousResponseId.empty())
@@ -114,32 +210,42 @@ namespace
 }
 
 [[nodiscard]] QJsonObject compatibleBody(const AiProviderConfiguration &configuration,
-                                         const AiGenerationRequest &generation)
+                                         const AiGenerationRequest &generation, const QJsonArray &tools)
 {
-    auto input = messages(generation);
+    auto input = conversationMessages(generation, false);
     if (!generation.instructions.empty())
     {
         input.prepend(QJsonObject{{QStringLiteral("role"), QStringLiteral("system")},
                                   {QStringLiteral("content"), fromUtf8(generation.instructions)}});
     }
-    return QJsonObject{{QStringLiteral("model"), fromUtf8(configuration.model)},
-                       {QStringLiteral("messages"), input},
-                       {QStringLiteral("stream"), true},
-                       {QStringLiteral("stream_options"), QJsonObject{{QStringLiteral("include_usage"), true}}}};
+    QJsonObject body{{QStringLiteral("model"), fromUtf8(configuration.model)},
+                     {QStringLiteral("messages"), input},
+                     {QStringLiteral("stream"), true},
+                     {QStringLiteral("stream_options"), QJsonObject{{QStringLiteral("include_usage"), true}}}};
+    if (!tools.isEmpty())
+    {
+        body.insert(QStringLiteral("tools"), tools);
+    }
+    return body;
 }
 
 [[nodiscard]] QJsonObject ollamaBody(const AiProviderConfiguration &configuration,
-                                     const AiGenerationRequest &generation)
+                                     const AiGenerationRequest &generation, const QJsonArray &tools)
 {
-    auto input = messages(generation);
+    auto input = conversationMessages(generation, true);
     if (!generation.instructions.empty())
     {
         input.prepend(QJsonObject{{QStringLiteral("role"), QStringLiteral("system")},
                                   {QStringLiteral("content"), fromUtf8(generation.instructions)}});
     }
-    return QJsonObject{{QStringLiteral("model"), fromUtf8(configuration.model)},
-                       {QStringLiteral("messages"), input},
-                       {QStringLiteral("stream"), true}};
+    QJsonObject body{{QStringLiteral("model"), fromUtf8(configuration.model)},
+                     {QStringLiteral("messages"), input},
+                     {QStringLiteral("stream"), true}};
+    if (!tools.isEmpty())
+    {
+        body.insert(QStringLiteral("tools"), tools);
+    }
+    return body;
 }
 
 } // namespace
@@ -162,17 +268,22 @@ ProviderRequestFactory::prepare(const AiProviderConfiguration &configuration, co
 
     QJsonObject body;
     auto protocol = AiWireProtocol::serverSentEvents;
+    const auto tools = toolDefinitions(generation, configuration.kind == AiProviderKind::openAiResponses);
+    if (!tools.has_value())
+    {
+        return std::unexpected(tools.error());
+    }
     switch (configuration.kind)
     {
         case AiProviderKind::openAiResponses:
-            body = openAiBody(configuration, generation);
+            body = openAiBody(configuration, generation, *tools);
             break;
         case AiProviderKind::ollama:
-            body = ollamaBody(configuration, generation);
+            body = ollamaBody(configuration, generation, *tools);
             protocol = AiWireProtocol::ndjson;
             break;
         case AiProviderKind::openAiCompatible:
-            body = compatibleBody(configuration, generation);
+            body = compatibleBody(configuration, generation, *tools);
             break;
     }
 

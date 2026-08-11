@@ -16,6 +16,10 @@ using ztermy::ai::AiMessageRole;
 using ztermy::ai::AiProviderConfiguration;
 using ztermy::ai::AiProviderErrorCode;
 using ztermy::ai::AiProviderKind;
+using ztermy::ai::AiToolCall;
+using ztermy::ai::AiToolDefinition;
+using ztermy::ai::AiToolExchange;
+using ztermy::ai::AiToolOutput;
 using ztermy::ai::AiWireProtocol;
 using ztermy::ai::ProviderRequestFactory;
 
@@ -38,6 +42,12 @@ void ProviderRequestFactoryTests::preparesOpenAiResponsesRequest()
     const AiGenerationRequest generation{
         .instructions = "Use terminal evidence.",
         .messages = {AiChatMessage{.role = AiMessageRole::user, .content = "解释失败"}},
+        .tools = {AiToolDefinition{.name = "read_terminal",
+                                   .description = "Read terminal lines.",
+                                   .parametersJson =
+                                       R"({"type":"object","properties":{},"additionalProperties":false})"}},
+        .toolHistory = {AiToolExchange{
+            .outputs = {AiToolOutput{.callId = "call_1", .name = "read_terminal", .outputJson = R"({"ok":true})"}}}},
         .previousResponseId = "resp_previous"};
     const auto prepared = ProviderRequestFactory::prepare(configuration, generation, "test-secret");
     QVERIFY(prepared.has_value());
@@ -50,7 +60,10 @@ void ProviderRequestFactoryTests::preparesOpenAiResponsesRequest()
     QCOMPARE(body.value("model").toString(), QStringLiteral("gpt-5.6"));
     QCOMPARE(body.value("store").toBool(), false);
     QCOMPARE(body.value("previous_response_id").toString(), QStringLiteral("resp_previous"));
-    QCOMPARE(body.value("input").toArray().first().toObject().value("content").toString(), QStringLiteral("解释失败"));
+    QCOMPARE(body.value("input").toArray().first().toObject().value("type").toString(),
+             QStringLiteral("function_call_output"));
+    QCOMPARE(body.value("tools").toArray().first().toObject().value("name").toString(),
+             QStringLiteral("read_terminal"));
 }
 
 void ProviderRequestFactoryTests::preparesOllamaRequest()
@@ -58,16 +71,27 @@ void ProviderRequestFactoryTests::preparesOllamaRequest()
     const AiProviderConfiguration configuration{.kind = AiProviderKind::ollama,
                                                 .baseUrl = "http://127.0.0.1:11434",
                                                 .model = "qwen3"};
-    const AiGenerationRequest generation{.instructions = "Be concise.",
-                                         .messages = {AiChatMessage{.content = "hello"}}};
+    const AiGenerationRequest generation{
+        .instructions = "Be concise.",
+        .messages = {AiChatMessage{.content = "hello"}},
+        .tools = {AiToolDefinition{.name = "list_sessions",
+                                   .description = "List sessions.",
+                                   .parametersJson = R"({"type":"object","properties":{}})"}},
+        .toolHistory = {AiToolExchange{
+            .calls = {AiToolCall{.id = "call_1", .name = "list_sessions", .argumentsJson = "{}"}},
+            .outputs = {AiToolOutput{.callId = "call_1", .name = "list_sessions", .outputJson = "[]"}}}}};
     const auto prepared = ProviderRequestFactory::prepare(configuration, generation, {});
     QVERIFY(prepared.has_value());
     QCOMPARE(prepared->request.url().toString(), QStringLiteral("http://127.0.0.1:11434/api/chat"));
     QCOMPARE(prepared->protocol, AiWireProtocol::ndjson);
     QCOMPARE(prepared->request.rawHeader("Authorization"), QByteArray{});
     const auto input = QJsonDocument::fromJson(prepared->body).object().value("messages").toArray();
-    QCOMPARE(input.size(), 2);
+    QCOMPARE(input.size(), 4);
     QCOMPARE(input.first().toObject().value("role").toString(), QStringLiteral("system"));
+    const auto body = QJsonDocument::fromJson(prepared->body).object();
+    QCOMPARE(body.value("tools").toArray().first().toObject().value("function").toObject().value("name").toString(),
+             QStringLiteral("list_sessions"));
+    QCOMPARE(input.last().toObject().value("role").toString(), QStringLiteral("tool"));
 }
 
 void ProviderRequestFactoryTests::preparesCompatibleRequest()
@@ -81,6 +105,11 @@ void ProviderRequestFactoryTests::preparesCompatibleRequest()
     QCOMPARE(prepared->request.url().toString(), QStringLiteral("https://example.test/v1/custom/chat"));
     const auto body = QJsonDocument::fromJson(prepared->body).object();
     QVERIFY(body.value("stream_options").toObject().value("include_usage").toBool());
+
+    const AiGenerationRequest invalidGeneration{.tools = {AiToolDefinition{.name = "broken", .parametersJson = "[]"}}};
+    const auto invalidTool = ProviderRequestFactory::prepare(configuration, invalidGeneration, "key");
+    QVERIFY(!invalidTool.has_value());
+    QCOMPARE(invalidTool.error().code, AiProviderErrorCode::invalidRequest);
 }
 
 void ProviderRequestFactoryTests::rejectsUnsafeOrIncompleteConfiguration()

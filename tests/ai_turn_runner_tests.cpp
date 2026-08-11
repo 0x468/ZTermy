@@ -25,6 +25,7 @@ using ztermy::ai::AiProviderRetryLimits;
 using ztermy::ai::AiProviderRetryPolicy;
 using ztermy::ai::AiStreamEvent;
 using ztermy::ai::AiStreamEventType;
+using ztermy::ai::AiToolOutput;
 using ztermy::ai::AiTurnMetrics;
 using ztermy::ai::AiTurnRunner;
 using ztermy::ai::ProviderHttpClient;
@@ -178,6 +179,7 @@ private slots:
     void doesNotReplayAfterVisibleOutput();
     void cancelsScheduledRetry();
     void destroyingRunnerCancelsSafely();
+    void executesReadToolAndContinuesTheSameTurn();
 };
 
 void AiTurnRunnerTests::retriesBeforeVisibleOutput()
@@ -311,6 +313,50 @@ void AiTurnRunnerTests::destroyingRunnerCancelsSafely()
     }
     QTest::qWait(150);
     QCOMPARE(network.requestCount(), std::size_t{1});
+}
+
+void AiTurnRunnerTests::executesReadToolAndContinuesTheSameTurn()
+{
+    FakeNetworkAccessManager network;
+    network.enqueue(FakeResponse{
+        .payload =
+            "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\"}}\n\n"
+            "data: "
+            "{\"type\":\"response.output_item.added\",\"item\":{\"type\":\"function_call\",\"id\":\"item_1\",\"call_"
+            "id\":\"call_1\",\"name\":\"list_sessions\"}}\n\n"
+            "data: {\"type\":\"response.function_call_arguments.done\",\"item_id\":\"item_1\",\"arguments\":\"{}\"}\n\n"
+            "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\"}}\n\n"});
+    network.enqueue(FakeResponse{.payload =
+                                     "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_2\"}}\n\n"
+                                     "data: {\"type\":\"response.output_text.delta\",\"delta\":\"done\"}\n\n"
+                                     "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_2\"}}\n\n"});
+    ProviderHttpClient client(&network);
+    AiTurnRunner runner(client, fastRetryPolicy());
+    std::vector<AiStreamEvent> events;
+    bool finished = false;
+    std::size_t toolCalls = 0;
+
+    QVERIFY(runner
+                .start(
+                    openAiConfiguration(), AiGenerationRequest{}, emptySecretLoader(),
+                    [&events](const auto, const AiStreamEvent &event) {
+                        events.push_back(event);
+                    },
+                    [&finished](const auto, const AiTurnMetrics &) {
+                        finished = true;
+                    },
+                    {}, {},
+                    [&toolCalls](const ztermy::ai::AiToolCall &call) -> std::expected<AiToolOutput, AiProviderError> {
+                        ++toolCalls;
+                        return AiToolOutput{.callId = call.id, .name = call.name, .outputJson = R"({"ok":true})"};
+                    })
+                .has_value());
+
+    QTRY_VERIFY_WITH_TIMEOUT(finished, 1000);
+    QCOMPARE(network.requestCount(), std::size_t{2});
+    QCOMPARE(toolCalls, std::size_t{1});
+    QCOMPARE(events.back().type, AiStreamEventType::responseCompleted);
+    QCOMPARE(events.at(events.size() - 2).delta, std::string("done"));
 }
 
 } // namespace

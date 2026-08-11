@@ -2,6 +2,7 @@
 
 #include "application/actions/ActionRegistry.h"
 #include "application/ai/AiConversationModel.h"
+#include "application/ai/AiReadToolDispatcher.h"
 #include "application/ai/AiSecretStore.h"
 #include "application/ai/AiTurnRunner.h"
 #include "application/forwarding/PortForwardingJob.h"
@@ -636,6 +637,7 @@ private:
     void initializeTerminalOutputSink(TerminalTab &tab);
     void initializeAiRuntime(TerminalTab &tab);
     [[nodiscard]] ai::AiContextBundle buildAiContext(TerminalTab &tab, bool preferLastFailure);
+    [[nodiscard]] std::vector<ai::AiTerminalReadSnapshot> aiReadSnapshots(const TerminalTab &tab) const;
     void acceptAiSelectedText(TerminalTab &tab, const QString &text);
     [[nodiscard]] bool sendAiMessage(TerminalTab &tab, const QString &prompt, bool preferLastFailure,
                                      bool appendPrompt = true, bool commandRequest = false);
@@ -771,6 +773,7 @@ private:
     QString m_portForwardingOperationError;
     ai::ProviderHttpClient m_aiProviderClient;
     ai::AiContextBroker m_aiContextBroker;
+    ai::AiReadToolDispatcher m_aiReadToolDispatcher;
     std::vector<std::unique_ptr<TerminalTab>> m_tabs;
     std::vector<std::unique_ptr<sftp::SftpSession>> m_stoppingSftpSessions;
     QString m_activeTabId;

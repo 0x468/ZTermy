@@ -4,6 +4,7 @@
 #include <QRandomGenerator>
 
 #include <algorithm>
+#include <iterator>
 #include <limits>
 #include <utility>
 
@@ -39,7 +40,7 @@ AiTurnRunner::~AiTurnRunner()
 std::expected<AiTurnRunner::TurnId, AiProviderError>
 AiTurnRunner::start(AiProviderConfiguration configuration, AiGenerationRequest generation, SecretLoader secretLoader,
                     EventHandler eventHandler, FinishedHandler finishedHandler, RetryHandler retryHandler,
-                    JitterSource jitterSource)
+                    JitterSource jitterSource, ToolHandler toolHandler)
 {
     if (active())
     {
@@ -61,8 +62,10 @@ AiTurnRunner::start(AiProviderConfiguration configuration, AiGenerationRequest g
     m_finishedHandler = std::move(finishedHandler);
     m_retryHandler = std::move(retryHandler);
     m_jitterSource = std::move(jitterSource);
+    m_toolHandler = std::move(toolHandler);
     m_turnId = m_nextTurnId++;
     m_completedRetries = 0;
+    m_completedToolCalls = 0;
     m_startedAt = std::chrono::steady_clock::now();
     m_firstTokenAt.reset();
     m_visibleOutputObserved = false;
@@ -149,7 +152,26 @@ void AiTurnRunner::handleEvent(const ProviderHttpClient::RequestId requestId, co
     }
     if (event.type == AiStreamEventType::responseStarted)
     {
+        if (!event.responseId.empty())
+        {
+            m_responseId = event.responseId;
+        }
         m_bufferedStart = event;
+        return;
+    }
+
+    if (event.type == AiStreamEventType::toolCallStarted || event.type == AiStreamEventType::toolArgumentsDelta
+        || event.type == AiStreamEventType::toolCallCompleted)
+    {
+        observeToolEvent(event);
+    }
+    if (event.type == AiStreamEventType::responseCompleted && !m_pendingToolCalls.empty())
+    {
+        if (!event.responseId.empty())
+        {
+            m_responseId = event.responseId;
+        }
+        m_toolContinuationPending = true;
         return;
     }
     if (event.type == AiStreamEventType::responseFailed)
@@ -180,6 +202,15 @@ void AiTurnRunner::handleFinished(const ProviderHttpClient::RequestId requestId)
     if (!m_pendingError.has_value())
     {
         emitBufferedStart();
+        if (m_toolContinuationPending)
+        {
+            const auto continued = continueWithTools();
+            if (!continued.has_value())
+            {
+                finishWithError(continued.error());
+            }
+            return;
+        }
         finishTurn();
         return;
     }
@@ -201,6 +232,94 @@ void AiTurnRunner::handleFinished(const ProviderHttpClient::RequestId requestId)
         return;
     }
     finishWithError(error);
+}
+
+std::expected<void, AiProviderError> AiTurnRunner::continueWithTools()
+{
+    constexpr std::uint32_t maximumToolCalls = 24;
+    if (!m_toolHandler)
+    {
+        return std::unexpected(
+            AiProviderError{.code = AiProviderErrorCode::protocol,
+                            .message = "The provider requested a tool but no tool handler is available.",
+                            .retryable = false});
+    }
+    if (m_pendingToolCalls.empty() || m_pendingToolCalls.size() > maximumToolCalls - m_completedToolCalls)
+    {
+        return std::unexpected(AiProviderError{.code = AiProviderErrorCode::protocol,
+                                               .message = "The AI turn exceeded its 24 tool-call budget.",
+                                               .retryable = false});
+    }
+    if (m_configuration.kind == AiProviderKind::openAiResponses && m_responseId.empty())
+    {
+        return std::unexpected(
+            AiProviderError{.code = AiProviderErrorCode::protocol,
+                            .message = "The provider omitted the response id required for tool continuation.",
+                            .retryable = false});
+    }
+
+    AiToolExchange exchange{.calls = m_pendingToolCalls};
+    exchange.outputs.reserve(exchange.calls.size());
+    for (const auto &call : exchange.calls)
+    {
+        if (call.id.empty() || call.name.empty() || call.argumentsJson.empty())
+        {
+            return std::unexpected(AiProviderError{.code = AiProviderErrorCode::protocol,
+                                                   .message = "The provider emitted an incomplete tool call.",
+                                                   .retryable = false});
+        }
+        auto output = m_toolHandler(call);
+        if (!output.has_value())
+        {
+            return std::unexpected(output.error());
+        }
+        exchange.outputs.push_back(std::move(*output));
+    }
+    m_completedToolCalls += static_cast<std::uint32_t>(exchange.calls.size());
+    m_generation.toolHistory.push_back(std::move(exchange));
+    if (!m_responseId.empty())
+    {
+        m_generation.previousResponseId = m_responseId;
+    }
+    m_pendingToolCalls.clear();
+    m_responseId.clear();
+    m_toolContinuationPending = false;
+    return startAttempt();
+}
+
+void AiTurnRunner::observeToolEvent(const AiStreamEvent &event)
+{
+    constexpr std::size_t maximumArgumentsBytes = std::size_t{16} * 1024;
+    auto tool = std::ranges::find(m_pendingToolCalls, event.toolCallId, &AiToolCall::id);
+    if (tool == m_pendingToolCalls.end())
+    {
+        if (event.toolCallId.empty())
+        {
+            return;
+        }
+        m_pendingToolCalls.push_back(AiToolCall{.id = event.toolCallId, .name = event.toolName});
+        tool = std::prev(m_pendingToolCalls.end());
+    }
+    if (!event.toolName.empty())
+    {
+        tool->name = event.toolName;
+    }
+    if (event.type == AiStreamEventType::toolCallCompleted && !event.delta.empty())
+    {
+        tool->argumentsJson = event.delta;
+    }
+    else if (event.type == AiStreamEventType::toolArgumentsDelta && !event.delta.empty())
+    {
+        if (event.delta.size() > maximumArgumentsBytes - std::min(maximumArgumentsBytes, tool->argumentsJson.size()))
+        {
+            m_pendingError = AiProviderError{.code = AiProviderErrorCode::protocol,
+                                             .message = "Tool arguments exceed the 16 KiB limit.",
+                                             .retryable = false};
+            static_cast<void>(m_client.cancel(*m_requestId));
+            return;
+        }
+        tool->argumentsJson += event.delta;
+    }
 }
 
 void AiTurnRunner::emitBufferedStart()
@@ -256,14 +375,19 @@ void AiTurnRunner::clearTurn()
     m_finishedHandler = {};
     m_retryHandler = {};
     m_jitterSource = {};
+    m_toolHandler = {};
     m_requestId.reset();
     m_bufferedStart.reset();
     m_pendingError.reset();
+    m_pendingToolCalls.clear();
+    m_responseId.clear();
     m_turnId = 0;
     m_completedRetries = 0;
+    m_completedToolCalls = 0;
     m_startedAt = {};
     m_firstTokenAt.reset();
     m_visibleOutputObserved = false;
+    m_toolContinuationPending = false;
     m_cancelled = false;
 }
 

@@ -6999,6 +6999,38 @@ ai::AiContextBundle AppController::buildAiContext(TerminalTab &tab, const bool p
     return context;
 }
 
+std::vector<ai::AiTerminalReadSnapshot> AppController::aiReadSnapshots(const TerminalTab &tab) const
+{
+    std::vector<ai::AiTerminalReadSnapshot> snapshots;
+    snapshots.reserve(1);
+    terminal::SemanticTerminalSnapshot semantic;
+    if (tab.semanticObserver)
+    {
+        semantic = tab.semanticObserver->snapshot();
+    }
+    auto capability = terminal::TerminalSemanticCapability::none;
+    QString shell = tab.kind == TerminalTabKind::Local ? QStringLiteral("pwsh") : QString{};
+    if (!semantic.commandBlocks.empty())
+    {
+        capability = semantic.commandBlocks.back().capability;
+        if (!semantic.commandBlocks.back().shell.empty())
+        {
+            shell = utf8QString(semantic.commandBlocks.back().shell);
+        }
+    }
+    snapshots.push_back(ai::AiTerminalReadSnapshot{.sessionId = utf8String(tab.id),
+                                                   .title = utf8String(tab.title),
+                                                   .host = utf8String(tab.address),
+                                                   .shell = utf8String(shell),
+                                                   .workingDirectory = utf8String(tab.terminalWorkingDirectory),
+                                                   .terminalFrame = utf8String(terminalFrameText(tab.snapshot)),
+                                                   .sessionGeneration = tab.reconnectGeneration,
+                                                   .capability = capability,
+                                                   .connected = tab.running,
+                                                   .commandBlocks = std::move(semantic.commandBlocks)});
+    return snapshots;
+}
+
 void AppController::acceptAiSelectedText(TerminalTab &tab, const QString &text)
 {
     if (text.trimmed().isEmpty())
@@ -7090,7 +7122,9 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
             "exactly one runnable command in exactly one fenced code block tagged for the active shell. Do not place "
             "alternative commands in other code blocks.";
     }
-    ai::AiGenerationRequest generation{.instructions = std::move(instructions), .messages = std::move(messages)};
+    ai::AiGenerationRequest generation{.instructions = std::move(instructions),
+                                       .messages = std::move(messages),
+                                       .tools = ai::AiReadToolDispatcher::definitions()};
 
     const auto started = tab.aiTurnRunner->start(
         configuration, std::move(generation),
@@ -7126,7 +7160,20 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                         target->aiConversation->appendAssistantDelta(assistantMessageId, utf8QString(event.delta)));
                     break;
                 case ai::AiStreamEventType::usageUpdated:
-                    target->aiUsage = event.usage;
+                    if (event.usage.has_value())
+                    {
+                        if (!target->aiUsage.has_value())
+                        {
+                            target->aiUsage = event.usage;
+                        }
+                        else
+                        {
+                            target->aiUsage->inputTokens += event.usage->inputTokens;
+                            target->aiUsage->outputTokens += event.usage->outputTokens;
+                            target->aiUsage->reasoningTokens += event.usage->reasoningTokens;
+                            target->aiUsage->cachedInputTokens += event.usage->cachedInputTokens;
+                        }
+                    }
                     break;
                 case ai::AiStreamEventType::responseCompleted:
                     static_cast<void>(
@@ -7185,6 +7232,16 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
             {
                 emit aiConversationChanged();
             }
+        },
+        {},
+        [this, tabId = tab.id](const ai::AiToolCall &call) -> std::expected<ai::AiToolOutput, ai::AiProviderError> {
+            const auto *target = findTab(tabId);
+            const auto snapshots =
+                target == nullptr ? std::vector<ai::AiTerminalReadSnapshot>{} : aiReadSnapshots(*target);
+            return ai::AiToolOutput{.callId = call.id,
+                                    .name = call.name,
+                                    .outputJson =
+                                        m_aiReadToolDispatcher.execute(call.name, call.argumentsJson, snapshots)};
         });
     if (!started.has_value())
     {

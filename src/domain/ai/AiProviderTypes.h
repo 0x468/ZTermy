@@ -38,10 +38,39 @@ struct AiProviderConfiguration final
     std::string model;
 };
 
+struct AiToolDefinition final
+{
+    std::string name;
+    std::string description;
+    std::string parametersJson;
+};
+
+struct AiToolCall final
+{
+    std::string id;
+    std::string name;
+    std::string argumentsJson;
+};
+
+struct AiToolOutput final
+{
+    std::string callId;
+    std::string name;
+    std::string outputJson;
+};
+
+struct AiToolExchange final
+{
+    std::vector<AiToolCall> calls;
+    std::vector<AiToolOutput> outputs;
+};
+
 struct AiGenerationRequest final
 {
     std::string instructions;
     std::vector<AiChatMessage> messages;
+    std::vector<AiToolDefinition> tools;
+    std::vector<AiToolExchange> toolHistory;
     std::optional<std::string> previousResponseId;
 };
 
