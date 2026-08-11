@@ -1,5 +1,6 @@
 #pragma once
 
+#include "domain/ai/AiContextRedactor.h"
 #include "domain/terminal/CommandBlockStore.h"
 
 #include <cstddef>
@@ -27,6 +28,7 @@ struct AiContextLimits final
     std::size_t maxItemBytes = std::size_t{16} * 1024;
     std::size_t maxItemLines = 300;
     std::size_t maxPrecedingBlocks = 5;
+    std::size_t maxRedactionWindowBytes = std::size_t{64} * 1024;
 };
 
 struct AiExplicitContext final
@@ -58,6 +60,7 @@ struct AiContextRequest final
     std::optional<AiTerminalFrameContext> currentFrame;
     std::unordered_set<std::string> excludedItemIds;
     std::unordered_set<std::string> pinnedItemIds;
+    std::vector<AiUserRedactionRule> redactionRules;
 };
 
 struct AiContextItem final
@@ -83,6 +86,8 @@ struct AiContextItem final
     bool automatic = false;
     bool truncated = false;
     bool untrustedEvidence = true;
+    std::size_t redactionCount = 0;
+    bool redacted = false;
 };
 
 struct AiContextBundle final
@@ -93,6 +98,8 @@ struct AiContextBundle final
     std::size_t estimatedTokens = 0;
     std::size_t droppedItems = 0;
     bool aggregateTruncated = false;
+    std::size_t totalRedactions = 0;
+    std::vector<std::string> invalidRedactionRuleIds;
 };
 
 class AiContextBroker final

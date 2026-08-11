@@ -54,6 +54,7 @@ private slots:
     void exposesEvidenceQualityAndNormalizesOutput();
     void appliesExclusionAndPinPriority();
     void enforcesItemAndAggregateBounds();
+    void redactsBeforePublishingPreview();
 };
 
 void AiContextBrokerTests::selectsFailureAndFivePrecedingBlocks()
@@ -140,6 +141,31 @@ void AiContextBrokerTests::enforcesItemAndAggregateBounds()
     QVERIFY(bundle.items.front().truncated);
     QVERIFY(bundle.aggregateTruncated);
     QVERIFY(bundle.droppedItems > 0);
+}
+
+void AiContextBrokerTests::redactsBeforePublishingPreview()
+{
+    CommandBlockStore store;
+    const auto id = addBlock(store,
+                             "curl -H 'Authorization: Bearer command-secret-12345'",
+                             "OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz123456\n",
+                             1);
+    AiContextBroker broker;
+    const auto bundle = broker.build(
+        store,
+        AiContextRequest{.primaryBlockId = id,
+                         .automaticContextEnabled = false,
+                         .redactionRules = {ztermy::ai::AiUserRedactionRule{
+                             .id = "host-rule",
+                             .pattern = "host"}}});
+    QCOMPARE(bundle.items.size(), std::size_t{1});
+    const auto &item = bundle.items.front();
+    QVERIFY(!item.command.contains("command-secret"));
+    QVERIFY(!item.content.contains("sk-abcdefghijklmnopqrstuvwxyz"));
+    QVERIFY(!item.host.contains("host"));
+    QVERIFY(item.redacted);
+    QVERIFY(item.redactionCount >= std::size_t{3});
+    QCOMPARE(bundle.totalRedactions, item.redactionCount);
 }
 
 } // namespace

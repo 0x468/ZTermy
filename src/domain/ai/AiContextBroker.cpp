@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <span>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 
 namespace ztermy::ai
@@ -203,10 +204,40 @@ void capBytes(std::string &text, const std::size_t maximumBytes, bool &truncated
            + item.workingDirectory.size() + item.sessionId.size() + item.host.size() + item.shell.size();
 }
 
-void finalizeItem(AiContextItem &item, const AiContextLimits &limits)
+void redactField(std::string &field,
+                 AiContextItem &item,
+                 const AiContextRedactor &redactor,
+                 const std::span<const AiUserRedactionRule> rules,
+                 std::unordered_set<std::string> &invalidRuleIds)
 {
+    const auto result = redactor.redact(field, rules);
+    field = result.text;
+    item.redactionCount += result.totalRedactions();
+    invalidRuleIds.insert(result.invalidRuleIds.begin(), result.invalidRuleIds.end());
+}
+
+void finalizeItem(AiContextItem &item,
+                  const AiContextLimits &limits,
+                  const AiContextRedactor &redactor,
+                  const std::span<const AiUserRedactionRule> rules,
+                  std::unordered_set<std::string> &invalidRuleIds)
+{
+    item.id = normalizedTerminalText(item.id);
+    item.title = normalizedTerminalText(item.title);
     item.command = normalizedTerminalText(item.command);
     item.content = normalizedTerminalText(item.content);
+    item.workingDirectory = normalizedTerminalText(item.workingDirectory);
+    item.sessionId = normalizedTerminalText(item.sessionId);
+    item.host = normalizedTerminalText(item.host);
+    item.shell = normalizedTerminalText(item.shell);
+    capBytes(item.content, limits.maxRedactionWindowBytes, item.truncated);
+    redactField(item.title, item, redactor, rules, invalidRuleIds);
+    redactField(item.command, item, redactor, rules, invalidRuleIds);
+    redactField(item.content, item, redactor, rules, invalidRuleIds);
+    redactField(item.workingDirectory, item, redactor, rules, invalidRuleIds);
+    redactField(item.host, item, redactor, rules, invalidRuleIds);
+    redactField(item.shell, item, redactor, rules, invalidRuleIds);
+    item.redacted = item.redactionCount > 0;
     const auto metadata = metadataBytes(item);
     const auto maximumContentBytes = metadata >= limits.maxItemBytes ? std::size_t{0}
                                                                      : limits.maxItemBytes - metadata;
@@ -220,7 +251,10 @@ void finalizeItem(AiContextItem &item, const AiContextLimits &limits)
 [[nodiscard]] AiContextItem commandItem(const terminal::CommandBlock &block,
                                         const bool automatic,
                                         const bool pinned,
-                                        const AiContextLimits &limits)
+                                        const AiContextLimits &limits,
+                                        const AiContextRedactor &redactor,
+                                        const std::span<const AiUserRedactionRule> rules,
+                                        std::unordered_set<std::string> &invalidRuleIds)
 {
     AiContextItem item{.id = blockId(block),
                        .kind = AiContextItemKind::commandBlock,
@@ -241,7 +275,7 @@ void finalizeItem(AiContextItem &item, const AiContextLimits &limits)
                        .pinned = pinned,
                        .automatic = automatic,
                        .truncated = !block.hasCompleteOutput()};
-    finalizeItem(item, limits);
+    finalizeItem(item, limits, redactor, rules, invalidRuleIds);
     return item;
 }
 
@@ -284,6 +318,10 @@ AiContextBundle AiContextBroker::build(const terminal::CommandBlockStore &store,
                                        const AiContextRequest &request) const
 {
     std::vector<std::pair<int, AiContextItem>> candidates;
+    AiContextRedactor redactor;
+    std::unordered_set<std::string> invalidRuleIds;
+    const auto validation = redactor.redact({}, request.redactionRules);
+    invalidRuleIds.insert(validation.invalidRuleIds.begin(), validation.invalidRuleIds.end());
     for (const auto &explicitItem : request.explicitItems)
     {
         const auto id = "attachment:" + explicitItem.id;
@@ -297,7 +335,7 @@ AiContextBundle AiContextBroker::build(const terminal::CommandBlockStore &store,
                            .content = explicitItem.content,
                            .host = explicitItem.source,
                            .pinned = request.pinnedItemIds.contains(id)};
-        finalizeItem(item, m_limits);
+        finalizeItem(item, m_limits, redactor, request.redactionRules, invalidRuleIds);
         candidates.emplace_back(0, std::move(item));
     }
 
@@ -308,7 +346,14 @@ AiContextBundle AiContextBroker::build(const terminal::CommandBlockStore &store,
         if (!request.excludedItemIds.contains(id))
         {
             const auto pinned = request.pinnedItemIds.contains(id);
-            candidates.emplace_back(pinned ? 5 : 10, commandItem(*primary, false, pinned, m_limits));
+            candidates.emplace_back(pinned ? 5 : 10,
+                                    commandItem(*primary,
+                                                false,
+                                                pinned,
+                                                m_limits,
+                                                redactor,
+                                                request.redactionRules,
+                                                invalidRuleIds));
         }
     }
 
@@ -330,7 +375,7 @@ AiContextBundle AiContextBroker::build(const terminal::CommandBlockStore &store,
                                .sessionGeneration = frame.sessionGeneration,
                                .capability = frame.capability,
                                .pinned = pinned};
-            finalizeItem(item, m_limits);
+            finalizeItem(item, m_limits, redactor, request.redactionRules, invalidRuleIds);
             candidates.emplace_back(pinned ? 5 : 20, std::move(item));
         }
     }
@@ -357,7 +402,13 @@ AiContextBundle AiContextBroker::build(const terminal::CommandBlockStore &store,
             }
             const auto pinned = request.pinnedItemIds.contains(id);
             candidates.emplace_back(pinned ? 5 : 50 + static_cast<int>(included),
-                                    commandItem(*iterator, true, pinned, m_limits));
+                                    commandItem(*iterator,
+                                                true,
+                                                pinned,
+                                                m_limits,
+                                                redactor,
+                                                request.redactionRules,
+                                                invalidRuleIds));
             ++included;
         }
     }
@@ -379,8 +430,11 @@ AiContextBundle AiContextBroker::build(const terminal::CommandBlockStore &store,
         bundle.totalBytes += item.accountedBytes;
         bundle.totalLines += item.lineCount;
         bundle.estimatedTokens += item.estimatedTokens;
+        bundle.totalRedactions += item.redactionCount;
         bundle.items.push_back(std::move(item));
     }
+    bundle.invalidRedactionRuleIds.assign(invalidRuleIds.begin(), invalidRuleIds.end());
+    std::ranges::sort(bundle.invalidRedactionRuleIds);
     return bundle;
 }
 
