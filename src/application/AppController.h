@@ -53,6 +53,11 @@ namespace ztermy::ui
 class TerminalItem;
 }
 
+namespace ztermy::windowing
+{
+class WindowsProtectedClipboard;
+}
+
 namespace ztermy
 {
 
@@ -447,6 +452,7 @@ public:
     Q_INVOKABLE bool explainAiLastFailure();
     Q_INVOKABLE bool cancelAiMessage();
     Q_INVOKABLE void clearAiConversation();
+    Q_INVOKABLE bool copyAiText(const QString &text);
     Q_INVOKABLE bool attachAiSelection();
     Q_INVOKABLE bool removeAiContextItem(const QString &itemId);
     Q_INVOKABLE bool setAiContextItemPinned(const QString &itemId, bool pinned);
@@ -723,6 +729,7 @@ private:
     ui::TerminalItem *m_terminal = nullptr;
     QHash<QString, QPointer<ui::TerminalItem>> m_terminalViewports;
     LocalTerminalSessionFactory m_localSessionFactory;
+    std::unique_ptr<windowing::WindowsProtectedClipboard> m_aiClipboard;
     ssh::SshProfileStore m_profileStore;
     forwarding::PortForwardingRuleStore m_portForwardingStore;
     config::ApplicationSettingsStore m_settingsStore;

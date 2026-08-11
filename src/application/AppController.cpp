@@ -4,6 +4,7 @@
 #include "domain/ssh/SshTarget.h"
 #include "infrastructure/security/InMemoryCredentialVault.h"
 #include "infrastructure/workbench/QuickCommandStore.h"
+#include "platform/windows/WindowsProtectedClipboard.h"
 #include "ui/terminal/TerminalItem.h"
 
 #include <QClipboard>
@@ -1531,6 +1532,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
                              LocalTerminalSessionFactory localSessionFactory, QObject *parent)
     : QObject(parent),
       m_localSessionFactory(std::move(localSessionFactory)),
+      m_aiClipboard(std::make_unique<windowing::WindowsProtectedClipboard>()),
       m_profileStore(std::move(profileStorePath)),
       m_portForwardingStore(siblingPortForwardingFile(m_profileStore.filePath())),
       m_settingsStore(settingsPath.isEmpty() ? siblingSettingsFile(m_profileStore.filePath())
@@ -1588,6 +1590,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
                              LocalTerminalSessionFactory localSessionFactory, QObject *parent)
     : QObject(parent),
       m_localSessionFactory(std::move(localSessionFactory)),
+      m_aiClipboard(std::make_unique<windowing::WindowsProtectedClipboard>()),
       m_profileStore(std::move(profileStorePath)),
       m_portForwardingStore(siblingPortForwardingFile(m_profileStore.filePath())),
       m_settingsStore(settingsPath.isEmpty() ? siblingSettingsFile(m_profileStore.filePath())
@@ -6828,6 +6831,11 @@ void AppController::clearAiConversation()
     tab->aiContextPreview.clear();
     tab->aiContextItems.clear();
     emit aiConversationChanged();
+}
+
+bool AppController::copyAiText(const QString &text)
+{
+    return m_aiClipboard != nullptr && m_aiClipboard->setProtectedText(text);
 }
 
 bool AppController::attachAiSelection()

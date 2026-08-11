@@ -432,6 +432,15 @@ Rectangle {
                             font.family: Theme.terminalFont
                             font.pixelSize: Theme.textCompact
                         }
+
+                        ActionButton {
+                            Layout.alignment: Qt.AlignRight
+                            visible: messageItem.messageRole === "assistant" && messageItem.text.length > 0
+                            text: qsTr("Protected copy")
+                            iconName: "copy"
+                            accessibleName: qsTr("Copy without Windows clipboard history or cloud sync")
+                            onClicked: pane.controller.copyAiText(messageItem.text)
+                        }
                     }
                 }
             }

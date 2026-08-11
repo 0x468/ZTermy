@@ -611,6 +611,26 @@ add_library(ztermy_terminal_ui STATIC
     src/ui/terminal/TerminalTextLayout.h
 )
 
+add_library(ztermy_windows_clipboard STATIC
+    src/platform/windows/WindowsProtectedClipboard.cpp
+    src/platform/windows/WindowsProtectedClipboard.h
+)
+target_compile_features(ztermy_windows_clipboard PUBLIC cxx_std_23)
+target_include_directories(ztermy_windows_clipboard PUBLIC src)
+target_compile_definitions(ztermy_windows_clipboard PRIVATE
+    NOMINMAX
+    UNICODE
+    WIN32_LEAN_AND_MEAN
+    _UNICODE
+)
+target_link_libraries(ztermy_windows_clipboard
+    PUBLIC
+        Qt6::Core
+        Qt6::Gui
+    PRIVATE
+        user32
+)
+
 target_compile_features(ztermy_terminal_ui PUBLIC cxx_std_23)
 target_include_directories(ztermy_terminal_ui PUBLIC src)
 target_link_libraries(ztermy_terminal_ui
@@ -1067,6 +1087,7 @@ target_link_libraries(ztermy PRIVATE
     ztermy_terminal_session
     ztermy_terminal_transport
     ztermy_terminal_ui
+    ztermy_windows_clipboard
     ztermy_icon_rendering
     ztermy_workbench_persistence
     Qt6::Core
@@ -2831,6 +2852,7 @@ if(BUILD_TESTING)
         ztermy_session_logging
         ztermy_terminal_session
         ztermy_terminal_ui
+        ztermy_windows_clipboard
         ztermy_workbench_persistence
         Qt6::Test
     )
@@ -2845,6 +2867,32 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME app-controller COMMAND ztermy_app_controller_tests)
+
+    qt_add_executable(ztermy_windows_protected_clipboard_tests
+        tests/windows_protected_clipboard_tests.cpp
+    )
+    target_compile_features(ztermy_windows_protected_clipboard_tests PRIVATE cxx_std_23)
+    target_compile_definitions(ztermy_windows_protected_clipboard_tests PRIVATE
+        NOMINMAX
+        UNICODE
+        WIN32_LEAN_AND_MEAN
+        _UNICODE
+    )
+    target_link_libraries(ztermy_windows_protected_clipboard_tests PRIVATE
+        ztermy_windows_clipboard
+        Qt6::Test
+        user32
+    )
+    if(MSVC)
+        target_compile_options(ztermy_windows_protected_clipboard_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+    add_test(NAME windows-protected-clipboard COMMAND ztermy_windows_protected_clipboard_tests)
+    set_tests_properties(windows-protected-clipboard PROPERTIES RUN_SERIAL TRUE)
 
     qt_add_executable(ztermy_terminal_item_tests
         tests/terminal_item_tests.cpp
@@ -3095,6 +3143,7 @@ if(BUILD_TESTING)
             ztermy_ai_context_serializer_tests
             ztermy_local_terminal_session_tests
             ztermy_app_controller_tests
+            ztermy_windows_protected_clipboard_tests
             ztermy_terminal_item_tests
             ztermy_font_catalog_tests
             ztermy_svg_icon_image_provider_tests
