@@ -1,6 +1,7 @@
 #pragma once
 
 #include "application/actions/ActionRegistry.h"
+#include "application/ai/AiSecretStore.h"
 #include "application/forwarding/PortForwardingJob.h"
 #include "application/security/CredentialVaultCoordinator.h"
 #include "application/sftp/SftpDirectoryModel.h"
@@ -138,6 +139,12 @@ class AppController final : public QObject
     Q_PROPERTY(bool sftpShowHiddenFiles READ sftpShowHiddenFiles NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool sftpConfirmDelete READ sftpConfirmDelete NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString languagePreference READ languagePreference NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(QString aiProviderPreference READ aiProviderPreference NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(QString aiBaseUrl READ aiBaseUrl NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(QString aiEndpointPath READ aiEndpointPath NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(QString aiModel READ aiModel NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(bool aiAutomaticContext READ aiAutomaticContext NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(bool aiApiKeyConfigured READ aiApiKeyConfigured NOTIFY credentialVaultChanged)
     Q_PROPERTY(QString credentialStoragePreference READ credentialStoragePreference NOTIFY credentialVaultChanged)
     Q_PROPERTY(QString effectiveCredentialStorage READ effectiveCredentialStorage NOTIFY credentialVaultChanged)
     Q_PROPERTY(bool portableVaultInitialized READ portableVaultInitialized NOTIFY credentialVaultChanged)
@@ -246,6 +253,12 @@ public:
     [[nodiscard]] bool sftpShowHiddenFiles() const noexcept;
     [[nodiscard]] bool sftpConfirmDelete() const noexcept;
     [[nodiscard]] QString languagePreference() const;
+    [[nodiscard]] QString aiProviderPreference() const;
+    [[nodiscard]] QString aiBaseUrl() const;
+    [[nodiscard]] QString aiEndpointPath() const;
+    [[nodiscard]] QString aiModel() const;
+    [[nodiscard]] bool aiAutomaticContext() const noexcept;
+    [[nodiscard]] bool aiApiKeyConfigured() const;
     void retranslateUiState();
     [[nodiscard]] QString credentialStoragePreference() const;
     [[nodiscard]] QString effectiveCredentialStorage() const;
@@ -412,6 +425,11 @@ public:
                                              const QString &cursor, bool cursorShouldBlink, bool shouldCopyOnSelect,
                                              bool shouldConfirmMultilinePaste, const QString &language,
                                              bool shouldShowHiddenSftpFiles, bool shouldConfirmSftpDelete);
+    Q_INVOKABLE bool saveAiProviderSettings(const QString &provider, const QString &baseUrl,
+                                            const QString &endpointPath, const QString &model,
+                                            bool automaticContext);
+    Q_INVOKABLE bool saveAiApiKey(const QString &apiKey);
+    Q_INVOKABLE bool removeAiApiKey();
     Q_INVOKABLE bool resetApplicationSettings();
     Q_INVOKABLE bool initializePortableCredentialVault(const QString &masterPassword);
     Q_INVOKABLE bool unlockPortableCredentialVault(const QString &masterPassword);

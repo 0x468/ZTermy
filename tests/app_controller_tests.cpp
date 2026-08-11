@@ -813,6 +813,24 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(controller.terminalLigatures());
     QCOMPARE(controller.terminalBackgroundOpacity(), 1.0);
     QCOMPARE(controller.languagePreference(), QStringLiteral("system"));
+    QCOMPARE(controller.aiProviderPreference(), QStringLiteral("openai-responses"));
+    QCOMPARE(controller.aiBaseUrl(), QStringLiteral("https://api.openai.com/v1"));
+    QVERIFY(controller.aiEndpointPath().isEmpty());
+    QVERIFY(controller.aiModel().isEmpty());
+    QVERIFY(controller.aiAutomaticContext());
+
+    QVERIFY(controller.saveAiProviderSettings(QStringLiteral("ollama"), QStringLiteral("http://127.0.0.1:11434"),
+                                              QStringLiteral("/api/chat"), QStringLiteral("qwen3"), false));
+    QCOMPARE(controller.aiProviderPreference(), QStringLiteral("ollama"));
+    QCOMPARE(controller.aiBaseUrl(), QStringLiteral("http://127.0.0.1:11434"));
+    QCOMPARE(controller.aiEndpointPath(), QStringLiteral("/api/chat"));
+    QCOMPARE(controller.aiModel(), QStringLiteral("qwen3"));
+    QVERIFY(!controller.aiAutomaticContext());
+    QVERIFY(!controller.saveAiProviderSettings(QStringLiteral("unknown"), QStringLiteral("https://example.test"),
+                                               {}, QStringLiteral("model"), true));
+    QVERIFY(!controller.saveAiProviderSettings(QStringLiteral("ollama"), QStringLiteral("file:///tmp/model"),
+                                               {}, QStringLiteral("model"), true));
+    settingsChanged.clear();
 
     QVERIFY(controller.saveApplicationSettings(
         QStringLiteral("light"), 0.8, QStringLiteral("micaAlt"), QStringLiteral("custom"), QStringLiteral("#3366cc"),
@@ -837,6 +855,8 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(controller.sftpShowHiddenFiles());
     QVERIFY(!controller.sftpConfirmDelete());
     QCOMPARE(controller.languagePreference(), QStringLiteral("zh_CN"));
+    QCOMPARE(controller.aiProviderPreference(), QStringLiteral("ollama"));
+    QCOMPARE(controller.aiModel(), QStringLiteral("qwen3"));
 
     QVERIFY(!controller.saveApplicationSettings(
         QStringLiteral("unknown"), 0.8, QStringLiteral("mica"), QStringLiteral("system"), QStringLiteral("#3366CC"), {},
@@ -867,6 +887,10 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(reloaded.sftpShowHiddenFiles());
     QVERIFY(!reloaded.sftpConfirmDelete());
     QCOMPARE(reloaded.languagePreference(), QStringLiteral("zh_CN"));
+    QCOMPARE(reloaded.aiProviderPreference(), QStringLiteral("ollama"));
+    QCOMPARE(reloaded.aiBaseUrl(), QStringLiteral("http://127.0.0.1:11434"));
+    QCOMPARE(reloaded.aiModel(), QStringLiteral("qwen3"));
+    QVERIFY(!reloaded.aiAutomaticContext());
 
     QVERIFY(reloaded.resetApplicationSettings());
     QCOMPARE(reloaded.themePreference(), QStringLiteral("dark"));

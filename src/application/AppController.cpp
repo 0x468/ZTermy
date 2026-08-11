@@ -2576,6 +2576,37 @@ QString AppController::languagePreference() const
     return config::languagePreferenceToken(m_settings.language);
 }
 
+QString AppController::aiProviderPreference() const
+{
+    return config::aiProviderPreferenceToken(m_settings.aiProvider);
+}
+
+QString AppController::aiBaseUrl() const
+{
+    return m_settings.aiBaseUrl;
+}
+
+QString AppController::aiEndpointPath() const
+{
+    return m_settings.aiEndpointPath;
+}
+
+QString AppController::aiModel() const
+{
+    return m_settings.aiModel;
+}
+
+bool AppController::aiAutomaticContext() const noexcept
+{
+    return m_settings.aiAutomaticContext;
+}
+
+bool AppController::aiApiKeyConfigured() const
+{
+    const ai::AiSecretStore store(m_credentialVaults->active());
+    return store.readApiKey(m_settings.aiCredentialReference.toStdString()).has_value();
+}
+
 void AppController::retranslateUiState()
 {
     for (const auto &tab : m_tabs)
@@ -6595,7 +6626,61 @@ bool AppController::saveApplicationSettings(const QString &theme, const qreal ba
         .sftpConfirmDelete = shouldConfirmSftpDelete,
         .credentialStorage = m_settings.credentialStorage,
         .language = *parsedLanguage,
+        .shortcutOverrides = m_settings.shortcutOverrides,
+        .aiProvider = m_settings.aiProvider,
+        .aiBaseUrl = m_settings.aiBaseUrl,
+        .aiEndpointPath = m_settings.aiEndpointPath,
+        .aiModel = m_settings.aiModel,
+        .aiCredentialReference = m_settings.aiCredentialReference,
+        .aiAutomaticContext = m_settings.aiAutomaticContext,
     });
+}
+
+bool AppController::saveAiProviderSettings(const QString &provider, const QString &baseUrl,
+                                           const QString &endpointPath, const QString &model,
+                                           const bool automaticContext)
+{
+    const auto parsedProvider = config::parseAiProviderPreference(provider);
+    if (!parsedProvider)
+    {
+        return false;
+    }
+    auto candidate = m_settings;
+    candidate.aiProvider = *parsedProvider;
+    candidate.aiBaseUrl = baseUrl.trimmed();
+    candidate.aiEndpointPath = endpointPath.trimmed();
+    candidate.aiModel = model.trimmed();
+    candidate.aiAutomaticContext = automaticContext;
+    return persistApplicationSettings(candidate);
+}
+
+bool AppController::saveAiApiKey(const QString &apiKey)
+{
+    ai::AiSecretStore store(m_credentialVaults->active());
+    auto stored = store.storeApiKey(m_settings.aiCredentialReference.toStdString(),
+                                    security::SensitiveByteArray(apiKey.toUtf8()));
+    if (!stored)
+    {
+        setCredentialOperationError(credentialVaultErrorMessage(stored.error()));
+        return false;
+    }
+    setCredentialOperationError({});
+    emit credentialVaultChanged();
+    return true;
+}
+
+bool AppController::removeAiApiKey()
+{
+    ai::AiSecretStore store(m_credentialVaults->active());
+    const auto removed = store.removeApiKey(m_settings.aiCredentialReference.toStdString());
+    if (!removed && removed.error() != security::CredentialVaultError::NotFound)
+    {
+        setCredentialOperationError(credentialVaultErrorMessage(removed.error()));
+        return false;
+    }
+    setCredentialOperationError({});
+    emit credentialVaultChanged();
+    return true;
 }
 
 bool AppController::resetApplicationSettings()
