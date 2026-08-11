@@ -428,6 +428,8 @@ add_library(ztermy_terminal_engine STATIC
 )
 
 add_library(ztermy_ai_domain STATIC
+    src/domain/ai/AiProviderRetryPolicy.cpp
+    src/domain/ai/AiProviderRetryPolicy.h
     src/domain/ai/AiProviderTypes.h
     src/domain/ai/NdjsonParser.cpp
     src/domain/ai/NdjsonParser.h
@@ -2605,6 +2607,27 @@ if(BUILD_TESTING)
 
     add_test(NAME provider-http-client COMMAND ztermy_provider_http_client_tests)
 
+    qt_add_executable(ztermy_ai_provider_retry_policy_tests
+        tests/ai_provider_retry_policy_tests.cpp
+    )
+
+    target_compile_features(ztermy_ai_provider_retry_policy_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ai_provider_retry_policy_tests PRIVATE
+        ztermy_ai_domain
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ai_provider_retry_policy_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ai-provider-retry-policy COMMAND ztermy_ai_provider_retry_policy_tests)
+
     qt_add_executable(ztermy_ai_context_broker_tests
         tests/ai_context_broker_tests.cpp
     )
@@ -2974,6 +2997,7 @@ if(BUILD_TESTING)
             ztermy_provider_stream_mapper_tests
             ztermy_provider_request_factory_tests
             ztermy_provider_http_client_tests
+            ztermy_ai_provider_retry_policy_tests
             ztermy_ai_context_broker_tests
             ztermy_ai_context_redactor_tests
             ztermy_ai_context_serializer_tests
