@@ -537,7 +537,7 @@ private:
         std::unique_ptr<ai::AiConversationModel> aiConversation;
         std::unique_ptr<ai::AiTurnRunner> aiTurnRunner;
         std::unique_ptr<ai::AiAgentTurnBudget> aiTurnBudget;
-        std::optional<ai::AiRunCommandAction> pendingAiRunCommand;
+        std::optional<ai::AiTerminalAction> pendingAiAction;
         qint64 connectedUtcMs = 0;
         qreal sessionBackgroundOpacity = -1.0;
         qint64 recordingStartedUtcMs = 0;
@@ -653,7 +653,9 @@ private:
                                      bool appendPrompt = true, bool commandRequest = false);
     [[nodiscard]] ai::AiTurnRunner::ToolHandlingResult handleAiWaitCommand(TerminalTab &tab, const QString &tabId,
                                                                            const ai::AiToolCall &call);
-    [[nodiscard]] std::string executeAiRunCommand(TerminalTab &tab, const ai::AiRunCommandAction &action);
+    [[nodiscard]] std::string executeAiTerminalAction(TerminalTab &tab, const ai::AiTerminalAction &action);
+    [[nodiscard]] std::string executeAiRunCommand(TerminalTab &tab, const ai::AiTerminalAction &action);
+    [[nodiscard]] std::string executeAiInterruptCommand(TerminalTab &tab, const ai::AiTerminalAction &action);
     void observeScriptOutput(const QString &tabId, const QByteArray &bytes);
     void dispatchScriptCommands(TerminalTab &tab, const std::vector<std::string> &commands);
     void initializeScriptExecutionTimer();

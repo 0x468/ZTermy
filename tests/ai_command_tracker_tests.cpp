@@ -66,6 +66,7 @@ void AiCommandTrackerTests::linksOnlyExactPostBaselineBlocks()
     const auto unknown = tracker.observe("command-1", evicted, true);
     QVERIFY(unknown.has_value());
     QCOMPARE(unknown.value_or(AiTrackedCommand{}).state, AiTrackedCommandState::outcomeUnknown);
+    QVERIFY(!tracker.markInterruptRequested("command-1"));
 }
 
 void AiCommandTrackerTests::exposesCompletionDisconnectAndInterruptIntent()

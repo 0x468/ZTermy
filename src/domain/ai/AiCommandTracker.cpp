@@ -84,7 +84,8 @@ bool AiCommandTracker::markInterruptRequested(const std::string_view commandId)
 {
     const auto position = std::ranges::find(m_commands, commandId, &AiTrackedCommand::id);
     if (position == m_commands.end() || position->state == AiTrackedCommandState::finished
-        || position->state == AiTrackedCommandState::disconnected)
+        || position->state == AiTrackedCommandState::disconnected
+        || position->state == AiTrackedCommandState::outcomeUnknown)
     {
         return false;
     }

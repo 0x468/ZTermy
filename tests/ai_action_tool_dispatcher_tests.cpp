@@ -15,6 +15,8 @@ using ztermy::ai::AiActionToolDisposition;
 using ztermy::ai::AiAgentTurnBudget;
 using ztermy::ai::AiAgentTurnLimits;
 using ztermy::ai::AiPermissionMode;
+using ztermy::ai::AiTerminalAction;
+using ztermy::ai::AiTerminalActionKind;
 using ztermy::ai::AiToolCall;
 using ztermy::ai::AiToolDispatchState;
 
@@ -36,6 +38,14 @@ using ztermy::ai::AiToolDispatchState;
                                        + command + R"("})"};
 }
 
+[[nodiscard]] AiToolCall interruptCall(const std::string &id = "interrupt-1")
+{
+    return AiToolCall{
+        .id = id,
+        .name = "interrupt_command",
+        .argumentsJson = R"({"command_id":"command-1","session_id":"session-1","session_generation":3,"mode":"soft"})"};
+}
+
 [[nodiscard]] QJsonObject object(const std::string &value)
 {
     return QJsonDocument::fromJson(QByteArray::fromStdString(value)).object();
@@ -47,6 +57,7 @@ class AiActionToolDispatcherTests final : public QObject
 
 private slots:
     void publishesStrictRunCommandDefinition();
+    void preparesSoftInterruptAsWriteAction();
     void waitsForApprovalAndCachesCompletion();
     void rejectsScopeReplayAndObserverWrites();
     void appliesRiskBudgetAndOwnershipGuards();
@@ -55,11 +66,34 @@ private slots:
 void AiActionToolDispatcherTests::publishesStrictRunCommandDefinition()
 {
     const auto definitions = AiActionToolDispatcher::definitions();
-    QCOMPARE(definitions.size(), std::size_t{1});
+    QCOMPARE(definitions.size(), std::size_t{2});
     QCOMPARE(definitions.front().name, std::string("run_command"));
     const auto schema = QJsonDocument::fromJson(QByteArray::fromStdString(definitions.front().parametersJson));
     QVERIFY(schema.isObject());
     QVERIFY(!schema.object().value(QStringLiteral("additionalProperties")).toBool(true));
+}
+
+void AiActionToolDispatcherTests::preparesSoftInterruptAsWriteAction()
+{
+    AiActionToolDispatcher dispatcher;
+    AiAgentTurnBudget budget;
+    const auto plan = dispatcher.prepare(interruptCall(), context(), budget);
+    QCOMPARE(plan.disposition, AiActionToolDisposition::awaitApproval);
+    QVERIFY(plan.sideEffecting);
+    const auto action = plan.action.value_or(AiTerminalAction{});
+    QCOMPARE(action.kind, AiTerminalActionKind::interruptCommand);
+    QCOMPARE(action.commandId, std::string("command-1"));
+    QCOMPARE(budget.writeActions(), std::uint32_t{1});
+
+    AiAgentTurnBudget invalidBudget;
+    auto invalid = interruptCall("interrupt-invalid");
+    invalid.argumentsJson =
+        R"({"command_id":"command-1","session_id":"session-1","session_generation":3,"mode":"kill"})";
+    const auto rejected = dispatcher.prepare(invalid, context(), invalidBudget);
+    QCOMPARE(
+        object(rejected.outputJson).value(QStringLiteral("error")).toObject().value(QStringLiteral("code")).toString(),
+        QStringLiteral("invalid_arguments"));
+    QCOMPARE(invalidBudget.writeActions(), std::uint32_t{0});
 }
 
 void AiActionToolDispatcherTests::waitsForApprovalAndCachesCompletion()
@@ -69,9 +103,9 @@ void AiActionToolDispatcherTests::waitsForApprovalAndCachesCompletion()
     const auto call = commandCall();
     const auto plan = dispatcher.prepare(call, context(), budget);
     QCOMPARE(plan.disposition, AiActionToolDisposition::awaitApproval);
-    QVERIFY(plan.runCommand.has_value());
+    QVERIFY(plan.action.has_value());
     QVERIFY(plan.sideEffecting);
-    const auto action = plan.runCommand.value_or(ztermy::ai::AiRunCommandAction{});
+    const auto action = plan.action.value_or(AiTerminalAction{});
     QCOMPARE(action.command, std::string("pwd"));
     QVERIFY(dispatcher.approve(action));
     const std::string completed = R"({"ok":true,"command_id":"command-1"})";
@@ -124,7 +158,7 @@ void AiActionToolDispatcherTests::appliesRiskBudgetAndOwnershipGuards()
     const auto risky = dispatcher.prepare(commandCall("risk-call", "rm -rf /tmp/example"),
                                           context("risk", AiPermissionMode::sessionAuto), riskBudget);
     QCOMPARE(risky.disposition, AiActionToolDisposition::awaitApproval);
-    QVERIFY(risky.runCommand.value_or(ztermy::ai::AiRunCommandAction{}).risk.highRisk());
+    QVERIFY(risky.action.value_or(AiTerminalAction{}).risk.highRisk());
     dispatcher.clearConversation("risk");
 
     AiAgentTurnBudget ownerBudget;

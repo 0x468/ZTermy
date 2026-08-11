@@ -372,7 +372,7 @@ Rectangle {
             border.color: pane.toolApproval.highRisk ? Theme.dangerBorder : Theme.accent
             border.width: 1
             Accessible.role: Accessible.Pane
-            Accessible.name: qsTr("AI command approval")
+            Accessible.name: pane.toolApproval.kind === "interrupt_command" ? qsTr("AI interrupt approval") : qsTr("AI command approval")
 
             ColumnLayout {
                 id: approvalContent
@@ -394,7 +394,7 @@ Rectangle {
 
                     Text {
                         Layout.fillWidth: true
-                        text: pane.toolApproval.highRisk ? qsTr("High-risk command requires approval") : qsTr("Command requires approval")
+                        text: pane.toolApproval.highRisk ? qsTr("High-risk command requires approval") : pane.toolApproval.kind === "interrupt_command" ? qsTr("Terminal interrupt requires approval") : qsTr("Command requires approval")
                         color: pane.toolApproval.highRisk ? Theme.dangerText : Theme.text
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.textBody
@@ -413,7 +413,7 @@ Rectangle {
                     textFormat: TextEdit.PlainText
                     font.family: Theme.terminalFont
                     font.pixelSize: Theme.textBody
-                    Accessible.name: qsTr("Command awaiting approval")
+                    Accessible.name: pane.toolApproval.kind === "interrupt_command" ? qsTr("Interrupt awaiting approval") : qsTr("Command awaiting approval")
 
                     Rectangle {
                         anchors.fill: parent
@@ -442,15 +442,15 @@ Rectangle {
                     ActionButton {
                         text: qsTr("Deny")
                         iconName: "close"
-                        accessibleName: qsTr("Deny the pending AI command")
+                        accessibleName: qsTr("Deny the pending AI terminal action")
                         onClicked: pane.controller.denyAiTool()
                     }
 
                     ActionButton {
-                        text: qsTr("Run command")
-                        iconName: "play"
+                        text: pane.toolApproval.kind === "interrupt_command" ? qsTr("Send Ctrl+C") : qsTr("Run command")
+                        iconName: pane.toolApproval.kind === "interrupt_command" ? "close" : "play"
                         variant: pane.toolApproval.highRisk ? "destructive" : "primary"
-                        accessibleName: qsTr("Approve and run the pending AI command")
+                        accessibleName: pane.toolApproval.kind === "interrupt_command" ? qsTr("Approve the pending soft interrupt") : qsTr("Approve and run the pending AI command")
                         onClicked: pane.controller.approveAiTool()
                     }
                 }

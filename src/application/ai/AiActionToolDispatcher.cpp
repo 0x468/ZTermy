@@ -15,6 +15,7 @@ namespace
 {
 
 constexpr std::size_t maximumCommandBytes = std::size_t{16} * 1024;
+constexpr std::size_t maximumCommandIdBytes = 256;
 constexpr std::size_t maximumArgumentsBytes = std::size_t{20} * 1024;
 
 [[nodiscard]] QString text(const std::string_view value)
@@ -96,13 +97,20 @@ std::vector<AiToolDefinition> AiActionToolDispatcher::definitions()
          .description = "Queue one command in the exact target terminal session. Returns after input is accepted, not "
                         "after the command finishes.",
          .parametersJson =
-             R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"command":{"type":"string","minLength":1,"maxLength":16384}},"required":["session_id","session_generation","command"],"additionalProperties":false})"}};
+             R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"command":{"type":"string","minLength":1,"maxLength":16384}},"required":["session_id","session_generation","command"],"additionalProperties":false})"},
+        {.name = "interrupt_command",
+         .description = "Request a soft interrupt for a tracked command in the exact target terminal session by "
+                        "writing Ctrl+C. The command outcome remains unknown until observed.",
+         .parametersJson =
+             R"({"type":"object","properties":{"command_id":{"type":"string","minLength":1,"maxLength":256},"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"mode":{"type":"string","enum":["soft"]}},"required":["command_id","session_id","session_generation","mode"],"additionalProperties":false})"}};
 }
 
 AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const AiActionToolContext &context,
                                                  AiAgentTurnBudget &budget)
 {
-    if (call.name != "run_command")
+    const bool runCommand = call.name == "run_command";
+    const bool interruptCommand = call.name == "interrupt_command";
+    if (!runCommand && !interruptCommand)
     {
         return response(
             failure(QStringLiteral("unsupported"), QStringLiteral("The requested action tool is unsupported.")), false);
@@ -114,25 +122,46 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
     const auto requestedGeneration = generation(object.value(QStringLiteral("session_generation")));
     const auto requestedSession = object.value(QStringLiteral("session_id"));
     const auto requestedCommand = object.value(QStringLiteral("command"));
-    const bool schemaValid =
-        call.argumentsJson.size() <= maximumArgumentsBytes && document.isObject()
-        && parseError.error == QJsonParseError::NoError
+    const auto requestedCommandId = object.value(QStringLiteral("command_id"));
+    const auto requestedMode = object.value(QStringLiteral("mode"));
+    const bool commonSchemaValid = call.argumentsJson.size() <= maximumArgumentsBytes && document.isObject()
+                                   && parseError.error == QJsonParseError::NoError && requestedSession.isString()
+                                   && !requestedSession.toString().isEmpty() && requestedGeneration.has_value();
+    const bool runSchemaValid =
+        runCommand && commonSchemaValid
         && hasOnlyKeys(object,
                        {QStringLiteral("session_id"), QStringLiteral("session_generation"), QStringLiteral("command")})
-        && requestedSession.isString() && !requestedSession.toString().isEmpty() && requestedGeneration.has_value()
         && requestedCommand.isString() && !requestedCommand.toString().trimmed().isEmpty()
         && std::cmp_less_equal(requestedCommand.toString().toUtf8().size(), maximumCommandBytes)
         && !requestedCommand.toString().contains(QChar::Null);
+    const bool interruptSchemaValid =
+        interruptCommand && commonSchemaValid
+        && hasOnlyKeys(object, {QStringLiteral("command_id"), QStringLiteral("session_id"),
+                                QStringLiteral("session_generation"), QStringLiteral("mode")})
+        && requestedCommandId.isString() && !requestedCommandId.toString().isEmpty()
+        && std::cmp_less_equal(requestedCommandId.toString().toUtf8().size(), maximumCommandIdBytes)
+        && !requestedCommandId.toString().contains(QChar::Null) && requestedMode.isString()
+        && requestedMode.toString() == QStringLiteral("soft");
+    const bool schemaValid = runSchemaValid || interruptSchemaValid;
     const auto sessionId = requestedSession.toString().toUtf8().toStdString();
     const auto command = requestedCommand.toString().toUtf8().toStdString();
+    const auto commandId = requestedCommandId.toString().toUtf8().toStdString();
     const bool scopeValid = schemaValid && sessionId == context.target.sessionId
                             && *requestedGeneration == context.target.sessionGeneration;
 
-    const QJsonObject canonical{
-        {QStringLiteral("command"), requestedCommand},
+    QJsonObject canonical{
         {QStringLiteral("session_generation"),
          requestedGeneration.has_value() ? QJsonValue{static_cast<qint64>(*requestedGeneration)} : QJsonValue::Null},
         {QStringLiteral("session_id"), requestedSession}};
+    if (runCommand)
+    {
+        canonical.insert(QStringLiteral("command"), requestedCommand);
+    }
+    else
+    {
+        canonical.insert(QStringLiteral("command_id"), requestedCommandId);
+        canonical.insert(QStringLiteral("mode"), requestedMode);
+    }
     AiToolDispatchRequest request{
         .key = {.conversationId = context.conversationId, .turnId = context.turnId, .toolCallId = call.id},
         .toolName = call.name,
@@ -164,7 +193,7 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
     };
     if (!schemaValid)
     {
-        return fail(QStringLiteral("invalid_arguments"), QStringLiteral("The run-command arguments are invalid."));
+        return fail(QStringLiteral("invalid_arguments"), QStringLiteral("The terminal-action arguments are invalid."));
     }
     if (!scopeValid)
     {
@@ -175,7 +204,7 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
         return fail(QStringLiteral("session_unavailable"),
                     QStringLiteral("The target terminal session is not writable."));
     }
-    const auto risk = AiPermissionPolicy::classifyCommand(command);
+    const auto risk = runCommand ? AiPermissionPolicy::classifyCommand(command) : AiCommandRiskReport{};
     const auto decision =
         m_permissionPolicy.decide(AiPermissionRequest{.mode = context.permissionMode,
                                                       .write = true,
@@ -185,7 +214,13 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
                                                       .savedHost = context.savedHost,
                                                       .highRisk = risk.highRisk(),
                                                       .highRiskSessionGrant = context.highRiskSessionGrant});
-    AiRunCommandAction action{.dispatchKey = key, .target = context.target, .command = command, .risk = risk};
+    AiTerminalAction action{.dispatchKey = key,
+                            .target = context.target,
+                            .kind =
+                                runCommand ? AiTerminalActionKind::runCommand : AiTerminalActionKind::interruptCommand,
+                            .command = command,
+                            .commandId = commandId,
+                            .risk = risk};
     if (decision.disposition == AiPermissionDisposition::deny)
     {
         return fail(QStringLiteral("permission_denied"),
@@ -206,28 +241,28 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
     {
         static_cast<void>(m_ledger.transition(key, AiToolDispatchState::awaitingApproval));
         return AiActionToolPlan{.disposition = AiActionToolDisposition::awaitApproval,
-                                .runCommand = std::move(action),
+                                .action = std::move(action),
                                 .sideEffecting = true};
     }
     static_cast<void>(m_ledger.transition(key, AiToolDispatchState::running));
     return AiActionToolPlan{.disposition = AiActionToolDisposition::execute,
-                            .runCommand = std::move(action),
+                            .action = std::move(action),
                             .sideEffecting = true};
 }
 
-bool AiActionToolDispatcher::approve(const AiRunCommandAction &action)
+bool AiActionToolDispatcher::approve(const AiTerminalAction &action)
 {
     return m_ledger.transition(action.dispatchKey, AiToolDispatchState::running);
 }
 
-bool AiActionToolDispatcher::deny(const AiRunCommandAction &action)
+bool AiActionToolDispatcher::deny(const AiTerminalAction &action)
 {
     return m_ledger.transition(
         action.dispatchKey, AiToolDispatchState::failed,
         failure(QStringLiteral("permission_denied"), QStringLiteral("The user denied this command.")));
 }
 
-bool AiActionToolDispatcher::complete(const AiRunCommandAction &action, const AiToolDispatchState state,
+bool AiActionToolDispatcher::complete(const AiTerminalAction &action, const AiToolDispatchState state,
                                       std::string resultJson)
 {
     return m_ledger.transition(action.dispatchKey, state, std::move(resultJson));

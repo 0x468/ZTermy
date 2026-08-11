@@ -32,18 +32,26 @@ enum class AiActionToolDisposition : std::uint8_t
     respond,
 };
 
-struct AiRunCommandAction final
+enum class AiTerminalActionKind : std::uint8_t
+{
+    runCommand,
+    interruptCommand,
+};
+
+struct AiTerminalAction final
 {
     AiToolDispatchKey dispatchKey;
     AiSessionTarget target;
+    AiTerminalActionKind kind = AiTerminalActionKind::runCommand;
     std::string command;
+    std::string commandId;
     AiCommandRiskReport risk;
 };
 
 struct AiActionToolPlan final
 {
     AiActionToolDisposition disposition = AiActionToolDisposition::respond;
-    std::optional<AiRunCommandAction> runCommand;
+    std::optional<AiTerminalAction> action;
     std::string outputJson;
     bool sideEffecting = false;
 };
@@ -54,9 +62,9 @@ public:
     [[nodiscard]] static std::vector<AiToolDefinition> definitions();
     [[nodiscard]] AiActionToolPlan prepare(const AiToolCall &call, const AiActionToolContext &context,
                                            AiAgentTurnBudget &budget);
-    [[nodiscard]] bool approve(const AiRunCommandAction &action);
-    [[nodiscard]] bool deny(const AiRunCommandAction &action);
-    [[nodiscard]] bool complete(const AiRunCommandAction &action, AiToolDispatchState state, std::string resultJson);
+    [[nodiscard]] bool approve(const AiTerminalAction &action);
+    [[nodiscard]] bool deny(const AiTerminalAction &action);
+    [[nodiscard]] bool complete(const AiTerminalAction &action, AiToolDispatchState state, std::string resultJson);
     void clearConversation(std::string_view conversationId);
 
 private:
