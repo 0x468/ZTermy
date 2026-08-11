@@ -52,12 +52,14 @@ public slots:
                                   bool rectangular) = 0;
     virtual void clearSelection() = 0;
     virtual void copySelection() = 0;
+    virtual void requestSelectedText() = 0;
     virtual void search(const QString &query, bool backwards, bool caseSensitive) = 0;
     virtual void clearSearch() = 0;
 
 signals:
     void snapshotReady(ztermy::terminal::TerminalSnapshotPtr snapshot);
     void clipboardTextReady(const QString &text);
+    void selectedTextReady(const QString &text);
     void statusChanged(const QString &status);
     void runningChanged(bool running);
     void searchResultReady(const QString &query, quint32 current, quint32 total, bool wrapped);
@@ -90,6 +92,7 @@ public slots:
                           bool rectangular) override;
     void clearSelection() override;
     void copySelection() override;
+    void requestSelectedText() override;
     void search(const QString &query, bool backwards, bool caseSensitive) override;
     void clearSearch() override;
 
@@ -117,6 +120,9 @@ private:
     struct CopyCommand
     {
     };
+    struct SelectedTextCommand
+    {
+    };
     struct SearchCommand
     {
         QByteArray query;
@@ -128,7 +134,7 @@ private:
     };
 
     using Command = std::variant<InputCommand, PasteCommand, TerminalGeometry, ScrollCommand, SelectionCommand,
-                                 CopyCommand, SearchCommand, ClearSearchCommand>;
+                                 CopyCommand, SelectedTextCommand, SearchCommand, ClearSearchCommand>;
 
     void queueByteCommand(Command command, std::size_t byteCount);
     void readLoop(const std::stop_token &stopToken);

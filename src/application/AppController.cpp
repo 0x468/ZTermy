@@ -6830,6 +6830,29 @@ void AppController::clearAiConversation()
     emit aiConversationChanged();
 }
 
+bool AppController::attachAiSelection()
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr)
+    {
+        return false;
+    }
+    tab->aiError.clear();
+    if (tab->ssh)
+    {
+        tab->ssh->requestSelectedText();
+        emit aiConversationChanged();
+        return true;
+    }
+    if (tab->local)
+    {
+        tab->local->requestSelectedText();
+        emit aiConversationChanged();
+        return true;
+    }
+    return false;
+}
+
 bool AppController::removeAiContextItem(const QString &itemId)
 {
     TerminalTab *tab = activeTab();
@@ -6891,9 +6914,19 @@ ai::AiContextBundle AppController::buildAiContext(TerminalTab &tab, const bool p
         }
     }
 
+    std::vector<ai::AiExplicitContext> explicitItems = tab.aiExplicitContextItems;
+    for (auto &item : explicitItems)
+    {
+        if (item.source == "terminal_selection")
+        {
+            item.title = utf8String(tr("Terminal selection"));
+        }
+    }
+
     ai::AiContextRequest contextRequest{
         .preferLastFailure = preferLastFailure,
         .automaticContextEnabled = m_settings.aiAutomaticContext,
+        .explicitItems = std::move(explicitItems),
         .currentFrame = ai::AiTerminalFrameContext{.id = utf8String(tab.id),
                                                    .content = utf8String(terminalFrameText(tab.snapshot)),
                                                    .sessionId = utf8String(tab.id),
@@ -6930,6 +6963,36 @@ ai::AiContextBundle AppController::buildAiContext(TerminalTab &tab, const bool p
                                                  {QStringLiteral("automatic"), item.automatic}});
     }
     return context;
+}
+
+void AppController::acceptAiSelectedText(TerminalTab &tab, const QString &text)
+{
+    if (text.trimmed().isEmpty())
+    {
+        tab.aiError = tr("Select terminal text before attaching it.");
+        emit aiConversationChanged();
+        return;
+    }
+
+    const std::string itemId = "terminal-selection:" + utf8String(tab.id);
+    const auto maximumCharacters = static_cast<qsizetype>(m_aiContextBroker.limits().maxItemBytes);
+    ai::AiExplicitContext selection{.id = itemId,
+                                    .title = utf8String(tr("Terminal selection")),
+                                    .content = utf8String(text.left(maximumCharacters)),
+                                    .source = "terminal_selection"};
+    const auto existing = std::ranges::find(tab.aiExplicitContextItems, itemId, &ai::AiExplicitContext::id);
+    if (existing == tab.aiExplicitContextItems.end())
+    {
+        tab.aiExplicitContextItems.push_back(std::move(selection));
+    }
+    else
+    {
+        *existing = std::move(selection);
+    }
+    tab.aiExcludedContextIds.erase(itemId);
+    tab.aiError.clear();
+    static_cast<void>(buildAiContext(tab, false));
+    emit aiConversationChanged();
 }
 
 bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const bool preferLastFailure)
@@ -7792,6 +7855,13 @@ void AppController::connectLocalTabSignals(TerminalTab &tab)
                              }
                          }
                      });
+    QObject::connect(tab.local.get(), &terminal::LocalTerminalSessionBackend::selectedTextReady, this,
+                     [this, tabId](const QString &text) {
+                         if (TerminalTab *updated = findTab(tabId))
+                         {
+                             acceptAiSelectedText(*updated, text);
+                         }
+                     });
     QObject::connect(tab.local.get(), &terminal::LocalTerminalSessionBackend::runningChanged, this,
                      [this, tabId](const bool running) {
                          if (TerminalTab *updated = findTab(tabId))
@@ -7874,6 +7944,13 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
                              {
                                  terminal->setClipboardText(text);
                              }
+                         }
+                     });
+    QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::selectedTextReady, this,
+                     [this, tabId](const QString &text) {
+                         if (TerminalTab *updated = findTab(tabId))
+                         {
+                             acceptAiSelectedText(*updated, text);
                          }
                      });
     QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::runningChanged, this, [this, tabId](const bool running) {

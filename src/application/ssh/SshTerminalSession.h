@@ -61,6 +61,7 @@ public slots:
     void requestSelection(quint16 startColumn, quint16 startRow, quint16 endColumn, quint16 endRow, bool rectangular);
     void clearSelection();
     void copySelection();
+    void requestSelectedText();
     void search(const QString &query, bool backwards, bool caseSensitive);
     void clearSearch();
     void setEncoding(const QString &encoding);
@@ -71,6 +72,7 @@ public slots:
 signals:
     void snapshotReady(ztermy::terminal::TerminalSnapshotPtr snapshot);
     void clipboardTextReady(const QString &text);
+    void selectedTextReady(const QString &text);
     void statusChanged(const QString &status);
     void runningChanged(bool running);
     void phaseChanged(ztermy::ssh::SshConnectionPhase phase);
@@ -91,6 +93,7 @@ private slots:
     void deliverHostKeyConfirmation(const QString &endpoint, const QString &algorithm, const QString &fingerprint);
     void deliverHostKeyChange(const QString &endpoint, const QString &algorithm, const QString &fingerprint);
     void deliverClipboardText(const QString &text);
+    void deliverSelectedText(const QString &text);
     void deliverSearchResult(const QString &query, quint32 current, quint32 total, bool wrapped);
     void deliverShellHistory(quint64 requestId, const QString &shell, const QByteArray &contents, const QString &error);
     void deliverRemoteTelemetry(const ztermy::telemetry::Sample &sample);
@@ -115,6 +118,9 @@ private:
         std::optional<terminal::TerminalSelection> selection;
     };
     struct CopyCommand final
+    {
+    };
+    struct SelectedTextCommand final
     {
     };
     struct SearchCommand final
@@ -143,8 +149,8 @@ private:
     };
 
     using Command = std::variant<InputCommand, PasteCommand, terminal::TerminalGeometry, ScrollCommand,
-                                 SelectionCommand, CopyCommand, SearchCommand, ClearSearchCommand, EncodingCommand,
-                                 HistoryCommand, TelemetryVisibilityCommand, TelemetryRefreshCommand>;
+                                 SelectionCommand, CopyCommand, SelectedTextCommand, SearchCommand, ClearSearchCommand,
+                                 EncodingCommand, HistoryCommand, TelemetryVisibilityCommand, TelemetryRefreshCommand>;
 
     void queueByteCommand(Command command, std::size_t byteCount);
     void run(SshConnectionRequest &request, terminal::TerminalGeometry geometry, const std::stop_token &stopToken);
@@ -156,6 +162,7 @@ private:
     void postHostKeyConfirmation(const QString &endpoint, const QString &algorithm, const QString &fingerprint);
     void postHostKeyChange(const QString &endpoint, const QString &algorithm, const QString &fingerprint);
     void postClipboardText(const QString &text);
+    void postSelectedText(const QString &text);
     void postSearchResult(const QString &query, quint32 current, quint32 total, bool wrapped);
     void postShellHistory(quint64 requestId, const QString &shell, const QByteArray &contents, const QString &error);
     void postRemoteTelemetry(const telemetry::Sample &sample);

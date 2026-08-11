@@ -410,6 +410,17 @@ void SshTerminalSession::copySelection()
     signalCommandWake();
 }
 
+void SshTerminalSession::requestSelectedText()
+{
+    if (!m_running.load())
+    {
+        return;
+    }
+    std::scoped_lock lock(m_commandMutex);
+    m_commands.emplace_back(SelectedTextCommand{});
+    signalCommandWake();
+}
+
 void SshTerminalSession::search(const QString &query, const bool backwards, const bool caseSensitive)
 {
     if (!m_running.load())
@@ -776,6 +787,25 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                     const QString text =
                         QString::fromUtf8((*selectedText)->data(), static_cast<qsizetype>((*selectedText)->size()));
                     postClipboardText(text);
+                }
+                continue;
+            }
+
+            if (std::holds_alternative<SelectedTextCommand>(command))
+            {
+                auto selectedText = m_engine->selectedText();
+                if (!selectedText)
+                {
+                    postStatus(tr("SSH terminal selection read failed: %1")
+                                   .arg(QString::fromStdString(selectedText.error().message())));
+                }
+                else
+                {
+                    const QString text = *selectedText
+                                             ? QString::fromUtf8((*selectedText)->data(),
+                                                                 static_cast<qsizetype>((*selectedText)->size()))
+                                             : QString{};
+                    postSelectedText(text);
                 }
                 continue;
             }
@@ -1257,6 +1287,19 @@ void SshTerminalSession::postClipboardText(const QString &text)
     }
 }
 
+void SshTerminalSession::postSelectedText(const QString &text)
+{
+    if (QThread::currentThread() == thread())
+    {
+        deliverSelectedText(text);
+        return;
+    }
+    if (!QMetaObject::invokeMethod(this, "deliverSelectedText", Qt::QueuedConnection, Q_ARG(QString, text)))
+    {
+        qCWarning(sshSessionLog) << "SSH selected text could not be queued to its owner thread";
+    }
+}
+
 void SshTerminalSession::postSearchResult(const QString &query, const quint32 current, const quint32 total,
                                           const bool wrapped)
 {
@@ -1360,6 +1403,11 @@ void SshTerminalSession::deliverHostKeyChange(const QString &endpoint, const QSt
 void SshTerminalSession::deliverClipboardText(const QString &text)
 {
     emit clipboardTextReady(text);
+}
+
+void SshTerminalSession::deliverSelectedText(const QString &text)
+{
+    emit selectedTextReady(text);
 }
 
 void SshTerminalSession::deliverSearchResult(const QString &query, const quint32 current, const quint32 total,

@@ -151,6 +151,14 @@ Rectangle {
                 onClicked: pane.controller.explainAiLastFailure()
             }
 
+            ActionButton {
+                text: qsTr("Attach selection")
+                iconName: "copy"
+                enabled: !pane.busy
+                accessibleName: qsTr("Attach selected terminal text to this request")
+                onClicked: pane.controller.attachAiSelection()
+            }
+
             Item {
                 Layout.fillWidth: true
             }

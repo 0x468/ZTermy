@@ -4,6 +4,7 @@
 
 #include <QDebug>
 #include <QElapsedTimer>
+#include <QSignalSpy>
 #include <QString>
 #include <QTest>
 #include <QTimer>
@@ -161,6 +162,7 @@ void LocalTerminalSessionTests::runsPowerShellAndStopsPromptly()
         ztermy::terminal::LocalTerminalSession session;
         const auto output = std::make_shared<MemoryOutputSink>();
         session.setOutputSink(output);
+        QSignalSpy selectedTextSpy(&session, &ztermy::terminal::LocalTerminalSession::selectedTextReady);
         ztermy::terminal::TerminalSnapshotPtr latestSnapshot;
         connect(&session, &ztermy::terminal::LocalTerminalSession::snapshotReady, this,
                 [&latestSnapshot](ztermy::terminal::TerminalSnapshotPtr snapshot) {
@@ -174,6 +176,10 @@ void LocalTerminalSessionTests::runsPowerShellAndStopsPromptly()
         }
 
         QTRY_VERIFY_WITH_TIMEOUT(latestSnapshot && latestSnapshot->cursor.visible, 5000);
+
+        session.requestSelectedText();
+        QTRY_COMPARE_WITH_TIMEOUT(selectedTextSpy.size(), 1, 2000);
+        QCOMPARE(selectedTextSpy.constFirst().constFirst().toString(), QString{});
 
         session.queueInput(QByteArrayLiteral("Write-Output ZTERMY_SESSION_OK\r"));
 

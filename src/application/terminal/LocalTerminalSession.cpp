@@ -312,6 +312,19 @@ void LocalTerminalSession::copySelection()
     m_commandAvailable.notify_one();
 }
 
+void LocalTerminalSession::requestSelectedText()
+{
+    if (!m_running.load())
+    {
+        return;
+    }
+    {
+        std::scoped_lock lock(m_commandMutex);
+        m_commands.emplace_back(SelectedTextCommand{});
+    }
+    m_commandAvailable.notify_one();
+}
+
 void LocalTerminalSession::search(const QString &query, const bool backwards, const bool caseSensitive)
 {
     if (!m_running.load())
@@ -510,6 +523,28 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
             {
                 emit clipboardTextReady(
                     QString::fromUtf8((*selectedText)->data(), static_cast<qsizetype>((*selectedText)->size())));
+            }
+            continue;
+        }
+
+        if (std::holds_alternative<SelectedTextCommand>(command))
+        {
+            std::expected<std::optional<std::string>, std::error_code> selectedText;
+            {
+                std::scoped_lock lock(m_engineMutex);
+                selectedText = m_engine->selectedText();
+            }
+            if (!selectedText)
+            {
+                postStatus(tr("Terminal selection read failed: %1")
+                               .arg(QString::fromStdString(selectedText.error().message())));
+            }
+            else
+            {
+                const QString text = *selectedText ? QString::fromUtf8((*selectedText)->data(),
+                                                                       static_cast<qsizetype>((*selectedText)->size()))
+                                                   : QString{};
+                emit selectedTextReady(text);
             }
             continue;
         }

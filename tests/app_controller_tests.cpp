@@ -27,6 +27,7 @@ struct FakeLocalSessionState final
     int stops = 0;
     QList<QByteArray> inputs;
     QList<QByteArray> pastes;
+    QString selectedText;
     std::shared_ptr<ztermy::terminal::TerminalOutputSink> outputSink;
 };
 
@@ -66,6 +67,7 @@ public:
     void requestSelection(quint16, quint16, quint16, quint16, bool) override {}
     void clearSelection() override {}
     void copySelection() override {}
+    void requestSelectedText() override { emit selectedTextReady(m_state->selectedText); }
     void search(const QString &, bool, bool) override {}
     void clearSearch() override {}
 
@@ -826,10 +828,10 @@ void AppControllerTests::persistsApplicationSettings()
     QCOMPARE(controller.aiEndpointPath(), QStringLiteral("/api/chat"));
     QCOMPARE(controller.aiModel(), QStringLiteral("qwen3"));
     QVERIFY(!controller.aiAutomaticContext());
-    QVERIFY(!controller.saveAiProviderSettings(QStringLiteral("unknown"), QStringLiteral("https://example.test"),
-                                               {}, QStringLiteral("model"), true));
-    QVERIFY(!controller.saveAiProviderSettings(QStringLiteral("ollama"), QStringLiteral("file:///tmp/model"),
-                                               {}, QStringLiteral("model"), true));
+    QVERIFY(!controller.saveAiProviderSettings(QStringLiteral("unknown"), QStringLiteral("https://example.test"), {},
+                                               QStringLiteral("model"), true));
+    QVERIFY(!controller.saveAiProviderSettings(QStringLiteral("ollama"), QStringLiteral("file:///tmp/model"), {},
+                                               QStringLiteral("model"), true));
     settingsChanged.clear();
 
     QVERIFY(controller.saveApplicationSettings(
@@ -1000,6 +1002,15 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
     QVERIFY(controller.toggleTerminalWorkbench(QStringLiteral("ai")));
     QCOMPARE(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("workbenchPage")).toString(),
              QStringLiteral("ai"));
+    sessionState->selectedText = QStringLiteral("selected terminal evidence");
+    QVERIFY(controller.attachAiSelection());
+    QVERIFY(std::ranges::any_of(controller.activeAiContextItems(), [](const QVariant &item) {
+        return item.toMap().value(QStringLiteral("kind")).toString() == QStringLiteral("attachment");
+    }));
+    QVERIFY(controller.activeAiContextPreview().contains(QStringLiteral("selected terminal evidence")));
+    sessionState->selectedText.clear();
+    QVERIFY(controller.attachAiSelection());
+    QVERIFY(!controller.activeAiError().isEmpty());
     QVERIFY(!controller.sendAiMessage(QStringLiteral("Explain the terminal")));
     QVERIFY(!controller.activeAiError().isEmpty());
     QVERIFY(controller.toggleTerminalWorkbench(QStringLiteral("ai")));
