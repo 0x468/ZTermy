@@ -19,6 +19,7 @@ constexpr std::wstring_view TargetPrefix = L"ztermy:ssh:";
 constexpr std::wstring_view PasswordSuffix = L":password";
 constexpr std::wstring_view PassphraseSuffix = L":key-passphrase";
 constexpr std::wstring_view ProxyPasswordSuffix = L":proxy-password";
+constexpr std::wstring_view AiApiKeySuffix = L":ai-api-key";
 
 struct CredentialDeleter final
 {
@@ -74,6 +75,9 @@ using CredentialPointer = std::unique_ptr<CREDENTIALW, CredentialDeleter>;
         case ztermy::security::CredentialKind::ProxyPassword:
             target.append(ProxyPasswordSuffix);
             break;
+        case ztermy::security::CredentialKind::AiApiKey:
+            target.append(AiApiKeySuffix);
+            break;
     }
     return target;
 }
@@ -100,6 +104,11 @@ using CredentialPointer = std::unique_ptr<CREDENTIALW, CredentialDeleter>;
     {
         kind = ztermy::security::CredentialKind::ProxyPassword;
         profile = target.substr(TargetPrefix.size(), target.size() - TargetPrefix.size() - ProxyPasswordSuffix.size());
+    }
+    else if (target.ends_with(AiApiKeySuffix))
+    {
+        kind = ztermy::security::CredentialKind::AiApiKey;
+        profile = target.substr(TargetPrefix.size(), target.size() - TargetPrefix.size() - AiApiKeySuffix.size());
     }
     else
     {

@@ -201,6 +201,8 @@ target_link_libraries(ztermy_application_diagnostics
 )
 
 add_library(ztermy_credential_vault STATIC
+    src/application/ai/AiSecretStore.cpp
+    src/application/ai/AiSecretStore.h
     src/application/security/CredentialVaultCoordinator.cpp
     src/application/security/CredentialVaultCoordinator.h
     src/core/security/CredentialVault.cpp

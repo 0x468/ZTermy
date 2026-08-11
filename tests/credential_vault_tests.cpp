@@ -1,3 +1,4 @@
+#include "application/ai/AiSecretStore.h"
 #include "application/security/CredentialVaultCoordinator.h"
 #include "core/security/CredentialVault.h"
 #include "infrastructure/security/InMemoryCredentialVault.h"
@@ -114,6 +115,7 @@ private slots:
     void portableVaultChangesMasterPassword();
     void portableVaultRejectsTampering();
     void windowsVaultRoundTripsGenericCredential();
+    void aiSecretStoreUsesDedicatedCredentialKind();
     void coordinatorMigratesOnlyAfterPortableVaultUnlocks();
     void coordinatorCanLeaveAnUninitializedPortableVault();
     void coordinatorRollsBackPartiallyWrittenTarget();
@@ -207,6 +209,8 @@ void CredentialVaultTests::portableVaultPersistsAndAuthenticates()
                                                      .kind = ztermy::security::CredentialKind::PrivateKeyPassphrase};
     const ztermy::security::CredentialKey proxyPassword{.profileId = "profile-3",
                                                         .kind = ztermy::security::CredentialKind::ProxyPassword};
+    const ztermy::security::CredentialKey apiKey{.profileId = "provider-default",
+                                                 .kind = ztermy::security::CredentialKind::AiApiKey};
 
     {
         ztermy::security::PortableCredentialVault vault(path);
@@ -215,6 +219,7 @@ void CredentialVaultTests::portableVaultPersistsAndAuthenticates()
         QVERIFY(vault.store(password, sensitive("password-secret")));
         QVERIFY(vault.store(passphrase, sensitive("key-secret")));
         QVERIFY(vault.store(proxyPassword, sensitive("proxy-secret")));
+        QVERIFY(vault.store(apiKey, sensitive("api-secret")));
     }
 
     QFile encryptedFile(path);
@@ -223,6 +228,7 @@ void CredentialVaultTests::portableVaultPersistsAndAuthenticates()
     QVERIFY(!encryptedBytes.contains("password-secret"));
     QVERIFY(!encryptedBytes.contains("key-secret"));
     QVERIFY(!encryptedBytes.contains("proxy-secret"));
+    QVERIFY(!encryptedBytes.contains("api-secret"));
     QVERIFY(!encryptedBytes.contains("correct horse battery staple"));
     encryptedFile.close();
 
@@ -244,9 +250,12 @@ void CredentialVaultTests::portableVaultPersistsAndAuthenticates()
     auto loadedProxy = reopened.read(proxyPassword);
     QVERIFY(loadedProxy);
     QCOMPARE(bytes(*loadedProxy), QByteArrayLiteral("proxy-secret"));
-    QCOMPARE(reopened.listKeys()->size(), std::size_t{3});
+    auto loadedApiKey = reopened.read(apiKey);
+    QVERIFY(loadedApiKey);
+    QCOMPARE(bytes(*loadedApiKey), QByteArrayLiteral("api-secret"));
+    QCOMPARE(reopened.listKeys()->size(), std::size_t{4});
     QVERIFY(reopened.remove(passphrase));
-    QCOMPARE(reopened.listKeys()->size(), std::size_t{2});
+    QCOMPARE(reopened.listKeys()->size(), std::size_t{3});
 }
 
 void CredentialVaultTests::portableVaultUsesFreshNonceForEveryRewrite()
@@ -340,6 +349,27 @@ void CredentialVaultTests::windowsVaultRoundTripsGenericCredential()
     QVERIFY(std::ranges::find(*keys, key) != keys->end());
     QVERIFY(vault.remove(key));
     const auto missing = vault.read(key);
+    QVERIFY(!missing);
+    QCOMPARE(missing.error(), ztermy::security::CredentialVaultError::NotFound);
+}
+
+void CredentialVaultTests::aiSecretStoreUsesDedicatedCredentialKind()
+{
+    ztermy::security::InMemoryCredentialVault vault;
+    ztermy::ai::AiSecretStore store(vault);
+    QVERIFY(store.storeApiKey("provider-default", sensitive("provider-secret")));
+
+    auto loaded = store.readApiKey("provider-default");
+    QVERIFY(loaded);
+    QCOMPARE(bytes(*loaded), QByteArrayLiteral("provider-secret"));
+    const auto keys = vault.listKeys();
+    QVERIFY(keys);
+    QCOMPARE(keys->size(), std::size_t{1});
+    QCOMPARE(keys->front().profileId, std::string("provider-default"));
+    QCOMPARE(keys->front().kind, ztermy::security::CredentialKind::AiApiKey);
+
+    QVERIFY(store.removeApiKey("provider-default"));
+    const auto missing = store.readApiKey("provider-default");
     QVERIFY(!missing);
     QCOMPARE(missing.error(), ztermy::security::CredentialVaultError::NotFound);
 }

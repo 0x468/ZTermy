@@ -16,6 +16,7 @@ enum class CredentialKind : std::uint8_t
     Password = 1,
     PrivateKeyPassphrase = 2,
     ProxyPassword = 3,
+    AiApiKey = 4,
 };
 
 struct CredentialKey final
