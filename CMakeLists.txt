@@ -436,6 +436,17 @@ add_library(ztermy_ai_domain STATIC
 target_compile_features(ztermy_ai_domain PUBLIC cxx_std_23)
 target_include_directories(ztermy_ai_domain PUBLIC src)
 
+add_library(ztermy_ai_context STATIC
+    src/domain/ai/AiContextBroker.cpp
+    src/domain/ai/AiContextBroker.h
+)
+
+target_compile_features(ztermy_ai_context PUBLIC cxx_std_23)
+target_include_directories(ztermy_ai_context PUBLIC src)
+target_link_libraries(ztermy_ai_context
+    PUBLIC ztermy_ai_domain ztermy_terminal_engine
+)
+
 add_library(ztermy_ai_provider STATIC
     src/infrastructure/ai/ProviderHttpClient.cpp
     src/infrastructure/ai/ProviderHttpClient.h
@@ -2587,6 +2598,27 @@ if(BUILD_TESTING)
 
     add_test(NAME provider-http-client COMMAND ztermy_provider_http_client_tests)
 
+    qt_add_executable(ztermy_ai_context_broker_tests
+        tests/ai_context_broker_tests.cpp
+    )
+
+    target_compile_features(ztermy_ai_context_broker_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ai_context_broker_tests PRIVATE
+        ztermy_ai_context
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ai_context_broker_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ai-context-broker COMMAND ztermy_ai_context_broker_tests)
+
     qt_add_executable(ztermy_local_terminal_session_tests
         tests/local_terminal_session_tests.cpp
     )
@@ -2893,6 +2925,7 @@ if(BUILD_TESTING)
             ztermy_provider_stream_mapper_tests
             ztermy_provider_request_factory_tests
             ztermy_provider_http_client_tests
+            ztermy_ai_context_broker_tests
             ztermy_local_terminal_session_tests
             ztermy_app_controller_tests
             ztermy_terminal_item_tests
