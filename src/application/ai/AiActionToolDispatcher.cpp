@@ -16,6 +16,7 @@ namespace
 
 constexpr std::size_t maximumCommandBytes = std::size_t{16} * 1024;
 constexpr std::size_t maximumCommandIdBytes = 256;
+constexpr std::size_t maximumPtyInputBytes = std::size_t{4} * 1024;
 constexpr std::size_t maximumArgumentsBytes = std::size_t{20} * 1024;
 
 [[nodiscard]] QString text(const std::string_view value)
@@ -63,6 +64,24 @@ constexpr std::size_t maximumArgumentsBytes = std::size_t{20} * 1024;
     return static_cast<std::uint64_t>(number);
 }
 
+[[nodiscard]] bool validPtyInput(const QString &value)
+{
+    if (value.isEmpty() || std::cmp_greater(value.toUtf8().size(), maximumPtyInputBytes))
+    {
+        return false;
+    }
+    for (const QChar character : value)
+    {
+        const auto codePoint = character.unicode();
+        if ((codePoint < 0x20U && codePoint != '\t') || codePoint == 0x7FU || codePoint == 0x85U || codePoint == 0x2028U
+            || codePoint == 0x2029U)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 [[nodiscard]] QString budgetCode(const AiAgentBudgetDecision decision)
 {
     switch (decision)
@@ -102,7 +121,12 @@ std::vector<AiToolDefinition> AiActionToolDispatcher::definitions()
          .description = "Request a soft interrupt for a tracked command in the exact target terminal session by "
                         "writing Ctrl+C. The command outcome remains unknown until observed.",
          .parametersJson =
-             R"({"type":"object","properties":{"command_id":{"type":"string","minLength":1,"maxLength":256},"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"mode":{"type":"string","enum":["soft"]}},"required":["command_id","session_id","session_generation","mode"],"additionalProperties":false})"}};
+             R"({"type":"object","properties":{"command_id":{"type":"string","minLength":1,"maxLength":256},"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"mode":{"type":"string","enum":["soft"]}},"required":["command_id","session_id","session_generation","mode"],"additionalProperties":false})"},
+        {.name = "write_to_pty",
+         .description = "Write bounded UTF-8 text to the exact target PTY, optionally followed by Enter. The input "
+                        "is not treated as a semantic command and is never echoed in the tool result.",
+         .parametersJson =
+             R"({"type":"object","properties":{"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"data":{"type":"string","minLength":1,"maxLength":4096},"append_enter":{"type":"boolean"}},"required":["session_id","session_generation","data","append_enter"],"additionalProperties":false})"}};
 }
 
 AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const AiActionToolContext &context,
@@ -110,7 +134,8 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
 {
     const bool runCommand = call.name == "run_command";
     const bool interruptCommand = call.name == "interrupt_command";
-    if (!runCommand && !interruptCommand)
+    const bool writeToPty = call.name == "write_to_pty";
+    if (!runCommand && !interruptCommand && !writeToPty)
     {
         return response(
             failure(QStringLiteral("unsupported"), QStringLiteral("The requested action tool is unsupported.")), false);
@@ -124,6 +149,8 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
     const auto requestedCommand = object.value(QStringLiteral("command"));
     const auto requestedCommandId = object.value(QStringLiteral("command_id"));
     const auto requestedMode = object.value(QStringLiteral("mode"));
+    const auto requestedPtyData = object.value(QStringLiteral("data"));
+    const auto requestedAppendEnter = object.value(QStringLiteral("append_enter"));
     const bool commonSchemaValid = call.argumentsJson.size() <= maximumArgumentsBytes && document.isObject()
                                    && parseError.error == QJsonParseError::NoError && requestedSession.isString()
                                    && !requestedSession.toString().isEmpty() && requestedGeneration.has_value();
@@ -142,10 +169,16 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
         && std::cmp_less_equal(requestedCommandId.toString().toUtf8().size(), maximumCommandIdBytes)
         && !requestedCommandId.toString().contains(QChar::Null) && requestedMode.isString()
         && requestedMode.toString() == QStringLiteral("soft");
-    const bool schemaValid = runSchemaValid || interruptSchemaValid;
+    const bool writeSchemaValid =
+        writeToPty && commonSchemaValid
+        && hasOnlyKeys(object, {QStringLiteral("session_id"), QStringLiteral("session_generation"),
+                                QStringLiteral("data"), QStringLiteral("append_enter")})
+        && requestedPtyData.isString() && validPtyInput(requestedPtyData.toString()) && requestedAppendEnter.isBool();
+    const bool schemaValid = runSchemaValid || interruptSchemaValid || writeSchemaValid;
     const auto sessionId = requestedSession.toString().toUtf8().toStdString();
     const auto command = requestedCommand.toString().toUtf8().toStdString();
     const auto commandId = requestedCommandId.toString().toUtf8().toStdString();
+    const auto ptyData = requestedPtyData.toString().toUtf8().toStdString();
     const bool scopeValid = schemaValid && sessionId == context.target.sessionId
                             && *requestedGeneration == context.target.sessionGeneration;
 
@@ -157,10 +190,15 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
     {
         canonical.insert(QStringLiteral("command"), requestedCommand);
     }
-    else
+    else if (interruptCommand)
     {
         canonical.insert(QStringLiteral("command_id"), requestedCommandId);
         canonical.insert(QStringLiteral("mode"), requestedMode);
+    }
+    else
+    {
+        canonical.insert(QStringLiteral("data"), requestedPtyData);
+        canonical.insert(QStringLiteral("append_enter"), requestedAppendEnter);
     }
     AiToolDispatchRequest request{
         .key = {.conversationId = context.conversationId, .turnId = context.turnId, .toolCallId = call.id},
@@ -216,10 +254,13 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
                                                       .highRiskSessionGrant = context.highRiskSessionGrant});
     AiTerminalAction action{.dispatchKey = key,
                             .target = context.target,
-                            .kind =
-                                runCommand ? AiTerminalActionKind::runCommand : AiTerminalActionKind::interruptCommand,
+                            .kind = runCommand   ? AiTerminalActionKind::runCommand
+                                    : writeToPty ? AiTerminalActionKind::writeToPty
+                                                 : AiTerminalActionKind::interruptCommand,
                             .command = command,
                             .commandId = commandId,
+                            .ptyData = ptyData,
+                            .appendEnter = requestedAppendEnter.toBool(),
                             .risk = risk};
     if (decision.disposition == AiPermissionDisposition::deny)
     {

@@ -46,6 +46,14 @@ using ztermy::ai::AiToolDispatchState;
         .argumentsJson = R"({"command_id":"command-1","session_id":"session-1","session_generation":3,"mode":"soft"})"};
 }
 
+[[nodiscard]] AiToolCall ptyWriteCall(const std::string &id = "pty-write-1")
+{
+    return AiToolCall{.id = id,
+                      .name = "write_to_pty",
+                      .argumentsJson =
+                          R"({"session_id":"session-1","session_generation":3,"data":"yes","append_enter":true})"};
+}
+
 [[nodiscard]] QJsonObject object(const std::string &value)
 {
     return QJsonDocument::fromJson(QByteArray::fromStdString(value)).object();
@@ -58,6 +66,7 @@ class AiActionToolDispatcherTests final : public QObject
 private slots:
     void publishesStrictRunCommandDefinition();
     void preparesSoftInterruptAsWriteAction();
+    void validatesInteractivePtyInput();
     void waitsForApprovalAndCachesCompletion();
     void rejectsScopeReplayAndObserverWrites();
     void appliesRiskBudgetAndOwnershipGuards();
@@ -66,11 +75,33 @@ private slots:
 void AiActionToolDispatcherTests::publishesStrictRunCommandDefinition()
 {
     const auto definitions = AiActionToolDispatcher::definitions();
-    QCOMPARE(definitions.size(), std::size_t{2});
+    QCOMPARE(definitions.size(), std::size_t{3});
     QCOMPARE(definitions.front().name, std::string("run_command"));
     const auto schema = QJsonDocument::fromJson(QByteArray::fromStdString(definitions.front().parametersJson));
     QVERIFY(schema.isObject());
     QVERIFY(!schema.object().value(QStringLiteral("additionalProperties")).toBool(true));
+}
+
+void AiActionToolDispatcherTests::validatesInteractivePtyInput()
+{
+    AiActionToolDispatcher dispatcher;
+    AiAgentTurnBudget budget;
+    const auto plan = dispatcher.prepare(ptyWriteCall(), context(), budget);
+    QCOMPARE(plan.disposition, AiActionToolDisposition::awaitApproval);
+    const auto action = plan.action.value_or(AiTerminalAction{});
+    QCOMPARE(action.kind, AiTerminalActionKind::writeToPty);
+    QCOMPARE(action.ptyData, std::string("yes"));
+    QVERIFY(action.appendEnter);
+
+    AiAgentTurnBudget invalidBudget;
+    auto invalid = ptyWriteCall("pty-write-invalid");
+    invalid.argumentsJson =
+        R"({"session_id":"session-1","session_generation":3,"data":"yes\nwhoami","append_enter":true})";
+    const auto rejected = dispatcher.prepare(invalid, context(), invalidBudget);
+    QCOMPARE(
+        object(rejected.outputJson).value(QStringLiteral("error")).toObject().value(QStringLiteral("code")).toString(),
+        QStringLiteral("invalid_arguments"));
+    QCOMPARE(invalidBudget.writeActions(), std::uint32_t{0});
 }
 
 void AiActionToolDispatcherTests::preparesSoftInterruptAsWriteAction()

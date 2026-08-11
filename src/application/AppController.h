@@ -655,6 +655,7 @@ private:
                                                                            const ai::AiToolCall &call);
     [[nodiscard]] std::string executeAiTerminalAction(TerminalTab &tab, const ai::AiTerminalAction &action);
     [[nodiscard]] std::string executeAiRunCommand(TerminalTab &tab, const ai::AiTerminalAction &action);
+    [[nodiscard]] std::string executeAiWriteToPty(TerminalTab &tab, const ai::AiTerminalAction &action);
     [[nodiscard]] std::string executeAiInterruptCommand(TerminalTab &tab, const ai::AiTerminalAction &action);
     void observeScriptOutput(const QString &tabId, const QByteArray &bytes);
     void dispatchScriptCommands(TerminalTab &tab, const std::vector<std::string> &commands);

@@ -35,6 +35,7 @@ enum class AiActionToolDisposition : std::uint8_t
 enum class AiTerminalActionKind : std::uint8_t
 {
     runCommand,
+    writeToPty,
     interruptCommand,
 };
 
@@ -45,6 +46,8 @@ struct AiTerminalAction final
     AiTerminalActionKind kind = AiTerminalActionKind::runCommand;
     std::string command;
     std::string commandId;
+    std::string ptyData;
+    bool appendEnter = false;
     AiCommandRiskReport risk;
 };
 

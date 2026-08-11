@@ -2766,15 +2766,31 @@ QVariantMap AppController::activeAiToolApproval() const
         return {};
     }
     const auto &action = *tab->pendingAiAction;
-    const QString actionText = action.kind == ai::AiTerminalActionKind::runCommand
-                                   ? utf8QString(action.command)
-                                   : tr("Send Ctrl+C to tracked command %1").arg(utf8QString(action.commandId));
+    QString actionText;
+    QString actionKind;
+    switch (action.kind)
+    {
+        case ai::AiTerminalActionKind::runCommand:
+            actionText = utf8QString(action.command);
+            actionKind = QStringLiteral("run_command");
+            break;
+        case ai::AiTerminalActionKind::writeToPty:
+            actionText = utf8QString(action.ptyData);
+            if (action.appendEnter)
+            {
+                actionText += QStringLiteral("\n↵ Enter");
+            }
+            actionKind = QStringLiteral("write_to_pty");
+            break;
+        case ai::AiTerminalActionKind::interruptCommand:
+            actionText = tr("Send Ctrl+C to tracked command %1").arg(utf8QString(action.commandId));
+            actionKind = QStringLiteral("interrupt_command");
+            break;
+    }
     return {{QStringLiteral("visible"), true},
             {QStringLiteral("toolCallId"), utf8QString(action.dispatchKey.toolCallId)},
             {QStringLiteral("command"), actionText},
-            {QStringLiteral("kind"), action.kind == ai::AiTerminalActionKind::runCommand
-                                         ? QStringLiteral("run_command")
-                                         : QStringLiteral("interrupt_command")},
+            {QStringLiteral("kind"), actionKind},
             {QStringLiteral("sessionId"), utf8QString(action.target.sessionId)},
             {QStringLiteral("sessionGeneration"), QVariant::fromValue<qulonglong>(action.target.sessionGeneration)},
             {QStringLiteral("highRisk"), action.risk.highRisk()},
@@ -7406,7 +7422,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
             {
                 return handleAiWaitCommand(*target, tabId, call);
             }
-            if (call.name == "run_command" || call.name == "interrupt_command")
+            if (call.name == "run_command" || call.name == "interrupt_command" || call.name == "write_to_pty")
             {
                 if (target == nullptr || !target->aiTurnRunner || !target->aiTurnBudget)
                 {
@@ -7668,10 +7684,30 @@ std::string AppController::executeAiTerminalAction(TerminalTab &tab, const ai::A
     {
         case ai::AiTerminalActionKind::runCommand:
             return executeAiRunCommand(tab, action);
+        case ai::AiTerminalActionKind::writeToPty:
+            return executeAiWriteToPty(tab, action);
         case ai::AiTerminalActionKind::interruptCommand:
             return executeAiInterruptCommand(tab, action);
     }
     return aiToolFailureJson(QStringLiteral("unsupported"), tr("The terminal action is unsupported."));
+}
+
+std::string AppController::executeAiWriteToPty(TerminalTab &tab, const ai::AiTerminalAction &action)
+{
+    QByteArray bytes(action.ptyData.data(), static_cast<qsizetype>(action.ptyData.size()));
+    if (action.appendEnter)
+    {
+        bytes.append('\r');
+    }
+    dispatchInput(tab, bytes);
+    return compactJson(
+        QJsonObject{{QStringLiteral("ok"), true},
+                    {QStringLiteral("status"), QStringLiteral("accepted")},
+                    {QStringLiteral("session_id"), utf8QString(action.target.sessionId)},
+                    {QStringLiteral("session_generation"), static_cast<qint64>(action.target.sessionGeneration)},
+                    {QStringLiteral("bytes_written"), static_cast<qint64>(bytes.size())},
+                    {QStringLiteral("enter_appended"), action.appendEnter},
+                    {QStringLiteral("content_echoed"), false}});
 }
 
 std::string AppController::executeAiRunCommand(TerminalTab &tab, const ai::AiTerminalAction &action)
