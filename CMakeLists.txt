@@ -441,6 +441,8 @@ target_compile_features(ztermy_ai_domain PUBLIC cxx_std_23)
 target_include_directories(ztermy_ai_domain PUBLIC src)
 
 add_library(ztermy_ai_context STATIC
+    src/domain/ai/AiReadTools.cpp
+    src/domain/ai/AiReadTools.h
     src/domain/ai/AiContextBroker.cpp
     src/domain/ai/AiContextBroker.h
     src/domain/ai/AiContextRedactor.cpp
@@ -2682,6 +2684,27 @@ if(BUILD_TESTING)
 
     add_test(NAME ai-context-broker COMMAND ztermy_ai_context_broker_tests)
 
+    qt_add_executable(ztermy_ai_read_tools_tests
+        tests/ai_read_tools_tests.cpp
+    )
+
+    target_compile_features(ztermy_ai_read_tools_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ai_read_tools_tests PRIVATE
+        ztermy_ai_context
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ai_read_tools_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ai-read-tools COMMAND ztermy_ai_read_tools_tests)
+
     qt_add_executable(ztermy_ai_context_redactor_tests
         tests/ai_context_redactor_tests.cpp
     )
@@ -3033,6 +3056,7 @@ if(BUILD_TESTING)
             ztermy_ai_provider_retry_policy_tests
             ztermy_ai_turn_runner_tests
             ztermy_ai_context_broker_tests
+            ztermy_ai_read_tools_tests
             ztermy_ai_context_redactor_tests
             ztermy_ai_context_serializer_tests
             ztermy_local_terminal_session_tests
