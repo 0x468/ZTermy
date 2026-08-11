@@ -421,6 +421,8 @@ add_library(ztermy_terminal_engine STATIC
     src/domain/terminal/TerminalOutputSink.h
     src/domain/terminal/ShellIntegrationDecoder.cpp
     src/domain/terminal/ShellIntegrationDecoder.h
+    src/domain/terminal/SemanticTerminalObserver.cpp
+    src/domain/terminal/SemanticTerminalObserver.h
 )
 
 add_library(ztermy_session_logging STATIC
@@ -2448,6 +2450,27 @@ if(BUILD_TESTING)
 
     add_test(NAME command-block-assembler COMMAND ztermy_command_block_assembler_tests)
 
+    qt_add_executable(ztermy_semantic_terminal_observer_tests
+        tests/semantic_terminal_observer_tests.cpp
+    )
+
+    target_compile_features(ztermy_semantic_terminal_observer_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_semantic_terminal_observer_tests PRIVATE
+        ztermy_terminal_engine
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_semantic_terminal_observer_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME semantic-terminal-observer COMMAND ztermy_semantic_terminal_observer_tests)
+
     qt_add_executable(ztermy_local_terminal_session_tests
         tests/local_terminal_session_tests.cpp
     )
@@ -2749,6 +2772,7 @@ if(BUILD_TESTING)
             ztermy_command_block_store_tests
             ztermy_shell_integration_decoder_tests
             ztermy_command_block_assembler_tests
+            ztermy_semantic_terminal_observer_tests
             ztermy_local_terminal_session_tests
             ztermy_app_controller_tests
             ztermy_terminal_item_tests

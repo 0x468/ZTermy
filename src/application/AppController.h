@@ -10,6 +10,7 @@
 #include "application/terminal/LocalTerminalSession.h"
 #include "core/config/ApplicationPaths.h"
 #include "core/config/ApplicationSettings.h"
+#include "domain/terminal/SemanticTerminalObserver.h"
 #include "domain/workbench/ScriptExecution.h"
 #include "domain/workbench/ScriptRecorder.h"
 #include "infrastructure/forwarding/PortForwardingRuleStore.h"
@@ -492,6 +493,7 @@ private:
         terminal::TerminalSnapshotPtr snapshot;
         std::shared_ptr<logging::SessionLogWriter> sessionLog;
         std::shared_ptr<terminal::TerminalOutputSink> outputSink;
+        std::shared_ptr<terminal::SemanticTerminalObserver> semanticObserver;
         QString id;
         QString workspaceId;
         QString paneId;

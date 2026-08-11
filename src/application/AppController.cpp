@@ -1715,6 +1715,10 @@ void AppController::shutdown() noexcept
         {
             tab->ssh->stop();
         }
+        if (tab->semanticObserver)
+        {
+            tab->semanticObserver->finish(terminal::CommandCompletionReason::disconnect);
+        }
         if (tab->sessionLog)
         {
             tab->sessionLog->stop();
@@ -2791,6 +2795,10 @@ bool AppController::closeTerminalTab(const QString &id)
         if (tab->ssh)
         {
             tab->ssh->stop();
+        }
+        if (tab->semanticObserver)
+        {
+            tab->semanticObserver->finish(terminal::CommandCompletionReason::disconnect);
         }
         if (tab->sessionLog)
         {
@@ -7166,12 +7174,23 @@ void AppController::initializeSessionLog(TerminalTab &tab)
 void AppController::initializeTerminalOutputSink(TerminalTab &tab)
 {
     const QString tabId = tab.id;
-    tab.outputSink =
-        std::make_shared<TerminalOutputFanout>(tab.sessionLog, [this, tabId](const std::span<const std::byte> bytes) {
+    const std::string nonce = utf8String(QUuid::createUuid().toString(QUuid::WithoutBraces));
+    tab.semanticObserver = std::make_shared<terminal::SemanticTerminalObserver>(
+        terminal::CommandBlockSessionContext{
+            .sessionId = utf8String(tab.id),
+            .host = utf8String(tab.address),
+            .shell = tab.kind == TerminalTabKind::Local ? "pwsh" : std::string{},
+            .sessionGeneration = tab.reconnectGeneration,
+        },
+        nonce);
+    const auto semanticObserver = tab.semanticObserver;
+    tab.outputSink = std::make_shared<TerminalOutputFanout>(
+        tab.sessionLog, [this, tabId, semanticObserver](const std::span<const std::byte> bytes) {
             if (bytes.empty())
             {
                 return;
             }
+            semanticObserver->append(bytes);
             const QByteArray copy(reinterpret_cast<const char *>(bytes.data()), static_cast<qsizetype>(bytes.size()));
             emit scriptOutputObserved(tabId, copy);
         });
@@ -7838,7 +7857,12 @@ void AppController::observeTerminalInput(TerminalTab &tab, const QByteArray &byt
         {
             if (tab.inputHistoryBufferReliable)
             {
-                appendCapturedHistory(tab, QString::fromUtf8(tab.inputHistoryBuffer));
+                const QString command = QString::fromUtf8(tab.inputHistoryBuffer);
+                appendCapturedHistory(tab, command);
+                if (tab.semanticObserver && !command.isEmpty())
+                {
+                    tab.semanticObserver->observeFallbackCommand(utf8String(command));
+                }
             }
             tab.inputHistoryBuffer.clear();
             tab.inputHistoryBufferReliable = true;
