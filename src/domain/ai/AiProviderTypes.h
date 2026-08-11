@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace ztermy::ai
 {
@@ -12,6 +13,36 @@ enum class AiProviderKind : std::uint8_t
     openAiResponses,
     ollama,
     openAiCompatible,
+};
+
+enum class AiMessageRole : std::uint8_t
+{
+    system,
+    user,
+    assistant,
+    tool,
+};
+
+struct AiChatMessage final
+{
+    AiMessageRole role = AiMessageRole::user;
+    std::string content;
+    std::string toolCallId;
+};
+
+struct AiProviderConfiguration final
+{
+    AiProviderKind kind = AiProviderKind::openAiResponses;
+    std::string baseUrl;
+    std::string endpointPath;
+    std::string model;
+};
+
+struct AiGenerationRequest final
+{
+    std::string instructions;
+    std::vector<AiChatMessage> messages;
+    std::optional<std::string> previousResponseId;
 };
 
 enum class AiStreamEventType : std::uint8_t
