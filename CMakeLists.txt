@@ -428,6 +428,8 @@ add_library(ztermy_terminal_engine STATIC
 )
 
 add_library(ztermy_ai_domain STATIC
+    src/domain/ai/AiAgentGuard.cpp
+    src/domain/ai/AiAgentGuard.h
     src/domain/ai/AiPermissionPolicy.cpp
     src/domain/ai/AiPermissionPolicy.h
     src/domain/ai/AiProviderRetryPolicy.cpp
@@ -2722,6 +2724,27 @@ if(BUILD_TESTING)
 
     add_test(NAME ai-tool-dispatch-ledger COMMAND ztermy_ai_tool_dispatch_ledger_tests)
 
+    qt_add_executable(ztermy_ai_agent_guard_tests
+        tests/ai_agent_guard_tests.cpp
+    )
+
+    target_compile_features(ztermy_ai_agent_guard_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ai_agent_guard_tests PRIVATE
+        ztermy_ai_domain
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ai_agent_guard_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ai-agent-guard COMMAND ztermy_ai_agent_guard_tests)
+
     qt_add_executable(ztermy_ai_usage_reporting_tests
         tests/ai_usage_reporting_tests.cpp
     )
@@ -3229,6 +3252,7 @@ if(BUILD_TESTING)
             ztermy_ai_provider_retry_policy_tests
             ztermy_ai_permission_policy_tests
             ztermy_ai_tool_dispatch_ledger_tests
+            ztermy_ai_agent_guard_tests
             ztermy_ai_turn_runner_tests
             ztermy_ai_conversation_model_tests
             ztermy_ai_read_tool_dispatcher_tests
