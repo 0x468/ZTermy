@@ -1,4 +1,6 @@
 #include "application/terminal/LocalTerminalSession.h"
+#include "application/terminal/PowerShellShellIntegration.h"
+#include "domain/terminal/SemanticTerminalObserver.h"
 
 #include <QDebug>
 #include <QElapsedTimer>
@@ -57,17 +59,100 @@ private:
     QByteArray m_bytes;
 };
 
+class SemanticOutputSink final : public ztermy::terminal::TerminalOutputSink
+{
+public:
+    explicit SemanticOutputSink(std::shared_ptr<ztermy::terminal::SemanticTerminalObserver> observer)
+        : m_observer(std::move(observer))
+    {
+    }
+
+    void append(const std::span<const std::byte> bytes) noexcept override { m_observer->append(bytes); }
+
+private:
+    std::shared_ptr<ztermy::terminal::SemanticTerminalObserver> m_observer;
+};
+
 class LocalTerminalSessionTests final : public QObject
 {
     Q_OBJECT
 
 private slots:
+    void buildsEphemeralPowerShellIntegrationCommand();
+    void capturesRichPowerShellCommandLifecycle();
     void runsPowerShellAndStopsPromptly();
     void restoresPromptAfterHelixAlternateScreen();
     void measuresInteractiveInputQueueLatency();
     void processesLargeOutputWithoutStarvingEventLoop();
     void survivesSustainedInteractionWithoutLatencyGrowth();
 };
+
+void LocalTerminalSessionTests::buildsEphemeralPowerShellIntegrationCommand()
+{
+    constexpr std::string_view nonce = "12345678-abcd-4321-abcd-1234567890ab";
+    const auto command = ztermy::terminal::powerShellLaunchCommand(L"pwsh.exe", nonce);
+    QVERIFY(command.has_value());
+    const QString commandText = QString::fromStdWString(*command);
+    const QString marker = QStringLiteral(" -EncodedCommand ");
+    const qsizetype markerPosition = commandText.indexOf(marker);
+    QVERIFY(markerPosition > 0);
+
+    const QByteArray encoded = commandText.sliced(markerPosition + marker.size()).toLatin1();
+    const QByteArray utf16 = QByteArray::fromBase64(encoded);
+    QVERIFY(!utf16.isEmpty());
+    QCOMPARE(utf16.size() % static_cast<qsizetype>(sizeof(char16_t)), qsizetype{0});
+    const QString script = QString::fromUtf16(reinterpret_cast<const char16_t *>(utf16.constData()),
+                                              utf16.size() / static_cast<qsizetype>(sizeof(char16_t)));
+    QVERIFY(script.contains(QString::fromLatin1(nonce)));
+    QVERIFY(script.contains(QStringLiteral("Set-PSReadLineKeyHandler -Chord Enter")));
+    QVERIFY(script.contains(QStringLiteral("`e]633;E;")));
+    QVERIFY(script.contains(QStringLiteral("HasRichCommandDetection=True")));
+    QVERIFY(!script.contains(QStringLiteral("Set-Content")));
+    QVERIFY(!script.contains(QStringLiteral("$PROFILE")));
+
+    QVERIFY(!ztermy::terminal::powerShellLaunchCommand(L"pwsh.exe", "unsafe';command").has_value());
+}
+
+void LocalTerminalSessionTests::capturesRichPowerShellCommandLifecycle()
+{
+    constexpr std::string_view nonce = "12345678-abcd-4321-abcd-1234567890ab";
+    auto observer = std::make_shared<ztermy::terminal::SemanticTerminalObserver>(
+        ztermy::terminal::CommandBlockSessionContext{
+            .sessionId = "local-test",
+            .host = "localhost",
+            .shell = "pwsh",
+        },
+        std::string(nonce));
+    const auto sink = std::make_shared<SemanticOutputSink>(observer);
+
+    ztermy::terminal::LocalTerminalSession session;
+    session.setOutputSink(sink);
+    session.setShellIntegrationNonce(std::string(nonce));
+    ztermy::terminal::TerminalSnapshotPtr latestSnapshot;
+    connect(&session, &ztermy::terminal::LocalTerminalSession::snapshotReady, this,
+            [&latestSnapshot](ztermy::terminal::TerminalSnapshotPtr snapshot) {
+                latestSnapshot = std::move(snapshot);
+            });
+
+    const std::error_code startError = session.start({.columns = 80, .rows = 24});
+    if (startError)
+    {
+        QFAIL(startError.message().c_str());
+    }
+    QTRY_VERIFY_WITH_TIMEOUT(latestSnapshot && latestSnapshot->cursor.visible, 5000);
+    session.queueInput(QStringLiteral("Write-Output '终端'\r").toUtf8());
+    QTRY_VERIFY_WITH_TIMEOUT(!observer->snapshot().commandBlocks.empty()
+                                 && observer->snapshot().commandBlocks.back().state
+                                        == ztermy::terminal::CommandBlockState::finished,
+                             5000);
+
+    const auto semantic = observer->snapshot();
+    const auto &block = semantic.commandBlocks.back();
+    QCOMPARE(block.command, std::string("Write-Output '终端'"));
+    QCOMPARE(block.capability, ztermy::terminal::TerminalSemanticCapability::rich);
+    QCOMPARE(block.exitStatus, std::optional<int>{0});
+    session.stop();
+}
 
 void LocalTerminalSessionTests::runsPowerShellAndStopsPromptly()
 {

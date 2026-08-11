@@ -7184,6 +7184,10 @@ void AppController::initializeTerminalOutputSink(TerminalTab &tab)
         },
         nonce);
     const auto semanticObserver = tab.semanticObserver;
+    if (tab.local)
+    {
+        tab.local->setShellIntegrationNonce(nonce);
+    }
     tab.outputSink = std::make_shared<TerminalOutputFanout>(
         tab.sessionLog, [this, tabId, semanticObserver](const std::span<const std::byte> bytes) {
             if (bytes.empty())

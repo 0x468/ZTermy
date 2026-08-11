@@ -16,6 +16,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <string>
 #include <system_error>
 #include <thread>
 #include <variant>
@@ -40,6 +41,7 @@ public:
     [[nodiscard]] virtual std::error_code start(TerminalGeometry geometry) = 0;
     virtual void stop() noexcept = 0;
     virtual void setOutputSink(const std::shared_ptr<TerminalOutputSink> &) {}
+    virtual void setShellIntegrationNonce(const std::string &) {}
 
 public slots:
     virtual void queueInput(const QByteArray &bytes) = 0;
@@ -75,6 +77,7 @@ public:
     [[nodiscard]] std::error_code start(TerminalGeometry geometry) override;
     void stop() noexcept override;
     void setOutputSink(const std::shared_ptr<TerminalOutputSink> &sink) override;
+    void setShellIntegrationNonce(const std::string &nonce) override;
     [[nodiscard]] diagnostics::LatencySummary inputQueueLatencySummary() const noexcept;
     [[nodiscard]] diagnostics::LatencySummary takeInputQueueLatencySummary() noexcept;
 
@@ -140,6 +143,7 @@ private:
     std::unique_ptr<ConPtyProcess> m_process;
     std::unique_ptr<GhosttyTerminalEngine> m_engine;
     std::shared_ptr<TerminalOutputSink> m_outputSink;
+    std::string m_shellIntegrationNonce;
     std::jthread m_readThread;
     std::jthread m_writeThread;
 

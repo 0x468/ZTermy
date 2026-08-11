@@ -1,5 +1,7 @@
 #include "application/terminal/LocalTerminalSession.h"
 
+#include "application/terminal/PowerShellShellIntegration.h"
+
 #include "domain/terminal/GhosttyTerminalEngine.h"
 #include "infrastructure/terminal/ConPtyProcess.h"
 
@@ -53,12 +55,16 @@ std::error_code LocalTerminalSession::start(const TerminalGeometry geometry)
 
     auto process = std::make_unique<ConPtyProcess>();
     const std::wstring workingDirectory = QStandardPaths::writableLocation(QStandardPaths::HomeLocation).toStdWString();
+    const std::wstring pwshCommand =
+        powerShellLaunchCommand(L"pwsh.exe", m_shellIntegrationNonce).value_or(L"pwsh.exe -NoLogo");
     std::error_code processError =
-        process->start(L"pwsh.exe -NoLogo", {.columns = geometry.columns, .rows = geometry.rows}, workingDirectory);
+        process->start(pwshCommand, {.columns = geometry.columns, .rows = geometry.rows}, workingDirectory);
     if (processError == std::make_error_code(std::errc::no_such_file_or_directory)
         || processError.value() == ERROR_FILE_NOT_FOUND)
     {
-        processError = process->start(L"powershell.exe -NoLogo", {.columns = geometry.columns, .rows = geometry.rows},
+        const std::wstring windowsPowerShellCommand =
+            powerShellLaunchCommand(L"powershell.exe", m_shellIntegrationNonce).value_or(L"powershell.exe -NoLogo");
+        processError = process->start(windowsPowerShellCommand, {.columns = geometry.columns, .rows = geometry.rows},
                                       workingDirectory);
     }
     if (processError)
@@ -156,6 +162,15 @@ void LocalTerminalSession::stop() noexcept
 void LocalTerminalSession::setOutputSink(const std::shared_ptr<TerminalOutputSink> &sink)
 {
     m_outputSink = sink;
+}
+
+void LocalTerminalSession::setShellIntegrationNonce(const std::string &nonce)
+{
+    if (m_running.load())
+    {
+        return;
+    }
+    m_shellIntegrationNonce = nonce;
 }
 
 void LocalTerminalSession::queueInput(const QByteArray &bytes)

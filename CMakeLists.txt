@@ -441,6 +441,8 @@ target_link_libraries(ztermy_terminal_engine PRIVATE ghostty-vt-static)
 add_library(ztermy_terminal_session STATIC
     src/application/terminal/LocalTerminalSession.cpp
     src/application/terminal/LocalTerminalSession.h
+    src/application/terminal/PowerShellShellIntegration.cpp
+    src/application/terminal/PowerShellShellIntegration.h
 )
 
 add_library(ztermy_ssh_session STATIC
