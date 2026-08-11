@@ -21,6 +21,7 @@ enum class AiReadToolErrorCode : std::uint8_t
     staleSessionGeneration,
     commandBlockNotFound,
     rangeOutOfBounds,
+    cursorExpired,
     limitExceeded,
 };
 
@@ -28,6 +29,7 @@ struct AiReadToolError final
 {
     AiReadToolErrorCode code = AiReadToolErrorCode::invalidArguments;
     std::string message;
+    std::optional<std::uint64_t> nextAvailableCursor;
 };
 
 struct AiReadToolLimits final
@@ -102,6 +104,25 @@ struct AiCommandBlockRead final
     bool untrustedEvidence = true;
 };
 
+struct AiCommandOutputRead final
+{
+    terminal::CommandBlockId id = 0;
+    std::string sessionId;
+    std::uint64_t sessionGeneration = 0;
+    terminal::CommandBlockState state = terminal::CommandBlockState::running;
+    terminal::CommandOutputCoverage outputCoverage = terminal::CommandOutputCoverage::unknown;
+    std::optional<int> exitStatus;
+    std::string output;
+    std::uint64_t requestedCursor = 0;
+    std::uint64_t nextCursor = 0;
+    std::uint64_t streamStart = 0;
+    std::uint64_t streamEnd = 0;
+    std::uint64_t skippedBytes = 0;
+    bool hasMore = false;
+    bool truncated = false;
+    bool untrustedEvidence = true;
+};
+
 class AiReadTools final
 {
 public:
@@ -119,6 +140,10 @@ public:
     [[nodiscard]] std::expected<AiCommandBlockRead, AiReadToolError>
     readCommandBlock(std::span<const AiTerminalReadSnapshot> sessions, std::string_view sessionId,
                      std::uint64_t sessionGeneration, terminal::CommandBlockId blockId) const;
+    [[nodiscard]] std::expected<AiCommandOutputRead, AiReadToolError>
+    readCommandOutput(std::span<const AiTerminalReadSnapshot> sessions, std::string_view sessionId,
+                      std::uint64_t sessionGeneration, terminal::CommandBlockId blockId, std::uint64_t afterCursor,
+                      std::size_t maximumBytes) const;
 
 private:
     [[nodiscard]] std::expected<const AiTerminalReadSnapshot *, AiReadToolError>

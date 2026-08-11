@@ -62,6 +62,15 @@ namespace
     return {reinterpret_cast<const char *>(block.retainedOutput.data()), block.retainedOutput.size()};
 }
 
+[[nodiscard]] std::string bytesText(const std::span<const std::byte> bytes)
+{
+    if (bytes.empty())
+    {
+        return {};
+    }
+    return {reinterpret_cast<const char *>(bytes.data()), bytes.size()};
+}
+
 } // namespace
 
 AiReadTools::AiReadTools(AiReadToolLimits limits) : m_limits(limits)
@@ -205,6 +214,102 @@ AiReadTools::readCommandBlock(const std::span<const AiTerminalReadSnapshot> sess
                               .missingOutputBytes = block->missingOutputBytes,
                               .truncated = truncated || block->omittedOutputBytes > 0,
                               .hasInterleavedOutput = block->hasInterleavedOutput};
+}
+
+std::expected<AiCommandOutputRead, AiReadToolError>
+AiReadTools::readCommandOutput(const std::span<const AiTerminalReadSnapshot> sessions, const std::string_view sessionId,
+                               const std::uint64_t sessionGeneration, const terminal::CommandBlockId blockId,
+                               const std::uint64_t afterCursor, const std::size_t maximumBytes) const
+{
+    if (blockId == 0 || maximumBytes == 0 || maximumBytes > m_limits.maxCommandOutputBytes)
+    {
+        return std::unexpected(
+            AiReadToolError{.code = AiReadToolErrorCode::invalidArguments,
+                            .message = "Command output reads require a block id and a bounded positive byte count."});
+    }
+    const auto session = findSession(sessions, sessionId, sessionGeneration);
+    if (!session.has_value())
+    {
+        return std::unexpected(session.error());
+    }
+    const auto block = std::ranges::find((*session)->commandBlocks, blockId, &terminal::CommandBlock::id);
+    if (block == (*session)->commandBlocks.end())
+    {
+        return std::unexpected(AiReadToolError{.code = AiReadToolErrorCode::commandBlockNotFound,
+                                               .message = "The command block does not exist in the target session."});
+    }
+
+    const auto streamStart = block->firstOutputStreamOffset;
+    const auto streamEnd = block->nextOutputStreamOffset;
+    const auto cursor = afterCursor == 0 ? streamStart : afterCursor;
+    if (cursor < streamStart)
+    {
+        return std::unexpected(AiReadToolError{.code = AiReadToolErrorCode::cursorExpired,
+                                               .message = "The requested command-output cursor is no longer retained.",
+                                               .nextAvailableCursor = streamStart});
+    }
+    if (cursor > streamEnd)
+    {
+        return std::unexpected(AiReadToolError{.code = AiReadToolErrorCode::rangeOutOfBounds,
+                                               .message = "The command-output cursor is beyond the observed stream."});
+    }
+
+    const auto head = block->retainedHead();
+    const auto tail = block->retainedTail();
+    const auto headEnd = streamStart + head.size();
+    const auto tailStart = tail.empty() ? headEnd : block->retainedTailStreamOffset;
+    if (cursor > headEnd && cursor < tailStart)
+    {
+        return std::unexpected(AiReadToolError{.code = AiReadToolErrorCode::cursorExpired,
+                                               .message = "The requested command-output cursor was evicted.",
+                                               .nextAvailableCursor = tailStart});
+    }
+
+    std::span<const std::byte> source;
+    std::uint64_t sourceStart = cursor;
+    std::uint64_t skippedBytes = 0;
+    if (cursor < headEnd)
+    {
+        source = head.subspan(static_cast<std::size_t>(cursor - streamStart));
+    }
+    else if (cursor == headEnd && !tail.empty() && tailStart > headEnd)
+    {
+        source = tail;
+        sourceStart = tailStart;
+        skippedBytes = tailStart - headEnd;
+    }
+    else if (!tail.empty() && cursor >= tailStart && cursor < streamEnd)
+    {
+        source = tail.subspan(static_cast<std::size_t>(cursor - tailStart));
+    }
+
+    const auto availableText = bytesText(source);
+    const auto emittedBytes = utf8Prefix(availableText, maximumBytes);
+    if (emittedBytes == 0 && !source.empty())
+    {
+        return std::unexpected(
+            AiReadToolError{.code = AiReadToolErrorCode::invalidArguments,
+                            .message = "The command-output byte limit is too small for the next UTF-8 character."});
+    }
+    auto output = availableText.substr(0, emittedBytes);
+    const auto nextCursor = sourceStart + emittedBytes;
+    const bool sourceHasMore = emittedBytes < source.size();
+    const bool retainedGapAhead = cursor < headEnd && nextCursor == headEnd && tailStart > headEnd;
+    const bool streamHasMore = nextCursor < streamEnd;
+    return AiCommandOutputRead{.id = block->id,
+                               .sessionId = block->sessionId,
+                               .sessionGeneration = block->sessionGeneration,
+                               .state = block->state,
+                               .outputCoverage = block->outputCoverage,
+                               .exitStatus = block->exitStatus,
+                               .output = std::move(output),
+                               .requestedCursor = afterCursor,
+                               .nextCursor = nextCursor,
+                               .streamStart = streamStart,
+                               .streamEnd = streamEnd,
+                               .skippedBytes = skippedBytes,
+                               .hasMore = sourceHasMore || retainedGapAhead || streamHasMore,
+                               .truncated = sourceHasMore};
 }
 
 std::expected<const AiTerminalReadSnapshot *, AiReadToolError>

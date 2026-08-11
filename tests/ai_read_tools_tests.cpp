@@ -21,7 +21,7 @@ using ztermy::terminal::TerminalSemanticCapability;
 [[nodiscard]] std::vector<std::byte> bytes(const std::string_view value)
 {
     const auto *begin = reinterpret_cast<const std::byte *>(value.data());
-    return std::vector<std::byte>(begin, begin + value.size());
+    return {begin, begin + value.size()};
 }
 
 [[nodiscard]] AiTerminalReadSnapshot session(const std::string &sessionId, const std::uint64_t generation)
@@ -61,6 +61,7 @@ private slots:
     void rejectsWrongAndStaleSessions();
     void readsBoundedTerminalRangesWithoutSplittingUtf8();
     void readsOnlyBlocksOwnedByTargetGeneration();
+    void readsCommandOutputWithExplicitCursorGaps();
 };
 
 void AiReadToolsTests::listsBoundedSessionMetadata()
@@ -132,6 +133,57 @@ void AiReadToolsTests::readsOnlyBlocksOwnedByTargetGeneration()
     const auto stale = tools.readCommandBlock(sessions, "session-1", 4, 7);
     QVERIFY(!stale.has_value());
     QCOMPARE(stale.error().code, AiReadToolErrorCode::staleSessionGeneration);
+}
+
+void AiReadToolsTests::readsCommandOutputWithExplicitCursorGaps()
+{
+    const AiReadTools tools(AiReadToolLimits{.maxCommandOutputBytes = 16});
+    auto snapshot = session("session-1", 3);
+    auto &block = snapshot.commandBlocks.front();
+    block.retainedOutput = bytes("headtail");
+    block.retainedHeadBytes = 4;
+    block.firstOutputStreamOffset = 100;
+    block.retainedTailStreamOffset = 196;
+    block.nextOutputStreamOffset = 200;
+    block.observedOutputBytes = 100;
+    block.omittedOutputBytes = 92;
+    const std::vector snapshots{snapshot};
+
+    const auto head = tools.readCommandOutput(snapshots, "session-1", 3, 7, 100, 2);
+    QVERIFY(head.has_value());
+    QCOMPARE(head->output, std::string("he"));
+    QCOMPARE(head->nextCursor, std::uint64_t{102});
+    QVERIFY(head->hasMore);
+    QVERIFY(head->truncated);
+
+    const auto tail = tools.readCommandOutput(snapshots, "session-1", 3, 7, 104, 16);
+    QVERIFY(tail.has_value());
+    QCOMPARE(tail->output, std::string("tail"));
+    QCOMPARE(tail->skippedBytes, std::uint64_t{92});
+    QCOMPARE(tail->nextCursor, std::uint64_t{200});
+    QVERIFY(!tail->hasMore);
+
+    const auto expired = tools.readCommandOutput(snapshots, "session-1", 3, 7, 150, 16);
+    QVERIFY(!expired.has_value());
+    QCOMPARE(expired.error().code, AiReadToolErrorCode::cursorExpired);
+    QCOMPARE(expired.error().nextAvailableCursor, std::optional<std::uint64_t>{196});
+
+    const auto end = tools.readCommandOutput(snapshots, "session-1", 3, 7, 200, 16);
+    QVERIFY(end.has_value());
+    QVERIFY(end->output.empty());
+    QVERIFY(!end->hasMore);
+
+    auto unicodeSnapshot = session("session-2", 1);
+    auto &unicodeBlock = unicodeSnapshot.commandBlocks.front();
+    unicodeBlock.retainedOutput = bytes("二");
+    unicodeBlock.retainedHeadBytes = unicodeBlock.retainedOutput.size();
+    unicodeBlock.firstOutputStreamOffset = 0;
+    unicodeBlock.nextOutputStreamOffset = 3;
+    unicodeBlock.retainedTailStreamOffset = 3;
+    const std::vector unicodeSnapshots{unicodeSnapshot};
+    const auto split = tools.readCommandOutput(unicodeSnapshots, "session-2", 1, 7, 0, 1);
+    QVERIFY(!split.has_value());
+    QCOMPARE(split.error().code, AiReadToolErrorCode::invalidArguments);
 }
 
 } // namespace

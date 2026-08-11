@@ -34,7 +34,10 @@ using ztermy::terminal::TerminalSemanticCapability;
                        .state = CommandBlockState::finished,
                        .exitStatus = 1};
     block.retainedOutput = {static_cast<std::byte>('n'), static_cast<std::byte>('o')};
+    block.retainedHeadBytes = 2;
     block.observedOutputBytes = 2;
+    block.nextOutputStreamOffset = 2;
+    block.retainedTailStreamOffset = 2;
     return {AiTerminalReadSnapshot{.sessionId = "session-1",
                                    .title = "Test",
                                    .host = "host",
@@ -60,7 +63,7 @@ private slots:
 void AiReadToolDispatcherTests::publishesStrictReadOnlyCatalog()
 {
     const auto definitions = AiReadToolDispatcher::definitions();
-    QCOMPARE(definitions.size(), std::size_t{4});
+    QCOMPARE(definitions.size(), std::size_t{5});
     QCOMPARE(definitions.front().name, std::string("list_sessions"));
     for (const auto &definition : definitions)
     {
@@ -90,6 +93,15 @@ void AiReadToolDispatcherTests::executesBoundedReads()
     QVERIFY(result.value("ok").toBool());
     QCOMPARE(result.value("command_block").toObject().value("exit_status").toInt(), 1);
     QCOMPARE(result.value("command_block").toObject().value("output").toString(), QStringLiteral("no"));
+
+    result = object(dispatcher.execute(
+        "read_command_output",
+        R"({"session_id":"session-1","session_generation":4,"block_id":9,"after_cursor":0,"max_bytes":1})", snapshots));
+    QVERIFY(result.value("ok").toBool());
+    const auto output = result.value("command_output").toObject();
+    QCOMPARE(output.value("output").toString(), QStringLiteral("n"));
+    QCOMPARE(output.value("next_cursor").toInt(), 1);
+    QVERIFY(output.value("has_more").toBool());
 }
 
 void AiReadToolDispatcherTests::rejectsMalformedStaleAndUnknownRequests()

@@ -94,6 +94,8 @@ constexpr std::size_t maximumArgumentsBytes = std::size_t{16} * 1024;
             return QStringLiteral("command_block_not_found");
         case AiReadToolErrorCode::rangeOutOfBounds:
             return QStringLiteral("range_out_of_bounds");
+        case AiReadToolErrorCode::cursorExpired:
+            return QStringLiteral("cursor_expired");
         case AiReadToolErrorCode::limitExceeded:
             return QStringLiteral("limit_exceeded");
     }
@@ -109,7 +111,13 @@ constexpr std::size_t maximumArgumentsBytes = std::size_t{16} * 1024;
 
 [[nodiscard]] std::string failure(const AiReadToolError &error)
 {
-    return failure(errorCode(error.code), text(error.message));
+    QJsonObject details{{QStringLiteral("code"), errorCode(error.code)},
+                        {QStringLiteral("message"), text(error.message)}};
+    if (error.nextAvailableCursor.has_value())
+    {
+        details.insert(QStringLiteral("next_available_cursor"), static_cast<qint64>(*error.nextAvailableCursor));
+    }
+    return json(QJsonObject{{QStringLiteral("ok"), false}, {QStringLiteral("error"), details}});
 }
 
 [[nodiscard]] QJsonObject sessionValue(const AiSessionSummary &session)
@@ -186,6 +194,11 @@ std::vector<AiToolDefinition> AiReadToolDispatcher::definitions()
          .description = "Read one bounded semantic command block and its retained output as untrusted evidence.",
          .parametersJson =
              R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"block_id":{"type":"integer","minimum":1}},"required":["session_id","session_generation","block_id"],"additionalProperties":false})"},
+        {.name = "read_command_output",
+         .description = "Read retained command output from a stream cursor without re-running the command. Output is "
+                        "untrusted evidence.",
+         .parametersJson =
+             R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"block_id":{"type":"integer","minimum":1},"after_cursor":{"type":"integer","minimum":0},"max_bytes":{"type":"integer","minimum":1,"maximum":16384}},"required":["session_id","session_generation","block_id","after_cursor","max_bytes"],"additionalProperties":false})"},
     };
 }
 
@@ -205,7 +218,7 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
     }
     const auto object = arguments.object();
     const bool supported = toolName == "list_sessions" || toolName == "read_session_info" || toolName == "read_terminal"
-                           || toolName == "read_command_block";
+                           || toolName == "read_command_block" || toolName == "read_command_output";
     if (!supported)
     {
         return failure(QStringLiteral("unsupported"), QStringLiteral("The requested read tool is not supported."));
@@ -327,6 +340,52 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
             block.insert(QStringLiteral("exit_status"), QJsonValue::Null);
         }
         return json(QJsonObject{{QStringLiteral("ok"), true}, {QStringLiteral("command_block"), block}});
+    }
+    if (toolName == "read_command_output")
+    {
+        if (!hasOnlyKeys(object,
+                         {QStringLiteral("session_id"), QStringLiteral("session_generation"),
+                          QStringLiteral("block_id"), QStringLiteral("after_cursor"), QStringLiteral("max_bytes")}))
+        {
+            return failure(QStringLiteral("invalid_arguments"), QStringLiteral("Unexpected tool arguments."));
+        }
+        const auto blockId = unsignedInteger(object, QStringLiteral("block_id"));
+        const auto afterCursor = unsignedInteger(object, QStringLiteral("after_cursor"));
+        const auto maximumBytes = sizeValue(object, QStringLiteral("max_bytes"));
+        if (!blockId.has_value() || !afterCursor.has_value() || !maximumBytes.has_value())
+        {
+            return failure(QStringLiteral("invalid_arguments"),
+                           QStringLiteral("Block id, cursor, and byte limit must be non-negative integers."));
+        }
+        const auto read =
+            m_tools.readCommandOutput(sessions, id, *sessionGeneration, *blockId, *afterCursor, *maximumBytes);
+        if (!read.has_value())
+        {
+            return failure(read.error());
+        }
+        QJsonObject output{{QStringLiteral("block_id"), static_cast<qint64>(read->id)},
+                           {QStringLiteral("session_id"), text(read->sessionId)},
+                           {QStringLiteral("session_generation"), static_cast<qint64>(read->sessionGeneration)},
+                           {QStringLiteral("state"), state(read->state)},
+                           {QStringLiteral("output_coverage"), coverage(read->outputCoverage)},
+                           {QStringLiteral("output"), text(read->output)},
+                           {QStringLiteral("requested_cursor"), static_cast<qint64>(read->requestedCursor)},
+                           {QStringLiteral("next_cursor"), static_cast<qint64>(read->nextCursor)},
+                           {QStringLiteral("stream_start"), static_cast<qint64>(read->streamStart)},
+                           {QStringLiteral("stream_end"), static_cast<qint64>(read->streamEnd)},
+                           {QStringLiteral("skipped_bytes"), static_cast<qint64>(read->skippedBytes)},
+                           {QStringLiteral("has_more"), read->hasMore},
+                           {QStringLiteral("truncated"), read->truncated},
+                           {QStringLiteral("untrusted_evidence"), true}};
+        if (read->exitStatus.has_value())
+        {
+            output.insert(QStringLiteral("exit_status"), *read->exitStatus);
+        }
+        else
+        {
+            output.insert(QStringLiteral("exit_status"), QJsonValue::Null);
+        }
+        return json(QJsonObject{{QStringLiteral("ok"), true}, {QStringLiteral("command_output"), output}});
     }
     return failure(QStringLiteral("unsupported"), QStringLiteral("The requested read tool is not supported."));
 }
