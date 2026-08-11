@@ -483,6 +483,8 @@ target_link_libraries(ztermy_ai_provider
 )
 
 add_library(ztermy_ai_application STATIC
+    src/application/ai/AiActionToolDispatcher.cpp
+    src/application/ai/AiActionToolDispatcher.h
     src/application/ai/AiConversationModel.cpp
     src/application/ai/AiConversationModel.h
     src/application/ai/AiReadToolDispatcher.cpp
@@ -2788,6 +2790,27 @@ if(BUILD_TESTING)
 
     add_test(NAME ai-turn-runner COMMAND ztermy_ai_turn_runner_tests)
 
+    qt_add_executable(ztermy_ai_action_tool_dispatcher_tests
+        tests/ai_action_tool_dispatcher_tests.cpp
+    )
+
+    target_compile_features(ztermy_ai_action_tool_dispatcher_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ai_action_tool_dispatcher_tests PRIVATE
+        ztermy_ai_application
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ai_action_tool_dispatcher_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ai-action-tool-dispatcher COMMAND ztermy_ai_action_tool_dispatcher_tests)
+
     qt_add_executable(ztermy_ai_conversation_model_tests
         tests/ai_conversation_model_tests.cpp
     )
@@ -3253,6 +3276,7 @@ if(BUILD_TESTING)
             ztermy_ai_permission_policy_tests
             ztermy_ai_tool_dispatch_ledger_tests
             ztermy_ai_agent_guard_tests
+            ztermy_ai_action_tool_dispatcher_tests
             ztermy_ai_turn_runner_tests
             ztermy_ai_conversation_model_tests
             ztermy_ai_read_tool_dispatcher_tests
