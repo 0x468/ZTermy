@@ -7234,14 +7234,16 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
             }
         },
         {},
-        [this, tabId = tab.id](const ai::AiToolCall &call) -> std::expected<ai::AiToolOutput, ai::AiProviderError> {
+        [this, tabId = tab.id](
+            const ai::AiToolCall &call) -> std::expected<ai::AiTurnRunner::ToolHandlingResult, ai::AiProviderError> {
             const auto *target = findTab(tabId);
             const auto snapshots =
                 target == nullptr ? std::vector<ai::AiTerminalReadSnapshot>{} : aiReadSnapshots(*target);
-            return ai::AiToolOutput{.callId = call.id,
-                                    .name = call.name,
-                                    .outputJson =
-                                        m_aiReadToolDispatcher.execute(call.name, call.argumentsJson, snapshots)};
+            return ai::AiTurnRunner::ToolHandlingResult{
+                .output = ai::AiToolOutput{
+                    .callId = call.id,
+                    .name = call.name,
+                    .outputJson = m_aiReadToolDispatcher.execute(call.name, call.argumentsJson, snapshots)}};
         });
     if (!started.has_value())
     {

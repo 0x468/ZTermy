@@ -26,7 +26,13 @@ public:
     using FinishedHandler = std::function<void(TurnId, const AiTurnMetrics &)>;
     using RetryHandler = std::function<void(TurnId, std::uint32_t, std::uint64_t)>;
     using JitterSource = std::function<double()>;
-    using ToolHandler = std::function<std::expected<AiToolOutput, AiProviderError>(const AiToolCall &)>;
+    struct ToolHandlingResult final
+    {
+        std::optional<AiToolOutput> output;
+        std::function<void()> cancel;
+        bool sideEffecting = false;
+    };
+    using ToolHandler = std::function<std::expected<ToolHandlingResult, AiProviderError>(const AiToolCall &)>;
 
     explicit AiTurnRunner(ProviderHttpClient &client, AiProviderRetryPolicy retryPolicy = AiProviderRetryPolicy{},
                           QObject *parent = nullptr);
@@ -40,6 +46,8 @@ public:
           EventHandler eventHandler, FinishedHandler finishedHandler, RetryHandler retryHandler = {},
           JitterSource jitterSource = {}, ToolHandler toolHandler = {});
     [[nodiscard]] bool cancel();
+    [[nodiscard]] bool completePendingTool(AiToolOutput output);
+    [[nodiscard]] std::optional<AiToolCall> pendingToolCall() const;
     [[nodiscard]] bool active() const noexcept;
     [[nodiscard]] TurnId activeTurnId() const noexcept;
 
@@ -48,6 +56,7 @@ private:
     void handleEvent(ProviderHttpClient::RequestId requestId, const AiStreamEvent &event);
     void handleFinished(ProviderHttpClient::RequestId requestId);
     [[nodiscard]] std::expected<void, AiProviderError> continueWithTools();
+    [[nodiscard]] std::expected<void, AiProviderError> executeNextTool();
     void observeToolEvent(const AiStreamEvent &event);
     void emitBufferedStart();
     void finishWithError(AiProviderError error);
@@ -69,15 +78,20 @@ private:
     std::optional<AiStreamEvent> m_bufferedStart;
     std::optional<AiProviderError> m_pendingError;
     std::vector<AiToolCall> m_pendingToolCalls;
+    std::optional<AiToolExchange> m_activeToolExchange;
+    std::function<void()> m_pendingToolCancellation;
     std::string m_responseId;
     TurnId m_turnId = 0;
     TurnId m_nextTurnId = 1;
     std::uint32_t m_completedRetries = 0;
     std::uint32_t m_completedToolCalls = 0;
+    std::size_t m_nextToolIndex = 0;
     std::chrono::steady_clock::time_point m_startedAt;
     std::optional<std::chrono::steady_clock::time_point> m_firstTokenAt;
     bool m_visibleOutputObserved = false;
     bool m_toolContinuationPending = false;
+    bool m_waitingForTool = false;
+    bool m_irreversibleToolObserved = false;
     bool m_cancelled = false;
 };
 

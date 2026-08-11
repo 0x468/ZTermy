@@ -180,6 +180,9 @@ private slots:
     void cancelsScheduledRetry();
     void destroyingRunnerCancelsSafely();
     void executesReadToolAndContinuesTheSameTurn();
+    void waitsForDeferredToolCompletion();
+    void cancelsDeferredToolWait();
+    void doesNotRetryAfterSideEffectingTool();
 };
 
 void AiTurnRunnerTests::retriesBeforeVisibleOutput()
@@ -346,9 +349,12 @@ void AiTurnRunnerTests::executesReadToolAndContinuesTheSameTurn()
                         finished = true;
                     },
                     {}, {},
-                    [&toolCalls](const ztermy::ai::AiToolCall &call) -> std::expected<AiToolOutput, AiProviderError> {
+                    [&toolCalls](const ztermy::ai::AiToolCall &call)
+                        -> std::expected<AiTurnRunner::ToolHandlingResult, AiProviderError> {
                         ++toolCalls;
-                        return AiToolOutput{.callId = call.id, .name = call.name, .outputJson = R"({"ok":true})"};
+                        return AiTurnRunner::ToolHandlingResult{
+                            .output =
+                                AiToolOutput{.callId = call.id, .name = call.name, .outputJson = R"({"ok":true})"}};
                     })
                 .has_value());
 
@@ -357,6 +363,143 @@ void AiTurnRunnerTests::executesReadToolAndContinuesTheSameTurn()
     QCOMPARE(toolCalls, std::size_t{1});
     QCOMPARE(events.back().type, AiStreamEventType::responseCompleted);
     QCOMPARE(events.at(events.size() - 2).delta, std::string("done"));
+}
+
+void AiTurnRunnerTests::waitsForDeferredToolCompletion()
+{
+    FakeNetworkAccessManager network;
+    network.enqueue(FakeResponse{
+        .payload =
+            "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\"}}\n\n"
+            "data: "
+            "{\"type\":\"response.output_item.added\",\"item\":{\"type\":\"function_call\",\"id\":\"item_1\",\"call_"
+            "id\":\"call_1\",\"name\":\"run_command\"}}\n\n"
+            "data: "
+            "{\"type\":\"response.function_call_arguments.done\",\"item_id\":\"item_1\",\"arguments\":\"{"
+            "\\\"command\\\":\\\"pwd\\\"}\"}\n\n"
+            "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\"}}\n\n"});
+    network.enqueue(FakeResponse{.payload =
+                                     "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_2\"}}\n\n"
+                                     "data: {\"type\":\"response.output_text.delta\",\"delta\":\"done\"}\n\n"
+                                     "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_2\"}}\n\n"});
+    ProviderHttpClient client(&network);
+    AiTurnRunner runner(client, fastRetryPolicy());
+    bool finished = false;
+
+    QVERIFY(
+        runner
+            .start(
+                openAiConfiguration(), AiGenerationRequest{}, emptySecretLoader(),
+                [](const auto, const AiStreamEvent &) {
+                },
+                [&finished](const auto, const AiTurnMetrics &) {
+                    finished = true;
+                },
+                {}, {},
+                [](const ztermy::ai::AiToolCall &) -> std::expected<AiTurnRunner::ToolHandlingResult, AiProviderError> {
+                    return AiTurnRunner::ToolHandlingResult{.sideEffecting = true};
+                })
+            .has_value());
+
+    QTRY_VERIFY_WITH_TIMEOUT(runner.pendingToolCall().has_value(), 1000);
+    QCOMPARE(network.requestCount(), std::size_t{1});
+    const auto pending = runner.pendingToolCall().value_or(ztermy::ai::AiToolCall{});
+    QVERIFY(runner.completePendingTool(
+        AiToolOutput{.callId = pending.id, .name = pending.name, .outputJson = R"({"ok":true})"}));
+    QTRY_VERIFY_WITH_TIMEOUT(finished, 1000);
+    QCOMPARE(network.requestCount(), std::size_t{2});
+}
+
+void AiTurnRunnerTests::cancelsDeferredToolWait()
+{
+    FakeNetworkAccessManager network;
+    network.enqueue(FakeResponse{
+        .payload =
+            "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\"}}\n\n"
+            "data: "
+            "{\"type\":\"response.output_item.added\",\"item\":{\"type\":\"function_call\",\"id\":\"item_1\",\"call_"
+            "id\":\"call_1\",\"name\":\"run_command\"}}\n\n"
+            "data: "
+            "{\"type\":\"response.function_call_arguments.done\",\"item_id\":\"item_1\",\"arguments\":\"{"
+            "\\\"command\\\":\\\"sleep 30\\\"}\"}\n\n"
+            "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\"}}\n\n"});
+    ProviderHttpClient client(&network);
+    AiTurnRunner runner(client, fastRetryPolicy());
+    std::vector<AiStreamEvent> events;
+    bool cancellationCalled = false;
+    bool finished = false;
+
+    QVERIFY(runner
+                .start(
+                    openAiConfiguration(), AiGenerationRequest{}, emptySecretLoader(),
+                    [&events](const auto, const AiStreamEvent &event) {
+                        events.push_back(event);
+                    },
+                    [&finished](const auto, const AiTurnMetrics &) {
+                        finished = true;
+                    },
+                    {}, {},
+                    [&cancellationCalled](const ztermy::ai::AiToolCall &)
+                        -> std::expected<AiTurnRunner::ToolHandlingResult, AiProviderError> {
+                        return AiTurnRunner::ToolHandlingResult{.cancel =
+                                                                    [&cancellationCalled] {
+                                                                        cancellationCalled = true;
+                                                                    },
+                                                                .sideEffecting = true};
+                    })
+                .has_value());
+
+    QTRY_VERIFY_WITH_TIMEOUT(runner.pendingToolCall().has_value(), 1000);
+    QVERIFY(runner.cancel());
+    QVERIFY(cancellationCalled);
+    QVERIFY(finished);
+    QCOMPARE(events.back().type, AiStreamEventType::responseFailed);
+    QCOMPARE(events.back().error.value_or(AiProviderError{}).code, AiProviderErrorCode::cancelled);
+}
+
+void AiTurnRunnerTests::doesNotRetryAfterSideEffectingTool()
+{
+    FakeNetworkAccessManager network;
+    network.enqueue(FakeResponse{
+        .payload =
+            "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\"}}\n\n"
+            "data: "
+            "{\"type\":\"response.output_item.added\",\"item\":{\"type\":\"function_call\",\"id\":\"item_1\",\"call_"
+            "id\":\"call_1\",\"name\":\"run_command\"}}\n\n"
+            "data: "
+            "{\"type\":\"response.function_call_arguments.done\",\"item_id\":\"item_1\",\"arguments\":\"{"
+            "\\\"command\\\":\\\"touch marker\\\"}\"}\n\n"
+            "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\"}}\n\n"});
+    network.enqueue(FakeResponse{.status = 500, .payload = "temporary"});
+    network.enqueue(
+        FakeResponse{.payload = "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_3\"}}\n\n"});
+    ProviderHttpClient client(&network);
+    AiTurnRunner runner(client, fastRetryPolicy());
+    std::vector<AiStreamEvent> events;
+    bool finished = false;
+
+    QVERIFY(runner
+                .start(
+                    openAiConfiguration(), AiGenerationRequest{}, emptySecretLoader(),
+                    [&events](const auto, const AiStreamEvent &event) {
+                        events.push_back(event);
+                    },
+                    [&finished](const auto, const AiTurnMetrics &) {
+                        finished = true;
+                    },
+                    {}, {},
+                    [](const ztermy::ai::AiToolCall &call)
+                        -> std::expected<AiTurnRunner::ToolHandlingResult, AiProviderError> {
+                        return AiTurnRunner::ToolHandlingResult{
+                            .output =
+                                AiToolOutput{.callId = call.id, .name = call.name, .outputJson = R"({"ok":true})"},
+                            .sideEffecting = true};
+                    })
+                .has_value());
+
+    QTRY_VERIFY_WITH_TIMEOUT(finished, 1000);
+    QCOMPARE(network.requestCount(), std::size_t{2});
+    QCOMPARE(events.back().type, AiStreamEventType::responseFailed);
 }
 
 } // namespace

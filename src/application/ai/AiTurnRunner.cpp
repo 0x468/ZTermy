@@ -96,7 +96,55 @@ bool AiTurnRunner::cancel()
                                         .retryable = false});
         return true;
     }
+    if (m_waitingForTool)
+    {
+        auto cancellation = std::move(m_pendingToolCancellation);
+        m_waitingForTool = false;
+        if (cancellation)
+        {
+            cancellation();
+        }
+        finishWithError(AiProviderError{.code = AiProviderErrorCode::cancelled,
+                                        .message = "AI request cancelled.",
+                                        .retryable = false});
+        return true;
+    }
     return m_requestId.has_value() && m_client.cancel(*m_requestId);
+}
+
+bool AiTurnRunner::completePendingTool(AiToolOutput output)
+{
+    constexpr std::size_t maximumOutputBytes = std::size_t{64} * 1024;
+    if (!active() || !m_waitingForTool || !m_activeToolExchange.has_value()
+        || m_nextToolIndex >= m_activeToolExchange->calls.size())
+    {
+        return false;
+    }
+    const auto &call = m_activeToolExchange->calls.at(m_nextToolIndex);
+    if (output.callId != call.id || output.name != call.name || output.outputJson.size() > maximumOutputBytes)
+    {
+        return false;
+    }
+
+    m_pendingToolCancellation = {};
+    m_waitingForTool = false;
+    m_activeToolExchange->outputs.push_back(std::move(output));
+    ++m_nextToolIndex;
+    const auto continued = executeNextTool();
+    if (!continued.has_value())
+    {
+        finishWithError(continued.error());
+    }
+    return true;
+}
+
+std::optional<AiToolCall> AiTurnRunner::pendingToolCall() const
+{
+    if (!m_waitingForTool || !m_activeToolExchange.has_value() || m_nextToolIndex >= m_activeToolExchange->calls.size())
+    {
+        return std::nullopt;
+    }
+    return m_activeToolExchange->calls.at(m_nextToolIndex);
 }
 
 bool AiTurnRunner::active() const noexcept
@@ -218,7 +266,7 @@ void AiTurnRunner::handleFinished(const ProviderHttpClient::RequestId requestId)
     const auto error = *m_pendingError;
     const auto jitter = m_jitterSource ? m_jitterSource() : QRandomGenerator::global()->generateDouble();
     const auto decision = m_retryPolicy.decide(error, m_completedRetries, jitter);
-    if (!m_cancelled && !m_visibleOutputObserved && decision.retry)
+    if (!m_cancelled && !m_visibleOutputObserved && !m_irreversibleToolObserved && decision.retry)
     {
         ++m_completedRetries;
         m_bufferedStart.reset();
@@ -258,9 +306,7 @@ std::expected<void, AiProviderError> AiTurnRunner::continueWithTools()
                             .retryable = false});
     }
 
-    AiToolExchange exchange{.calls = m_pendingToolCalls};
-    exchange.outputs.reserve(exchange.calls.size());
-    for (const auto &call : exchange.calls)
+    for (const auto &call : m_pendingToolCalls)
     {
         if (call.id.empty() || call.name.empty() || call.argumentsJson.empty())
         {
@@ -268,22 +314,62 @@ std::expected<void, AiProviderError> AiTurnRunner::continueWithTools()
                                                    .message = "The provider emitted an incomplete tool call.",
                                                    .retryable = false});
         }
-        auto output = m_toolHandler(call);
-        if (!output.has_value())
-        {
-            return std::unexpected(output.error());
-        }
-        exchange.outputs.push_back(std::move(*output));
     }
-    m_completedToolCalls += static_cast<std::uint32_t>(exchange.calls.size());
-    m_generation.toolHistory.push_back(std::move(exchange));
+
+    m_activeToolExchange = AiToolExchange{.calls = std::move(m_pendingToolCalls)};
+    m_activeToolExchange->outputs.reserve(m_activeToolExchange->calls.size());
+    m_pendingToolCalls.clear();
+    m_nextToolIndex = 0;
+    return executeNextTool();
+}
+
+std::expected<void, AiProviderError> AiTurnRunner::executeNextTool()
+{
+    constexpr std::size_t maximumOutputBytes = std::size_t{64} * 1024;
+    if (!m_activeToolExchange.has_value())
+    {
+        return std::unexpected(AiProviderError{.code = AiProviderErrorCode::protocol,
+                                               .message = "The active tool exchange is missing.",
+                                               .retryable = false});
+    }
+
+    while (m_nextToolIndex < m_activeToolExchange->calls.size())
+    {
+        const auto &call = m_activeToolExchange->calls.at(m_nextToolIndex);
+        auto handled = m_toolHandler(call);
+        if (!handled.has_value())
+        {
+            return std::unexpected(handled.error());
+        }
+        m_irreversibleToolObserved = m_irreversibleToolObserved || handled->sideEffecting;
+        if (!handled->output.has_value())
+        {
+            m_pendingToolCancellation = std::move(handled->cancel);
+            m_waitingForTool = true;
+            return {};
+        }
+
+        auto output = std::move(*handled->output);
+        if (output.callId != call.id || output.name != call.name || output.outputJson.size() > maximumOutputBytes)
+        {
+            return std::unexpected(AiProviderError{.code = AiProviderErrorCode::protocol,
+                                                   .message = "The tool handler returned an invalid output.",
+                                                   .retryable = false});
+        }
+        m_activeToolExchange->outputs.push_back(std::move(output));
+        ++m_nextToolIndex;
+    }
+
+    m_completedToolCalls += static_cast<std::uint32_t>(m_activeToolExchange->calls.size());
+    m_generation.toolHistory.push_back(std::move(*m_activeToolExchange));
+    m_activeToolExchange.reset();
     if (!m_responseId.empty())
     {
         m_generation.previousResponseId = m_responseId;
     }
-    m_pendingToolCalls.clear();
     m_responseId.clear();
     m_toolContinuationPending = false;
+    m_nextToolIndex = 0;
     return startAttempt();
 }
 
@@ -380,14 +466,19 @@ void AiTurnRunner::clearTurn()
     m_bufferedStart.reset();
     m_pendingError.reset();
     m_pendingToolCalls.clear();
+    m_activeToolExchange.reset();
+    m_pendingToolCancellation = {};
     m_responseId.clear();
     m_turnId = 0;
     m_completedRetries = 0;
     m_completedToolCalls = 0;
+    m_nextToolIndex = 0;
     m_startedAt = {};
     m_firstTokenAt.reset();
     m_visibleOutputObserved = false;
     m_toolContinuationPending = false;
+    m_waitingForTool = false;
+    m_irreversibleToolObserved = false;
     m_cancelled = false;
 }
 
