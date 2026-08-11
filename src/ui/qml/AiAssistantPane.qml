@@ -14,6 +14,25 @@ Rectangle {
     readonly property var conversation: controller.activeAiConversation
     property bool contextExpanded: false
 
+    component ContextToolButton: ToolButton {
+        id: contextButton
+
+        hoverEnabled: true
+        focusPolicy: Qt.StrongFocus
+        implicitWidth: 26
+        implicitHeight: 26
+        background: Rectangle {
+            radius: width / 2
+            color: contextButton.down ? Theme.controlPressed : contextButton.hovered ? Theme.controlHover : "transparent"
+            border.color: contextButton.activeFocus ? Theme.focus : "transparent"
+            border.width: contextButton.activeFocus ? 2 : 0
+        }
+
+        HoverHandler {
+            cursorShape: contextButton.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+        }
+    }
+
     function stateLabel() {
         switch (controller.activeAiState) {
         case "starting":
@@ -214,14 +233,18 @@ Rectangle {
             }
 
             ScrollView {
+                id: contextScroll
+
                 anchors.fill: parent
                 anchors.margins: 8
                 clip: true
+                contentWidth: availableWidth
+                ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
                 ColumnLayout {
                     id: contextColumn
 
-                    width: parent.width
+                    width: contextScroll.availableWidth
                     spacing: 6
 
                     Repeater {
@@ -244,6 +267,7 @@ Rectangle {
 
                                 Text {
                                     Layout.fillWidth: true
+                                    Layout.minimumWidth: 0
                                     text: contextItem.modelData.title
                                     color: Theme.textSoft
                                     elide: Text.ElideMiddle
@@ -265,6 +289,36 @@ Rectangle {
                                     font.family: Theme.uiFont
                                     font.pixelSize: Theme.textCompact
                                 }
+
+                                ContextToolButton {
+                                    id: pinButton
+
+                                    checked: contextItem.modelData.pinned
+                                    checkable: true
+                                    Accessible.name: checked ? qsTr("Unpin %1").arg(contextItem.modelData.title) : qsTr("Pin %1").arg(contextItem.modelData.title)
+                                    onClicked: pane.controller.setAiContextItemPinned(contextItem.modelData.id, checked)
+                                    contentItem: AppIcon {
+                                        name: "bookmark"
+                                        color: pinButton.checked ? Theme.accent : Theme.textMuted
+                                    }
+
+                                    AppToolTip {
+                                        text: pinButton.checked ? qsTr("Unpin context") : qsTr("Pin context")
+                                    }
+                                }
+
+                                ContextToolButton {
+                                    Accessible.name: qsTr("Remove %1 from context").arg(contextItem.modelData.title)
+                                    onClicked: pane.controller.removeAiContextItem(contextItem.modelData.id)
+                                    contentItem: AppIcon {
+                                        name: "close"
+                                        color: Theme.textMuted
+                                    }
+
+                                    AppToolTip {
+                                        text: qsTr("Remove from this request")
+                                    }
+                                }
                             }
                         }
                     }
@@ -277,6 +331,14 @@ Rectangle {
                         wrapMode: Text.WrapAnywhere
                         font.family: Theme.terminalFont
                         font.pixelSize: Theme.textCompact
+                    }
+
+                    ActionButton {
+                        Layout.alignment: Qt.AlignRight
+                        text: qsTr("Reset context")
+                        iconName: "refresh"
+                        accessibleName: qsTr("Restore automatic context items")
+                        onClicked: pane.controller.resetAiContextItems()
                     }
                 }
             }

@@ -766,6 +766,33 @@ struct ResizeHitRuntimeCase
         rootObject == nullptr ? nullptr : rootObject->findChild<QQuickItem *>(QStringLiteral("aiAssistantPane"));
     auto *aiPromptEditor =
         rootObject == nullptr ? nullptr : rootObject->findChild<QQuickItem *>(QStringLiteral("aiPromptEditor"));
+    const QVariantList initialAiContextItems = controller.activeAiContextItems();
+    const QString firstAiContextId =
+        initialAiContextItems.isEmpty()
+            ? QString{}
+            : initialAiContextItems.constFirst().toMap().value(QStringLiteral("id")).toString();
+    const bool contextPinned =
+        !firstAiContextId.isEmpty() && controller.setAiContextItemPinned(firstAiContextId, true)
+        && std::ranges::any_of(controller.activeAiContextItems(), [&firstAiContextId](const QVariant &item) {
+               const QVariantMap map = item.toMap();
+               return map.value(QStringLiteral("id")).toString() == firstAiContextId
+                      && map.value(QStringLiteral("pinned")).toBool();
+           });
+    const bool contextRemoved =
+        contextPinned && controller.removeAiContextItem(firstAiContextId)
+        && std::ranges::none_of(controller.activeAiContextItems(), [&firstAiContextId](const QVariant &item) {
+               return item.toMap().value(QStringLiteral("id")).toString() == firstAiContextId;
+           });
+    controller.resetAiContextItems();
+    const bool contextRestored =
+        contextRemoved
+        && std::ranges::any_of(controller.activeAiContextItems(), [&firstAiContextId](const QVariant &item) {
+               return item.toMap().value(QStringLiteral("id")).toString() == firstAiContextId;
+           });
+    if (aiAssistantPane != nullptr)
+    {
+        aiAssistantPane->setProperty("contextExpanded", true);
+    }
     if (aiPromptEditor != nullptr)
     {
         aiPromptEditor->forceActiveFocus(Qt::TabFocusReason);
@@ -774,10 +801,10 @@ struct ResizeHitRuntimeCase
     const bool missingProviderShown =
         !controller.sendAiMessage(QStringLiteral("Explain this terminal")) && !controller.activeAiError().isEmpty();
     processWindowEventsFor(std::chrono::milliseconds{100});
-    const bool aiDarkCaptured =
-        aiWorkbenchOpened && aiAssistantPane != nullptr && aiAssistantPane->isVisible() && aiPromptEditor != nullptr
-        && aiPromptEditor->hasActiveFocus()
-        && captureLayout(window, outputDirectory, QStringLiteral("dark-regular-ai-assistant"));
+    const bool aiDarkCaptured = aiWorkbenchOpened && contextRestored && aiAssistantPane != nullptr
+                                && aiAssistantPane->isVisible() && aiPromptEditor != nullptr
+                                && aiPromptEditor->hasActiveFocus()
+                                && captureLayout(window, outputDirectory, QStringLiteral("dark-regular-ai-assistant"));
     const bool aiLightTheme = applyUiLayoutSmokeTheme(controller, QStringLiteral("light"), QStringLiteral("en"));
     processWindowEventsFor(std::chrono::milliseconds{250});
     const bool aiLightCaptured =
