@@ -74,6 +74,10 @@ QVariant AiConversationModel::data(const QModelIndex &index, const int role) con
             return message.costCatalogDate;
         case LongContextRatesRole:
             return message.longContextRates;
+        case CommandSuggestionRole:
+            return message.commandSuggestion;
+        case HasCommandSuggestionRole:
+            return !message.commandSuggestion.isEmpty();
         default:
             return {};
     }
@@ -98,7 +102,9 @@ QHash<int, QByteArray> AiConversationModel::roleNames() const
             {EstimatedCostKnownRole, "estimatedCostKnown"},
             {EstimatedCostUsdRole, "estimatedCostUsd"},
             {CostCatalogDateRole, "costCatalogDate"},
-            {LongContextRatesRole, "longContextRates"}};
+            {LongContextRatesRole, "longContextRates"},
+            {CommandSuggestionRole, "commandSuggestion"},
+            {HasCommandSuggestionRole, "hasCommandSuggestion"}};
 }
 
 bool AiConversationModel::streaming() const noexcept
@@ -192,10 +198,11 @@ bool AiConversationModel::completeAssistantMessage(const std::uint64_t messageId
     }
     message->state = MessageState::complete;
     message->usage = usage;
+    message->commandSuggestion = commandSuggestion(message->text);
     const auto row = indexOf(messageId);
-    emit dataChanged(
-        index(row), index(row),
-        {StateRole, InputTokensRole, OutputTokensRole, CachedInputTokensRole, ReasoningTokensRole, UsageAvailableRole});
+    emit dataChanged(index(row), index(row),
+                     {StateRole, InputTokensRole, OutputTokensRole, CachedInputTokensRole, ReasoningTokensRole,
+                      UsageAvailableRole, CommandSuggestionRole, HasCommandSuggestionRole});
     updateStreaming();
     return true;
 }
@@ -297,6 +304,57 @@ QString AiConversationModel::boundedUtf8(QString text, const std::size_t maximum
     utf8.truncate(static_cast<qsizetype>(count));
     truncated = true;
     return QString::fromUtf8(utf8);
+}
+
+QString AiConversationModel::commandSuggestion(const QString &text)
+{
+    constexpr qsizetype maximumCommandCharacters = qsizetype{16} * 1024;
+    qsizetype searchFrom = 0;
+    QString candidate;
+    int blocks = 0;
+    while (true)
+    {
+        const qsizetype opening = text.indexOf(QStringLiteral("```"), searchFrom);
+        if (opening < 0)
+        {
+            break;
+        }
+        const qsizetype headerEnd = text.indexOf(QLatin1Char('\n'), opening + 3);
+        if (headerEnd < 0)
+        {
+            return {};
+        }
+        const QString language = text.mid(opening + 3, headerEnd - opening - 3).trimmed().toLower();
+        const qsizetype closing = text.indexOf(QStringLiteral("```"), headerEnd + 1);
+        if (closing < 0)
+        {
+            return {};
+        }
+        static const QStringList supportedLanguages = {QString{},
+                                                       QStringLiteral("sh"),
+                                                       QStringLiteral("shell"),
+                                                       QStringLiteral("bash"),
+                                                       QStringLiteral("zsh"),
+                                                       QStringLiteral("fish"),
+                                                       QStringLiteral("pwsh"),
+                                                       QStringLiteral("powershell"),
+                                                       QStringLiteral("cmd"),
+                                                       QStringLiteral("bat"),
+                                                       QStringLiteral("batch")};
+        if (supportedLanguages.contains(language))
+        {
+            ++blocks;
+            candidate = text.mid(headerEnd + 1, closing - headerEnd - 1);
+        }
+        searchFrom = closing + 3;
+    }
+    candidate = candidate.trimmed();
+    if (blocks != 1 || candidate.isEmpty() || candidate.size() > maximumCommandCharacters
+        || candidate.contains(QChar::Null))
+    {
+        return {};
+    }
+    return candidate;
 }
 
 AiConversationModel::Message *AiConversationModel::find(const std::uint64_t messageId)

@@ -449,6 +449,7 @@ public:
     Q_INVOKABLE bool saveAiApiKey(const QString &apiKey);
     Q_INVOKABLE bool removeAiApiKey();
     Q_INVOKABLE bool sendAiMessage(const QString &prompt);
+    Q_INVOKABLE bool sendAiCommandRequest(const QString &prompt);
     Q_INVOKABLE bool explainAiLastFailure();
     Q_INVOKABLE bool cancelAiMessage();
     Q_INVOKABLE bool retryAiMessage();
@@ -608,6 +609,7 @@ private:
         bool sftpHasListing = false;
         bool inputHistoryBufferReliable = true;
         bool aiLastPreferFailure = false;
+        bool aiLastCommandRequest = false;
         bool workbenchOpen = false;
         bool composerOpen = false;
         bool running = false;
@@ -636,7 +638,7 @@ private:
     [[nodiscard]] ai::AiContextBundle buildAiContext(TerminalTab &tab, bool preferLastFailure);
     void acceptAiSelectedText(TerminalTab &tab, const QString &text);
     [[nodiscard]] bool sendAiMessage(TerminalTab &tab, const QString &prompt, bool preferLastFailure,
-                                     bool appendPrompt = true);
+                                     bool appendPrompt = true, bool commandRequest = false);
     void observeScriptOutput(const QString &tabId, const QByteArray &bytes);
     void dispatchScriptCommands(TerminalTab &tab, const std::vector<std::string> &commands);
     void initializeScriptExecutionTimer();

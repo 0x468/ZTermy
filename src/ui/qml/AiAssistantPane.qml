@@ -10,9 +10,10 @@ Rectangle {
     objectName: "aiAssistantPane"
     required property var controller
     required property var activeTab
-    readonly property bool busy: controller.activeAiState === "starting" || controller.activeAiState === "retrying" || controller.activeAiState === "streaming"
+    readonly property bool busy: controller.activeAiState === "starting" || controller.activeAiState === "retrying" || controller.activeAiState === "streaming" || controller.activeAiState === "cancelling"
     readonly property var conversation: controller.activeAiConversation
     property bool contextExpanded: false
+    property bool commandRequest: false
 
     component ContextToolButton: ToolButton {
         id: contextButton
@@ -41,6 +42,8 @@ Rectangle {
             return qsTr("Retrying");
         case "streaming":
             return qsTr("Responding");
+        case "cancelling":
+            return qsTr("Cancelling");
         case "error":
             return qsTr("Needs attention");
         default:
@@ -53,7 +56,8 @@ Rectangle {
         if (prompt.length === 0 || busy) {
             return;
         }
-        if (controller.sendAiMessage(prompt)) {
+        const accepted = commandRequest ? controller.sendAiCommandRequest(prompt) : controller.sendAiMessage(prompt);
+        if (accepted) {
             promptEditor.clear();
         }
     }
@@ -388,6 +392,8 @@ Rectangle {
                 required property real estimatedCostUsd
                 required property string costCatalogDate
                 required property bool longContextRates
+                required property string commandSuggestion
+                required property bool hasCommandSuggestion
                 width: ListView.view.width
                 height: messageBubble.implicitHeight
 
@@ -483,6 +489,23 @@ Rectangle {
                             spacing: 6
 
                             ActionButton {
+                                visible: messageItem.messageRole === "assistant" && messageItem.state === "complete" && messageItem.hasCommandSuggestion
+                                text: qsTr("Insert")
+                                iconName: "composer"
+                                accessibleName: qsTr("Insert the suggested command without running it")
+                                onClicked: pane.controller.insertTerminalCommand(messageItem.commandSuggestion)
+                            }
+
+                            ActionButton {
+                                visible: messageItem.messageRole === "assistant" && messageItem.state === "complete" && messageItem.hasCommandSuggestion
+                                text: qsTr("Run")
+                                iconName: "play"
+                                variant: "primary"
+                                accessibleName: qsTr("Run the suggested command in the active terminal")
+                                onClicked: pane.controller.runTerminalCommand(messageItem.commandSuggestion)
+                            }
+
+                            ActionButton {
                                 visible: messageItem.messageRole === "assistant" && messageItem.state === "failed" && messageItem.index === conversationList.count - 1
                                 text: qsTr("Retry")
                                 iconName: "refresh"
@@ -517,60 +540,91 @@ Rectangle {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: Math.max(86, Math.min(170, promptEditor.contentHeight + 48))
+            Layout.preferredHeight: Math.max(116, Math.min(200, promptEditor.contentHeight + 78))
             color: Theme.elevatedBackground
             border.color: Theme.border
 
-            RowLayout {
+            ColumnLayout {
                 anchors.fill: parent
                 anchors.margins: 8
-                spacing: 8
+                spacing: 6
 
-                ScrollView {
+                RowLayout {
                     Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    clip: true
+                    spacing: 6
 
-                    TextArea {
-                        id: promptEditor
+                    ActionButton {
+                        text: pane.commandRequest ? qsTr("Command request") : qsTr("Ask")
+                        iconName: pane.commandRequest ? "terminal" : "ai"
+                        variant: pane.commandRequest ? "primary" : "default"
+                        checkable: true
+                        checked: pane.commandRequest
+                        enabled: !pane.busy
+                        accessibleName: qsTr("Toggle command generation mode")
+                        onClicked: pane.commandRequest = !pane.commandRequest
+                    }
 
-                        objectName: "aiPromptEditor"
-                        placeholderText: qsTr("Ask about this terminal. Enter sends · Shift+Enter adds a new line")
-                        color: Theme.text
-                        placeholderTextColor: Theme.textMuted
-                        selectionColor: Theme.accent
-                        selectedTextColor: Theme.accentText
-                        wrapMode: TextEdit.Wrap
+                    Text {
+                        Layout.fillWidth: true
+                        text: pane.commandRequest ? qsTr("The response must contain one explicit shell command.") : qsTr("Ask, explain, or diagnose using the reviewed context.")
+                        color: Theme.textMuted
+                        elide: Text.ElideRight
                         font.family: Theme.uiFont
-                        font.pixelSize: Theme.textBody
-                        Accessible.name: qsTr("AI message")
-                        Keys.onPressed: event => {
-                            if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && (event.modifiers & Qt.ShiftModifier) === 0 && !promptEditor.inputMethodComposing) {
-                                pane.sendPrompt();
-                                event.accepted = true;
-                            }
-                        }
-                        background: Rectangle {
-                            radius: Theme.radiusControl
-                            color: Theme.controlBackground
-                            border.color: promptEditor.activeFocus ? Theme.focus : Theme.border
-                            border.width: promptEditor.activeFocus ? 2 : 1
-                        }
+                        font.pixelSize: Theme.textCompact
                     }
                 }
 
-                ActionButton {
-                    Layout.alignment: Qt.AlignBottom
-                    text: pane.busy ? qsTr("Cancel") : qsTr("Send")
-                    iconName: pane.busy ? "close" : "play"
-                    variant: pane.busy ? "destructive" : "primary"
-                    enabled: pane.busy || promptEditor.text.trim().length > 0
-                    accessibleName: text
-                    onClicked: {
-                        if (pane.busy) {
-                            pane.controller.cancelAiMessage();
-                        } else {
-                            pane.sendPrompt();
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    spacing: 8
+
+                    ScrollView {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        clip: true
+
+                        TextArea {
+                            id: promptEditor
+
+                            objectName: "aiPromptEditor"
+                            placeholderText: pane.commandRequest ? qsTr("Describe the command you need. Enter sends · Shift+Enter adds a new line") : qsTr("Ask about this terminal. Enter sends · Shift+Enter adds a new line")
+                            color: Theme.text
+                            placeholderTextColor: Theme.textMuted
+                            selectionColor: Theme.accent
+                            selectedTextColor: Theme.accentText
+                            wrapMode: TextEdit.Wrap
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.textBody
+                            Accessible.name: qsTr("AI message")
+                            Keys.onPressed: event => {
+                                if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && (event.modifiers & Qt.ShiftModifier) === 0 && !promptEditor.inputMethodComposing) {
+                                    pane.sendPrompt();
+                                    event.accepted = true;
+                                }
+                            }
+                            background: Rectangle {
+                                radius: Theme.radiusControl
+                                color: Theme.controlBackground
+                                border.color: promptEditor.activeFocus ? Theme.focus : Theme.border
+                                border.width: promptEditor.activeFocus ? 2 : 1
+                            }
+                        }
+                    }
+
+                    ActionButton {
+                        Layout.alignment: Qt.AlignBottom
+                        text: pane.busy ? qsTr("Cancel") : qsTr("Send")
+                        iconName: pane.busy ? "close" : "play"
+                        variant: pane.busy ? "destructive" : "primary"
+                        enabled: pane.busy || promptEditor.text.trim().length > 0
+                        accessibleName: text
+                        onClicked: {
+                            if (pane.busy) {
+                                pane.controller.cancelAiMessage();
+                            } else {
+                                pane.sendPrompt();
+                            }
                         }
                     }
                 }

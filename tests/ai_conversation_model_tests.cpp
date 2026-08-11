@@ -20,6 +20,7 @@ private slots:
     void streamsAssistantMessageAndUsage();
     void boundsMessagesAndUtf8Text();
     void exposesFailureWithoutLeakingIntoLogs();
+    void exposesOnlyOneBoundedShellCommandSuggestion();
 };
 
 void AiConversationModelTests::streamsAssistantMessageAndUsage()
@@ -75,6 +76,27 @@ void AiConversationModelTests::exposesFailureWithoutLeakingIntoLogs()
     QVERIFY(!model.streaming());
     model.clear();
     QCOMPARE(model.rowCount(), 0);
+}
+
+void AiConversationModelTests::exposesOnlyOneBoundedShellCommandSuggestion()
+{
+    AiConversationModel model;
+    auto assistantId = model.beginAssistantMessage();
+    QVERIFY(model.appendAssistantDelta(assistantId, QStringLiteral("Use this:\n```pwsh\nGet-ChildItem -Force\n```")));
+    QVERIFY(model.completeAssistantMessage(assistantId));
+    QCOMPARE(model.data(model.index(0), AiConversationModel::CommandSuggestionRole).toString(),
+             QStringLiteral("Get-ChildItem -Force"));
+    QVERIFY(model.data(model.index(0), AiConversationModel::HasCommandSuggestionRole).toBool());
+
+    assistantId = model.beginAssistantMessage();
+    QVERIFY(model.appendAssistantDelta(assistantId, QStringLiteral("```sh\nls\n```\n```sh\npwd\n```")));
+    QVERIFY(model.completeAssistantMessage(assistantId));
+    QVERIFY(!model.data(model.index(1), AiConversationModel::HasCommandSuggestionRole).toBool());
+
+    assistantId = model.beginAssistantMessage();
+    QVERIFY(model.appendAssistantDelta(assistantId, QStringLiteral("No command block here.")));
+    QVERIFY(model.completeAssistantMessage(assistantId));
+    QVERIFY(!model.data(model.index(2), AiConversationModel::HasCommandSuggestionRole).toBool());
 }
 
 } // namespace

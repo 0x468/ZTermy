@@ -48,6 +48,8 @@ public:
         EstimatedCostUsdRole,
         CostCatalogDateRole,
         LongContextRatesRole,
+        CommandSuggestionRole,
+        HasCommandSuggestionRole,
     };
 
     explicit AiConversationModel(AiConversationLimits limits = {}, QObject *parent = nullptr);
@@ -95,11 +97,13 @@ private:
         std::size_t bytes = 0;
         bool truncated = false;
         bool longContextRates = false;
+        QString commandSuggestion;
     };
 
     [[nodiscard]] static QString roleToken(AiMessageRole role);
     [[nodiscard]] static QString stateToken(MessageState state);
     [[nodiscard]] static QString boundedUtf8(QString text, std::size_t maximumBytes, bool &truncated);
+    [[nodiscard]] static QString commandSuggestion(const QString &text);
     [[nodiscard]] Message *find(std::uint64_t messageId);
     [[nodiscard]] int indexOf(std::uint64_t messageId) const;
     void evictFor(std::size_t incomingBytes);
