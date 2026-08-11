@@ -111,25 +111,18 @@ public:
     [[nodiscard]] std::expected<std::vector<AiSessionSummary>, AiReadToolError>
     listSessions(std::span<const AiTerminalReadSnapshot> sessions) const;
     [[nodiscard]] std::expected<AiSessionSummary, AiReadToolError>
-    readSessionInfo(std::span<const AiTerminalReadSnapshot> sessions,
-                    std::string_view sessionId,
+    readSessionInfo(std::span<const AiTerminalReadSnapshot> sessions, std::string_view sessionId,
                     std::uint64_t sessionGeneration) const;
     [[nodiscard]] std::expected<AiTerminalRange, AiReadToolError>
-    readTerminal(std::span<const AiTerminalReadSnapshot> sessions,
-                 std::string_view sessionId,
-                 std::uint64_t sessionGeneration,
-                 std::size_t firstLine,
-                 std::size_t lineCount) const;
+    readTerminal(std::span<const AiTerminalReadSnapshot> sessions, std::string_view sessionId,
+                 std::uint64_t sessionGeneration, std::size_t firstLine, std::size_t lineCount) const;
     [[nodiscard]] std::expected<AiCommandBlockRead, AiReadToolError>
-    readCommandBlock(std::span<const AiTerminalReadSnapshot> sessions,
-                     std::string_view sessionId,
-                     std::uint64_t sessionGeneration,
-                     terminal::CommandBlockId blockId) const;
+    readCommandBlock(std::span<const AiTerminalReadSnapshot> sessions, std::string_view sessionId,
+                     std::uint64_t sessionGeneration, terminal::CommandBlockId blockId) const;
 
 private:
     [[nodiscard]] std::expected<const AiTerminalReadSnapshot *, AiReadToolError>
-    findSession(std::span<const AiTerminalReadSnapshot> sessions,
-                std::string_view sessionId,
+    findSession(std::span<const AiTerminalReadSnapshot> sessions, std::string_view sessionId,
                 std::uint64_t sessionGeneration) const;
 
     AiReadToolLimits m_limits;

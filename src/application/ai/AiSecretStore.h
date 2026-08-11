@@ -13,8 +13,8 @@ class AiSecretStore final
 public:
     explicit AiSecretStore(security::CredentialVault &vault) noexcept;
 
-    [[nodiscard]] std::expected<void, security::CredentialVaultError>
-    storeApiKey(std::string_view credentialReference, security::SensitiveByteArray apiKey);
+    [[nodiscard]] std::expected<void, security::CredentialVaultError> storeApiKey(std::string_view credentialReference,
+                                                                                  security::SensitiveByteArray apiKey);
     [[nodiscard]] std::expected<security::SensitiveByteArray, security::CredentialVaultError>
     readApiKey(std::string_view credentialReference) const;
     [[nodiscard]] std::expected<void, security::CredentialVaultError>

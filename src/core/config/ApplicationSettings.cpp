@@ -197,15 +197,15 @@ template <>
                return !id.trimmed().isEmpty() && id.size() <= 128 && shortcut.size() <= 128;
            });
     const QUrl aiBaseUrl(settings.aiBaseUrl.trimmed());
-    const bool validAiBaseUrl = aiBaseUrl.isValid() && !aiBaseUrl.host().isEmpty() && aiBaseUrl.userInfo().isEmpty()
-                                && (aiBaseUrl.scheme() == QStringLiteral("http")
-                                    || aiBaseUrl.scheme() == QStringLiteral("https"));
+    const bool validAiBaseUrl =
+        aiBaseUrl.isValid() && !aiBaseUrl.host().isEmpty() && aiBaseUrl.userInfo().isEmpty()
+        && (aiBaseUrl.scheme() == QStringLiteral("http") || aiBaseUrl.scheme() == QStringLiteral("https"));
     const QString credentialReference = settings.aiCredentialReference.trimmed();
-    const bool validCredentialReference = !credentialReference.isEmpty() && credentialReference.size() <= 128
-                                          && std::ranges::all_of(credentialReference, [](const QChar character) {
-                                                 return character.isLetterOrNumber() || character == QLatin1Char('-')
-                                                        || character == QLatin1Char('_');
-                                             });
+    const bool validCredentialReference =
+        !credentialReference.isEmpty() && credentialReference.size() <= 128
+        && std::ranges::all_of(credentialReference, [](const QChar character) {
+               return character.isLetterOrNumber() || character == QLatin1Char('-') || character == QLatin1Char('_');
+           });
     return settings.backdropOpacity >= 0.0 && settings.backdropOpacity <= 1.0
            && settings.terminalBackgroundOpacity >= 0.0 && settings.terminalBackgroundOpacity <= 1.0
            && uiFontFamily.size() <= 128 && !fontFamily.isEmpty() && fontFamily.size() <= 128
@@ -366,8 +366,8 @@ template <>
                                                         : QStringLiteral("https://api.openai.com/v1"),
         .aiEndpointPath = version >= aiProviderSchemaVersion ? aiEndpointPathValue.toString() : QString{},
         .aiModel = version >= aiProviderSchemaVersion ? aiModelValue.toString() : QString{},
-        .aiCredentialReference = version >= aiProviderSchemaVersion ? aiCredentialReferenceValue.toString()
-                                                                    : QStringLiteral("ai-default"),
+        .aiCredentialReference =
+            version >= aiProviderSchemaVersion ? aiCredentialReferenceValue.toString() : QStringLiteral("ai-default"),
         .aiAutomaticContext = version < aiProviderSchemaVersion || aiAutomaticContextValue.toBool(),
     };
     if (!validSettings(settings))

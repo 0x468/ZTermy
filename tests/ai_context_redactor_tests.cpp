@@ -54,17 +54,15 @@ void AiContextRedactorTests::redactsBuiltInSecretClasses()
 
 void AiContextRedactorTests::appliesUserLiteralAndRegexRules()
 {
-    const std::vector rules{
-        AiUserRedactionRule{.id = "literal",
-                            .type = AiRedactionRuleType::literal,
-                            .pattern = "Project Falcon",
-                            .caseSensitive = false},
-        AiUserRedactionRule{.id = "ticket",
-                            .type = AiRedactionRuleType::regularExpression,
-                            .pattern = R"(INC-[0-9]{4})"}};
+    const std::vector rules{AiUserRedactionRule{.id = "literal",
+                                                .type = AiRedactionRuleType::literal,
+                                                .pattern = "Project Falcon",
+                                                .caseSensitive = false},
+                            AiUserRedactionRule{.id = "ticket",
+                                                .type = AiRedactionRuleType::regularExpression,
+                                                .pattern = R"(INC-[0-9]{4})"}};
     const auto result = AiContextRedactor{}.redact("project falcon INC-2048", rules);
-    QCOMPARE(result.text,
-             std::string("[REDACTED:USER_RULE] [REDACTED:USER_RULE]"));
+    QCOMPARE(result.text, std::string("[REDACTED:USER_RULE] [REDACTED:USER_RULE]"));
     QCOMPARE(result.counts[index(AiSecretKind::userRule)], std::size_t{2});
     QVERIFY(result.invalidRuleIds.empty());
 }
@@ -73,11 +71,8 @@ void AiContextRedactorTests::reportsInvalidRulesWithoutDisablingBuiltIns()
 {
     const std::vector rules{
         AiUserRedactionRule{.id = "empty", .pattern = ""},
-        AiUserRedactionRule{.id = "broken",
-                            .type = AiRedactionRuleType::regularExpression,
-                            .pattern = "(["}};
-    const auto result = AiContextRedactor{}.redact(
-        "token sk-abcdefghijklmnopqrstuvwxyz123456", rules);
+        AiUserRedactionRule{.id = "broken", .type = AiRedactionRuleType::regularExpression, .pattern = "(["}};
+    const auto result = AiContextRedactor{}.redact("token sk-abcdefghijklmnopqrstuvwxyz123456", rules);
     QCOMPARE(result.invalidRuleIds.size(), std::size_t{2});
     QVERIFY(result.text.contains("[REDACTED:API_KEY]"));
 }

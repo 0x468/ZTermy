@@ -24,8 +24,8 @@ namespace
 [[nodiscard]] std::expected<QJsonObject, AiProviderError> parseObject(const std::string_view json)
 {
     QJsonParseError parseError;
-    const auto document = QJsonDocument::fromJson(
-        QByteArray(json.data(), static_cast<qsizetype>(json.size())), &parseError);
+    const auto document =
+        QJsonDocument::fromJson(QByteArray(json.data(), static_cast<qsizetype>(json.size())), &parseError);
     if (parseError.error != QJsonParseError::NoError || !document.isObject())
     {
         return std::unexpected(AiProviderError{.code = AiProviderErrorCode::protocol,
@@ -73,8 +73,8 @@ namespace
     }
     return AiProviderError{.code = code,
                            .message = std::move(message),
-                           .retryable = code == AiProviderErrorCode::rateLimited
-                                        || code == AiProviderErrorCode::server};
+                           .retryable =
+                               code == AiProviderErrorCode::rateLimited || code == AiProviderErrorCode::server};
 }
 
 [[nodiscard]] std::optional<AiTokenUsage> openAiUsage(const QJsonObject &object)
@@ -96,9 +96,8 @@ void appendUsageAndCompletion(const QJsonObject &response, std::vector<AiStreamE
     const auto responseId = utf8(response.value("id").toString());
     if (const auto usage = openAiUsage(response.value("usage").toObject()); usage.has_value())
     {
-        events.push_back(AiStreamEvent{.type = AiStreamEventType::usageUpdated,
-                                       .responseId = responseId,
-                                       .usage = usage});
+        events.push_back(
+            AiStreamEvent{.type = AiStreamEventType::usageUpdated, .responseId = responseId, .usage = usage});
     }
     events.push_back(AiStreamEvent{.type = AiStreamEventType::responseCompleted, .responseId = responseId});
 }
@@ -154,18 +153,17 @@ OpenAiResponsesStreamMapper::map(const ServerSentEvent &event)
                                            .toolName = state.name});
         }
     }
-    else if (type == "response.function_call_arguments.delta"
-             || type == "response.function_call_arguments.done")
+    else if (type == "response.function_call_arguments.delta" || type == "response.function_call_arguments.done")
     {
         const auto itemId = utf8(object.value("item_id").toString());
         const auto tool = m_toolsByItemId.find(itemId);
         const auto isDone = type.endsWith(".done");
-        events.push_back(AiStreamEvent{.type = isDone ? AiStreamEventType::toolCallCompleted
-                                                      : AiStreamEventType::toolArgumentsDelta,
-                                       .itemId = itemId,
-                                       .toolCallId = tool == m_toolsByItemId.end() ? std::string{} : tool->second.callId,
-                                       .toolName = tool == m_toolsByItemId.end() ? std::string{} : tool->second.name,
-                                       .delta = utf8(object.value(isDone ? "arguments" : "delta").toString())});
+        events.push_back(
+            AiStreamEvent{.type = isDone ? AiStreamEventType::toolCallCompleted : AiStreamEventType::toolArgumentsDelta,
+                          .itemId = itemId,
+                          .toolCallId = tool == m_toolsByItemId.end() ? std::string{} : tool->second.callId,
+                          .toolName = tool == m_toolsByItemId.end() ? std::string{} : tool->second.name,
+                          .delta = utf8(object.value(isDone ? "arguments" : "delta").toString())});
     }
     else if (type == "response.completed")
     {
@@ -182,8 +180,7 @@ OpenAiResponsesStreamMapper::map(const ServerSentEvent &event)
     else if (type == "error")
     {
         auto error = providerError(object.value("error"));
-        events.push_back(AiStreamEvent{.type = AiStreamEventType::responseFailed,
-                                       .error = std::move(error)});
+        events.push_back(AiStreamEvent{.type = AiStreamEventType::responseFailed, .error = std::move(error)});
     }
     return events;
 }
@@ -224,8 +221,7 @@ OpenAiCompatibleStreamMapper::map(const ServerSentEvent &event)
     if (object.contains("error"))
     {
         auto error = providerError(object.value("error"));
-        return std::vector{AiStreamEvent{.type = AiStreamEventType::responseFailed,
-                                         .error = std::move(error)}};
+        return std::vector{AiStreamEvent{.type = AiStreamEventType::responseFailed, .error = std::move(error)}};
     }
 
     std::vector<AiStreamEvent> events;
@@ -243,9 +239,8 @@ OpenAiCompatibleStreamMapper::map(const ServerSentEvent &event)
         const auto content = utf8(delta.value("content").toString());
         if (!content.empty())
         {
-            events.push_back(AiStreamEvent{.type = AiStreamEventType::textDelta,
-                                           .responseId = responseId,
-                                           .delta = content});
+            events.push_back(
+                AiStreamEvent{.type = AiStreamEventType::textDelta, .responseId = responseId, .delta = content});
         }
         auto reasoning = utf8(delta.value("reasoning_content").toString());
         if (reasoning.empty())
@@ -303,15 +298,13 @@ OpenAiCompatibleStreamMapper::map(const ServerSentEvent &event)
                                                .toolCallId = tool.callId,
                                                .toolName = tool.name});
             }
-            events.push_back(AiStreamEvent{.type = AiStreamEventType::responseCompleted,
-                                           .responseId = responseId});
+            events.push_back(AiStreamEvent{.type = AiStreamEventType::responseCompleted, .responseId = responseId});
         }
     }
     if (const auto usage = openAiUsage(object.value("usage").toObject()); usage.has_value())
     {
-        events.push_back(AiStreamEvent{.type = AiStreamEventType::usageUpdated,
-                                       .responseId = responseId,
-                                       .usage = usage});
+        events.push_back(
+            AiStreamEvent{.type = AiStreamEventType::usageUpdated, .responseId = responseId, .usage = usage});
     }
     return events;
 }
@@ -336,8 +329,7 @@ std::expected<std::vector<AiStreamEvent>, AiProviderError> OllamaStreamMapper::m
         AiProviderError error{.code = AiProviderErrorCode::server,
                               .message = utf8(object.value("error").toString()),
                               .retryable = false};
-        return std::vector{AiStreamEvent{.type = AiStreamEventType::responseFailed,
-                                         .error = std::move(error)}};
+        return std::vector{AiStreamEvent{.type = AiStreamEventType::responseFailed, .error = std::move(error)}};
     }
 
     std::vector<AiStreamEvent> events;
@@ -354,8 +346,7 @@ std::expected<std::vector<AiStreamEvent>, AiProviderError> OllamaStreamMapper::m
     }
     if (!content.empty())
     {
-        events.push_back(AiStreamEvent{.type = AiStreamEventType::textDelta,
-                                       .delta = std::move(content)});
+        events.push_back(AiStreamEvent{.type = AiStreamEventType::textDelta, .delta = std::move(content)});
     }
     auto thinking = utf8(message.value("thinking").toString());
     if (thinking.empty())
@@ -364,8 +355,7 @@ std::expected<std::vector<AiStreamEvent>, AiProviderError> OllamaStreamMapper::m
     }
     if (!thinking.empty())
     {
-        events.push_back(AiStreamEvent{.type = AiStreamEventType::reasoningDelta,
-                                       .delta = std::move(thinking)});
+        events.push_back(AiStreamEvent{.type = AiStreamEventType::reasoningDelta, .delta = std::move(thinking)});
     }
     const auto toolCalls = message.value("tool_calls").toArray();
     for (const auto toolValue : toolCalls)
@@ -374,9 +364,8 @@ std::expected<std::vector<AiStreamEvent>, AiProviderError> OllamaStreamMapper::m
         const auto callId = syntheticToolId(++m_toolSequence);
         const auto name = utf8(function.value("name").toString());
         const auto arguments = QJsonDocument(function.value("arguments").toObject()).toJson(QJsonDocument::Compact);
-        events.push_back(AiStreamEvent{.type = AiStreamEventType::toolCallStarted,
-                                       .toolCallId = callId,
-                                       .toolName = name});
+        events.push_back(
+            AiStreamEvent{.type = AiStreamEventType::toolCallStarted, .toolCallId = callId, .toolName = name});
         events.push_back(AiStreamEvent{.type = AiStreamEventType::toolCallCompleted,
                                        .toolCallId = callId,
                                        .toolName = name,
@@ -385,9 +374,8 @@ std::expected<std::vector<AiStreamEvent>, AiProviderError> OllamaStreamMapper::m
     if (object.value("done").toBool() && !m_completed)
     {
         m_completed = true;
-        const auto usage = AiTokenUsage{
-            .inputTokens = object.value("prompt_eval_count").toVariant().toULongLong(),
-            .outputTokens = object.value("eval_count").toVariant().toULongLong()};
+        const auto usage = AiTokenUsage{.inputTokens = object.value("prompt_eval_count").toVariant().toULongLong(),
+                                        .outputTokens = object.value("eval_count").toVariant().toULongLong()};
         events.push_back(AiStreamEvent{.type = AiStreamEventType::usageUpdated, .usage = usage});
         events.push_back(AiStreamEvent{.type = AiStreamEventType::responseCompleted});
     }

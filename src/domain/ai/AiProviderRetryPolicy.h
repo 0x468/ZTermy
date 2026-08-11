@@ -27,8 +27,7 @@ public:
     explicit AiProviderRetryPolicy(AiProviderRetryLimits limits = {});
 
     [[nodiscard]] const AiProviderRetryLimits &limits() const noexcept;
-    [[nodiscard]] AiProviderRetryDecision decide(const AiProviderError &error,
-                                                 std::uint32_t completedRetries,
+    [[nodiscard]] AiProviderRetryDecision decide(const AiProviderError &error, std::uint32_t completedRetries,
                                                  double jitterSample = 0.5) const noexcept;
 
 private:

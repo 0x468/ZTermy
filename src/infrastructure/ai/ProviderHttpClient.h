@@ -35,11 +35,8 @@ public:
     ProviderHttpClient &operator=(const ProviderHttpClient &) = delete;
 
     [[nodiscard]] std::expected<RequestId, AiProviderError>
-    start(const AiProviderConfiguration &configuration,
-          const AiGenerationRequest &generation,
-          security::SensitiveByteArray apiKey,
-          EventHandler eventHandler,
-          FinishedHandler finishedHandler);
+    start(const AiProviderConfiguration &configuration, const AiGenerationRequest &generation,
+          security::SensitiveByteArray apiKey, EventHandler eventHandler, FinishedHandler finishedHandler);
     [[nodiscard]] bool cancel(RequestId requestId);
 
 private:

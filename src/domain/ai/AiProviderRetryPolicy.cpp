@@ -13,16 +13,16 @@ namespace
 {
     switch (code)
     {
-    case AiProviderErrorCode::network:
-    case AiProviderErrorCode::rateLimited:
-    case AiProviderErrorCode::server:
-    case AiProviderErrorCode::protocol:
-        return true;
-    case AiProviderErrorCode::authentication:
-    case AiProviderErrorCode::quotaExceeded:
-    case AiProviderErrorCode::invalidRequest:
-    case AiProviderErrorCode::cancelled:
-        return false;
+        case AiProviderErrorCode::network:
+        case AiProviderErrorCode::rateLimited:
+        case AiProviderErrorCode::server:
+        case AiProviderErrorCode::protocol:
+            return true;
+        case AiProviderErrorCode::authentication:
+        case AiProviderErrorCode::quotaExceeded:
+        case AiProviderErrorCode::invalidRequest:
+        case AiProviderErrorCode::cancelled:
+            return false;
     }
     return false;
 }
@@ -35,12 +35,10 @@ namespace
 
 } // namespace
 
-AiProviderRetryPolicy::AiProviderRetryPolicy(AiProviderRetryLimits limits)
-    : m_limits(limits)
+AiProviderRetryPolicy::AiProviderRetryPolicy(AiProviderRetryLimits limits) : m_limits(limits)
 {
     m_limits.baseDelayMilliseconds = std::max<std::uint64_t>(1, m_limits.baseDelayMilliseconds);
-    m_limits.maxDelayMilliseconds =
-        std::max(m_limits.baseDelayMilliseconds, m_limits.maxDelayMilliseconds);
+    m_limits.maxDelayMilliseconds = std::max(m_limits.baseDelayMilliseconds, m_limits.maxDelayMilliseconds);
     m_limits.jitterPercent = std::min<std::uint32_t>(m_limits.jitterPercent, 100);
 }
 
@@ -53,8 +51,7 @@ AiProviderRetryDecision AiProviderRetryPolicy::decide(const AiProviderError &err
                                                       const std::uint32_t completedRetries,
                                                       const double jitterSample) const noexcept
 {
-    if (!error.retryable || !supportsAutomaticRetry(error.code)
-        || completedRetries >= m_limits.maxRetries)
+    if (!error.retryable || !supportsAutomaticRetry(error.code) || completedRetries >= m_limits.maxRetries)
     {
         return {};
     }
@@ -63,9 +60,7 @@ AiProviderRetryDecision AiProviderRetryPolicy::decide(const AiProviderError &err
     {
         return {.retry = true,
                 .delayMilliseconds =
-                    std::clamp(*error.retryAfterMilliseconds,
-                               std::uint64_t{1},
-                               m_limits.maxDelayMilliseconds)};
+                    std::clamp(*error.retryAfterMilliseconds, std::uint64_t{1}, m_limits.maxDelayMilliseconds)};
     }
 
     auto delay = m_limits.baseDelayMilliseconds;
@@ -79,10 +74,7 @@ AiProviderRetryDecision AiProviderRetryPolicy::decide(const AiProviderError &err
     const auto jitter = static_cast<double>(m_limits.jitterPercent) / 100.0;
     const auto multiplier = (1.0 - jitter) + ((2.0 * jitter) * sample);
     const auto jittered = static_cast<std::uint64_t>(std::llround(static_cast<double>(delay) * multiplier));
-    return {.retry = true,
-            .delayMilliseconds = std::clamp(jittered,
-                                            std::uint64_t{1},
-                                            m_limits.maxDelayMilliseconds)};
+    return {.retry = true, .delayMilliseconds = std::clamp(jittered, std::uint64_t{1}, m_limits.maxDelayMilliseconds)};
 }
 
 } // namespace ztermy::ai

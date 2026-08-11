@@ -56,66 +56,66 @@ constexpr std::string_view lineTruncationMarker = "...[truncated]...\n";
         const auto value = static_cast<unsigned char>(byte);
         switch (state)
         {
-        case State::normal:
-            if (value == 0x1BU)
-            {
-                state = State::escape;
-            }
-            else if (value == '\r')
-            {
-                if (output.empty() || output.back() != '\n')
+            case State::normal:
+                if (value == 0x1BU)
                 {
-                    output.push_back('\n');
+                    state = State::escape;
                 }
-                previousWasCarriageReturn = true;
-            }
-            else if (value == '\n')
-            {
-                if (!previousWasCarriageReturn)
+                else if (value == '\r')
                 {
-                    output.push_back('\n');
+                    if (output.empty() || output.back() != '\n')
+                    {
+                        output.push_back('\n');
+                    }
+                    previousWasCarriageReturn = true;
                 }
-                previousWasCarriageReturn = false;
-            }
-            else if (value == '\t' || value >= 0x20U)
-            {
-                output.push_back(static_cast<char>(value));
-                previousWasCarriageReturn = false;
-            }
-            break;
-        case State::escape:
-            if (value == '[')
-            {
-                state = State::csi;
-            }
-            else if (value == ']')
-            {
-                state = State::osc;
-            }
-            else
-            {
-                state = State::normal;
-            }
-            break;
-        case State::csi:
-            if (value >= 0x40U && value <= 0x7EU)
-            {
-                state = State::normal;
-            }
-            break;
-        case State::osc:
-            if (value == 0x07U)
-            {
-                state = State::normal;
-            }
-            else if (value == 0x1BU)
-            {
-                state = State::oscEscape;
-            }
-            break;
-        case State::oscEscape:
-            state = value == '\\' ? State::normal : State::osc;
-            break;
+                else if (value == '\n')
+                {
+                    if (!previousWasCarriageReturn)
+                    {
+                        output.push_back('\n');
+                    }
+                    previousWasCarriageReturn = false;
+                }
+                else if (value == '\t' || value >= 0x20U)
+                {
+                    output.push_back(static_cast<char>(value));
+                    previousWasCarriageReturn = false;
+                }
+                break;
+            case State::escape:
+                if (value == '[')
+                {
+                    state = State::csi;
+                }
+                else if (value == ']')
+                {
+                    state = State::osc;
+                }
+                else
+                {
+                    state = State::normal;
+                }
+                break;
+            case State::csi:
+                if (value >= 0x40U && value <= 0x7EU)
+                {
+                    state = State::normal;
+                }
+                break;
+            case State::osc:
+                if (value == 0x07U)
+                {
+                    state = State::normal;
+                }
+                else if (value == 0x1BU)
+                {
+                    state = State::oscEscape;
+                }
+                break;
+            case State::oscEscape:
+                state = value == '\\' ? State::normal : State::osc;
+                break;
         }
     }
     return output;
@@ -200,15 +200,12 @@ void capBytes(std::string &text, const std::size_t maximumBytes, bool &truncated
 
 [[nodiscard]] std::size_t metadataBytes(const AiContextItem &item)
 {
-    return std::size_t{64} + item.id.size() + item.title.size() + item.command.size()
-           + item.workingDirectory.size() + item.sessionId.size() + item.host.size() + item.shell.size();
+    return std::size_t{64} + item.id.size() + item.title.size() + item.command.size() + item.workingDirectory.size()
+           + item.sessionId.size() + item.host.size() + item.shell.size();
 }
 
-void redactField(std::string &field,
-                 AiContextItem &item,
-                 const AiContextRedactor &redactor,
-                 const std::span<const AiUserRedactionRule> rules,
-                 std::unordered_set<std::string> &invalidRuleIds)
+void redactField(std::string &field, AiContextItem &item, const AiContextRedactor &redactor,
+                 const std::span<const AiUserRedactionRule> rules, std::unordered_set<std::string> &invalidRuleIds)
 {
     const auto result = redactor.redact(field, rules);
     field = result.text;
@@ -216,11 +213,8 @@ void redactField(std::string &field,
     invalidRuleIds.insert(result.invalidRuleIds.begin(), result.invalidRuleIds.end());
 }
 
-void finalizeItem(AiContextItem &item,
-                  const AiContextLimits &limits,
-                  const AiContextRedactor &redactor,
-                  const std::span<const AiUserRedactionRule> rules,
-                  std::unordered_set<std::string> &invalidRuleIds)
+void finalizeItem(AiContextItem &item, const AiContextLimits &limits, const AiContextRedactor &redactor,
+                  const std::span<const AiUserRedactionRule> rules, std::unordered_set<std::string> &invalidRuleIds)
 {
     item.id = normalizedTerminalText(item.id);
     item.title = normalizedTerminalText(item.title);
@@ -239,8 +233,7 @@ void finalizeItem(AiContextItem &item,
     redactField(item.shell, item, redactor, rules, invalidRuleIds);
     item.redacted = item.redactionCount > 0;
     const auto metadata = metadataBytes(item);
-    const auto maximumContentBytes = metadata >= limits.maxItemBytes ? std::size_t{0}
-                                                                     : limits.maxItemBytes - metadata;
+    const auto maximumContentBytes = metadata >= limits.maxItemBytes ? std::size_t{0} : limits.maxItemBytes - metadata;
     capLines(item.content, limits.maxItemLines, item.truncated);
     capBytes(item.content, maximumContentBytes, item.truncated);
     item.lineCount = lineCount(item.content) + (item.command.empty() ? 0 : 1);
@@ -248,19 +241,15 @@ void finalizeItem(AiContextItem &item,
     item.estimatedTokens = (item.accountedBytes + 3) / 4;
 }
 
-[[nodiscard]] AiContextItem commandItem(const terminal::CommandBlock &block,
-                                        const bool automatic,
-                                        const bool pinned,
-                                        const AiContextLimits &limits,
-                                        const AiContextRedactor &redactor,
+[[nodiscard]] AiContextItem commandItem(const terminal::CommandBlock &block, const bool automatic, const bool pinned,
+                                        const AiContextLimits &limits, const AiContextRedactor &redactor,
                                         const std::span<const AiUserRedactionRule> rules,
                                         std::unordered_set<std::string> &invalidRuleIds)
 {
     AiContextItem item{.id = blockId(block),
                        .kind = AiContextItemKind::commandBlock,
-                       .title = block.exitStatus.has_value() && block.exitStatus.value() != 0
-                                    ? "Failed command"
-                                    : "Command",
+                       .title =
+                           block.exitStatus.has_value() && block.exitStatus.value() != 0 ? "Failed command" : "Command",
                        .content = normalizedTerminalText(block.retainedOutput),
                        .command = block.command,
                        .workingDirectory = block.workingDirectory,
@@ -304,18 +293,14 @@ void finalizeItem(AiContextItem &item,
 
 } // namespace
 
-AiContextBroker::AiContextBroker(const AiContextLimits limits)
-    : m_limits(limits)
-{
-}
+AiContextBroker::AiContextBroker(const AiContextLimits limits) : m_limits(limits) {}
 
 const AiContextLimits &AiContextBroker::limits() const noexcept
 {
     return m_limits;
 }
 
-AiContextBundle AiContextBroker::build(const terminal::CommandBlockStore &store,
-                                       const AiContextRequest &request) const
+AiContextBundle AiContextBroker::build(const terminal::CommandBlockStore &store, const AiContextRequest &request) const
 {
     const auto &storedBlocks = store.blocks();
     const std::vector<terminal::CommandBlock> blocks(storedBlocks.begin(), storedBlocks.end());
@@ -354,14 +339,8 @@ AiContextBundle AiContextBroker::build(const std::span<const terminal::CommandBl
         if (!request.excludedItemIds.contains(id))
         {
             const auto pinned = request.pinnedItemIds.contains(id);
-            candidates.emplace_back(pinned ? 5 : 10,
-                                    commandItem(*primary,
-                                                false,
-                                                pinned,
-                                                m_limits,
-                                                redactor,
-                                                request.redactionRules,
-                                                invalidRuleIds));
+            candidates.emplace_back(pinned ? 5 : 10, commandItem(*primary, false, pinned, m_limits, redactor,
+                                                                 request.redactionRules, invalidRuleIds));
         }
     }
 
@@ -395,8 +374,7 @@ AiContextBundle AiContextBroker::build(const std::span<const terminal::CommandBl
             return block.id == primary->id;
         });
         for (auto iterator = std::make_reverse_iterator(primaryPosition);
-             iterator != blocks.rend() && included < m_limits.maxPrecedingBlocks;
-             ++iterator)
+             iterator != blocks.rend() && included < m_limits.maxPrecedingBlocks; ++iterator)
         {
             if (iterator->state != terminal::CommandBlockState::finished || !sameSession(*iterator, *primary))
             {
@@ -408,14 +386,9 @@ AiContextBundle AiContextBroker::build(const std::span<const terminal::CommandBl
                 continue;
             }
             const auto pinned = request.pinnedItemIds.contains(id);
-            candidates.emplace_back(pinned ? 5 : 50 + static_cast<int>(included),
-                                    commandItem(*iterator,
-                                                true,
-                                                pinned,
-                                                m_limits,
-                                                redactor,
-                                                request.redactionRules,
-                                                invalidRuleIds));
+            candidates.emplace_back(
+                pinned ? 5 : 50 + static_cast<int>(included),
+                commandItem(*iterator, true, pinned, m_limits, redactor, request.redactionRules, invalidRuleIds));
             ++included;
         }
     }

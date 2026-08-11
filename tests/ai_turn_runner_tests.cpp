@@ -52,7 +52,9 @@ public:
             setRawHeader("Retry-After", m_response.retryAfter);
         }
         open(QIODevice::ReadOnly);
-        QTimer::singleShot(m_response.delayMilliseconds, this, [this] { deliver(); });
+        QTimer::singleShot(m_response.delayMilliseconds, this, [this] {
+            deliver();
+        });
     }
 
     void abort() override
@@ -63,7 +65,9 @@ public:
         }
         m_aborted = true;
         setError(QNetworkReply::OperationCanceledError, QStringLiteral("cancelled"));
-        QTimer::singleShot(0, this, [this] { complete(); });
+        QTimer::singleShot(0, this, [this] {
+            complete();
+        });
     }
 
     [[nodiscard]] qint64 bytesAvailable() const override
@@ -122,8 +126,7 @@ public:
     [[nodiscard]] std::size_t requestCount() const noexcept { return m_requestCount; }
 
 protected:
-    QNetworkReply *createRequest(const Operation operation,
-                                 const QNetworkRequest &request,
+    QNetworkReply *createRequest(const Operation operation, const QNetworkRequest &request,
                                  QIODevice *outgoingData) override
     {
         static_cast<void>(operation);
@@ -160,9 +163,9 @@ private:
 [[nodiscard]] AiProviderRetryPolicy fastRetryPolicy()
 {
     return AiProviderRetryPolicy(AiProviderRetryLimits{.maxRetries = 2,
-                                                        .baseDelayMilliseconds = 1,
-                                                        .maxDelayMilliseconds = 2,
-                                                        .jitterPercent = 0});
+                                                       .baseDelayMilliseconds = 1,
+                                                       .maxDelayMilliseconds = 2,
+                                                       .jitterPercent = 0});
 }
 
 class AiTurnRunnerTests final : public QObject
@@ -190,15 +193,21 @@ void AiTurnRunnerTests::retriesBeforeVisibleOutput()
     std::uint32_t retryCount = 0;
     bool finished = false;
 
-    QVERIFY(runner.start(openAiConfiguration(),
-                         AiGenerationRequest{},
-                         emptySecretLoader(),
-                         [&events](const auto, const AiStreamEvent &event) { events.push_back(event); },
-                         [&finished](const auto) { finished = true; },
-                         [&retryCount](const auto, const auto attempt, const auto) {
-                             retryCount = attempt;
-                         },
-                         [] { return 0.5; })
+    QVERIFY(runner
+                .start(
+                    openAiConfiguration(), AiGenerationRequest{}, emptySecretLoader(),
+                    [&events](const auto, const AiStreamEvent &event) {
+                        events.push_back(event);
+                    },
+                    [&finished](const auto) {
+                        finished = true;
+                    },
+                    [&retryCount](const auto, const auto attempt, const auto) {
+                        retryCount = attempt;
+                    },
+                    [] {
+                        return 0.5;
+                    })
                 .has_value());
 
     QTRY_VERIFY_WITH_TIMEOUT(finished, 1000);
@@ -216,18 +225,22 @@ void AiTurnRunnerTests::doesNotReplayAfterVisibleOutput()
     network.enqueue(FakeResponse{.payload =
                                      "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\"}}\n\n"
                                      "data: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}\n\n"});
-    network.enqueue(FakeResponse{.payload =
-                                     "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_2\"}}\n\n"});
+    network.enqueue(
+        FakeResponse{.payload = "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_2\"}}\n\n"});
     ProviderHttpClient client(&network);
     AiTurnRunner runner(client, fastRetryPolicy());
     std::vector<AiStreamEvent> events;
     bool finished = false;
 
-    QVERIFY(runner.start(openAiConfiguration(),
-                         AiGenerationRequest{},
-                         emptySecretLoader(),
-                         [&events](const auto, const AiStreamEvent &event) { events.push_back(event); },
-                         [&finished](const auto) { finished = true; })
+    QVERIFY(runner
+                .start(
+                    openAiConfiguration(), AiGenerationRequest{}, emptySecretLoader(),
+                    [&events](const auto, const AiStreamEvent &event) {
+                        events.push_back(event);
+                    },
+                    [&finished](const auto) {
+                        finished = true;
+                    })
                 .has_value());
 
     QTRY_VERIFY_WITH_TIMEOUT(finished, 1000);
@@ -249,14 +262,18 @@ void AiTurnRunnerTests::cancelsScheduledRetry()
     bool cancelled = false;
     bool finished = false;
 
-    QVERIFY(runner.start(openAiConfiguration(),
-                         AiGenerationRequest{},
-                         emptySecretLoader(),
-                         [&events](const auto, const AiStreamEvent &event) { events.push_back(event); },
-                         [&finished](const auto) { finished = true; },
-                         [&runner, &cancelled](const auto, const auto, const auto) {
-                             cancelled = runner.cancel();
-                         })
+    QVERIFY(runner
+                .start(
+                    openAiConfiguration(), AiGenerationRequest{}, emptySecretLoader(),
+                    [&events](const auto, const AiStreamEvent &event) {
+                        events.push_back(event);
+                    },
+                    [&finished](const auto) {
+                        finished = true;
+                    },
+                    [&runner, &cancelled](const auto, const auto, const auto) {
+                        cancelled = runner.cancel();
+                    })
                 .has_value());
 
     QTRY_VERIFY_WITH_TIMEOUT(finished, 1000);
@@ -274,11 +291,13 @@ void AiTurnRunnerTests::destroyingRunnerCancelsSafely()
     ProviderHttpClient client(&network);
     {
         AiTurnRunner runner(client, fastRetryPolicy());
-        QVERIFY(runner.start(openAiConfiguration(),
-                             AiGenerationRequest{},
-                             emptySecretLoader(),
-                             [](const auto, const AiStreamEvent &) {},
-                             [](const auto) {})
+        QVERIFY(runner
+                    .start(
+                        openAiConfiguration(), AiGenerationRequest{}, emptySecretLoader(),
+                        [](const auto, const AiStreamEvent &) {
+                        },
+                        [](const auto) {
+                        })
                     .has_value());
     }
     QTest::qWait(150);

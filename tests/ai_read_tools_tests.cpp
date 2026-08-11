@@ -24,8 +24,7 @@ using ztermy::terminal::TerminalSemanticCapability;
     return std::vector<std::byte>(begin, begin + value.size());
 }
 
-[[nodiscard]] AiTerminalReadSnapshot session(const std::string &sessionId,
-                                             const std::uint64_t generation)
+[[nodiscard]] AiTerminalReadSnapshot session(const std::string &sessionId, const std::uint64_t generation)
 {
     CommandBlock block{.id = 7,
                        .command = "false",
@@ -97,8 +96,7 @@ void AiReadToolsTests::rejectsWrongAndStaleSessions()
 
 void AiReadToolsTests::readsBoundedTerminalRangesWithoutSplittingUtf8()
 {
-    const AiReadTools tools(AiReadToolLimits{.maxTerminalLines = 2,
-                                             .maxTerminalBytes = 8});
+    const AiReadTools tools(AiReadToolLimits{.maxTerminalLines = 2, .maxTerminalBytes = 8});
     const std::vector sessions{session("session-1", 3)};
 
     const auto range = tools.readTerminal(sessions, "session-1", 3, 0, 2);

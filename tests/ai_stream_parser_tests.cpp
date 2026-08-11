@@ -82,9 +82,8 @@ void AiStreamParserTests::ignoresCommentsAndInvalidRetry()
 
 void AiStreamParserTests::boundsServerSentEventInput()
 {
-    ServerSentEventParser parser(ServerSentEventParserLimits{.maxLineBytes = 12,
-                                                              .maxEventBytes = 8,
-                                                              .maxBufferedBytes = 32});
+    ServerSentEventParser parser(
+        ServerSentEventParserLimits{.maxLineBytes = 12, .maxEventBytes = 8, .maxBufferedBytes = 32});
     const auto result = parser.append("data: 123456789\n");
     QVERIFY(!result.has_value());
     QCOMPARE(result.error().code, StreamParseErrorCode::lineTooLarge);

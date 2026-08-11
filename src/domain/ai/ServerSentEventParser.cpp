@@ -7,10 +7,7 @@
 namespace ztermy::ai
 {
 
-ServerSentEventParser::ServerSentEventParser(const ServerSentEventParserLimits limits)
-    : m_limits(limits)
-{
-}
+ServerSentEventParser::ServerSentEventParser(const ServerSentEventParserLimits limits) : m_limits(limits) {}
 
 std::expected<std::vector<ServerSentEvent>, StreamParseError>
 ServerSentEventParser::append(const std::string_view bytes)

@@ -49,7 +49,9 @@ public:
             setRawHeader("Retry-After", m_response.retryAfter);
         }
         open(QIODevice::ReadOnly);
-        QTimer::singleShot(m_response.delayMilliseconds, this, [this] { deliver(); });
+        QTimer::singleShot(m_response.delayMilliseconds, this, [this] {
+            deliver();
+        });
     }
 
     void abort() override
@@ -60,7 +62,9 @@ public:
         }
         m_aborted = true;
         setError(QNetworkReply::OperationCanceledError, QStringLiteral("cancelled"));
-        QTimer::singleShot(0, this, [this] { complete(); });
+        QTimer::singleShot(0, this, [this] {
+            complete();
+        });
     }
 
     [[nodiscard]] qint64 bytesAvailable() const override
@@ -118,8 +122,7 @@ public:
     void enqueue(FakeResponse response) { m_responses.push_back(std::move(response)); }
 
 protected:
-    QNetworkReply *createRequest(const Operation operation,
-                                 const QNetworkRequest &request,
+    QNetworkReply *createRequest(const Operation operation, const QNetworkRequest &request,
                                  QIODevice *outgoingData) override
     {
         static_cast<void>(operation);
@@ -160,11 +163,14 @@ void ProviderHttpClientTests::streamsTypedEventsAndFinishes()
     ProviderHttpClient client(&network);
     std::vector<AiStreamEvent> events;
     bool finished = false;
-    const auto requestId = client.start(openAiConfiguration(),
-                                        AiGenerationRequest{},
-                                        SensitiveByteArray{},
-                                        [&events](const auto, const AiStreamEvent &event) { events.push_back(event); },
-                                        [&finished](const auto) { finished = true; });
+    const auto requestId = client.start(
+        openAiConfiguration(), AiGenerationRequest{}, SensitiveByteArray{},
+        [&events](const auto, const AiStreamEvent &event) {
+            events.push_back(event);
+        },
+        [&finished](const auto) {
+            finished = true;
+        });
     QVERIFY(requestId.has_value());
     QTRY_VERIFY_WITH_TIMEOUT(finished, 1000);
     QCOMPARE(events.size(), std::size_t{3});
@@ -180,11 +186,15 @@ void ProviderHttpClientTests::classifiesRateLimitAndRetryDelay()
     ProviderHttpClient client(&network);
     std::vector<AiStreamEvent> events;
     bool finished = false;
-    QVERIFY(client.start(openAiConfiguration(),
-                         AiGenerationRequest{},
-                         SensitiveByteArray{},
-                         [&events](const auto, const AiStreamEvent &event) { events.push_back(event); },
-                         [&finished](const auto) { finished = true; })
+    QVERIFY(client
+                .start(
+                    openAiConfiguration(), AiGenerationRequest{}, SensitiveByteArray{},
+                    [&events](const auto, const AiStreamEvent &event) {
+                        events.push_back(event);
+                    },
+                    [&finished](const auto) {
+                        finished = true;
+                    })
                 .has_value());
     QTRY_VERIFY_WITH_TIMEOUT(finished, 1000);
     QCOMPARE(events.size(), std::size_t{1});
@@ -202,11 +212,14 @@ void ProviderHttpClientTests::cancelsInFlightRequest()
     ProviderHttpClient client(&network);
     std::vector<AiStreamEvent> events;
     bool finished = false;
-    const auto requestId = client.start(openAiConfiguration(),
-                                        AiGenerationRequest{},
-                                        SensitiveByteArray{},
-                                        [&events](const auto, const AiStreamEvent &event) { events.push_back(event); },
-                                        [&finished](const auto) { finished = true; });
+    const auto requestId = client.start(
+        openAiConfiguration(), AiGenerationRequest{}, SensitiveByteArray{},
+        [&events](const auto, const AiStreamEvent &event) {
+            events.push_back(event);
+        },
+        [&finished](const auto) {
+            finished = true;
+        });
     QVERIFY(requestId.has_value());
     QVERIFY(client.cancel(requestId.value()));
     QTRY_VERIFY_WITH_TIMEOUT(finished, 1000);

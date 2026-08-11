@@ -30,35 +30,26 @@ void AiConversationModelTests::streamsAssistantMessageAndUsage()
     QVERIFY(model.streaming());
     QVERIFY(model.appendAssistantDelta(assistantId, QStringLiteral("Hello ")));
     QVERIFY(model.appendAssistantDelta(assistantId, QStringLiteral("世界")));
-    QVERIFY(model.completeAssistantMessage(
-        assistantId,
-        AiTokenUsage{.inputTokens = 12, .outputTokens = 3}));
+    QVERIFY(model.completeAssistantMessage(assistantId, AiTokenUsage{.inputTokens = 12, .outputTokens = 3}));
 
     QCOMPARE(model.rowCount(), 2);
-    QCOMPARE(model.data(model.index(1), AiConversationModel::TextRole).toString(),
-             QStringLiteral("Hello 世界"));
-    QCOMPARE(model.data(model.index(1), AiConversationModel::StateRole).toString(),
-             QStringLiteral("complete"));
-    QCOMPARE(model.data(model.index(1), AiConversationModel::InputTokensRole).toULongLong(),
-             qulonglong{12});
-    QCOMPARE(model.data(model.index(1), AiConversationModel::OutputTokensRole).toULongLong(),
-             qulonglong{3});
+    QCOMPARE(model.data(model.index(1), AiConversationModel::TextRole).toString(), QStringLiteral("Hello 世界"));
+    QCOMPARE(model.data(model.index(1), AiConversationModel::StateRole).toString(), QStringLiteral("complete"));
+    QCOMPARE(model.data(model.index(1), AiConversationModel::InputTokensRole).toULongLong(), qulonglong{12});
+    QCOMPARE(model.data(model.index(1), AiConversationModel::OutputTokensRole).toULongLong(), qulonglong{3});
     QVERIFY(!model.streaming());
     QCOMPARE(streamingSpy.count(), 2);
 }
 
 void AiConversationModelTests::boundsMessagesAndUtf8Text()
 {
-    AiConversationModel model(AiConversationLimits{.maxMessages = 2,
-                                                    .maxMessageBytes = 5,
-                                                    .maxConversationBytes = 10});
+    AiConversationModel model(AiConversationLimits{.maxMessages = 2, .maxMessageBytes = 5, .maxConversationBytes = 10});
     static_cast<void>(model.appendUserMessage(QStringLiteral("first")));
     static_cast<void>(model.appendUserMessage(QStringLiteral("second")));
     static_cast<void>(model.appendUserMessage(QStringLiteral("你好")));
 
     QCOMPARE(model.rowCount(), 2);
-    QCOMPARE(model.data(model.index(1), AiConversationModel::TextRole).toString(),
-             QStringLiteral("你"));
+    QCOMPARE(model.data(model.index(1), AiConversationModel::TextRole).toString(), QStringLiteral("你"));
     QVERIFY(model.data(model.index(1), AiConversationModel::TruncatedRole).toBool());
 }
 
@@ -67,8 +58,7 @@ void AiConversationModelTests::exposesFailureWithoutLeakingIntoLogs()
     AiConversationModel model;
     const auto assistantId = model.beginAssistantMessage();
     QVERIFY(model.failAssistantMessage(assistantId, QStringLiteral("Provider unavailable")));
-    QCOMPARE(model.data(model.index(0), AiConversationModel::StateRole).toString(),
-             QStringLiteral("failed"));
+    QCOMPARE(model.data(model.index(0), AiConversationModel::StateRole).toString(), QStringLiteral("failed"));
     QCOMPARE(model.data(model.index(0), AiConversationModel::ErrorRole).toString(),
              QStringLiteral("Provider unavailable"));
     QVERIFY(!model.streaming());

@@ -16,8 +16,7 @@ namespace ztermy::ai
 class OpenAiResponsesStreamMapper final
 {
 public:
-    [[nodiscard]] std::expected<std::vector<AiStreamEvent>, AiProviderError>
-    map(const ServerSentEvent &event);
+    [[nodiscard]] std::expected<std::vector<AiStreamEvent>, AiProviderError> map(const ServerSentEvent &event);
     void reset() noexcept;
 
 private:
@@ -33,8 +32,7 @@ private:
 class OpenAiCompatibleStreamMapper final
 {
 public:
-    [[nodiscard]] std::expected<std::vector<AiStreamEvent>, AiProviderError>
-    map(const ServerSentEvent &event);
+    [[nodiscard]] std::expected<std::vector<AiStreamEvent>, AiProviderError> map(const ServerSentEvent &event);
     void reset() noexcept;
 
 private:

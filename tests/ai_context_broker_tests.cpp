@@ -26,19 +26,18 @@ using ztermy::terminal::TerminalSemanticCapability;
     return std::as_bytes(std::span(value));
 }
 
-[[nodiscard]] ztermy::terminal::CommandBlockId addBlock(CommandBlockStore &store,
-                                                        const std::string &command,
-                                                        const std::string_view output,
-                                                        const int exitStatus)
+[[nodiscard]] ztermy::terminal::CommandBlockId addBlock(CommandBlockStore &store, const std::string &command,
+                                                        const std::string_view output, const int exitStatus)
 {
-    const auto id = store.begin(CommandBlockStart{.command = command,
-                                                  .workingDirectory = "/srv",
-                                                  .sessionId = "session",
-                                                  .host = "host",
-                                                  .shell = "bash",
-                                                  .sessionGeneration = 7,
-                                                  .capability = TerminalSemanticCapability::rich,
-                                                  .outputStreamOffset = 0})
+    const auto id = store
+                        .begin(CommandBlockStart{.command = command,
+                                                 .workingDirectory = "/srv",
+                                                 .sessionId = "session",
+                                                 .host = "host",
+                                                 .shell = "bash",
+                                                 .sessionGeneration = 7,
+                                                 .capability = TerminalSemanticCapability::rich,
+                                                 .outputStreamOffset = 0})
                         .value();
     store.append(id, CommandOutputObservation{.bytes = bytes(output), .streamOffset = 0}).value();
     store.finish(id, exitStatus, 10).value();
@@ -102,12 +101,11 @@ void AiContextBrokerTests::appliesExclusionAndPinPriority()
     const auto firstId = "command-block:session:7:" + std::to_string(first);
     const auto secondId = "command-block:session:7:" + std::to_string(second);
     AiContextBroker broker;
-    const auto bundle = broker.build(store,
-                                     AiContextRequest{.primaryBlockId = second,
-                                                      .explicitItems = {AiExplicitContext{.id = "note",
-                                                                                         .content = "note"}},
-                                                      .excludedItemIds = {secondId},
-                                                      .pinnedItemIds = {firstId}});
+    const auto bundle =
+        broker.build(store, AiContextRequest{.primaryBlockId = second,
+                                             .explicitItems = {AiExplicitContext{.id = "note", .content = "note"}},
+                                             .excludedItemIds = {secondId},
+                                             .pinnedItemIds = {firstId}});
     QCOMPARE(bundle.items.size(), std::size_t{2});
     QCOMPARE(bundle.items.front().kind, AiContextItemKind::explicitAttachment);
     QCOMPARE(bundle.items.at(1).command, std::string("first"));
@@ -128,11 +126,10 @@ void AiContextBrokerTests::enforcesItemAndAggregateBounds()
     {
         large += "line-" + std::to_string(index) + "-你好\n";
     }
-    const auto bundle = broker.build(store,
-                                     AiContextRequest{.explicitItems = {
-                                                          AiExplicitContext{.id = "a", .content = large},
-                                                          AiExplicitContext{.id = "b", .content = large},
-                                                          AiExplicitContext{.id = "c", .content = large}}});
+    const auto bundle =
+        broker.build(store, AiContextRequest{.explicitItems = {AiExplicitContext{.id = "a", .content = large},
+                                                               AiExplicitContext{.id = "b", .content = large},
+                                                               AiExplicitContext{.id = "c", .content = large}}});
     QVERIFY(bundle.totalBytes <= std::size_t{900});
     QVERIFY(bundle.totalLines <= std::size_t{20});
     QVERIFY(bundle.estimatedTokens <= std::size_t{225});
@@ -146,18 +143,14 @@ void AiContextBrokerTests::enforcesItemAndAggregateBounds()
 void AiContextBrokerTests::redactsBeforePublishingPreview()
 {
     CommandBlockStore store;
-    const auto id = addBlock(store,
-                             "curl -H 'Authorization: Bearer command-secret-12345'",
-                             "OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz123456\n",
-                             1);
+    const auto id = addBlock(store, "curl -H 'Authorization: Bearer command-secret-12345'",
+                             "OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz123456\n", 1);
     AiContextBroker broker;
     const auto bundle = broker.build(
         store,
         AiContextRequest{.primaryBlockId = id,
                          .automaticContextEnabled = false,
-                         .redactionRules = {ztermy::ai::AiUserRedactionRule{
-                             .id = "host-rule",
-                             .pattern = "host"}}});
+                         .redactionRules = {ztermy::ai::AiUserRedactionRule{.id = "host-rule", .pattern = "host"}}});
     QCOMPARE(bundle.items.size(), std::size_t{1});
     const auto &item = bundle.items.front();
     QVERIFY(!item.command.contains("command-secret"));

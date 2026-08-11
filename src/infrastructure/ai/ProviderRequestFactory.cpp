@@ -18,14 +18,14 @@ namespace
 {
     switch (role)
     {
-    case AiMessageRole::system:
-        return QStringLiteral("system");
-    case AiMessageRole::user:
-        return QStringLiteral("user");
-    case AiMessageRole::assistant:
-        return QStringLiteral("assistant");
-    case AiMessageRole::tool:
-        return QStringLiteral("tool");
+        case AiMessageRole::system:
+            return QStringLiteral("system");
+        case AiMessageRole::user:
+            return QStringLiteral("user");
+        case AiMessageRole::assistant:
+            return QStringLiteral("assistant");
+        case AiMessageRole::tool:
+            return QStringLiteral("tool");
     }
     return QStringLiteral("user");
 }
@@ -39,12 +39,12 @@ namespace
 {
     switch (kind)
     {
-    case AiProviderKind::openAiResponses:
-        return "/responses";
-    case AiProviderKind::ollama:
-        return "/api/chat";
-    case AiProviderKind::openAiCompatible:
-        return "/chat/completions";
+        case AiProviderKind::openAiResponses:
+            return "/responses";
+        case AiProviderKind::ollama:
+            return "/api/chat";
+        case AiProviderKind::openAiCompatible:
+            return "/chat/completions";
     }
     return {};
 }
@@ -55,9 +55,10 @@ namespace
     if (!base.isValid() || base.host().isEmpty() || !base.userInfo().isEmpty()
         || (base.scheme() != QStringLiteral("http") && base.scheme() != QStringLiteral("https")))
     {
-        return std::unexpected(AiProviderError{.code = AiProviderErrorCode::invalidRequest,
-                                               .message = "Provider base URL must be an HTTP(S) URL without credentials.",
-                                               .retryable = false});
+        return std::unexpected(
+            AiProviderError{.code = AiProviderErrorCode::invalidRequest,
+                            .message = "Provider base URL must be an HTTP(S) URL without credentials.",
+                            .retryable = false});
     }
 
     auto basePath = base.path();
@@ -113,7 +114,7 @@ namespace
 }
 
 [[nodiscard]] QJsonObject compatibleBody(const AiProviderConfiguration &configuration,
-                                          const AiGenerationRequest &generation)
+                                         const AiGenerationRequest &generation)
 {
     auto input = messages(generation);
     if (!generation.instructions.empty())
@@ -124,8 +125,7 @@ namespace
     return QJsonObject{{QStringLiteral("model"), fromUtf8(configuration.model)},
                        {QStringLiteral("messages"), input},
                        {QStringLiteral("stream"), true},
-                       {QStringLiteral("stream_options"),
-                        QJsonObject{{QStringLiteral("include_usage"), true}}}};
+                       {QStringLiteral("stream_options"), QJsonObject{{QStringLiteral("include_usage"), true}}}};
 }
 
 [[nodiscard]] QJsonObject ollamaBody(const AiProviderConfiguration &configuration,
@@ -145,8 +145,7 @@ namespace
 } // namespace
 
 std::expected<PreparedProviderRequest, AiProviderError>
-ProviderRequestFactory::prepare(const AiProviderConfiguration &configuration,
-                                const AiGenerationRequest &generation,
+ProviderRequestFactory::prepare(const AiProviderConfiguration &configuration, const AiGenerationRequest &generation,
                                 const std::string_view apiKey)
 {
     if (configuration.model.empty())
@@ -165,22 +164,22 @@ ProviderRequestFactory::prepare(const AiProviderConfiguration &configuration,
     auto protocol = AiWireProtocol::serverSentEvents;
     switch (configuration.kind)
     {
-    case AiProviderKind::openAiResponses:
-        body = openAiBody(configuration, generation);
-        break;
-    case AiProviderKind::ollama:
-        body = ollamaBody(configuration, generation);
-        protocol = AiWireProtocol::ndjson;
-        break;
-    case AiProviderKind::openAiCompatible:
-        body = compatibleBody(configuration, generation);
-        break;
+        case AiProviderKind::openAiResponses:
+            body = openAiBody(configuration, generation);
+            break;
+        case AiProviderKind::ollama:
+            body = ollamaBody(configuration, generation);
+            protocol = AiWireProtocol::ndjson;
+            break;
+        case AiProviderKind::openAiCompatible:
+            body = compatibleBody(configuration, generation);
+            break;
     }
 
     QNetworkRequest request(url.value());
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-    request.setRawHeader("Accept", protocol == AiWireProtocol::serverSentEvents ? "text/event-stream"
-                                                                                : "application/x-ndjson");
+    request.setRawHeader("Accept",
+                         protocol == AiWireProtocol::serverSentEvents ? "text/event-stream" : "application/x-ndjson");
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
     request.setTransferTimeout(120'000);
     if (!apiKey.empty())

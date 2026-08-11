@@ -28,8 +28,7 @@ class ProviderRequestFactory final
 {
 public:
     [[nodiscard]] static std::expected<PreparedProviderRequest, AiProviderError>
-    prepare(const AiProviderConfiguration &configuration,
-            const AiGenerationRequest &generation,
+    prepare(const AiProviderConfiguration &configuration, const AiGenerationRequest &generation,
             std::string_view apiKey);
 };
 

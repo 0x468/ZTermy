@@ -99,10 +99,8 @@ ProviderHttpClient::~ProviderHttpClient()
 }
 
 std::expected<ProviderHttpClient::RequestId, AiProviderError>
-ProviderHttpClient::start(const AiProviderConfiguration &configuration,
-                          const AiGenerationRequest &generation,
-                          security::SensitiveByteArray apiKey,
-                          EventHandler eventHandler,
+ProviderHttpClient::start(const AiProviderConfiguration &configuration, const AiGenerationRequest &generation,
+                          security::SensitiveByteArray apiKey, EventHandler eventHandler,
                           FinishedHandler finishedHandler)
 {
     if (m_networkAccessManager == nullptr)
@@ -151,8 +149,12 @@ bool ProviderHttpClient::cancel(const RequestId requestId)
 void ProviderHttpClient::attach(QNetworkReply *reply, std::unique_ptr<RequestState> state)
 {
     m_requests.emplace(reply, std::move(state));
-    connect(reply, &QIODevice::readyRead, this, [this, reply] { consumeAvailable(reply); });
-    connect(reply, &QNetworkReply::finished, this, [this, reply] { finish(reply); });
+    connect(reply, &QIODevice::readyRead, this, [this, reply] {
+        consumeAvailable(reply);
+    });
+    connect(reply, &QNetworkReply::finished, this, [this, reply] {
+        finish(reply);
+    });
 }
 
 void ProviderHttpClient::consumeAvailable(QNetworkReply *reply)
@@ -196,9 +198,8 @@ void ProviderHttpClient::consumeSse(RequestState &state, const std::string_view 
     }
     for (const auto &event : parsed.value())
     {
-        const auto mapped = state.provider == AiProviderKind::openAiResponses
-                                ? state.openAiMapper.map(event)
-                                : state.compatibleMapper.map(event);
+        const auto mapped = state.provider == AiProviderKind::openAiResponses ? state.openAiMapper.map(event)
+                                                                              : state.compatibleMapper.map(event);
         if (!mapped.has_value())
         {
             fail(state, mapped.error(), reply);
@@ -236,8 +237,7 @@ void ProviderHttpClient::dispatch(RequestState &state, const std::vector<AiStrea
 {
     for (const auto &event : events)
     {
-        if (event.type == AiStreamEventType::responseCompleted
-            || event.type == AiStreamEventType::responseFailed)
+        if (event.type == AiStreamEventType::responseCompleted || event.type == AiStreamEventType::responseFailed)
         {
             state.terminalEventSeen = true;
         }
@@ -256,8 +256,7 @@ void ProviderHttpClient::fail(RequestState &state, AiProviderError error, QNetwo
     }
     state.failed = true;
     state.terminalEventSeen = true;
-    dispatch(state, {AiStreamEvent{.type = AiStreamEventType::responseFailed,
-                                   .error = std::move(error)}});
+    dispatch(state, {AiStreamEvent{.type = AiStreamEventType::responseFailed, .error = std::move(error)}});
     reply->abort();
 }
 

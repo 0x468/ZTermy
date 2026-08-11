@@ -50,8 +50,7 @@ void ProviderRequestFactoryTests::preparesOpenAiResponsesRequest()
     QCOMPARE(body.value("model").toString(), QStringLiteral("gpt-5.6"));
     QCOMPARE(body.value("store").toBool(), false);
     QCOMPARE(body.value("previous_response_id").toString(), QStringLiteral("resp_previous"));
-    QCOMPARE(body.value("input").toArray().first().toObject().value("content").toString(),
-             QStringLiteral("解释失败"));
+    QCOMPARE(body.value("input").toArray().first().toObject().value("content").toString(), QStringLiteral("解释失败"));
 }
 
 void ProviderRequestFactoryTests::preparesOllamaRequest()
@@ -86,8 +85,7 @@ void ProviderRequestFactoryTests::preparesCompatibleRequest()
 
 void ProviderRequestFactoryTests::rejectsUnsafeOrIncompleteConfiguration()
 {
-    auto configuration = AiProviderConfiguration{.baseUrl = "https://user:pass@example.test/v1",
-                                                 .model = "model"};
+    auto configuration = AiProviderConfiguration{.baseUrl = "https://user:pass@example.test/v1", .model = "model"};
     auto result = ProviderRequestFactory::prepare(configuration, AiGenerationRequest{}, {});
     QVERIFY(!result.has_value());
     QCOMPARE(result.error().code, AiProviderErrorCode::invalidRequest);

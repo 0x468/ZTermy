@@ -10,9 +10,7 @@
 namespace ztermy::ai
 {
 
-AiTurnRunner::AiTurnRunner(ProviderHttpClient &client,
-                           AiProviderRetryPolicy retryPolicy,
-                           QObject *parent)
+AiTurnRunner::AiTurnRunner(ProviderHttpClient &client, AiProviderRetryPolicy retryPolicy, QObject *parent)
     : QObject(parent), m_client(client), m_retryPolicy(retryPolicy)
 {
     m_retryTimer.setSingleShot(true);
@@ -39,12 +37,8 @@ AiTurnRunner::~AiTurnRunner()
 }
 
 std::expected<AiTurnRunner::TurnId, AiProviderError>
-AiTurnRunner::start(AiProviderConfiguration configuration,
-                    AiGenerationRequest generation,
-                    SecretLoader secretLoader,
-                    EventHandler eventHandler,
-                    FinishedHandler finishedHandler,
-                    RetryHandler retryHandler,
+AiTurnRunner::start(AiProviderConfiguration configuration, AiGenerationRequest generation, SecretLoader secretLoader,
+                    EventHandler eventHandler, FinishedHandler finishedHandler, RetryHandler retryHandler,
                     JitterSource jitterSource)
 {
     if (active())
@@ -124,9 +118,7 @@ std::expected<void, AiProviderError> AiTurnRunner::startAttempt()
 
     const QPointer<AiTurnRunner> guardedThis(this);
     const auto started = m_client.start(
-        m_configuration,
-        m_generation,
-        std::move(secret.value()),
+        m_configuration, m_generation, std::move(secret.value()),
         [guardedThis](const auto requestId, const AiStreamEvent &event) {
             if (guardedThis)
             {
@@ -147,8 +139,7 @@ std::expected<void, AiProviderError> AiTurnRunner::startAttempt()
     return {};
 }
 
-void AiTurnRunner::handleEvent(const ProviderHttpClient::RequestId requestId,
-                               const AiStreamEvent &event)
+void AiTurnRunner::handleEvent(const ProviderHttpClient::RequestId requestId, const AiStreamEvent &event)
 {
     if (!m_requestId.has_value() || *m_requestId != requestId || !active())
     {
@@ -161,10 +152,9 @@ void AiTurnRunner::handleEvent(const ProviderHttpClient::RequestId requestId,
     }
     if (event.type == AiStreamEventType::responseFailed)
     {
-        m_pendingError = event.error.value_or(
-            AiProviderError{.code = AiProviderErrorCode::protocol,
-                            .message = "Provider failed without an error payload.",
-                            .retryable = false});
+        m_pendingError = event.error.value_or(AiProviderError{.code = AiProviderErrorCode::protocol,
+                                                              .message = "Provider failed without an error payload.",
+                                                              .retryable = false});
         return;
     }
 
@@ -189,8 +179,7 @@ void AiTurnRunner::handleFinished(const ProviderHttpClient::RequestId requestId)
     }
 
     const auto error = *m_pendingError;
-    const auto jitter = m_jitterSource ? m_jitterSource()
-                                       : QRandomGenerator::global()->generateDouble();
+    const auto jitter = m_jitterSource ? m_jitterSource() : QRandomGenerator::global()->generateDouble();
     const auto decision = m_retryPolicy.decide(error, m_completedRetries, jitter);
     if (!m_cancelled && !m_visibleOutputObserved && decision.retry)
     {
@@ -198,8 +187,7 @@ void AiTurnRunner::handleFinished(const ProviderHttpClient::RequestId requestId)
         m_bufferedStart.reset();
         m_pendingError.reset();
         m_retryTimer.start(static_cast<int>(std::min<std::uint64_t>(
-            decision.delayMilliseconds,
-            static_cast<std::uint64_t>(std::numeric_limits<int>::max()))));
+            decision.delayMilliseconds, static_cast<std::uint64_t>(std::numeric_limits<int>::max()))));
         if (m_retryHandler)
         {
             m_retryHandler(m_turnId, m_completedRetries, decision.delayMilliseconds);
@@ -226,9 +214,7 @@ void AiTurnRunner::finishWithError(AiProviderError error)
         return;
     }
     emitBufferedStart();
-    m_eventHandler(m_turnId,
-                   AiStreamEvent{.type = AiStreamEventType::responseFailed,
-                                 .error = std::move(error)});
+    m_eventHandler(m_turnId, AiStreamEvent{.type = AiStreamEventType::responseFailed, .error = std::move(error)});
     finishTurn();
 }
 

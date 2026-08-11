@@ -22,14 +22,11 @@ private slots:
 
 void AiProviderRetryPolicyTests::retriesBoundedTransientFailures()
 {
-    const AiProviderRetryPolicy policy(
-        AiProviderRetryLimits{.maxRetries = 2,
-                              .baseDelayMilliseconds = 500,
-                              .maxDelayMilliseconds = 8'000,
-                              .jitterPercent = 20});
-    const AiProviderError error{.code = AiProviderErrorCode::network,
-                                .message = "offline",
-                                .retryable = true};
+    const AiProviderRetryPolicy policy(AiProviderRetryLimits{.maxRetries = 2,
+                                                             .baseDelayMilliseconds = 500,
+                                                             .maxDelayMilliseconds = 8'000,
+                                                             .jitterPercent = 20});
+    const AiProviderError error{.code = AiProviderErrorCode::network, .message = "offline", .retryable = true};
 
     const auto first = policy.decide(error, 0, 0.0);
     QVERIFY(first.retry);
@@ -44,11 +41,10 @@ void AiProviderRetryPolicyTests::retriesBoundedTransientFailures()
 
 void AiProviderRetryPolicyTests::honorsBoundedRetryAfter()
 {
-    const AiProviderRetryPolicy policy(
-        AiProviderRetryLimits{.maxRetries = 2,
-                              .baseDelayMilliseconds = 500,
-                              .maxDelayMilliseconds = 8'000,
-                              .jitterPercent = 20});
+    const AiProviderRetryPolicy policy(AiProviderRetryLimits{.maxRetries = 2,
+                                                             .baseDelayMilliseconds = 500,
+                                                             .maxDelayMilliseconds = 8'000,
+                                                             .jitterPercent = 20});
 
     auto error = AiProviderError{.code = AiProviderErrorCode::rateLimited,
                                  .message = "slow down",
@@ -63,10 +59,8 @@ void AiProviderRetryPolicyTests::honorsBoundedRetryAfter()
 void AiProviderRetryPolicyTests::rejectsPermanentAndCancelledFailures()
 {
     const AiProviderRetryPolicy policy;
-    for (const auto code : {AiProviderErrorCode::authentication,
-                            AiProviderErrorCode::quotaExceeded,
-                            AiProviderErrorCode::invalidRequest,
-                            AiProviderErrorCode::cancelled})
+    for (const auto code : {AiProviderErrorCode::authentication, AiProviderErrorCode::quotaExceeded,
+                            AiProviderErrorCode::invalidRequest, AiProviderErrorCode::cancelled})
     {
         const AiProviderError error{.code = code, .message = "stop", .retryable = true};
         QVERIFY(!policy.decide(error, 0).retry);

@@ -7,8 +7,8 @@
 namespace
 {
 
-using ztermy::ai::AiProviderErrorCode;
 using ztermy::ai::AiProviderError;
+using ztermy::ai::AiProviderErrorCode;
 using ztermy::ai::AiStreamEventType;
 using ztermy::ai::AiTokenUsage;
 using ztermy::ai::OllamaStreamMapper;
@@ -32,17 +32,20 @@ private slots:
 void ProviderStreamMapperTests::mapsOpenAiTextAndUsage()
 {
     OpenAiResponsesStreamMapper mapper;
-    auto events = mapper.map(ServerSentEvent{.data =
-                                                 R"json({"type":"response.created","response":{"id":"resp_1"}})json"});
+    auto events =
+        mapper.map(ServerSentEvent{.data = R"json({"type":"response.created","response":{"id":"resp_1"}})json"});
     QVERIFY(events.has_value());
     QCOMPARE(events->front().type, AiStreamEventType::responseStarted);
     QCOMPARE(events->front().responseId, std::string("resp_1"));
 
-    events = mapper.map(ServerSentEvent{.data = R"json({"type":"response.output_text.delta","item_id":"msg_1","delta":"你好"})json"});
+    events = mapper.map(
+        ServerSentEvent{.data = R"json({"type":"response.output_text.delta","item_id":"msg_1","delta":"你好"})json"});
     QCOMPARE(events->front().type, AiStreamEventType::textDelta);
     QCOMPARE(events->front().delta, std::string("你好"));
 
-    events = mapper.map(ServerSentEvent{.data = R"json({"type":"response.completed","response":{"id":"resp_1","usage":{"input_tokens":12,"output_tokens":7,"input_tokens_details":{"cached_tokens":4},"output_tokens_details":{"reasoning_tokens":2}}}})json"});
+    events = mapper.map(ServerSentEvent{
+        .data =
+            R"json({"type":"response.completed","response":{"id":"resp_1","usage":{"input_tokens":12,"output_tokens":7,"input_tokens_details":{"cached_tokens":4},"output_tokens_details":{"reasoning_tokens":2}}}})json"});
     QCOMPARE(events->size(), std::size_t{2});
     QCOMPARE(events->at(0).type, AiStreamEventType::usageUpdated);
     QVERIFY(events->at(0).usage.has_value());
@@ -55,15 +58,21 @@ void ProviderStreamMapperTests::mapsOpenAiTextAndUsage()
 void ProviderStreamMapperTests::mapsOpenAiToolArguments()
 {
     OpenAiResponsesStreamMapper mapper;
-    auto events = mapper.map(ServerSentEvent{.data = R"json({"type":"response.output_item.added","item":{"type":"function_call","id":"item_1","call_id":"call_1","name":"run_command"}})json"});
+    auto events = mapper.map(ServerSentEvent{
+        .data =
+            R"json({"type":"response.output_item.added","item":{"type":"function_call","id":"item_1","call_id":"call_1","name":"run_command"}})json"});
     QCOMPARE(events->front().type, AiStreamEventType::toolCallStarted);
     QCOMPARE(events->front().toolCallId, std::string("call_1"));
 
-    events = mapper.map(ServerSentEvent{.data = R"json({"type":"response.function_call_arguments.delta","item_id":"item_1","delta":"{\"command\":"})json"});
+    events = mapper.map(ServerSentEvent{
+        .data =
+            R"json({"type":"response.function_call_arguments.delta","item_id":"item_1","delta":"{\"command\":"})json"});
     QCOMPARE(events->front().type, AiStreamEventType::toolArgumentsDelta);
     QCOMPARE(events->front().toolName, std::string("run_command"));
 
-    events = mapper.map(ServerSentEvent{.data = R"json({"type":"response.function_call_arguments.done","item_id":"item_1","arguments":"{\"command\":\"pwd\"}"})json"});
+    events = mapper.map(ServerSentEvent{
+        .data =
+            R"json({"type":"response.function_call_arguments.done","item_id":"item_1","arguments":"{\"command\":\"pwd\"}"})json"});
     QCOMPARE(events->front().type, AiStreamEventType::toolCallCompleted);
     QCOMPARE(events->front().delta, std::string(R"json({"command":"pwd"})json"));
 }
@@ -79,7 +88,9 @@ void ProviderStreamMapperTests::rejectsMalformedProviderJson()
 void ProviderStreamMapperTests::mapsCompatibleTextToolsAndCompletion()
 {
     OpenAiCompatibleStreamMapper mapper;
-    auto events = mapper.map(ServerSentEvent{.data = R"json({"id":"chat_1","choices":[{"delta":{"content":"hi","tool_calls":[{"index":0,"id":"call_1","function":{"name":"run_command","arguments":"{\""}}]},"finish_reason":null}]})json"});
+    auto events = mapper.map(ServerSentEvent{
+        .data =
+            R"json({"id":"chat_1","choices":[{"delta":{"content":"hi","tool_calls":[{"index":0,"id":"call_1","function":{"name":"run_command","arguments":"{\""}}]},"finish_reason":null}]})json"});
     QVERIFY(events.has_value());
     QCOMPARE(events->at(1).type, AiStreamEventType::textDelta);
     QCOMPARE(events->at(2).type, AiStreamEventType::toolCallStarted);
@@ -95,7 +106,8 @@ void ProviderStreamMapperTests::mapsCompatibleTextToolsAndCompletion()
 void ProviderStreamMapperTests::mapsOllamaThinkingToolsAndUsage()
 {
     OllamaStreamMapper mapper;
-    const auto events = mapper.map(R"json({"message":{"content":"answer","thinking":"plan","tool_calls":[{"function":{"name":"run_command","arguments":{"command":"pwd"}}}]},"done":true,"prompt_eval_count":9,"eval_count":4})json");
+    const auto events = mapper.map(
+        R"json({"message":{"content":"answer","thinking":"plan","tool_calls":[{"function":{"name":"run_command","arguments":{"command":"pwd"}}}]},"done":true,"prompt_eval_count":9,"eval_count":4})json");
     QVERIFY(events.has_value());
     QCOMPARE(events->size(), std::size_t{7});
     QCOMPARE(events->at(0).type, AiStreamEventType::responseStarted);

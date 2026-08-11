@@ -5,10 +5,7 @@
 namespace ztermy::ai
 {
 
-NdjsonParser::NdjsonParser(const NdjsonParserLimits limits)
-    : m_limits(limits)
-{
-}
+NdjsonParser::NdjsonParser(const NdjsonParserLimits limits) : m_limits(limits) {}
 
 std::expected<std::vector<std::string>, StreamParseError> NdjsonParser::append(const std::string_view bytes)
 {

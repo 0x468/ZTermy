@@ -37,29 +37,26 @@ using Replacement = std::function<QString(const QRegularExpressionMatch &)>;
 {
     switch (kind)
     {
-    case AiSecretKind::privateKey:
-        return QStringLiteral("[REDACTED:PRIVATE_KEY]");
-    case AiSecretKind::authorizationHeader:
-        return QStringLiteral("[REDACTED:AUTHORIZATION]");
-    case AiSecretKind::uriCredential:
-        return QStringLiteral("[REDACTED:URI_CREDENTIAL]");
-    case AiSecretKind::apiKey:
-        return QStringLiteral("[REDACTED:API_KEY]");
-    case AiSecretKind::shellAssignment:
-        return QStringLiteral("[REDACTED:SHELL_SECRET]");
-    case AiSecretKind::userRule:
-        return QStringLiteral("[REDACTED:USER_RULE]");
-    case AiSecretKind::count:
-        break;
+        case AiSecretKind::privateKey:
+            return QStringLiteral("[REDACTED:PRIVATE_KEY]");
+        case AiSecretKind::authorizationHeader:
+            return QStringLiteral("[REDACTED:AUTHORIZATION]");
+        case AiSecretKind::uriCredential:
+            return QStringLiteral("[REDACTED:URI_CREDENTIAL]");
+        case AiSecretKind::apiKey:
+            return QStringLiteral("[REDACTED:API_KEY]");
+        case AiSecretKind::shellAssignment:
+            return QStringLiteral("[REDACTED:SHELL_SECRET]");
+        case AiSecretKind::userRule:
+            return QStringLiteral("[REDACTED:USER_RULE]");
+        case AiSecretKind::count:
+            break;
     }
     return QStringLiteral("[REDACTED]");
 }
 
-void replacePattern(QString &text,
-                    const QRegularExpression &expression,
-                    const AiSecretKind kind,
-                    AiRedactionResult &result,
-                    const Replacement &replacement)
+void replacePattern(QString &text, const QRegularExpression &expression, const AiSecretKind kind,
+                    AiRedactionResult &result, const Replacement &replacement)
 {
     auto iterator = expression.globalMatch(text);
     QString output;
@@ -86,9 +83,7 @@ void replacePattern(QString &text,
     result.counts[kindIndex(kind)] += matches;
 }
 
-void replaceLiteral(QString &text,
-                    const QString &literal,
-                    const Qt::CaseSensitivity sensitivity,
+void replaceLiteral(QString &text, const QString &literal, const Qt::CaseSensitivity sensitivity,
                     AiRedactionResult &result)
 {
     QString output;
@@ -112,8 +107,7 @@ void replaceLiteral(QString &text,
     result.counts[kindIndex(AiSecretKind::userRule)] += matches;
 }
 
-[[nodiscard]] QRegularExpression builtInExpression(const QString &pattern,
-                                                   const bool caseInsensitive = false)
+[[nodiscard]] QRegularExpression builtInExpression(const QString &pattern, const bool caseInsensitive = false)
 {
     QRegularExpression::PatternOptions options = QRegularExpression::UseUnicodePropertiesOption;
     if (caseInsensitive)
@@ -128,14 +122,14 @@ void applyBuiltInRules(QString &text, AiRedactionResult &result)
     static const auto privateKey = builtInExpression(
         QStringLiteral(R"((-----BEGIN ([A-Z0-9 ]*PRIVATE KEY)-----)[\s\S]{0,65535}?-----END \2-----)"));
     static const auto authorization = builtInExpression(
-        QStringLiteral(R"((Authorization[ \t]*:[ \t]*)(?:Bearer|Basic)[ \t]+[A-Za-z0-9._~+/=\-]{4,})"),
-        true);
-    static const auto uriCredential = builtInExpression(
-        QStringLiteral(R"(([A-Za-z][A-Za-z0-9+.-]*://)[^/\s:@]+:[^/\s@]+@)"));
-    static const auto apiKey = builtInExpression(
-        QStringLiteral(R"((?:sk-(?:proj-)?[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,}|xox[baprs]-[A-Za-z0-9-]{10,}))"));
+        QStringLiteral(R"((Authorization[ \t]*:[ \t]*)(?:Bearer|Basic)[ \t]+[A-Za-z0-9._~+/=\-]{4,})"), true);
+    static const auto uriCredential =
+        builtInExpression(QStringLiteral(R"(([A-Za-z][A-Za-z0-9+.-]*://)[^/\s:@]+:[^/\s@]+@)"));
+    static const auto apiKey = builtInExpression(QStringLiteral(
+        R"((?:sk-(?:proj-)?[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,}|xox[baprs]-[A-Za-z0-9-]{10,}))"));
     static const auto shellAssignment = builtInExpression(
-        QStringLiteral(R"(([A-Z_][A-Z0-9_]*(?:PASSWORD|PASSWD|TOKEN|SECRET|API_KEY|PRIVATE_KEY|ACCESS_KEY)[A-Z0-9_]*[ \t]*=[ \t]*)(?!\[REDACTED:)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s;\r\n]+))"),
+        QStringLiteral(
+            R"(([A-Z_][A-Z0-9_]*(?:PASSWORD|PASSWD|TOKEN|SECRET|API_KEY|PRIVATE_KEY|ACCESS_KEY)[A-Z0-9_]*[ \t]*=[ \t]*)(?!\[REDACTED:)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s;\r\n]+))"),
         true);
 
     replacePattern(text, privateKey, AiSecretKind::privateKey, result, [](const auto &) {
@@ -155,9 +149,7 @@ void applyBuiltInRules(QString &text, AiRedactionResult &result)
     });
 }
 
-void applyUserRules(QString &text,
-                    const std::span<const AiUserRedactionRule> rules,
-                    AiRedactionResult &result)
+void applyUserRules(QString &text, const std::span<const AiUserRedactionRule> rules, AiRedactionResult &result)
 {
     for (const auto &rule : rules)
     {
@@ -172,9 +164,7 @@ void applyUserRules(QString &text,
         }
         if (rule.type == AiRedactionRuleType::literal)
         {
-            replaceLiteral(text,
-                           fromUtf8(rule.pattern),
-                           rule.caseSensitive ? Qt::CaseSensitive : Qt::CaseInsensitive,
+            replaceLiteral(text, fromUtf8(rule.pattern), rule.caseSensitive ? Qt::CaseSensitive : Qt::CaseInsensitive,
                            result);
             continue;
         }
@@ -184,8 +174,7 @@ void applyUserRules(QString &text,
         {
             options |= QRegularExpression::CaseInsensitiveOption;
         }
-        const auto boundedPattern = QStringLiteral("(*LIMIT_MATCH=100000)(*LIMIT_DEPTH=1000)")
-                                    + fromUtf8(rule.pattern);
+        const auto boundedPattern = QStringLiteral("(*LIMIT_MATCH=100000)(*LIMIT_DEPTH=1000)") + fromUtf8(rule.pattern);
         const QRegularExpression expression(boundedPattern, options);
         if (!expression.isValid())
         {

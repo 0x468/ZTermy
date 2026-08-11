@@ -15,45 +15,43 @@ AiConversationModel::AiConversationModel(AiConversationLimits limits, QObject *p
 {
     m_limits.maxMessages = std::max<std::size_t>(2, m_limits.maxMessages);
     m_limits.maxMessageBytes = std::max<std::size_t>(1, m_limits.maxMessageBytes);
-    m_limits.maxConversationBytes =
-        std::max(m_limits.maxMessageBytes, m_limits.maxConversationBytes);
+    m_limits.maxConversationBytes = std::max(m_limits.maxMessageBytes, m_limits.maxConversationBytes);
 }
 
 int AiConversationModel::rowCount(const QModelIndex &parent) const
 {
-    return parent.isValid() ? 0 : static_cast<int>(std::min<std::size_t>(
-                                      m_messages.size(),
-                                      static_cast<std::size_t>(std::numeric_limits<int>::max())));
+    return parent.isValid() ? 0
+                            : static_cast<int>(std::min<std::size_t>(
+                                  m_messages.size(), static_cast<std::size_t>(std::numeric_limits<int>::max())));
 }
 
 QVariant AiConversationModel::data(const QModelIndex &index, const int role) const
 {
-    if (!index.isValid() || index.row() < 0
-        || static_cast<std::size_t>(index.row()) >= m_messages.size())
+    if (!index.isValid() || index.row() < 0 || static_cast<std::size_t>(index.row()) >= m_messages.size())
     {
         return {};
     }
     const auto &message = m_messages[static_cast<std::size_t>(index.row())];
     switch (role)
     {
-    case MessageIdRole:
-        return QVariant::fromValue<qulonglong>(message.id);
-    case MessageRole:
-        return roleToken(message.role);
-    case TextRole:
-        return message.text;
-    case StateRole:
-        return stateToken(message.state);
-    case ErrorRole:
-        return message.error;
-    case TruncatedRole:
-        return message.truncated;
-    case InputTokensRole:
-        return QVariant::fromValue<qulonglong>(message.usage.has_value() ? message.usage->inputTokens : 0);
-    case OutputTokensRole:
-        return QVariant::fromValue<qulonglong>(message.usage.has_value() ? message.usage->outputTokens : 0);
-    default:
-        return {};
+        case MessageIdRole:
+            return QVariant::fromValue<qulonglong>(message.id);
+        case MessageRole:
+            return roleToken(message.role);
+        case TextRole:
+            return message.text;
+        case StateRole:
+            return stateToken(message.state);
+        case ErrorRole:
+            return message.error;
+        case TruncatedRole:
+            return message.truncated;
+        case InputTokensRole:
+            return QVariant::fromValue<qulonglong>(message.usage.has_value() ? message.usage->inputTokens : 0);
+        case OutputTokensRole:
+            return QVariant::fromValue<qulonglong>(message.usage.has_value() ? message.usage->outputTokens : 0);
+        default:
+            return {};
     }
 }
 
@@ -89,8 +87,7 @@ std::vector<AiChatMessage> AiConversationModel::providerMessages() const
         {
             continue;
         }
-        messages.push_back(AiChatMessage{.role = message.role,
-                                         .content = message.text.toUtf8().toStdString()});
+        messages.push_back(AiChatMessage{.role = message.role, .content = message.text.toUtf8().toStdString()});
     }
     return messages;
 }
@@ -121,9 +118,7 @@ std::uint64_t AiConversationModel::beginAssistantMessage()
     const auto row = rowCount();
     beginInsertRows({}, row, row);
     const auto id = m_nextMessageId++;
-    m_messages.push_back(Message{.id = id,
-                                 .role = AiMessageRole::assistant,
-                                 .state = MessageState::streaming});
+    m_messages.push_back(Message{.id = id, .role = AiMessageRole::assistant, .state = MessageState::streaming});
     endInsertRows();
     emit countChanged();
     updateStreaming();
@@ -133,8 +128,8 @@ std::uint64_t AiConversationModel::beginAssistantMessage()
 bool AiConversationModel::appendAssistantDelta(const std::uint64_t messageId, QString delta)
 {
     auto *message = find(messageId);
-    if (message == nullptr || message->role != AiMessageRole::assistant
-        || message->state != MessageState::streaming || delta.isEmpty())
+    if (message == nullptr || message->role != AiMessageRole::assistant || message->state != MessageState::streaming
+        || delta.isEmpty())
     {
         return false;
     }
@@ -154,8 +149,7 @@ bool AiConversationModel::appendAssistantDelta(const std::uint64_t messageId, QS
     return addedBytes > 0 || truncated;
 }
 
-bool AiConversationModel::completeAssistantMessage(const std::uint64_t messageId,
-                                                   std::optional<AiTokenUsage> usage)
+bool AiConversationModel::completeAssistantMessage(const std::uint64_t messageId, std::optional<AiTokenUsage> usage)
 {
     auto *message = find(messageId);
     if (message == nullptr || message->state != MessageState::streaming)
@@ -205,14 +199,14 @@ QString AiConversationModel::roleToken(const AiMessageRole role)
 {
     switch (role)
     {
-    case AiMessageRole::system:
-        return QStringLiteral("system");
-    case AiMessageRole::user:
-        return QStringLiteral("user");
-    case AiMessageRole::assistant:
-        return QStringLiteral("assistant");
-    case AiMessageRole::tool:
-        return QStringLiteral("tool");
+        case AiMessageRole::system:
+            return QStringLiteral("system");
+        case AiMessageRole::user:
+            return QStringLiteral("user");
+        case AiMessageRole::assistant:
+            return QStringLiteral("assistant");
+        case AiMessageRole::tool:
+            return QStringLiteral("tool");
     }
     return QStringLiteral("system");
 }
@@ -221,19 +215,17 @@ QString AiConversationModel::stateToken(const MessageState state)
 {
     switch (state)
     {
-    case MessageState::complete:
-        return QStringLiteral("complete");
-    case MessageState::streaming:
-        return QStringLiteral("streaming");
-    case MessageState::failed:
-        return QStringLiteral("failed");
+        case MessageState::complete:
+            return QStringLiteral("complete");
+        case MessageState::streaming:
+            return QStringLiteral("streaming");
+        case MessageState::failed:
+            return QStringLiteral("failed");
     }
     return QStringLiteral("failed");
 }
 
-QString AiConversationModel::boundedUtf8(QString text,
-                                         const std::size_t maximumBytes,
-                                         bool &truncated)
+QString AiConversationModel::boundedUtf8(QString text, const std::size_t maximumBytes, bool &truncated)
 {
     auto utf8 = text.toUtf8();
     if (std::cmp_less_equal(utf8.size(), maximumBytes))
@@ -260,16 +252,14 @@ AiConversationModel::Message *AiConversationModel::find(const std::uint64_t mess
 int AiConversationModel::indexOf(const std::uint64_t messageId) const
 {
     const auto iterator = std::ranges::find(m_messages, messageId, &Message::id);
-    return iterator == m_messages.end()
-               ? -1
-               : static_cast<int>(std::distance(m_messages.begin(), iterator));
+    return iterator == m_messages.end() ? -1 : static_cast<int>(std::distance(m_messages.begin(), iterator));
 }
 
 void AiConversationModel::evictFor(const std::size_t incomingBytes)
 {
-    while (!m_messages.empty()
-           && (m_messages.size() >= m_limits.maxMessages
-               || m_totalBytes + incomingBytes > m_limits.maxConversationBytes))
+    while (
+        !m_messages.empty()
+        && (m_messages.size() >= m_limits.maxMessages || m_totalBytes + incomingBytes > m_limits.maxConversationBytes))
     {
         beginRemoveRows({}, 0, 0);
         m_totalBytes -= std::min(m_totalBytes, m_messages.front().bytes);

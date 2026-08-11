@@ -24,8 +24,7 @@ public:
     using RetryHandler = std::function<void(TurnId, std::uint32_t, std::uint64_t)>;
     using JitterSource = std::function<double()>;
 
-    explicit AiTurnRunner(ProviderHttpClient &client,
-                          AiProviderRetryPolicy retryPolicy = AiProviderRetryPolicy{},
+    explicit AiTurnRunner(ProviderHttpClient &client, AiProviderRetryPolicy retryPolicy = AiProviderRetryPolicy{},
                           QObject *parent = nullptr);
     ~AiTurnRunner() override;
 
@@ -33,12 +32,8 @@ public:
     AiTurnRunner &operator=(const AiTurnRunner &) = delete;
 
     [[nodiscard]] std::expected<TurnId, AiProviderError>
-    start(AiProviderConfiguration configuration,
-          AiGenerationRequest generation,
-          SecretLoader secretLoader,
-          EventHandler eventHandler,
-          FinishedHandler finishedHandler,
-          RetryHandler retryHandler = {},
+    start(AiProviderConfiguration configuration, AiGenerationRequest generation, SecretLoader secretLoader,
+          EventHandler eventHandler, FinishedHandler finishedHandler, RetryHandler retryHandler = {},
           JitterSource jitterSource = {});
     [[nodiscard]] bool cancel();
     [[nodiscard]] bool active() const noexcept;
