@@ -417,6 +417,8 @@ add_library(ztermy_terminal_engine STATIC
     src/domain/terminal/GhosttyTerminalEngine.h
     src/domain/terminal/TerminalEngine.h
     src/domain/terminal/TerminalOutputSink.h
+    src/domain/terminal/ShellIntegrationDecoder.cpp
+    src/domain/terminal/ShellIntegrationDecoder.h
 )
 
 add_library(ztermy_session_logging STATIC
@@ -2402,6 +2404,27 @@ if(BUILD_TESTING)
 
     add_test(NAME command-block-store COMMAND ztermy_command_block_store_tests)
 
+    qt_add_executable(ztermy_shell_integration_decoder_tests
+        tests/shell_integration_decoder_tests.cpp
+    )
+
+    target_compile_features(ztermy_shell_integration_decoder_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_shell_integration_decoder_tests PRIVATE
+        ztermy_terminal_engine
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_shell_integration_decoder_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME shell-integration-decoder COMMAND ztermy_shell_integration_decoder_tests)
+
     qt_add_executable(ztermy_local_terminal_session_tests
         tests/local_terminal_session_tests.cpp
     )
@@ -2701,6 +2724,7 @@ if(BUILD_TESTING)
             ztermy_workspace_state_store_tests
             ztermy_terminal_engine_tests
             ztermy_command_block_store_tests
+            ztermy_shell_integration_decoder_tests
             ztermy_local_terminal_session_tests
             ztermy_app_controller_tests
             ztermy_terminal_item_tests
