@@ -57,13 +57,18 @@ void AiTerminalFrameToolTests::evaluatesConditionsAndSerializesFrames()
         R"({"session_id":"s","session_generation":2,"after_revision":8,"condition":"idle","idle_ms":500,"timeout_ms":3000})");
     QVERIFY(changed.has_value() && AiTerminalFrameTool::satisfied(*changed, frame));
     QVERIFY(idle.has_value() && AiTerminalFrameTool::satisfied(*idle, frame));
+    const auto capability = ztermy::ai::AiTerminalCapabilityAdapter::describe(
+        "pwsh", ztermy::terminal::TerminalSemanticCapability::rich, true);
     const auto result =
-        QJsonDocument::fromJson(QByteArray::fromStdString(AiTerminalFrameTool::result(frame, "user"))).object();
+        QJsonDocument::fromJson(QByteArray::fromStdString(AiTerminalFrameTool::result(frame, "user", capability)))
+            .object();
     QVERIFY(result.value(QStringLiteral("ok")).toBool());
     const auto value = result.value(QStringLiteral("frame")).toObject();
     QVERIFY(value.value(QStringLiteral("alternate_screen")).toBool());
     QVERIFY(value.value(QStringLiteral("untrusted_evidence")).toBool());
     QCOMPARE(value.value(QStringLiteral("control_owner")).toString(), QStringLiteral("user"));
+    QCOMPARE(value.value(QStringLiteral("capability")).toObject().value(QStringLiteral("semantic_quality")).toString(),
+             QStringLiteral("rich_verified"));
     QCOMPARE(value.value(QStringLiteral("lines")).toArray().size(), 1);
 }
 } // namespace

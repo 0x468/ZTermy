@@ -453,6 +453,8 @@ add_library(ztermy_ai_context STATIC
     src/domain/ai/AiCommandTracker.h
     src/domain/ai/AiReadTools.cpp
     src/domain/ai/AiReadTools.h
+    src/domain/ai/AiTerminalCapabilityAdapter.cpp
+    src/domain/ai/AiTerminalCapabilityAdapter.h
     src/domain/ai/AiTerminalFrameTracker.cpp
     src/domain/ai/AiTerminalFrameTracker.h
     src/domain/ai/AiContextBroker.cpp
@@ -2819,6 +2821,27 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME ai-terminal-frame-tracker COMMAND ztermy_ai_terminal_frame_tracker_tests)
+
+    qt_add_executable(ztermy_ai_terminal_capability_adapter_tests
+        tests/ai_terminal_capability_adapter_tests.cpp
+    )
+
+    target_compile_features(ztermy_ai_terminal_capability_adapter_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ai_terminal_capability_adapter_tests PRIVATE
+        ztermy_ai_context
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ai_terminal_capability_adapter_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ai-terminal-capability-adapter COMMAND ztermy_ai_terminal_capability_adapter_tests)
 
     qt_add_executable(ztermy_ai_terminal_frame_tool_tests
         tests/ai_terminal_frame_tool_tests.cpp

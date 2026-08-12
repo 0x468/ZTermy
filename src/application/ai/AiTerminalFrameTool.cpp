@@ -84,7 +84,8 @@ struct Common final
         .revision = *revision};
 }
 
-[[nodiscard]] QJsonObject frameValue(const AiTerminalFrameDelta &frame, const std::string_view controlOwner)
+[[nodiscard]] QJsonObject frameValue(const AiTerminalFrameDelta &frame, const std::string_view controlOwner,
+                                     const AiTerminalInteractionCapability &capability)
 {
     QJsonArray lines;
     for (const auto &line : frame.lines)
@@ -105,6 +106,14 @@ struct Common final
             {QStringLiteral("full"), frame.full},
             {QStringLiteral("cursor_expired"), frame.cursorExpired},
             {QStringLiteral("control_owner"), QString::fromUtf8(controlOwner)},
+            {QStringLiteral("capability"),
+             QJsonObject{{QStringLiteral("shell_family"), QString::fromUtf8(capability.shellFamily)},
+                         {QStringLiteral("semantic_quality"), QString::fromUtf8(capability.semanticQuality)},
+                         {QStringLiteral("observation_mode"), QString::fromUtf8(capability.observationMode)},
+                         {QStringLiteral("degraded_reason"), QString::fromUtf8(capability.degradedReason)},
+                         {QStringLiteral("exact_command_boundaries"), capability.exactCommandBoundaries},
+                         {QStringLiteral("reliable_exit_status"), capability.reliableExitStatus},
+                         {QStringLiteral("frame_deltas"), capability.frameDeltas}}},
             {QStringLiteral("lines"), lines},
             {QStringLiteral("untrusted_evidence"), true}};
 }
@@ -182,19 +191,22 @@ bool AiTerminalFrameTool::satisfied(const AiTerminalFrameWaitRequest &request,
                      && frame.idleMilliseconds >= static_cast<std::int64_t>(request.idleMilliseconds);
 }
 
-std::string AiTerminalFrameTool::result(const AiTerminalFrameDelta &frame, const std::string_view controlOwner)
+std::string AiTerminalFrameTool::result(const AiTerminalFrameDelta &frame, const std::string_view controlOwner,
+                                        const AiTerminalInteractionCapability &capability)
 {
-    return json(QJsonObject{{QStringLiteral("ok"), true}, {QStringLiteral("frame"), frameValue(frame, controlOwner)}});
+    return json(QJsonObject{{QStringLiteral("ok"), true},
+                            {QStringLiteral("frame"), frameValue(frame, controlOwner, capability)}});
 }
 
-std::string AiTerminalFrameTool::timeout(const AiTerminalFrameDelta &frame, const std::string_view controlOwner)
+std::string AiTerminalFrameTool::timeout(const AiTerminalFrameDelta &frame, const std::string_view controlOwner,
+                                         const AiTerminalInteractionCapability &capability)
 {
     return json(
         QJsonObject{{QStringLiteral("ok"), false},
                     {QStringLiteral("error"),
                      QJsonObject{{QStringLiteral("code"), QStringLiteral("timeout")},
                                  {QStringLiteral("message"), QStringLiteral("The terminal-frame wait timed out.")}}},
-                    {QStringLiteral("frame"), frameValue(frame, controlOwner)}});
+                    {QStringLiteral("frame"), frameValue(frame, controlOwner, capability)}});
 }
 
 std::string AiTerminalFrameTool::failure(const std::string_view code, const std::string_view message)

@@ -8367,13 +8367,13 @@ AppController::handleAiTerminalFrameTool(TerminalTab &owner, const QString &owne
     }
     const ai::AiSessionTarget requestTarget = waiting ? waitRequest->target : readRequest->target;
     const std::uint64_t afterRevision = waiting ? waitRequest->afterRevision : readRequest->afterRevision;
-    const bool allowed = std::ranges::any_of(allowedTargets, [&requestTarget](const auto &candidate) {
+    const auto allowedTarget = std::ranges::find_if(allowedTargets, [&requestTarget](const auto &candidate) {
         return candidate.sessionId == requestTarget.sessionId
                && candidate.sessionGeneration == requestTarget.sessionGeneration;
     });
     TerminalTab *session = findTab(utf8QString(requestTarget.sessionId));
-    if (!allowed || session == nullptr || session->reconnectGeneration != requestTarget.sessionGeneration
-        || !session->aiFrameTracker)
+    if (allowedTarget == allowedTargets.end() || session == nullptr
+        || session->reconnectGeneration != requestTarget.sessionGeneration || !session->aiFrameTracker)
     {
         return {.output = ai::AiToolOutput{
                     .callId = call.id,
@@ -8403,23 +8403,28 @@ AppController::handleAiTerminalFrameTool(TerminalTab &owner, const QString &owne
                                           : m_aiActionToolDispatcher.agentHasControl(requestTarget, conversationId)
                                               ? std::string_view{"current_agent"}
                                               : std::string_view{"unclaimed_or_other_agent"};
+    const auto capability = ai::AiTerminalCapabilityAdapter::describe(allowedTarget->shell, allowedTarget->capability,
+                                                                      initial.alternateScreen);
     if (!waiting)
     {
-        return {.output = ai::AiToolOutput{.callId = call.id,
-                                           .name = call.name,
-                                           .outputJson = ai::AiTerminalFrameTool::result(initial, controlOwner)}};
+        return {.output =
+                    ai::AiToolOutput{.callId = call.id,
+                                     .name = call.name,
+                                     .outputJson = ai::AiTerminalFrameTool::result(initial, controlOwner, capability)}};
     }
     if (ai::AiTerminalFrameTool::satisfied(*waitRequest, initial))
     {
-        return {.output = ai::AiToolOutput{.callId = call.id,
-                                           .name = call.name,
-                                           .outputJson = ai::AiTerminalFrameTool::result(initial, controlOwner)}};
+        return {.output =
+                    ai::AiToolOutput{.callId = call.id,
+                                     .name = call.name,
+                                     .outputJson = ai::AiTerminalFrameTool::result(initial, controlOwner, capability)}};
     }
     if (waitRequest->timeoutMilliseconds == 0)
     {
         return {.output = ai::AiToolOutput{.callId = call.id,
                                            .name = call.name,
-                                           .outputJson = ai::AiTerminalFrameTool::timeout(initial, controlOwner)}};
+                                           .outputJson =
+                                               ai::AiTerminalFrameTool::timeout(initial, controlOwner, capability)}};
     }
 
     auto *timer = new QTimer(this);
@@ -8429,69 +8434,77 @@ AppController::handleAiTerminalFrameTool(TerminalTab &owner, const QString &owne
     const QPointer<QTimer> timerGuard(timer);
     const auto callGuard = std::make_shared<const ai::AiToolCall>(call);
     const auto requestGuard = std::make_shared<const ai::AiTerminalFrameWaitRequest>(*waitRequest);
-    QObject::connect(timer, &QTimer::timeout, this, [this, timerGuard, callGuard, requestGuard, ownerTabId] noexcept {
-        try
-        {
-            if (!timerGuard)
+    const std::string shell = allowedTarget->shell;
+    const auto semanticCapability = allowedTarget->capability;
+    QObject::connect(
+        timer, &QTimer::timeout, this,
+        [this, timerGuard, callGuard, requestGuard, ownerTabId, shell, semanticCapability] noexcept {
+            try
             {
-                return;
-            }
-            TerminalTab *owner = findTab(ownerTabId);
-            TerminalTab *session = findTab(utf8QString(requestGuard->target.sessionId));
-            if (owner == nullptr || !owner->aiTurnRunner)
-            {
+                if (!timerGuard)
+                {
+                    return;
+                }
+                TerminalTab *owner = findTab(ownerTabId);
+                TerminalTab *session = findTab(utf8QString(requestGuard->target.sessionId));
+                if (owner == nullptr || !owner->aiTurnRunner)
+                {
+                    timerGuard->stop();
+                    timerGuard->deleteLater();
+                    return;
+                }
+                if (session == nullptr || session->reconnectGeneration != requestGuard->target.sessionGeneration
+                    || !session->aiFrameTracker)
+                {
+                    timerGuard->stop();
+                    timerGuard->deleteLater();
+                    const auto output = ai::AiTerminalFrameTool::failure(
+                        "scope_changed", "The terminal session changed while waiting for its frame.");
+                    recordAiActivity(*owner, *callGuard, QStringLiteral("failed"), QStringLiteral("scope_changed"),
+                                     false);
+                    static_cast<void>(owner->aiTurnRunner->completePendingTool(
+                        ai::AiToolOutput{.callId = callGuard->id, .name = callGuard->name, .outputJson = output}));
+                    return;
+                }
+                const ai::AiTerminalFrameDelta frame = session->aiFrameTracker->snapshot(requestGuard->afterRevision);
+                const std::string conversationId = utf8String(owner->aiConversationId);
+                const std::string_view controlOwner =
+                    m_aiActionToolDispatcher.userHasControl(requestGuard->target, conversationId)
+                        ? std::string_view{"user"}
+                    : m_aiActionToolDispatcher.agentHasControl(requestGuard->target, conversationId)
+                        ? std::string_view{"current_agent"}
+                        : std::string_view{"unclaimed_or_other_agent"};
+                const auto capability =
+                    ai::AiTerminalCapabilityAdapter::describe(shell, semanticCapability, frame.alternateScreen);
+                const qint64 remaining = std::max<qint64>(0, timerGuard->property("ztermyAiRemainingMs").toLongLong()
+                                                                 - timerGuard->interval());
+                timerGuard->setProperty("ztermyAiRemainingMs", remaining);
+                if (!ai::AiTerminalFrameTool::satisfied(*requestGuard, frame) && remaining > 0)
+                {
+                    return;
+                }
                 timerGuard->stop();
                 timerGuard->deleteLater();
-                return;
-            }
-            if (session == nullptr || session->reconnectGeneration != requestGuard->target.sessionGeneration
-                || !session->aiFrameTracker)
-            {
-                timerGuard->stop();
-                timerGuard->deleteLater();
-                const auto output = ai::AiTerminalFrameTool::failure(
-                    "scope_changed", "The terminal session changed while waiting for its frame.");
-                recordAiActivity(*owner, *callGuard, QStringLiteral("failed"), QStringLiteral("scope_changed"), false);
+                const auto output = ai::AiTerminalFrameTool::satisfied(*requestGuard, frame)
+                                        ? ai::AiTerminalFrameTool::result(frame, controlOwner, capability)
+                                        : ai::AiTerminalFrameTool::timeout(frame, controlOwner, capability);
+                const QString code = aiActivityResultCode(output);
+                recordAiActivity(*owner, *callGuard,
+                                 code == QStringLiteral("ok") ? QStringLiteral("succeeded") : QStringLiteral("failed"),
+                                 code, false);
                 static_cast<void>(owner->aiTurnRunner->completePendingTool(
                     ai::AiToolOutput{.callId = callGuard->id, .name = callGuard->name, .outputJson = output}));
-                return;
             }
-            const ai::AiTerminalFrameDelta frame = session->aiFrameTracker->snapshot(requestGuard->afterRevision);
-            const std::string conversationId = utf8String(owner->aiConversationId);
-            const std::string_view controlOwner =
-                m_aiActionToolDispatcher.userHasControl(requestGuard->target, conversationId) ? std::string_view{"user"}
-                : m_aiActionToolDispatcher.agentHasControl(requestGuard->target, conversationId)
-                    ? std::string_view{"current_agent"}
-                    : std::string_view{"unclaimed_or_other_agent"};
-            const qint64 remaining =
-                std::max<qint64>(0, timerGuard->property("ztermyAiRemainingMs").toLongLong() - timerGuard->interval());
-            timerGuard->setProperty("ztermyAiRemainingMs", remaining);
-            if (!ai::AiTerminalFrameTool::satisfied(*requestGuard, frame) && remaining > 0)
+            catch (...)
             {
-                return;
+                if (timerGuard)
+                {
+                    timerGuard->stop();
+                    timerGuard->deleteLater();
+                }
+                qCCritical(appControllerLog) << "AI terminal-frame wait suppressed an exception";
             }
-            timerGuard->stop();
-            timerGuard->deleteLater();
-            const auto output = ai::AiTerminalFrameTool::satisfied(*requestGuard, frame)
-                                    ? ai::AiTerminalFrameTool::result(frame, controlOwner)
-                                    : ai::AiTerminalFrameTool::timeout(frame, controlOwner);
-            const QString code = aiActivityResultCode(output);
-            recordAiActivity(*owner, *callGuard,
-                             code == QStringLiteral("ok") ? QStringLiteral("succeeded") : QStringLiteral("failed"),
-                             code, false);
-            static_cast<void>(owner->aiTurnRunner->completePendingTool(
-                ai::AiToolOutput{.callId = callGuard->id, .name = callGuard->name, .outputJson = output}));
-        }
-        catch (...)
-        {
-            if (timerGuard)
-            {
-                timerGuard->stop();
-                timerGuard->deleteLater();
-            }
-            qCCritical(appControllerLog) << "AI terminal-frame wait suppressed an exception";
-        }
-    });
+        });
     timer->start();
     return {.cancel = [timerGuard] {
         if (timerGuard)

@@ -2,6 +2,7 @@
 
 #include "domain/ai/AiCommandTracker.h"
 #include "domain/ai/AiProviderTypes.h"
+#include "domain/ai/AiTerminalCapabilityAdapter.h"
 #include "domain/ai/AiTerminalFrameTracker.h"
 
 #include <cstdint>
@@ -44,10 +45,10 @@ public:
     parseWait(std::string_view argumentsJson);
     [[nodiscard]] static bool satisfied(const AiTerminalFrameWaitRequest &request,
                                         const AiTerminalFrameDelta &frame) noexcept;
-    [[nodiscard]] static std::string result(const AiTerminalFrameDelta &frame,
-                                            std::string_view controlOwner = "unclaimed");
-    [[nodiscard]] static std::string timeout(const AiTerminalFrameDelta &frame,
-                                             std::string_view controlOwner = "unclaimed");
+    [[nodiscard]] static std::string result(const AiTerminalFrameDelta &frame, std::string_view controlOwner,
+                                            const AiTerminalInteractionCapability &capability);
+    [[nodiscard]] static std::string timeout(const AiTerminalFrameDelta &frame, std::string_view controlOwner,
+                                             const AiTerminalInteractionCapability &capability);
     [[nodiscard]] static std::string failure(std::string_view code, std::string_view message);
 };
 
