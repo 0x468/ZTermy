@@ -3479,6 +3479,29 @@ if(BUILD_TESTING)
         ENVIRONMENT "QTEST_FUNCTION_TIMEOUT=3600000"
     )
 
+    qt_add_executable(ztermy_ai_agent_scenario_tests
+        tests/ai_agent_scenario_tests.cpp
+    )
+
+    target_compile_features(ztermy_ai_agent_scenario_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ai_agent_scenario_tests PRIVATE
+        ztermy_ai_application
+        ztermy_terminal_session
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ai_agent_scenario_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ai-agent-scenario COMMAND ztermy_ai_agent_scenario_tests)
+    set_tests_properties(ai-agent-scenario PROPERTIES TIMEOUT 60)
+
     set(ZTERMY_TERMINAL_SOAK_SECONDS "1800" CACHE STRING
         "Duration of the local terminal stability soak")
     add_custom_target(ztermy_terminal_stability_soak
@@ -3826,6 +3849,7 @@ if(BUILD_TESTING)
             ztermy_ai_context_redactor_tests
             ztermy_ai_context_serializer_tests
             ztermy_local_terminal_session_tests
+            ztermy_ai_agent_scenario_tests
             ztermy_app_controller_tests
             ztermy_windows_protected_clipboard_tests
             ztermy_terminal_item_tests

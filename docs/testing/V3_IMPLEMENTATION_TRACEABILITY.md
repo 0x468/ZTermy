@@ -1,9 +1,9 @@
 # V3 implementation traceability
 
-Status: `0.3.0`-`0.3.4` implementation audit complete; post-RC agent UX
-hardening in progress and owner/environment release acceptance tracked separately
+Status: `0.3.0`-`0.3.8` implementation audit in progress; owner/environment
+release acceptance tracked separately
 
-Date: 2026-08-12
+Date: 2026-08-13
 
 ## Purpose
 
@@ -13,7 +13,8 @@ traceability aid, not a substitute for executed test output or the manual
 matrix. The authoritative execution record remains
 `V3_0_3_0_RC_ACCEPTANCE.md`.
 
-The static Release configuration registers 102 tests. The rows below name the
+The test count is recorded by the final rebuilt candidate rather than frozen in
+this living matrix. The rows below name the
 focused contracts that prove each V3 boundary; inherited terminal, SSH, SFTP,
 credential, persistence, packaging, and real-window tests remain required in
 addition.
@@ -83,17 +84,38 @@ covered by `application-settings`, `ai-permission-policy`,
 | Rule overrides across terminal, PTY, interrupt, runbook, and SFTP actions | `src/application/ai/AiActionToolDispatcher.*` | `ai-action-tool-dispatcher` | ADR 0080 |
 | Compact approval-card scope/matcher editor and Settings view/edit/toggle/revoke manager | `src/ui/qml/AiAssistantPane.qml`, `src/ui/qml/SettingsPane.qml` | QML compilation, translation gate, real-window smoke | ADR 0078, 0080 |
 
+## 0.3.7 — reasoning and conversation presentation
+
+| Approved boundary | Representative implementation | Focused CTest contracts | Decisions |
+| --- | --- | --- | --- |
+| Provider-exposed reasoning controls and retained summaries without claiming hidden chain-of-thought | `src/infrastructure/ai/ProviderRequestFactory.*`, `ProviderStreamMapper.*`; `src/application/ai/AiConversationModel.*` | `provider-request-factory`, `provider-stream-mapper`, `ai-conversation-model` | ADR 0081 |
+| Rich Markdown rendering, raw source copy, native tool cards, responsive cancel/retry | `src/ui/qml/AiAssistantPane.qml`, `src/application/AppController.*` | `qml-native-window-smoke`, `app-controller`, `ai-turn-runner` | ADR 0078, 0081 |
+
+## 0.3.8 — autonomous Agent closure
+
+| Approved boundary | Representative implementation | Focused CTest contracts | Decisions |
+| --- | --- | --- | --- |
+| Mode-to-terminal end-to-end execution through real ConPTY/PowerShell, semantic command blocks, retained result, replay, long-command user input, and interactive PTY response | `tests/ai_agent_scenario_tests.cpp` plus the production dispatcher/session/observer/tracker path | `ai-agent-scenario` | ADR 0083 |
+| Edit/Auto/YOLO consistency for terminal, runbook, SFTP, and reviewed MCP tools | `src/application/ai/AiActionToolDispatcher.*`, `src/application/AppController.*` | `ai-action-tool-dispatcher`, `app-controller`, `mcp-runtime-manager` | ADR 0080, 0082 |
+| Expanded mixed Agent/MCP duration set rejects stale reports that predate the end-to-end scenario | `scripts/run_ai_concurrency_soak.ps1`, `scripts/verify_v3_release_candidate.ps1` | dynamic Debug and static Release schema-2 developer runs plus formal duration report before final RC | ADR 0076, 0083 |
+
 ## Evidence classification
 
-- **Implementation complete:** every approved `0.3.0`–`0.3.6` boundary above
+- **Implementation coverage:** every approved `0.3.0`–`0.3.8` boundary above
   has production code and at least one focused executable or real-window
   contract.
 - **Automated candidate evidence:** the exact builds, test totals, static
   analysis, real-window gates, real-host key-only runs, and package hashes are
   recorded in `V3_0_3_0_RC_ACCEPTANCE.md`.
-- **Duration evidence:** remains unclaimed until the default invocation of
-  `verify_v3_release_candidate.ps1` accepts the two-hour and eight-hour JSON
-  reports together with the final rebuilt release bundle.
+- **Duration evidence:** the earlier two-hour report covers the pre-`0.3.8`
+  set. ADR 0083 expands and versions that set, so final V3 acceptance requires
+  a fresh two-hour report plus the retained eight-hour terminal report and
+  final rebuilt release bundle.
+- **Current developer evidence:** dynamic Debug and static Release each pass
+  104/104 tests; the end-to-end scenario also passes 20 consecutive focused
+  runs. Schema-2 mixed Agent/MCP developer soaks completed one iteration in
+  each configuration with zero failures. These short runs prove the new report
+  contract but do not replace the formal two-hour duration gate.
 - **Owner/environment evidence:** live-provider quality, manual AI UX, password
   authentication, MSI interaction, and the previous supported Windows 11 build
   remain explicitly unchecked. They cannot be inferred from the focused tests

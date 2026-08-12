@@ -1,7 +1,7 @@
 # V3 0.3.0 release-candidate acceptance
 
-Status: automated candidate complete; owner and environment-dependent checks
-pending
+Status: historical pre-`0.3.8` automated candidate; superseded by Agent
+hardening and awaiting a rebuilt final candidate
 
 Date: 2026-08-12
 
@@ -13,6 +13,12 @@ Identity:
 - supported release platform: Windows 11 x64;
 - candidate package source: `05eb0a4`; the final application reliability change
   is `7339b20`.
+
+This document preserves the evidence for that exact package. Commits after the
+recorded source add the mainstream Agent conversation, mode/rule, Markdown,
+reasoning, and deterministic end-to-end scenario slices. Their final candidate
+must refresh the build/test totals, the expanded schema-2 AI/MCP duration
+report, package hashes, and owner matrix rather than inheriting this sign-off.
 
 ## Environment
 
@@ -206,7 +212,10 @@ Expected:
 Follow the four MCP checks in `V3_AI_ACCEPTANCE.md` using the absolute local
 `ztermy_mcp_test_server.exe` path from the same build. Observe trust must not
 expose tools; execute trust plus exact schema approval exposes only that digest;
-every call still asks, and schema drift or revoke removes it immediately.
+   calls follow the active Read-only/Ask/Edit/Auto/YOLO mode and reusable rules,
+   and schema drift or revoke removes the tool immediately. Ask/Edit expose the
+   exact approval card; Auto/YOLO dispatch without an accidental per-call
+   prompt unless an explicit ask rule matches.
 
 ### 7. MSI and portable interaction
 

@@ -14,6 +14,8 @@ if ([string]::IsNullOrWhiteSpace($ReportPath)) {
 
 $tests = @(
     "ai-turn-runner",
+    "ai-agent-scenario",
+    "ai-action-tool-dispatcher",
     "ai-agent-guard",
     "ai-tool-dispatch-ledger",
     "ai-read-tool-dispatcher",
@@ -41,7 +43,7 @@ while ($stopwatch.Elapsed.TotalSeconds -lt $DurationSeconds -or $iterations -eq 
 $stopwatch.Stop()
 
 $report = [ordered]@{
-    schemaVersion = 1
+    schemaVersion = 2
     startedAtUtc = $started.ToString("O")
     completedAtUtc = [DateTimeOffset]::UtcNow.ToString("O")
     requestedDurationSeconds = $DurationSeconds
@@ -63,4 +65,3 @@ if ($failures -ne 0) {
 }
 Write-Host "AI concurrency soak passed: $iterations iteration(s), $([Math]::Round($stopwatch.Elapsed.TotalSeconds, 1)) second(s)."
 Write-Host "Report: $ReportPath"
-

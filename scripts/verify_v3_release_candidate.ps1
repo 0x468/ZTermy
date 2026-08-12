@@ -51,10 +51,11 @@ function Assert-SoakReport {
         [Parameter(Mandatory = $true)]
         [string]$Description,
         [Parameter(Mandatory = $true)]
-        [int]$MinimumDurationSeconds
+        [int]$MinimumDurationSeconds,
+        [int]$ExpectedSchemaVersion = 1
     )
 
-    if ($Report.schemaVersion -ne 1) {
+    if ($Report.schemaVersion -ne $ExpectedSchemaVersion) {
         throw "$Description has unsupported schemaVersion '$($Report.schemaVersion)'."
     }
     if ($Report.failures -ne 0) {
@@ -140,7 +141,7 @@ if (($writtenChecksumLines -join "`n") -ne ($checksumLines -join "`n")) {
 }
 
 $aiReport = Read-JsonObject -Path $AiSoakReportPath -Description "AI concurrency soak report"
-Assert-SoakReport -Report $aiReport -Description "AI concurrency soak report" -MinimumDurationSeconds $MinimumAiSoakSeconds
+Assert-SoakReport -Report $aiReport -Description "AI concurrency soak report" -MinimumDurationSeconds $MinimumAiSoakSeconds -ExpectedSchemaVersion 2
 if ([System.IO.Path]::GetFullPath([string]$aiReport.buildDirectory) -ne $resolvedBuild) {
     throw "AI concurrency soak report belongs to another build directory."
 }
@@ -149,6 +150,8 @@ if ($aiReport.iterations -lt 1) {
 }
 $expectedAiTests = @(
     "ai-turn-runner",
+    "ai-agent-scenario",
+    "ai-action-tool-dispatcher",
     "ai-agent-guard",
     "ai-tool-dispatch-ledger",
     "ai-read-tool-dispatcher",

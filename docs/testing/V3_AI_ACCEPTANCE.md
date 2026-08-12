@@ -129,7 +129,13 @@ evaluations serve different purposes and are reported separately.
     authority. Store, registry, protocol, process, runtime-manager, permission,
     and AppController tests cover backup recovery, drift, disable/revoke,
     duplicate dispatch, cancellation, modes, rules, and application
-    configuration.
+      configuration.
+- [x] A deterministic provider-independent Agent scenario crosses all five
+      modes into real local ConPTY/PowerShell execution, semantic command
+      completion, retained `wait_command` output, cached replay, user input
+      queued during a long command, and interactive `write_to_pty`. A
+      saved-SSH-Profile mutation matrix covers mode behavior without being
+      mislabeled as real-host shell evidence (`ADR 0083`).
 - [x] Evaluation replay works with recorded synthetic/provider-independent tool
       traces and separately reports live-provider results.
   - Implemented: the versioned 12-case corpus and deterministic replay harness
@@ -150,7 +156,7 @@ evaluations serve different purposes and are reported separately.
       layout captures without depending on Windows foreground activation (`ADR
       0078`).
 
-### Automated release-candidate execution — 2026-08-12 through 2026-08-13
+### Historical pre-0.3.8 release-candidate execution — 2026-08-12 through 2026-08-13
 
 The detailed handoff is `V3_0_3_0_RC_ACCEPTANCE.md`. The candidate was exercised
 on Windows 11 Pro build 26200, x64, with Qt 6.8.3 static, MSVC 2022 17.14.15,
@@ -233,6 +239,19 @@ failures, satisfying the two-hour mixed AI/MCP concurrency requirement. The
 formal AI-idle terminal run completed 28800.1 seconds with zero failures,
 satisfying the eight-hour terminal requirement. Both content-free reports pass
 the unified release-candidate verifier.
+
+### 0.3.8 Agent closure developer evidence — 2026-08-13
+
+- dynamic Debug and static Release each pass 104/104 tests;
+- `ai-agent-scenario` passes 20 consecutive focused runs and exercises all five
+  permission modes, real local ConPTY/PowerShell, semantic command completion,
+  replay, user input during a long command, interactive PTY input, and the
+  saved-SSH-Profile mutation matrix;
+- schema-2 mixed Agent/MCP developer soaks completed one iteration in both
+  configurations with zero failures;
+- the final candidate still requires a fresh schema-2 two-hour duration report,
+  refreshed packages and hashes, and the owner/environment matrix. The earlier
+  eight-hour AI-idle terminal report remains applicable.
 
 ## Evaluation corpus
 

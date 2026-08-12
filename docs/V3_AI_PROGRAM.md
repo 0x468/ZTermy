@@ -235,6 +235,12 @@ becomes conversation retention.
 
 Current closure work:
 
+- a deterministic provider-independent Agent scenario now crosses mode
+  evaluation, approval/automatic execution, real ConPTY/PowerShell, semantic
+  command blocks, retained `wait_command` output, at-most-once replay, user
+  input during a long command, and interactive PTY input (`ADR 0083`);
+- the saved-SSH-Profile mutation matrix is covered without pretending that it
+  replaces the separate real-host transport and shell-capability acceptance;
 - reviewed MCP tools now obey Read-only/Ask/Edit/Auto/YOLO and reusable
   `mcp-tool` rules instead of forcing a confirmation in every mode; executable
   trust and exact-schema review remain prerequisites (`ADR 0082`);
