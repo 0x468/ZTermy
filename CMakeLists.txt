@@ -511,6 +511,8 @@ add_library(ztermy_ai_application STATIC
     src/application/ai/AiReadToolDispatcher.h
     src/application/ai/AiSftpReadTool.cpp
     src/application/ai/AiSftpReadTool.h
+    src/application/ai/AiSftpListTool.cpp
+    src/application/ai/AiSftpListTool.h
     src/application/ai/AiTurnRunner.cpp
     src/application/ai/AiTurnRunner.h
     src/application/ai/AiWaitCommandTool.cpp
@@ -2894,6 +2896,18 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME ai-sftp-read-tool COMMAND ztermy_ai_sftp_read_tool_tests)
 
+    qt_add_executable(ztermy_ai_sftp_list_tool_tests
+        tests/ai_sftp_list_tool_tests.cpp
+    )
+    target_compile_features(ztermy_ai_sftp_list_tool_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ai_sftp_list_tool_tests PRIVATE ztermy_ai_application Qt6::Test)
+    if(MSVC)
+        target_compile_options(ztermy_ai_sftp_list_tool_tests PRIVATE
+            /W4 /WX /permissive- /utf-8 /Zc:__cplusplus
+        )
+    endif()
+    add_test(NAME ai-sftp-list-tool COMMAND ztermy_ai_sftp_list_tool_tests)
+
     qt_add_executable(ztermy_ai_note_read_tool_tests
         tests/ai_note_read_tool_tests.cpp
     )
@@ -3441,6 +3455,7 @@ if(BUILD_TESTING)
             ztermy_ai_action_tool_dispatcher_tests
             ztermy_ai_wait_command_tool_tests
             ztermy_ai_sftp_read_tool_tests
+            ztermy_ai_sftp_list_tool_tests
             ztermy_ai_note_read_tool_tests
             ztermy_ai_turn_runner_tests
             ztermy_ai_conversation_store_tests

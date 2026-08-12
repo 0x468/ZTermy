@@ -8,6 +8,7 @@
 #include "application/ai/AiNoteReadTool.h"
 #include "application/ai/AiReadToolDispatcher.h"
 #include "application/ai/AiSecretStore.h"
+#include "application/ai/AiSftpListTool.h"
 #include "application/ai/AiSftpReadTool.h"
 #include "application/ai/AiTurnRunner.h"
 #include "application/forwarding/PortForwardingJob.h"
@@ -560,6 +561,13 @@ private:
             ai::AiSftpReadRequest request;
         };
 
+        struct PendingAiSftpList final
+        {
+            quint64 requestId = 0;
+            ai::AiToolCall call;
+            ai::AiSftpListRequest request;
+        };
+
         struct PendingAiNoteRead final
         {
             quint64 requestId = 0;
@@ -576,6 +584,7 @@ private:
         std::unique_ptr<ai::AiAgentTurnBudget> aiTurnBudget;
         std::optional<ai::AiTerminalAction> pendingAiAction;
         std::optional<PendingAiSftpRead> pendingAiSftpRead;
+        std::optional<PendingAiSftpList> pendingAiSftpList;
         std::optional<PendingAiNoteRead> pendingAiNoteRead;
         qint64 connectedUtcMs = 0;
         qreal sessionBackgroundOpacity = -1.0;
@@ -585,6 +594,7 @@ private:
         std::uint64_t historyRequestId = 0;
         std::uint64_t sftpRequestId = 0;
         std::uint64_t aiSftpReadRequestId = 0;
+        std::uint64_t aiSftpListRequestId = 0;
         std::uint64_t aiNoteReadRequestId = 0;
         std::uint64_t sftpGeneration = 0;
         std::uint64_t sftpTreeRequestId = 0;
