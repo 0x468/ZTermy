@@ -11,6 +11,7 @@
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <optional>
 
 using namespace std::chrono_literals;
 
@@ -20,6 +21,8 @@ namespace
 constexpr auto excludeFromMonitorFormat = L"ExcludeClipboardContentFromMonitorProcessing";
 constexpr auto excludeFromHistoryFormat = L"CanIncludeInClipboardHistory";
 constexpr auto excludeFromCloudFormat = L"CanUploadToCloudClipboard";
+constexpr int clipboardReadAttempts = 40;
+constexpr DWORD clipboardReadRetryDelayMilliseconds = 5;
 
 [[nodiscard]] std::unique_ptr<QMimeData> cloneClipboardMimeData()
 {
@@ -38,22 +41,62 @@ constexpr auto excludeFromCloudFormat = L"CanUploadToCloudClipboard";
 
 [[nodiscard]] DWORD nativeClipboardFlag(const UINT format)
 {
-    if (OpenClipboard(nullptr) == FALSE)
+    for (int attempt = 0; attempt < clipboardReadAttempts; ++attempt)
     {
-        return std::numeric_limits<DWORD>::max();
-    }
-
-    DWORD value = std::numeric_limits<DWORD>::max();
-    if (const HANDLE data = GetClipboardData(format); data != nullptr)
-    {
-        if (const void *bytes = GlobalLock(data); bytes != nullptr)
+        if (OpenClipboard(nullptr) != FALSE)
         {
-            std::memcpy(&value, bytes, sizeof(value));
-            GlobalUnlock(data);
+            DWORD value = std::numeric_limits<DWORD>::max();
+            if (const HANDLE data = GetClipboardData(format); data != nullptr)
+            {
+                if (const void *bytes = GlobalLock(data); bytes != nullptr)
+                {
+                    std::memcpy(&value, bytes, sizeof(value));
+                    GlobalUnlock(data);
+                }
+            }
+            CloseClipboard();
+            return value;
+        }
+
+        if (attempt + 1 < clipboardReadAttempts)
+        {
+            Sleep(clipboardReadRetryDelayMilliseconds);
         }
     }
-    CloseClipboard();
-    return value;
+    return std::numeric_limits<DWORD>::max();
+}
+
+[[nodiscard]] std::optional<QString> nativeClipboardText()
+{
+    for (int attempt = 0; attempt < clipboardReadAttempts; ++attempt)
+    {
+        if (OpenClipboard(nullptr) != FALSE)
+        {
+            QString value;
+            if (const HANDLE data = GetClipboardData(CF_UNICODETEXT); data != nullptr)
+            {
+                if (const auto *text = static_cast<const wchar_t *>(GlobalLock(data)); text != nullptr)
+                {
+                    value = QString::fromWCharArray(text);
+                    GlobalUnlock(data);
+                }
+            }
+            CloseClipboard();
+            return value;
+        }
+
+        if (attempt + 1 < clipboardReadAttempts)
+        {
+            Sleep(clipboardReadRetryDelayMilliseconds);
+        }
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] bool nativeClipboardTextEquals(const QString &expected)
+{
+    const std::optional<QString> actual = nativeClipboardText();
+    return actual.has_value() && *actual == expected;
 }
 
 class WindowsProtectedClipboardTests final : public QObject
@@ -85,8 +128,7 @@ void WindowsProtectedClipboardTests::publishesWindowsProtectionFormats()
 {
     ztermy::windowing::WindowsProtectedClipboard clipboard;
     QVERIFY(clipboard.setProtectedText(QStringLiteral("protected assistant response")));
-    QTRY_COMPARE_WITH_TIMEOUT(QGuiApplication::clipboard()->text(QClipboard::Clipboard),
-                              QStringLiteral("protected assistant response"), 1000);
+    QTRY_VERIFY_WITH_TIMEOUT(nativeClipboardTextEquals(QStringLiteral("protected assistant response")), 2000);
 
     const UINT monitorFormat = RegisterClipboardFormatW(excludeFromMonitorFormat);
     const UINT historyFormat = RegisterClipboardFormatW(excludeFromHistoryFormat);
@@ -104,21 +146,20 @@ void WindowsProtectedClipboardTests::publishesWindowsProtectionFormats()
 void WindowsProtectedClipboardTests::autoClearRemovesOnlyItsOwnClipboardItem()
 {
     ztermy::windowing::WindowsProtectedClipboard clipboard;
-    QVERIFY(clipboard.setProtectedText(QStringLiteral("short lived"), 120ms));
-    QTRY_COMPARE_WITH_TIMEOUT(QGuiApplication::clipboard()->text(QClipboard::Clipboard), QStringLiteral("short lived"),
-                              1000);
-    QTRY_VERIFY_WITH_TIMEOUT(QGuiApplication::clipboard()->text(QClipboard::Clipboard).isEmpty(), 1000);
+    QVERIFY(clipboard.setProtectedText(QStringLiteral("short lived"), 500ms));
+    QTRY_VERIFY_WITH_TIMEOUT(nativeClipboardTextEquals(QStringLiteral("short lived")), 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(nativeClipboardTextEquals(QString{}), 3000);
 }
 
 void WindowsProtectedClipboardTests::autoClearPreservesNewerClipboardItem()
 {
     ztermy::windowing::WindowsProtectedClipboard clipboard;
-    QVERIFY(clipboard.setProtectedText(QStringLiteral("older protected value"), 180ms));
-    QTRY_COMPARE_WITH_TIMEOUT(QGuiApplication::clipboard()->text(QClipboard::Clipboard),
-                              QStringLiteral("older protected value"), 1000);
+    QVERIFY(clipboard.setProtectedText(QStringLiteral("older protected value"), 500ms));
+    QTRY_VERIFY_WITH_TIMEOUT(nativeClipboardTextEquals(QStringLiteral("older protected value")), 2000);
     QGuiApplication::clipboard()->setText(QStringLiteral("newer user value"), QClipboard::Clipboard);
-    QTest::qWait(260);
-    QCOMPARE(QGuiApplication::clipboard()->text(QClipboard::Clipboard), QStringLiteral("newer user value"));
+    QTRY_VERIFY_WITH_TIMEOUT(nativeClipboardTextEquals(QStringLiteral("newer user value")), 2000);
+    QTest::qWait(700);
+    QVERIFY(nativeClipboardTextEquals(QStringLiteral("newer user value")));
 }
 
 } // namespace

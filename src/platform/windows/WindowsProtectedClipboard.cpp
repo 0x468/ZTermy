@@ -17,7 +17,8 @@ namespace
 constexpr auto excludeFromMonitorFormat = L"ExcludeClipboardContentFromMonitorProcessing";
 constexpr auto excludeFromHistoryFormat = L"CanIncludeInClipboardHistory";
 constexpr auto excludeFromCloudFormat = L"CanUploadToCloudClipboard";
-constexpr int clipboardOpenAttempts = 8;
+constexpr int clipboardOpenAttempts = 10;
+constexpr DWORD clipboardOpenRetryDelayMilliseconds = 5;
 
 struct GlobalMemoryDeleter final
 {
@@ -63,7 +64,7 @@ using GlobalMemory = std::unique_ptr<void, GlobalMemoryDeleter>;
         }
         if (attempt + 1 < clipboardOpenAttempts)
         {
-            Sleep(1);
+            Sleep(clipboardOpenRetryDelayMilliseconds);
         }
     }
     return false;
