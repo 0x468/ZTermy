@@ -9,11 +9,11 @@ namespace ztermy::ai
 
 enum class AiPermissionMode : std::uint8_t
 {
-    observer,
-    askEachWrite,
-    askFirstWrite,
-    sessionAuto,
-    savedHostAuto,
+    readOnly,
+    ask,
+    edit,
+    automatic,
+    yolo,
 };
 
 enum class AiPermissionDisposition : std::uint8_t
@@ -31,13 +31,11 @@ enum class AiPermissionReason : std::uint8_t
     explicitDeny,
     explicitVisibleApproval,
     explicitAllow,
-    observerMode,
-    askEachWriteMode,
-    askFirstWriteMode,
-    askFirstWriteGrant,
-    sessionAutoMode,
-    savedHostAutoMode,
-    savedHostRequired,
+    readOnlyMode,
+    askMode,
+    editMode,
+    automaticMode,
+    yoloMode,
     highRiskOverlay,
     defaultDeny,
 };
@@ -64,7 +62,7 @@ struct AiCommandRiskReport final
 
 struct AiPermissionRequest final
 {
-    AiPermissionMode mode = AiPermissionMode::observer;
+    AiPermissionMode mode = AiPermissionMode::readOnly;
     bool write = false;
     bool schemaValid = true;
     bool scopeValid = true;

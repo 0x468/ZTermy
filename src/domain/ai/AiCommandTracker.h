@@ -33,6 +33,9 @@ struct AiTrackedCommand final
     std::optional<terminal::CommandBlockId> blockId;
     AiTrackedCommandState state = AiTrackedCommandState::queued;
     std::optional<int> exitStatus;
+    std::string output;
+    std::uint64_t omittedOutputBytes = 0;
+    terminal::CommandOutputCoverage outputCoverage = terminal::CommandOutputCoverage::unknown;
     bool interruptRequested = false;
 };
 

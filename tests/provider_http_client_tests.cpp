@@ -154,6 +154,7 @@ private slots:
     void streamsOllamaTypedEvents();
     void classifiesRateLimitAndRetryDelay();
     void cancelsInFlightRequest();
+    void tracesExactPayloadWithoutAuthorizationSecret();
 };
 
 void ProviderHttpClientTests::streamsTypedEventsAndFinishes()
@@ -327,6 +328,38 @@ void ProviderHttpClientTests::cancelsInFlightRequest()
     const auto error = events.front().error.value_or(ztermy::ai::AiProviderError{});
     QCOMPARE(error.code, AiProviderErrorCode::cancelled);
     QVERIFY(!client.cancel(requestId.value()));
+}
+
+void ProviderHttpClientTests::tracesExactPayloadWithoutAuthorizationSecret()
+{
+    FakeNetworkAccessManager network;
+    network.enqueue(
+        FakeResponse{.payload = "data: {\"type\":\"response.output_text.delta\",\"delta\":\"hello\"}\n\n"
+                                "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_trace\"}}\n\n"});
+    ProviderHttpClient client(&network);
+    std::vector<std::pair<QString, QByteArray>> trace;
+    client.setTraceHandler([&trace](const auto, QString event, QByteArray payload) {
+        trace.emplace_back(std::move(event), std::move(payload));
+    });
+    AiGenerationRequest request;
+    request.messages.push_back({.role = ztermy::ai::AiMessageRole::user, .content = "trace this exact prompt"});
+    bool finished = false;
+    QVERIFY(client
+                .start(
+                    openAiConfiguration(), request, SensitiveByteArray{QByteArray("secret-token")},
+                    [](const auto, const AiStreamEvent &) {
+                    },
+                    [&finished](const auto) {
+                        finished = true;
+                    })
+                .has_value());
+    QTRY_VERIFY_WITH_TIMEOUT(finished, 1000);
+    QCOMPARE(trace.size(), std::size_t{2});
+    QCOMPARE(trace.front().first, QStringLiteral("provider_request"));
+    QVERIFY(trace.front().second.contains("trace this exact prompt"));
+    QVERIFY(!trace.front().second.contains("secret-token"));
+    QCOMPARE(trace.back().first, QStringLiteral("provider_response_bytes"));
+    QVERIFY(trace.back().second.contains("hello"));
 }
 
 } // namespace

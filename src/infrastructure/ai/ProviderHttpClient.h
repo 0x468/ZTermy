@@ -10,6 +10,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QObject>
+#include <QString>
 
 #include <cstdint>
 #include <expected>
@@ -26,6 +27,7 @@ public:
     using RequestId = std::uint64_t;
     using EventHandler = std::function<void(RequestId, const AiStreamEvent &)>;
     using FinishedHandler = std::function<void(RequestId)>;
+    using TraceHandler = std::function<void(RequestId, const QString &, const QByteArray &)>;
 
     explicit ProviderHttpClient(QNetworkAccessManager *networkAccessManager, QObject *parent = nullptr);
     explicit ProviderHttpClient(QObject *parent = nullptr);
@@ -38,6 +40,7 @@ public:
     start(const AiProviderConfiguration &configuration, const AiGenerationRequest &generation,
           security::SensitiveByteArray apiKey, EventHandler eventHandler, FinishedHandler finishedHandler);
     [[nodiscard]] bool cancel(RequestId requestId);
+    void setTraceHandler(TraceHandler handler);
 
 private:
     struct RequestState final
@@ -71,6 +74,7 @@ private:
     QNetworkAccessManager *m_networkAccessManager = nullptr;
     std::unordered_map<QNetworkReply *, std::unique_ptr<RequestState>> m_requests;
     RequestId m_nextRequestId = 1;
+    TraceHandler m_traceHandler;
 };
 
 } // namespace ztermy::ai

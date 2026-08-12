@@ -110,44 +110,44 @@ secret. Automatic whole-scrollback upload is therefore prohibited.
 
 ## Permission model
 
-Initial modes:
+Agent modes:
 
 | Mode | Reads | First write | Later writes | Typical use |
 | --- | --- | --- | --- | --- |
-| Observer | Allowed within context policy | Denied | Denied | explanation/audit |
-| Ask each write | Allowed | Ask | Ask | cautious operation |
-| Ask first write | Allowed | Ask | Allow for same conversation and scope | normal assisted work |
-| Session auto | Allowed | Allow | Allow until conversation/session ends | trusted task |
-| Saved-host auto | Allowed | Allow | Allow for that saved host policy | advanced opt-in |
+| Read-only | Allowed within context policy | Denied | Denied | explanation/audit |
+| Ask | Allowed | Ask unless a rule matches | Ask unless a rule matches | supervised operation |
+| Edit | Allowed | Ask unless a rule matches | Allow owned file/SFTP edits in scope | file-oriented work |
+| Auto | Allowed | Allow unless an ask/deny rule matches | Allow unless an ask/deny rule matches | trusted task |
+| YOLO | Allowed | Allow | Allow | uninterrupted expert automation |
 
 Decision precedence:
 
 1. invalid schema, stale scope/generation, unavailable capability -> deny;
-2. explicit deny rule -> ask or deny according to rule type;
-3. explicit user action on a visible Run/Approve control -> allow that exact
+2. explicit deny rule -> deny;
+3. explicit ask rule -> ask;
+4. explicit allow rule -> allow;
+5. explicit user action on a visible Run/Approve control -> allow that exact
    action and arguments;
-4. matching allow rule -> allow;
-5. active mode -> allow, ask, or deny;
-6. otherwise fail closed.
+6. active mode -> allow, ask, or deny;
+7. otherwise deny.
 
 Direct user Run is an explicit action and does not receive an additional generic
 warning. The command and target remain visible.
 
-Model-initiated writes additionally pass a deterministic risk overlay for
+Model-initiated commands retain a deterministic risk classifier for informative
+Ask/Edit cards and audit metadata covering
 destructive filesystem/disk operations, privilege and credential changes,
 recursive permission changes, shutdown/reboot, firewall/network disruption, and
-opaque download-and-execute pipelines. The overlay is defense in depth, not a
-claim that shell text can be classified perfectly. High-risk actions ask even in
-automatic mode; an advanced, explicit grant may relax this
-for the current session and exact target. Direct visible Run remains exact
-authorization. Critical deny rules still win.
+opaque download-and-execute pipelines. It is not containment and does not
+override Auto, YOLO, a matching allow rule, or direct visible Run. Explicit deny
+rules still win outside YOLO; invariant target/schema failures always win.
 
 Permissions are capability-specific: command execution, PTY writing, SFTP
 mutation, local file access, MCP server access, and multi-session targeting are
 separate decisions.
 
-Saved-host automatic execution is hidden behind advanced settings and never
-applies to a quick connection. Encrypted conversation history is opt-in.
+Profile-specific behavior is represented by explicit profile-scoped rules.
+Encrypted conversation history is opt-in.
 
 ## Target and lifecycle integrity
 
@@ -232,12 +232,20 @@ stale capabilities. A tool never silently retargets to the newly active tab.
 
 ## Logging and diagnostics
 
-Never log:
+Normal application logs never contain:
 
 - prompts, model responses, terminal input/output, full command lines;
 - provider authorization headers, keys, raw request/response bodies;
 - private paths/host identifiers without the existing diagnostic redaction;
 - encrypted transcript plaintext or encryption keys.
+
+An explicit developer-only AI trace setting is a separate diagnostic artifact,
+not a normal log. While enabled it records the exact bounded provider request
+body and raw provider response bytes, including terminal/context text, in a
+dedicated local JSONL file whose path is shown in Settings. It never records
+Authorization headers, API keys, credential-vault contents, or private-key
+material introduced outside the request body. Disabling the setting closes the
+writer; deletion and sharing remain deliberate user actions.
 
 Crash dumps are not logs and must not be described as safe-to-share merely
 because these logging rules pass.

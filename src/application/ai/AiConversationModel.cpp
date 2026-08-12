@@ -40,6 +40,8 @@ QVariant AiConversationModel::data(const QModelIndex &index, const int role) con
             return roleToken(message.role);
         case TextRole:
             return message.text;
+        case ReasoningRole:
+            return message.reasoning;
         case StateRole:
             return stateToken(message.state);
         case ErrorRole:
@@ -88,6 +90,7 @@ QHash<int, QByteArray> AiConversationModel::roleNames() const
     return {{MessageIdRole, "messageId"},
             {MessageRole, "messageRole"},
             {TextRole, "text"},
+            {ReasoningRole, "reasoning"},
             {StateRole, "state"},
             {ErrorRole, "error"},
             {TruncatedRole, "truncated"},
@@ -123,7 +126,8 @@ std::vector<AiChatMessage> AiConversationModel::providerMessages() const
     messages.reserve(m_messages.size());
     for (const auto &message : m_messages)
     {
-        if (message.state == MessageState::streaming || message.state == MessageState::failed)
+        if (message.state == MessageState::streaming || message.state == MessageState::failed
+            || message.state == MessageState::cancelled)
         {
             continue;
         }
@@ -228,6 +232,30 @@ bool AiConversationModel::appendAssistantDelta(const std::uint64_t messageId, QS
     return addedBytes > 0 || truncated;
 }
 
+bool AiConversationModel::appendAssistantReasoningDelta(const std::uint64_t messageId, QString delta)
+{
+    auto *message = find(messageId);
+    if (message == nullptr || message->role != AiMessageRole::assistant || message->state != MessageState::streaming
+        || delta.isEmpty())
+    {
+        return false;
+    }
+    const auto availableForMessage = m_limits.maxMessageBytes - std::min(message->bytes, m_limits.maxMessageBytes);
+    const auto availableForConversation =
+        m_limits.maxConversationBytes - std::min(m_totalBytes, m_limits.maxConversationBytes);
+    const auto available = std::min(availableForMessage, availableForConversation);
+    bool truncated = false;
+    delta = boundedUtf8(std::move(delta), available, truncated);
+    const auto addedBytes = static_cast<std::size_t>(delta.toUtf8().size());
+    message->reasoning += delta;
+    message->bytes += addedBytes;
+    message->truncated = message->truncated || truncated;
+    m_totalBytes += addedBytes;
+    const auto row = indexOf(messageId);
+    emit dataChanged(index(row), index(row), {ReasoningRole, TruncatedRole});
+    return addedBytes > 0 || truncated;
+}
+
 bool AiConversationModel::completeAssistantMessage(const std::uint64_t messageId, std::optional<AiTokenUsage> usage)
 {
     auto *message = find(messageId);
@@ -283,6 +311,21 @@ bool AiConversationModel::failAssistantMessage(const std::uint64_t messageId, QS
     return true;
 }
 
+bool AiConversationModel::cancelAssistantMessage(const std::uint64_t messageId)
+{
+    auto *message = find(messageId);
+    if (message == nullptr || message->state != MessageState::streaming)
+    {
+        return false;
+    }
+    message->error.clear();
+    message->state = MessageState::cancelled;
+    const auto row = indexOf(messageId);
+    emit dataChanged(index(row), index(row), {StateRole, ErrorRole});
+    updateStreaming();
+    return true;
+}
+
 void AiConversationModel::clear()
 {
     if (m_messages.empty())
@@ -323,6 +366,8 @@ QString AiConversationModel::stateToken(const MessageState state)
             return QStringLiteral("streaming");
         case MessageState::failed:
             return QStringLiteral("failed");
+        case MessageState::cancelled:
+            return QStringLiteral("cancelled");
     }
     return QStringLiteral("failed");
 }

@@ -38,6 +38,7 @@
 #include "infrastructure/workbench/WorkspaceStateStore.h"
 
 #include <QHash>
+#include <QJsonObject>
 #include <QMetaType>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
@@ -172,6 +173,8 @@ class AppController final : public QObject
     Q_PROPERTY(bool aiAutomaticContext READ aiAutomaticContext NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString aiPermissionPreference READ aiPermissionPreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool aiConversationHistoryEnabled READ aiConversationHistoryEnabled NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(bool aiDebugTraceEnabled READ aiDebugTraceEnabled NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(QString aiDebugTracePath READ aiDebugTracePath NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool aiApiKeyConfigured READ aiApiKeyConfigured NOTIFY credentialVaultChanged)
     Q_PROPERTY(QObject *aiActivity READ aiActivity CONSTANT)
     Q_PROPERTY(QObject *aiConversationHistory READ aiConversationHistory CONSTANT)
@@ -304,6 +307,8 @@ public:
     [[nodiscard]] bool aiAutomaticContext() const noexcept;
     [[nodiscard]] QString aiPermissionPreference() const;
     [[nodiscard]] bool aiConversationHistoryEnabled() const noexcept;
+    [[nodiscard]] bool aiDebugTraceEnabled() const noexcept;
+    [[nodiscard]] QString aiDebugTracePath() const;
     [[nodiscard]] bool aiApiKeyConfigured() const;
     [[nodiscard]] QObject *aiActivity() noexcept;
     [[nodiscard]] QObject *aiConversationHistory() noexcept;
@@ -489,7 +494,7 @@ public:
                                             const QString &permissionMode);
     Q_INVOKABLE bool saveAiProviderConfiguration(const QString &provider, const QString &baseUrl, const QString &model,
                                                  bool automaticContext, const QString &permissionMode,
-                                                 const QString &apiKey);
+                                                 const QString &apiKey, bool debugTraceEnabled);
     Q_INVOKABLE void refreshAiModels(const QString &provider, const QString &baseUrl, const QString &apiKey);
     [[nodiscard]] Q_INVOKABLE QString aiProviderEndpointPreview(const QString &provider, const QString &baseUrl) const;
     Q_INVOKABLE bool saveAiApiKey(const QString &apiKey);
@@ -505,6 +510,7 @@ public:
     Q_INVOKABLE bool restoreAiConversationHistory(const QString &conversationId);
     Q_INVOKABLE bool sendAiMessage(const QString &prompt);
     Q_INVOKABLE bool sendAiCommandRequest(const QString &prompt);
+    Q_INVOKABLE bool setAiPermissionMode(const QString &mode);
     Q_INVOKABLE bool explainAiLastFailure();
     Q_INVOKABLE bool cancelAiMessage();
     Q_INVOKABLE bool approveAiTool();
@@ -743,6 +749,9 @@ private:
     void initializeTerminalOutputSink(TerminalTab &tab);
     void initializeAiRuntime(TerminalTab &tab);
     void initializeAiPrivacySignals();
+    void initializeAiDebugTrace();
+    void configureAiDebugTrace();
+    void appendAiDebugTrace(const QString &event, const QJsonObject &payload = {});
     void initializeAiConversationHistory();
     void persistAiConversation(const TerminalTab &tab);
     [[nodiscard]] ai::AiContextBundle buildAiContext(TerminalTab &tab, bool preferLastFailure);
@@ -906,6 +915,8 @@ private:
     std::vector<std::unique_ptr<PortForwardingRuntime>> m_portForwardingRuntimes;
     QString m_portForwardingOperationError;
     ai::ProviderHttpClient m_aiProviderClient;
+    std::shared_ptr<logging::SessionLogWriter> m_aiDebugTrace;
+    QString m_aiDebugTracePath;
     QNetworkAccessManager m_aiModelNetwork;
     QPointer<QNetworkReply> m_aiModelsReply;
     QStringList m_aiAvailableModels;

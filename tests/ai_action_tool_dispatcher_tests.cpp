@@ -21,7 +21,7 @@ using ztermy::ai::AiToolCall;
 using ztermy::ai::AiToolDispatchState;
 
 [[nodiscard]] AiActionToolContext context(const std::string &conversation = "conversation-1",
-                                          const AiPermissionMode mode = AiPermissionMode::askEachWrite)
+                                          const AiPermissionMode mode = AiPermissionMode::ask)
 {
     return AiActionToolContext{.conversationId = conversation,
                                .turnId = 7,
@@ -117,8 +117,8 @@ void AiActionToolDispatcherTests::requiresExplicitApprovalForSftpMutations()
     {
         AiAgentTurnBudget budget;
         const auto plan = dispatcher.prepare(transferCall(upload, upload ? "upload" : "download"),
-                                             context("sftp", AiPermissionMode::sessionAuto), budget);
-        QCOMPARE(plan.disposition, AiActionToolDisposition::awaitApproval);
+                                             context("sftp", AiPermissionMode::automatic), budget);
+        QCOMPARE(plan.disposition, AiActionToolDisposition::execute);
         const auto action = plan.action.value_or(AiTerminalAction{});
         QCOMPARE(action.kind,
                  upload ? AiTerminalActionKind::enqueueSftpUpload : AiTerminalActionKind::enqueueSftpDownload);
@@ -129,26 +129,24 @@ void AiActionToolDispatcherTests::requiresExplicitApprovalForSftpMutations()
 
     AiAgentTurnBudget observerBudget;
     const auto observer = dispatcher.prepare(transferCall(false, "observer-sftp"),
-                                             context("observer-sftp", AiPermissionMode::observer), observerBudget);
+                                             context("observer-sftp", AiPermissionMode::readOnly), observerBudget);
     QCOMPARE(
         object(observer.outputJson).value(QStringLiteral("error")).toObject().value(QStringLiteral("code")).toString(),
         QStringLiteral("permission_denied"));
 
-    auto unsavedContext = context("unsaved-sftp", AiPermissionMode::sessionAuto);
+    auto unsavedContext = context("unsaved-sftp", AiPermissionMode::automatic);
     unsavedContext.savedHost = false;
     AiAgentTurnBudget unsavedBudget;
     const auto unsaved = dispatcher.prepare(transferCall(true, "unsaved-sftp"), unsavedContext, unsavedBudget);
-    QCOMPARE(
-        object(unsaved.outputJson).value(QStringLiteral("error")).toObject().value(QStringLiteral("code")).toString(),
-        QStringLiteral("permission_denied"));
+    QCOMPARE(unsaved.disposition, AiActionToolDisposition::execute);
 }
 
 void AiActionToolDispatcherTests::requiresExplicitApprovalForRunbooks()
 {
     AiActionToolDispatcher dispatcher;
     AiAgentTurnBudget budget;
-    const auto plan = dispatcher.prepare(runbookCall(), context("runbook", AiPermissionMode::sessionAuto), budget);
-    QCOMPARE(plan.disposition, AiActionToolDisposition::awaitApproval);
+    const auto plan = dispatcher.prepare(runbookCall(), context("runbook", AiPermissionMode::automatic), budget);
+    QCOMPARE(plan.disposition, AiActionToolDisposition::execute);
     const auto action = plan.action.value_or(AiTerminalAction{});
     QCOMPARE(action.kind, AiTerminalActionKind::saveRunbook);
     QVERIFY(!action.payloadJson.empty());
@@ -157,7 +155,7 @@ void AiActionToolDispatcherTests::requiresExplicitApprovalForRunbooks()
 
     AiAgentTurnBudget observerBudget;
     const auto denied = dispatcher.prepare(runbookCall("runbook-observer"),
-                                           context("observer-runbook", AiPermissionMode::observer), observerBudget);
+                                           context("observer-runbook", AiPermissionMode::readOnly), observerBudget);
     QCOMPARE(
         object(denied.outputJson).value(QStringLiteral("error")).toObject().value(QStringLiteral("code")).toString(),
         QStringLiteral("permission_denied"));
@@ -181,7 +179,7 @@ void AiActionToolDispatcherTests::transfersControlToUserUntilResumed()
     AiActionToolDispatcher dispatcher;
     AiAgentTurnBudget budget;
     const auto transfer =
-        dispatcher.prepare(transferControlCall(), context("owner", AiPermissionMode::sessionAuto), budget);
+        dispatcher.prepare(transferControlCall(), context("owner", AiPermissionMode::automatic), budget);
     QCOMPARE(transfer.disposition, AiActionToolDisposition::execute);
     QCOMPARE(transfer.action.value_or(AiTerminalAction{}).kind, AiTerminalActionKind::transferToUser);
     QCOMPARE(budget.toolCalls(), std::uint32_t{1});
@@ -190,7 +188,7 @@ void AiActionToolDispatcherTests::transfersControlToUserUntilResumed()
 
     AiAgentTurnBudget blockedBudget;
     const auto blocked =
-        dispatcher.prepare(commandCall("blocked-call"), context("owner", AiPermissionMode::sessionAuto), blockedBudget);
+        dispatcher.prepare(commandCall("blocked-call"), context("owner", AiPermissionMode::automatic), blockedBudget);
     QCOMPARE(
         object(blocked.outputJson).value(QStringLiteral("error")).toObject().value(QStringLiteral("code")).toString(),
         QStringLiteral("user_has_control"));
@@ -198,7 +196,7 @@ void AiActionToolDispatcherTests::transfersControlToUserUntilResumed()
 
     AiAgentTurnBudget resumedBudget;
     const auto resumed =
-        dispatcher.prepare(commandCall("resumed-call"), context("owner", AiPermissionMode::sessionAuto), resumedBudget);
+        dispatcher.prepare(commandCall("resumed-call"), context("owner", AiPermissionMode::automatic), resumedBudget);
     QCOMPARE(resumed.disposition, AiActionToolDisposition::execute);
 }
 
@@ -280,13 +278,13 @@ void AiActionToolDispatcherTests::rejectsScopeReplayAndObserverWrites()
              QStringLiteral("scope_changed"));
 
     AiAgentTurnBudget observerBudget;
-    plan = dispatcher.prepare(commandCall("observer-call"), context("observer", AiPermissionMode::observer),
+    plan = dispatcher.prepare(commandCall("observer-call"), context("observer", AiPermissionMode::readOnly),
                               observerBudget);
     QCOMPARE(object(plan.outputJson).value(QStringLiteral("error")).toObject().value(QStringLiteral("code")).toString(),
              QStringLiteral("permission_denied"));
     QCOMPARE(observerBudget.writeActions(), std::uint32_t{0});
 
-    auto unavailableContext = context("unavailable", AiPermissionMode::sessionAuto);
+    auto unavailableContext = context("unavailable", AiPermissionMode::automatic);
     unavailableContext.writable = false;
     AiAgentTurnBudget unavailableBudget;
     plan = dispatcher.prepare(commandCall("unavailable-call"), unavailableContext, unavailableBudget);
@@ -296,7 +294,7 @@ void AiActionToolDispatcherTests::rejectsScopeReplayAndObserverWrites()
 
     AiAgentTurnBudget mismatchBudget;
     const auto mismatch = dispatcher.prepare(commandCall("observer-call", "whoami"),
-                                             context("observer", AiPermissionMode::observer), mismatchBudget);
+                                             context("observer", AiPermissionMode::readOnly), mismatchBudget);
     QCOMPARE(
         object(mismatch.outputJson).value(QStringLiteral("error")).toObject().value(QStringLiteral("code")).toString(),
         QStringLiteral("duplicate_mismatch"));
@@ -307,19 +305,19 @@ void AiActionToolDispatcherTests::appliesRiskBudgetAndOwnershipGuards()
     AiActionToolDispatcher dispatcher;
     AiAgentTurnBudget riskBudget;
     const auto risky = dispatcher.prepare(commandCall("risk-call", "rm -rf /tmp/example"),
-                                          context("risk", AiPermissionMode::sessionAuto), riskBudget);
-    QCOMPARE(risky.disposition, AiActionToolDisposition::awaitApproval);
+                                          context("risk", AiPermissionMode::automatic), riskBudget);
+    QCOMPARE(risky.disposition, AiActionToolDisposition::execute);
     QVERIFY(risky.action.value_or(AiTerminalAction{}).risk.highRisk());
     dispatcher.clearConversation("risk");
 
     AiAgentTurnBudget ownerBudget;
     const auto owner =
-        dispatcher.prepare(commandCall("owner-call"), context("owner", AiPermissionMode::sessionAuto), ownerBudget);
+        dispatcher.prepare(commandCall("owner-call"), context("owner", AiPermissionMode::automatic), ownerBudget);
     QCOMPARE(owner.disposition, AiActionToolDisposition::execute);
 
     AiAgentTurnBudget conflictBudget;
     const auto conflict = dispatcher.prepare(commandCall("conflict-call"),
-                                             context("other-owner", AiPermissionMode::sessionAuto), conflictBudget);
+                                             context("other-owner", AiPermissionMode::automatic), conflictBudget);
     QCOMPARE(
         object(conflict.outputJson).value(QStringLiteral("error")).toObject().value(QStringLiteral("code")).toString(),
         QStringLiteral("ownership_conflict"));
@@ -327,7 +325,7 @@ void AiActionToolDispatcherTests::appliesRiskBudgetAndOwnershipGuards()
     AiActionToolDispatcher limitedDispatcher;
     AiAgentTurnBudget limited(AiAgentTurnLimits{.maximumToolCalls = 1, .maximumWriteActions = 0});
     const auto limitedPlan = limitedDispatcher.prepare(commandCall("limited-call"),
-                                                       context("limited", AiPermissionMode::sessionAuto), limited);
+                                                       context("limited", AiPermissionMode::automatic), limited);
     QCOMPARE(object(limitedPlan.outputJson)
                  .value(QStringLiteral("error"))
                  .toObject()

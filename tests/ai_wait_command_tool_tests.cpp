@@ -35,6 +35,7 @@ class AiWaitCommandToolTests final : public QObject
 private slots:
     void publishesAndParsesStrictContract();
     void serializesLifecycleTimeoutAndUnknownOutcome();
+    void returnsFinishedCommandOutput();
 };
 
 void AiWaitCommandToolTests::publishesAndParsesStrictContract()
@@ -75,6 +76,21 @@ void AiWaitCommandToolTests::serializesLifecycleTimeoutAndUnknownOutcome()
     QVERIFY(!unknown.value(QStringLiteral("ok")).toBool(true));
     QCOMPARE(unknown.value(QStringLiteral("error")).toObject().value(QStringLiteral("code")).toString(),
              QStringLiteral("outcome_unknown"));
+}
+
+void AiWaitCommandToolTests::returnsFinishedCommandOutput()
+{
+    auto tracked = command(AiTrackedCommandState::finished);
+    tracked.output = "\x1b[32mFilesystem Size Used Avail Use% Mounted on\x1b[0m\r\n"
+                     "/dev/sda1 80G 20G 60G 25% /\r\n";
+    tracked.outputCoverage = ztermy::terminal::CommandOutputCoverage::complete;
+
+    const auto result = object(AiWaitCommandTool::result(tracked));
+    const auto serialized = result.value(QStringLiteral("command")).toObject();
+    QCOMPARE(serialized.value(QStringLiteral("output")).toString(),
+             QStringLiteral("Filesystem Size Used Avail Use% Mounted on\n/dev/sda1 80G 20G 60G 25% /\n"));
+    QVERIFY(serialized.value(QStringLiteral("output_complete")).toBool());
+    QCOMPARE(serialized.value(QStringLiteral("omitted_output_bytes")).toInteger(), qint64{0});
 }
 
 } // namespace

@@ -8,6 +8,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 #include <vector>
 
@@ -107,6 +108,8 @@ class AiContextBroker final
 {
 public:
     explicit AiContextBroker(AiContextLimits limits = {});
+
+    [[nodiscard]] static std::string normalizeTerminalText(std::string_view text);
 
     [[nodiscard]] const AiContextLimits &limits() const noexcept;
     [[nodiscard]] AiContextBundle build(const terminal::CommandBlockStore &store,

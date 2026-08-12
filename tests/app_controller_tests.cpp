@@ -832,21 +832,21 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(controller.aiEndpointPath().isEmpty());
     QVERIFY(controller.aiModel().isEmpty());
     QVERIFY(controller.aiAutomaticContext());
-    QCOMPARE(controller.aiPermissionPreference(), QStringLiteral("ask-each-write"));
+    QCOMPARE(controller.aiPermissionPreference(), QStringLiteral("ask"));
 
     QVERIFY(controller.saveAiProviderSettings(QStringLiteral("ollama"), QStringLiteral("http://127.0.0.1:11434"),
                                               QStringLiteral("/api/chat"), QStringLiteral("qwen3"), false,
-                                              QStringLiteral("ask-first-write")));
+                                              QStringLiteral("edit")));
     QCOMPARE(controller.aiProviderPreference(), QStringLiteral("ollama"));
     QCOMPARE(controller.aiBaseUrl(), QStringLiteral("http://127.0.0.1:11434"));
     QCOMPARE(controller.aiEndpointPath(), QStringLiteral("/api/chat"));
     QCOMPARE(controller.aiModel(), QStringLiteral("qwen3"));
     QVERIFY(!controller.aiAutomaticContext());
-    QCOMPARE(controller.aiPermissionPreference(), QStringLiteral("ask-first-write"));
+    QCOMPARE(controller.aiPermissionPreference(), QStringLiteral("edit"));
     QVERIFY(!controller.saveAiProviderSettings(QStringLiteral("unknown"), QStringLiteral("https://example.test"), {},
-                                               QStringLiteral("model"), true, QStringLiteral("observer")));
+                                               QStringLiteral("model"), true, QStringLiteral("read-only")));
     QVERIFY(!controller.saveAiProviderSettings(QStringLiteral("ollama"), QStringLiteral("file:///tmp/model"), {},
-                                               QStringLiteral("model"), true, QStringLiteral("observer")));
+                                               QStringLiteral("model"), true, QStringLiteral("read-only")));
     settingsChanged.clear();
 
     QVERIFY(controller.saveApplicationSettings(

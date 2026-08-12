@@ -219,18 +219,18 @@ aiPermissionMode(const ztermy::config::AiPermissionPreference preference) noexce
 {
     switch (preference)
     {
-        case ztermy::config::AiPermissionPreference::observer:
-            return ztermy::ai::AiPermissionMode::observer;
-        case ztermy::config::AiPermissionPreference::askFirstWrite:
-            return ztermy::ai::AiPermissionMode::askFirstWrite;
-        case ztermy::config::AiPermissionPreference::sessionAuto:
-            return ztermy::ai::AiPermissionMode::sessionAuto;
-        case ztermy::config::AiPermissionPreference::savedHostAuto:
-            return ztermy::ai::AiPermissionMode::savedHostAuto;
-        case ztermy::config::AiPermissionPreference::askEachWrite:
-            return ztermy::ai::AiPermissionMode::askEachWrite;
+        case ztermy::config::AiPermissionPreference::readOnly:
+            return ztermy::ai::AiPermissionMode::readOnly;
+        case ztermy::config::AiPermissionPreference::edit:
+            return ztermy::ai::AiPermissionMode::edit;
+        case ztermy::config::AiPermissionPreference::automatic:
+            return ztermy::ai::AiPermissionMode::automatic;
+        case ztermy::config::AiPermissionPreference::yolo:
+            return ztermy::ai::AiPermissionMode::yolo;
+        case ztermy::config::AiPermissionPreference::ask:
+            return ztermy::ai::AiPermissionMode::ask;
     }
-    return ztermy::ai::AiPermissionMode::askEachWrite;
+    return ztermy::ai::AiPermissionMode::ask;
 }
 
 [[nodiscard]] QString semanticCapabilityToken(const ztermy::terminal::TerminalSemanticCapability capability)
@@ -1723,6 +1723,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     loadHostProfiles();
     loadPortForwardingRules();
     loadApplicationSettings();
+    initializeAiDebugTrace();
     m_mcpRuntime.initialize();
     initializeAiConversationHistory();
     initializeActionRegistry();
@@ -1794,6 +1795,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     loadHostProfiles();
     loadPortForwardingRules();
     loadApplicationSettings();
+    initializeAiDebugTrace();
     m_mcpRuntime.initialize();
     initializeAiConversationHistory();
     initializeActionRegistry();
@@ -1926,6 +1928,12 @@ void AppController::shutdown() noexcept
         reply->deleteLater();
     }
     m_aiModelsLoading = false;
+    m_aiProviderClient.setTraceHandler({});
+    if (m_aiDebugTrace)
+    {
+        m_aiDebugTrace->stop();
+        m_aiDebugTrace.reset();
+    }
     m_mcpRuntime.shutdown();
     stopAllPortForwardingRules();
     clearHostKeyPrompt();
@@ -2861,6 +2869,16 @@ bool AppController::aiAutomaticContext() const noexcept
     return m_settings.aiAutomaticContext;
 }
 
+bool AppController::aiDebugTraceEnabled() const noexcept
+{
+    return m_settings.aiDebugTraceEnabled;
+}
+
+QString AppController::aiDebugTracePath() const
+{
+    return m_aiDebugTracePath;
+}
+
 QString AppController::aiPermissionPreference() const
 {
     return config::aiPermissionPreferenceToken(m_settings.aiPermission);
@@ -3134,6 +3152,72 @@ void AppController::initializeAiPrivacySignals()
     QObject::connect(this, &AppController::aiConversationChanged, this, &AppController::aiPrivacyDiagnosticsChanged);
     QObject::connect(this, &AppController::mcpConfigurationChanged, this, &AppController::aiPrivacyDiagnosticsChanged);
     QObject::connect(this, &AppController::terminalTabsChanged, this, &AppController::aiPrivacyDiagnosticsChanged);
+}
+
+void AppController::initializeAiDebugTrace()
+{
+    m_aiProviderClient.setTraceHandler(
+        [this](const ai::ProviderHttpClient::RequestId requestId, const QString &event, const QByteArray &bytes) {
+            QJsonObject payload{{QStringLiteral("request_id"), static_cast<qint64>(requestId)}};
+            QJsonParseError parseError;
+            const QJsonDocument document = QJsonDocument::fromJson(bytes, &parseError);
+            if (parseError.error == QJsonParseError::NoError && (document.isObject() || document.isArray()))
+            {
+                payload.insert(QStringLiteral("data"),
+                               document.isObject() ? QJsonValue{document.object()} : QJsonValue{document.array()});
+            }
+            else
+            {
+                payload.insert(QStringLiteral("text"), QString::fromUtf8(bytes));
+                payload.insert(QStringLiteral("base64"), QString::fromLatin1(bytes.toBase64()));
+            }
+            appendAiDebugTrace(event, payload);
+        });
+    configureAiDebugTrace();
+}
+
+void AppController::configureAiDebugTrace()
+{
+    if (m_aiDebugTrace)
+    {
+        m_aiDebugTrace->stop();
+        m_aiDebugTrace.reset();
+    }
+    m_aiDebugTracePath.clear();
+    if (!m_settings.aiDebugTraceEnabled)
+    {
+        return;
+    }
+
+    QDir directory(QFileInfo(m_settingsStore.filePath()).absolutePath());
+    if (!directory.mkpath(QStringLiteral("ai-debug")) || !directory.cd(QStringLiteral("ai-debug")))
+    {
+        qCWarning(appControllerLog) << "Could not create the AI debug trace directory";
+        return;
+    }
+    m_aiDebugTracePath =
+        directory.filePath(QStringLiteral("ai-trace-%1.jsonl")
+                               .arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss-zzz"))));
+    m_aiDebugTrace = std::make_shared<logging::SessionLogWriter>();
+    if (!m_aiDebugTrace->start(m_aiDebugTracePath))
+    {
+        m_aiDebugTrace.reset();
+        m_aiDebugTracePath.clear();
+    }
+}
+
+void AppController::appendAiDebugTrace(const QString &event, const QJsonObject &payload)
+{
+    if (!m_settings.aiDebugTraceEnabled || !m_aiDebugTrace)
+    {
+        return;
+    }
+    QJsonObject record{{QStringLiteral("timestamp"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
+                       {QStringLiteral("event"), event},
+                       {QStringLiteral("payload"), payload}};
+    QByteArray line = QJsonDocument(record).toJson(QJsonDocument::Compact);
+    line.append('\n');
+    m_aiDebugTrace->append(std::as_bytes(std::span(line.constData(), static_cast<std::size_t>(line.size()))));
 }
 
 void AppController::retranslateUiState()
@@ -7234,7 +7318,7 @@ bool AppController::saveAiProviderSettings(const QString &provider, const QStrin
 
 bool AppController::saveAiProviderConfiguration(const QString &provider, const QString &baseUrl, const QString &model,
                                                 const bool automaticContext, const QString &permissionMode,
-                                                const QString &apiKey)
+                                                const QString &apiKey, const bool debugTraceEnabled)
 {
     const auto parsedProvider = config::parseAiProviderPreference(provider);
     const auto parsedPermission = config::parseAiPermissionPreference(permissionMode);
@@ -7249,6 +7333,7 @@ bool AppController::saveAiProviderConfiguration(const QString &provider, const Q
     candidate.aiModel = model.trimmed();
     candidate.aiAutomaticContext = automaticContext;
     candidate.aiPermission = *parsedPermission;
+    candidate.aiDebugTraceEnabled = debugTraceEnabled;
     if (*parsedProvider != m_settings.aiProvider || !apiKey.isEmpty())
     {
         candidate.aiCredentialReference = aiCredentialReference(*parsedProvider);
@@ -7526,6 +7611,18 @@ bool AppController::sendAiCommandRequest(const QString &prompt)
     return tab != nullptr && sendAiMessage(*tab, prompt, false, true, true);
 }
 
+bool AppController::setAiPermissionMode(const QString &mode)
+{
+    const auto parsed = config::parseAiPermissionPreference(mode);
+    if (!parsed.has_value())
+    {
+        return false;
+    }
+    auto candidate = m_settings;
+    candidate.aiPermission = *parsed;
+    return persistApplicationSettings(candidate);
+}
+
 bool AppController::explainAiLastFailure()
 {
     TerminalTab *tab = activeTab();
@@ -7554,13 +7651,13 @@ bool AppController::explainAiLastFailure()
 bool AppController::cancelAiMessage()
 {
     TerminalTab *tab = activeTab();
-    if (tab == nullptr || !tab->aiTurnRunner || !tab->aiTurnRunner->cancel())
+    if (tab == nullptr || !tab->aiTurnRunner || !tab->aiTurnRunner->active())
     {
         return false;
     }
     tab->aiState = QStringLiteral("cancelling");
     emit aiConversationChanged();
-    return true;
+    return tab->aiTurnRunner->cancel();
 }
 
 bool AppController::approveAiTool()
@@ -7772,9 +7869,11 @@ bool AppController::handoffAiControlToUser(TerminalTab &tab, const bool cancelTu
     {
         return false;
     }
-    if (cancelTurn && tab.aiTurnRunner && tab.aiTurnRunner->active() && tab.aiTurnRunner->cancel())
+    if (cancelTurn && tab.aiTurnRunner && tab.aiTurnRunner->active())
     {
         tab.aiState = QStringLiteral("cancelling");
+        emit aiConversationChanged();
+        static_cast<void>(tab.aiTurnRunner->cancel());
     }
     emit aiConversationChanged();
     return true;
@@ -7799,8 +7898,8 @@ bool AppController::resumeAiAgentControl()
 bool AppController::retryAiMessage()
 {
     TerminalTab *tab = activeTab();
-    if (tab == nullptr || tab->aiState != QStringLiteral("error") || tab->aiLastPrompt.isEmpty()
-        || (tab->aiTurnRunner && tab->aiTurnRunner->active()))
+    if (tab == nullptr || (tab->aiState != QStringLiteral("error") && tab->aiState != QStringLiteral("cancelled"))
+        || tab->aiLastPrompt.isEmpty() || (tab->aiTurnRunner && tab->aiTurnRunner->active()))
     {
         return false;
     }
@@ -8205,6 +8304,15 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
         return false;
     }
 
+    if (!tab.aiConversationId.isEmpty() && (tab.ssh || tab.local))
+    {
+        const ai::AiSessionTarget target{.sessionId = utf8String(tab.id), .sessionGeneration = tab.reconnectGeneration};
+        if (m_aiActionToolDispatcher.userHasControl(target, utf8String(tab.aiConversationId)))
+        {
+            static_cast<void>(m_aiActionToolDispatcher.resumeAgent(target, utf8String(tab.aiConversationId)));
+        }
+    }
+
     const auto context = buildAiContext(tab, preferLastFailure);
 
     if (appendPrompt)
@@ -8331,13 +8439,25 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                     target->aiError.clear();
                     break;
                 case ai::AiStreamEventType::responseFailed:
-                    target->aiError = utf8QString(event.error.value_or(ai::AiProviderError{}).message);
-                    static_cast<void>(
-                        target->aiConversation->failAssistantMessage(assistantMessageId, target->aiError));
-                    persistAiConversation(*target);
-                    target->aiState = QStringLiteral("error");
+                    if (event.error.has_value() && event.error->code == ai::AiProviderErrorCode::cancelled)
+                    {
+                        target->aiError.clear();
+                        static_cast<void>(target->aiConversation->cancelAssistantMessage(assistantMessageId));
+                        target->aiState = QStringLiteral("cancelled");
+                    }
+                    else
+                    {
+                        target->aiError = utf8QString(event.error.value_or(ai::AiProviderError{}).message);
+                        static_cast<void>(
+                            target->aiConversation->failAssistantMessage(assistantMessageId, target->aiError));
+                        persistAiConversation(*target);
+                        target->aiState = QStringLiteral("error");
+                    }
                     break;
                 case ai::AiStreamEventType::reasoningDelta:
+                    static_cast<void>(target->aiConversation->appendAssistantReasoningDelta(assistantMessageId,
+                                                                                            utf8QString(event.delta)));
+                    break;
                 case ai::AiStreamEventType::toolCallStarted:
                 case ai::AiStreamEventType::toolArgumentsDelta:
                 case ai::AiStreamEventType::toolCallCompleted:
@@ -11874,7 +11994,12 @@ bool AppController::persistApplicationSettings(const config::ApplicationSettings
     {
         return true;
     }
+    const bool aiDebugTraceChanged = m_settings.aiDebugTraceEnabled != settings.aiDebugTraceEnabled;
     m_settings = settings;
+    if (aiDebugTraceChanged)
+    {
+        configureAiDebugTrace();
+    }
     for (const auto &tab : m_tabs)
     {
         if (tab->sftpModel != nullptr)

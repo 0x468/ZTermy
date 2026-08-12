@@ -326,3 +326,41 @@ Before each release candidate, the owner receives:
 - the evaluation summary and known model/provider variance;
 - any environment-dependent checks that remain unexecuted;
 - an explicit list of capability degradation by shell and connection type.
+
+## Post-RC agent UX regression matrix
+
+Run this matrix against the current dynamic Debug candidate before accepting
+the `0.3.5` conversation-repair slice:
+
+1. Ask the agent to run `df -h`, approve it in Ask mode, and let it finish.
+   The following model turn must receive the command's retained normalized
+   output directly, including the header and root filesystem when present. The
+   tool result must expose `output_complete` and `omitted_output_bytes`; the
+   assistant must not invent a viewport-truncation diagnosis.
+2. Cancel once during provider streaming and once while a command wait is
+   active. Cancellation must settle as neutral `Cancelled`, the Cancel button
+   must disappear, Retry must become available, and Retry must start one new
+   turn without a frozen `cancelling` state or late text from the old turn.
+3. Return a response containing headings, nested lists, a fenced code block, a
+   Markdown table, and a link. The assistant bubble must render the structure,
+   remain clipped inside a 320 px workbench, and scroll vertically. Copy must
+   place the provider's original Markdown source on the protected clipboard,
+   not rendered HTML or flattened display text.
+4. Exercise a provider that exposes reasoning or a reasoning summary. It must
+   appear in a separate collapsed region. Providers that keep reasoning hidden
+   must not display a fabricated placeholder or claim access to chain of
+   thought.
+5. Enable full AI debug trace, send one disposable request, then disable it.
+   The JSONL trace must contain the exact bounded provider request and raw
+   provider response needed for diagnosis, including attached terminal context,
+   while omitting Authorization headers and API keys. Ordinary diagnostics and
+   logs must remain content-free.
+6. Open the AI workbench from the dedicated terminal-toolbar action, switch all
+   five modes from the compact selector, move the workbench left/right, resize
+   it to its minimum, close it with the same toolbar action, and reopen it. No
+   control may escape the workbench; ordinary terminal typing requires no
+   visible takeover ceremony, and the next AI prompt automatically resumes the
+   serialized agent lease.
+
+The reusable-rule UI and exact/prefix/glob/regex/all lifetime matrix belong to
+the subsequent `0.3.6` gate and are intentionally not marked complete here.

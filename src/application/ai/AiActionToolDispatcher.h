@@ -18,7 +18,7 @@ struct AiActionToolContext final
     std::string conversationId;
     std::uint64_t turnId = 0;
     AiSessionTarget target;
-    AiPermissionMode permissionMode = AiPermissionMode::askEachWrite;
+    AiPermissionMode permissionMode = AiPermissionMode::ask;
     bool writable = true;
     bool savedHost = false;
     bool firstWriteApproved = false;

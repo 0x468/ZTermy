@@ -60,6 +60,8 @@ Rectangle {
             return qsTr("Cancelling");
         case "error":
             return qsTr("Needs attention");
+        case "cancelled":
+            return qsTr("Cancelled");
         default:
             return qsTr("Ready");
         }
@@ -78,6 +80,10 @@ Rectangle {
 
     function focusEditor() {
         Qt.callLater(promptEditor.forceActiveFocus);
+    }
+
+    function permissionModeIndex(token) {
+        return token === "read-only" ? 0 : token === "edit" ? 2 : token === "auto" ? 3 : token === "yolo" ? 4 : 1;
     }
 
     color: Theme.panelBackground
@@ -155,6 +161,18 @@ Rectangle {
                         font.pixelSize: Theme.textCompact
                     }
                 }
+
+                AppComboBox {
+                    id: agentModeBox
+
+                    objectName: "aiAgentModeBox"
+                    Layout.preferredWidth: 112
+                    model: ["read-only", "ask", "edit", "auto", "yolo"]
+                    displayTextModel: [qsTr("Read-only"), qsTr("Ask"), qsTr("Edit"), qsTr("Auto"), qsTr("YOLO")]
+                    currentIndex: pane.permissionModeIndex(pane.controller.aiPermissionPreference)
+                    accessibleName: qsTr("Agent execution mode")
+                    onActivated: index => pane.controller.setAiPermissionMode(model[index])
+                }
             }
         }
 
@@ -225,59 +243,6 @@ Rectangle {
                 enabled: !pane.busy && pane.conversation !== null && pane.conversation.count > 0
                 accessibleName: qsTr("Clear this AI conversation")
                 onClicked: pane.controller.clearAiConversation()
-            }
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.leftMargin: 10
-            Layout.rightMargin: 10
-            Layout.bottomMargin: 4
-            visible: pane.controller.activeAiControlOwner !== "unavailable"
-            spacing: 7
-
-            Rectangle {
-                Layout.preferredHeight: 24
-                Layout.preferredWidth: controlOwnerLabel.implicitWidth + 18
-                radius: 12
-                color: pane.controller.activeAiControlOwner === "user" ? Theme.selectedBackground : Theme.controlBackground
-                border.color: pane.controller.activeAiControlOwner === "user" ? Theme.warning : Theme.successText
-
-                Text {
-                    id: controlOwnerLabel
-
-                    anchors.centerIn: parent
-                    text: pane.controller.activeAiControlOwner === "user" ? qsTr("User control") : qsTr("Agent ready")
-                    color: pane.controller.activeAiControlOwner === "user" ? Theme.warning : Theme.successText
-                    font.family: Theme.uiFont
-                    font.pixelSize: Theme.textCompact
-                    font.weight: Font.Medium
-                }
-            }
-
-            Text {
-                Layout.fillWidth: true
-                Layout.minimumWidth: 0
-                text: pane.controller.activeAiControlOwner === "user" ? qsTr("AI terminal writes are paused until you resume them.") : qsTr("Typing in the terminal takes control immediately.")
-                color: Theme.textSubtle
-                elide: Text.ElideRight
-                font.family: Theme.uiFont
-                font.pixelSize: Theme.textCompact
-            }
-
-            ActionButton {
-                objectName: "aiControlHandoffButton"
-                text: pane.controller.activeAiControlOwner === "user" ? qsTr("Resume agent") : qsTr("Take control")
-                iconName: pane.controller.activeAiControlOwner === "user" ? "play" : "terminal"
-                enabled: pane.controller.activeAiControlOwner !== "user" || !pane.busy
-                accessibleName: pane.controller.activeAiControlOwner === "user" ? qsTr("Resume AI terminal write control") : qsTr("Take terminal control from AI")
-                onClicked: {
-                    if (pane.controller.activeAiControlOwner === "user") {
-                        pane.controller.resumeAiAgentControl();
-                    } else {
-                        pane.controller.takeAiControl();
-                    }
-                }
             }
         }
 
@@ -890,6 +855,7 @@ Rectangle {
                 required property int index
                 required property string messageRole
                 required property string text
+                required property string reasoning
                 required property string state
                 required property string error
                 required property bool truncated
@@ -930,6 +896,56 @@ Rectangle {
                         anchors.margins: 9
                         spacing: 5
 
+                        Button {
+                            id: reasoningToggle
+
+                            property bool expanded: false
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: visible ? 30 : 0
+                            visible: messageItem.messageRole === "assistant" && messageItem.reasoning.length > 0
+                            text: expanded ? qsTr("Hide model reasoning") : qsTr("Show model reasoning")
+                            Accessible.name: text
+                            onClicked: expanded = !expanded
+
+                            contentItem: RowLayout {
+                                spacing: 6
+
+                                AppIcon {
+                                    Layout.preferredWidth: 14
+                                    Layout.preferredHeight: 14
+                                    name: reasoningToggle.expanded ? "chevron-down" : "chevron-right"
+                                    color: Theme.textMuted
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: reasoningToggle.text
+                                    color: Theme.textSoft
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.textCompact
+                                }
+                            }
+                            background: Rectangle {
+                                radius: Theme.radiusSmall
+                                color: reasoningToggle.down ? Theme.controlPressed : reasoningToggle.hovered ? Theme.controlHover : "transparent"
+                            }
+                        }
+
+                        TextEdit {
+                            Layout.fillWidth: true
+                            Layout.maximumHeight: 180
+                            visible: reasoningToggle.visible && reasoningToggle.expanded
+                            text: messageItem.reasoning
+                            color: Theme.textMuted
+                            readOnly: true
+                            selectByMouse: true
+                            wrapMode: TextEdit.Wrap
+                            textFormat: messageItem.messageRole === "assistant" ? TextEdit.MarkdownText : TextEdit.PlainText
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.textCompact
+                            onLinkActivated: link => Qt.openUrlExternally(link)
+                        }
+
                         TextEdit {
                             id: messageText
 
@@ -939,15 +955,16 @@ Rectangle {
                             readOnly: true
                             selectByMouse: true
                             wrapMode: TextEdit.Wrap
-                            textFormat: TextEdit.PlainText
+                            textFormat: messageItem.messageRole === "assistant" ? TextEdit.MarkdownText : TextEdit.PlainText
                             font.family: Theme.uiFont
                             font.pixelSize: Theme.textBody
+                            onLinkActivated: link => Qt.openUrlExternally(link)
                         }
 
                         Text {
                             Layout.fillWidth: true
-                            visible: messageItem.state === "failed" || messageItem.truncated
-                            text: messageItem.state === "failed" ? messageItem.error : qsTr("Message was truncated locally.")
+                            visible: messageItem.state === "failed" || messageItem.state === "cancelled" || messageItem.truncated
+                            text: messageItem.state === "failed" ? messageItem.error : messageItem.state === "cancelled" ? qsTr("Cancelled") : qsTr("Message was truncated locally.")
                             color: messageItem.state === "failed" ? Theme.dangerText : Theme.warning
                             wrapMode: Text.WordWrap
                             font.family: Theme.uiFont
@@ -1020,7 +1037,7 @@ Rectangle {
                             }
 
                             ActionButton {
-                                visible: messageItem.messageRole === "assistant" && messageItem.state === "failed" && messageItem.index === conversationList.count - 1
+                                visible: messageItem.messageRole === "assistant" && (messageItem.state === "failed" || messageItem.state === "cancelled") && messageItem.index === conversationList.count - 1
                                 text: qsTr("Retry")
                                 iconName: "refresh"
                                 accessibleName: qsTr("Retry the failed assistant response")

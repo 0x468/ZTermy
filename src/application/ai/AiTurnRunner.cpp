@@ -194,6 +194,7 @@ std::expected<void, AiProviderError> AiTurnRunner::startAttempt()
 
 void AiTurnRunner::handleEvent(const ProviderHttpClient::RequestId requestId, const AiStreamEvent &event)
 {
+    constexpr std::size_t maximumReasoningBytes = std::size_t{512} * 1024;
     if (!m_requestId.has_value() || *m_requestId != requestId || !active())
     {
         return;
@@ -212,6 +213,18 @@ void AiTurnRunner::handleEvent(const ProviderHttpClient::RequestId requestId, co
         || event.type == AiStreamEventType::toolCallCompleted)
     {
         observeToolEvent(event);
+    }
+    if (event.type == AiStreamEventType::reasoningDelta && !event.delta.empty())
+    {
+        if (event.delta.size() > maximumReasoningBytes - std::min(maximumReasoningBytes, m_currentReasoning.size()))
+        {
+            m_pendingError = AiProviderError{.code = AiProviderErrorCode::protocol,
+                                             .message = "Provider reasoning exceeds the 512 KiB limit.",
+                                             .retryable = false};
+            static_cast<void>(m_client.cancel(*m_requestId));
+            return;
+        }
+        m_currentReasoning += event.delta;
     }
     if (event.type == AiStreamEventType::responseCompleted && !m_pendingToolCalls.empty())
     {
@@ -316,9 +329,11 @@ std::expected<void, AiProviderError> AiTurnRunner::continueWithTools()
         }
     }
 
-    m_activeToolExchange = AiToolExchange{.calls = std::move(m_pendingToolCalls)};
+    m_activeToolExchange =
+        AiToolExchange{.calls = std::move(m_pendingToolCalls), .reasoning = std::move(m_currentReasoning)};
     m_activeToolExchange->outputs.reserve(m_activeToolExchange->calls.size());
     m_pendingToolCalls.clear();
+    m_currentReasoning.clear();
     m_nextToolIndex = 0;
     return executeNextTool();
 }
@@ -466,6 +481,7 @@ void AiTurnRunner::clearTurn()
     m_bufferedStart.reset();
     m_pendingError.reset();
     m_pendingToolCalls.clear();
+    m_currentReasoning.clear();
     m_activeToolExchange.reset();
     m_pendingToolCancellation = {};
     m_responseId.clear();

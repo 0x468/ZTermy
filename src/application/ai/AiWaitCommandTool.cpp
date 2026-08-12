@@ -1,4 +1,5 @@
 #include "application/ai/AiWaitCommandTool.h"
+#include "domain/ai/AiContextBroker.h"
 
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -95,6 +96,14 @@ constexpr std::uint32_t maximumTimeoutMilliseconds = 120'000;
     else
     {
         value.insert(QStringLiteral("exit_status"), QJsonValue::Null);
+    }
+    if (command.state == AiTrackedCommandState::finished)
+    {
+        value.insert(QStringLiteral("output"), text(AiContextBroker::normalizeTerminalText(command.output)));
+        value.insert(QStringLiteral("output_complete"),
+                     command.outputCoverage == terminal::CommandOutputCoverage::complete
+                         && command.omittedOutputBytes == 0);
+        value.insert(QStringLiteral("omitted_output_bytes"), static_cast<qint64>(command.omittedOutputBytes));
     }
     return value;
 }

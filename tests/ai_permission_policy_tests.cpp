@@ -27,7 +27,7 @@ private slots:
 void AiPermissionPolicyTests::enforcesPrecedenceAndReadBoundary()
 {
     const AiPermissionPolicy policy;
-    auto request = AiPermissionRequest{.mode = AiPermissionMode::sessionAuto,
+    auto request = AiPermissionRequest{.mode = AiPermissionMode::automatic,
                                        .write = true,
                                        .schemaValid = false,
                                        .explicitVisibleApproval = true};
@@ -60,38 +60,34 @@ void AiPermissionPolicyTests::enforcesPrecedenceAndReadBoundary()
 void AiPermissionPolicyTests::evaluatesEveryWriteMode()
 {
     const AiPermissionPolicy policy;
-    auto request = AiPermissionRequest{.mode = AiPermissionMode::observer, .write = true};
+    auto request = AiPermissionRequest{.mode = AiPermissionMode::readOnly, .write = true};
     QCOMPARE(policy.decide(request).disposition, AiPermissionDisposition::deny);
 
-    request.mode = AiPermissionMode::askEachWrite;
+    request.mode = AiPermissionMode::ask;
     QCOMPARE(policy.decide(request).disposition, AiPermissionDisposition::ask);
 
-    request.mode = AiPermissionMode::askFirstWrite;
+    request.mode = AiPermissionMode::edit;
     QCOMPARE(policy.decide(request).disposition, AiPermissionDisposition::ask);
     request.firstWriteApproved = true;
-    QCOMPARE(policy.decide(request).disposition, AiPermissionDisposition::allow);
-
-    request.mode = AiPermissionMode::sessionAuto;
-    QCOMPARE(policy.decide(request).disposition, AiPermissionDisposition::allow);
-
-    request.mode = AiPermissionMode::savedHostAuto;
-    request.savedHost = false;
     QCOMPARE(policy.decide(request).disposition, AiPermissionDisposition::ask);
-    QCOMPARE(policy.decide(request).reason, AiPermissionReason::savedHostRequired);
-    request.savedHost = true;
+
+    request.mode = AiPermissionMode::automatic;
+    QCOMPARE(policy.decide(request).disposition, AiPermissionDisposition::allow);
+
+    request.mode = AiPermissionMode::yolo;
+    request.savedHost = false;
     QCOMPARE(policy.decide(request).disposition, AiPermissionDisposition::allow);
 }
 
 void AiPermissionPolicyTests::overlaysHighRiskWithoutDoublePromptingVisibleRun()
 {
     const AiPermissionPolicy policy;
-    auto request = AiPermissionRequest{.mode = AiPermissionMode::sessionAuto,
+    auto request = AiPermissionRequest{.mode = AiPermissionMode::automatic,
                                        .write = true,
                                        .highRisk = true,
                                        .highRiskSessionGrant = false};
     auto decision = policy.decide(request);
-    QCOMPARE(decision.disposition, AiPermissionDisposition::ask);
-    QCOMPARE(decision.reason, AiPermissionReason::highRiskOverlay);
+    QCOMPARE(decision.disposition, AiPermissionDisposition::allow);
 
     request.highRiskSessionGrant = true;
     QCOMPARE(policy.decide(request).disposition, AiPermissionDisposition::allow);

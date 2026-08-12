@@ -1,7 +1,7 @@
 # V3 implementation traceability
 
-Status: implementation audit complete; duration and owner/environment release
-acceptance tracked separately
+Status: `0.3.0`-`0.3.4` implementation audit complete; post-RC agent UX
+hardening in progress and owner/environment release acceptance tracked separately
 
 Date: 2026-08-12
 
@@ -60,10 +60,29 @@ addition.
 | Privacy diagnostics and provider wire contracts | `src/application/ai/AiPrivacyDiagnostics.*`, provider adapter files above | `ai-privacy-diagnostics`, `provider-http-client`, `provider-request-factory`, `provider-stream-mapper` | ADR 0075, 0077 |
 | Concurrency, responsive accessibility, translation, package, and release evidence | `scripts/run_ai_concurrency_soak.ps1`, `scripts/run_terminal_stability_soak.ps1`, `scripts/verify_v3_release_candidate.ps1`; real-window/package CMake gates | `ai-mcp-lifecycle-stress`, `qml-native-window-smoke`, `translation-catalog`, `windows-executable-metadata`, `branding-assets` plus the opt-in duration drivers | ADR 0076, 0078 and inherited ADR 0014–0016 |
 
+## 0.3.5 — agent conversation repair
+
+| Approved boundary | Representative implementation | Focused CTest contracts | Decisions |
+| --- | --- | --- | --- |
+| Completed command results return normalized retained output and explicit completeness instead of forcing the model to infer from the visible viewport | `src/domain/ai/AiCommandTracker.*`, `src/application/ai/AiWaitCommandTool.*`, `src/domain/ai/AiContextBroker.*` | `ai-command-tracker`, `ai-wait-command-tool`, `ai-context-broker` | ADR 0080 |
+| Cancellation is a terminal, retryable conversation state and cannot be overwritten by the synchronous cancel callback | `src/application/AppController.*`, `src/application/ai/AiConversationModel.*`, `AiTurnRunner.*` | `app-controller`, `ai-conversation-model`, `ai-turn-runner` | ADR 0080 |
+| Assistant Markdown, raw-copy fidelity, provider-exposed reasoning, and opt-in wire trace | `src/ui/qml/AiAssistantPane.qml`, `src/infrastructure/ai/ProviderRequestFactory.*`, `ProviderHttpClient.*`, `src/application/AppController.*` | `provider-request-factory`, `provider-http-client`, `ai-conversation-model`, `qml-native-window-smoke` | ADR 0080 |
+| Ordinary terminal typing and agent turns share an invisible serialized PTY lease; the next AI turn resumes agent ownership without a daily takeover control | `src/application/AppController.*`, `src/domain/ai/AiAgentGuard.*`, `src/ui/qml/AiAssistantPane.qml` | `app-controller`, `ai-agent-guard`, `ai-action-tool-dispatcher` | ADR 0080 |
+
+## 0.3.6 — modes and reusable rules
+
+The five user-facing modes (`read-only`, `ask`, `edit`, `auto`, and `yolo`),
+legacy-settings migration, and the in-panel mode selector are implemented and
+covered by `application-settings`, `ai-permission-policy`,
+`ai-action-tool-dispatcher`, and `app-controller`. Exact/prefix/glob/regex/all
+rules with once/session/profile/global lifetimes remain the next implementation
+slice and are not yet claimed complete.
+
 ## Evidence classification
 
-- **Implementation complete:** every approved `0.3.0`–`0.3.4` boundary above
-  has production code and at least one focused executable contract.
+- **Implementation complete:** every approved `0.3.0`–`0.3.4` boundary and the
+  `0.3.5` repair boundary above have production code and at least one focused
+  executable contract.
 - **Automated candidate evidence:** the exact builds, test totals, static
   analysis, real-window gates, real-host key-only runs, and package hashes are
   recorded in `V3_0_3_0_RC_ACCEPTANCE.md`.

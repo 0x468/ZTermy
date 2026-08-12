@@ -20,6 +20,7 @@ private slots:
     void streamsAssistantMessageAndUsage();
     void boundsMessagesAndUtf8Text();
     void exposesFailureWithoutLeakingIntoLogs();
+    void exposesCancellationAsRetryableNeutralState();
     void exposesOnlyOneBoundedShellCommandSuggestion();
     void restoresOnlyBoundedUserAndAssistantMessages();
 };
@@ -77,6 +78,19 @@ void AiConversationModelTests::exposesFailureWithoutLeakingIntoLogs()
     QVERIFY(!model.streaming());
     model.clear();
     QCOMPARE(model.rowCount(), 0);
+}
+
+void AiConversationModelTests::exposesCancellationAsRetryableNeutralState()
+{
+    AiConversationModel model;
+    static_cast<void>(model.appendUserMessage(QStringLiteral("continue")));
+    const auto assistantId = model.beginAssistantMessage();
+    QVERIFY(model.appendAssistantDelta(assistantId, QStringLiteral("partial")));
+    QVERIFY(model.cancelAssistantMessage(assistantId));
+    QCOMPARE(model.data(model.index(1), AiConversationModel::StateRole).toString(), QStringLiteral("cancelled"));
+    QVERIFY(model.data(model.index(1), AiConversationModel::ErrorRole).toString().isEmpty());
+    QCOMPARE(model.providerMessages().size(), std::size_t{1});
+    QVERIFY(!model.streaming());
 }
 
 void AiConversationModelTests::exposesOnlyOneBoundedShellCommandSuggestion()

@@ -1,6 +1,6 @@
 # ADR 0067: User-approved AI runbooks
 
-Status: accepted
+Status: superseded by ADR 0080
 
 ## Context
 

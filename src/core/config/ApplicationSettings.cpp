@@ -28,7 +28,9 @@ constexpr qint64 sftpSchemaVersion = 10;
 constexpr qint64 aiProviderSchemaVersion = 11;
 constexpr qint64 aiPermissionSchemaVersion = 12;
 constexpr qint64 aiConversationHistorySchemaVersion = 13;
-constexpr qint64 currentSchemaVersion = aiConversationHistorySchemaVersion;
+constexpr qint64 aiDebugTraceSchemaVersion = 14;
+constexpr qint64 aiAgentModeSchemaVersion = 15;
+constexpr qint64 currentSchemaVersion = aiAgentModeSchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::AiPermissionPreference;
@@ -201,25 +203,25 @@ template <>
 template <>
 [[nodiscard]] std::optional<AiPermissionPreference> parsePreference(const QString &token)
 {
-    if (token == QStringLiteral("observer"))
+    if (token == QStringLiteral("read-only") || token == QStringLiteral("observer"))
     {
-        return AiPermissionPreference::observer;
+        return AiPermissionPreference::readOnly;
     }
-    if (token == QStringLiteral("ask-each-write"))
+    if (token == QStringLiteral("ask") || token == QStringLiteral("ask-each-write"))
     {
-        return AiPermissionPreference::askEachWrite;
+        return AiPermissionPreference::ask;
     }
-    if (token == QStringLiteral("ask-first-write"))
+    if (token == QStringLiteral("edit") || token == QStringLiteral("ask-first-write"))
     {
-        return AiPermissionPreference::askFirstWrite;
+        return AiPermissionPreference::edit;
     }
-    if (token == QStringLiteral("session-auto"))
+    if (token == QStringLiteral("auto") || token == QStringLiteral("session-auto"))
     {
-        return AiPermissionPreference::sessionAuto;
+        return AiPermissionPreference::automatic;
     }
-    if (token == QStringLiteral("saved-host-auto"))
+    if (token == QStringLiteral("yolo") || token == QStringLiteral("saved-host-auto"))
     {
-        return AiPermissionPreference::savedHostAuto;
+        return AiPermissionPreference::yolo;
     }
     return std::nullopt;
 }
@@ -272,7 +274,7 @@ template <>
         && version != localizationSchemaVersion && version != fontOptionsSchemaVersion
         && version != workbenchSchemaVersion && version != shortcutSchemaVersion && version != sftpSchemaVersion
         && version != aiProviderSchemaVersion && version != aiPermissionSchemaVersion
-        && version != currentSchemaVersion)
+        && version != aiConversationHistorySchemaVersion && version != currentSchemaVersion)
     {
         return std::unexpected(ApplicationSettingsStoreError::unsupportedVersion);
     }
@@ -306,6 +308,7 @@ template <>
     const QJsonValue aiAutomaticContextValue = root.value(QStringLiteral("aiAutomaticContext"));
     const QJsonValue aiPermissionValue = root.value(QStringLiteral("aiPermission"));
     const QJsonValue aiConversationHistoryEnabledValue = root.value(QStringLiteral("aiConversationHistoryEnabled"));
+    const QJsonValue aiDebugTraceEnabledValue = root.value(QStringLiteral("aiDebugTraceEnabled"));
 
     if (!themeValue.isString() || !opacityValue.isDouble() || !backdropValue.isString() || !fontFamilyValue.isString()
         || !fontSizeValue.isDouble() || !cursorValue.isString() || !cursorBlinkValue.isBool()
@@ -356,6 +359,10 @@ template <>
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
+    if (version >= aiDebugTraceSchemaVersion && !aiDebugTraceEnabledValue.isBool())
+    {
+        return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
+    }
     const auto theme = parsePreference<ThemePreference>(themeValue.toString());
     const auto backdrop = parsePreference<BackdropPreference>(backdropValue.toString());
     const auto accent = version >= accentSchemaVersion ? parsePreference<AccentPreference>(accentValue.toString())
@@ -372,7 +379,7 @@ template <>
                                 : std::optional{AiProviderPreference::openAiResponses};
     const auto aiPermission = version >= aiPermissionSchemaVersion
                                   ? parsePreference<AiPermissionPreference>(aiPermissionValue.toString())
-                                  : std::optional{AiPermissionPreference::askEachWrite};
+                                  : std::optional{AiPermissionPreference::ask};
     const qint64 fontSize = fontSizeValue.toInteger(-1);
     if (!theme || !backdrop || !accent || !cursor || !credentialStorage || !language || !aiProvider || !aiPermission
         || fontSizeValue.toDouble() != static_cast<double>(fontSize))
@@ -431,6 +438,7 @@ template <>
         .aiPermission = *aiPermission,
         .aiConversationHistoryEnabled =
             version >= aiConversationHistorySchemaVersion && aiConversationHistoryEnabledValue.toBool(),
+        .aiDebugTraceEnabled = version >= aiDebugTraceSchemaVersion && aiDebugTraceEnabledValue.toBool(),
     };
     if (!validSettings(settings))
     {
@@ -567,6 +575,7 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
         {QStringLiteral("aiAutomaticContext"), settings.aiAutomaticContext},
         {QStringLiteral("aiPermission"), aiPermissionPreferenceToken(settings.aiPermission)},
         {QStringLiteral("aiConversationHistoryEnabled"), settings.aiConversationHistoryEnabled},
+        {QStringLiteral("aiDebugTraceEnabled"), settings.aiDebugTraceEnabled},
     };
 
     const QByteArray data = QJsonDocument(root).toJson(QJsonDocument::Indented);
@@ -696,17 +705,17 @@ QString aiPermissionPreferenceToken(const AiPermissionPreference preference)
 {
     switch (preference)
     {
-        case AiPermissionPreference::observer:
-            return QStringLiteral("observer");
-        case AiPermissionPreference::askFirstWrite:
-            return QStringLiteral("ask-first-write");
-        case AiPermissionPreference::sessionAuto:
-            return QStringLiteral("session-auto");
-        case AiPermissionPreference::savedHostAuto:
-            return QStringLiteral("saved-host-auto");
-        case AiPermissionPreference::askEachWrite:
+        case AiPermissionPreference::readOnly:
+            return QStringLiteral("read-only");
+        case AiPermissionPreference::edit:
+            return QStringLiteral("edit");
+        case AiPermissionPreference::automatic:
+            return QStringLiteral("auto");
+        case AiPermissionPreference::yolo:
+            return QStringLiteral("yolo");
+        case AiPermissionPreference::ask:
         default:
-            return QStringLiteral("ask-each-write");
+            return QStringLiteral("ask");
     }
 }
 

@@ -26,7 +26,8 @@ terminal bytes + shell lifecycle + user selection + session metadata
     -> terminal / SSH / SFTP / telemetry actions
 ```
 
-The supporting research is in `research/AI_TERMINAL_LANDSCAPE.md`; the target
+The supporting research is in `research/AI_TERMINAL_LANDSCAPE.md` and
+`research/AI_AGENT_HARNESSES.md`; the target
 design is in `AI_ARCHITECTURE.md`; security boundaries are in
 `AI_SECURITY_AND_PRIVACY.md`; acceptance is in `testing/V3_AI_ACCEPTANCE.md`;
 implementation-to-test traceability is in
@@ -137,8 +138,8 @@ SFTP writes, run unattended background agents, or depend on MCP.
 - replay-safe, at-most-once native dispatch within an active conversation through
   a retained turn/tool-call deduplication record; side effects are never blindly
   retried;
-- observer, ask-each-write, ask-first-write, session-auto, and saved-host-auto
-  modes with deny/allow rules, a high-risk overlay, visible target identity,
+- read-only, ask, edit, auto, and YOLO modes with typed deny/ask/allow rules,
+  once/session/profile/global grants, visible target identity,
   per-turn action/time/token budgets, and loop detection;
 - long-running command snapshots, alternate-screen metadata, and user/agent
   control handoff;
@@ -184,6 +185,52 @@ becomes conversation retention.
   privacy diagnostics, and long-duration concurrency gates;
 - complete English/Chinese, accessibility, package, upgrade, recovery, and
   manual real-host acceptance for the V3 surface.
+
+### 0.3.5 — agent conversation repair
+
+- return the finished command's bounded normalized output directly from
+  `wait_command`, so the model does not reconstruct results from a viewport;
+- make cancel idempotent and immediately responsive, represent cancellation as
+  a neutral retryable lifecycle state, and prevent synchronous cancellation
+  callbacks from restoring a stale `cancelling` state;
+- render assistant text and provider-exposed reasoning as Markdown while Copy
+  preserves the untouched provider source;
+- add an explicit local JSONL provider trace for opt-in debugging of the exact
+  bounded request, terminal context, tool continuation, and raw response;
+- remove visible terminal-control ceremony from ordinary conversation while
+  retaining deterministic PTY write serialization internally.
+
+### 0.3.6 — mainstream modes and reusable rules
+
+- replace legacy observer/first-write/saved-host modes with Read-only, Ask,
+  Edit, Auto, and YOLO;
+- add capability-specific exact/prefix/glob/regex/all rules with allow/ask/deny
+  decisions and once/session/profile/global duration;
+- make approval cards offer Run once, session rule, permanent rule, deny once,
+  and permanent deny with an editable suggested matcher;
+- add a compact rule manager with search, enable/disable, edit, delete, import,
+  and export.
+
+### 0.3.7 — reasoning, tool cards, and rich Markdown
+
+- expose provider/model reasoning capability and off/auto/effort controls only
+  where the adapter can express them honestly;
+- retain provider-exposed reasoning summaries across tool continuations without
+  claiming access to hidden chain-of-thought;
+- complete responsive native tool cards, Markdown tables/lists/code/links,
+  raw-copy behavior, and narrow-panel/high-DPI visual acceptance;
+- distinguish provider retry, user retry, tool wait, cancellation, and offline
+  recovery with responsive non-blocking controls.
+
+### 0.3.8 — autonomous terminal-agent closure
+
+- exercise local and SSH agents against deterministic multi-step tasks in every
+  mode, including user typing during a run and long/interactive commands;
+- finalize edit/auto/YOLO behavior across terminal, SFTP, runbooks, and MCP with
+  no accidental confirmation prompts;
+- complete rule-precedence, replay, loop-budget, concurrency, latency, and
+  provider compatibility gates;
+- produce the owner-facing V3 acceptance matrix and release candidate artifacts.
 
 Delivery status:
 
@@ -260,11 +307,12 @@ The owner approved these defaults on 2026-08-11:
 - encrypted AI history is opt-in; conversations remain session-only by default;
 - provider order is OpenAI Responses, Ollama, then generic OpenAI-compatible,
   while the architecture remains provider-independent;
-- saved-host automatic execution is available only through advanced settings;
+- Auto and YOLO are explicit expert modes; YOLO does not emit heuristic risk
+  prompts, while profile-scoped exceptions are represented as rules;
 - ephemeral shell integration is the default and an explicit, previewed,
   reversible persistent installer is allowed;
-- model-initiated high-risk actions ask by default even in automatic mode; an
-  advanced grant may relax this only for the current session and exact target;
+- command-risk classification is informative in Ask/Edit and audit views; it
+  does not add surprise prompts to Auto, YOLO, or direct visible Run;
 - direct visible Run remains exact authorization and receives no duplicate
   warning.
 

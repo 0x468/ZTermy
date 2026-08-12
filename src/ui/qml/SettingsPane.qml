@@ -189,11 +189,11 @@ Rectangle {
     }
 
     function aiPermissionIndex(token) {
-        return token === "observer" ? 0 : token === "ask-first-write" ? 2 : token === "session-auto" ? 3 : token === "saved-host-auto" ? 4 : 1;
+        return token === "read-only" ? 0 : token === "edit" ? 2 : token === "auto" ? 3 : token === "yolo" ? 4 : 1;
     }
 
     function aiPermissionToken() {
-        return ["observer", "ask-each-write", "ask-first-write", "session-auto", "saved-host-auto"][aiPermissionBox.currentIndex];
+        return ["read-only", "ask", "edit", "auto", "yolo"][aiPermissionBox.currentIndex];
     }
 
     function aiEndpointScopeLabel(token) {
@@ -388,6 +388,7 @@ Rectangle {
         aiBaseUrlDraft = controller.aiBaseUrl;
         aiModelDraft = controller.aiModel;
         aiAutomaticContextSwitch.checked = controller.aiAutomaticContext;
+        aiDebugTraceSwitch.checked = controller.aiDebugTraceEnabled;
         aiConversationHistorySwitch.checked = controller.aiConversationHistoryEnabled;
         aiApiKeyField.text = "";
         loadingDraft = false;
@@ -1419,8 +1420,8 @@ Rectangle {
 
                             objectName: "settingsAiPermission"
                             Layout.fillWidth: true
-                            model: ["observer", "ask-each-write", "ask-first-write", "session-auto", "saved-host-auto"]
-                            displayTextModel: [qsTr("Observer only"), qsTr("Ask for every write"), qsTr("Ask for the first write"), qsTr("Automatic for this session"), qsTr("Automatic for saved hosts")]
+                            model: ["read-only", "ask", "edit", "auto", "yolo"]
+                            displayTextModel: [qsTr("Read-only"), qsTr("Ask before changes"), qsTr("Edit files automatically"), qsTr("Auto"), qsTr("YOLO")]
                             accessibleName: qsTr("AI terminal action permission mode")
                         }
 
@@ -1434,6 +1435,19 @@ Rectangle {
                             objectName: "settingsAiAutomaticContext"
                             Layout.fillWidth: true
                             text: qsTr("Attach bounded recent terminal context automatically")
+                            accessibleName: text
+                        }
+
+                        Item {
+                            visible: !pane.compactLayout
+                            implicitHeight: aiDebugTraceSwitch.implicitHeight
+                        }
+                        AppSwitch {
+                            id: aiDebugTraceSwitch
+
+                            objectName: "settingsAiDebugTrace"
+                            Layout.fillWidth: true
+                            text: qsTr("Record full AI request and response trace")
                             accessibleName: text
                         }
 
@@ -1457,6 +1471,16 @@ Rectangle {
                         Layout.fillWidth: true
                         text: qsTr("Request: %1").arg(pane.controller.aiProviderEndpointPreview(pane.aiProviderToken(), pane.aiBaseUrlDraft))
                         color: Theme.textSubtle
+                        elide: Text.ElideMiddle
+                        font.family: Theme.terminalFont
+                        font.pixelSize: Theme.textCompact
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        visible: aiDebugTraceSwitch.checked
+                        text: pane.controller.aiDebugTracePath.length > 0 ? qsTr("Debug trace: %1").arg(pane.controller.aiDebugTracePath) : qsTr("A new JSONL trace file will be created after saving.")
+                        color: Theme.warning
                         elide: Text.ElideMiddle
                         font.family: Theme.terminalFont
                         font.pixelSize: Theme.textCompact
@@ -1490,7 +1514,7 @@ Rectangle {
                             accessibleName: qsTr("Save AI provider")
                             variant: "primary"
                             onClicked: {
-                                const saved = pane.controller.saveAiProviderConfiguration(pane.aiProviderToken(), pane.aiBaseUrlDraft, pane.aiModelDraft, aiAutomaticContextSwitch.checked, pane.aiPermissionToken(), aiApiKeyField.text);
+                                const saved = pane.controller.saveAiProviderConfiguration(pane.aiProviderToken(), pane.aiBaseUrlDraft, pane.aiModelDraft, aiAutomaticContextSwitch.checked, pane.aiPermissionToken(), aiApiKeyField.text, aiDebugTraceSwitch.checked);
                                 pane.presentStatus(saved ? qsTr("AI provider saved.") : qsTr("The provider settings or API key could not be saved."), !saved, saved);
                                 if (saved)
                                     aiApiKeyField.text = "";

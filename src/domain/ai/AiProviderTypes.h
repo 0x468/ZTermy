@@ -64,6 +64,7 @@ struct AiToolExchange final
 {
     std::vector<AiToolCall> calls;
     std::vector<AiToolOutput> outputs;
+    std::string reasoning;
 };
 
 struct AiGenerationRequest final

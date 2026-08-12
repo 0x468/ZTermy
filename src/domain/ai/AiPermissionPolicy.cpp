@@ -88,36 +88,22 @@ AiPermissionDecision AiPermissionPolicy::decide(const AiPermissionRequest &reque
     {
         switch (request.mode)
         {
-            case AiPermissionMode::observer:
-                decision = {.reason = AiPermissionReason::observerMode};
+            case AiPermissionMode::readOnly:
+                decision = {.reason = AiPermissionReason::readOnlyMode};
                 break;
-            case AiPermissionMode::askEachWrite:
-                decision = {.disposition = AiPermissionDisposition::ask,
-                            .reason = AiPermissionReason::askEachWriteMode};
+            case AiPermissionMode::ask:
+                decision = {.disposition = AiPermissionDisposition::ask, .reason = AiPermissionReason::askMode};
                 break;
-            case AiPermissionMode::askFirstWrite:
-                decision = request.firstWriteApproved
-                               ? AiPermissionDecision{.disposition = AiPermissionDisposition::allow,
-                                                      .reason = AiPermissionReason::askFirstWriteGrant}
-                               : AiPermissionDecision{.disposition = AiPermissionDisposition::ask,
-                                                      .reason = AiPermissionReason::askFirstWriteMode};
+            case AiPermissionMode::edit:
+                decision = {.disposition = AiPermissionDisposition::ask, .reason = AiPermissionReason::editMode};
                 break;
-            case AiPermissionMode::sessionAuto:
-                decision = {.disposition = AiPermissionDisposition::allow,
-                            .reason = AiPermissionReason::sessionAutoMode};
+            case AiPermissionMode::automatic:
+                decision = {.disposition = AiPermissionDisposition::allow, .reason = AiPermissionReason::automaticMode};
                 break;
-            case AiPermissionMode::savedHostAuto:
-                decision = request.savedHost ? AiPermissionDecision{.disposition = AiPermissionDisposition::allow,
-                                                                    .reason = AiPermissionReason::savedHostAutoMode}
-                                             : AiPermissionDecision{.disposition = AiPermissionDisposition::ask,
-                                                                    .reason = AiPermissionReason::savedHostRequired};
+            case AiPermissionMode::yolo:
+                decision = {.disposition = AiPermissionDisposition::allow, .reason = AiPermissionReason::yoloMode};
                 break;
         }
-    }
-
-    if (decision.disposition == AiPermissionDisposition::allow && request.highRisk && !request.highRiskSessionGrant)
-    {
-        return {.disposition = AiPermissionDisposition::ask, .reason = AiPermissionReason::highRiskOverlay};
     }
     return decision;
 }

@@ -293,6 +293,11 @@ void finalizeItem(AiContextItem &item, const AiContextLimits &limits, const AiCo
 
 } // namespace
 
+std::string AiContextBroker::normalizeTerminalText(const std::string_view text)
+{
+    return normalizedTerminalText(text);
+}
+
 AiContextBroker::AiContextBroker(const AiContextLimits limits) : m_limits(limits) {}
 
 const AiContextLimits &AiContextBroker::limits() const noexcept

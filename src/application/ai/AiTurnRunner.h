@@ -78,6 +78,7 @@ private:
     std::optional<AiStreamEvent> m_bufferedStart;
     std::optional<AiProviderError> m_pendingError;
     std::vector<AiToolCall> m_pendingToolCalls;
+    std::string m_currentReasoning;
     std::optional<AiToolExchange> m_activeToolExchange;
     std::function<void()> m_pendingToolCancellation;
     std::string m_responseId;

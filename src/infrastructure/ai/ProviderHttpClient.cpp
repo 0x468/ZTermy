@@ -1,6 +1,8 @@
 #include "infrastructure/ai/ProviderHttpClient.h"
 
 #include <QByteArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QNetworkRequest>
 #include <QVariant>
 
@@ -123,9 +125,31 @@ ProviderHttpClient::start(const AiProviderConfiguration &configuration, const Ai
     state->eventHandler = std::move(eventHandler);
     state->finishedHandler = std::move(finishedHandler);
     const auto requestId = state->id;
+    if (m_traceHandler)
+    {
+        QJsonParseError parseError;
+        const auto body = QJsonDocument::fromJson(prepared->body, &parseError);
+        const auto traceUrl =
+            prepared->request.url().adjusted(QUrl::RemoveUserInfo | QUrl::RemoveQuery | QUrl::RemoveFragment);
+        QJsonObject record{
+            {QStringLiteral("method"), QStringLiteral("POST")},
+            {QStringLiteral("url"), traceUrl.toString()},
+            {QStringLiteral("query_present"), prepared->request.url().hasQuery()},
+            {QStringLiteral("content_type"), QString::fromLatin1(prepared->request.rawHeader("Content-Type"))}};
+        record.insert(QStringLiteral("body"), body.isObject() && parseError.error == QJsonParseError::NoError
+                                                  ? QJsonValue{body.object()}
+                                                  : QJsonValue{QString::fromUtf8(prepared->body)});
+        m_traceHandler(requestId, QStringLiteral("provider_request"),
+                       QJsonDocument(record).toJson(QJsonDocument::Compact));
+    }
     auto *reply = m_networkAccessManager->post(prepared->request, prepared->body);
     attach(reply, std::move(state));
     return requestId;
+}
+
+void ProviderHttpClient::setTraceHandler(TraceHandler handler)
+{
+    m_traceHandler = std::move(handler);
 }
 
 bool ProviderHttpClient::cancel(const RequestId requestId)
@@ -167,6 +191,10 @@ void ProviderHttpClient::consumeAvailable(QNetworkReply *reply)
     }
     auto &state = *iterator->second;
     const auto bytes = reply->readAll();
+    if (m_traceHandler && !bytes.isEmpty())
+    {
+        m_traceHandler(state.id, QStringLiteral("provider_response_bytes"), bytes);
+    }
     if (statusCode(*reply) >= 400)
     {
         const auto available = maxErrorBodyBytes - std::min(state.errorBody.size(), maxErrorBodyBytes);

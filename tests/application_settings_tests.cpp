@@ -85,8 +85,9 @@ void ApplicationSettingsTests::savesAndLoadsEveryPreference()
         .aiModel = QStringLiteral("terminal-model"),
         .aiCredentialReference = QStringLiteral("ai-custom"),
         .aiAutomaticContext = false,
-        .aiPermission = ztermy::config::AiPermissionPreference::savedHostAuto,
+        .aiPermission = ztermy::config::AiPermissionPreference::yolo,
         .aiConversationHistoryEnabled = true,
+        .aiDebugTraceEnabled = true,
     };
     const ztermy::config::ApplicationSettingsStore store(directory.filePath(QStringLiteral("settings.json")));
 
@@ -154,7 +155,7 @@ void ApplicationSettingsTests::migratesLegacyWindowOpacityAndNoneBackdrop()
     QFile saved(path);
     QVERIFY(saved.open(QIODevice::ReadOnly));
     const QByteArray persisted = saved.readAll();
-    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 13")));
+    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 15")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdropOpacity\": 0.75")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdrop\": \"transparent\"")));
     QVERIFY(!persisted.contains(QByteArrayLiteral("windowOpacity")));
@@ -370,7 +371,7 @@ void ApplicationSettingsTests::migratesEveryIntermediateSchema()
         QVERIFY(loaded->aiModel.isEmpty());
         QCOMPARE(loaded->aiCredentialReference, QStringLiteral("ai-default"));
         QVERIFY(loaded->aiAutomaticContext);
-        QCOMPARE(loaded->aiPermission, ztermy::config::AiPermissionPreference::askEachWrite);
+        QCOMPARE(loaded->aiPermission, ztermy::config::AiPermissionPreference::ask);
         QVERIFY(!loaded->aiConversationHistoryEnabled);
     }
 }
@@ -400,7 +401,7 @@ void ApplicationSettingsTests::migratesAiProviderSchemaWithPermissionDefault()
     QVERIFY2(loaded, qPrintable(QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact))));
     QCOMPARE(loaded->aiProvider, ztermy::config::AiProviderPreference::ollama);
     QCOMPARE(loaded->aiModel, QStringLiteral("qwen3"));
-    QCOMPARE(loaded->aiPermission, ztermy::config::AiPermissionPreference::askEachWrite);
+    QCOMPARE(loaded->aiPermission, ztermy::config::AiPermissionPreference::ask);
     QVERIFY(!loaded->aiConversationHistoryEnabled);
 }
 
@@ -416,7 +417,7 @@ void ApplicationSettingsTests::rejectsMalformedUnsupportedAndIncompleteDocuments
     QVERIFY(!malformed);
     QCOMPARE(malformed.error(), ztermy::config::ApplicationSettingsStoreError::invalidFormat);
 
-    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":14})")));
+    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":16})")));
     const auto unsupported = store.load();
     QVERIFY(!unsupported);
     QCOMPARE(unsupported.error(), ztermy::config::ApplicationSettingsStoreError::unsupportedVersion);

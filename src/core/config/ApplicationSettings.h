@@ -68,11 +68,11 @@ enum class AiProviderPreference : std::uint8_t
 
 enum class AiPermissionPreference : std::uint8_t
 {
-    observer,
-    askEachWrite,
-    askFirstWrite,
-    sessionAuto,
-    savedHostAuto,
+    readOnly,
+    ask,
+    edit,
+    automatic,
+    yolo,
 };
 
 struct ApplicationSettings final
@@ -103,8 +103,9 @@ struct ApplicationSettings final
     QString aiModel;
     QString aiCredentialReference = QStringLiteral("ai-default");
     bool aiAutomaticContext = true;
-    AiPermissionPreference aiPermission = AiPermissionPreference::askEachWrite;
+    AiPermissionPreference aiPermission = AiPermissionPreference::ask;
     bool aiConversationHistoryEnabled = false;
+    bool aiDebugTraceEnabled = false;
 
     [[nodiscard]] friend bool operator==(const ApplicationSettings &, const ApplicationSettings &) = default;
 };

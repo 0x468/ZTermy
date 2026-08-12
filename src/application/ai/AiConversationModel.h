@@ -33,6 +33,7 @@ public:
         MessageIdRole = Qt::UserRole + 1,
         MessageRole,
         TextRole,
+        ReasoningRole,
         StateRole,
         ErrorRole,
         TruncatedRole,
@@ -65,11 +66,13 @@ public:
     [[nodiscard]] std::uint64_t appendUserMessage(QString text);
     [[nodiscard]] std::uint64_t beginAssistantMessage();
     [[nodiscard]] bool appendAssistantDelta(std::uint64_t messageId, QString delta);
+    [[nodiscard]] bool appendAssistantReasoningDelta(std::uint64_t messageId, QString delta);
     [[nodiscard]] bool completeAssistantMessage(std::uint64_t messageId,
                                                 std::optional<AiTokenUsage> usage = std::nullopt);
     [[nodiscard]] bool setAssistantMetrics(std::uint64_t messageId, const AiTurnMetrics &metrics,
                                            const AiCostEstimate &costEstimate = {});
     [[nodiscard]] bool failAssistantMessage(std::uint64_t messageId, QString error);
+    [[nodiscard]] bool cancelAssistantMessage(std::uint64_t messageId);
     Q_INVOKABLE void clear();
 
 signals:
@@ -82,6 +85,7 @@ private:
         complete,
         streaming,
         failed,
+        cancelled,
     };
 
     struct Message final
@@ -89,6 +93,7 @@ private:
         std::uint64_t id = 0;
         AiMessageRole role = AiMessageRole::user;
         QString text;
+        QString reasoning;
         QString error;
         MessageState state = MessageState::complete;
         std::optional<AiTokenUsage> usage;

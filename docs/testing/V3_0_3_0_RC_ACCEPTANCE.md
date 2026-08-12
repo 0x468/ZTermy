@@ -146,8 +146,7 @@ Expected:
 
 ### 3. Agent permissions and terminal control
 
-1. Repeat a harmless write tool in observer, ask-each-write, ask-first-write,
-   session-auto, and saved-host-auto modes.
+1. Repeat a harmless write tool in read-only, ask, edit, auto, and yolo modes.
 2. Ask the model to propose a clearly destructive command without executing it.
 3. Start a long command, open a second AI conversation as an observer, wait/read
    from both, interrupt softly, and transfer control back to the user.
@@ -157,8 +156,8 @@ Expected:
 Expected:
 
 - every mode follows its displayed target and grant lifetime;
-- model-initiated high-risk work asks even in automatic mode unless the owner
-  explicitly grants the exact session/target override;
+- model-initiated work follows the selected mode and any higher-priority
+  reusable rule; no hidden risk overlay silently changes the selected mode;
 - only one conversation owns writes; observer cancellation does not cancel the
   command or another waiter;
 - frame generation, dimensions, cursor, takeover state, and degraded capability

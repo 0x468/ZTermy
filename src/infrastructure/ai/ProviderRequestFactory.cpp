@@ -92,7 +92,8 @@ namespace
     return result;
 }
 
-[[nodiscard]] QJsonArray conversationMessages(const AiGenerationRequest &generation, const bool objectArguments)
+[[nodiscard]] QJsonArray conversationMessages(const AiGenerationRequest &generation, const bool objectArguments,
+                                              const QString &reasoningKey = {})
 {
     auto result = messages(generation);
     for (const auto &exchange : generation.toolHistory)
@@ -118,9 +119,14 @@ namespace
         }
         if (!calls.isEmpty())
         {
-            result.append(QJsonObject{{QStringLiteral("role"), QStringLiteral("assistant")},
-                                      {QStringLiteral("content"), QJsonValue::Null},
-                                      {QStringLiteral("tool_calls"), calls}});
+            QJsonObject assistant{{QStringLiteral("role"), QStringLiteral("assistant")},
+                                  {QStringLiteral("content"), QJsonValue::Null},
+                                  {QStringLiteral("tool_calls"), calls}};
+            if (!reasoningKey.isEmpty() && !exchange.reasoning.empty())
+            {
+                assistant.insert(reasoningKey, fromUtf8(exchange.reasoning));
+            }
+            result.append(assistant);
         }
         for (const auto &output : exchange.outputs)
         {
@@ -175,7 +181,7 @@ namespace
 [[nodiscard]] QJsonObject compatibleBody(const AiProviderConfiguration &configuration,
                                          const AiGenerationRequest &generation, const QJsonArray &tools)
 {
-    auto input = conversationMessages(generation, false);
+    auto input = conversationMessages(generation, false, QStringLiteral("reasoning_content"));
     if (!generation.instructions.empty())
     {
         input.prepend(QJsonObject{{QStringLiteral("role"), QStringLiteral("system")},
@@ -278,7 +284,7 @@ namespace
 [[nodiscard]] QJsonObject ollamaBody(const AiProviderConfiguration &configuration,
                                      const AiGenerationRequest &generation, const QJsonArray &tools)
 {
-    auto input = conversationMessages(generation, true);
+    auto input = conversationMessages(generation, true, QStringLiteral("thinking"));
     if (!generation.instructions.empty())
     {
         input.prepend(QJsonObject{{QStringLiteral("role"), QStringLiteral("system")},
