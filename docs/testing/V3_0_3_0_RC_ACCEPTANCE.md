@@ -57,7 +57,11 @@ The following gates completed with exit code zero:
 8. WiX generation, ICE validation, decompilation, and structural inspection.
    Only the retained and reviewed ICE61, ICE69, and ICE91 warnings were emitted.
 9. Final portable archive extraction, `portable.flag` inspection, and packaged
-   executable lifecycle smoke.
+   executable lifecycle smoke. The executable extracted from the checksummed
+   final ZIP additionally passed the work-area/caption, appearance,
+   resize/hit-test, responsive layout, keyboard, large-output terminal render,
+   and lifecycle gates; the packaged binary passed the DPI matrix at
+   100/125/150/200 percent and the integrated real-host SSH/SFTP UI smoke.
 10. The pinned key-only LAN test host completed 100 authenticated
     connect/disconnect cycles in one `SshTerminalSession` with no failure. A
     second focused real-host run passed explicit host-key confirmation, bounded
