@@ -220,7 +220,9 @@ Remove-Item Env:ZTERMY_LOCAL_SOAK_SECONDS
 Also required before declaring the final release rather than an RC:
 
 - 100 real SSH connect/disconnect/tab-close cycles on the current supported
-  Windows 11 release;
+  Windows 11 release, using `ZTERMY_TEST_SSH_STRESS=1` and
+  `ZTERMY_TEST_SSH_STRESS_CYCLES=100` with the non-secret host/key-path gate
+  variables documented in `SSH_TRANSPORT.md`;
 - the same critical matrix on the previous supported Windows 11 build when a
   VM or machine is available;
 - five clean runs per supported evaluation task on the designated cloud model

@@ -270,15 +270,18 @@ rendering.
 ## Repeated lifecycle stress gate
 
 The opt-in test reuses one `SshTerminalSession` after an initial trusted-host
-warm-up, then performs 20 authenticated connect/disconnect cycles. It verifies
-that every cycle reaches both connected and disconnected states, never prompts
-for the already remembered host key, and does not accumulate process handles.
+warm-up, then performs 20 authenticated connect/disconnect cycles by default.
+`ZTERMY_TEST_SSH_STRESS_CYCLES` may select 1 through 100 cycles; the V3 release
+gate uses 100. It verifies that every cycle reaches both connected and
+disconnected states, never prompts for the already remembered host key, and does
+not accumulate process handles.
 
 Set only the host identity and private-key path; never put a passphrase or
 private-key content in an environment variable:
 
 ```powershell
 $env:ZTERMY_TEST_SSH_STRESS = "1"
+$env:ZTERMY_TEST_SSH_STRESS_CYCLES = "100"
 $env:ZTERMY_TEST_SSH_HOST = "192.168.1.25"
 $env:ZTERMY_TEST_SSH_USERNAME = "testkey"
 $env:ZTERMY_TEST_SSH_PRIVATE_KEY = "$HOME\.ssh\id_ed25519"
@@ -291,7 +294,7 @@ Expected:
 
 - The initial warm-up asks for host-key confirmation once and matches the
   independently trusted fingerprint.
-- All 20 subsequent cycles authenticate without another trust prompt.
+- All configured cycles authenticate without another trust prompt.
 - Each stop joins the worker and reaches `Disconnected`.
 - Final process handle count is no more than four above the post-warm-up
   baseline; linear handle growth fails the test.

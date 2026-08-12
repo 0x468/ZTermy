@@ -1185,8 +1185,13 @@ void SshTerminalSessionTests::survivesRepeatedConnectDisconnectCycles()
 {
     if (qgetenv("ZTERMY_TEST_SSH_STRESS") != QByteArrayLiteral("1"))
     {
-        QSKIP("Set ZTERMY_TEST_SSH_STRESS=1 to run the 20-cycle real-host gate");
+        QSKIP("Set ZTERMY_TEST_SSH_STRESS=1 to run the real-host lifecycle gate");
     }
+
+    bool cycleCountIsValid = false;
+    const int configuredCycleCount = qEnvironmentVariableIntValue("ZTERMY_TEST_SSH_STRESS_CYCLES", &cycleCountIsValid);
+    const int cycleCount = cycleCountIsValid ? configuredCycleCount : 20;
+    QVERIFY2(cycleCount >= 1 && cycleCount <= 100, "ZTERMY_TEST_SSH_STRESS_CYCLES must be between 1 and 100");
 
     const QByteArray host = qgetenv("ZTERMY_TEST_SSH_HOST");
     const QByteArray username = qgetenv("ZTERMY_TEST_SSH_USERNAME");
@@ -1241,7 +1246,7 @@ void SshTerminalSessionTests::survivesRepeatedConnectDisconnectCycles()
     QVERIFY(GetProcessHandleCount(GetCurrentProcess(), &baselineHandleCount));
     DWORD maximumHandleCount = baselineHandleCount;
 
-    for (int cycle = 0; cycle < 20; ++cycle)
+    for (int cycle = 0; cycle < cycleCount; ++cycle)
     {
         confirmationSpy.clear();
         runningSpy.clear();
@@ -1264,7 +1269,7 @@ void SshTerminalSessionTests::survivesRepeatedConnectDisconnectCycles()
     DWORD finalHandleCount = 0;
     QVERIFY(GetProcessHandleCount(GetCurrentProcess(), &finalHandleCount));
     qInfo().noquote() << "SSH lifecycle handle counts"
-                      << "baseline=" << baselineHandleCount << "final=" << finalHandleCount
+                      << "cycles=" << cycleCount << "baseline=" << baselineHandleCount << "final=" << finalHandleCount
                       << "peak=" << maximumHandleCount;
     QVERIFY2(finalHandleCount <= baselineHandleCount + 4,
              qPrintable(QStringLiteral("Process handles grew from %1 to %2 (peak %3)")
