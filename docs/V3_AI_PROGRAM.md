@@ -29,7 +29,8 @@ terminal bytes + shell lifecycle + user selection + session metadata
 The supporting research is in `research/AI_TERMINAL_LANDSCAPE.md`; the target
 design is in `AI_ARCHITECTURE.md`; security boundaries are in
 `AI_SECURITY_AND_PRIVACY.md`; acceptance is in `testing/V3_AI_ACCEPTANCE.md`;
-the first formal review response is in
+implementation-to-test traceability is in
+`testing/V3_IMPLEMENTATION_TRACEABILITY.md`; the first formal review response is in
 `reviews/V3_AI_ARCHITECTURE_REVIEW_2026-08-11.md`.
 
 ## Product outcomes
