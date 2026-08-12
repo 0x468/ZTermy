@@ -32,8 +32,13 @@ contract non-deterministic.
 - Answer a real PowerShell `Read-Host` prompt through `write_to_pty` and require
   the interactive command to finish with the supplied value.
 - Cover a saved-SSH-Profile SFTP mutation matrix without network dependency;
-  the existing real-host gates remain responsible for transport and shell
-  environment evidence.
+  the existing real-host gates remain responsible for general transport and
+  shell environment evidence.
+- Add a separate environment-gated `ai-agent-real-host` contract. It sends
+  automatic Agent commands through a real `SshTerminalSession`, queues direct
+  user input behind a long Agent command, and answers a remote interactive
+  `read` through `write_to_pty`. Offline test runs skip this case explicitly;
+  a release candidate records a real key-authenticated execution.
 - Include this scenario and the action-dispatcher contract in the mixed AI/MCP
   concurrency soak. Bump the content-free soak schema so an older report cannot
   be mistaken for evidence covering the expanded set.
@@ -41,7 +46,10 @@ contract non-deterministic.
 ## Consequences
 
 The release gate now detects integration regressions that isolated policy,
-terminal, or serializer tests cannot see. It adds roughly one to two seconds to
-one mixed-soak iteration and requires PowerShell/ConPTY, which is appropriate
-for ztermy's Windows 11 release platform. A fresh formal duration report is
-required for the final V3 candidate because the approved soak set changed.
+terminal, or serializer tests cannot see. The deterministic local scenario adds
+roughly one to two seconds to one mixed-soak iteration and requires
+PowerShell/ConPTY, which is appropriate for ztermy's Windows 11 release
+platform. The real-host scenario is not placed in the repeated soak because
+network availability is an independent environment variable. A fresh formal
+duration report is required for the final V3 candidate because the approved
+local soak set changed.

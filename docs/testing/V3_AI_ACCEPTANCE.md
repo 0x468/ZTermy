@@ -247,6 +247,9 @@ the unified release-candidate verifier.
   permission modes, real local ConPTY/PowerShell, semantic command completion,
   replay, user input during a long command, interactive PTY input, and the
   saved-SSH-Profile mutation matrix;
+- `ai-agent-real-host` passes against the owner-provided key-authenticated Linux
+  host and exercises automatic Agent execution, user input queued during a long
+  command, and an interactive remote `read` answered through `write_to_pty`;
 - schema-2 mixed Agent/MCP developer soaks completed one iteration in both
   configurations with zero failures;
 - the final candidate still requires a fresh schema-2 two-hour duration report,

@@ -96,6 +96,7 @@ covered by `application-settings`, `ai-permission-policy`,
 | Approved boundary | Representative implementation | Focused CTest contracts | Decisions |
 | --- | --- | --- | --- |
 | Mode-to-terminal end-to-end execution through real ConPTY/PowerShell, semantic command blocks, retained result, replay, long-command user input, and interactive PTY response | `tests/ai_agent_scenario_tests.cpp` plus the production dispatcher/session/observer/tracker path | `ai-agent-scenario` | ADR 0083 |
+| Agent and user input through a real key-authenticated SSH PTY, including long and interactive commands | `tests/ai_agent_real_host_tests.cpp` plus `SshTerminalSession` and the production action dispatcher | `ai-agent-real-host` (environment-gated) | ADR 0083 |
 | Edit/Auto/YOLO consistency for terminal, runbook, SFTP, and reviewed MCP tools | `src/application/ai/AiActionToolDispatcher.*`, `src/application/AppController.*` | `ai-action-tool-dispatcher`, `app-controller`, `mcp-runtime-manager` | ADR 0080, 0082 |
 | Expanded mixed Agent/MCP duration set rejects stale reports that predate the end-to-end scenario | `scripts/run_ai_concurrency_soak.ps1`, `scripts/verify_v3_release_candidate.ps1` | dynamic Debug and static Release schema-2 developer runs plus formal duration report before final RC | ADR 0076, 0083 |
 
@@ -116,6 +117,10 @@ covered by `application-settings`, `ai-permission-policy`,
   runs. Schema-2 mixed Agent/MCP developer soaks completed one iteration in
   each configuration with zero failures. These short runs prove the new report
   contract but do not replace the formal two-hour duration gate.
+- **Current real-host evidence:** `ai-agent-real-host` passed against the
+  owner-provided key-authenticated Linux SSH host in 1.681 seconds, covering
+  automatic execution, user input queued behind a long command, and
+  interactive `write_to_pty` response.
 - **Owner/environment evidence:** live-provider quality, manual AI UX, password
   authentication, MSI interaction, and the previous supported Windows 11 build
   remain explicitly unchecked. They cannot be inferred from the focused tests
