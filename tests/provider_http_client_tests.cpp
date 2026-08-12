@@ -149,6 +149,7 @@ class ProviderHttpClientTests final : public QObject
 
 private slots:
     void streamsTypedEventsAndFinishes();
+    void streamsAnthropicTypedEvents();
     void streamsCompatibleTypedEvents();
     void streamsOllamaTypedEvents();
     void classifiesRateLimitAndRetryDelay();
@@ -191,6 +192,41 @@ void ProviderHttpClientTests::streamsCompatibleTypedEvents()
     const AiProviderConfiguration configuration{.kind = AiProviderKind::openAiCompatible,
                                                 .baseUrl = "https://compatible.example/v1",
                                                 .model = "model"};
+    std::vector<AiStreamEvent> events;
+    bool finished = false;
+    QVERIFY(client
+                .start(
+                    configuration, AiGenerationRequest{}, SensitiveByteArray{},
+                    [&events](const auto, const AiStreamEvent &event) {
+                        events.push_back(event);
+                    },
+                    [&finished](const auto) {
+                        finished = true;
+                    })
+                .has_value());
+    QTRY_VERIFY_WITH_TIMEOUT(finished, 1000);
+    QVERIFY(std::ranges::any_of(events, [](const AiStreamEvent &event) {
+        return event.type == AiStreamEventType::textDelta && event.delta == "hi";
+    }));
+    QCOMPARE(events.back().type, AiStreamEventType::responseCompleted);
+}
+
+void ProviderHttpClientTests::streamsAnthropicTypedEvents()
+{
+    FakeNetworkAccessManager network;
+    network.enqueue(FakeResponse{
+        .payload =
+            "event: message_start\n"
+            "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"usage\":{\"input_tokens\":3}}}\n\n"
+            "event: content_block_delta\n"
+            "data: "
+            "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"hi\"}}\n\n"
+            "event: message_stop\n"
+            "data: {\"type\":\"message_stop\"}\n\n"});
+    ProviderHttpClient client(&network);
+    const AiProviderConfiguration configuration{.kind = AiProviderKind::anthropicMessages,
+                                                .baseUrl = "https://api.anthropic.test",
+                                                .model = "claude"};
     std::vector<AiStreamEvent> events;
     bool finished = false;
     QVERIFY(client

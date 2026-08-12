@@ -282,11 +282,15 @@ only when it passes the same evidence and action contract.
 
 ## Manual real-window matrix
 
-- [ ] Settings AI category: provider creation/edit/delete, masked key, validation,
-      offline/auth/TLS errors, installed and portable vault behavior.
+- [ ] Settings AI category: choose each provider preset, verify the default API
+      address and resolved request preview, enter/replace the masked API key,
+      fetch models into the editable selector, manually enter a model when list
+      discovery is unavailable, and verify offline/auth/TLS feedback. Installed
+      and portable storage must preserve the key without exposing vault or
+      credential-reference concepts in the workflow.
 - [ ] AI panel: open/close/toggle, left/right workbench, resize, narrow mode,
       context chips/remove/pin/preview, evidence badges, streaming/cancel/retry,
-      secure copy, usage/estimated cost, audit view, keyboard-only, focus
+      copy, usage/estimated cost, audit view, keyboard-only, focus
       restoration, tooltips, light/dark/high contrast, English/Chinese.
 - [ ] Encrypted history: opt in with Windows Credential Manager; restart and
       restore a conversation; disable retention and still export/delete the

@@ -1,3 +1,4 @@
+#include "infrastructure/ai/ProviderModelCatalog.h"
 #include "infrastructure/ai/ProviderRequestFactory.h"
 
 #include <QJsonArray>
@@ -31,6 +32,8 @@ private slots:
     void preparesOpenAiResponsesRequest();
     void preparesOllamaRequest();
     void preparesCompatibleRequest();
+    void preparesAnthropicRequest();
+    void resolvesFriendlyApiAddressesAndModels();
     void rejectsUnsafeOrIncompleteConfiguration();
 };
 
@@ -110,6 +113,67 @@ void ProviderRequestFactoryTests::preparesCompatibleRequest()
     const auto invalidTool = ProviderRequestFactory::prepare(configuration, invalidGeneration, "key");
     QVERIFY(!invalidTool.has_value());
     QCOMPARE(invalidTool.error().code, AiProviderErrorCode::invalidRequest);
+}
+
+void ProviderRequestFactoryTests::preparesAnthropicRequest()
+{
+    const AiProviderConfiguration configuration{.kind = AiProviderKind::anthropicMessages,
+                                                .baseUrl = "https://api.anthropic.com",
+                                                .model = "claude-sonnet-4-6"};
+    const AiGenerationRequest generation{
+        .instructions = "Be concise.",
+        .messages = {AiChatMessage{.content = "hello"}},
+        .tools = {AiToolDefinition{.name = "run_command",
+                                   .description = "Run a command.",
+                                   .parametersJson = R"({"type":"object","properties":{}})"}}};
+    const auto prepared = ProviderRequestFactory::prepare(configuration, generation, "anthropic-key");
+    QVERIFY(prepared.has_value());
+    QCOMPARE(prepared->request.url().toString(), QStringLiteral("https://api.anthropic.com/v1/messages"));
+    QCOMPARE(prepared->request.rawHeader("x-api-key"), QByteArray("anthropic-key"));
+    QCOMPARE(prepared->request.rawHeader("anthropic-version"), QByteArray("2023-06-01"));
+    QVERIFY(prepared->request.rawHeader("Authorization").isEmpty());
+    const auto body = QJsonDocument::fromJson(prepared->body).object();
+    QCOMPARE(body.value("system").toString(), QStringLiteral("Be concise."));
+    QCOMPARE(body.value("max_tokens").toInt(), 8192);
+    QCOMPARE(body.value("tools").toArray().first().toObject().value("input_schema").toObject().value("type").toString(),
+             QStringLiteral("object"));
+}
+
+void ProviderRequestFactoryTests::resolvesFriendlyApiAddressesAndModels()
+{
+    auto configuration = AiProviderConfiguration{.kind = AiProviderKind::openAiCompatible,
+                                                 .baseUrl = "https://gateway.example.test",
+                                                 .model = "model"};
+    auto prepared = ProviderRequestFactory::prepare(configuration, AiGenerationRequest{}, "key");
+    QVERIFY(prepared.has_value());
+    QCOMPARE(prepared->request.url().toString(), QStringLiteral("https://gateway.example.test/v1/chat/completions"));
+
+    configuration.baseUrl = "https://gateway.example.test/custom/v4";
+    prepared = ProviderRequestFactory::prepare(configuration, AiGenerationRequest{}, "key");
+    QCOMPARE(prepared->request.url().toString(),
+             QStringLiteral("https://gateway.example.test/custom/v4/chat/completions"));
+
+    configuration.baseUrl = "https://gateway.example.test/custom/";
+    prepared = ProviderRequestFactory::prepare(configuration, AiGenerationRequest{}, "key");
+    QCOMPARE(prepared->request.url().toString(),
+             QStringLiteral("https://gateway.example.test/custom/chat/completions"));
+
+    configuration.baseUrl = "https://gateway.example.test/custom/chat#";
+    prepared = ProviderRequestFactory::prepare(configuration, AiGenerationRequest{}, "key");
+    QCOMPARE(prepared->request.url().toString(), QStringLiteral("https://gateway.example.test/custom/chat"));
+    auto unavailableCatalog = ztermy::ai::ProviderModelCatalog::prepareRequest(
+        configuration, ztermy::security::SensitiveByteArray(QByteArray("key")));
+    QVERIFY(!unavailableCatalog.has_value());
+
+    configuration.baseUrl = "https://gateway.example.test";
+    auto catalogRequest = ztermy::ai::ProviderModelCatalog::prepareRequest(
+        configuration, ztermy::security::SensitiveByteArray(QByteArray("key")));
+    QVERIFY(catalogRequest.has_value());
+    QCOMPARE(catalogRequest->url().toString(), QStringLiteral("https://gateway.example.test/v1/models"));
+    const auto models = ztermy::ai::ProviderModelCatalog::parse(
+        configuration.kind, R"({"data":[{"id":"zeta"},{"id":"alpha"},{"id":"alpha"}]})");
+    QVERIFY(models.has_value());
+    QCOMPARE(*models, QStringList({QStringLiteral("alpha"), QStringLiteral("zeta")}));
 }
 
 void ProviderRequestFactoryTests::rejectsUnsafeOrIncompleteConfiguration()

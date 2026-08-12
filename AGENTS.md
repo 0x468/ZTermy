@@ -3,6 +3,11 @@
 ## Product boundary
 
 - ztermy is a Windows 11-first native SSH terminal.
+- ztermy is a personal tool for technical and expert users. Default workflows
+  must favor directness, mainstream conventions, and low friction. Keep
+  necessary safety mechanisms transparent and contextual; never expose
+  internal security architecture as concepts the user must manage unless a
+  concrete risk or explicit user choice requires it.
 - Netcatty and other SSH tools are product references only.
 - Do not copy third-party source code, images, icons, themes, or branding unless
   an explicit compatible dependency decision is recorded.

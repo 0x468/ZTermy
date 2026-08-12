@@ -11,6 +11,7 @@ using ztermy::ai::AiProviderError;
 using ztermy::ai::AiProviderErrorCode;
 using ztermy::ai::AiStreamEventType;
 using ztermy::ai::AiTokenUsage;
+using ztermy::ai::AnthropicStreamMapper;
 using ztermy::ai::OllamaStreamMapper;
 using ztermy::ai::OpenAiCompatibleStreamMapper;
 using ztermy::ai::OpenAiResponsesStreamMapper;
@@ -25,6 +26,7 @@ private slots:
     void mapsOpenAiToolArguments();
     void rejectsMalformedProviderJson();
     void mapsCompatibleTextToolsAndCompletion();
+    void mapsAnthropicTextToolsUsageAndCompletion();
     void mapsOllamaThinkingToolsAndUsage();
     void mapsOllamaError();
 };
@@ -101,6 +103,41 @@ void ProviderStreamMapperTests::mapsCompatibleTextToolsAndCompletion()
     QCOMPARE(events->at(0).type, AiStreamEventType::toolCallCompleted);
     QCOMPARE(events->at(1).type, AiStreamEventType::responseCompleted);
     QVERIFY(mapper.map(ServerSentEvent{.data = "[DONE]"})->empty());
+}
+
+void ProviderStreamMapperTests::mapsAnthropicTextToolsUsageAndCompletion()
+{
+    AnthropicStreamMapper mapper;
+    auto events = mapper.map(ServerSentEvent{
+        .event = "message_start",
+        .data =
+            R"json({"type":"message_start","message":{"id":"msg_1","usage":{"input_tokens":9,"cache_read_input_tokens":3}}})json"});
+    QVERIFY(events.has_value());
+    QCOMPARE(events->at(0).type, AiStreamEventType::responseStarted);
+    QCOMPARE(events->at(1).usage.value_or(AiTokenUsage{}).inputTokens, std::uint64_t{9});
+
+    events = mapper.map(ServerSentEvent{
+        .event = "content_block_start",
+        .data =
+            R"json({"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"tool_1","name":"run_command"}})json"});
+    QCOMPARE(events->front().type, AiStreamEventType::toolCallStarted);
+    events = mapper.map(ServerSentEvent{
+        .event = "content_block_delta",
+        .data =
+            R"json({"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"command\":"}})json"});
+    QCOMPARE(events->front().type, AiStreamEventType::toolArgumentsDelta);
+    events = mapper.map(ServerSentEvent{
+        .event = "content_block_delta",
+        .data = R"json({"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hello"}})json"});
+    QCOMPARE(events->front().delta, std::string("hello"));
+    events = mapper.map(
+        ServerSentEvent{.event = "content_block_stop", .data = R"json({"type":"content_block_stop","index":1})json"});
+    QCOMPARE(events->front().type, AiStreamEventType::toolCallCompleted);
+    events = mapper.map(ServerSentEvent{.event = "message_delta",
+                                        .data = R"json({"type":"message_delta","usage":{"output_tokens":4}})json"});
+    QCOMPARE(events->front().usage.value_or(AiTokenUsage{}).outputTokens, std::uint64_t{4});
+    events = mapper.map(ServerSentEvent{.event = "message_stop", .data = R"json({"type":"message_stop"})json"});
+    QCOMPARE(events->front().type, AiStreamEventType::responseCompleted);
 }
 
 void ProviderStreamMapperTests::mapsOllamaThinkingToolsAndUsage()

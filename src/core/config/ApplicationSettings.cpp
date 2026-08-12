@@ -179,6 +179,22 @@ template <>
     {
         return AiProviderPreference::openAiCompatible;
     }
+    if (token == QStringLiteral("anthropic"))
+    {
+        return AiProviderPreference::anthropic;
+    }
+    if (token == QStringLiteral("deepseek"))
+    {
+        return AiProviderPreference::deepSeek;
+    }
+    if (token == QStringLiteral("kimi"))
+    {
+        return AiProviderPreference::kimi;
+    }
+    if (token == QStringLiteral("zai"))
+    {
+        return AiProviderPreference::zai;
+    }
     return std::nullopt;
 }
 
@@ -658,6 +674,14 @@ QString aiProviderPreferenceToken(const AiProviderPreference preference)
 {
     switch (preference)
     {
+        case AiProviderPreference::anthropic:
+            return QStringLiteral("anthropic");
+        case AiProviderPreference::deepSeek:
+            return QStringLiteral("deepseek");
+        case AiProviderPreference::kimi:
+            return QStringLiteral("kimi");
+        case AiProviderPreference::zai:
+            return QStringLiteral("zai");
         case AiProviderPreference::ollama:
             return QStringLiteral("ollama");
         case AiProviderPreference::openAiCompatible:

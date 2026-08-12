@@ -47,6 +47,25 @@ private:
     bool m_completed = false;
 };
 
+class AnthropicStreamMapper final
+{
+public:
+    [[nodiscard]] std::expected<std::vector<AiStreamEvent>, AiProviderError> map(const ServerSentEvent &event);
+    void reset() noexcept;
+
+private:
+    struct ToolState final
+    {
+        std::string callId;
+        std::string name;
+    };
+
+    std::unordered_map<std::size_t, ToolState> m_toolsByIndex;
+    std::string m_responseId;
+    bool m_started = false;
+    bool m_completed = false;
+};
+
 class OllamaStreamMapper final
 {
 public:

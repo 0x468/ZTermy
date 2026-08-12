@@ -13,7 +13,17 @@ Rectangle {
     required property var activeTab
     readonly property bool busy: controller.activeAiState === "starting" || controller.activeAiState === "retrying" || controller.activeAiState === "streaming" || controller.activeAiState === "cancelling"
     readonly property var conversation: controller.activeAiConversation
-    readonly property var toolApproval: controller.activeAiToolApproval
+    readonly property var toolApproval: controller.activeAiToolApproval || ({
+            "visible": false,
+            "kind": "",
+            "command": "",
+            "highRisk": false,
+            "riskReason": ""
+        })
+    readonly property string approvalKind: typeof toolApproval.kind === "string" ? toolApproval.kind : ""
+    readonly property string approvalCommand: typeof toolApproval.command === "string" ? toolApproval.command : ""
+    readonly property string approvalRiskReason: typeof toolApproval.riskReason === "string" ? toolApproval.riskReason : ""
+    readonly property bool approvalHighRisk: toolApproval.highRisk === true
     property bool contextExpanded: false
     property bool activityExpanded: false
     property bool historyExpanded: false
@@ -71,6 +81,7 @@ Rectangle {
     }
 
     color: Theme.panelBackground
+    clip: true
     Accessible.role: Accessible.Pane
     Accessible.name: qsTr("Terminal AI assistant")
     onVisibleChanged: {
@@ -104,10 +115,13 @@ Rectangle {
 
                 ColumnLayout {
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                     spacing: 0
 
                     Text {
+                        Layout.fillWidth: true
                         text: qsTr("Terminal assistant")
+                        elide: Text.ElideRight
                         color: Theme.text
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.textBody
@@ -115,6 +129,7 @@ Rectangle {
                     }
 
                     Text {
+                        Layout.fillWidth: true
                         text: pane.activeTab ? pane.activeTab.title : ""
                         color: Theme.textSubtle
                         elide: Text.ElideRight
@@ -143,8 +158,10 @@ Rectangle {
             }
         }
 
-        RowLayout {
+        Flow {
             Layout.fillWidth: true
+            Layout.minimumWidth: 0
+            Layout.preferredHeight: implicitHeight
             Layout.leftMargin: 10
             Layout.rightMargin: 10
             Layout.topMargin: 8
@@ -201,10 +218,6 @@ Rectangle {
                 }
             }
 
-            Item {
-                Layout.fillWidth: true
-            }
-
             ActionButton {
                 objectName: "aiClearConversationButton"
                 text: qsTr("Clear")
@@ -228,7 +241,7 @@ Rectangle {
                 Layout.preferredWidth: controlOwnerLabel.implicitWidth + 18
                 radius: 12
                 color: pane.controller.activeAiControlOwner === "user" ? Theme.selectedBackground : Theme.controlBackground
-                border.color: pane.controller.activeAiControlOwner === "user" ? Theme.warning : Theme.success
+                border.color: pane.controller.activeAiControlOwner === "user" ? Theme.warning : Theme.successText
 
                 Text {
                     id: controlOwnerLabel
@@ -244,6 +257,7 @@ Rectangle {
 
             Text {
                 Layout.fillWidth: true
+                Layout.minimumWidth: 0
                 text: pane.controller.activeAiControlOwner === "user" ? qsTr("AI terminal writes are paused until you resume them.") : qsTr("Typing in the terminal takes control immediately.")
                 color: Theme.textSubtle
                 elide: Text.ElideRight
@@ -458,11 +472,11 @@ Rectangle {
             Layout.preferredHeight: approvalContent.implicitHeight + 20
             visible: pane.toolApproval.visible === true
             radius: Theme.radiusPanel
-            color: pane.toolApproval.highRisk ? Theme.dangerSurface : Theme.raisedBackground
-            border.color: pane.toolApproval.highRisk ? Theme.dangerBorder : Theme.accent
+            color: pane.approvalHighRisk ? Theme.dangerSurface : Theme.raisedBackground
+            border.color: pane.approvalHighRisk ? Theme.dangerBorder : Theme.accent
             border.width: 1
             Accessible.role: Accessible.Pane
-            Accessible.name: pane.toolApproval.kind.indexOf("queue_sftp_") === 0 ? qsTr("AI SFTP transfer approval") : pane.toolApproval.kind === "interrupt_command" ? qsTr("AI interrupt approval") : pane.toolApproval.kind === "write_to_pty" ? qsTr("AI terminal input approval") : pane.toolApproval.kind === "save_runbook" ? qsTr("AI runbook approval") : qsTr("AI command approval")
+            Accessible.name: pane.approvalKind.indexOf("queue_sftp_") === 0 ? qsTr("AI SFTP transfer approval") : pane.approvalKind === "interrupt_command" ? qsTr("AI interrupt approval") : pane.approvalKind === "write_to_pty" ? qsTr("AI terminal input approval") : pane.approvalKind === "save_runbook" ? qsTr("AI runbook approval") : qsTr("AI command approval")
 
             ColumnLayout {
                 id: approvalContent
@@ -478,14 +492,14 @@ Rectangle {
                     AppIcon {
                         Layout.preferredWidth: 17
                         Layout.preferredHeight: 17
-                        name: pane.toolApproval.highRisk ? "warning" : "terminal"
-                        color: pane.toolApproval.highRisk ? Theme.dangerText : Theme.accent
+                        name: pane.approvalHighRisk ? "warning" : "terminal"
+                        color: pane.approvalHighRisk ? Theme.dangerText : Theme.accent
                     }
 
                     Text {
                         Layout.fillWidth: true
-                        text: pane.toolApproval.highRisk ? qsTr("High-risk command requires approval") : pane.toolApproval.kind.indexOf("queue_sftp_") === 0 ? qsTr("SFTP transfer requires approval") : pane.toolApproval.kind === "interrupt_command" ? qsTr("Terminal interrupt requires approval") : pane.toolApproval.kind === "write_to_pty" ? qsTr("Terminal input requires approval") : pane.toolApproval.kind === "save_runbook" ? qsTr("Runbook save requires approval") : qsTr("Command requires approval")
-                        color: pane.toolApproval.highRisk ? Theme.dangerText : Theme.text
+                        text: pane.approvalHighRisk ? qsTr("High-risk command requires approval") : pane.approvalKind.indexOf("queue_sftp_") === 0 ? qsTr("SFTP transfer requires approval") : pane.approvalKind === "interrupt_command" ? qsTr("Terminal interrupt requires approval") : pane.approvalKind === "write_to_pty" ? qsTr("Terminal input requires approval") : pane.approvalKind === "save_runbook" ? qsTr("Runbook save requires approval") : qsTr("Command requires approval")
+                        color: pane.approvalHighRisk ? Theme.dangerText : Theme.text
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.textBody
                         font.weight: Font.DemiBold
@@ -495,7 +509,7 @@ Rectangle {
                 TextEdit {
                     Layout.fillWidth: true
                     Layout.maximumHeight: 120
-                    text: pane.toolApproval.command || ""
+                    text: pane.approvalCommand
                     color: Theme.text
                     readOnly: true
                     selectByMouse: true
@@ -503,7 +517,7 @@ Rectangle {
                     textFormat: TextEdit.PlainText
                     font.family: Theme.terminalFont
                     font.pixelSize: Theme.textBody
-                    Accessible.name: pane.toolApproval.kind === "interrupt_command" ? qsTr("Interrupt awaiting approval") : pane.toolApproval.kind === "write_to_pty" ? qsTr("Terminal input awaiting approval") : pane.toolApproval.kind === "save_runbook" ? qsTr("Runbook awaiting approval") : qsTr("Command awaiting approval")
+                    Accessible.name: pane.approvalKind === "interrupt_command" ? qsTr("Interrupt awaiting approval") : pane.approvalKind === "write_to_pty" ? qsTr("Terminal input awaiting approval") : pane.approvalKind === "save_runbook" ? qsTr("Runbook awaiting approval") : qsTr("Command awaiting approval")
 
                     Rectangle {
                         anchors.fill: parent
@@ -517,8 +531,8 @@ Rectangle {
 
                 Text {
                     Layout.fillWidth: true
-                    visible: pane.toolApproval.highRisk && (pane.toolApproval.riskReason || "").length > 0
-                    text: pane.toolApproval.riskReason || ""
+                    visible: pane.approvalHighRisk && pane.approvalRiskReason.length > 0
+                    text: pane.approvalRiskReason
                     color: Theme.dangerText
                     wrapMode: Text.WordWrap
                     font.family: Theme.uiFont
@@ -537,10 +551,10 @@ Rectangle {
                     }
 
                     ActionButton {
-                        text: pane.toolApproval.kind.indexOf("queue_sftp_") === 0 ? qsTr("Queue transfer") : pane.toolApproval.kind === "interrupt_command" ? qsTr("Send Ctrl+C") : pane.toolApproval.kind === "write_to_pty" ? qsTr("Send input") : pane.toolApproval.kind === "save_runbook" ? qsTr("Save runbook") : qsTr("Run command")
-                        iconName: pane.toolApproval.kind.indexOf("queue_sftp_") === 0 ? "transfer" : pane.toolApproval.kind === "interrupt_command" ? "close" : pane.toolApproval.kind === "write_to_pty" ? "composer" : pane.toolApproval.kind === "save_runbook" ? "save" : "play"
-                        variant: pane.toolApproval.highRisk ? "destructive" : "primary"
-                        accessibleName: pane.toolApproval.kind.indexOf("queue_sftp_") === 0 ? qsTr("Approve and queue the pending AI SFTP transfer") : pane.toolApproval.kind === "interrupt_command" ? qsTr("Approve the pending soft interrupt") : pane.toolApproval.kind === "write_to_pty" ? qsTr("Approve the pending terminal input") : pane.toolApproval.kind === "save_runbook" ? qsTr("Approve and save the pending AI runbook") : qsTr("Approve and run the pending AI command")
+                        text: pane.approvalKind.indexOf("queue_sftp_") === 0 ? qsTr("Queue transfer") : pane.approvalKind === "interrupt_command" ? qsTr("Send Ctrl+C") : pane.approvalKind === "write_to_pty" ? qsTr("Send input") : pane.approvalKind === "save_runbook" ? qsTr("Save runbook") : qsTr("Run command")
+                        iconName: pane.approvalKind.indexOf("queue_sftp_") === 0 ? "transfer" : pane.approvalKind === "interrupt_command" ? "close" : pane.approvalKind === "write_to_pty" ? "composer" : pane.approvalKind === "save_runbook" ? "save" : "play"
+                        variant: pane.approvalHighRisk ? "destructive" : "primary"
+                        accessibleName: pane.approvalKind.indexOf("queue_sftp_") === 0 ? qsTr("Approve and queue the pending AI SFTP transfer") : pane.approvalKind === "interrupt_command" ? qsTr("Approve the pending soft interrupt") : pane.approvalKind === "write_to_pty" ? qsTr("Approve the pending terminal input") : pane.approvalKind === "save_runbook" ? qsTr("Approve and save the pending AI runbook") : qsTr("Approve and run the pending AI command")
                         onClicked: pane.controller.approveAiTool()
                     }
                 }
@@ -983,8 +997,9 @@ Rectangle {
                             font.pixelSize: Theme.textCompact
                         }
 
-                        RowLayout {
-                            Layout.alignment: Qt.AlignRight
+                        Flow {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: implicitHeight
                             spacing: 6
 
                             ActionButton {
@@ -1014,9 +1029,9 @@ Rectangle {
 
                             ActionButton {
                                 visible: messageItem.messageRole === "assistant" && messageItem.text.length > 0
-                                text: qsTr("Protected copy")
+                                text: qsTr("Copy")
                                 iconName: "copy"
-                                accessibleName: qsTr("Copy without Windows clipboard history or cloud sync")
+                                accessibleName: qsTr("Copy assistant response")
                                 onClicked: pane.controller.copyAiText(messageItem.text)
                             }
                         }
@@ -1028,7 +1043,7 @@ Rectangle {
                 anchors.centerIn: parent
                 width: Math.min(280, parent.width - 32)
                 visible: pane.conversation === null || pane.conversation.count === 0
-                text: qsTr("Ask about the active terminal. ztermy sends only the bounded context shown above, after local redaction.")
+                text: qsTr("Ask about the active terminal, diagnose failures, or request a command.")
                 color: Theme.textMuted
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
@@ -1065,6 +1080,7 @@ Rectangle {
 
                     Text {
                         Layout.fillWidth: true
+                        Layout.minimumWidth: 0
                         text: pane.commandRequest ? qsTr("The response must contain one explicit shell command.") : qsTr("Ask, explain, or diagnose using the reviewed context.")
                         color: Theme.textMuted
                         elide: Text.ElideRight

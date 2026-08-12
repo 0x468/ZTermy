@@ -63,18 +63,22 @@ V3 succeeds when ztermy can:
    selection, redaction, permissions, tools, audit metadata, and session control
    remain in ztermy.
 3. **Provider independence.** A conversation and tool call have ztermy-owned
-   types. OpenAI Responses, OpenAI-compatible endpoints, and Ollama are adapters.
-4. **Professional autonomy.** Direct Run is available. Observer, confirmation,
+   types. OpenAI Responses, Anthropic Messages, OpenAI-compatible endpoints, and
+   Ollama are adapters.
+4. **Expert-first defaults.** ztermy is a personal tool for technical users.
+   Follow mainstream direct workflows, keep setup compact, and keep necessary
+   safety machinery transparent unless a concrete risk requires interaction.
+5. **Professional autonomy.** Direct Run is available. Observer, confirmation,
    and automatic modes are configurable; approval friction is not hard-coded as
    the product's personality.
-5. **Untrusted terminal data.** Remote output can contain prompt injection,
+6. **Untrusted terminal data.** Remote output can contain prompt injection,
    escape sequences, or secrets. It is evidence, never authority.
-6. **No hidden global scrape.** The user can inspect, remove, or pin individual
+7. **No hidden global scrape.** The user can inspect, remove, or pin individual
    context items in a bounded preview. Pinning never bypasses redaction or hard
    limits. Automatic context has declared provenance, evidence quality, and size.
-7. **No UI-thread I/O.** Model networking, token estimation beyond small local
+8. **No UI-thread I/O.** Model networking, token estimation beyond small local
    work, compaction, encryption, and tool execution never block Qt Quick.
-8. **No inert breadth.** A visible tool ships with backend behavior, errors,
+9. **No inert breadth.** A visible tool ships with backend behavior, errors,
    cancellation, tests, and a permission contract in the same milestone.
 
 ## Scope model
@@ -98,10 +102,12 @@ on another session merely because the model supplied a different identifier.
 Deliver the smallest complete vertical slice:
 
 - `AiProvider` and typed streaming events;
-- OpenAI Responses provider, generic OpenAI-compatible provider, and Ollama
-  native streaming provider;
-- provider/API-key settings using the existing installed/portable credential
-  boundary;
+- OpenAI Responses, Anthropic Messages, generic OpenAI-compatible, and Ollama
+  native streaming adapters; branded presets cover OpenAI, Anthropic, DeepSeek,
+  Kimi, and Z.AI without leaking protocol selection into the UI;
+- integrated provider/API-address/API-key/model settings, asynchronous model
+  discovery, and editable model fallback using the existing installed/portable
+  credential boundary transparently;
 - bounded `CommandBlockStore` with capability quality (`none`, `basic`, `rich`),
   command text, output, exit status, timestamps, CWD, host, attribution, and
   explicit output coverage (`complete`, bounded/truncated, gapped, interleaved,
@@ -110,7 +116,8 @@ Deliver the smallest complete vertical slice:
   support for ztermy-owned rich integration;
 - AI terminal side panel, removable/pinnable context chips, context preview,
   evidence-quality badges, streaming answer, cancel/retry, selection attachment,
-  secure-copy behavior, and keyboard/focus behavior;
+  ordinary copy behavior backed by the existing clipboard implementation, and
+  keyboard/focus behavior;
 - Explain selection, Explain last failure, Generate command, Insert, and explicit
   Run; Explain last failure is capability-gated and never invents a failure when
   exit status is unavailable;

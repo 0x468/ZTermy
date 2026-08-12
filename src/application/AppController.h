@@ -28,6 +28,7 @@
 #include "domain/terminal/SemanticTerminalObserver.h"
 #include "domain/workbench/ScriptExecution.h"
 #include "domain/workbench/ScriptRecorder.h"
+#include "infrastructure/ai/ProviderModelCatalog.h"
 #include "infrastructure/forwarding/PortForwardingRuleStore.h"
 #include "infrastructure/logging/SessionLogWriter.h"
 #include "infrastructure/ssh/SshProfileStore.h"
@@ -38,6 +39,8 @@
 
 #include <QHash>
 #include <QMetaType>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
 #include <QObject>
 #include <QPointer>
 #include <QString>
@@ -163,6 +166,9 @@ class AppController final : public QObject
     Q_PROPERTY(QString aiBaseUrl READ aiBaseUrl NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString aiEndpointPath READ aiEndpointPath NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString aiModel READ aiModel NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(QStringList aiAvailableModels READ aiAvailableModels NOTIFY aiModelsChanged)
+    Q_PROPERTY(bool aiModelsLoading READ aiModelsLoading NOTIFY aiModelsChanged)
+    Q_PROPERTY(QString aiModelsError READ aiModelsError NOTIFY aiModelsChanged)
     Q_PROPERTY(bool aiAutomaticContext READ aiAutomaticContext NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString aiPermissionPreference READ aiPermissionPreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool aiConversationHistoryEnabled READ aiConversationHistoryEnabled NOTIFY applicationSettingsChanged)
@@ -292,6 +298,9 @@ public:
     [[nodiscard]] QString aiBaseUrl() const;
     [[nodiscard]] QString aiEndpointPath() const;
     [[nodiscard]] QString aiModel() const;
+    [[nodiscard]] QStringList aiAvailableModels() const;
+    [[nodiscard]] bool aiModelsLoading() const noexcept;
+    [[nodiscard]] QString aiModelsError() const;
     [[nodiscard]] bool aiAutomaticContext() const noexcept;
     [[nodiscard]] QString aiPermissionPreference() const;
     [[nodiscard]] bool aiConversationHistoryEnabled() const noexcept;
@@ -478,6 +487,11 @@ public:
     Q_INVOKABLE bool saveAiProviderSettings(const QString &provider, const QString &baseUrl,
                                             const QString &endpointPath, const QString &model, bool automaticContext,
                                             const QString &permissionMode);
+    Q_INVOKABLE bool saveAiProviderConfiguration(const QString &provider, const QString &baseUrl, const QString &model,
+                                                 bool automaticContext, const QString &permissionMode,
+                                                 const QString &apiKey);
+    Q_INVOKABLE void refreshAiModels(const QString &provider, const QString &baseUrl, const QString &apiKey);
+    [[nodiscard]] Q_INVOKABLE QString aiProviderEndpointPreview(const QString &provider, const QString &baseUrl) const;
     Q_INVOKABLE bool saveAiApiKey(const QString &apiKey);
     Q_INVOKABLE bool removeAiApiKey();
     Q_INVOKABLE bool saveMcpServer(const QString &id, const QString &nameSpace, const QString &program,
@@ -547,6 +561,7 @@ signals:
     void applicationSettingsChanged();
     void credentialVaultChanged();
     void aiConversationChanged();
+    void aiModelsChanged();
     void aiPrivacyDiagnosticsChanged();
     void mcpConfigurationChanged();
     void portForwardingRulesChanged();
@@ -891,6 +906,12 @@ private:
     std::vector<std::unique_ptr<PortForwardingRuntime>> m_portForwardingRuntimes;
     QString m_portForwardingOperationError;
     ai::ProviderHttpClient m_aiProviderClient;
+    QNetworkAccessManager m_aiModelNetwork;
+    QPointer<QNetworkReply> m_aiModelsReply;
+    QStringList m_aiAvailableModels;
+    QString m_aiModelsError;
+    quint64 m_aiModelsRequestGeneration = 0;
+    bool m_aiModelsLoading = false;
     ai::AiContextBroker m_aiContextBroker;
     ai::AiCommandTracker m_aiCommandTracker;
     ai::AiActionToolDispatcher m_aiActionToolDispatcher;

@@ -198,8 +198,9 @@ void ProviderHttpClient::consumeSse(RequestState &state, const std::string_view 
     }
     for (const auto &event : parsed.value())
     {
-        const auto mapped = state.provider == AiProviderKind::openAiResponses ? state.openAiMapper.map(event)
-                                                                              : state.compatibleMapper.map(event);
+        const auto mapped = state.provider == AiProviderKind::openAiResponses     ? state.openAiMapper.map(event)
+                            : state.provider == AiProviderKind::anthropicMessages ? state.anthropicMapper.map(event)
+                                                                                  : state.compatibleMapper.map(event);
         if (!mapped.has_value())
         {
             fail(state, mapped.error(), reply);
@@ -286,9 +287,10 @@ void ProviderHttpClient::finish(QNetworkReply *reply)
             {
                 for (const auto &event : parsed.value())
                 {
-                    const auto mapped = state.provider == AiProviderKind::openAiResponses
-                                            ? state.openAiMapper.map(event)
-                                            : state.compatibleMapper.map(event);
+                    const auto mapped =
+                        state.provider == AiProviderKind::openAiResponses     ? state.openAiMapper.map(event)
+                        : state.provider == AiProviderKind::anthropicMessages ? state.anthropicMapper.map(event)
+                                                                              : state.compatibleMapper.map(event);
                     if (mapped.has_value())
                     {
                         dispatch(state, mapped.value());

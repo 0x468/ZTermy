@@ -20,9 +20,10 @@ Rectangle {
     property string languageDraft: "system"
     property string uiFontDraft: ""
     property string terminalFontDraft: "Cascadia Mono"
-    property string aiBaseUrlDraft: "https://api.openai.com/v1"
-    property string aiEndpointPathDraft: ""
+    property string aiBaseUrlDraft: "https://api.openai.com"
     property string aiModelDraft: ""
+    property string aiSelectedProviderToken: "openai-responses"
+    readonly property var aiProviderTokens: ["openai-responses", "anthropic", "deepseek", "kimi", "zai", "ollama", "openai-compatible"]
     property string mcpOriginalId: ""
     property string mcpEditingId: ""
     property string mcpNamespaceDraft: ""
@@ -153,11 +154,38 @@ Rectangle {
     }
 
     function aiProviderIndex(token) {
-        return token === "ollama" ? 1 : token === "openai-compatible" ? 2 : 0;
+        const index = aiProviderTokens.indexOf(token);
+        return index < 0 ? 0 : index;
     }
 
     function aiProviderToken() {
-        return aiProviderBox.currentIndex === 1 ? "ollama" : aiProviderBox.currentIndex === 2 ? "openai-compatible" : "openai-responses";
+        return aiProviderTokens[Math.max(0, aiProviderBox.currentIndex)];
+    }
+
+    function aiProviderDefault(token) {
+        if (token === "anthropic")
+            return "https://api.anthropic.com";
+        if (token === "deepseek")
+            return "https://api.deepseek.com";
+        if (token === "kimi")
+            return "https://api.moonshot.ai";
+        if (token === "zai")
+            return "https://api.z.ai/api/paas/v4";
+        if (token === "ollama")
+            return "http://127.0.0.1:11434";
+        if (token === "openai-compatible")
+            return "";
+        return "https://api.openai.com";
+    }
+
+    function selectAiProvider(index) {
+        const previousDefault = aiProviderDefault(aiSelectedProviderToken);
+        const nextToken = aiProviderTokens[index];
+        if (aiBaseUrlDraft.trim().length === 0 || aiBaseUrlDraft === previousDefault) {
+            aiBaseUrlDraft = aiProviderDefault(nextToken);
+        }
+        aiSelectedProviderToken = nextToken;
+        aiModelDraft = "";
     }
 
     function aiPermissionIndex(token) {
@@ -354,10 +382,10 @@ Rectangle {
         languageDraft = controller.languagePreference;
         credentialStorageBox.currentIndex = credentialStorageIndex(controller.effectiveCredentialStorage);
         credentialCleanupStorageBox.currentIndex = credentialStorageIndex(controller.effectiveCredentialStorage);
-        aiProviderBox.currentIndex = aiProviderIndex(controller.aiProviderPreference);
+        aiSelectedProviderToken = controller.aiProviderPreference;
+        aiProviderBox.currentIndex = aiProviderIndex(aiSelectedProviderToken);
         aiPermissionBox.currentIndex = aiPermissionIndex(controller.aiPermissionPreference);
         aiBaseUrlDraft = controller.aiBaseUrl;
-        aiEndpointPathDraft = controller.aiEndpointPath;
         aiModelDraft = controller.aiModel;
         aiAutomaticContextSwitch.checked = controller.aiAutomaticContext;
         aiConversationHistorySwitch.checked = controller.aiConversationHistoryEnabled;
@@ -375,6 +403,16 @@ Rectangle {
         presentStatus(saved ? qsTr("Settings saved and applied.") : qsTr("These settings could not be saved. Check the font and numeric ranges."), !saved, saved);
         if (!saved) {
             loadDraft();
+        }
+    }
+
+    Connections {
+        target: pane.controller
+
+        function onAiModelsChanged() {
+            if (!pane.controller.aiModelsLoading && pane.controller.aiModelsError.length === 0 && pane.aiModelDraft.length === 0 && pane.controller.aiAvailableModels.length > 0) {
+                pane.aiModelDraft = pane.controller.aiAvailableModels[0];
+            }
         }
     }
 
@@ -1283,7 +1321,7 @@ Rectangle {
 
                     Text {
                         Layout.fillWidth: true
-                        text: qsTr("Provider requests are streamed directly from this device. Terminal evidence is bounded, previewable, and redacted locally before it leaves ztermy.")
+                        text: qsTr("Choose a provider, enter its API key, fetch the available models, and select one for the terminal assistant.")
                         color: Theme.textMuted
                         wrapMode: Text.WordWrap
                         font.family: Theme.uiFont
@@ -1305,9 +1343,71 @@ Rectangle {
 
                             objectName: "settingsAiProvider"
                             Layout.fillWidth: true
-                            model: ["openai-responses", "ollama", "openai-compatible"]
-                            displayTextModel: [qsTr("OpenAI Responses"), qsTr("Ollama"), qsTr("OpenAI-compatible")]
+                            model: pane.aiProviderTokens
+                            displayTextModel: [qsTr("OpenAI (ChatGPT / Codex)"), qsTr("Anthropic (Claude)"), qsTr("DeepSeek"), qsTr("Kimi"), qsTr("Z.AI (GLM)"), qsTr("Ollama"), qsTr("OpenAI-compatible")]
                             accessibleName: qsTr("AI model provider")
+                            onActivated: index => pane.selectAiProvider(index)
+                        }
+
+                        Label {
+                            text: qsTr("API address")
+                            color: Theme.text
+                        }
+                        AppTextField {
+                            id: aiBaseUrlField
+
+                            objectName: "settingsAiBaseUrl"
+                            Layout.fillWidth: true
+                            text: pane.aiBaseUrlDraft
+                            placeholderText: qsTr("https://api.example.com")
+                            accessibleName: qsTr("AI provider base URL")
+                            onTextEdited: pane.aiBaseUrlDraft = text
+                        }
+
+                        Label {
+                            text: qsTr("API key")
+                            color: Theme.text
+                        }
+                        AppTextField {
+                            id: aiApiKeyField
+
+                            objectName: "settingsAiApiKey"
+                            Layout.fillWidth: true
+                            placeholderText: pane.controller.aiApiKeyConfigured ? qsTr("Saved · enter only to replace") : pane.aiProviderToken() === "ollama" ? qsTr("Not required for local Ollama") : qsTr("Enter API key")
+                            passwordRevealable: true
+                            accessibleName: qsTr("AI provider API key")
+                        }
+
+                        Label {
+                            text: qsTr("Model")
+                            color: Theme.text
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            spacing: 8
+
+                            EditableSuggestionField {
+                                id: aiModelField
+
+                                objectName: "settingsAiModel"
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 0
+                                model: pane.controller.aiAvailableModels
+                                text: pane.aiModelDraft
+                                placeholderText: qsTr("Fetch or enter a model identifier")
+                                accessibleName: qsTr("AI model identifier")
+                                onTextChanged: pane.aiModelDraft = text
+                            }
+
+                            ActionButton {
+                                objectName: "settingsAiFetchModels"
+                                text: pane.controller.aiModelsLoading ? qsTr("Fetching…") : qsTr("Fetch models")
+                                iconName: "refresh"
+                                enabled: !pane.controller.aiModelsLoading && pane.aiBaseUrlDraft.trim().length > 0
+                                accessibleName: qsTr("Fetch models from this provider")
+                                onClicked: pane.controller.refreshAiModels(pane.aiProviderToken(), pane.aiBaseUrlDraft, aiApiKeyField.text)
+                            }
                         }
 
                         Label {
@@ -1322,51 +1422,6 @@ Rectangle {
                             model: ["observer", "ask-each-write", "ask-first-write", "session-auto", "saved-host-auto"]
                             displayTextModel: [qsTr("Observer only"), qsTr("Ask for every write"), qsTr("Ask for the first write"), qsTr("Automatic for this session"), qsTr("Automatic for saved hosts")]
                             accessibleName: qsTr("AI terminal action permission mode")
-                        }
-
-                        Label {
-                            text: qsTr("Base URL")
-                            color: Theme.text
-                        }
-                        AppTextField {
-                            id: aiBaseUrlField
-
-                            objectName: "settingsAiBaseUrl"
-                            Layout.fillWidth: true
-                            text: pane.aiBaseUrlDraft
-                            placeholderText: qsTr("https://api.openai.com/v1")
-                            accessibleName: qsTr("AI provider base URL")
-                            onTextEdited: pane.aiBaseUrlDraft = text
-                        }
-
-                        Label {
-                            text: qsTr("Endpoint override")
-                            color: Theme.text
-                        }
-                        AppTextField {
-                            id: aiEndpointPathField
-
-                            objectName: "settingsAiEndpointPath"
-                            Layout.fillWidth: true
-                            text: pane.aiEndpointPathDraft
-                            placeholderText: qsTr("Use provider default")
-                            accessibleName: qsTr("Optional AI provider endpoint path")
-                            onTextEdited: pane.aiEndpointPathDraft = text
-                        }
-
-                        Label {
-                            text: qsTr("Model")
-                            color: Theme.text
-                        }
-                        AppTextField {
-                            id: aiModelField
-
-                            objectName: "settingsAiModel"
-                            Layout.fillWidth: true
-                            text: pane.aiModelDraft
-                            placeholderText: qsTr("Model identifier")
-                            accessibleName: qsTr("AI model identifier")
-                            onTextEdited: pane.aiModelDraft = text
                         }
 
                         Item {
@@ -1398,12 +1453,31 @@ Rectangle {
                         }
                     }
 
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("Request: %1").arg(pane.controller.aiProviderEndpointPreview(pane.aiProviderToken(), pane.aiBaseUrlDraft))
+                        color: Theme.textSubtle
+                        elide: Text.ElideMiddle
+                        font.family: Theme.terminalFont
+                        font.pixelSize: Theme.textCompact
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        visible: pane.controller.aiModelsError.length > 0
+                        text: pane.controller.aiModelsError
+                        color: Theme.danger
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textCompact
+                    }
+
                     RowLayout {
                         Layout.fillWidth: true
 
                         Text {
                             Layout.fillWidth: true
-                            text: qsTr("The last successfully saved provider and model are restored at startup.")
+                            text: pane.controller.aiApiKeyConfigured ? qsTr("API key saved for this provider.") : qsTr("The model field remains editable when a provider does not expose a model list.")
                             color: Theme.textMuted
                             wrapMode: Text.WordWrap
                             font.family: Theme.uiFont
@@ -1412,76 +1486,14 @@ Rectangle {
 
                         ActionButton {
                             objectName: "settingsAiProviderApply"
-                            text: qsTr("Save provider")
-                            accessibleName: qsTr("Save AI provider settings")
+                            text: qsTr("Save")
+                            accessibleName: qsTr("Save AI provider")
                             variant: "primary"
                             onClicked: {
-                                const saved = pane.controller.saveAiProviderSettings(pane.aiProviderToken(), pane.aiBaseUrlDraft, pane.aiEndpointPathDraft, pane.aiModelDraft, aiAutomaticContextSwitch.checked, pane.aiPermissionToken());
-                                pane.presentStatus(saved ? qsTr("AI provider settings saved.") : qsTr("The provider URL or model settings are invalid."), !saved, saved);
-                            }
-                        }
-                    }
-                }
-            }
-
-            SectionCard {
-                Layout.fillWidth: true
-                visible: pane.currentCategory === "ai"
-                compact: true
-                heading: qsTr("Provider credential")
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: Theme.spacingControl
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: pane.controller.aiApiKeyConfigured ? qsTr("An API key is stored in the active credential vault. Entering a new key replaces it; the saved value is never exposed back to QML.") : qsTr("No API key is stored. Ollama can normally be used without one.")
-                        color: pane.controller.aiApiKeyConfigured ? Theme.textSoft : Theme.textMuted
-                        wrapMode: Text.WordWrap
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.textLabel
-                    }
-
-                    AppTextField {
-                        id: aiApiKeyField
-
-                        objectName: "settingsAiApiKey"
-                        Layout.fillWidth: true
-                        placeholderText: pane.controller.aiApiKeyConfigured ? qsTr("Enter a replacement API key") : qsTr("Enter API key")
-                        passwordRevealable: true
-                        accessibleName: qsTr("AI provider API key")
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-
-                        ActionButton {
-                            visible: pane.controller.aiApiKeyConfigured
-                            text: qsTr("Remove key")
-                            accessibleName: qsTr("Remove the stored AI provider API key")
-                            onClicked: {
-                                const removed = pane.controller.removeAiApiKey();
-                                pane.showCredentialResult(removed, qsTr("AI provider API key removed."));
-                            }
-                        }
-
-                        Item {
-                            Layout.fillWidth: true
-                        }
-
-                        ActionButton {
-                            objectName: "settingsAiApiKeySave"
-                            text: qsTr("Save key")
-                            accessibleName: qsTr("Save AI provider API key")
-                            variant: "primary"
-                            enabled: aiApiKeyField.text.length > 0
-                            onClicked: {
-                                const saved = pane.controller.saveAiApiKey(aiApiKeyField.text);
-                                pane.showCredentialResult(saved, qsTr("AI provider API key saved in the active credential vault."));
-                                if (saved) {
+                                const saved = pane.controller.saveAiProviderConfiguration(pane.aiProviderToken(), pane.aiBaseUrlDraft, pane.aiModelDraft, aiAutomaticContextSwitch.checked, pane.aiPermissionToken(), aiApiKeyField.text);
+                                pane.presentStatus(saved ? qsTr("AI provider saved.") : qsTr("The provider settings or API key could not be saved."), !saved, saved);
+                                if (saved)
                                     aiApiKeyField.text = "";
-                                }
                             }
                         }
                     }

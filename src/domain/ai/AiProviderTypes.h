@@ -11,6 +11,7 @@ namespace ztermy::ai
 enum class AiProviderKind : std::uint8_t
 {
     openAiResponses,
+    anthropicMessages,
     ollama,
     openAiCompatible,
 };

@@ -5,6 +5,7 @@
 #include "application/ai/AiWaitCommandTool.h"
 #include "domain/ai/AiContextSerializer.h"
 #include "domain/ssh/SshTarget.h"
+#include "infrastructure/ai/ProviderEndpointResolver.h"
 #include "infrastructure/security/InMemoryCredentialVault.h"
 #include "infrastructure/workbench/QuickCommandStore.h"
 #include "platform/windows/WindowsProtectedClipboard.h"
@@ -195,12 +196,22 @@ private:
     {
         case ztermy::config::AiProviderPreference::openAiResponses:
             return ztermy::ai::AiProviderKind::openAiResponses;
-        case ztermy::config::AiProviderPreference::ollama:
-            return ztermy::ai::AiProviderKind::ollama;
+        case ztermy::config::AiProviderPreference::anthropic:
+            return ztermy::ai::AiProviderKind::anthropicMessages;
+        case ztermy::config::AiProviderPreference::deepSeek:
+        case ztermy::config::AiProviderPreference::kimi:
+        case ztermy::config::AiProviderPreference::zai:
         case ztermy::config::AiProviderPreference::openAiCompatible:
             return ztermy::ai::AiProviderKind::openAiCompatible;
+        case ztermy::config::AiProviderPreference::ollama:
+            return ztermy::ai::AiProviderKind::ollama;
     }
     return ztermy::ai::AiProviderKind::openAiResponses;
+}
+
+[[nodiscard]] QString aiCredentialReference(const ztermy::config::AiProviderPreference provider)
+{
+    return QStringLiteral("ai-") + ztermy::config::aiProviderPreferenceToken(provider);
 }
 
 [[nodiscard]] ztermy::ai::AiPermissionMode
@@ -1905,6 +1916,16 @@ void AppController::shutdown() noexcept
     }
     m_shutdownStarted = true;
     m_scriptExecutionTimer.stop();
+    ++m_aiModelsRequestGeneration;
+    if (m_aiModelsReply)
+    {
+        auto *reply = m_aiModelsReply.data();
+        m_aiModelsReply = nullptr;
+        QObject::disconnect(reply, nullptr, this, nullptr);
+        reply->abort();
+        reply->deleteLater();
+    }
+    m_aiModelsLoading = false;
     m_mcpRuntime.shutdown();
     stopAllPortForwardingRules();
     clearHostKeyPrompt();
@@ -2818,6 +2839,21 @@ QString AppController::aiEndpointPath() const
 QString AppController::aiModel() const
 {
     return m_settings.aiModel;
+}
+
+QStringList AppController::aiAvailableModels() const
+{
+    return m_aiAvailableModels;
+}
+
+bool AppController::aiModelsLoading() const noexcept
+{
+    return m_aiModelsLoading;
+}
+
+QString AppController::aiModelsError() const
+{
+    return m_aiModelsError;
 }
 
 bool AppController::aiAutomaticContext() const noexcept
@@ -7194,6 +7230,139 @@ bool AppController::saveAiProviderSettings(const QString &provider, const QStrin
     candidate.aiAutomaticContext = automaticContext;
     candidate.aiPermission = *parsedPermission;
     return persistApplicationSettings(candidate);
+}
+
+bool AppController::saveAiProviderConfiguration(const QString &provider, const QString &baseUrl, const QString &model,
+                                                const bool automaticContext, const QString &permissionMode,
+                                                const QString &apiKey)
+{
+    const auto parsedProvider = config::parseAiProviderPreference(provider);
+    const auto parsedPermission = config::parseAiPermissionPreference(permissionMode);
+    if (!parsedProvider || !parsedPermission)
+    {
+        return false;
+    }
+    auto candidate = m_settings;
+    candidate.aiProvider = *parsedProvider;
+    candidate.aiBaseUrl = baseUrl.trimmed();
+    candidate.aiEndpointPath.clear();
+    candidate.aiModel = model.trimmed();
+    candidate.aiAutomaticContext = automaticContext;
+    candidate.aiPermission = *parsedPermission;
+    if (*parsedProvider != m_settings.aiProvider || !apiKey.isEmpty())
+    {
+        candidate.aiCredentialReference = aiCredentialReference(*parsedProvider);
+    }
+    if (!persistApplicationSettings(candidate))
+    {
+        return false;
+    }
+    return apiKey.isEmpty() || saveAiApiKey(apiKey);
+}
+
+QString AppController::aiProviderEndpointPreview(const QString &provider, const QString &baseUrl) const
+{
+    const auto parsedProvider = config::parseAiProviderPreference(provider);
+    if (!parsedProvider)
+    {
+        return tr("Invalid API address");
+    }
+    const ai::AiProviderConfiguration configuration{.kind = aiProviderKind(*parsedProvider),
+                                                    .baseUrl = utf8String(baseUrl)};
+    const auto endpoint = ai::resolveProviderEndpoint(configuration, ai::ProviderEndpointPurpose::generation);
+    return endpoint.has_value() ? endpoint->toString(QUrl::FullyEncoded) : tr("Invalid API address");
+}
+
+void AppController::refreshAiModels(const QString &provider, const QString &baseUrl, const QString &apiKey)
+{
+    const auto parsedProvider = config::parseAiProviderPreference(provider);
+    if (!parsedProvider)
+    {
+        m_aiModelsError = tr("Choose a supported model provider.");
+        emit aiModelsChanged();
+        return;
+    }
+    ++m_aiModelsRequestGeneration;
+    const auto generation = m_aiModelsRequestGeneration;
+    if (m_aiModelsReply)
+    {
+        m_aiModelsReply->abort();
+        m_aiModelsReply->deleteLater();
+        m_aiModelsReply = nullptr;
+    }
+
+    security::SensitiveByteArray secret;
+    if (!apiKey.isEmpty())
+    {
+        secret = security::SensitiveByteArray(apiKey.toUtf8());
+    }
+    else if (*parsedProvider != config::AiProviderPreference::ollama)
+    {
+        const ai::AiSecretStore store(m_credentialVaults->active());
+        const auto reference = *parsedProvider == m_settings.aiProvider ? m_settings.aiCredentialReference
+                                                                        : aiCredentialReference(*parsedProvider);
+        auto stored = store.readApiKey(reference.toStdString());
+        if (stored.has_value())
+        {
+            secret = std::move(*stored);
+        }
+    }
+    const ai::AiProviderConfiguration configuration{.kind = aiProviderKind(*parsedProvider),
+                                                    .baseUrl = utf8String(baseUrl)};
+    auto request = ai::ProviderModelCatalog::prepareRequest(configuration, std::move(secret));
+    if (!request.has_value())
+    {
+        m_aiModelsLoading = false;
+        m_aiModelsError = QString::fromStdString(request.error().message);
+        emit aiModelsChanged();
+        return;
+    }
+
+    m_aiModelsLoading = true;
+    m_aiModelsError.clear();
+    emit aiModelsChanged();
+    auto *reply = m_aiModelNetwork.get(*request);
+    m_aiModelsReply = reply;
+    connect(reply, &QNetworkReply::finished, this, [this, reply, generation, kind = configuration.kind] {
+        if (generation != m_aiModelsRequestGeneration || m_aiModelsReply != reply)
+        {
+            reply->deleteLater();
+            return;
+        }
+        m_aiModelsReply = nullptr;
+        m_aiModelsLoading = false;
+        const auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if (reply->error() != QNetworkReply::NoError || status >= 400)
+        {
+            m_aiModelsError = status > 0 ? tr("Could not fetch models (HTTP %1).").arg(status)
+                                         : tr("Could not reach the model provider.");
+        }
+        else
+        {
+            constexpr qsizetype maximumCatalogBytes = qsizetype{2} * 1024 * 1024;
+            const auto body = reply->read(maximumCatalogBytes + 1);
+            if (body.size() > maximumCatalogBytes)
+            {
+                m_aiModelsError = tr("The provider model list is too large.");
+            }
+            else
+            {
+                const auto parsed = ai::ProviderModelCatalog::parse(kind, body);
+                if (parsed.has_value())
+                {
+                    m_aiAvailableModels = *parsed;
+                    m_aiModelsError =
+                        m_aiAvailableModels.isEmpty() ? tr("The provider returned no models.") : QString{};
+                }
+                else
+                {
+                    m_aiModelsError = QString::fromStdString(parsed.error().message);
+                }
+            }
+        }
+        reply->deleteLater();
+        emit aiModelsChanged();
+    });
 }
 
 bool AppController::saveAiApiKey(const QString &apiKey)

@@ -1573,6 +1573,31 @@ Rectangle {
                             }
 
                             TerminalToolbarButton {
+                                id: aiToolbarButton
+
+                                objectName: "terminalAiAction"
+                                Layout.preferredWidth: 28
+                                Layout.preferredHeight: 22
+                                checkable: true
+                                checked: root.activeTerminalTab !== null && root.activeTerminalTab.workbenchOpen && root.activeTerminalTab.workbenchPage === "ai"
+                                selected: checked
+                                enabled: root.activeTerminalTab !== null
+                                onClicked: root.controller.toggleTerminalWorkbench("ai")
+                                Keys.onReturnPressed: click()
+                                Keys.onEnterPressed: click()
+                                Accessible.name: qsTr("AI assistant")
+                                contentItem: AppIcon {
+                                    name: "ai"
+                                    color: aiToolbarButton.checked ? Theme.accent : root.mutedColor
+                                }
+
+                                AppToolTip {
+                                    visible: aiToolbarButton.hovered
+                                    text: qsTr("AI assistant")
+                                }
+                            }
+
+                            TerminalToolbarButton {
                                 id: terminalMoreButton
                                 objectName: "terminalMoreAction"
 

@@ -6,6 +6,8 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <array>
+
 namespace
 {
 
@@ -24,6 +26,7 @@ class ApplicationSettingsTests final : public QObject
 private slots:
     void missingFileUsesDefaults();
     void savesAndLoadsEveryPreference();
+    void roundTripsEveryAiProviderPreference();
     void migratesLegacyWindowOpacityAndNoneBackdrop();
     void migratesMaterialSchemaWithOpaqueTerminalDefault();
     void migratesTerminalAppearanceSchemaWithDefaultAccent();
@@ -91,6 +94,32 @@ void ApplicationSettingsTests::savesAndLoadsEveryPreference()
     const auto loaded = store.load();
     QVERIFY(loaded);
     QCOMPARE(*loaded, expected);
+}
+
+void ApplicationSettingsTests::roundTripsEveryAiProviderPreference()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const ztermy::config::ApplicationSettingsStore store(directory.filePath(QStringLiteral("settings.json")));
+
+    const std::array providers{
+        ztermy::config::AiProviderPreference::openAiResponses,
+        ztermy::config::AiProviderPreference::anthropic,
+        ztermy::config::AiProviderPreference::deepSeek,
+        ztermy::config::AiProviderPreference::kimi,
+        ztermy::config::AiProviderPreference::zai,
+        ztermy::config::AiProviderPreference::ollama,
+        ztermy::config::AiProviderPreference::openAiCompatible,
+    };
+    for (const auto provider : providers)
+    {
+        auto expected = ztermy::config::ApplicationSettings{};
+        expected.aiProvider = provider;
+        QVERIFY(store.save(expected));
+        const auto loaded = store.load();
+        QVERIFY(loaded);
+        QCOMPARE(loaded->aiProvider, provider);
+    }
 }
 
 void ApplicationSettingsTests::migratesLegacyWindowOpacityAndNoneBackdrop()

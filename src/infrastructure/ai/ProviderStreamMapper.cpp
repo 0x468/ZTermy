@@ -316,6 +316,123 @@ void OpenAiCompatibleStreamMapper::reset() noexcept
     m_completed = false;
 }
 
+std::expected<std::vector<AiStreamEvent>, AiProviderError> AnthropicStreamMapper::map(const ServerSentEvent &event)
+{
+    const auto parsed = parseObject(event.data);
+    if (!parsed.has_value())
+    {
+        return std::unexpected(parsed.error());
+    }
+    const auto &object = parsed.value();
+    const auto type =
+        object.value("type").toString(event.event.empty() ? QString{} : QString::fromStdString(event.event));
+    std::vector<AiStreamEvent> events;
+    if (type == QStringLiteral("error"))
+    {
+        auto error = providerError(object.value("error"));
+        events.push_back(AiStreamEvent{.type = AiStreamEventType::responseFailed, .error = std::move(error)});
+    }
+    else if (type == QStringLiteral("message_start"))
+    {
+        const auto message = object.value("message").toObject();
+        m_responseId = utf8(message.value("id").toString());
+        if (!m_started)
+        {
+            m_started = true;
+            events.push_back(AiStreamEvent{.type = AiStreamEventType::responseStarted, .responseId = m_responseId});
+        }
+        const auto usage = message.value("usage").toObject();
+        if (!usage.isEmpty())
+        {
+            events.push_back(AiStreamEvent{
+                .type = AiStreamEventType::usageUpdated,
+                .responseId = m_responseId,
+                .usage = AiTokenUsage{.inputTokens = usage.value("input_tokens").toVariant().toULongLong(),
+                                      .cachedInputTokens =
+                                          usage.value("cache_read_input_tokens").toVariant().toULongLong()}});
+        }
+    }
+    else if (type == QStringLiteral("content_block_start"))
+    {
+        const auto index = static_cast<std::size_t>(object.value("index").toInt());
+        const auto block = object.value("content_block").toObject();
+        if (block.value("type").toString() == QStringLiteral("tool_use"))
+        {
+            ToolState state{.callId = utf8(block.value("id").toString()), .name = utf8(block.value("name").toString())};
+            m_toolsByIndex.insert_or_assign(index, state);
+            events.push_back(AiStreamEvent{.type = AiStreamEventType::toolCallStarted,
+                                           .responseId = m_responseId,
+                                           .toolCallId = state.callId,
+                                           .toolName = state.name});
+        }
+    }
+    else if (type == QStringLiteral("content_block_delta"))
+    {
+        const auto index = static_cast<std::size_t>(object.value("index").toInt());
+        const auto delta = object.value("delta").toObject();
+        const auto deltaType = delta.value("type").toString();
+        if (deltaType == QStringLiteral("text_delta"))
+        {
+            events.push_back(AiStreamEvent{.type = AiStreamEventType::textDelta,
+                                           .responseId = m_responseId,
+                                           .delta = utf8(delta.value("text").toString())});
+        }
+        else if (deltaType == QStringLiteral("thinking_delta"))
+        {
+            events.push_back(AiStreamEvent{.type = AiStreamEventType::reasoningDelta,
+                                           .responseId = m_responseId,
+                                           .delta = utf8(delta.value("thinking").toString())});
+        }
+        else if (deltaType == QStringLiteral("input_json_delta"))
+        {
+            const auto tool = m_toolsByIndex.find(index);
+            events.push_back(
+                AiStreamEvent{.type = AiStreamEventType::toolArgumentsDelta,
+                              .responseId = m_responseId,
+                              .toolCallId = tool == m_toolsByIndex.end() ? std::string{} : tool->second.callId,
+                              .toolName = tool == m_toolsByIndex.end() ? std::string{} : tool->second.name,
+                              .delta = utf8(delta.value("partial_json").toString())});
+        }
+    }
+    else if (type == QStringLiteral("content_block_stop"))
+    {
+        const auto index = static_cast<std::size_t>(object.value("index").toInt());
+        const auto tool = m_toolsByIndex.find(index);
+        if (tool != m_toolsByIndex.end())
+        {
+            events.push_back(AiStreamEvent{.type = AiStreamEventType::toolCallCompleted,
+                                           .responseId = m_responseId,
+                                           .toolCallId = tool->second.callId,
+                                           .toolName = tool->second.name});
+        }
+    }
+    else if (type == QStringLiteral("message_delta"))
+    {
+        const auto usage = object.value("usage").toObject();
+        if (!usage.isEmpty())
+        {
+            events.push_back(AiStreamEvent{
+                .type = AiStreamEventType::usageUpdated,
+                .responseId = m_responseId,
+                .usage = AiTokenUsage{.outputTokens = usage.value("output_tokens").toVariant().toULongLong()}});
+        }
+    }
+    else if (type == QStringLiteral("message_stop") && !m_completed)
+    {
+        m_completed = true;
+        events.push_back(AiStreamEvent{.type = AiStreamEventType::responseCompleted, .responseId = m_responseId});
+    }
+    return events;
+}
+
+void AnthropicStreamMapper::reset() noexcept
+{
+    m_toolsByIndex.clear();
+    m_responseId.clear();
+    m_started = false;
+    m_completed = false;
+}
+
 std::expected<std::vector<AiStreamEvent>, AiProviderError> OllamaStreamMapper::map(const std::string_view line)
 {
     const auto parsed = parseObject(line);

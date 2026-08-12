@@ -476,8 +476,12 @@ target_link_libraries(ztermy_ai_context
 )
 
 add_library(ztermy_ai_provider STATIC
+    src/infrastructure/ai/ProviderEndpointResolver.cpp
+    src/infrastructure/ai/ProviderEndpointResolver.h
     src/infrastructure/ai/ProviderHttpClient.cpp
     src/infrastructure/ai/ProviderHttpClient.h
+    src/infrastructure/ai/ProviderModelCatalog.cpp
+    src/infrastructure/ai/ProviderModelCatalog.h
     src/infrastructure/ai/ProviderRequestFactory.cpp
     src/infrastructure/ai/ProviderRequestFactory.h
     src/infrastructure/ai/ProviderStreamMapper.cpp

@@ -49,6 +49,7 @@ private:
         NdjsonParser ndjsonParser;
         OpenAiResponsesStreamMapper openAiMapper;
         OpenAiCompatibleStreamMapper compatibleMapper;
+        AnthropicStreamMapper anthropicMapper;
         OllamaStreamMapper ollamaMapper;
         EventHandler eventHandler;
         FinishedHandler finishedHandler;

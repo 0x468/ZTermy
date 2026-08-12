@@ -1,4 +1,5 @@
 #include "infrastructure/ai/ProviderRequestFactory.h"
+#include "infrastructure/ai/ProviderEndpointResolver.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -35,47 +36,9 @@ namespace
     return QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size()));
 }
 
-[[nodiscard]] std::string_view defaultEndpoint(const AiProviderKind kind)
-{
-    switch (kind)
-    {
-        case AiProviderKind::openAiResponses:
-            return "/responses";
-        case AiProviderKind::ollama:
-            return "/api/chat";
-        case AiProviderKind::openAiCompatible:
-            return "/chat/completions";
-    }
-    return {};
-}
-
 [[nodiscard]] std::expected<QUrl, AiProviderError> endpointUrl(const AiProviderConfiguration &configuration)
 {
-    auto base = QUrl(fromUtf8(configuration.baseUrl));
-    if (!base.isValid() || base.host().isEmpty() || !base.userInfo().isEmpty()
-        || (base.scheme() != QStringLiteral("http") && base.scheme() != QStringLiteral("https")))
-    {
-        return std::unexpected(
-            AiProviderError{.code = AiProviderErrorCode::invalidRequest,
-                            .message = "Provider base URL must be an HTTP(S) URL without credentials.",
-                            .retryable = false});
-    }
-
-    auto basePath = base.path();
-    while (basePath.endsWith('/'))
-    {
-        basePath.chop(1);
-    }
-    auto endpoint = configuration.endpointPath.empty() ? fromUtf8(defaultEndpoint(configuration.kind))
-                                                       : fromUtf8(configuration.endpointPath);
-    if (!endpoint.startsWith('/'))
-    {
-        endpoint.prepend('/');
-    }
-    base.setPath(basePath + endpoint);
-    base.setQuery(QString{});
-    base.setFragment(QString{});
-    return base;
+    return resolveProviderEndpoint(configuration, ProviderEndpointPurpose::generation);
 }
 
 [[nodiscard]] QJsonArray messages(const AiGenerationRequest &generation)
@@ -229,6 +192,89 @@ namespace
     return body;
 }
 
+[[nodiscard]] QJsonArray anthropicMessages(const AiGenerationRequest &generation)
+{
+    QJsonArray result;
+    for (const auto &message : generation.messages)
+    {
+        if (message.role == AiMessageRole::system || message.role == AiMessageRole::tool)
+        {
+            continue;
+        }
+        result.append(QJsonObject{{QStringLiteral("role"), roleName(message.role)},
+                                  {QStringLiteral("content"), fromUtf8(message.content)}});
+    }
+    for (const auto &exchange : generation.toolHistory)
+    {
+        QJsonArray uses;
+        for (const auto &call : exchange.calls)
+        {
+            QJsonParseError parseError;
+            const auto arguments = QJsonDocument::fromJson(
+                QByteArray(call.argumentsJson.data(), static_cast<qsizetype>(call.argumentsJson.size())), &parseError);
+            uses.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("tool_use")},
+                                    {QStringLiteral("id"), fromUtf8(call.id)},
+                                    {QStringLiteral("name"), fromUtf8(call.name)},
+                                    {QStringLiteral("input"), arguments.isObject() ? QJsonValue(arguments.object())
+                                                                                   : QJsonValue(QJsonObject{})}});
+        }
+        if (!uses.isEmpty())
+        {
+            result.append(
+                QJsonObject{{QStringLiteral("role"), QStringLiteral("assistant")}, {QStringLiteral("content"), uses}});
+        }
+        QJsonArray outputs;
+        for (const auto &output : exchange.outputs)
+        {
+            outputs.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("tool_result")},
+                                       {QStringLiteral("tool_use_id"), fromUtf8(output.callId)},
+                                       {QStringLiteral("content"), fromUtf8(output.outputJson)}});
+        }
+        if (!outputs.isEmpty())
+        {
+            result.append(
+                QJsonObject{{QStringLiteral("role"), QStringLiteral("user")}, {QStringLiteral("content"), outputs}});
+        }
+    }
+    return result;
+}
+
+[[nodiscard]] std::expected<QJsonObject, AiProviderError> anthropicBody(const AiProviderConfiguration &configuration,
+                                                                        const AiGenerationRequest &generation)
+{
+    QJsonArray tools;
+    for (const auto &definition : generation.tools)
+    {
+        QJsonParseError parseError;
+        const auto parameters = QJsonDocument::fromJson(
+            QByteArray(definition.parametersJson.data(), static_cast<qsizetype>(definition.parametersJson.size())),
+            &parseError);
+        if (definition.name.empty() || !parameters.isObject() || parseError.error != QJsonParseError::NoError)
+        {
+            return std::unexpected(
+                AiProviderError{.code = AiProviderErrorCode::invalidRequest,
+                                .message = "AI tool definitions must have a name and JSON object schema.",
+                                .retryable = false});
+        }
+        tools.append(QJsonObject{{QStringLiteral("name"), fromUtf8(definition.name)},
+                                 {QStringLiteral("description"), fromUtf8(definition.description)},
+                                 {QStringLiteral("input_schema"), parameters.object()}});
+    }
+    QJsonObject body{{QStringLiteral("model"), fromUtf8(configuration.model)},
+                     {QStringLiteral("messages"), anthropicMessages(generation)},
+                     {QStringLiteral("max_tokens"), 8192},
+                     {QStringLiteral("stream"), true}};
+    if (!generation.instructions.empty())
+    {
+        body.insert(QStringLiteral("system"), fromUtf8(generation.instructions));
+    }
+    if (!tools.isEmpty())
+    {
+        body.insert(QStringLiteral("tools"), tools);
+    }
+    return body;
+}
+
 [[nodiscard]] QJsonObject ollamaBody(const AiProviderConfiguration &configuration,
                                      const AiGenerationRequest &generation, const QJsonArray &tools)
 {
@@ -278,6 +324,16 @@ ProviderRequestFactory::prepare(const AiProviderConfiguration &configuration, co
         case AiProviderKind::openAiResponses:
             body = openAiBody(configuration, generation, *tools);
             break;
+        case AiProviderKind::anthropicMessages:
+        {
+            const auto anthropic = anthropicBody(configuration, generation);
+            if (!anthropic.has_value())
+            {
+                return std::unexpected(anthropic.error());
+            }
+            body = *anthropic;
+            break;
+        }
         case AiProviderKind::ollama:
             body = ollamaBody(configuration, generation, *tools);
             protocol = AiWireProtocol::ndjson;
@@ -293,7 +349,12 @@ ProviderRequestFactory::prepare(const AiProviderConfiguration &configuration, co
                          protocol == AiWireProtocol::serverSentEvents ? "text/event-stream" : "application/x-ndjson");
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
     request.setTransferTimeout(120'000);
-    if (!apiKey.empty())
+    if (!apiKey.empty() && configuration.kind == AiProviderKind::anthropicMessages)
+    {
+        request.setRawHeader("x-api-key", QByteArray(apiKey.data(), static_cast<qsizetype>(apiKey.size())));
+        request.setRawHeader("anthropic-version", "2023-06-01");
+    }
+    else if (!apiKey.empty())
     {
         QByteArray authorization("Bearer ");
         authorization.append(apiKey.data(), static_cast<qsizetype>(apiKey.size()));

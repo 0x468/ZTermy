@@ -58,6 +58,10 @@ enum class LanguagePreference : std::uint8_t
 enum class AiProviderPreference : std::uint8_t
 {
     openAiResponses,
+    anthropic,
+    deepSeek,
+    kimi,
+    zai,
     ollama,
     openAiCompatible,
 };
