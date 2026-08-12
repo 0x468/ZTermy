@@ -104,7 +104,7 @@ private slots:
 void AiReadToolDispatcherTests::publishesStrictReadOnlyCatalog()
 {
     const auto definitions = AiReadToolDispatcher::definitions();
-    QCOMPARE(definitions.size(), std::size_t{12});
+    QCOMPARE(definitions.size(), std::size_t{13});
     QCOMPARE(definitions.front().name, std::string("list_sessions"));
     for (const auto &definition : definitions)
     {
@@ -121,6 +121,16 @@ void AiReadToolDispatcherTests::executesBoundedReads()
     auto result = object(dispatcher.execute("list_sessions", "{}", snapshots));
     QVERIFY(result.value("ok").toBool());
     QCOMPARE(result.value("sessions").toArray().size(), 1);
+
+    result = object(dispatcher.execute(
+        "read_multi_session_status",
+        R"({"targets":[{"session_id":"session-1","session_generation":4},{"session_id":"missing","session_generation":1}]})",
+        snapshots));
+    const auto multiSession = result.value("results").toObject().value("items").toArray();
+    QCOMPARE(multiSession.size(), 2);
+    QVERIFY(multiSession.at(0).toObject().value("ok").toBool());
+    QCOMPARE(multiSession.at(0).toObject().value("telemetry").toObject().value("cpu_percent").toDouble(), 12.5);
+    QVERIFY(!multiSession.at(1).toObject().value("ok").toBool());
 
     result = object(dispatcher.execute(
         "read_terminal", R"({"session_id":"session-1","session_generation":4,"first_line":1,"line_count":1})",
@@ -210,6 +220,12 @@ void AiReadToolDispatcherTests::rejectsMalformedStaleAndUnknownRequests()
     QCOMPARE(result.value("error").toObject().value("code").toString(), QStringLiteral("invalid_arguments"));
 
     result = object(dispatcher.execute("list_sessions", R"({"unexpected":true})", snapshots));
+    QCOMPARE(result.value("error").toObject().value("code").toString(), QStringLiteral("invalid_arguments"));
+
+    result = object(dispatcher.execute(
+        "read_multi_session_status",
+        R"({"targets":[{"session_id":"session-1","session_generation":4},{"session_id":"session-1","session_generation":4}]})",
+        snapshots));
     QCOMPARE(result.value("error").toObject().value("code").toString(), QStringLiteral("invalid_arguments"));
 
     result = object(dispatcher.execute("run_command", "{}", snapshots));

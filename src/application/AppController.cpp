@@ -7447,10 +7447,8 @@ ai::AiContextBundle AppController::buildAiContext(TerminalTab &tab, const bool p
     return context;
 }
 
-std::vector<ai::AiTerminalReadSnapshot> AppController::aiReadSnapshots(const TerminalTab &tab) const
+ai::AiTerminalReadSnapshot AppController::aiReadSnapshot(const TerminalTab &tab) const
 {
-    std::vector<ai::AiTerminalReadSnapshot> snapshots;
-    snapshots.reserve(1);
     terminal::SemanticTerminalSnapshot semantic;
     if (tab.semanticObserver)
     {
@@ -7582,17 +7580,31 @@ std::vector<ai::AiTerminalReadSnapshot> AppController::aiReadSnapshots(const Ter
         operations.telemetry.transmittedBytesPerSecond = sample.transmittedBytesPerSecond;
         operations.telemetry.sshProbeLatencyMs = sample.sshProbeLatencyMs;
     }
-    snapshots.push_back(ai::AiTerminalReadSnapshot{.sessionId = utf8String(tab.id),
-                                                   .title = utf8String(tab.title),
-                                                   .host = utf8String(tab.address),
-                                                   .shell = utf8String(shell),
-                                                   .workingDirectory = utf8String(tab.terminalWorkingDirectory),
-                                                   .terminalFrame = utf8String(terminalFrameText(tab.snapshot)),
-                                                   .sessionGeneration = tab.reconnectGeneration,
-                                                   .capability = capability,
-                                                   .connected = tab.running,
-                                                   .commandBlocks = std::move(semantic.commandBlocks),
-                                                   .operations = std::move(operations)});
+    return ai::AiTerminalReadSnapshot{.sessionId = utf8String(tab.id),
+                                      .title = utf8String(tab.title),
+                                      .host = utf8String(tab.address),
+                                      .shell = utf8String(shell),
+                                      .workingDirectory = utf8String(tab.terminalWorkingDirectory),
+                                      .terminalFrame = utf8String(terminalFrameText(tab.snapshot)),
+                                      .sessionGeneration = tab.reconnectGeneration,
+                                      .capability = capability,
+                                      .connected = tab.running,
+                                      .commandBlocks = std::move(semantic.commandBlocks),
+                                      .operations = std::move(operations)};
+}
+
+std::vector<ai::AiTerminalReadSnapshot> AppController::aiReadSnapshots(const TerminalTab &tab) const
+{
+    std::vector<ai::AiTerminalReadSnapshot> snapshots;
+    snapshots.reserve(m_tabs.size());
+    snapshots.push_back(aiReadSnapshot(tab));
+    for (const auto &candidate : m_tabs)
+    {
+        if (candidate && candidate.get() != &tab && candidate->workspaceId == tab.workspaceId)
+        {
+            snapshots.push_back(aiReadSnapshot(*candidate));
+        }
+    }
     return snapshots;
 }
 
@@ -7708,6 +7720,8 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
     toolDefinitions.push_back(ai::AiWaitCommandTool::definition());
     toolDefinitions.push_back(ai::AiSftpReadTool::definition());
     toolDefinitions.push_back(ai::AiNoteReadTool::definition());
+    const auto turnReadSnapshots =
+        std::make_shared<const std::vector<ai::AiTerminalReadSnapshot>>(aiReadSnapshots(tab));
     ai::AiGenerationRequest generation{.instructions = std::move(instructions),
                                        .messages = std::move(messages),
                                        .tools = std::move(toolDefinitions)};
@@ -7825,7 +7839,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
             }
         },
         {},
-        [this, tabId = tab.id](
+        [this, tabId = tab.id, turnReadSnapshots](
             const ai::AiToolCall &call) -> std::expected<ai::AiTurnRunner::ToolHandlingResult, ai::AiProviderError> {
             auto *target = findTab(tabId);
             if (call.name == "wait_command" && target != nullptr)
@@ -8140,9 +8154,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                                                    .outputJson = aiBudgetFailureJson(budgetDecision)}};
                 }
             }
-            const auto snapshots =
-                target == nullptr ? std::vector<ai::AiTerminalReadSnapshot>{} : aiReadSnapshots(*target);
-            const auto output = m_aiReadToolDispatcher.execute(call.name, call.argumentsJson, snapshots);
+            const auto output = m_aiReadToolDispatcher.execute(call.name, call.argumentsJson, *turnReadSnapshots);
             if (target != nullptr)
             {
                 const QString resultCode = aiActivityResultCode(output);

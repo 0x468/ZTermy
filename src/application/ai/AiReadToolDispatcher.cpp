@@ -239,8 +239,13 @@ std::vector<AiToolDefinition> AiReadToolDispatcher::definitions()
 {
     return {
         {.name = "list_sessions",
-         .description = "List bounded metadata for terminal sessions visible to this ztermy window.",
+         .description = "List bounded metadata for terminal sessions in the immutable workspace target set.",
          .parametersJson = R"({"type":"object","properties":{},"additionalProperties":false})"},
+        {.name = "read_multi_session_status",
+         .description =
+             "Read bounded session and telemetry status for explicit targets in the immutable workspace set.",
+         .parametersJson =
+             R"({"type":"object","properties":{"targets":{"type":"array","minItems":1,"maxItems":16,"items":{"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0}},"required":["session_id","session_generation"],"additionalProperties":false}}},"required":["targets"],"additionalProperties":false})"},
         {.name = "read_session_info",
          .description = "Read bounded metadata for one terminal session generation.",
          .parametersJson =
@@ -262,10 +267,7 @@ std::vector<AiToolDefinition> AiReadToolDispatcher::definitions()
          .description = "List a bounded page from the currently loaded SFTP directory as untrusted evidence.",
          .parametersJson =
              R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["session_id","session_generation","offset","limit"],"additionalProperties":false})"},
-        {.name = "list_shell_history",
-         .description = "List a bounded page of captured shell history for the exact session as untrusted evidence.",
-         .parametersJson =
-             R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["session_id","session_generation","offset","limit"],"additionalProperties":false})"},
+        {.name = "list_shell_history", .description = "List a bounded page of captured shell history for the exact session as untrusted evidence.", .parametersJson = R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["session_id","session_generation","offset","limit"],"additionalProperties":false})"},
         {.name = "list_scripts",
          .description = "List bounded metadata for user-owned ztermy scripts. Script commands are not returned.",
          .parametersJson =
@@ -305,7 +307,8 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
         return failure(QStringLiteral("invalid_arguments"), QStringLiteral("Tool arguments must be a JSON object."));
     }
     const auto object = arguments.object();
-    const bool supported = toolName == "list_sessions" || toolName == "read_session_info" || toolName == "read_terminal"
+    const bool supported = toolName == "list_sessions" || toolName == "read_multi_session_status"
+                           || toolName == "read_session_info" || toolName == "read_terminal"
                            || toolName == "read_command_block" || toolName == "read_command_output"
                            || toolName == "list_sftp_directory" || toolName == "list_shell_history"
                            || toolName == "list_scripts" || toolName == "read_script" || toolName == "list_notes"
@@ -332,6 +335,73 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
             values.append(sessionValue(session));
         }
         return json(QJsonObject{{QStringLiteral("ok"), true}, {QStringLiteral("sessions"), values}});
+    }
+    if (toolName == "read_multi_session_status")
+    {
+        if (!hasOnlyKeys(object, {QStringLiteral("targets")}) || !object.value(QStringLiteral("targets")).isArray())
+        {
+            return failure(QStringLiteral("invalid_arguments"),
+                           QStringLiteral("An explicit target array is required."));
+        }
+        const QJsonArray targets = object.value(QStringLiteral("targets")).toArray();
+        if (targets.isEmpty() || targets.size() > 16)
+        {
+            return failure(QStringLiteral("invalid_arguments"),
+                           QStringLiteral("The target array must contain from 1 through 16 entries."));
+        }
+        QSet<QString> seen;
+        QJsonArray results;
+        for (const QJsonValue &targetValue : targets)
+        {
+            if (!targetValue.isObject())
+            {
+                return failure(QStringLiteral("invalid_arguments"), QStringLiteral("Every target must be an object."));
+            }
+            const QJsonObject requested = targetValue.toObject();
+            const QJsonValue requestedId = requested.value(QStringLiteral("session_id"));
+            const auto requestedGeneration = unsignedInteger(requested, QStringLiteral("session_generation"));
+            if (!hasOnlyKeys(requested, {QStringLiteral("session_id"), QStringLiteral("session_generation")})
+                || !requestedId.isString() || requestedId.toString().isEmpty() || !requestedGeneration.has_value())
+            {
+                return failure(QStringLiteral("invalid_arguments"), QStringLiteral("Every target must be exact."));
+            }
+            const QString targetKey = requestedId.toString() + QLatin1Char(':') + QString::number(*requestedGeneration);
+            if (seen.contains(targetKey))
+            {
+                return failure(QStringLiteral("invalid_arguments"),
+                               QStringLiteral("Duplicate targets are not allowed."));
+            }
+            seen.insert(targetKey);
+            const auto requestedIdUtf8 = requestedId.toString().toUtf8().toStdString();
+            const auto metadata = m_tools.readSessionInfo(sessions, requestedIdUtf8, *requestedGeneration);
+            QJsonObject item{{QStringLiteral("target"), requested}};
+            if (!metadata.has_value())
+            {
+                const QJsonObject errorEnvelope =
+                    QJsonDocument::fromJson(QByteArray::fromStdString(failure(metadata.error()))).object();
+                item.insert(QStringLiteral("ok"), false);
+                item.insert(QStringLiteral("error"), errorEnvelope.value(QStringLiteral("error")));
+                results.append(item);
+                continue;
+            }
+            const auto *targetSnapshot = findSnapshot(sessions, requestedIdUtf8, *requestedGeneration);
+            Q_ASSERT(targetSnapshot != nullptr);
+            const auto &sample = targetSnapshot->operations.telemetry;
+            QJsonObject telemetry{{QStringLiteral("state"), text(sample.state)},
+                                  {QStringLiteral("os_name"), text(sample.osName)},
+                                  {QStringLiteral("cpu_core_count"), static_cast<int>(sample.cpuCoreCount)},
+                                  {QStringLiteral("memory_used_kib"), static_cast<qint64>(sample.memoryUsedKiB)},
+                                  {QStringLiteral("memory_total_kib"), static_cast<qint64>(sample.memoryTotalKiB)},
+                                  {QStringLiteral("ssh_probe_latency_ms"), static_cast<int>(sample.sshProbeLatencyMs)}};
+            telemetry.insert(QStringLiteral("cpu_percent"),
+                             sample.cpuPercent.has_value() ? QJsonValue{*sample.cpuPercent} : QJsonValue::Null);
+            item.insert(QStringLiteral("ok"), true);
+            item.insert(QStringLiteral("session"), sessionValue(*metadata));
+            item.insert(QStringLiteral("telemetry"), telemetry);
+            item.insert(QStringLiteral("untrusted_evidence"), true);
+            results.append(item);
+        }
+        return boundedOperationsResult(QStringLiteral("results"), QJsonObject{{QStringLiteral("items"), results}});
     }
 
     const auto sessionId = object.value(QStringLiteral("session_id"));
