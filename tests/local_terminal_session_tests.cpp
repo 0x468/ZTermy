@@ -391,8 +391,8 @@ void LocalTerminalSessionTests::survivesSustainedInteractionWithoutLatencyGrowth
     bool durationIsValid = false;
     const int configuredDuration = qEnvironmentVariableIntValue("ZTERMY_LOCAL_SOAK_SECONDS", &durationIsValid);
     const int durationSeconds = durationIsValid ? configuredDuration : 1'800;
-    QVERIFY2(durationSeconds >= 10 && durationSeconds <= 3'600,
-             "ZTERMY_LOCAL_SOAK_SECONDS must be between 10 and 3600");
+    QVERIFY2(durationSeconds >= 10 && durationSeconds <= 28'800,
+             "ZTERMY_LOCAL_SOAK_SECONDS must be between 10 and 28800");
     const int windowSeconds = (std::max)(1, (std::min)(60, durationSeconds / 6));
 
     try
