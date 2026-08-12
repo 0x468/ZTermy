@@ -353,7 +353,7 @@ Before each release candidate, the owner receives:
 ## Post-RC agent UX regression matrix
 
 Run this matrix against the current dynamic Debug candidate before accepting
-the `0.3.5` conversation-repair slice:
+the final `0.3.8` Agent candidate:
 
 1. Ask the agent to run `df -h`, approve it in Ask mode, and let it finish.
    The following model turn must receive the command's retained normalized
@@ -407,5 +407,6 @@ the `0.3.6` gate below.
    invalid schema, unavailable capability, or exhausted turn budget checks.
 6. Resize the Agent workbench to its minimum width in light and dark themes.
    The command, scope/matcher controls, and action buttons remain clipped
-   inside the panel and keyboard reachable. MCP approvals retain their existing
-   per-call contract and do not display terminal-rule controls.
+   inside the panel and keyboard reachable. Reviewed MCP calls follow the same
+   active mode and reusable-rule decision path; Ask/Edit display the exact
+   approval card, while Auto/YOLO do not add an accidental per-call prompt.

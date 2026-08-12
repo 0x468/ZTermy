@@ -1,7 +1,7 @@
 # V3 AI program
 
-Status: `0.3.0` implementation complete; release-candidate human and
-environment-dependent acceptance pending
+Status: `0.3.0`-`0.3.8` implementation and automated closure in progress;
+release-candidate human and environment-dependent acceptance pending
 
 ## Decision
 
@@ -258,8 +258,9 @@ Delivery status:
 - local MCP stdio transport, isolated namespaces, schema-drift revocation, and
   bounded untrusted results are implemented (`ADR 0073`);
 - persistent server management and the executable-trust -> exact-schema-review
-  -> per-call-approval chain are integrated with cancellation, replay
-  protection, audit, Settings UI, and backup recovery (`ADR 0074`);
+  chain are integrated with cancellation, replay protection, audit, Settings
+  UI, backup recovery, and the shared Agent mode/rule decision path (`ADR 0074`,
+  `ADR 0082`);
 - automatic task/model routing remains intentionally absent: the current replay
   evidence does not establish a provider-independent quality, latency, or cost
   improvement. The remembered explicit model remains the predictable default;

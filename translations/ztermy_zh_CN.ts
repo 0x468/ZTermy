@@ -4500,8 +4500,8 @@
     </message>
     <message>
         <location filename="../src/ui/qml/SettingsPane.qml" line="1760"/>
-        <source>MCP servers run as local stdio child processes with a reduced environment. Server descriptions and results are untrusted; execution requires server trust, an exact schema review, and approval for every call.</source>
-        <translation>MCP 服务器以精简环境中的本地 stdio 子进程运行。服务器描述和结果均不受信任；执行需要服务器信任、精确的架构审核以及逐次调用批准。</translation>
+        <source>MCP servers run as local stdio child processes. Trust and review a server once; calls then follow the current Agent mode and reusable rules.</source>
+        <translation>MCP 服务器以本地 stdio 子进程运行。完成一次信任与审核后，调用将遵循当前 Agent 模式和可复用规则。</translation>
     </message>
     <message>
         <location filename="../src/ui/qml/SettingsPane.qml" line="1828"/>
