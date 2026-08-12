@@ -1,7 +1,8 @@
 # V3 AI acceptance plan
 
-Status: automated `0.3.0` release-candidate gates executed; owner/provider,
-real-host, installer-interaction, and release-duration checks pending
+Status: automated `0.3.0` release-candidate gates and two-hour AI/MCP soak
+executed; owner/provider, real-host, installer-interaction, and eight-hour
+terminal checks pending
 
 ## Evidence rule
 
@@ -162,6 +163,9 @@ CMake 4.4.0, Ninja 1.13.1, PowerShell 7.6.4, and clang-tidy 22.1.6.
 - the static AI concurrency gate completed four full iterations in 158.877
   seconds with zero failures. The earlier dynamic Debug run completed three
   iterations in 120.296 seconds with zero failures;
+- the formal static Release AI/MCP concurrency gate completed 179 full
+  iterations in 7207.7 seconds with zero failures. Its content-free report
+  covers the nine approved runtime and lifecycle contracts;
 - WiX generated and contract-validated the per-user MSI. ICE emitted only the
   retained and reviewed ICE61, ICE69, and ICE91 warnings; decompilation and the
   LocalAppData, icon, shortcut, upgrade, and uninstall-folder contracts passed;
@@ -211,11 +215,13 @@ build, long-duration, or owner UX checks below.
   available. Exact OS, Qt, PowerShell/OpenSSH, provider, model, and build versions
   are recorded.
 
-Developer evidence on 2026-08-12: dynamic Debug completed three full gate
-iterations in 120.296 seconds and static Release completed four full iterations
-in 158.877 seconds, both with zero failures. This validates the soak mechanism,
-the 32-cycle lifecycle stress, and both linkage modes; it is not the final
-two-hour or eight-hour release-duration claim.
+Duration evidence on 2026-08-12: dynamic Debug completed three developer gate
+iterations in 120.296 seconds and static Release completed four developer gate
+iterations in 158.877 seconds, both with zero failures. The formal static
+Release run then completed 179 full iterations in 7207.7 seconds with zero
+failures, satisfying the two-hour mixed AI/MCP concurrency requirement. The
+eight-hour terminal requirement remains separately unclaimed until its report
+exists and passes the release-candidate verifier.
 
 ## Evaluation corpus
 

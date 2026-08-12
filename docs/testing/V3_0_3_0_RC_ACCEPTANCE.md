@@ -43,7 +43,11 @@ The following gates completed with exit code zero:
    shutdown.
 7. Provider-independent AI concurrency soak:
    - dynamic Debug: three iterations, 120.296 seconds, zero failures;
-   - static Release: four iterations, 158.877 seconds, zero failures.
+   - static Release developer run: four iterations, 158.877 seconds, zero
+     failures;
+   - static Release formal duration run: 179 iterations, 7207.7 seconds, zero
+     failures. The content-free report spans 2026-08-12 07:36:34Z through
+     09:36:42Z and belongs to the static Release build directory.
 8. WiX generation, ICE validation, decompilation, and structural inspection.
    Only the retained and reviewed ICE61, ICE69, and ICE91 warnings were emitted.
 9. Final portable archive extraction, `portable.flag` inspection, and packaged
@@ -209,7 +213,8 @@ Expected:
 
 ## Environment-dependent release gates
 
-These deliberately remain unclaimed until their reports exist:
+The two-hour AI/MCP command below completed successfully. The eight-hour
+terminal command remains in progress and unclaimed until its report exists:
 
 ```powershell
 pwsh -NoProfile -File .\scripts\run_ai_concurrency_soak.ps1 `

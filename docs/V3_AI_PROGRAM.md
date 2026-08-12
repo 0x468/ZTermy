@@ -197,8 +197,8 @@ Delivery status:
   content-free AI counts/policy state to diagnostic exports (`ADR 0075`);
 - provider-independent concurrency/lifecycle soak infrastructure and JSON
   evidence are implemented (`ADR 0076`); Debug and static Release developer
-  runs are green, while the release-duration run remains a final-candidate
-  gate;
+  runs are green, and the static Release two-hour AI/MCP duration gate completed
+  179 iterations in 7207.7 seconds with zero failures;
 - deterministic provider wire contracts and real-window responsive and
   accessibility contracts are implemented (`ADR 0077`, `ADR 0078`);
 - the static `0.3.0` MSI and portable ZIP pass the inherited installer,
@@ -207,7 +207,7 @@ Delivery status:
 - the exact automated evidence and remaining owner/environment checks are
   recorded in `testing/V3_0_3_0_RC_ACCEPTANCE.md`. Live-provider evaluation,
   real-host shell coverage, MSI interaction, previous-Windows-build coverage,
-  and release-duration soak evidence remain acceptance work rather than hidden
+  and the eight-hour terminal soak remain acceptance work rather than hidden
   implementation gaps.
 
 ## Explicit exclusions
