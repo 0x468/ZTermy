@@ -315,9 +315,10 @@ Optional history in `0.3.1` uses:
 
 ADR 0061 fixes the concrete first-store contract at AES-256-GCM, a dedicated
 vault-managed data key, schema/generation AAD, fresh nonce per rewrite, and
-bounded 50-conversation/90-day retention. The infrastructure store and its
-tamper/key-loss/bounds tests are implemented; application worker and opt-in UI
-integration sit above this synchronous boundary.
+bounded 50-conversation/90-day retention. A serialized application worker now
+owns every store operation; the opt-in settings surface supports browsing,
+restore, explicit decrypted export, and deletion without blocking the GUI.
+Restore accepts user/assistant text only and cannot revive tools or grants.
 
 No transcript is written to diagnostic logs, generic workspace JSON, or Windows
 Credential Manager.

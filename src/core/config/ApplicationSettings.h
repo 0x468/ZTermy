@@ -100,6 +100,7 @@ struct ApplicationSettings final
     QString aiCredentialReference = QStringLiteral("ai-default");
     bool aiAutomaticContext = true;
     AiPermissionPreference aiPermission = AiPermissionPreference::askEachWrite;
+    bool aiConversationHistoryEnabled = false;
 
     [[nodiscard]] friend bool operator==(const ApplicationSettings &, const ApplicationSettings &) = default;
 };

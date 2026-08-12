@@ -77,6 +77,15 @@ evaluations serve different purposes and are reported separately.
       budget.
 - [ ] Encrypted transcript storage covers read/write, tamper, truncation,
       unsupported schema, key loss, migration, retention, export, and deletion.
+- [ ] Encrypted history is off by default; session storage and a locked portable
+      vault cannot enable it; disabling retention preserves explicit
+      export/delete access; portable lock forgets decrypted in-memory rows.
+- [ ] Migrating to session storage disables retention, and source cleanup is
+      refused while an encrypted envelope exists so its durable key cannot be
+      discarded outside the explicit history-delete action.
+- [ ] Restart reload and transcript restore preserve only user/assistant text.
+      Restore never revives permissions, tool calls, pending actions, budgets,
+      or write ownership, and one stored conversation cannot own two live tabs.
 
 ## 0.3.2–0.3.4 automated gates
 
@@ -175,6 +184,12 @@ only when it passes the same evidence and action contract.
       context chips/remove/pin/preview, evidence badges, streaming/cancel/retry,
       secure copy, usage/estimated cost, audit view, keyboard-only, focus
       restoration, tooltips, light/dark/high contrast, English/Chinese.
+- [ ] Encrypted history: opt in with Windows Credential Manager; restart and
+      restore a conversation; disable retention and still export/delete the
+      existing ciphertext; verify the decrypted export is clearly user-owned.
+- [ ] Portable encrypted history: enabling while locked is rejected; unlocking
+      reloads rows; locking clears visible rows; reopening and unlocking restores
+      them; migrating credential storage preserves access to the same envelope.
 - [ ] Terminal selection action preserves wide/CJK/grapheme text and identifies
       truncation.
 - [ ] Local PowerShell rich integration reports exact command/CWD/exit status and

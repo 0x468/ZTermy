@@ -3,6 +3,7 @@
 #include "application/actions/ActionRegistry.h"
 #include "application/ai/AiActionToolDispatcher.h"
 #include "application/ai/AiActivityModel.h"
+#include "application/ai/AiConversationHistoryModel.h"
 #include "application/ai/AiConversationModel.h"
 #include "application/ai/AiReadToolDispatcher.h"
 #include "application/ai/AiSecretStore.h"
@@ -158,8 +159,10 @@ class AppController final : public QObject
     Q_PROPERTY(QString aiModel READ aiModel NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool aiAutomaticContext READ aiAutomaticContext NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString aiPermissionPreference READ aiPermissionPreference NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(bool aiConversationHistoryEnabled READ aiConversationHistoryEnabled NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool aiApiKeyConfigured READ aiApiKeyConfigured NOTIFY credentialVaultChanged)
     Q_PROPERTY(QObject *aiActivity READ aiActivity CONSTANT)
+    Q_PROPERTY(QObject *aiConversationHistory READ aiConversationHistory CONSTANT)
     Q_PROPERTY(QObject *activeAiConversation READ activeAiConversation NOTIFY aiConversationChanged)
     Q_PROPERTY(QString activeAiState READ activeAiState NOTIFY aiConversationChanged)
     Q_PROPERTY(QString activeAiError READ activeAiError NOTIFY aiConversationChanged)
@@ -281,8 +284,10 @@ public:
     [[nodiscard]] QString aiModel() const;
     [[nodiscard]] bool aiAutomaticContext() const noexcept;
     [[nodiscard]] QString aiPermissionPreference() const;
+    [[nodiscard]] bool aiConversationHistoryEnabled() const noexcept;
     [[nodiscard]] bool aiApiKeyConfigured() const;
     [[nodiscard]] QObject *aiActivity() noexcept;
+    [[nodiscard]] QObject *aiConversationHistory() noexcept;
     [[nodiscard]] QObject *activeAiConversation() const noexcept;
     [[nodiscard]] QString activeAiState() const;
     [[nodiscard]] QString activeAiError() const;
@@ -461,6 +466,8 @@ public:
                                             const QString &permissionMode);
     Q_INVOKABLE bool saveAiApiKey(const QString &apiKey);
     Q_INVOKABLE bool removeAiApiKey();
+    Q_INVOKABLE bool setAiConversationHistoryEnabled(bool enabled);
+    Q_INVOKABLE bool restoreAiConversationHistory(const QString &conversationId);
     Q_INVOKABLE bool sendAiMessage(const QString &prompt);
     Q_INVOKABLE bool sendAiCommandRequest(const QString &prompt);
     Q_INVOKABLE bool explainAiLastFailure();
@@ -658,6 +665,8 @@ private:
     void initializeSessionLog(TerminalTab &tab);
     void initializeTerminalOutputSink(TerminalTab &tab);
     void initializeAiRuntime(TerminalTab &tab);
+    void initializeAiConversationHistory();
+    void persistAiConversation(const TerminalTab &tab);
     [[nodiscard]] ai::AiContextBundle buildAiContext(TerminalTab &tab, bool preferLastFailure);
     [[nodiscard]] std::vector<ai::AiTerminalReadSnapshot> aiReadSnapshots(const TerminalTab &tab) const;
     void acceptAiSelectedText(TerminalTab &tab, const QString &text);
@@ -793,6 +802,7 @@ private:
     std::uint64_t m_noteSearchRequestId = 0;
     bool m_activeNoteDirty = false;
     std::unique_ptr<security::CredentialVaultCoordinator> m_credentialVaults;
+    std::unique_ptr<ai::AiConversationHistoryModel> m_aiConversationHistory;
     std::unique_ptr<sftp::TransferManager> m_transferManager;
     std::unique_ptr<sftp::TransferBatchCoordinator> m_transferBatchCoordinator;
     QVariantList m_transferTasks;

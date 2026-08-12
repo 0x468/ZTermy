@@ -16,6 +16,7 @@ Rectangle {
     readonly property var toolApproval: controller.activeAiToolApproval
     property bool contextExpanded: false
     property bool activityExpanded: false
+    property bool historyExpanded: false
     property bool commandRequest: false
 
     component ContextToolButton: ToolButton {
@@ -173,7 +174,29 @@ Rectangle {
                 checkable: true
                 checked: pane.activityExpanded
                 accessibleName: pane.activityExpanded ? qsTr("Hide AI activity") : qsTr("Show AI activity")
-                onClicked: pane.activityExpanded = !pane.activityExpanded
+                onClicked: {
+                    pane.activityExpanded = !pane.activityExpanded;
+                    if (pane.activityExpanded) {
+                        pane.historyExpanded = false;
+                    }
+                }
+            }
+
+            ActionButton {
+                objectName: "aiHistoryToggle"
+                text: qsTr("History")
+                iconName: "history"
+                checkable: true
+                checked: pane.historyExpanded
+                enabled: pane.controller.aiConversationHistoryEnabled
+                accessibleName: pane.historyExpanded ? qsTr("Hide AI conversation history") : qsTr("Show AI conversation history")
+                onClicked: {
+                    pane.historyExpanded = !pane.historyExpanded;
+                    if (pane.historyExpanded) {
+                        pane.activityExpanded = false;
+                        pane.controller.aiConversationHistory.reload();
+                    }
+                }
             }
 
             Item {
@@ -516,6 +539,152 @@ Rectangle {
                         variant: pane.toolApproval.highRisk ? "destructive" : "primary"
                         accessibleName: pane.toolApproval.kind === "interrupt_command" ? qsTr("Approve the pending soft interrupt") : pane.toolApproval.kind === "write_to_pty" ? qsTr("Approve the pending terminal input") : qsTr("Approve and run the pending AI command")
                         onClicked: pane.controller.approveAiTool()
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            id: historyPanel
+
+            objectName: "aiHistoryPanel"
+            Layout.fillWidth: true
+            Layout.leftMargin: 10
+            Layout.rightMargin: 10
+            Layout.topMargin: pane.historyExpanded ? 6 : 0
+            Layout.preferredHeight: pane.historyExpanded ? 212 : 0
+            visible: pane.historyExpanded
+            clip: true
+            radius: Theme.radiusPanel
+            color: Theme.raisedBackground
+            border.color: Theme.border
+            Accessible.role: Accessible.Pane
+            Accessible.name: qsTr("Encrypted AI conversation history")
+
+            Behavior on Layout.preferredHeight {
+                NumberAnimation {
+                    duration: Theme.motionFast
+                    easing.type: Easing.OutCubic
+                }
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 8
+                spacing: 6
+
+                RowLayout {
+                    Layout.fillWidth: true
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("Encrypted history · %n conversation(s)", "", pane.controller.aiConversationHistory.count)
+                        color: Theme.text
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textBody
+                        font.weight: Font.DemiBold
+                    }
+
+                    BusyIndicator {
+                        implicitWidth: 18
+                        implicitHeight: 18
+                        running: pane.controller.aiConversationHistory.busy
+                        visible: running
+                    }
+
+                    Text {
+                        visible: pane.controller.aiConversationHistory.errorCode.length > 0
+                        text: pane.controller.aiConversationHistory.errorCode
+                        color: Theme.danger
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textCompact
+                    }
+                }
+
+                ListView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+                    spacing: 5
+                    model: pane.controller.aiConversationHistory
+                    boundsBehavior: Flickable.StopAtBounds
+
+                    delegate: Rectangle {
+                        id: historyItem
+
+                        required property string conversationId
+                        required property string title
+                        required property date updatedAt
+                        required property int messageCount
+                        required property string preview
+                        width: ListView.view.width
+                        height: 56
+                        radius: Theme.radiusSmall
+                        color: historyHover.hovered ? Theme.controlHover : Theme.controlBackground
+                        border.color: Theme.border
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 9
+                            anchors.rightMargin: 6
+                            spacing: 8
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 2
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: historyItem.title
+                                    color: Theme.text
+                                    elide: Text.ElideRight
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.textLabel
+                                    font.weight: Font.DemiBold
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: qsTr("%n message(s)", "", historyItem.messageCount) + " · " + historyItem.updatedAt.toLocaleString(Qt.locale(), Locale.ShortFormat) + " · " + historyItem.preview
+                                    color: Theme.textMuted
+                                    elide: Text.ElideRight
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.textCompact
+                                }
+                            }
+
+                            ActionButton {
+                                text: qsTr("Restore")
+                                accessibleName: qsTr("Restore saved conversation")
+                                onClicked: {
+                                    if (pane.controller.restoreAiConversationHistory(historyItem.conversationId)) {
+                                        pane.historyExpanded = false;
+                                    }
+                                }
+                            }
+
+                            ContextToolButton {
+                                Accessible.name: qsTr("Delete saved conversation")
+                                onClicked: pane.controller.aiConversationHistory.remove(historyItem.conversationId)
+                                contentItem: AppIcon {
+                                    name: "trash"
+                                    color: Theme.textMuted
+                                }
+                            }
+                        }
+
+                        HoverHandler {
+                            id: historyHover
+                        }
+                    }
+
+                    Text {
+                        anchors.centerIn: parent
+                        visible: parent.count === 0 && !pane.controller.aiConversationHistory.busy
+                        text: qsTr("No saved conversations")
+                        color: Theme.textMuted
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
                     }
                 }
             }

@@ -160,6 +160,11 @@ private:
     return QFileInfo(settingsPath).dir().filePath(QStringLiteral("ai_activity.json"));
 }
 
+[[nodiscard]] QString siblingAiConversationHistoryFile(const QString &settingsPath)
+{
+    return QFileInfo(settingsPath).dir().filePath(QStringLiteral("ai_conversations.enc"));
+}
+
 [[nodiscard]] QString siblingTransferRecoveryFile(const QString &settingsPath)
 {
     return QFileInfo(settingsPath).dir().filePath(QStringLiteral("transfer_recovery.json"));
@@ -1671,6 +1676,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     loadHostProfiles();
     loadPortForwardingRules();
     loadApplicationSettings();
+    initializeAiConversationHistory();
     initializeActionRegistry();
     initializeTransferManager();
     initializeScriptExecutionTimer();
@@ -1733,6 +1739,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     loadHostProfiles();
     loadPortForwardingRules();
     loadApplicationSettings();
+    initializeAiConversationHistory();
     initializeActionRegistry();
     initializeTransferManager();
     initializeScriptExecutionTimer();
@@ -2777,6 +2784,11 @@ QString AppController::aiPermissionPreference() const
     return config::aiPermissionPreferenceToken(m_settings.aiPermission);
 }
 
+bool AppController::aiConversationHistoryEnabled() const noexcept
+{
+    return m_settings.aiConversationHistoryEnabled;
+}
+
 bool AppController::aiApiKeyConfigured() const
 {
     const ai::AiSecretStore store(m_credentialVaults->active());
@@ -2786,6 +2798,11 @@ bool AppController::aiApiKeyConfigured() const
 QObject *AppController::aiActivity() noexcept
 {
     return &m_aiActivity;
+}
+
+QObject *AppController::aiConversationHistory() noexcept
+{
+    return m_aiConversationHistory.get();
 }
 
 QObject *AppController::activeAiConversation() const noexcept
@@ -6918,6 +6935,7 @@ bool AppController::saveApplicationSettings(const QString &theme, const qreal ba
         .aiCredentialReference = m_settings.aiCredentialReference,
         .aiAutomaticContext = m_settings.aiAutomaticContext,
         .aiPermission = m_settings.aiPermission,
+        .aiConversationHistoryEnabled = m_settings.aiConversationHistoryEnabled,
     });
 }
 
@@ -6967,6 +6985,81 @@ bool AppController::removeAiApiKey()
     }
     setCredentialOperationError({});
     emit credentialVaultChanged();
+    return true;
+}
+
+bool AppController::setAiConversationHistoryEnabled(const bool enabled)
+{
+    if (enabled && !m_credentialVaults->active().persistent())
+    {
+        setCredentialOperationError(
+            tr("Encrypted AI history requires Windows Credential Manager or the portable vault."));
+        return false;
+    }
+    if (enabled && m_credentialVaults->storage() == security::CredentialStorage::Portable
+        && m_credentialVaults->portableLocked())
+    {
+        setCredentialOperationError(tr("Unlock the portable credential vault before enabling encrypted AI history."));
+        return false;
+    }
+    auto candidate = m_settings;
+    candidate.aiConversationHistoryEnabled = enabled;
+    if (!persistApplicationSettings(candidate))
+    {
+        return false;
+    }
+    setCredentialOperationError({});
+    if (m_aiConversationHistory)
+    {
+        if (enabled)
+        {
+            m_aiConversationHistory->reload();
+        }
+    }
+    return true;
+}
+
+bool AppController::restoreAiConversationHistory(const QString &conversationId)
+{
+    TerminalTab *tab = activeTab();
+    if (!m_settings.aiConversationHistoryEnabled || tab == nullptr || !tab->aiConversation
+        || (tab->aiTurnRunner && tab->aiTurnRunner->active()) || !m_aiConversationHistory)
+    {
+        return false;
+    }
+    const auto stored = m_aiConversationHistory->conversation(conversationId);
+    if (!stored.has_value())
+    {
+        return false;
+    }
+    const auto alreadyOpen = std::ranges::any_of(m_tabs, [&](const std::unique_ptr<TerminalTab> &candidate) {
+        return candidate && candidate->id != tab->id && candidate->aiConversationId == stored->id;
+    });
+    if (alreadyOpen)
+    {
+        return false;
+    }
+    std::vector<ai::AiChatMessage> messages;
+    messages.reserve(stored->messages.size());
+    for (const auto &message : stored->messages)
+    {
+        messages.push_back(
+            {.role = message.role == QStringLiteral("user") ? ai::AiMessageRole::user : ai::AiMessageRole::assistant,
+             .content = utf8String(message.text)});
+    }
+    if (!tab->aiConversation->restoreProviderMessages(messages))
+    {
+        return false;
+    }
+    m_aiActionToolDispatcher.clearConversation(utf8String(tab->aiConversationId));
+    m_aiCommandTracker.clearConversation(utf8String(tab->aiConversationId));
+    tab->aiConversationId = stored->id;
+    tab->aiState = QStringLiteral("complete");
+    tab->aiError.clear();
+    tab->aiFirstWriteApproved = false;
+    tab->aiTurnBudget.reset();
+    tab->pendingAiAction.reset();
+    emit aiConversationChanged();
     return true;
 }
 
@@ -7154,6 +7247,7 @@ void AppController::clearAiConversation()
     {
         return;
     }
+    const QString previousConversationId = tab->aiConversationId;
     tab->aiConversation->clear();
     tab->aiState = QStringLiteral("idle");
     tab->aiError.clear();
@@ -7165,8 +7259,9 @@ void AppController::clearAiConversation()
     tab->aiFirstWriteApproved = false;
     tab->aiTurnBudget.reset();
     tab->pendingAiAction.reset();
-    m_aiActionToolDispatcher.clearConversation(utf8String(tab->aiConversationId));
-    m_aiCommandTracker.clearConversation(utf8String(tab->aiConversationId));
+    m_aiActionToolDispatcher.clearConversation(utf8String(previousConversationId));
+    m_aiCommandTracker.clearConversation(utf8String(previousConversationId));
+    tab->aiConversationId = tab->id + QLatin1Char(':') + QUuid::createUuid().toString(QUuid::WithoutBraces);
     emit aiConversationChanged();
 }
 
@@ -7519,8 +7614,10 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                     }
                     break;
                 case ai::AiStreamEventType::responseCompleted:
-                    static_cast<void>(
-                        target->aiConversation->completeAssistantMessage(assistantMessageId, target->aiUsage));
+                    if (target->aiConversation->completeAssistantMessage(assistantMessageId, target->aiUsage))
+                    {
+                        persistAiConversation(*target);
+                    }
                     target->aiState = QStringLiteral("complete");
                     target->aiError.clear();
                     break;
@@ -7528,6 +7625,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                     target->aiError = utf8QString(event.error.value_or(ai::AiProviderError{}).message);
                     static_cast<void>(
                         target->aiConversation->failAssistantMessage(assistantMessageId, target->aiError));
+                    persistAiConversation(*target);
                     target->aiState = QStringLiteral("error");
                     break;
                 case ai::AiStreamEventType::reasoningDelta:
@@ -8042,6 +8140,12 @@ bool AppController::initializePortableCredentialVault(const QString &masterPassw
     setCredentialOperationError({});
     emit hostProfilesChanged();
     emit credentialVaultChanged();
+    if (m_aiConversationHistory && m_settings.aiConversationHistoryEnabled
+        && m_credentialVaults->storage() == security::CredentialStorage::Portable)
+    {
+        m_aiConversationHistory->setVault(m_credentialVaults->active());
+        m_aiConversationHistory->reload();
+    }
     for (const forwarding::PortForwardingRule &rule : m_portForwardingRules)
     {
         if (rule.autoStart && findPortForwardingRuntime(rule.id) == nullptr)
@@ -8063,6 +8167,12 @@ bool AppController::unlockPortableCredentialVault(const QString &masterPassword)
     setCredentialOperationError({});
     emit hostProfilesChanged();
     emit credentialVaultChanged();
+    if (m_aiConversationHistory && m_settings.aiConversationHistoryEnabled
+        && m_credentialVaults->storage() == security::CredentialStorage::Portable)
+    {
+        m_aiConversationHistory->setVault(m_credentialVaults->active());
+        m_aiConversationHistory->reload();
+    }
     for (const forwarding::PortForwardingRule &rule : m_portForwardingRules)
     {
         if (rule.autoStart && findPortForwardingRuntime(rule.id) == nullptr)
@@ -8089,6 +8199,11 @@ bool AppController::changePortableVaultMasterPassword(const QString &masterPassw
 
 void AppController::lockPortableCredentialVault()
 {
+    if (m_aiConversationHistory)
+    {
+        m_aiConversationHistory->setVault(m_credentialVaults->active());
+        m_aiConversationHistory->forgetLoaded();
+    }
     m_credentialVaults->lockPortable();
     setCredentialOperationError({});
     emit hostProfilesChanged();
@@ -8109,6 +8224,17 @@ bool AppController::migrateCredentialStorage(const QString &target, const bool r
         setCredentialOperationError({});
         return true;
     }
+    if (*parsedTarget == security::CredentialStorage::Session && removeSource
+        && QFileInfo::exists(siblingAiConversationHistoryFile(m_settingsStore.filePath())))
+    {
+        setCredentialOperationError(tr("Delete encrypted AI history or keep the previous credential store before "
+                                       "moving credentials to session storage."));
+        return false;
+    }
+    if (m_aiConversationHistory)
+    {
+        m_aiConversationHistory->setVault(m_credentialVaults->active());
+    }
     auto migrated = m_credentialVaults->migrate(*parsedTarget, false);
     if (!migrated)
     {
@@ -8118,15 +8244,31 @@ bool AppController::migrateCredentialStorage(const QString &target, const bool r
 
     config::ApplicationSettings updatedSettings = m_settings;
     updatedSettings.credentialStorage = credentialPreferenceForStorage(*parsedTarget);
+    if (*parsedTarget == security::CredentialStorage::Session)
+    {
+        updatedSettings.aiConversationHistoryEnabled = false;
+    }
     if (!persistApplicationSettings(updatedSettings))
     {
         m_credentialVaults->select(previousStorage);
+        if (m_aiConversationHistory)
+        {
+            m_aiConversationHistory->setVault(m_credentialVaults->active());
+        }
         setCredentialOperationError(tr(
             "Credentials were copied, but the storage preference could not be saved. The old store remains active."));
         emit credentialVaultChanged();
         return false;
     }
     emit hostProfilesChanged();
+    if (m_aiConversationHistory)
+    {
+        m_aiConversationHistory->setVault(m_credentialVaults->active());
+        if (m_settings.aiConversationHistoryEnabled)
+        {
+            m_aiConversationHistory->reload();
+        }
+    }
     if (removeSource)
     {
         auto cleaned = m_credentialVaults->removeAll(previousStorage);
@@ -8642,6 +8784,66 @@ void AppController::initializeAiRuntime(TerminalTab &tab)
     if (!tab.aiTurnRunner)
     {
         tab.aiTurnRunner = std::make_unique<ai::AiTurnRunner>(m_aiProviderClient);
+    }
+}
+
+void AppController::initializeAiConversationHistory()
+{
+    m_aiConversationHistory = std::make_unique<ai::AiConversationHistoryModel>(
+        siblingAiConversationHistoryFile(m_settingsStore.filePath()), m_credentialVaults->active(), this);
+    if (m_settings.aiConversationHistoryEnabled)
+    {
+        if (m_credentialVaults->active().persistent())
+        {
+            m_aiConversationHistory->reload();
+        }
+        else
+        {
+            m_settings.aiConversationHistoryEnabled = false;
+            const auto saved = m_settingsStore.save(m_settings);
+            if (!saved)
+            {
+                qCWarning(appControllerLog) << "Could not persist disabled AI conversation history setting";
+            }
+        }
+    }
+}
+
+void AppController::persistAiConversation(const TerminalTab &tab)
+{
+    if (!m_settings.aiConversationHistoryEnabled || !m_aiConversationHistory || !tab.aiConversation)
+    {
+        return;
+    }
+    const auto providerMessages = tab.aiConversation->providerMessages();
+    if (providerMessages.empty())
+    {
+        return;
+    }
+    ai::AiStoredConversation stored{.id = tab.aiConversationId, .updatedAtUtc = QDateTime::currentDateTimeUtc()};
+    stored.messages.reserve(providerMessages.size());
+    for (const auto &message : providerMessages)
+    {
+        if (message.role != ai::AiMessageRole::user && message.role != ai::AiMessageRole::assistant)
+        {
+            continue;
+        }
+        const QString text = utf8QString(message.content);
+        if (stored.title.isEmpty() && message.role == ai::AiMessageRole::user)
+        {
+            stored.title = text.simplified().left(80);
+        }
+        stored.messages.push_back(
+            {.role = message.role == ai::AiMessageRole::user ? QStringLiteral("user") : QStringLiteral("assistant"),
+             .text = text});
+    }
+    if (stored.title.isEmpty())
+    {
+        stored.title = tr("AI conversation");
+    }
+    if (!stored.messages.empty())
+    {
+        m_aiConversationHistory->persist(std::move(stored));
     }
 }
 

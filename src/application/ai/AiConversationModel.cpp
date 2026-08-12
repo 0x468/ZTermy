@@ -132,6 +132,45 @@ std::vector<AiChatMessage> AiConversationModel::providerMessages() const
     return messages;
 }
 
+bool AiConversationModel::restoreProviderMessages(const std::vector<AiChatMessage> &messages)
+{
+    std::size_t totalBytes = 0;
+    if (messages.size() > m_limits.maxMessages
+        || !std::ranges::all_of(messages, [this, &totalBytes](const AiChatMessage &message) {
+               if ((message.role != AiMessageRole::user && message.role != AiMessageRole::assistant)
+                   || !message.toolCallId.empty() || message.content.size() > m_limits.maxMessageBytes)
+               {
+                   return false;
+               }
+               totalBytes += message.content.size();
+               return totalBytes <= m_limits.maxConversationBytes;
+           }))
+    {
+        return false;
+    }
+    clear();
+    for (const auto &message : messages)
+    {
+        if (message.role == AiMessageRole::user)
+        {
+            static_cast<void>(appendUserMessage(QString::fromUtf8(message.content)));
+            continue;
+        }
+        const std::uint64_t messageId = beginAssistantMessage();
+        if (!message.content.empty() && !appendAssistantDelta(messageId, QString::fromUtf8(message.content)))
+        {
+            clear();
+            return false;
+        }
+        if (!completeAssistantMessage(messageId))
+        {
+            clear();
+            return false;
+        }
+    }
+    return true;
+}
+
 std::uint64_t AiConversationModel::appendUserMessage(QString text)
 {
     bool truncated = false;

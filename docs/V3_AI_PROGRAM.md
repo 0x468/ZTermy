@@ -140,13 +140,10 @@ SFTP writes, run unattended background agents, or depend on MCP.
 - a user-visible AI activity/audit view with redacted metadata and tool outcomes.
 
 The activity/audit half is implemented as a bounded metadata-only trail in ADR
-0060. Encrypted transcript persistence remains a separate opt-in deliverable so
-audit never silently becomes conversation retention.
-
-ADR 0061 now implements and tests the encrypted store format, vault-only data
-key, retention, tamper/key-loss handling, export, and deletion. Opt-in settings,
-serialized application I/O, and history browsing/replay remain the integration
-slice before `0.3.1` closes.
+0060. ADR 0061 separately implements the encrypted store format, vault-only data
+key, retention, tamper/key-loss handling, serialized application I/O, opt-in
+settings, browsing/replay, export, and deletion. Audit therefore never silently
+becomes conversation retention.
 
 ### 0.3.2 — SSH operations intelligence
 

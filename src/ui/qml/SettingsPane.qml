@@ -301,6 +301,7 @@ Rectangle {
         aiEndpointPathDraft = controller.aiEndpointPath;
         aiModelDraft = controller.aiModel;
         aiAutomaticContextSwitch.checked = controller.aiAutomaticContext;
+        aiConversationHistorySwitch.checked = controller.aiConversationHistoryEnabled;
         aiApiKeyField.text = "";
         loadingDraft = false;
         previewDraft();
@@ -1344,6 +1345,83 @@ Rectangle {
 
             SectionCard {
                 Layout.fillWidth: true
+                visible: pane.currentCategory === "ai"
+                compact: true
+                heading: qsTr("Encrypted conversation history")
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacingControl
+
+                    AppSwitch {
+                        id: aiConversationHistorySwitch
+
+                        objectName: "settingsAiConversationHistory"
+                        Layout.fillWidth: true
+                        text: qsTr("Keep bounded AI conversations after restart")
+                        accessibleName: text
+                        onToggled: {
+                            if (pane.loadingDraft) {
+                                return;
+                            }
+                            const saved = pane.controller.setAiConversationHistoryEnabled(checked);
+                            pane.presentStatus(saved ? (checked ? qsTr("Encrypted conversation history enabled.") : qsTr("Conversation history retention disabled.")) : qsTr("Choose Windows Credential Manager or an unlocked portable vault before enabling history."), !saved, saved);
+                            if (!saved) {
+                                checked = pane.controller.aiConversationHistoryEnabled;
+                            }
+                        }
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("History is off by default. Transcript bodies use authenticated encryption; only the small data key is stored in the active credential vault. Disabling retention does not delete existing encrypted history.")
+                        color: Theme.textMuted
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        visible: pane.controller.aiConversationHistory.errorCode.length > 0
+                        text: qsTr("History unavailable: %1").arg(pane.controller.aiConversationHistory.errorCode)
+                        color: Theme.danger
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: qsTr("%n saved conversation(s)", "", pane.controller.aiConversationHistory.count)
+                            color: Theme.textSoft
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.textLabel
+                        }
+
+                        ActionButton {
+                            text: qsTr("Export decrypted JSON")
+                            accessibleName: qsTr("Export decrypted AI conversation history")
+                            enabled: !pane.controller.aiConversationHistory.busy && pane.controller.aiConversationHistory.count > 0
+                            onClicked: aiHistoryExportDialog.open()
+                        }
+
+                        ActionButton {
+                            text: qsTr("Delete history")
+                            accessibleName: qsTr("Delete encrypted AI conversation history and its key")
+                            variant: "destructive"
+                            enabled: !pane.controller.aiConversationHistory.busy && pane.controller.aiConversationHistory.count > 0
+                            onClicked: aiHistoryDeleteDialog.open()
+                        }
+                    }
+                }
+            }
+
+            SectionCard {
+                Layout.fillWidth: true
                 visible: pane.currentCategory === "security"
                 compact: true
                 heading: qsTr("Credential storage")
@@ -1665,6 +1743,26 @@ Rectangle {
             const exported = pane.diagnostics.exportReport(selectedFile);
             pane.presentStatus(exported ? qsTr("Diagnostic report exported.") : pane.diagnostics.lastError, !exported, exported);
         }
+    }
+
+    FileDialog {
+        id: aiHistoryExportDialog
+
+        title: qsTr("Export decrypted AI conversation history")
+        fileMode: FileDialog.SaveFile
+        nameFilters: [qsTr("JSON files (*.json)"), qsTr("All files (*)")]
+        defaultSuffix: "json"
+        onAccepted: pane.controller.aiConversationHistory.exportDecrypted(selectedFile.toString())
+    }
+
+    ConfirmationDialog {
+        id: aiHistoryDeleteDialog
+
+        heading: qsTr("Delete all AI conversation history?")
+        description: qsTr("This removes the encrypted history, its recovery copy, and the data-encryption key. This action cannot be undone.")
+        acceptText: qsTr("Delete history")
+        destructive: true
+        onAccepted: pane.controller.aiConversationHistory.clear()
     }
 
     ConfirmationDialog {

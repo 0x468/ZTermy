@@ -503,6 +503,8 @@ add_library(ztermy_ai_application STATIC
     src/application/ai/AiActionToolDispatcher.h
     src/application/ai/AiConversationModel.cpp
     src/application/ai/AiConversationModel.h
+    src/application/ai/AiConversationHistoryModel.cpp
+    src/application/ai/AiConversationHistoryModel.h
     src/application/ai/AiReadToolDispatcher.cpp
     src/application/ai/AiReadToolDispatcher.h
     src/application/ai/AiTurnRunner.cpp
@@ -515,7 +517,7 @@ target_compile_features(ztermy_ai_application PUBLIC cxx_std_23)
 target_include_directories(ztermy_ai_application PUBLIC src)
 target_link_libraries(ztermy_ai_application
     PUBLIC ztermy_ai_context ztermy_ai_domain ztermy_ai_provider Qt6::Core
-    PRIVATE ztermy_core_persistence
+    PRIVATE ztermy_ai_conversation_store ztermy_core_persistence
 )
 
 add_library(ztermy_session_logging STATIC
@@ -2913,6 +2915,27 @@ if(BUILD_TESTING)
 
     add_test(NAME ai-conversation-store COMMAND ztermy_ai_conversation_store_tests)
 
+    qt_add_executable(ztermy_ai_conversation_history_model_tests
+        tests/ai_conversation_history_model_tests.cpp
+    )
+
+    target_compile_features(ztermy_ai_conversation_history_model_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ai_conversation_history_model_tests PRIVATE
+        ztermy_ai_application
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ai_conversation_history_model_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ai-conversation-history-model COMMAND ztermy_ai_conversation_history_model_tests)
+
     qt_add_executable(ztermy_ai_conversation_model_tests
         tests/ai_conversation_model_tests.cpp
     )
@@ -3383,6 +3406,7 @@ if(BUILD_TESTING)
             ztermy_ai_wait_command_tool_tests
             ztermy_ai_turn_runner_tests
             ztermy_ai_conversation_store_tests
+            ztermy_ai_conversation_history_model_tests
             ztermy_ai_conversation_model_tests
             ztermy_ai_read_tool_dispatcher_tests
             ztermy_ai_context_broker_tests

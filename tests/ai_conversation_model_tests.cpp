@@ -21,6 +21,7 @@ private slots:
     void boundsMessagesAndUtf8Text();
     void exposesFailureWithoutLeakingIntoLogs();
     void exposesOnlyOneBoundedShellCommandSuggestion();
+    void restoresOnlyBoundedUserAndAssistantMessages();
 };
 
 void AiConversationModelTests::streamsAssistantMessageAndUsage()
@@ -97,6 +98,24 @@ void AiConversationModelTests::exposesOnlyOneBoundedShellCommandSuggestion()
     QVERIFY(model.appendAssistantDelta(assistantId, QStringLiteral("No command block here.")));
     QVERIFY(model.completeAssistantMessage(assistantId));
     QVERIFY(!model.data(model.index(2), AiConversationModel::HasCommandSuggestionRole).toBool());
+}
+
+void AiConversationModelTests::restoresOnlyBoundedUserAndAssistantMessages()
+{
+    AiConversationModel model;
+    const std::vector<ztermy::ai::AiChatMessage> transcript{
+        {.role = ztermy::ai::AiMessageRole::user, .content = "question"},
+        {.role = ztermy::ai::AiMessageRole::assistant, .content = "answer"}};
+    QVERIFY(model.restoreProviderMessages(transcript));
+    QCOMPARE(model.rowCount(), 2);
+    QCOMPARE(model.data(model.index(0), AiConversationModel::TextRole).toString(), QStringLiteral("question"));
+    QCOMPARE(model.data(model.index(1), AiConversationModel::TextRole).toString(), QStringLiteral("answer"));
+    QVERIFY(!model.streaming());
+
+    auto invalid = transcript;
+    invalid.push_back({.role = ztermy::ai::AiMessageRole::tool, .content = "untrusted tool replay"});
+    QVERIFY(!model.restoreProviderMessages(invalid));
+    QCOMPARE(model.rowCount(), 2);
 }
 
 } // namespace

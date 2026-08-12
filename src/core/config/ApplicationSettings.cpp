@@ -27,7 +27,8 @@ constexpr qint64 shortcutSchemaVersion = 9;
 constexpr qint64 sftpSchemaVersion = 10;
 constexpr qint64 aiProviderSchemaVersion = 11;
 constexpr qint64 aiPermissionSchemaVersion = 12;
-constexpr qint64 currentSchemaVersion = aiPermissionSchemaVersion;
+constexpr qint64 aiConversationHistorySchemaVersion = 13;
+constexpr qint64 currentSchemaVersion = aiConversationHistorySchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::AiPermissionPreference;
@@ -254,7 +255,8 @@ template <>
         && version != accentSchemaVersion && version != credentialStorageSchemaVersion
         && version != localizationSchemaVersion && version != fontOptionsSchemaVersion
         && version != workbenchSchemaVersion && version != shortcutSchemaVersion && version != sftpSchemaVersion
-        && version != aiProviderSchemaVersion && version != currentSchemaVersion)
+        && version != aiProviderSchemaVersion && version != aiPermissionSchemaVersion
+        && version != currentSchemaVersion)
     {
         return std::unexpected(ApplicationSettingsStoreError::unsupportedVersion);
     }
@@ -287,6 +289,7 @@ template <>
     const QJsonValue aiCredentialReferenceValue = root.value(QStringLiteral("aiCredentialReference"));
     const QJsonValue aiAutomaticContextValue = root.value(QStringLiteral("aiAutomaticContext"));
     const QJsonValue aiPermissionValue = root.value(QStringLiteral("aiPermission"));
+    const QJsonValue aiConversationHistoryEnabledValue = root.value(QStringLiteral("aiConversationHistoryEnabled"));
 
     if (!themeValue.isString() || !opacityValue.isDouble() || !backdropValue.isString() || !fontFamilyValue.isString()
         || !fontSizeValue.isDouble() || !cursorValue.isString() || !cursorBlinkValue.isBool()
@@ -330,6 +333,10 @@ template <>
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
     if (version >= aiPermissionSchemaVersion && !aiPermissionValue.isString())
+    {
+        return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
+    }
+    if (version >= aiConversationHistorySchemaVersion && !aiConversationHistoryEnabledValue.isBool())
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
@@ -406,6 +413,8 @@ template <>
             version >= aiProviderSchemaVersion ? aiCredentialReferenceValue.toString() : QStringLiteral("ai-default"),
         .aiAutomaticContext = version < aiProviderSchemaVersion || aiAutomaticContextValue.toBool(),
         .aiPermission = *aiPermission,
+        .aiConversationHistoryEnabled =
+            version >= aiConversationHistorySchemaVersion && aiConversationHistoryEnabledValue.toBool(),
     };
     if (!validSettings(settings))
     {
@@ -541,6 +550,7 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
         {QStringLiteral("aiCredentialReference"), settings.aiCredentialReference.trimmed()},
         {QStringLiteral("aiAutomaticContext"), settings.aiAutomaticContext},
         {QStringLiteral("aiPermission"), aiPermissionPreferenceToken(settings.aiPermission)},
+        {QStringLiteral("aiConversationHistoryEnabled"), settings.aiConversationHistoryEnabled},
     };
 
     const QByteArray data = QJsonDocument(root).toJson(QJsonDocument::Indented);

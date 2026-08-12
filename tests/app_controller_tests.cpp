@@ -610,7 +610,16 @@ void AppControllerTests::portableControllerPersistsCredentialAcrossRestart()
             {}, false, QStringLiteral("Lab"), QStringLiteral("unverified-portable-secret"), true));
         QVERIFY(controller.credentialOperationError().contains(QStringLiteral("Create the portable credential vault")));
         QVERIFY(controller.hostProfiles().isEmpty());
+        QVERIFY(!controller.setAiConversationHistoryEnabled(true));
         QVERIFY(controller.initializePortableCredentialVault(QStringLiteral("original portable password")));
+        QVERIFY(controller.setAiConversationHistoryEnabled(true));
+        QVERIFY(controller.aiConversationHistoryEnabled());
+        QFile historyEnvelope(directory.filePath(QStringLiteral("ai_conversations.enc")));
+        QVERIFY(historyEnvelope.open(QIODevice::WriteOnly));
+        QCOMPARE(historyEnvelope.write("encrypted-history-placeholder"), 29);
+        historyEnvelope.close();
+        QVERIFY(!controller.migrateCredentialStorage(QStringLiteral("session"), true));
+        QVERIFY(controller.credentialOperationError().contains(QStringLiteral("Delete encrypted AI history")));
         QVERIFY(controller.saveHostProfileWithCredential(
             id, {}, QStringLiteral("server.example.test"), 22, QStringLiteral("developer"), QStringLiteral("password"),
             {}, false, QStringLiteral("Lab"), QStringLiteral("unverified-portable-secret"), true));
@@ -621,6 +630,7 @@ void AppControllerTests::portableControllerPersistsCredentialAcrossRestart()
                                        ztermy::config::StorageMode::portable);
         QVERIFY(reopened.portableVaultInitialized());
         QVERIFY(reopened.portableVaultLocked());
+        QVERIFY(reopened.aiConversationHistoryEnabled());
         QCOMPARE(reopened.hostProfiles().front().toMap().value(QStringLiteral("credentialStored")).toBool(), true);
         QVERIFY(!reopened.unlockPortableCredentialVault(QStringLiteral("wrong portable password")));
         QVERIFY(reopened.portableVaultLocked());

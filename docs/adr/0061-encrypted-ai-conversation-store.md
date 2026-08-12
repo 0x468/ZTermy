@@ -42,9 +42,17 @@ Conversation replay remains untrusted evidence. Loading old text never restores
 tool approval, agent control, target ownership, or a permission grant. Those are
 reconstructed from live policy outside the transcript.
 
-The storage implementation is synchronous at its infrastructure boundary. Its
-application integration must call it through an owned serialized worker and
-must not block the Qt Quick render or GUI thread.
+The storage implementation is synchronous at its infrastructure boundary. The
+application owns a single-thread serialized history model that performs every
+load, rewrite, export, and delete away from the Qt Quick render and GUI thread.
+Only immutable results return to the GUI model.
+
+Retention is opt-in. Disabling retention stops future transcript writes but
+does not silently delete existing ciphertext; the user can still export or
+delete that history explicitly. Locking the active portable vault immediately
+forgets decrypted in-memory history. Restoring a transcript creates no grants,
+budgets, pending actions, or tool ownership, and the same stored conversation
+cannot be restored into two live terminal tabs at once.
 
 ## Consequences
 
@@ -56,6 +64,13 @@ must not block the Qt Quick render or GUI thread.
   rejected rather than interpreted as partial history.
 - Decrypted exports are intentionally sensitive user-owned artifacts and do not
   share the metadata-only audit export contract from ADR 0060.
+- A portable history cannot be enabled until its vault is initialized and
+  unlocked. Startup may expose an already-enabled history as unavailable until
+  the user unlocks that vault; successful unlock reloads it asynchronously.
+- Selecting session-only credential storage disables future history retention.
+  Source cleanup is rejected while an encrypted history envelope exists, so a
+  generic credential migration cannot implicitly destroy its only durable key;
+  history deletion remains an explicit operation.
 - Rollback detection across an attacker replacing both the primary envelope and
   its recovery copy is outside the local non-adversarial-user threat model; the
   generation still prevents accidental cross-generation AAD reuse.

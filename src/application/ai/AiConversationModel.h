@@ -61,6 +61,7 @@ public:
     [[nodiscard]] bool streaming() const noexcept;
     [[nodiscard]] const AiConversationLimits &limits() const noexcept;
     [[nodiscard]] std::vector<AiChatMessage> providerMessages() const;
+    [[nodiscard]] bool restoreProviderMessages(const std::vector<AiChatMessage> &messages);
     [[nodiscard]] std::uint64_t appendUserMessage(QString text);
     [[nodiscard]] std::uint64_t beginAssistantMessage();
     [[nodiscard]] bool appendAssistantDelta(std::uint64_t messageId, QString delta);
