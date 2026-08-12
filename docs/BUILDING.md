@@ -236,3 +236,17 @@ terminal driver raises `QTEST_FUNCTION_TIMEOUT` to the requested duration plus
 a ten-minute shutdown margin; without that override QtTest intentionally aborts
 any single test function after five minutes. A watchdog remains active so a
 deadlocked long run still fails.
+
+After both reports and the release bundle exist, verify their duration,
+content-free result contracts, exact artifact set, manifest identity, and
+SHA-256 digests together:
+
+```powershell
+pwsh -NoProfile -File .\scripts\verify_v3_release_candidate.ps1 `
+  -BuildDirectory .\build\msvc-static-release
+```
+
+The verifier defaults to the `0.3.0` two-hour AI report, eight-hour terminal
+report, and packaged Windows x64 handoff. Its version, paths, and minimum
+durations are explicit parameters so shorter developer evidence can exercise
+the same verifier without being mistaken for release evidence.
