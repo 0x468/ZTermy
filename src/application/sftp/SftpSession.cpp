@@ -555,7 +555,7 @@ void SftpSession::processCommand(SftpClient &client, Command command, const std:
                 bytes.reserve(static_cast<qsizetype>(read.maximumBytes + 1));
                 std::array<char, 8192> buffer{};
                 std::optional<ssh::SshTransportErrorKind> failure;
-                while (static_cast<std::size_t>(bytes.size()) <= read.maximumBytes && !token.stop_requested())
+                while (std::cmp_less_equal(bytes.size(), read.maximumBytes) && !token.stop_requested())
                 {
                     const std::size_t remaining = read.maximumBytes + 1 - static_cast<std::size_t>(bytes.size());
                     auto chunk = client.readFile(std::span(buffer.data(), std::min(buffer.size(), remaining)), token);
@@ -585,7 +585,7 @@ void SftpSession::processCommand(SftpClient &client, Command command, const std:
                     postFileReadFailure(read.requestId, read.generation, path, *failure);
                     return;
                 }
-                const bool truncated = static_cast<std::size_t>(bytes.size()) > read.maximumBytes;
+                const bool truncated = std::cmp_greater(bytes.size(), read.maximumBytes);
                 if (truncated)
                 {
                     bytes.truncate(static_cast<qsizetype>(read.maximumBytes));

@@ -351,7 +351,7 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
         }
         QSet<QString> seen;
         QJsonArray results;
-        for (const QJsonValue &targetValue : targets)
+        for (const auto &targetValue : targets)
         {
             if (!targetValue.isObject())
             {

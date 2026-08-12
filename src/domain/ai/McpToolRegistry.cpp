@@ -15,7 +15,7 @@ namespace
 {
 constexpr std::size_t maximumToolsPerServer = 128;
 constexpr std::size_t maximumDescriptionBytes = 4096;
-constexpr std::size_t maximumSchemaBytes = 64 * 1024;
+constexpr std::size_t maximumSchemaBytes = std::size_t{64} * 1024;
 
 [[nodiscard]] bool validToken(const std::string_view value)
 {
@@ -85,11 +85,9 @@ McpToolRegistry::update(const McpServerIdentity &server, const std::span<const M
                                          .trust = server.trust,
                                          .schemaApproved = approved});
     }
-    m_tools.erase(std::remove_if(m_tools.begin(), m_tools.end(),
-                                 [&server](const auto &candidate) {
-                                     return candidate.serverId == server.id;
-                                 }),
-                  m_tools.end());
+    std::erase_if(m_tools, [&server](const auto &candidate) {
+        return candidate.serverId == server.id;
+    });
     m_tools.insert(m_tools.end(), next.begin(), next.end());
     return McpDiscoveryUpdate{.tools = std::move(next),
                               .reviewRequired = std::ranges::any_of(m_tools, [&server](const auto &tool) {

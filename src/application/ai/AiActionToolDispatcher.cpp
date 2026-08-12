@@ -228,7 +228,7 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
                              && runbook.value(QStringLiteral("shell")).isString() && shells.contains(shell)
                              && runbook.value(QStringLiteral("steps")).isArray() && !steps.isEmpty()
                              && steps.size() <= 64;
-        for (const QJsonValue &stepValue : steps)
+        for (const auto &stepValue : steps)
         {
             const QJsonObject step = stepValue.toObject();
             const auto timeout = generation(step.value(QStringLiteral("timeout_ms")));
@@ -240,7 +240,8 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
                 && step.value(QStringLiteral("command")).isString()
                 && !step.value(QStringLiteral("command")).toString().trimmed().isEmpty()
                 && step.value(QStringLiteral("command")).toString().size() <= 16384
-                && step.value(QStringLiteral("command")).toString().toUtf8().size() <= maximumCommandBytes
+                && std::cmp_less_equal(step.value(QStringLiteral("command")).toString().toUtf8().size(),
+                                       maximumCommandBytes)
                 && !step.value(QStringLiteral("command")).toString().contains(QChar::Null)
                 && (continuation == QStringLiteral("immediate") || continuation == QStringLiteral("literal-output"))
                 && step.value(QStringLiteral("output_marker")).isString()

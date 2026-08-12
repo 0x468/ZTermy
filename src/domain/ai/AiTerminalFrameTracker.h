@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <mutex>
@@ -38,6 +39,7 @@ struct AiTerminalFrameDelta final
     std::uint16_t cursorRow = 0;
     bool cursorVisible = false;
     bool alternateScreen = false;
+    std::uint64_t droppedOutputObservations = 0;
     bool full = true;
     bool cursorExpired = false;
     std::vector<AiTerminalFrameLine> lines;
@@ -65,6 +67,7 @@ private:
     std::string m_escapeTail;
     std::uint64_t m_revision = 0;
     std::int64_t m_changedUtcMs = 0;
+    std::atomic_uint64_t m_droppedOutputObservations{0};
     bool m_alternateScreen = false;
     bool m_lastChangeRequiresFull = true;
 };

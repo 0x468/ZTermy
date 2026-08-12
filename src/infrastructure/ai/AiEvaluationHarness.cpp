@@ -13,7 +13,7 @@ namespace ztermy::ai
 {
 namespace
 {
-constexpr qsizetype maximumDocumentBytes = 2 * 1024 * 1024;
+constexpr qsizetype maximumDocumentBytes = qsizetype{2} * 1024 * 1024;
 constexpr qsizetype maximumCases = 64;
 
 [[nodiscard]] std::expected<QJsonObject, QString> document(const QString &path)
@@ -39,7 +39,7 @@ constexpr qsizetype maximumCases = 64;
     {
         return result;
     }
-    for (const QJsonValue &entry : value.toArray())
+    for (const auto &entry : value.toArray())
     {
         if (entry.isString() && !entry.toString().isEmpty())
         {
@@ -80,7 +80,7 @@ std::expected<QJsonObject, QString> AiEvaluationHarness::replay(const QString &c
     }
 
     QHash<QString, QJsonObject> byId;
-    for (const QJsonValue &value : observations)
+    for (const auto &value : observations)
     {
         const QJsonObject observation = value.toObject();
         const QString id = observation.value(QStringLiteral("id")).toString();
@@ -94,7 +94,7 @@ std::expected<QJsonObject, QString> AiEvaluationHarness::replay(const QString &c
     QJsonArray results;
     QSet<QString> corpusIds;
     int passed = 0;
-    for (const QJsonValue &value : cases)
+    for (const auto &value : cases)
     {
         const QJsonObject definition = value.toObject();
         if (!validCase(definition))
@@ -129,7 +129,7 @@ std::expected<QJsonObject, QString> AiEvaluationHarness::replay(const QString &c
             }
         }
         QSet<QString> sideEffectKeys;
-        for (const QJsonValue &toolValue : observation.value(QStringLiteral("tools")).toArray())
+        for (const auto &toolValue : observation.value(QStringLiteral("tools")).toArray())
         {
             const QJsonObject tool = toolValue.toObject();
             const QString name = tool.value(QStringLiteral("name")).toString();

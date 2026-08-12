@@ -11,8 +11,8 @@ namespace ztermy::ai
 {
 namespace
 {
-constexpr qsizetype maximumBufferedBytes = 1024 * 1024;
-constexpr qsizetype maximumMessageBytes = 512 * 1024;
+constexpr qsizetype maximumBufferedBytes = qsizetype{1024} * 1024;
+constexpr qsizetype maximumMessageBytes = qsizetype{512} * 1024;
 constexpr std::size_t maximumTools = 128;
 
 [[nodiscard]] QByteArray line(const QJsonObject &value)
@@ -67,7 +67,7 @@ std::expected<QByteArray, QString> McpJsonRpcProtocol::callToolRequest(const std
                                                                        const std::string_view toolName,
                                                                        const std::string_view argumentsJson) const
 {
-    if (toolName.empty() || toolName.size() > 64 || argumentsJson.size() > 64 * 1024)
+    if (toolName.empty() || toolName.size() > 64 || argumentsJson.size() > std::size_t{64} * 1024)
     {
         return std::unexpected(QStringLiteral("The MCP tool request exceeds its bounds."));
     }
@@ -96,7 +96,7 @@ QByteArray McpJsonRpcProtocol::cancelRequestNotification(const std::uint64_t id,
                                                            {QStringLiteral("reason"), boundedReason}}}});
 }
 
-std::expected<std::vector<McpJsonRpcMessage>, QString> McpJsonRpcProtocol::append(QByteArray bytes)
+std::expected<std::vector<McpJsonRpcMessage>, QString> McpJsonRpcProtocol::append(const QByteArray &bytes)
 {
     if (bytes.size() > maximumBufferedBytes || m_buffer.size() > maximumBufferedBytes - bytes.size())
     {
@@ -163,7 +163,7 @@ McpJsonRpcProtocol::discoveredTools(const McpJsonRpcMessage &message)
     }
     std::vector<McpDiscoveredTool> tools;
     tools.reserve(static_cast<std::size_t>(values.size()));
-    for (const QJsonValue &value : values)
+    for (const auto &value : values)
     {
         const QJsonObject object = value.toObject();
         const QString name = object.value(QStringLiteral("name")).toString();

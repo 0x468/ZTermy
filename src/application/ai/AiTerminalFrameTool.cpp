@@ -10,12 +10,13 @@
 #include <initializer_list>
 #include <limits>
 #include <optional>
+#include <utility>
 
 namespace ztermy::ai
 {
 namespace
 {
-constexpr std::size_t maximumArgumentsBytes = 16 * 1024;
+constexpr std::size_t maximumArgumentsBytes = std::size_t{16} * 1024;
 constexpr std::uint64_t maximumTimeoutMilliseconds = 120'000;
 constexpr std::uint64_t maximumIdleMilliseconds = 30'000;
 
@@ -28,7 +29,7 @@ constexpr std::uint64_t maximumIdleMilliseconds = 30'000;
 {
     for (auto current = value.begin(); current != value.end(); ++current)
     {
-        if (std::find(keys.begin(), keys.end(), current.key()) == keys.end())
+        if (std::ranges::find(keys, current.key()) == keys.end())
         {
             return false;
         }
@@ -103,6 +104,7 @@ struct Common final
             {QStringLiteral("cursor_row"), frame.cursorRow},
             {QStringLiteral("cursor_visible"), frame.cursorVisible},
             {QStringLiteral("alternate_screen"), frame.alternateScreen},
+            {QStringLiteral("dropped_output_observations"), static_cast<qint64>(frame.droppedOutputObservations)},
             {QStringLiteral("full"), frame.full},
             {QStringLiteral("cursor_expired"), frame.cursorExpired},
             {QStringLiteral("control_owner"), QString::fromUtf8(controlOwner)},
@@ -188,7 +190,7 @@ bool AiTerminalFrameTool::satisfied(const AiTerminalFrameWaitRequest &request,
     return request.condition == AiTerminalFrameWaitCondition::changed
                ? frame.revision > request.afterRevision
                : frame.revision >= request.afterRevision
-                     && frame.idleMilliseconds >= static_cast<std::int64_t>(request.idleMilliseconds);
+                     && std::cmp_greater_equal(frame.idleMilliseconds, request.idleMilliseconds);
 }
 
 std::string AiTerminalFrameTool::result(const AiTerminalFrameDelta &frame, const std::string_view controlOwner,

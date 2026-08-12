@@ -108,6 +108,7 @@ void AiTerminalFrameTracker::observeOutput(const std::span<const std::byte> byte
     }
     catch (...)
     {
+        static_cast<void>(m_droppedOutputObservations.fetch_add(1, std::memory_order_relaxed));
     }
 }
 
@@ -124,7 +125,9 @@ AiTerminalFrameDelta AiTerminalFrameTracker::snapshot(const std::uint64_t afterR
                                 .cursorColumn = m_current.cursorColumn,
                                 .cursorRow = m_current.cursorRow,
                                 .cursorVisible = m_current.cursorVisible,
-                                .alternateScreen = m_alternateScreen};
+                                .alternateScreen = m_alternateScreen,
+                                .droppedOutputObservations =
+                                    m_droppedOutputObservations.load(std::memory_order_relaxed)};
     if (afterRevision == m_revision)
     {
         result.full = false;

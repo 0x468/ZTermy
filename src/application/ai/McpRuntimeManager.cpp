@@ -129,11 +129,9 @@ bool McpRuntimeManager::saveServer(McpServerRecord candidate)
     {
         old->client->stop();
     }
-    m_runtimes.erase(std::remove_if(m_runtimes.begin(), m_runtimes.end(),
-                                    [&id](const auto &item) {
-                                        return item->serverId == id;
-                                    }),
-                     m_runtimes.end());
+    std::erase_if(m_runtimes, [&id](const auto &item) {
+        return item->serverId == id;
+    });
     m_records = std::move(records);
     if (McpServerRecord *saved = record(id); saved != nullptr)
     {
@@ -148,11 +146,9 @@ bool McpRuntimeManager::removeServer(const std::string_view serverId)
 {
     auto records = m_records;
     const auto before = records.size();
-    records.erase(std::remove_if(records.begin(), records.end(),
-                                 [serverId](const auto &item) {
-                                     return item.configuration.identity.id == serverId;
-                                 }),
-                  records.end());
+    std::erase_if(records, [serverId](const auto &item) {
+        return item.configuration.identity.id == serverId;
+    });
     if (records.size() == before || !persist(records))
     {
         return false;
@@ -162,11 +158,9 @@ bool McpRuntimeManager::removeServer(const std::string_view serverId)
         old->client->stop();
     }
     m_registry.disableServer(serverId);
-    m_runtimes.erase(std::remove_if(m_runtimes.begin(), m_runtimes.end(),
-                                    [serverId](const auto &item) {
-                                        return item->serverId == serverId;
-                                    }),
-                     m_runtimes.end());
+    std::erase_if(m_runtimes, [serverId](const auto &item) {
+        return item->serverId == serverId;
+    });
     m_records = std::move(records);
     m_operationError.clear();
     publishChanged();
@@ -184,11 +178,9 @@ bool McpRuntimeManager::restartServer(const std::string_view serverId)
     {
         old->client->stop();
     }
-    m_runtimes.erase(std::remove_if(m_runtimes.begin(), m_runtimes.end(),
-                                    [serverId](const auto &item) {
-                                        return item->serverId == serverId;
-                                    }),
-                     m_runtimes.end());
+    std::erase_if(m_runtimes, [serverId](const auto &item) {
+        return item->serverId == serverId;
+    });
     start(*saved);
     publishChanged();
     return true;
@@ -247,7 +239,8 @@ bool McpRuntimeManager::setToolApproved(const std::string_view serverId, const s
 }
 
 std::expected<McpCallHandle, QString> McpRuntimeManager::call(const std::string_view exposedName,
-                                                              const std::string_view argumentsJson, CallHandler handler)
+                                                              const std::string_view argumentsJson,
+                                                              const CallHandler &handler)
 {
     const auto tool = m_registry.resolve(exposedName);
     if (!tool.has_value())
@@ -259,7 +252,7 @@ std::expected<McpCallHandle, QString> McpRuntimeManager::call(const std::string_
     {
         return std::unexpected(QStringLiteral("The MCP server is not ready."));
     }
-    auto request = active->client->call(exposedName, argumentsJson, std::move(handler));
+    auto request = active->client->call(exposedName, argumentsJson, handler);
     if (!request.has_value())
     {
         return std::unexpected(request.error());
@@ -329,29 +322,30 @@ void McpRuntimeManager::start(McpServerRecord &saved)
     }
     active->client = std::make_unique<McpStdioClient>(m_registry);
     active->state = QStringLiteral("starting");
-    Runtime *runtimePointer = active.get();
-    const std::string serverId = active->serverId;
-    auto started = active->client->start(saved.configuration, [this, serverId, runtimePointer](auto discovered) {
-        if (runtime(serverId) != runtimePointer)
+    McpStdioClient *clientPointer = active->client.get();
+    const auto serverId = std::make_shared<const std::string>(active->serverId);
+    auto started = active->client->start(saved.configuration, [this, serverId, clientPointer](auto discovered) {
+        Runtime *callbackRuntime = runtime(*serverId);
+        if (callbackRuntime == nullptr || callbackRuntime->client.get() != clientPointer)
         {
             return;
         }
         if (!discovered.has_value())
         {
-            runtimePointer->state = QStringLiteral("error");
-            runtimePointer->error = discovered.error();
+            callbackRuntime->state = QStringLiteral("error");
+            callbackRuntime->error = discovered.error();
             publishChanged();
             return;
         }
-        runtimePointer->tools = discovered->tools;
-        runtimePointer->state = QStringLiteral("ready");
-        runtimePointer->error.clear();
-        const McpServerRecord *current = record(serverId);
+        callbackRuntime->tools = discovered->tools;
+        callbackRuntime->state = QStringLiteral("ready");
+        callbackRuntime->error.clear();
+        const McpServerRecord *current = record(*serverId);
         if (current != nullptr)
         {
             for (const auto &approval : current->approvedTools)
             {
-                static_cast<void>(m_registry.approve(serverId, approval.exposedName, approval.schemaDigest));
+                static_cast<void>(m_registry.approve(*serverId, approval.exposedName, approval.schemaDigest));
             }
         }
         publishChanged();

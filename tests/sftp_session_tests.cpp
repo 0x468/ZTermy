@@ -146,7 +146,8 @@ public:
         std::scoped_lock lock(m_state->mutex);
         const std::size_t remaining = m_state->fileContents.size() - m_state->readOffset;
         const std::size_t count = std::min(output.size(), remaining);
-        std::ranges::copy_n(m_state->fileContents.data() + m_state->readOffset, count, output.data());
+        std::ranges::copy_n(m_state->fileContents.data() + m_state->readOffset, static_cast<std::ptrdiff_t>(count),
+                            output.data());
         m_state->readOffset += count;
         return count;
     }

@@ -12,6 +12,7 @@ namespace
 {
 constexpr std::uint64_t initializeRequestId = 1;
 constexpr std::uint64_t listToolsRequestId = 2;
+constexpr qsizetype maximumResultBytes = qsizetype{48} * 1024;
 
 [[nodiscard]] QProcessEnvironment boundedEnvironment()
 {
@@ -35,11 +36,12 @@ constexpr std::uint64_t listToolsRequestId = 2;
     const QJsonObject payload = message.error.isEmpty() ? message.result : message.error;
     const QByteArray serialized = QJsonDocument(payload).toJson(QJsonDocument::Compact);
     QJsonValue boundedPayload = payload;
-    if (serialized.size() > 48 * 1024)
+    if (serialized.size() > maximumResultBytes)
     {
-        boundedPayload = QJsonObject{{QStringLiteral("truncated"), true},
-                                     {QStringLiteral("original_bytes"), serialized.size()},
-                                     {QStringLiteral("preview"), QString::fromUtf8(serialized.left(48 * 1024))}};
+        boundedPayload =
+            QJsonObject{{QStringLiteral("truncated"), true},
+                        {QStringLiteral("original_bytes"), serialized.size()},
+                        {QStringLiteral("preview"), QString::fromUtf8(serialized.left(maximumResultBytes))}};
     }
     if (!message.error.isEmpty())
     {
@@ -107,7 +109,8 @@ std::expected<void, QString> McpStdioClient::start(McpStdioConfiguration configu
 }
 
 std::expected<std::uint64_t, QString> McpStdioClient::call(const std::string_view exposedToolName,
-                                                           const std::string_view argumentsJson, CallHandler handler)
+                                                           const std::string_view argumentsJson,
+                                                           const CallHandler &handler)
 {
     if (m_state != State::ready || m_pendingCalls.size() >= 16)
     {
@@ -124,7 +127,7 @@ std::expected<std::uint64_t, QString> McpStdioClient::call(const std::string_vie
     {
         return std::unexpected(request.error());
     }
-    m_pendingCalls.insert(id, std::move(handler));
+    m_pendingCalls.insert(id, handler);
     if (!write(*request))
     {
         m_pendingCalls.remove(id);
@@ -149,14 +152,15 @@ void McpStdioClient::stop()
 {
     m_state = State::stopped;
     m_registry.disableServer(m_configuration.identity.id);
-    for (auto handler : std::as_const(m_pendingCalls))
+    const auto pendingHandlers = m_pendingCalls.values();
+    m_pendingCalls.clear();
+    for (const auto &handler : pendingHandlers)
     {
         if (handler)
         {
             handler(std::unexpected(QStringLiteral("The MCP server stopped.")));
         }
     }
-    m_pendingCalls.clear();
     if (m_process.state() != QProcess::NotRunning)
     {
         m_process.terminate();
@@ -244,14 +248,15 @@ void McpStdioClient::fail(const QString &message)
     {
         m_discoveryHandler(std::unexpected(message));
     }
-    for (auto handler : std::as_const(m_pendingCalls))
+    const auto pendingHandlers = m_pendingCalls.values();
+    m_pendingCalls.clear();
+    for (const auto &handler : pendingHandlers)
     {
         if (handler)
         {
             handler(std::unexpected(message));
         }
     }
-    m_pendingCalls.clear();
 }
 
 bool McpStdioClient::write(const QByteArray &bytes)

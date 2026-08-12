@@ -182,7 +182,7 @@ void AiConversationStoreTests::enforcesRetentionAndConversationBounds()
                                   {.maximumConversations = 2,
                                    .maximumMessagesPerConversation = 4,
                                    .maximumMessageBytes = 1024,
-                                   .maximumPlaintextBytes = 16 * 1024,
+                                   .maximumPlaintextBytes = std::size_t{16} * 1024,
                                    .retentionDays = 30});
     QVERIFY(store.upsert(conversation(QStringLiteral("old"), QStringLiteral("old"), -40)).has_value());
     QVERIFY(store.upsert(conversation(QStringLiteral("one"), QStringLiteral("one"), -2)).has_value());

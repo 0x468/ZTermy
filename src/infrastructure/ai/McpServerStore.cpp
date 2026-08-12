@@ -16,7 +16,7 @@ namespace ztermy::ai
 {
 namespace
 {
-constexpr qsizetype maximumFileBytes = 256 * 1024;
+constexpr qsizetype maximumFileBytes = qsizetype{256} * 1024;
 constexpr std::size_t maximumServers = 8;
 constexpr qsizetype maximumArguments = 32;
 constexpr qsizetype maximumApprovedTools = 128;
@@ -82,7 +82,7 @@ constexpr qsizetype maximumApprovedTools = 128;
     servers.reserve(static_cast<std::size_t>(values.size()));
     std::unordered_set<std::string> ids;
     std::unordered_set<std::string> namespaces;
-    for (const QJsonValue &value : values)
+    for (const auto &value : values)
     {
         const QJsonObject object = value.toObject();
         const QString id = object.value(QStringLiteral("id")).toString();
@@ -103,7 +103,7 @@ constexpr qsizetype maximumApprovedTools = 128;
         record.configuration.program = program;
         record.configuration.workingDirectory = object.value(QStringLiteral("working_directory")).toString();
         record.enabled = object.value(QStringLiteral("enabled")).toBool(false);
-        for (const QJsonValue &argument : arguments)
+        for (const auto &argument : arguments)
         {
             const QString text = argument.toString();
             if (!argument.isString() || text.size() > 2048)
@@ -113,7 +113,7 @@ constexpr qsizetype maximumApprovedTools = 128;
             record.configuration.arguments.push_back(text);
         }
         std::unordered_set<std::string> approvedNames;
-        for (const QJsonValue &approval : approved)
+        for (const auto &approval : approved)
         {
             const QJsonObject item = approval.toObject();
             const QString name = item.value(QStringLiteral("name")).toString();

@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <utility>
 
 namespace ztermy::ai
 {
@@ -44,7 +45,7 @@ constexpr std::size_t maximumNoteReadBytes = std::size_t{32} * 1024;
 [[nodiscard]] QString boundedUtf8(const QString &content, const std::size_t maximumBytes, bool &truncated)
 {
     QByteArray bytes = content.toUtf8();
-    truncated = static_cast<std::size_t>(bytes.size()) > maximumBytes;
+    truncated = std::cmp_greater(bytes.size(), maximumBytes);
     if (!truncated)
     {
         return content;

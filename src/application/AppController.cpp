@@ -2951,18 +2951,18 @@ QVariantMap AppController::activeAiToolApproval() const
     {
         const auto &pending = *tab->pendingAiMcpCall;
         const QString arguments = utf8QString(pending.call.argumentsJson);
-        return {
-            {QStringLiteral("visible"), true},
-            {QStringLiteral("toolCallId"), utf8QString(pending.call.id)},
-            {QStringLiteral("command"), tr("MCP tool: %1\nServer: %2\n\nArguments (untrusted):\n%3")
-                                            .arg(utf8QString(pending.tool.exposedName),
-                                                 utf8QString(pending.tool.serverNamespace), arguments.left(16 * 1024))},
-            {QStringLiteral("kind"), QStringLiteral("mcp_tool")},
-            {QStringLiteral("sessionId"), tab->id},
-            {QStringLiteral("sessionGeneration"), QVariant::fromValue<qulonglong>(tab->reconnectGeneration)},
-            {QStringLiteral("highRisk"), true},
-            {QStringLiteral("riskReason"),
-             tr("MCP tools run in an external process and their descriptions and results are untrusted.")}};
+        return {{QStringLiteral("visible"), true},
+                {QStringLiteral("toolCallId"), utf8QString(pending.call.id)},
+                {QStringLiteral("command"),
+                 tr("MCP tool: %1\nServer: %2\n\nArguments (untrusted):\n%3")
+                     .arg(utf8QString(pending.tool.exposedName), utf8QString(pending.tool.serverNamespace),
+                          arguments.left(qsizetype{16} * 1024))},
+                {QStringLiteral("kind"), QStringLiteral("mcp_tool")},
+                {QStringLiteral("sessionId"), tab->id},
+                {QStringLiteral("sessionGeneration"), QVariant::fromValue<qulonglong>(tab->reconnectGeneration)},
+                {QStringLiteral("highRisk"), true},
+                {QStringLiteral("riskReason"),
+                 tr("MCP tools run in an external process and their descriptions and results are untrusted.")}};
     }
     if (!tab->pendingAiAction.has_value())
     {
@@ -8473,7 +8473,8 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                                                                            .request = std::move(*request)};
                 const QString rootPath = m_noteStore.rootPath();
                 const QString relativePath = target->pendingAiNoteRead->request.relativePath;
-                const ai::AiNoteReadRequest noteRequest = target->pendingAiNoteRead->request;
+                const auto noteRequest =
+                    std::make_shared<const ai::AiNoteReadRequest>(target->pendingAiNoteRead->request);
                 const quint64 generation = target->reconnectGeneration;
                 const QPointer<AppController> self(this);
                 QThreadPool::globalInstance()->start(
@@ -8482,7 +8483,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                         try
                         {
                             auto read = workbench::NoteStore(rootPath).read(relativePath);
-                            output = read.has_value() ? ai::AiNoteReadTool::result(noteRequest, *read)
+                            output = read.has_value() ? ai::AiNoteReadTool::result(*noteRequest, *read)
                                                       : ai::AiNoteReadTool::failure(read.error());
                         }
                         catch (const std::bad_alloc &)
@@ -8588,14 +8589,16 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                 {
                     emit aiConversationChanged();
                 }
+                const auto cancellationKey = std::make_shared<const ai::AiToolDispatchKey>(key);
+                const auto cancellationCall = std::make_shared<const ai::AiToolCall>(call);
                 return ai::AiTurnRunner::ToolHandlingResult{
                     .cancel =
-                        [this, tabId, key, call] noexcept {
+                        [this, tabId, cancellationKey, cancellationCall] noexcept {
                             try
                             {
                                 TerminalTab *cancelledTarget = findTab(tabId);
                                 if (cancelledTarget == nullptr || !cancelledTarget->pendingAiMcpCall.has_value()
-                                    || cancelledTarget->pendingAiMcpCall->dispatchKey != key)
+                                    || cancelledTarget->pendingAiMcpCall->dispatchKey != *cancellationKey)
                                 {
                                     return;
                                 }
@@ -8606,10 +8609,10 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                                 }
                                 const auto output = aiToolFailureJson(QStringLiteral("cancelled"),
                                                                       tr("The MCP tool call was cancelled."));
-                                static_cast<void>(
-                                    m_mcpDispatchLedger.transition(key, ai::AiToolDispatchState::cancelled, output));
+                                static_cast<void>(m_mcpDispatchLedger.transition(
+                                    *cancellationKey, ai::AiToolDispatchState::cancelled, output));
                                 cancelledTarget->pendingAiMcpCall.reset();
-                                recordAiActivity(*cancelledTarget, call, QStringLiteral("cancelled"),
+                                recordAiActivity(*cancelledTarget, *cancellationCall, QStringLiteral("cancelled"),
                                                  QStringLiteral("cancelled"), true, true);
                                 if (m_activeTabId == tabId || m_focusedTabId == tabId)
                                 {
@@ -8852,7 +8855,7 @@ AppController::handleAiTerminalFrameTool(TerminalTab &owner, const QString &owne
     const QPointer<QTimer> timerGuard(timer);
     const auto callGuard = std::make_shared<const ai::AiToolCall>(call);
     const auto requestGuard = std::make_shared<const ai::AiTerminalFrameWaitRequest>(*waitRequest);
-    const std::string shell = allowedTarget->shell;
+    const auto shell = std::make_shared<const std::string>(allowedTarget->shell);
     const auto semanticCapability = allowedTarget->capability;
     QObject::connect(
         timer, &QTimer::timeout, this,
@@ -8893,7 +8896,7 @@ AppController::handleAiTerminalFrameTool(TerminalTab &owner, const QString &owne
                         ? std::string_view{"current_agent"}
                         : std::string_view{"unclaimed_or_other_agent"};
                 const auto capability =
-                    ai::AiTerminalCapabilityAdapter::describe(shell, semanticCapability, frame.alternateScreen);
+                    ai::AiTerminalCapabilityAdapter::describe(*shell, semanticCapability, frame.alternateScreen);
                 const qint64 remaining = std::max<qint64>(0, timerGuard->property("ztermyAiRemainingMs").toLongLong()
                                                                  - timerGuard->interval());
                 timerGuard->setProperty("ztermyAiRemainingMs", remaining);
@@ -9135,7 +9138,7 @@ std::string AppController::executeAiSaveRunbook(const ai::AiTerminalAction &acti
     QVariantList steps;
     const QJsonArray runbookSteps = runbook.value(QStringLiteral("steps")).toArray();
     steps.reserve(runbookSteps.size());
-    for (const QJsonValue &stepValue : runbookSteps)
+    for (const auto &stepValue : runbookSteps)
     {
         const QJsonObject step = stepValue.toObject();
         steps.append(QVariantMap{

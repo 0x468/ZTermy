@@ -35,8 +35,8 @@ public:
 
     [[nodiscard]] std::expected<void, QString> start(McpStdioConfiguration configuration,
                                                      DiscoveryHandler discoveryHandler);
-    [[nodiscard]] std::expected<std::uint64_t, QString> call(std::string_view exposedToolName,
-                                                             std::string_view argumentsJson, CallHandler handler);
+    [[nodiscard]] std::expected<std::uint64_t, QString>
+    call(std::string_view exposedToolName, std::string_view argumentsJson, const CallHandler &handler);
     [[nodiscard]] bool cancel(std::uint64_t requestId, std::string_view reason = "Cancelled by the user.");
     void stop();
     [[nodiscard]] bool ready() const noexcept;

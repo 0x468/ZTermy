@@ -31,7 +31,7 @@ public:
     [[nodiscard]] std::expected<QByteArray, QString> callToolRequest(std::uint64_t id, std::string_view toolName,
                                                                      std::string_view argumentsJson) const;
     [[nodiscard]] QByteArray cancelRequestNotification(std::uint64_t id, std::string_view reason) const;
-    [[nodiscard]] std::expected<std::vector<McpJsonRpcMessage>, QString> append(QByteArray bytes);
+    [[nodiscard]] std::expected<std::vector<McpJsonRpcMessage>, QString> append(const QByteArray &bytes);
     [[nodiscard]] static std::expected<std::vector<McpDiscoveredTool>, QString>
     discoveredTools(const McpJsonRpcMessage &message);
 

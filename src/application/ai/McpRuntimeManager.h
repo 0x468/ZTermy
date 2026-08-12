@@ -60,8 +60,8 @@ public:
     [[nodiscard]] bool restartServer(std::string_view serverId);
     [[nodiscard]] bool setToolApproved(std::string_view serverId, std::string_view exposedName,
                                        std::string_view schemaDigest, bool approved);
-    [[nodiscard]] std::expected<McpCallHandle, QString> call(std::string_view exposedName,
-                                                             std::string_view argumentsJson, CallHandler handler);
+    [[nodiscard]] std::expected<McpCallHandle, QString>
+    call(std::string_view exposedName, std::string_view argumentsJson, const CallHandler &handler);
     [[nodiscard]] bool cancel(const McpCallHandle &handle, std::string_view reason = "Cancelled by the user.");
 
 private:

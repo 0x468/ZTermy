@@ -47,9 +47,13 @@ void McpStdioClientTests::discoversApprovesAndCallsTool()
     QTimer::singleShot(5'000, &discoveryLoop, &QEventLoop::quit);
     discoveryLoop.exec();
     QVERIFY2(failure.isEmpty(), qPrintable(failure));
-    QVERIFY(update.has_value());
-    QVERIFY(update->reviewRequired);
-    const auto &tool = update->tools.front();
+    if (!update.has_value())
+    {
+        QFAIL("The MCP test server did not publish discovery.");
+    }
+    const ztermy::ai::McpDiscoveryUpdate &discovery = *update;
+    QVERIFY(discovery.reviewRequired);
+    const auto &tool = discovery.tools.front();
     QVERIFY(registry.approve(tool.serverId, tool.exposedName, tool.schemaDigest));
     QCOMPARE(registry.definitions().size(), std::size_t{1});
 
@@ -71,7 +75,7 @@ void McpStdioClientTests::discoversApprovesAndCallsTool()
     QVERIFY(envelope.value(QStringLiteral("ok")).toBool());
     QVERIFY(envelope.value(QStringLiteral("untrusted_evidence")).toBool());
 
-    const auto slow = update->tools.at(1);
+    const auto slow = discovery.tools.at(1);
     QVERIFY(registry.approve(slow.serverId, slow.exposedName, slow.schemaDigest));
     bool cancelledHandlerCalled = false;
     auto slowCall = client.call(slow.exposedName, R"({})", [&cancelledHandlerCalled](auto result) {

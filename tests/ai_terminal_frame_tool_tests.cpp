@@ -49,6 +49,7 @@ void AiTerminalFrameToolTests::evaluatesConditionsAndSerializesFrames()
                                      .cursorColumn = 3,
                                      .cursorVisible = true,
                                      .alternateScreen = true,
+                                     .droppedOutputObservations = 2,
                                      .full = false,
                                      .lines = {AiTerminalFrameLine{.index = 2, .text = "changed"}}};
     auto changed = AiTerminalFrameTool::parseWait(
@@ -65,6 +66,7 @@ void AiTerminalFrameToolTests::evaluatesConditionsAndSerializesFrames()
     QVERIFY(result.value(QStringLiteral("ok")).toBool());
     const auto value = result.value(QStringLiteral("frame")).toObject();
     QVERIFY(value.value(QStringLiteral("alternate_screen")).toBool());
+    QCOMPARE(value.value(QStringLiteral("dropped_output_observations")).toInt(), 2);
     QVERIFY(value.value(QStringLiteral("untrusted_evidence")).toBool());
     QCOMPARE(value.value(QStringLiteral("control_owner")).toString(), QStringLiteral("user"));
     QCOMPARE(value.value(QStringLiteral("capability")).toObject().value(QStringLiteral("semantic_quality")).toString(),
