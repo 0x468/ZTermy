@@ -345,6 +345,10 @@ only when it passes the same evidence and action contract.
 
 ## Human approval checkpoint
 
+The executable owner-facing checklist is `V3_OWNER_ACCEPTANCE_ZH_CN.md`. It
+consolidates the current `0.3.8` behavior below into one Chinese handoff without
+changing these normative contracts.
+
 Before each release candidate, the owner receives:
 
 - exact manual steps and expected result for affected surfaces;
