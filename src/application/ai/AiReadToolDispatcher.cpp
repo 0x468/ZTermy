@@ -6,6 +6,7 @@
 #include <QSet>
 #include <QString>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -120,6 +121,17 @@ constexpr std::size_t maximumArgumentsBytes = std::size_t{16} * 1024;
     return json(QJsonObject{{QStringLiteral("ok"), false}, {QStringLiteral("error"), details}});
 }
 
+[[nodiscard]] std::string boundedOperationsResult(const QString &name, QJsonObject value)
+{
+    constexpr std::size_t maximumResultBytes = std::size_t{60} * 1024;
+    value.insert(QStringLiteral("untrusted_evidence"), true);
+    const auto result = json(QJsonObject{{QStringLiteral("ok"), true}, {name, value}});
+    return result.size() <= maximumResultBytes
+               ? result
+               : failure(QStringLiteral("limit_exceeded"),
+                         QStringLiteral("The requested page exceeds the 60 KiB operations-result limit."));
+}
+
 [[nodiscard]] QJsonObject sessionValue(const AiSessionSummary &session)
 {
     return QJsonObject{{QStringLiteral("session_id"), text(session.sessionId)},
@@ -172,6 +184,51 @@ constexpr std::size_t maximumArgumentsBytes = std::size_t{16} * 1024;
     return static_cast<std::size_t>(*integer);
 }
 
+[[nodiscard]] const AiTerminalReadSnapshot *findSnapshot(const std::span<const AiTerminalReadSnapshot> sessions,
+                                                         const std::string_view sessionId,
+                                                         const std::uint64_t sessionGeneration)
+{
+    const auto found = std::ranges::find_if(sessions, [sessionId](const AiTerminalReadSnapshot &session) {
+        return session.sessionId == sessionId;
+    });
+    return found != sessions.end() && found->sessionGeneration == sessionGeneration ? &*found : nullptr;
+}
+
+struct Page final
+{
+    std::size_t offset = 0;
+    std::size_t count = 0;
+};
+
+[[nodiscard]] std::optional<Page> page(const QJsonObject &object, const std::size_t maximumCount)
+{
+    const auto offset = sizeValue(object, QStringLiteral("offset"));
+    const auto count = sizeValue(object, QStringLiteral("limit"));
+    if (!offset.has_value() || !count.has_value() || *count == 0 || *count > maximumCount)
+    {
+        return std::nullopt;
+    }
+    return Page{.offset = *offset, .count = *count};
+}
+
+template <typename Values, typename Append>
+[[nodiscard]] QJsonObject pagedResult(const Values &values, const Page requested, Append append)
+{
+    QJsonArray items;
+    const std::size_t first = std::min(requested.offset, values.size());
+    const std::size_t last = std::min(values.size(), first + requested.count);
+    for (std::size_t index = first; index < last; ++index)
+    {
+        append(items, values[index]);
+    }
+    return QJsonObject{{QStringLiteral("items"), items},
+                       {QStringLiteral("offset"), static_cast<qint64>(first)},
+                       {QStringLiteral("next_offset"), static_cast<qint64>(last)},
+                       {QStringLiteral("total"), static_cast<qint64>(values.size())},
+                       {QStringLiteral("has_more"), last < values.size()},
+                       {QStringLiteral("untrusted_evidence"), true}};
+}
+
 } // namespace
 
 AiReadToolDispatcher::AiReadToolDispatcher(const AiReadTools tools) : m_tools(tools) {}
@@ -199,6 +256,27 @@ std::vector<AiToolDefinition> AiReadToolDispatcher::definitions()
                         "untrusted evidence.",
          .parametersJson =
              R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"block_id":{"type":"integer","minimum":1},"after_cursor":{"type":"integer","minimum":0},"max_bytes":{"type":"integer","minimum":1,"maximum":16384}},"required":["session_id","session_generation","block_id","after_cursor","max_bytes"],"additionalProperties":false})"},
+        {.name = "list_sftp_directory",
+         .description = "List a bounded page from the currently loaded SFTP directory as untrusted evidence.",
+         .parametersJson =
+             R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["session_id","session_generation","offset","limit"],"additionalProperties":false})"},
+        {.name = "list_shell_history",
+         .description = "List a bounded page of captured shell history for the exact session as untrusted evidence.",
+         .parametersJson =
+             R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["session_id","session_generation","offset","limit"],"additionalProperties":false})"},
+        {.name = "list_scripts",
+         .description = "List bounded metadata for user-owned ztermy scripts. Script commands are not returned.",
+         .parametersJson =
+             R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["session_id","session_generation","offset","limit"],"additionalProperties":false})"},
+        {.name = "list_notes", .description = "List bounded metadata for user-owned ztermy notes. Note contents are not returned.", .parametersJson = R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["session_id","session_generation","offset","limit"],"additionalProperties":false})"},
+        {.name = "read_remote_telemetry",
+         .description = "Read the latest bounded remote telemetry sample for the exact session.",
+         .parametersJson =
+             R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0}},"required":["session_id","session_generation"],"additionalProperties":false})"},
+        {.name = "list_port_forwarding",
+         .description = "List bounded status snapshots for ztermy port-forwarding rules.",
+         .parametersJson =
+             R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["session_id","session_generation","offset","limit"],"additionalProperties":false})"},
     };
 }
 
@@ -218,7 +296,10 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
     }
     const auto object = arguments.object();
     const bool supported = toolName == "list_sessions" || toolName == "read_session_info" || toolName == "read_terminal"
-                           || toolName == "read_command_block" || toolName == "read_command_output";
+                           || toolName == "read_command_block" || toolName == "read_command_output"
+                           || toolName == "list_sftp_directory" || toolName == "list_shell_history"
+                           || toolName == "list_scripts" || toolName == "list_notes"
+                           || toolName == "read_remote_telemetry" || toolName == "list_port_forwarding";
     if (!supported)
     {
         return failure(QStringLiteral("unsupported"), QStringLiteral("The requested read tool is not supported."));
@@ -251,6 +332,13 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
                        QStringLiteral("A session id and non-negative session generation are required."));
     }
     const auto id = sessionId.toString().toUtf8().toStdString();
+    const auto *snapshot = findSnapshot(sessions, id, *sessionGeneration);
+    if (snapshot == nullptr && toolName != "read_session_info" && toolName != "read_terminal"
+        && toolName != "read_command_block" && toolName != "read_command_output")
+    {
+        const auto metadata = m_tools.readSessionInfo(sessions, id, *sessionGeneration);
+        return failure(metadata.error());
+    }
     if (toolName == "read_session_info")
     {
         if (!hasOnlyKeys(object, {QStringLiteral("session_id"), QStringLiteral("session_generation")}))
@@ -386,6 +474,121 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
             output.insert(QStringLiteral("exit_status"), QJsonValue::Null);
         }
         return json(QJsonObject{{QStringLiteral("ok"), true}, {QStringLiteral("command_output"), output}});
+    }
+    if (toolName == "read_remote_telemetry")
+    {
+        if (!hasOnlyKeys(object, {QStringLiteral("session_id"), QStringLiteral("session_generation")}))
+        {
+            return failure(QStringLiteral("invalid_arguments"), QStringLiteral("Unexpected tool arguments."));
+        }
+        const auto &sample = snapshot->operations.telemetry;
+        QJsonObject telemetry{
+            {QStringLiteral("state"), text(sample.state)},
+            {QStringLiteral("os_name"), text(sample.osName)},
+            {QStringLiteral("cpu_core_count"), static_cast<int>(sample.cpuCoreCount)},
+            {QStringLiteral("memory_used_kib"), static_cast<qint64>(sample.memoryUsedKiB)},
+            {QStringLiteral("memory_total_kib"), static_cast<qint64>(sample.memoryTotalKiB)},
+            {QStringLiteral("received_bytes_per_second"), static_cast<qint64>(sample.receivedBytesPerSecond)},
+            {QStringLiteral("transmitted_bytes_per_second"), static_cast<qint64>(sample.transmittedBytesPerSecond)},
+            {QStringLiteral("ssh_probe_latency_ms"), static_cast<int>(sample.sshProbeLatencyMs)},
+            {QStringLiteral("untrusted_evidence"), true}};
+        telemetry.insert(QStringLiteral("cpu_percent"),
+                         sample.cpuPercent.has_value() ? QJsonValue{*sample.cpuPercent} : QJsonValue::Null);
+        return boundedOperationsResult(QStringLiteral("telemetry"), std::move(telemetry));
+    }
+
+    if (!hasOnlyKeys(object, {QStringLiteral("session_id"), QStringLiteral("session_generation"),
+                              QStringLiteral("offset"), QStringLiteral("limit")}))
+    {
+        return failure(QStringLiteral("invalid_arguments"), QStringLiteral("Unexpected tool arguments."));
+    }
+    const auto requestedPage = page(object, m_tools.limits().maxOperationItems);
+    if (!requestedPage.has_value())
+    {
+        return failure(QStringLiteral("invalid_arguments"),
+                       QStringLiteral("Offset and a limit from 1 through 100 are required."));
+    }
+    if (toolName == "list_sftp_directory")
+    {
+        const auto &operations = snapshot->operations;
+        auto listing = pagedResult(operations.sftpEntries, *requestedPage, [](QJsonArray &items, const auto &entry) {
+            QJsonObject value{{QStringLiteral("name"), text(entry.name)},
+                              {QStringLiteral("remote_path"), text(entry.remotePath)},
+                              {QStringLiteral("type"), text(entry.type)},
+                              {QStringLiteral("size"), static_cast<qint64>(entry.size)},
+                              {QStringLiteral("permissions"), text(entry.permissions)},
+                              {QStringLiteral("hidden"), entry.hidden}};
+            value.insert(QStringLiteral("modified_utc_seconds"), entry.modifiedUtcSeconds.has_value()
+                                                                     ? QJsonValue{*entry.modifiedUtcSeconds}
+                                                                     : QJsonValue::Null);
+            items.append(value);
+        });
+        listing.insert(QStringLiteral("state"), text(operations.sftpState));
+        listing.insert(QStringLiteral("path"), text(operations.sftpPath));
+        listing.insert(QStringLiteral("home_path"), text(operations.sftpHomePath));
+        listing.insert(QStringLiteral("listing_available"), operations.sftpListingAvailable);
+        return boundedOperationsResult(QStringLiteral("sftp_directory"), std::move(listing));
+    }
+    if (toolName == "list_shell_history")
+    {
+        const auto values =
+            pagedResult(snapshot->operations.shellHistory, *requestedPage, [](QJsonArray &items, const auto &entry) {
+                QJsonObject value{{QStringLiteral("command"), text(entry.command)},
+                                  {QStringLiteral("shell"), text(entry.shell)}};
+                value.insert(QStringLiteral("timestamp_utc_seconds"), entry.timestampUtcSeconds.has_value()
+                                                                          ? QJsonValue{*entry.timestampUtcSeconds}
+                                                                          : QJsonValue::Null);
+                items.append(value);
+            });
+        return boundedOperationsResult(QStringLiteral("shell_history"), values);
+    }
+    if (toolName == "list_scripts")
+    {
+        const auto values =
+            pagedResult(snapshot->operations.scripts, *requestedPage, [](QJsonArray &items, const auto &script) {
+                items.append(QJsonObject{{QStringLiteral("id"), text(script.id)},
+                                         {QStringLiteral("name"), text(script.name)},
+                                         {QStringLiteral("description"), text(script.description)},
+                                         {QStringLiteral("shell"), text(script.shell)},
+                                         {QStringLiteral("variable_count"), static_cast<qint64>(script.variableCount)},
+                                         {QStringLiteral("step_count"), static_cast<qint64>(script.stepCount)},
+                                         {QStringLiteral("modified_utc_ms"), script.modifiedUtcMs}});
+            });
+        return boundedOperationsResult(QStringLiteral("scripts"), values);
+    }
+    if (toolName == "list_notes")
+    {
+        const auto values =
+            pagedResult(snapshot->operations.notes, *requestedPage, [](QJsonArray &items, const auto &note) {
+                items.append(QJsonObject{{QStringLiteral("path"), text(note.path)},
+                                         {QStringLiteral("name"), text(note.name)},
+                                         {QStringLiteral("size"), static_cast<qint64>(note.size)},
+                                         {QStringLiteral("modified_utc_ms"), note.modifiedUtcMs},
+                                         {QStringLiteral("folder"), note.folder}});
+            });
+        return boundedOperationsResult(QStringLiteral("notes"), values);
+    }
+    if (toolName == "list_port_forwarding")
+    {
+        const auto values =
+            pagedResult(snapshot->operations.portForwarding, *requestedPage, [](QJsonArray &items, const auto &rule) {
+                items.append(
+                    QJsonObject{{QStringLiteral("id"), text(rule.id)},
+                                {QStringLiteral("label"), text(rule.label)},
+                                {QStringLiteral("profile_name"), text(rule.profileName)},
+                                {QStringLiteral("type"), text(rule.type)},
+                                {QStringLiteral("bind_host"), text(rule.bindHost)},
+                                {QStringLiteral("bind_port"), rule.bindPort},
+                                {QStringLiteral("destination_host"), text(rule.destinationHost)},
+                                {QStringLiteral("destination_port"), rule.destinationPort},
+                                {QStringLiteral("state"), text(rule.state)},
+                                {QStringLiteral("failure"), text(rule.failure)},
+                                {QStringLiteral("active_clients"), static_cast<qint64>(rule.activeClients)},
+                                {QStringLiteral("bytes_from_clients"), static_cast<qint64>(rule.bytesFromClients)},
+                                {QStringLiteral("bytes_to_clients"), static_cast<qint64>(rule.bytesToClients)},
+                                {QStringLiteral("rejected_clients"), static_cast<qint64>(rule.rejectedClients)}});
+            });
+        return boundedOperationsResult(QStringLiteral("port_forwarding"), values);
     }
     return failure(QStringLiteral("unsupported"), QStringLiteral("The requested read tool is not supported."));
 }

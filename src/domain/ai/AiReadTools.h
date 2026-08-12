@@ -38,6 +38,90 @@ struct AiReadToolLimits final
     std::size_t maxTerminalLines = 200;
     std::size_t maxTerminalBytes = std::size_t{32} * 1024;
     std::size_t maxCommandOutputBytes = std::size_t{16} * 1024;
+    std::size_t maxOperationItems = 100;
+};
+
+struct AiSftpEntrySnapshot final
+{
+    std::string name;
+    std::string remotePath;
+    std::string type;
+    std::uint64_t size = 0;
+    std::optional<std::int64_t> modifiedUtcSeconds;
+    std::string permissions;
+    bool hidden = false;
+};
+
+struct AiShellHistorySnapshot final
+{
+    std::string command;
+    std::string shell;
+    std::optional<std::int64_t> timestampUtcSeconds;
+};
+
+struct AiScriptSnapshot final
+{
+    std::string id;
+    std::string name;
+    std::string description;
+    std::string shell;
+    std::size_t variableCount = 0;
+    std::size_t stepCount = 0;
+    std::int64_t modifiedUtcMs = 0;
+};
+
+struct AiNoteSnapshot final
+{
+    std::string path;
+    std::string name;
+    std::uint64_t size = 0;
+    std::int64_t modifiedUtcMs = 0;
+    bool folder = false;
+};
+
+struct AiPortForwardingSnapshot final
+{
+    std::string id;
+    std::string label;
+    std::string profileName;
+    std::string type;
+    std::string bindHost;
+    std::uint16_t bindPort = 0;
+    std::string destinationHost;
+    std::uint16_t destinationPort = 0;
+    std::string state;
+    std::string failure;
+    std::uint64_t activeClients = 0;
+    std::uint64_t bytesFromClients = 0;
+    std::uint64_t bytesToClients = 0;
+    std::uint64_t rejectedClients = 0;
+};
+
+struct AiTelemetrySnapshot final
+{
+    std::string state;
+    std::string osName;
+    std::optional<double> cpuPercent;
+    std::uint32_t cpuCoreCount = 0;
+    std::uint64_t memoryUsedKiB = 0;
+    std::uint64_t memoryTotalKiB = 0;
+    std::uint64_t receivedBytesPerSecond = 0;
+    std::uint64_t transmittedBytesPerSecond = 0;
+    std::uint32_t sshProbeLatencyMs = 0;
+};
+
+struct AiOperationsReadSnapshot final
+{
+    std::string sftpState;
+    std::string sftpPath;
+    std::string sftpHomePath;
+    bool sftpListingAvailable = false;
+    std::vector<AiSftpEntrySnapshot> sftpEntries;
+    std::vector<AiShellHistorySnapshot> shellHistory;
+    std::vector<AiScriptSnapshot> scripts;
+    std::vector<AiNoteSnapshot> notes;
+    std::vector<AiPortForwardingSnapshot> portForwarding;
+    AiTelemetrySnapshot telemetry;
 };
 
 struct AiTerminalReadSnapshot final
@@ -52,6 +136,7 @@ struct AiTerminalReadSnapshot final
     terminal::TerminalSemanticCapability capability = terminal::TerminalSemanticCapability::none;
     bool connected = false;
     std::vector<terminal::CommandBlock> commandBlocks;
+    AiOperationsReadSnapshot operations;
 };
 
 struct AiSessionSummary final

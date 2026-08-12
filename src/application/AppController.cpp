@@ -7435,6 +7435,103 @@ std::vector<ai::AiTerminalReadSnapshot> AppController::aiReadSnapshots(const Ter
             shell = utf8QString(semantic.commandBlocks.back().shell);
         }
     }
+    ai::AiOperationsReadSnapshot operations;
+    operations.sftpState = utf8String(tab.sftpState);
+    operations.sftpPath = utf8String(tab.sftpPath);
+    operations.sftpHomePath = utf8String(tab.sftpHomePath);
+    operations.sftpListingAvailable = tab.sftpHasListing && tab.sftpModel != nullptr;
+    if (tab.sftpModel)
+    {
+        constexpr int maximumSftpSnapshotEntries = 500;
+        const int rowCount = std::min(tab.sftpModel->rowCount(), maximumSftpSnapshotEntries);
+        operations.sftpEntries.reserve(static_cast<std::size_t>(rowCount));
+        for (int row = 0; row < rowCount; ++row)
+        {
+            const QVariantMap value = tab.sftpModel->entry(row);
+            const QVariant modified = value.value(QStringLiteral("modifiedUtcSeconds"));
+            operations.sftpEntries.push_back(ai::AiSftpEntrySnapshot{
+                .name = utf8String(value.value(QStringLiteral("name")).toString()),
+                .remotePath = utf8String(value.value(QStringLiteral("remotePath")).toString()),
+                .type = utf8String(value.value(QStringLiteral("entryType")).toString()),
+                .size = value.value(QStringLiteral("size")).toULongLong(),
+                .modifiedUtcSeconds =
+                    modified.isValid() ? std::optional<std::int64_t>{modified.toLongLong()} : std::nullopt,
+                .permissions = utf8String(value.value(QStringLiteral("permissions")).toString()),
+                .hidden = value.value(QStringLiteral("hidden")).toBool()});
+        }
+    }
+    const auto &history = tab.history.empty() ? tab.capturedHistory : tab.history;
+    constexpr std::size_t maximumHistorySnapshotEntries = 500;
+    const std::size_t historyStart =
+        history.size() > maximumHistorySnapshotEntries ? history.size() - maximumHistorySnapshotEntries : 0;
+    operations.shellHistory.reserve(history.size() - historyStart);
+    for (std::size_t index = historyStart; index < history.size(); ++index)
+    {
+        const auto &entry = history[index];
+        operations.shellHistory.push_back(
+            ai::AiShellHistorySnapshot{.command = utf8String(utf8QString(entry.command).left(1024)),
+                                       .shell = utf8String(shellKindToken(entry.shell)),
+                                       .timestampUtcSeconds = entry.timestampUtcSeconds});
+    }
+    operations.scripts.reserve(m_scripts.size());
+    for (const auto &script : m_scripts)
+    {
+        operations.scripts.push_back(
+            ai::AiScriptSnapshot{.id = script.id,
+                                 .name = script.name,
+                                 .description = utf8String(utf8QString(script.description).left(4096)),
+                                 .shell = utf8String(quickCommandShellScopeToken(script.shellScope)),
+                                 .variableCount = script.variables.size(),
+                                 .stepCount = script.steps.size(),
+                                 .modifiedUtcMs = script.modifiedUtcMs});
+    }
+    operations.notes.reserve(static_cast<std::size_t>(m_notes.size()));
+    for (const QVariant &noteValue : m_notes)
+    {
+        const QVariantMap note = noteValue.toMap();
+        operations.notes.push_back(
+            ai::AiNoteSnapshot{.path = utf8String(note.value(QStringLiteral("path")).toString()),
+                               .name = utf8String(note.value(QStringLiteral("name")).toString()),
+                               .size = note.value(QStringLiteral("size")).toULongLong(),
+                               .modifiedUtcMs = note.value(QStringLiteral("modifiedUtcMs")).toLongLong(),
+                               .folder = note.value(QStringLiteral("folder")).toBool()});
+    }
+    operations.portForwarding.reserve(m_portForwardingRules.size());
+    for (const auto &rule : m_portForwardingRules)
+    {
+        const auto profile = std::ranges::find(m_profiles, rule.profileId, &ssh::SshProfile::id);
+        const PortForwardingRuntime *runtime = findPortForwardingRuntime(rule.id);
+        const forwarding::PortForwardingJobSnapshot forwardingSnapshot =
+            runtime != nullptr && runtime->job ? runtime->job->snapshot() : forwarding::PortForwardingJobSnapshot{};
+        operations.portForwarding.push_back(
+            ai::AiPortForwardingSnapshot{.id = rule.id,
+                                         .label = rule.label,
+                                         .profileName = profile == m_profiles.end() ? std::string{} : profile->name,
+                                         .type = utf8String(forwardingTypeToken(rule.type)),
+                                         .bindHost = rule.bind.host,
+                                         .bindPort = rule.bind.port,
+                                         .destinationHost = rule.destination.host,
+                                         .destinationPort = rule.destination.port,
+                                         .state = utf8String(forwardingStateToken(forwardingSnapshot.state)),
+                                         .failure = utf8String(forwardingFailureToken(forwardingSnapshot.failure)),
+                                         .activeClients = forwardingSnapshot.activeClients,
+                                         .bytesFromClients = forwardingSnapshot.bytesFromClients,
+                                         .bytesToClients = forwardingSnapshot.bytesToClients,
+                                         .rejectedClients = forwardingSnapshot.rejectedClients});
+    }
+    operations.telemetry.state = utf8String(tab.telemetryState);
+    if (tab.telemetrySample.has_value())
+    {
+        const auto &sample = *tab.telemetrySample;
+        operations.telemetry.osName = sample.osName;
+        operations.telemetry.cpuPercent = sample.cpuPercent;
+        operations.telemetry.cpuCoreCount = sample.cpuCoreCount;
+        operations.telemetry.memoryUsedKiB = sample.memoryUsedKiB;
+        operations.telemetry.memoryTotalKiB = sample.memory.totalKiB;
+        operations.telemetry.receivedBytesPerSecond = sample.receivedBytesPerSecond;
+        operations.telemetry.transmittedBytesPerSecond = sample.transmittedBytesPerSecond;
+        operations.telemetry.sshProbeLatencyMs = sample.sshProbeLatencyMs;
+    }
     snapshots.push_back(ai::AiTerminalReadSnapshot{.sessionId = utf8String(tab.id),
                                                    .title = utf8String(tab.title),
                                                    .host = utf8String(tab.address),
@@ -7444,7 +7541,8 @@ std::vector<ai::AiTerminalReadSnapshot> AppController::aiReadSnapshots(const Ter
                                                    .sessionGeneration = tab.reconnectGeneration,
                                                    .capability = capability,
                                                    .connected = tab.running,
-                                                   .commandBlocks = std::move(semantic.commandBlocks)});
+                                                   .commandBlocks = std::move(semantic.commandBlocks),
+                                                   .operations = std::move(operations)});
     return snapshots;
 }
 

@@ -95,6 +95,11 @@ evaluations serve different purposes and are reported separately.
       result per target without active-tab retargeting.
 - [ ] Scripts, notes, telemetry, forwarding, and history expose bounded typed
       data and preserve their existing ownership and privacy contracts.
+  - Implemented: immutable session-generation snapshots, 100-item paging,
+    metadata-only script/note lists, current SFTP listing, shell history,
+    telemetry, and forwarding status (`ADR 0062`).
+  - Remaining for 0.3.2: bounded content reads, asynchronous arbitrary SFTP
+    reads, mutations, and workspace target sets.
 - [ ] MCP tools use the same registry, permission, result, audit, cancellation,
       and namespace rules as native tools; server trust tier, credential scope,
       description/schema changes, untrusted elicitation, and disable/revoke are
