@@ -11,7 +11,7 @@ The approved product program is recorded in `V3_AI_PROGRAM.md`, with architectur
 security, research, and acceptance documents linked from that program.
 
 All `0.2.z` releases retain the codename `此` and the approved verse.
-The selected V3 direction provisionally uses codename `糸` and verse
+The selected V3 direction uses codename `糸` and verse
 `「剪不断，理还乱，是离愁」` across the `0.3.z` line.
 
 ## Execution order

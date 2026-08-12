@@ -11,7 +11,7 @@ automatic version after this release.
 Release codenames follow the `x.y` line rather than individual patch builds.
 All `0.2.z` releases retain the codename `此` and its approved verse; a new
 codename is selected only when the minor version changes.
-The provisional `0.3.x` codename is `糸`, with
+The accepted `0.3.x` codename is `糸`, with
 `「剪不断，理还乱，是离愁」`; final presentation is approved before the
 first `0.3.0` release candidate.
 

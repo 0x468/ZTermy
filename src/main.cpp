@@ -598,8 +598,8 @@ struct ResizeHitRuntimeCase
             brandLockup != nullptr && brandLockup->property("visible").toBool()
             && brandLockup->property("width").toReal() > 0.0 && brandLockup->property("height").toReal() > 0.0
             && releaseIdentity != nullptr && releaseIdentity->property("visible").toBool()
-            && releaseIdentity->property("codename").toString() == QStringLiteral("此")
-            && releaseIdentity->property("verse").toString() == QStringLiteral("天长地久有时尽，此恨绵绵无绝期。")
+            && releaseIdentity->property("codename").toString() == QStringLiteral("糸")
+            && releaseIdentity->property("verse").toString() == QStringLiteral("剪不断，理还乱，是离愁")
             && diagnosticsCard != nullptr && diagnosticsCard->property("visible").toBool()
             && diagnosticsCard->property("width").toReal() > 0.0 && buildInfo != nullptr
             && buildInfo->property("visible").toBool()

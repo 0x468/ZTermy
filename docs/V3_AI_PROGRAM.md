@@ -7,13 +7,12 @@ Status: approved product program for `0.3.x`; implementation not started
 V3 focuses on native AI assistance and terminal agency. Cross-platform work,
 cloud collaboration, serial support, and a general remote IDE remain separate
 future decisions. All `0.3.z` releases share one owner-selected codename. The
-provisional `0.3.x` identity is:
+accepted `0.3.x` identity is:
 
 - codename: **糸**;
 - verse: **「剪不断，理还乱，是离愁」**.
 
-The owner confirms the final typography and presentation before the first
-`0.3.0` release candidate.
+This identity remains unchanged for every `0.3.z` patch release.
 
 The central V3 product is not a chat box attached to a terminal. It is a
 provider-independent, auditable AI runtime built on semantic terminal state:
@@ -249,5 +248,5 @@ The owner approved these defaults on 2026-08-11:
 - direct visible Run remains exact authorization and receives no duplicate
   warning.
 
-The remaining presentation decision is final typography/layout of the
-provisional `糸` codename and verse before the first `0.3.0` release candidate.
+The release identity card uses the accepted `糸` codename and verse and remains
+part of the real-window layout smoke for every `0.3.z` release candidate.

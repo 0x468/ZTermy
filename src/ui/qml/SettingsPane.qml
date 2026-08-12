@@ -671,9 +671,9 @@ Rectangle {
                 Layout.fillWidth: true
                 visible: pane.currentCategory === "application"
                 compact: pane.compactLayout
-                codename: "此"
+                codename: "糸"
                 version: Qt.application.version
-                verse: "天长地久有时尽，此恨绵绵无绝期。"
+                verse: "剪不断，理还乱，是离愁"
             }
 
             SectionCard {
