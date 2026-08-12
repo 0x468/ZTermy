@@ -1,8 +1,8 @@
 # V3 AI acceptance plan
 
-Status: automated `0.3.0` release-candidate gates and two-hour AI/MCP soak
-executed; owner/provider, real-host, installer-interaction, and eight-hour
-terminal checks pending
+Status: automated `0.3.0` release-candidate gates, two-hour AI/MCP soak, and
+eight-hour terminal soak executed; owner/provider, real-host, and
+installer-interaction checks pending
 
 ## Evidence rule
 
@@ -166,6 +166,9 @@ CMake 4.4.0, Ninja 1.13.1, PowerShell 7.6.4, and clang-tidy 22.1.6.
 - the formal static Release AI/MCP concurrency gate completed 179 full
   iterations in 7207.7 seconds with zero failures. Its content-free report
   covers the nine approved runtime and lifecycle contracts;
+- the formal static Release AI-idle terminal gate completed 28800.1 seconds
+  with zero failures. Its content-free report covers the sustained local
+  terminal interaction and latency-growth contract;
 - WiX generated and contract-validated the per-user MSI. ICE emitted only the
   retained and reviewed ICE61, ICE69, and ICE91 warnings; decompilation and the
   LocalAppData, icon, shortcut, upgrade, and uninstall-folder contracts passed;
@@ -174,9 +177,9 @@ CMake 4.4.0, Ninja 1.13.1, PowerShell 7.6.4, and clang-tidy 22.1.6.
   `portable.flag` was present, and its packaged executable passed the lifecycle
   smoke.
 
-These results close the automated implementation gates. They do not substitute
-for the unchecked live-provider, real-host, MSI interaction, previous-Windows-
-build, long-duration, or owner UX checks below.
+These results close the automated implementation and duration gates. They do
+not substitute for the unchecked live-provider, real-host, MSI interaction,
+previous-Windows-build, or owner UX checks below.
 
 ### MCP manual release-candidate check
 
@@ -220,8 +223,9 @@ iterations in 120.296 seconds and static Release completed four developer gate
 iterations in 158.877 seconds, both with zero failures. The formal static
 Release run then completed 179 full iterations in 7207.7 seconds with zero
 failures, satisfying the two-hour mixed AI/MCP concurrency requirement. The
-eight-hour terminal requirement remains separately unclaimed until its report
-exists and passes the release-candidate verifier.
+formal AI-idle terminal run completed 28800.1 seconds with zero failures,
+satisfying the eight-hour terminal requirement. Both content-free reports pass
+the unified release-candidate verifier.
 
 ## Evaluation corpus
 

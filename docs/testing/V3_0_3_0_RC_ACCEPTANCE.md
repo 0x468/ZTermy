@@ -60,11 +60,16 @@ The following gates completed with exit code zero:
     owner-approved host identity, public fingerprint, username, and private-key
     path; no password, passphrase, key content, or terminal command entered the
     command line or report.
+11. The formal AI-idle local-terminal stability gate completed 28800.148
+    seconds with zero failures. The content-free report spans 2026-08-12
+    15:45:37+08:00 through 23:45:38+08:00, records the static Release build
+    directory, and passes the unified release-candidate evidence verifier.
 
-The static soak report is generated at
-`build/msvc-static-release/ai-concurrency-soak.json`. It contains test names,
-timings, iteration counts, and failures only; it contains no terminal or AI
-content.
+The formal soak reports are generated at
+`build/msvc-static-release/ai-concurrency-soak-2h.json` and
+`build/msvc-static-release/terminal-stability-soak-8h.json`. They contain test
+names, timings, iteration counts or requested duration, and failures only; they
+contain no terminal or AI content.
 
 ## Release handoff
 
@@ -213,8 +218,8 @@ Expected:
 
 ## Environment-dependent release gates
 
-The two-hour AI/MCP command below completed successfully. The eight-hour
-terminal command remains in progress and unclaimed until its report exists:
+Both duration commands below completed successfully, and their reports pass the
+unified release-candidate evidence verifier:
 
 ```powershell
 pwsh -NoProfile -File .\scripts\run_ai_concurrency_soak.ps1 `
