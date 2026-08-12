@@ -79,6 +79,7 @@ private:
     std::optional<AiProviderError> m_pendingError;
     std::vector<AiToolCall> m_pendingToolCalls;
     std::string m_currentReasoning;
+    std::string m_currentReasoningSignature;
     std::optional<AiToolExchange> m_activeToolExchange;
     std::function<void()> m_pendingToolCancellation;
     std::string m_responseId;

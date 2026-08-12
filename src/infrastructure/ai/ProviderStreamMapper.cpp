@@ -383,6 +383,12 @@ std::expected<std::vector<AiStreamEvent>, AiProviderError> AnthropicStreamMapper
                                            .responseId = m_responseId,
                                            .delta = utf8(delta.value("thinking").toString())});
         }
+        else if (deltaType == QStringLiteral("signature_delta"))
+        {
+            events.push_back(AiStreamEvent{.type = AiStreamEventType::reasoningSignatureDelta,
+                                           .responseId = m_responseId,
+                                           .delta = utf8(delta.value("signature").toString())});
+        }
         else if (deltaType == QStringLiteral("input_json_delta"))
         {
             const auto tool = m_toolsByIndex.find(index);

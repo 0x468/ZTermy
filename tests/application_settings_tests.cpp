@@ -88,6 +88,7 @@ void ApplicationSettingsTests::savesAndLoadsEveryPreference()
         .aiPermission = ztermy::config::AiPermissionPreference::yolo,
         .aiConversationHistoryEnabled = true,
         .aiDebugTraceEnabled = true,
+        .aiReasoning = ztermy::config::AiReasoningPreference::maximum,
     };
     const ztermy::config::ApplicationSettingsStore store(directory.filePath(QStringLiteral("settings.json")));
 
@@ -155,7 +156,7 @@ void ApplicationSettingsTests::migratesLegacyWindowOpacityAndNoneBackdrop()
     QFile saved(path);
     QVERIFY(saved.open(QIODevice::ReadOnly));
     const QByteArray persisted = saved.readAll();
-    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 15")));
+    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 16")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdropOpacity\": 0.75")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdrop\": \"transparent\"")));
     QVERIFY(!persisted.contains(QByteArrayLiteral("windowOpacity")));
@@ -417,7 +418,7 @@ void ApplicationSettingsTests::rejectsMalformedUnsupportedAndIncompleteDocuments
     QVERIFY(!malformed);
     QCOMPARE(malformed.error(), ztermy::config::ApplicationSettingsStoreError::invalidFormat);
 
-    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":16})")));
+    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":17})")));
     const auto unsupported = store.load();
     QVERIFY(!unsupported);
     QCOMPARE(unsupported.error(), ztermy::config::ApplicationSettingsStoreError::unsupportedVersion);

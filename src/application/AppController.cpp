@@ -214,6 +214,87 @@ private:
     return ztermy::ai::AiProviderKind::openAiResponses;
 }
 
+[[nodiscard]] ztermy::ai::AiProviderFlavor
+aiProviderFlavor(const ztermy::config::AiProviderPreference provider) noexcept
+{
+    using Flavor = ztermy::ai::AiProviderFlavor;
+    switch (provider)
+    {
+        case ztermy::config::AiProviderPreference::openAiResponses:
+            return Flavor::openAi;
+        case ztermy::config::AiProviderPreference::anthropic:
+            return Flavor::anthropic;
+        case ztermy::config::AiProviderPreference::deepSeek:
+            return Flavor::deepSeek;
+        case ztermy::config::AiProviderPreference::kimi:
+            return Flavor::kimi;
+        case ztermy::config::AiProviderPreference::zai:
+            return Flavor::zai;
+        case ztermy::config::AiProviderPreference::ollama:
+            return Flavor::ollama;
+        case ztermy::config::AiProviderPreference::openAiCompatible:
+            return Flavor::compatible;
+    }
+    return Flavor::openAi;
+}
+
+[[nodiscard]] ztermy::ai::AiReasoningEffort
+aiReasoningEffort(const ztermy::config::AiReasoningPreference preference) noexcept
+{
+    using Effort = ztermy::ai::AiReasoningEffort;
+    switch (preference)
+    {
+        case ztermy::config::AiReasoningPreference::automatic:
+            return Effort::automatic;
+        case ztermy::config::AiReasoningPreference::disabled:
+            return Effort::disabled;
+        case ztermy::config::AiReasoningPreference::low:
+            return Effort::low;
+        case ztermy::config::AiReasoningPreference::medium:
+            return Effort::medium;
+        case ztermy::config::AiReasoningPreference::high:
+            return Effort::high;
+        case ztermy::config::AiReasoningPreference::maximum:
+            return Effort::maximum;
+    }
+    return Effort::automatic;
+}
+
+[[nodiscard]] QStringList supportedAiReasoningTokens(const ztermy::config::AiProviderPreference provider,
+                                                     const QString &model)
+{
+    switch (provider)
+    {
+        case ztermy::config::AiProviderPreference::openAiResponses:
+        case ztermy::config::AiProviderPreference::anthropic:
+            return {QStringLiteral("auto"), QStringLiteral("low"), QStringLiteral("medium"), QStringLiteral("high"),
+                    QStringLiteral("max")};
+        case ztermy::config::AiProviderPreference::deepSeek:
+            return {QStringLiteral("auto"), QStringLiteral("off"), QStringLiteral("low"), QStringLiteral("high"),
+                    QStringLiteral("max")};
+        case ztermy::config::AiProviderPreference::kimi:
+        {
+            const QString normalizedModel = model.trimmed().toLower();
+            if (normalizedModel.startsWith(QStringLiteral("kimi-k3")))
+            {
+                return {QStringLiteral("auto"), QStringLiteral("low"), QStringLiteral("high"), QStringLiteral("max")};
+            }
+            if (normalizedModel.startsWith(QStringLiteral("kimi-k2.5"))
+                || normalizedModel.startsWith(QStringLiteral("kimi-k2.6")))
+            {
+                return {QStringLiteral("auto"), QStringLiteral("off")};
+            }
+            return {QStringLiteral("auto")};
+        }
+        case ztermy::config::AiProviderPreference::zai:
+            return {QStringLiteral("auto"), QStringLiteral("off")};
+        case ztermy::config::AiProviderPreference::ollama:
+        case ztermy::config::AiProviderPreference::openAiCompatible:
+            return {QStringLiteral("auto")};
+    }
+    return {QStringLiteral("auto")};
+}
+
 [[nodiscard]] QString aiCredentialReference(const ztermy::config::AiProviderPreference provider)
 {
     return QStringLiteral("ai-") + ztermy::config::aiProviderPreferenceToken(provider);
@@ -2965,6 +3046,11 @@ QString AppController::aiProviderPreference() const
     return config::aiProviderPreferenceToken(m_settings.aiProvider);
 }
 
+QString AppController::aiReasoningPreference() const
+{
+    return config::aiReasoningPreferenceToken(m_settings.aiReasoning);
+}
+
 QString AppController::aiBaseUrl() const
 {
     return m_settings.aiBaseUrl;
@@ -3052,18 +3138,6 @@ QString AppController::activeAiError() const
 {
     const TerminalTab *tab = activeTab();
     return tab == nullptr ? QString{} : tab->aiError;
-}
-
-QString AppController::activeAiControlOwner() const
-{
-    const TerminalTab *tab = activeTab();
-    if (tab == nullptr || tab->aiConversationId.isEmpty() || (!tab->ssh && !tab->local))
-    {
-        return QStringLiteral("unavailable");
-    }
-    const ai::AiSessionTarget target{.sessionId = utf8String(tab->id), .sessionGeneration = tab->reconnectGeneration};
-    return m_aiActionToolDispatcher.userHasControl(target, utf8String(tab->aiConversationId)) ? QStringLiteral("user")
-                                                                                              : QStringLiteral("agent");
 }
 
 QString AppController::activeAiContextPreview() const
@@ -3211,10 +3285,6 @@ QVariantMap AppController::activeAiToolApproval() const
         case ai::AiTerminalActionKind::interruptCommand:
             actionText = tr("Send Ctrl+C to tracked command %1").arg(utf8QString(action.commandId));
             actionKind = QStringLiteral("interrupt_command");
-            break;
-        case ai::AiTerminalActionKind::transferToUser:
-            actionText = tr("Return terminal control to the user");
-            actionKind = QStringLiteral("transfer_control");
             break;
         case ai::AiTerminalActionKind::saveRunbook:
         {
@@ -7469,6 +7539,8 @@ bool AppController::saveApplicationSettings(const QString &theme, const qreal ba
         .aiAutomaticContext = m_settings.aiAutomaticContext,
         .aiPermission = m_settings.aiPermission,
         .aiConversationHistoryEnabled = m_settings.aiConversationHistoryEnabled,
+        .aiDebugTraceEnabled = m_settings.aiDebugTraceEnabled,
+        .aiReasoning = m_settings.aiReasoning,
     });
 }
 
@@ -7494,11 +7566,18 @@ bool AppController::saveAiProviderSettings(const QString &provider, const QStrin
 
 bool AppController::saveAiProviderConfiguration(const QString &provider, const QString &baseUrl, const QString &model,
                                                 const bool automaticContext, const QString &permissionMode,
-                                                const QString &apiKey, const bool debugTraceEnabled)
+                                                const QString &apiKey, const bool debugTraceEnabled,
+                                                const QString &reasoningPreference)
 {
     const auto parsedProvider = config::parseAiProviderPreference(provider);
     const auto parsedPermission = config::parseAiPermissionPreference(permissionMode);
-    if (!parsedProvider || !parsedPermission)
+    const auto parsedReasoning = config::parseAiReasoningPreference(reasoningPreference);
+    if (!parsedProvider || !parsedPermission || !parsedReasoning)
+    {
+        return false;
+    }
+    const QStringList supportedReasoning = supportedAiReasoningTokens(*parsedProvider, model);
+    if (!supportedReasoning.contains(config::aiReasoningPreferenceToken(*parsedReasoning)))
     {
         return false;
     }
@@ -7510,6 +7589,7 @@ bool AppController::saveAiProviderConfiguration(const QString &provider, const Q
     candidate.aiAutomaticContext = automaticContext;
     candidate.aiPermission = *parsedPermission;
     candidate.aiDebugTraceEnabled = debugTraceEnabled;
+    candidate.aiReasoning = *parsedReasoning;
     if (*parsedProvider != m_settings.aiProvider || !apiKey.isEmpty())
     {
         candidate.aiCredentialReference = aiCredentialReference(*parsedProvider);
@@ -7521,6 +7601,50 @@ bool AppController::saveAiProviderConfiguration(const QString &provider, const Q
     return apiKey.isEmpty() || saveAiApiKey(apiKey);
 }
 
+QVariantMap AppController::aiReasoningCapabilities(const QString &provider, const QString &model) const
+{
+    const auto parsedProvider = config::parseAiProviderPreference(provider);
+    const QStringList tokens =
+        parsedProvider ? supportedAiReasoningTokens(*parsedProvider, model) : QStringList{QStringLiteral("auto")};
+    QStringList labels;
+    labels.reserve(tokens.size());
+    for (const QString &token : tokens)
+    {
+        if (token == QStringLiteral("off"))
+        {
+            labels.push_back(tr("Off"));
+        }
+        else if (token == QStringLiteral("low"))
+        {
+            labels.push_back(tr("Low"));
+        }
+        else if (token == QStringLiteral("medium"))
+        {
+            labels.push_back(tr("Medium"));
+        }
+        else if (token == QStringLiteral("high"))
+        {
+            labels.push_back(tr("High"));
+        }
+        else if (token == QStringLiteral("max"))
+        {
+            labels.push_back(tr("Maximum"));
+        }
+        else
+        {
+            labels.push_back(tr("Automatic"));
+        }
+    }
+    return {{QStringLiteral("tokens"), tokens},
+            {QStringLiteral("labels"), labels},
+            {QStringLiteral("configurable"), tokens.size() > 1},
+            {QStringLiteral("description"),
+             tokens.size() > 1
+                 ? tr("Uses this provider's documented reasoning controls. Unsupported levels are not shown.")
+                 : tr("This provider or model does not expose a documented reasoning control; ztermy leaves it "
+                      "unchanged.")}};
+}
+
 QString AppController::aiProviderEndpointPreview(const QString &provider, const QString &baseUrl) const
 {
     const auto parsedProvider = config::parseAiProviderPreference(provider);
@@ -7529,6 +7653,7 @@ QString AppController::aiProviderEndpointPreview(const QString &provider, const 
         return tr("Invalid API address");
     }
     const ai::AiProviderConfiguration configuration{.kind = aiProviderKind(*parsedProvider),
+                                                    .flavor = aiProviderFlavor(*parsedProvider),
                                                     .baseUrl = utf8String(baseUrl)};
     const auto endpoint = ai::resolveProviderEndpoint(configuration, ai::ProviderEndpointPurpose::generation);
     return endpoint.has_value() ? endpoint->toString(QUrl::FullyEncoded) : tr("Invalid API address");
@@ -7569,6 +7694,7 @@ void AppController::refreshAiModels(const QString &provider, const QString &base
         }
     }
     const ai::AiProviderConfiguration configuration{.kind = aiProviderKind(*parsedProvider),
+                                                    .flavor = aiProviderFlavor(*parsedProvider),
                                                     .baseUrl = utf8String(baseUrl)};
     auto request = ai::ProviderModelCatalog::prepareRequest(configuration, std::move(secret));
     if (!request.has_value())
@@ -8126,49 +8252,6 @@ void AppController::completeAiMcpTool(const QString &tabId, const std::uint64_t 
     }
 }
 
-bool AppController::takeAiControl()
-{
-    TerminalTab *tab = activeTab();
-    return tab != nullptr && handoffAiControlToUser(*tab, true);
-}
-
-bool AppController::handoffAiControlToUser(TerminalTab &tab, const bool cancelTurn)
-{
-    if (tab.aiConversationId.isEmpty() || (!tab.ssh && !tab.local))
-    {
-        return false;
-    }
-    const ai::AiSessionTarget target{.sessionId = utf8String(tab.id), .sessionGeneration = tab.reconnectGeneration};
-    if (!m_aiActionToolDispatcher.handoffToUser(target, utf8String(tab.aiConversationId)))
-    {
-        return false;
-    }
-    if (cancelTurn && tab.aiTurnRunner && tab.aiTurnRunner->active())
-    {
-        tab.aiState = QStringLiteral("cancelling");
-        emit aiConversationChanged();
-        static_cast<void>(tab.aiTurnRunner->cancel());
-    }
-    emit aiConversationChanged();
-    return true;
-}
-
-bool AppController::resumeAiAgentControl()
-{
-    TerminalTab *tab = activeTab();
-    if (tab == nullptr || tab->aiConversationId.isEmpty() || (!tab->ssh && !tab->local))
-    {
-        return false;
-    }
-    const ai::AiSessionTarget target{.sessionId = utf8String(tab->id), .sessionGeneration = tab->reconnectGeneration};
-    if (!m_aiActionToolDispatcher.resumeAgent(target, utf8String(tab->aiConversationId)))
-    {
-        return false;
-    }
-    emit aiConversationChanged();
-    return true;
-}
-
 bool AppController::retryAiMessage()
 {
     TerminalTab *tab = activeTab();
@@ -8551,6 +8634,23 @@ void AppController::acceptAiSelectedText(TerminalTab &tab, const QString &text)
 void AppController::recordAiActivity(const TerminalTab &tab, const ai::AiToolCall &call, const QString &state,
                                      const QString &resultCode, const bool sideEffecting, const bool highRisk)
 {
+    QString summary;
+    if (call.name == "run_command")
+    {
+        QJsonParseError parseError;
+        const QJsonDocument arguments =
+            QJsonDocument::fromJson(QByteArray::fromStdString(call.argumentsJson), &parseError);
+        if (parseError.error == QJsonParseError::NoError && arguments.isObject())
+        {
+            summary = arguments.object().value(QStringLiteral("command")).toString().left(1024);
+        }
+    }
+    if (tab.aiConversation && tab.aiAssistantMessageId != 0)
+    {
+        static_cast<void>(tab.aiConversation->upsertAssistantToolActivity(
+            tab.aiAssistantMessageId, utf8QString(call.id), utf8QString(call.name), summary, state, resultCode,
+            sideEffecting, highRisk));
+    }
     m_aiActivity.record({.conversationId = tab.aiConversationId,
                          .toolCallId = utf8QString(call.id),
                          .toolName = utf8QString(call.name),
@@ -8575,15 +8675,6 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
         tab.aiError = tr("Configure an AI provider URL and model before starting a conversation.");
         emit aiConversationChanged();
         return false;
-    }
-
-    if (!tab.aiConversationId.isEmpty() && (tab.ssh || tab.local))
-    {
-        const ai::AiSessionTarget target{.sessionId = utf8String(tab.id), .sessionGeneration = tab.reconnectGeneration};
-        if (m_aiActionToolDispatcher.userHasControl(target, utf8String(tab.aiConversationId)))
-        {
-            static_cast<void>(m_aiActionToolDispatcher.resumeAgent(target, utf8String(tab.aiConversationId)));
-        }
     }
 
     const auto context = buildAiContext(tab, preferLastFailure);
@@ -8613,6 +8704,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
     const auto assistantMessageId = tab.aiAssistantMessageId;
     const auto provider = m_settings.aiProvider;
     const auto configuration = ai::AiProviderConfiguration{.kind = aiProviderKind(provider),
+                                                           .flavor = aiProviderFlavor(provider),
                                                            .baseUrl = utf8String(m_settings.aiBaseUrl),
                                                            .endpointPath = utf8String(m_settings.aiEndpointPath),
                                                            .model = utf8String(m_settings.aiModel)};
@@ -8649,7 +8741,8 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
         std::make_shared<const std::vector<ai::AiTerminalReadSnapshot>>(aiReadSnapshots(tab));
     ai::AiGenerationRequest generation{.instructions = std::move(instructions),
                                        .messages = std::move(messages),
-                                       .tools = std::move(toolDefinitions)};
+                                       .tools = std::move(toolDefinitions),
+                                       .reasoningEffort = aiReasoningEffort(m_settings.aiReasoning)};
     tab.aiTurnBudget = std::make_unique<ai::AiAgentTurnBudget>();
     tab.pendingAiAction.reset();
     tab.pendingAiMcpCall.reset();
@@ -9190,7 +9283,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                     .sideEffecting = true};
             }
             if (call.name == "run_command" || call.name == "interrupt_command" || call.name == "write_to_pty"
-                || call.name == "transfer_control" || call.name == "save_runbook" || call.name == "queue_sftp_download"
+                || call.name == "save_runbook" || call.name == "queue_sftp_download"
                 || call.name == "queue_sftp_upload")
             {
                 if (target != nullptr)
@@ -9380,9 +9473,7 @@ AppController::handleAiTerminalFrameTool(TerminalTab &owner, const QString &owne
     }
     const ai::AiTerminalFrameDelta initial = session->aiFrameTracker->snapshot(afterRevision);
     const std::string conversationId = utf8String(owner.aiConversationId);
-    const std::string_view controlOwner = m_aiActionToolDispatcher.userHasControl(requestTarget, conversationId)
-                                              ? std::string_view{"user"}
-                                          : m_aiActionToolDispatcher.agentHasControl(requestTarget, conversationId)
+    const std::string_view controlOwner = m_aiActionToolDispatcher.agentHasControl(requestTarget, conversationId)
                                               ? std::string_view{"current_agent"}
                                               : std::string_view{"unclaimed_or_other_agent"};
     const auto capability = ai::AiTerminalCapabilityAdapter::describe(allowedTarget->shell, allowedTarget->capability,
@@ -9451,9 +9542,7 @@ AppController::handleAiTerminalFrameTool(TerminalTab &owner, const QString &owne
                 const ai::AiTerminalFrameDelta frame = session->aiFrameTracker->snapshot(requestGuard->afterRevision);
                 const std::string conversationId = utf8String(owner->aiConversationId);
                 const std::string_view controlOwner =
-                    m_aiActionToolDispatcher.userHasControl(requestGuard->target, conversationId)
-                        ? std::string_view{"user"}
-                    : m_aiActionToolDispatcher.agentHasControl(requestGuard->target, conversationId)
+                    m_aiActionToolDispatcher.agentHasControl(requestGuard->target, conversationId)
                         ? std::string_view{"current_agent"}
                         : std::string_view{"unclaimed_or_other_agent"};
                 const auto capability =
@@ -9675,8 +9764,6 @@ std::string AppController::executeAiTerminalAction(TerminalTab &tab, const ai::A
             return executeAiWriteToPty(tab, action);
         case ai::AiTerminalActionKind::interruptCommand:
             return executeAiInterruptCommand(tab, action);
-        case ai::AiTerminalActionKind::transferToUser:
-            return executeAiTransferControl(action);
         case ai::AiTerminalActionKind::saveRunbook:
             return executeAiSaveRunbook(action);
         case ai::AiTerminalActionKind::enqueueSftpDownload:
@@ -9792,18 +9879,6 @@ std::string AppController::executeAiSftpTransfer(TerminalTab &tab, const ai::AiT
                     {QStringLiteral("status"), QStringLiteral("queued")},
                     {QStringLiteral("transfer_id"), utf8QString(taskId)},
                     {QStringLiteral("direction"), upload ? QStringLiteral("upload") : QStringLiteral("download")}});
-}
-
-std::string AppController::executeAiTransferControl(const ai::AiTerminalAction &action)
-{
-    emit aiConversationChanged();
-    return compactJson(
-        QJsonObject{{QStringLiteral("ok"), true},
-                    {QStringLiteral("status"), QStringLiteral("transferred")},
-                    {QStringLiteral("control_owner"), QStringLiteral("user")},
-                    {QStringLiteral("session_id"), utf8QString(action.target.sessionId)},
-                    {QStringLiteral("session_generation"), static_cast<qint64>(action.target.sessionGeneration)},
-                    {QStringLiteral("process_interrupted"), false}});
 }
 
 std::string AppController::executeAiWriteToPty(TerminalTab &tab, const ai::AiTerminalAction &action)
@@ -11371,12 +11446,6 @@ void AppController::queueInput(const QByteArray &bytes)
     {
         return;
     }
-    const ai::AiSessionTarget target{.sessionId = utf8String(tab->id), .sessionGeneration = tab->reconnectGeneration};
-    if (!tab->aiConversationId.isEmpty()
-        && m_aiActionToolDispatcher.agentHasControl(target, utf8String(tab->aiConversationId)))
-    {
-        static_cast<void>(handoffAiControlToUser(*tab, true));
-    }
     observeTerminalInput(*tab, bytes);
     dispatchInput(*tab, bytes);
 }
@@ -11387,12 +11456,6 @@ void AppController::queuePaste(const QByteArray &bytes)
     if (tab == nullptr || bytes.isEmpty())
     {
         return;
-    }
-    const ai::AiSessionTarget target{.sessionId = utf8String(tab->id), .sessionGeneration = tab->reconnectGeneration};
-    if (!tab->aiConversationId.isEmpty()
-        && m_aiActionToolDispatcher.agentHasControl(target, utf8String(tab->aiConversationId)))
-    {
-        static_cast<void>(handoffAiControlToUser(*tab, true));
     }
     observeTerminalInput(*tab, bytes);
     dispatchPaste(*tab, bytes);

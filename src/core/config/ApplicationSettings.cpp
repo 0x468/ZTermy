@@ -30,11 +30,13 @@ constexpr qint64 aiPermissionSchemaVersion = 12;
 constexpr qint64 aiConversationHistorySchemaVersion = 13;
 constexpr qint64 aiDebugTraceSchemaVersion = 14;
 constexpr qint64 aiAgentModeSchemaVersion = 15;
-constexpr qint64 currentSchemaVersion = aiAgentModeSchemaVersion;
+constexpr qint64 aiReasoningSchemaVersion = 16;
+constexpr qint64 currentSchemaVersion = aiReasoningSchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::AiPermissionPreference;
 using ztermy::config::AiProviderPreference;
+using ztermy::config::AiReasoningPreference;
 using ztermy::config::ApplicationSettings;
 using ztermy::config::ApplicationSettingsStoreError;
 using ztermy::config::BackdropPreference;
@@ -226,6 +228,36 @@ template <>
     return std::nullopt;
 }
 
+template <>
+[[nodiscard]] std::optional<AiReasoningPreference> parsePreference(const QString &token)
+{
+    if (token == QStringLiteral("auto"))
+    {
+        return AiReasoningPreference::automatic;
+    }
+    if (token == QStringLiteral("off"))
+    {
+        return AiReasoningPreference::disabled;
+    }
+    if (token == QStringLiteral("low"))
+    {
+        return AiReasoningPreference::low;
+    }
+    if (token == QStringLiteral("medium"))
+    {
+        return AiReasoningPreference::medium;
+    }
+    if (token == QStringLiteral("high"))
+    {
+        return AiReasoningPreference::high;
+    }
+    if (token == QStringLiteral("max"))
+    {
+        return AiReasoningPreference::maximum;
+    }
+    return std::nullopt;
+}
+
 [[nodiscard]] bool validSettings(const ApplicationSettings &settings)
 {
     const QString fontFamily = settings.terminalFontFamily.trimmed();
@@ -274,7 +306,8 @@ template <>
         && version != localizationSchemaVersion && version != fontOptionsSchemaVersion
         && version != workbenchSchemaVersion && version != shortcutSchemaVersion && version != sftpSchemaVersion
         && version != aiProviderSchemaVersion && version != aiPermissionSchemaVersion
-        && version != aiConversationHistorySchemaVersion && version != currentSchemaVersion)
+        && version != aiConversationHistorySchemaVersion && version != aiDebugTraceSchemaVersion
+        && version != aiAgentModeSchemaVersion && version != currentSchemaVersion)
     {
         return std::unexpected(ApplicationSettingsStoreError::unsupportedVersion);
     }
@@ -309,6 +342,7 @@ template <>
     const QJsonValue aiPermissionValue = root.value(QStringLiteral("aiPermission"));
     const QJsonValue aiConversationHistoryEnabledValue = root.value(QStringLiteral("aiConversationHistoryEnabled"));
     const QJsonValue aiDebugTraceEnabledValue = root.value(QStringLiteral("aiDebugTraceEnabled"));
+    const QJsonValue aiReasoningValue = root.value(QStringLiteral("aiReasoning"));
 
     if (!themeValue.isString() || !opacityValue.isDouble() || !backdropValue.isString() || !fontFamilyValue.isString()
         || !fontSizeValue.isDouble() || !cursorValue.isString() || !cursorBlinkValue.isBool()
@@ -363,6 +397,10 @@ template <>
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
+    if (version >= aiReasoningSchemaVersion && !aiReasoningValue.isString())
+    {
+        return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
+    }
     const auto theme = parsePreference<ThemePreference>(themeValue.toString());
     const auto backdrop = parsePreference<BackdropPreference>(backdropValue.toString());
     const auto accent = version >= accentSchemaVersion ? parsePreference<AccentPreference>(accentValue.toString())
@@ -380,9 +418,12 @@ template <>
     const auto aiPermission = version >= aiPermissionSchemaVersion
                                   ? parsePreference<AiPermissionPreference>(aiPermissionValue.toString())
                                   : std::optional{AiPermissionPreference::ask};
+    const auto aiReasoning = version >= aiReasoningSchemaVersion
+                                 ? parsePreference<AiReasoningPreference>(aiReasoningValue.toString())
+                                 : std::optional{AiReasoningPreference::automatic};
     const qint64 fontSize = fontSizeValue.toInteger(-1);
     if (!theme || !backdrop || !accent || !cursor || !credentialStorage || !language || !aiProvider || !aiPermission
-        || fontSizeValue.toDouble() != static_cast<double>(fontSize))
+        || !aiReasoning || fontSizeValue.toDouble() != static_cast<double>(fontSize))
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
@@ -439,6 +480,7 @@ template <>
         .aiConversationHistoryEnabled =
             version >= aiConversationHistorySchemaVersion && aiConversationHistoryEnabledValue.toBool(),
         .aiDebugTraceEnabled = version >= aiDebugTraceSchemaVersion && aiDebugTraceEnabledValue.toBool(),
+        .aiReasoning = *aiReasoning,
     };
     if (!validSettings(settings))
     {
@@ -576,6 +618,7 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
         {QStringLiteral("aiPermission"), aiPermissionPreferenceToken(settings.aiPermission)},
         {QStringLiteral("aiConversationHistoryEnabled"), settings.aiConversationHistoryEnabled},
         {QStringLiteral("aiDebugTraceEnabled"), settings.aiDebugTraceEnabled},
+        {QStringLiteral("aiReasoning"), aiReasoningPreferenceToken(settings.aiReasoning)},
     };
 
     const QByteArray data = QJsonDocument(root).toJson(QJsonDocument::Indented);
@@ -719,6 +762,26 @@ QString aiPermissionPreferenceToken(const AiPermissionPreference preference)
     }
 }
 
+QString aiReasoningPreferenceToken(const AiReasoningPreference preference)
+{
+    switch (preference)
+    {
+        case AiReasoningPreference::disabled:
+            return QStringLiteral("off");
+        case AiReasoningPreference::low:
+            return QStringLiteral("low");
+        case AiReasoningPreference::medium:
+            return QStringLiteral("medium");
+        case AiReasoningPreference::high:
+            return QStringLiteral("high");
+        case AiReasoningPreference::maximum:
+            return QStringLiteral("max");
+        case AiReasoningPreference::automatic:
+        default:
+            return QStringLiteral("auto");
+    }
+}
+
 std::optional<ThemePreference> parseThemePreference(const QString &token)
 {
     return parsePreference<ThemePreference>(token);
@@ -757,6 +820,11 @@ std::optional<AiProviderPreference> parseAiProviderPreference(const QString &tok
 std::optional<AiPermissionPreference> parseAiPermissionPreference(const QString &token)
 {
     return parsePreference<AiPermissionPreference>(token);
+}
+
+std::optional<AiReasoningPreference> parseAiReasoningPreference(const QString &token)
+{
+    return parsePreference<AiReasoningPreference>(token);
 }
 
 } // namespace ztermy::config

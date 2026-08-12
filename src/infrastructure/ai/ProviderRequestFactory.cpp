@@ -41,6 +41,78 @@ namespace
     return resolveProviderEndpoint(configuration, ProviderEndpointPurpose::generation);
 }
 
+[[nodiscard]] QString reasoningEffortToken(const AiReasoningEffort effort, const bool xhighForMaximum = false)
+{
+    switch (effort)
+    {
+        case AiReasoningEffort::low:
+            return QStringLiteral("low");
+        case AiReasoningEffort::medium:
+            return QStringLiteral("medium");
+        case AiReasoningEffort::high:
+            return QStringLiteral("high");
+        case AiReasoningEffort::maximum:
+            return xhighForMaximum ? QStringLiteral("xhigh") : QStringLiteral("max");
+        case AiReasoningEffort::automatic:
+        case AiReasoningEffort::disabled:
+            return {};
+    }
+    return {};
+}
+
+void applyCompatibleReasoning(QJsonObject &body, const AiProviderConfiguration &configuration,
+                              const AiReasoningEffort effort)
+{
+    if (effort == AiReasoningEffort::automatic)
+    {
+        return;
+    }
+    if (configuration.flavor == AiProviderFlavor::deepSeek)
+    {
+        body.insert(
+            QStringLiteral("thinking"),
+            QJsonObject{{QStringLiteral("type"), effort == AiReasoningEffort::disabled ? QStringLiteral("disabled")
+                                                                                       : QStringLiteral("enabled")}});
+        if (effort != AiReasoningEffort::automatic && effort != AiReasoningEffort::disabled)
+        {
+            const auto mapped = effort == AiReasoningEffort::medium ? AiReasoningEffort::high : effort;
+            body.insert(QStringLiteral("reasoning_effort"), reasoningEffortToken(mapped));
+        }
+        return;
+    }
+    if (configuration.flavor == AiProviderFlavor::zai)
+    {
+        body.insert(
+            QStringLiteral("thinking"),
+            QJsonObject{{QStringLiteral("type"), effort == AiReasoningEffort::disabled ? QStringLiteral("disabled")
+                                                                                       : QStringLiteral("enabled")},
+                        {QStringLiteral("clear_thinking"), false}});
+        return;
+    }
+    if (configuration.flavor != AiProviderFlavor::kimi)
+    {
+        return;
+    }
+
+    const QString model = fromUtf8(configuration.model).toLower();
+    if (model.startsWith(QStringLiteral("kimi-k3")))
+    {
+        if (effort != AiReasoningEffort::automatic && effort != AiReasoningEffort::disabled)
+        {
+            const auto mapped = effort == AiReasoningEffort::medium ? AiReasoningEffort::high : effort;
+            body.insert(QStringLiteral("reasoning_effort"), reasoningEffortToken(mapped));
+        }
+    }
+    else if (model.startsWith(QStringLiteral("kimi-k2.5")) || model.startsWith(QStringLiteral("kimi-k2.6")))
+    {
+        body.insert(
+            QStringLiteral("thinking"),
+            QJsonObject{{QStringLiteral("type"), effort == AiReasoningEffort::disabled ? QStringLiteral("disabled")
+                                                                                       : QStringLiteral("enabled")},
+                        {QStringLiteral("keep"), QStringLiteral("all")}});
+    }
+}
+
 [[nodiscard]] QJsonArray messages(const AiGenerationRequest &generation)
 {
     QJsonArray result;
@@ -175,6 +247,20 @@ namespace
     {
         body.insert(QStringLiteral("previous_response_id"), fromUtf8(previousResponseId));
     }
+    QJsonObject reasoning{{QStringLiteral("summary"), QStringLiteral("auto")}};
+    if (generation.reasoningEffort == AiReasoningEffort::disabled)
+    {
+        reasoning.insert(QStringLiteral("effort"), QStringLiteral("none"));
+    }
+    else
+    {
+        const QString effort = reasoningEffortToken(generation.reasoningEffort, true);
+        if (!effort.isEmpty())
+        {
+            reasoning.insert(QStringLiteral("effort"), effort);
+        }
+    }
+    body.insert(QStringLiteral("reasoning"), reasoning);
     return body;
 }
 
@@ -195,6 +281,7 @@ namespace
     {
         body.insert(QStringLiteral("tools"), tools);
     }
+    applyCompatibleReasoning(body, configuration, generation.reasoningEffort);
     return body;
 }
 
@@ -213,6 +300,12 @@ namespace
     for (const auto &exchange : generation.toolHistory)
     {
         QJsonArray uses;
+        if (!exchange.reasoning.empty() && !exchange.reasoningSignature.empty())
+        {
+            uses.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("thinking")},
+                                    {QStringLiteral("thinking"), fromUtf8(exchange.reasoning)},
+                                    {QStringLiteral("signature"), fromUtf8(exchange.reasoningSignature)}});
+        }
         for (const auto &call : exchange.calls)
         {
             QJsonParseError parseError;
@@ -277,6 +370,12 @@ namespace
     if (!tools.isEmpty())
     {
         body.insert(QStringLiteral("tools"), tools);
+    }
+    const QString effort = reasoningEffortToken(generation.reasoningEffort);
+    if (!effort.isEmpty())
+    {
+        body.insert(QStringLiteral("thinking"), QJsonObject{{QStringLiteral("type"), QStringLiteral("adaptive")}});
+        body.insert(QStringLiteral("output_config"), QJsonObject{{QStringLiteral("effort"), effort}});
     }
     return body;
 }

@@ -165,6 +165,7 @@ class AppController final : public QObject
     Q_PROPERTY(bool sftpConfirmDelete READ sftpConfirmDelete NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString languagePreference READ languagePreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString aiProviderPreference READ aiProviderPreference NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(QString aiReasoningPreference READ aiReasoningPreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString aiBaseUrl READ aiBaseUrl NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString aiEndpointPath READ aiEndpointPath NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString aiModel READ aiModel NOTIFY applicationSettingsChanged)
@@ -182,7 +183,6 @@ class AppController final : public QObject
     Q_PROPERTY(QObject *activeAiConversation READ activeAiConversation NOTIFY aiConversationChanged)
     Q_PROPERTY(QString activeAiState READ activeAiState NOTIFY aiConversationChanged)
     Q_PROPERTY(QString activeAiError READ activeAiError NOTIFY aiConversationChanged)
-    Q_PROPERTY(QString activeAiControlOwner READ activeAiControlOwner NOTIFY aiConversationChanged)
     Q_PROPERTY(QString activeAiContextPreview READ activeAiContextPreview NOTIFY aiConversationChanged)
     Q_PROPERTY(QVariantList activeAiContextItems READ activeAiContextItems NOTIFY aiConversationChanged)
     Q_PROPERTY(QVariantMap activeAiToolApproval READ activeAiToolApproval NOTIFY aiConversationChanged)
@@ -301,6 +301,7 @@ public:
     [[nodiscard]] bool sftpConfirmDelete() const noexcept;
     [[nodiscard]] QString languagePreference() const;
     [[nodiscard]] QString aiProviderPreference() const;
+    [[nodiscard]] QString aiReasoningPreference() const;
     [[nodiscard]] QString aiBaseUrl() const;
     [[nodiscard]] QString aiEndpointPath() const;
     [[nodiscard]] QString aiModel() const;
@@ -318,7 +319,6 @@ public:
     [[nodiscard]] QObject *activeAiConversation() const noexcept;
     [[nodiscard]] QString activeAiState() const;
     [[nodiscard]] QString activeAiError() const;
-    [[nodiscard]] QString activeAiControlOwner() const;
     [[nodiscard]] QString activeAiContextPreview() const;
     [[nodiscard]] QVariantList activeAiContextItems() const;
     [[nodiscard]] QVariantMap activeAiToolApproval() const;
@@ -499,7 +499,9 @@ public:
                                             const QString &permissionMode);
     Q_INVOKABLE bool saveAiProviderConfiguration(const QString &provider, const QString &baseUrl, const QString &model,
                                                  bool automaticContext, const QString &permissionMode,
-                                                 const QString &apiKey, bool debugTraceEnabled);
+                                                 const QString &apiKey, bool debugTraceEnabled,
+                                                 const QString &reasoningPreference);
+    [[nodiscard]] Q_INVOKABLE QVariantMap aiReasoningCapabilities(const QString &provider, const QString &model) const;
     Q_INVOKABLE void refreshAiModels(const QString &provider, const QString &baseUrl, const QString &apiKey);
     [[nodiscard]] Q_INVOKABLE QString aiProviderEndpointPreview(const QString &provider, const QString &baseUrl) const;
     Q_INVOKABLE bool saveAiApiKey(const QString &apiKey);
@@ -525,8 +527,6 @@ public:
     Q_INVOKABLE bool updateAiPermissionRule(const QString &id, const QString &matcher, const QString &pattern,
                                             bool enabled);
     Q_INVOKABLE bool deleteAiPermissionRule(const QString &id);
-    Q_INVOKABLE bool takeAiControl();
-    Q_INVOKABLE bool resumeAiAgentControl();
     Q_INVOKABLE bool retryAiMessage();
     Q_INVOKABLE void clearAiConversation();
     Q_INVOKABLE void clearAiActivity();
@@ -783,7 +783,6 @@ private:
     [[nodiscard]] std::string executeAiRunCommand(TerminalTab &tab, const ai::AiTerminalAction &action);
     [[nodiscard]] std::string executeAiWriteToPty(TerminalTab &tab, const ai::AiTerminalAction &action);
     [[nodiscard]] std::string executeAiInterruptCommand(TerminalTab &tab, const ai::AiTerminalAction &action);
-    [[nodiscard]] std::string executeAiTransferControl(const ai::AiTerminalAction &action);
     [[nodiscard]] std::string executeAiSaveRunbook(const ai::AiTerminalAction &action);
     [[nodiscard]] std::string executeAiSftpTransfer(TerminalTab &tab, const ai::AiTerminalAction &action);
     [[nodiscard]] bool approveAiMcpTool(TerminalTab &tab);
@@ -792,7 +791,6 @@ private:
                            const ai::AiToolCall &call, std::expected<std::string, QString> result);
     void recordAiActivity(const TerminalTab &tab, const ai::AiToolCall &call, const QString &state,
                           const QString &resultCode, bool sideEffecting, bool highRisk = false);
-    [[nodiscard]] bool handoffAiControlToUser(TerminalTab &tab, bool cancelTurn);
     void observeScriptOutput(const QString &tabId, const QByteArray &bytes);
     void dispatchScriptCommands(TerminalTab &tab, const std::vector<std::string> &commands);
     void initializeScriptExecutionTimer();

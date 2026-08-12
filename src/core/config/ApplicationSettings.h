@@ -75,6 +75,16 @@ enum class AiPermissionPreference : std::uint8_t
     yolo,
 };
 
+enum class AiReasoningPreference : std::uint8_t
+{
+    automatic,
+    disabled,
+    low,
+    medium,
+    high,
+    maximum,
+};
+
 struct ApplicationSettings final
 {
     ThemePreference theme = ThemePreference::dark;
@@ -106,6 +116,7 @@ struct ApplicationSettings final
     AiPermissionPreference aiPermission = AiPermissionPreference::ask;
     bool aiConversationHistoryEnabled = false;
     bool aiDebugTraceEnabled = false;
+    AiReasoningPreference aiReasoning = AiReasoningPreference::automatic;
 
     [[nodiscard]] friend bool operator==(const ApplicationSettings &, const ApplicationSettings &) = default;
 };
@@ -141,6 +152,7 @@ private:
 [[nodiscard]] QString languagePreferenceToken(LanguagePreference preference);
 [[nodiscard]] QString aiProviderPreferenceToken(AiProviderPreference preference);
 [[nodiscard]] QString aiPermissionPreferenceToken(AiPermissionPreference preference);
+[[nodiscard]] QString aiReasoningPreferenceToken(AiReasoningPreference preference);
 [[nodiscard]] std::optional<ThemePreference> parseThemePreference(const QString &token);
 [[nodiscard]] std::optional<BackdropPreference> parseBackdropPreference(const QString &token);
 [[nodiscard]] std::optional<AccentPreference> parseAccentPreference(const QString &token);
@@ -149,5 +161,6 @@ private:
 [[nodiscard]] std::optional<LanguagePreference> parseLanguagePreference(const QString &token);
 [[nodiscard]] std::optional<AiProviderPreference> parseAiProviderPreference(const QString &token);
 [[nodiscard]] std::optional<AiPermissionPreference> parseAiPermissionPreference(const QString &token);
+[[nodiscard]] std::optional<AiReasoningPreference> parseAiReasoningPreference(const QString &token);
 
 } // namespace ztermy::config

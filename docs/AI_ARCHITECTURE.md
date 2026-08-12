@@ -255,7 +255,6 @@ the domain or QML layers.
 | `wait_command` | Read/wait | 0.3.1 | lifecycle subscription |
 | `write_to_pty` | Write | 0.3.1 | session input queue |
 | `interrupt_command` | Write | 0.3.1 | session interrupt path |
-| `transfer_control` | State | 0.3.1 | agent/user control owner |
 | `list_sftp` / `read_sftp_file` | Read | 0.3.2 | SFTP session service |
 | SFTP mutations | Write | 0.3.2 | transfer/batch job graph |
 | telemetry/forwarding/scripts/notes | Mixed | 0.3.2 | existing bounded services |
@@ -284,13 +283,13 @@ language description.
   through the owned ConPTY/SSH PTY input path. It is not a kill guarantee.
   Closing a session is a separate destructive capability. SSH disconnect or an
   untracked remote process may produce `outcome_unknown`.
-- At most one conversation owns write/control capability for a terminal session.
-  Other conversations may observe and wait. Ownership transfer is explicit;
-  cancelling an observer never interrupts another owner's command.
-- User control is sticky for the exact session generation. `transfer_control`
-  and direct terminal input hand control to the user; later agent writes return
-  `user_has_control` until the user explicitly resumes the same conversation.
-  Handoff cancels model orchestration, not the terminal process.
+- At most one Agent conversation owns the internal write lease for a terminal
+  session. Other Agent conversations may observe and wait. Cancelling an
+  observer never interrupts another Agent's command.
+- Direct user input is always accepted through the same ordered PTY input queue.
+  It neither requires a Take control action nor creates a sticky user-owned
+  state. Agent-to-Agent serialization remains internal and is surfaced only as
+  a concrete busy/conflict result when two autonomous writers contend.
 
 ADR 0056 owns dispatch idempotency, risk overlay, ownership, budgets, and these
 tool lifecycle semantics.
@@ -377,5 +376,5 @@ focused ADRs before committing to:
 
 - encrypted conversation-store format and migration;
 - saved-host automatic grant storage, precedence, expiry, and revocation;
-- interactive-frame delta and control-handoff protocol;
+- interactive-frame delta and Agent lease/contention protocol;
 - MCP transport and tool-namespace policy.

@@ -80,6 +80,8 @@ QVariant AiConversationModel::data(const QModelIndex &index, const int role) con
             return message.commandSuggestion;
         case HasCommandSuggestionRole:
             return !message.commandSuggestion.isEmpty();
+        case ToolActivitiesRole:
+            return message.toolActivities;
         default:
             return {};
     }
@@ -107,7 +109,8 @@ QHash<int, QByteArray> AiConversationModel::roleNames() const
             {CostCatalogDateRole, "costCatalogDate"},
             {LongContextRatesRole, "longContextRates"},
             {CommandSuggestionRole, "commandSuggestion"},
-            {HasCommandSuggestionRole, "hasCommandSuggestion"}};
+            {HasCommandSuggestionRole, "hasCommandSuggestion"},
+            {ToolActivitiesRole, "toolActivities"}};
 }
 
 bool AiConversationModel::streaming() const noexcept
@@ -254,6 +257,52 @@ bool AiConversationModel::appendAssistantReasoningDelta(const std::uint64_t mess
     const auto row = indexOf(messageId);
     emit dataChanged(index(row), index(row), {ReasoningRole, TruncatedRole});
     return addedBytes > 0 || truncated;
+}
+
+bool AiConversationModel::upsertAssistantToolActivity(const std::uint64_t messageId, QString toolCallId,
+                                                      QString toolName, QString summary, QString state,
+                                                      QString resultCode, const bool sideEffecting, const bool highRisk)
+{
+    auto *message = find(messageId);
+    if (message == nullptr || message->role != AiMessageRole::assistant || toolCallId.isEmpty() || toolName.isEmpty())
+    {
+        return false;
+    }
+    bool truncated = false;
+    toolCallId = boundedUtf8(std::move(toolCallId), 256, truncated);
+    toolName = boundedUtf8(std::move(toolName), 128, truncated);
+    summary = boundedUtf8(std::move(summary), 4096, truncated);
+    state = boundedUtf8(std::move(state), 64, truncated);
+    resultCode = boundedUtf8(std::move(resultCode), 128, truncated);
+    QVariantMap activity{{QStringLiteral("id"), toolCallId},         {QStringLiteral("name"), toolName},
+                         {QStringLiteral("summary"), summary},       {QStringLiteral("state"), state},
+                         {QStringLiteral("resultCode"), resultCode}, {QStringLiteral("sideEffecting"), sideEffecting},
+                         {QStringLiteral("highRisk"), highRisk}};
+    qsizetype existingIndex = -1;
+    for (qsizetype index = 0; index < message->toolActivities.size(); ++index)
+    {
+        if (message->toolActivities.at(index).toMap().value(QStringLiteral("id")).toString() == toolCallId)
+        {
+            existingIndex = index;
+            break;
+        }
+    }
+    if (existingIndex >= 0)
+    {
+        message->toolActivities[existingIndex] = activity;
+    }
+    else
+    {
+        constexpr qsizetype maximumToolActivities = 32;
+        if (message->toolActivities.size() >= maximumToolActivities)
+        {
+            message->toolActivities.removeFirst();
+        }
+        message->toolActivities.push_back(activity);
+    }
+    const auto row = indexOf(messageId);
+    emit dataChanged(index(row), index(row), {ToolActivitiesRole});
+    return true;
 }
 
 bool AiConversationModel::completeAssistantMessage(const std::uint64_t messageId, std::optional<AiTokenUsage> usage)

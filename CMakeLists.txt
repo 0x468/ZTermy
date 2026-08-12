@@ -1007,6 +1007,10 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS AiAssistantPane.qml
 )
 set_source_files_properties(
+    src/ui/qml/MarkdownMessage.qml
+    PROPERTIES QT_RESOURCE_ALIAS MarkdownMessage.qml
+)
+set_source_files_properties(
     src/ui/qml/NotesPane.qml
     PROPERTIES QT_RESOURCE_ALIAS NotesPane.qml
 )
@@ -1055,6 +1059,7 @@ qt_add_qml_module(ztermy
     QML_FILES
         src/ui/qml/ActionButton.qml
         src/ui/qml/AiAssistantPane.qml
+        src/ui/qml/MarkdownMessage.qml
         src/ui/qml/AppCheckBox.qml
         src/ui/qml/AppComboBox.qml
         src/ui/qml/AppIcon.qml

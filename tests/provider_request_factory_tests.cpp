@@ -16,7 +16,9 @@ using ztermy::ai::AiGenerationRequest;
 using ztermy::ai::AiMessageRole;
 using ztermy::ai::AiProviderConfiguration;
 using ztermy::ai::AiProviderErrorCode;
+using ztermy::ai::AiProviderFlavor;
 using ztermy::ai::AiProviderKind;
+using ztermy::ai::AiReasoningEffort;
 using ztermy::ai::AiToolCall;
 using ztermy::ai::AiToolDefinition;
 using ztermy::ai::AiToolExchange;
@@ -33,6 +35,8 @@ private slots:
     void preparesOllamaRequest();
     void preparesCompatibleRequest();
     void preparesAnthropicRequest();
+    void appliesProviderSpecificReasoningControls();
+    void preservesAnthropicThinkingSignatureAcrossTools();
     void resolvesFriendlyApiAddressesAndModels();
     void rejectsUnsafeOrIncompleteConfiguration();
 };
@@ -137,6 +141,69 @@ void ProviderRequestFactoryTests::preparesAnthropicRequest()
     QCOMPARE(body.value("max_tokens").toInt(), 8192);
     QCOMPARE(body.value("tools").toArray().first().toObject().value("input_schema").toObject().value("type").toString(),
              QStringLiteral("object"));
+}
+
+void ProviderRequestFactoryTests::appliesProviderSpecificReasoningControls()
+{
+    auto configuration = AiProviderConfiguration{.kind = AiProviderKind::openAiCompatible,
+                                                 .flavor = AiProviderFlavor::deepSeek,
+                                                 .baseUrl = "https://api.deepseek.com",
+                                                 .model = "deepseek-chat"};
+    auto prepared = ProviderRequestFactory::prepare(
+        configuration, AiGenerationRequest{.reasoningEffort = AiReasoningEffort::high}, "key");
+    QVERIFY(prepared.has_value());
+    auto body = QJsonDocument::fromJson(prepared->body).object();
+    QCOMPARE(body.value("thinking").toObject().value("type").toString(), QStringLiteral("enabled"));
+    QCOMPARE(body.value("reasoning_effort").toString(), QStringLiteral("high"));
+
+    configuration.flavor = AiProviderFlavor::zai;
+    prepared = ProviderRequestFactory::prepare(
+        configuration, AiGenerationRequest{.reasoningEffort = AiReasoningEffort::disabled}, "key");
+    QVERIFY(prepared.has_value());
+    body = QJsonDocument::fromJson(prepared->body).object();
+    QCOMPARE(body.value("thinking").toObject().value("type").toString(), QStringLiteral("disabled"));
+    QCOMPARE(body.value("thinking").toObject().value("clear_thinking").toBool(), false);
+
+    configuration.flavor = AiProviderFlavor::kimi;
+    configuration.model = "kimi-k3";
+    prepared = ProviderRequestFactory::prepare(
+        configuration, AiGenerationRequest{.reasoningEffort = AiReasoningEffort::maximum}, "key");
+    QVERIFY(prepared.has_value());
+    body = QJsonDocument::fromJson(prepared->body).object();
+    QCOMPARE(body.value("reasoning_effort").toString(), QStringLiteral("max"));
+
+    configuration.kind = AiProviderKind::openAiResponses;
+    configuration.flavor = AiProviderFlavor::openAi;
+    configuration.baseUrl = "https://api.openai.com/v1";
+    configuration.model = "gpt-5.6";
+    prepared = ProviderRequestFactory::prepare(
+        configuration, AiGenerationRequest{.reasoningEffort = AiReasoningEffort::maximum}, "key");
+    QVERIFY(prepared.has_value());
+    body = QJsonDocument::fromJson(prepared->body).object();
+    QCOMPARE(body.value("reasoning").toObject().value("effort").toString(), QStringLiteral("xhigh"));
+}
+
+void ProviderRequestFactoryTests::preservesAnthropicThinkingSignatureAcrossTools()
+{
+    const AiProviderConfiguration configuration{.kind = AiProviderKind::anthropicMessages,
+                                                .flavor = AiProviderFlavor::anthropic,
+                                                .baseUrl = "https://api.anthropic.com",
+                                                .model = "claude-sonnet-4-6"};
+    const AiGenerationRequest generation{
+        .toolHistory = {AiToolExchange{
+            .calls = {AiToolCall{.id = "tool_1", .name = "run_command", .argumentsJson = R"({"command":"pwd"})"}},
+            .outputs = {AiToolOutput{.callId = "tool_1", .name = "run_command", .outputJson = R"({"ok":true})"}},
+            .reasoning = "private provider reasoning",
+            .reasoningSignature = "signed-block"}},
+        .reasoningEffort = AiReasoningEffort::high};
+    const auto prepared = ProviderRequestFactory::prepare(configuration, generation, "key");
+    QVERIFY(prepared.has_value());
+    const auto body = QJsonDocument::fromJson(prepared->body).object();
+    QCOMPARE(body.value("thinking").toObject().value("type").toString(), QStringLiteral("adaptive"));
+    QCOMPARE(body.value("output_config").toObject().value("effort").toString(), QStringLiteral("high"));
+    const auto assistantContent = body.value("messages").toArray().first().toObject().value("content").toArray();
+    QCOMPARE(assistantContent.first().toObject().value("type").toString(), QStringLiteral("thinking"));
+    QCOMPARE(assistantContent.first().toObject().value("signature").toString(), QStringLiteral("signed-block"));
 }
 
 void ProviderRequestFactoryTests::resolvesFriendlyApiAddressesAndModels()

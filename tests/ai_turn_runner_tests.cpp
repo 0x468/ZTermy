@@ -178,6 +178,7 @@ private slots:
     void retriesBeforeVisibleOutput();
     void doesNotReplayAfterVisibleOutput();
     void cancelsScheduledRetry();
+    void cancelsActiveRequestSynchronously();
     void destroyingRunnerCancelsSafely();
     void executesReadToolAndContinuesTheSameTurn();
     void waitsForDeferredToolCompletion();
@@ -296,6 +297,39 @@ void AiTurnRunnerTests::cancelsScheduledRetry()
     QCOMPARE(events.size(), std::size_t{1});
     QCOMPARE(events.front().type, AiStreamEventType::responseFailed);
     QCOMPARE(events.front().error.value_or(AiProviderError{}).code, AiProviderErrorCode::cancelled);
+}
+
+void AiTurnRunnerTests::cancelsActiveRequestSynchronously()
+{
+    FakeNetworkAccessManager network;
+    network.enqueue(
+        FakeResponse{.payload = "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"late\"}}\n\n",
+                     .delayMilliseconds = 30'000});
+    ProviderHttpClient client(&network);
+    AiTurnRunner runner(client, fastRetryPolicy());
+    std::vector<AiStreamEvent> events;
+    int finishedCount = 0;
+
+    QVERIFY(runner
+                .start(
+                    openAiConfiguration(), AiGenerationRequest{}, emptySecretLoader(),
+                    [&events](const auto, const AiStreamEvent &event) {
+                        events.push_back(event);
+                    },
+                    [&finishedCount](const auto, const AiTurnMetrics &) {
+                        ++finishedCount;
+                    })
+                .has_value());
+    QVERIFY(runner.active());
+    QVERIFY(runner.cancel());
+    QVERIFY(!runner.active());
+    QCOMPARE(finishedCount, 1);
+    QVERIFY(!events.empty());
+    QCOMPARE(events.back().type, AiStreamEventType::responseFailed);
+    QCOMPARE(events.back().error.value_or(AiProviderError{}).code, AiProviderErrorCode::cancelled);
+
+    QTest::qWait(10);
+    QCOMPARE(finishedCount, 1);
 }
 
 void AiTurnRunnerTests::destroyingRunnerCancelsSafely()

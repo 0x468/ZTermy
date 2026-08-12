@@ -21,6 +21,7 @@ private slots:
     void boundsMessagesAndUtf8Text();
     void exposesFailureWithoutLeakingIntoLogs();
     void exposesCancellationAsRetryableNeutralState();
+    void exposesBoundedNativeToolActivities();
     void exposesOnlyOneBoundedShellCommandSuggestion();
     void restoresOnlyBoundedUserAndAssistantMessages();
 };
@@ -91,6 +92,24 @@ void AiConversationModelTests::exposesCancellationAsRetryableNeutralState()
     QVERIFY(model.data(model.index(1), AiConversationModel::ErrorRole).toString().isEmpty());
     QCOMPARE(model.providerMessages().size(), std::size_t{1});
     QVERIFY(!model.streaming());
+}
+
+void AiConversationModelTests::exposesBoundedNativeToolActivities()
+{
+    AiConversationModel model;
+    const auto assistantId = model.beginAssistantMessage();
+    QVERIFY(model.upsertAssistantToolActivity(assistantId, QStringLiteral("call-1"), QStringLiteral("run_command"),
+                                              QStringLiteral("df -h"), QStringLiteral("queued"),
+                                              QStringLiteral("pending"), true, false));
+    QVERIFY(model.upsertAssistantToolActivity(assistantId, QStringLiteral("call-1"), QStringLiteral("run_command"),
+                                              QStringLiteral("df -h"), QStringLiteral("succeeded"),
+                                              QStringLiteral("ok"), true, false));
+    const QVariantList activities = model.data(model.index(0), AiConversationModel::ToolActivitiesRole).toList();
+    QCOMPARE(activities.size(), 1);
+    const QVariantMap activity = activities.constFirst().toMap();
+    QCOMPARE(activity.value(QStringLiteral("name")).toString(), QStringLiteral("run_command"));
+    QCOMPARE(activity.value(QStringLiteral("summary")).toString(), QStringLiteral("df -h"));
+    QCOMPARE(activity.value(QStringLiteral("state")).toString(), QStringLiteral("succeeded"));
 }
 
 void AiConversationModelTests::exposesOnlyOneBoundedShellCommandSuggestion()

@@ -1,6 +1,7 @@
 #include "application/AppController.h"
 #include "application/FontCatalog.h"
 #include "application/LocalizationManager.h"
+#include "application/ai/AiConversationModel.h"
 #include "application/diagnostics/DiagnosticReporter.h"
 #include "core/config/ApplicationPaths.h"
 #include "core/logging/Logging.h"
@@ -806,6 +807,24 @@ struct ResizeHitRuntimeCase
     }
     const bool missingProviderShown =
         !controller.sendAiMessage(QStringLiteral("Explain this terminal")) && !controller.activeAiError().isEmpty();
+    auto *aiConversation = qobject_cast<ztermy::ai::AiConversationModel *>(controller.activeAiConversation());
+    bool aiMarkdownFixturePrepared = false;
+    if (aiConversation != nullptr)
+    {
+        static_cast<void>(aiConversation->appendUserMessage(QStringLiteral("Summarize the terminal state.")));
+        const std::uint64_t markdownMessageId = aiConversation->beginAssistantMessage();
+        const bool markdownAdded = aiConversation->appendAssistantDelta(
+            markdownMessageId,
+            QStringLiteral("## Terminal summary\n\n- Service is **ready**\n- Review the table before continuing\n\n"
+                           "| Item | State |\n| --- | --- |\n| Shell | PowerShell |\n| Session | Local |\n\n"
+                           "```powershell\nGet-Location\n```"));
+        const bool toolActivityAdded = aiConversation->upsertAssistantToolActivity(
+            markdownMessageId, QStringLiteral("layout-fixture-tool"), QStringLiteral("read_terminal_frame"),
+            QStringLiteral("Read the visible terminal frame"), QStringLiteral("succeeded"), QStringLiteral("ok"), false,
+            false);
+        aiMarkdownFixturePrepared =
+            markdownAdded && toolActivityAdded && aiConversation->completeAssistantMessage(markdownMessageId);
+    }
     processWindowEventsFor(std::chrono::milliseconds{100});
     QQuickItem *aiContextToggle = quickItem(rootObject, "aiContextToggle");
     QAccessibleInterface *aiContextInterface =
@@ -818,8 +837,6 @@ struct ResizeHitRuntimeCase
     const bool aiAttachAccessible =
         verifyAccessibleButton(rootObject, "aiAttachSelectionButton", "Attach selected terminal text to this request");
     const bool aiActivityAccessible = verifyAccessibleToggle(rootObject, "aiActivityToggle", "Show AI activity");
-    const bool aiControlAccessible =
-        verifyAccessibleButton(rootObject, "aiControlHandoffButton", "Take terminal control from AI");
     const bool aiClearAccessible =
         verifyAccessibleButton(rootObject, "aiClearConversationButton", "Clear this AI conversation");
     const bool aiSendAccessible = verifyAccessibleButton(rootObject, "aiSendButton", "Send");
@@ -828,8 +845,8 @@ struct ResizeHitRuntimeCase
         && aiContextInterface->text(QAccessible::Name)
                == QStringLiteral("Request context · %1 item(s)").arg(controller.activeAiContextItems().size());
     const bool aiAccessibilityPassed = aiLauncherAccessible && aiToolbarAccessible && aiExplainAccessible
-                                       && aiAttachAccessible && aiActivityAccessible && aiControlAccessible
-                                       && aiClearAccessible && aiSendAccessible && aiContextAccessible;
+                                       && aiAttachAccessible && aiActivityAccessible && aiClearAccessible
+                                       && aiSendAccessible && aiContextAccessible;
     QAccessibleInterface *aiPaneInterface =
         aiAssistantPane == nullptr ? nullptr : QAccessible::queryAccessibleInterface(aiAssistantPane);
     QAccessibleInterface *aiPromptInterface =
@@ -849,7 +866,6 @@ struct ResizeHitRuntimeCase
         artifact << "explain=" << aiExplainAccessible << '\n';
         artifact << "attach=" << aiAttachAccessible << '\n';
         artifact << "activity=" << aiActivityAccessible << '\n';
-        artifact << "control=" << aiControlAccessible << '\n';
         artifact << "clear=" << aiClearAccessible << '\n';
         artifact << "send=" << aiSendAccessible << '\n';
         artifact << "context=" << aiContextAccessible << '\n';
@@ -867,15 +883,14 @@ struct ResizeHitRuntimeCase
         artifact << "promptName="
                  << (aiPromptInterface == nullptr ? QString{} : aiPromptInterface->text(QAccessible::Name)) << '\n';
     }
-    const bool aiDarkCaptured = aiWorkbenchOpened && contextRestored && aiAssistantPane != nullptr
-                                && aiAssistantPane->isVisible() && aiPromptEditor != nullptr && aiAccessibilityPassed
-                                && aiSemanticRolesPassed
+    const bool aiDarkCaptured = aiWorkbenchOpened && contextRestored && aiMarkdownFixturePrepared
+                                && aiAssistantPane != nullptr && aiAssistantPane->isVisible()
+                                && aiPromptEditor != nullptr && aiAccessibilityPassed && aiSemanticRolesPassed
                                 && captureLayout(window, outputDirectory, QStringLiteral("dark-regular-ai-assistant"));
     window.resize(QSize{500, 360});
     processWindowEventsFor(std::chrono::milliseconds{250});
-    constexpr std::array compactAiActionNames{"aiExplainFailureButton",    "aiAttachSelectionButton",
-                                              "aiActivityToggle",          "aiHistoryToggle",
-                                              "aiClearConversationButton", "aiControlHandoffButton"};
+    constexpr std::array compactAiActionNames{"aiExplainFailureButton", "aiAttachSelectionButton", "aiActivityToggle",
+                                              "aiHistoryToggle", "aiClearConversationButton"};
     const bool compactAiActionsInsidePanel =
         aiAssistantPane != nullptr
         && std::ranges::all_of(compactAiActionNames, [rootObject, aiAssistantPane](const char *objectName) {

@@ -35,7 +35,6 @@ enum class AiTerminalActionKind : std::uint8_t
     runCommand,
     writeToPty,
     interruptCommand,
-    transferToUser,
     saveRunbook,
     enqueueSftpDownload,
     enqueueSftpUpload,
@@ -73,10 +72,7 @@ public:
     [[nodiscard]] bool approve(const AiTerminalAction &action);
     [[nodiscard]] bool deny(const AiTerminalAction &action);
     [[nodiscard]] bool complete(const AiTerminalAction &action, AiToolDispatchState state, std::string resultJson);
-    [[nodiscard]] bool handoffToUser(const AiSessionTarget &target, std::string_view conversationId);
-    [[nodiscard]] bool resumeAgent(const AiSessionTarget &target, std::string_view conversationId);
     [[nodiscard]] bool agentHasControl(const AiSessionTarget &target, std::string_view conversationId) const;
-    [[nodiscard]] bool userHasControl(const AiSessionTarget &target, std::string_view conversationId) const;
     [[nodiscard]] bool replacePermissionRules(std::vector<AiPermissionRule> rules);
     [[nodiscard]] bool addPermissionRule(AiPermissionRule rule);
     [[nodiscard]] bool removePermissionRule(std::string_view ruleId);

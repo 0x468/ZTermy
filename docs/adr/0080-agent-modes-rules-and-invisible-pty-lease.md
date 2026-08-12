@@ -36,9 +36,9 @@ and exact target generations.
   YOLO executes all supported actions without heuristic warning prompts.
 - Keep command-risk classification only as informative metadata for Ask/Edit
   cards and audit UI. It does not override Auto/YOLO or direct visible Run.
-- Retain the one-writer PTY lease as an internal mechanism. Direct user input
-  takes the next write slot and cancels active model orchestration when needed.
-  A later user request to the agent reacquires the lease automatically. The
+- Retain the one-writer lease between Agent conversations as an internal
+  mechanism. Direct user input always uses the existing ordered PTY input queue
+  and does not cancel model orchestration merely because the user typed. The
   normal AI panel does not show Take control/Resume controls.
 - Render assistant prose as Markdown, keep native tool/action cards separate,
   and copy the raw provider text.

@@ -51,6 +51,7 @@ public:
         LongContextRatesRole,
         CommandSuggestionRole,
         HasCommandSuggestionRole,
+        ToolActivitiesRole,
     };
 
     explicit AiConversationModel(AiConversationLimits limits = {}, QObject *parent = nullptr);
@@ -67,6 +68,9 @@ public:
     [[nodiscard]] std::uint64_t beginAssistantMessage();
     [[nodiscard]] bool appendAssistantDelta(std::uint64_t messageId, QString delta);
     [[nodiscard]] bool appendAssistantReasoningDelta(std::uint64_t messageId, QString delta);
+    [[nodiscard]] bool upsertAssistantToolActivity(std::uint64_t messageId, QString toolCallId, QString toolName,
+                                                   QString summary, QString state, QString resultCode,
+                                                   bool sideEffecting, bool highRisk);
     [[nodiscard]] bool completeAssistantMessage(std::uint64_t messageId,
                                                 std::optional<AiTokenUsage> usage = std::nullopt);
     [[nodiscard]] bool setAssistantMetrics(std::uint64_t messageId, const AiTurnMetrics &metrics,
@@ -104,6 +108,7 @@ private:
         bool truncated = false;
         bool longContextRates = false;
         QString commandSuggestion;
+        QVariantList toolActivities;
     };
 
     [[nodiscard]] static QString roleToken(AiMessageRole role);

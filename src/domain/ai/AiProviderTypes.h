@@ -16,6 +16,27 @@ enum class AiProviderKind : std::uint8_t
     openAiCompatible,
 };
 
+enum class AiProviderFlavor : std::uint8_t
+{
+    openAi,
+    anthropic,
+    deepSeek,
+    kimi,
+    zai,
+    ollama,
+    compatible,
+};
+
+enum class AiReasoningEffort : std::uint8_t
+{
+    automatic,
+    disabled,
+    low,
+    medium,
+    high,
+    maximum,
+};
+
 enum class AiMessageRole : std::uint8_t
 {
     system,
@@ -34,6 +55,7 @@ struct AiChatMessage final
 struct AiProviderConfiguration final
 {
     AiProviderKind kind = AiProviderKind::openAiResponses;
+    AiProviderFlavor flavor = AiProviderFlavor::openAi;
     std::string baseUrl;
     std::string endpointPath;
     std::string model;
@@ -65,6 +87,7 @@ struct AiToolExchange final
     std::vector<AiToolCall> calls;
     std::vector<AiToolOutput> outputs;
     std::string reasoning;
+    std::string reasoningSignature;
 };
 
 struct AiGenerationRequest final
@@ -74,6 +97,7 @@ struct AiGenerationRequest final
     std::vector<AiToolDefinition> tools;
     std::vector<AiToolExchange> toolHistory;
     std::optional<std::string> previousResponseId;
+    AiReasoningEffort reasoningEffort = AiReasoningEffort::automatic;
 };
 
 enum class AiStreamEventType : std::uint8_t
@@ -81,6 +105,7 @@ enum class AiStreamEventType : std::uint8_t
     responseStarted,
     textDelta,
     reasoningDelta,
+    reasoningSignatureDelta,
     toolCallStarted,
     toolArgumentsDelta,
     toolCallCompleted,

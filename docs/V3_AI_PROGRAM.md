@@ -43,7 +43,7 @@ V3 succeeds when ztermy can:
 - translate natural language into a reviewable command, then Insert or Run it
   without forcing a redundant warning after an explicit user Run action;
 - run bounded multi-step terminal tasks, read their results, wait for long
-  commands, interrupt them, and hand control between user and agent;
+  commands, interrupt them, and coexist with ordinary user input;
 - understand an interactive terminal frame without pretending that a full-screen
   application is ordinary line-oriented scrollback;
 - use relevant SSH, SFTP, telemetry, history, scripts, and notes through typed
@@ -141,9 +141,9 @@ SFTP writes, run unattended background agents, or depend on MCP.
 - read-only, ask, edit, auto, and YOLO modes with typed deny/ask/allow rules,
   once/session/profile/global grants, visible target identity,
   per-turn action/time/token budgets, and loop detection;
-- long-running command snapshots, alternate-screen metadata, and user/agent
-  control handoff;
-- one write-owning conversation per terminal session, read-only observer fanout,
+- long-running command snapshots, alternate-screen metadata, and ordered
+  user/Agent PTY input;
+- one Agent write lease per terminal session, read-only observer fanout,
   queued/cancelled/completed tool cards, exact action results, and bounded retry;
 - encrypted optional conversation history, audit metadata, export, and deletion;
 - a user-visible AI activity/audit view with redacted metadata and tool outcomes.
@@ -168,7 +168,8 @@ becomes conversation retention.
 - frame-delta observation for REPLs, database shells, debuggers, pagers, and
   full-screen applications;
 - deterministic idle/change/wait conditions rather than sleep-only polling;
-- explicit takeover, pause, resume, and transfer-control states;
+- explicit Agent pause/resume and interactive-wait states without blocking
+  ordinary user terminal input;
 - capability adapters and acceptance fixtures for PowerShell, bash, zsh, fish,
   nested SSH, `sudo`, `tmux`, and alternate-screen programs;
 - degraded behavior when rich shell integration is absent or spoofing checks

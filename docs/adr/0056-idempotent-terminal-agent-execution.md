@@ -31,19 +31,15 @@ never resumed automatically.
 ### Session ownership
 
 A terminal session may have many read-only conversations and wait subscribers,
-but at most one write/control owner. Another conversation must wait, request an
-explicit transfer, or remain read-only. Closing/cancelling one observer removes
-only its subscriptions. It cannot interrupt the owner's process.
+but at most one Agent write lease. Another Agent conversation must wait or
+remain read-only. Closing/cancelling one observer removes only its subscriptions
+and cannot interrupt the lease owner's process.
 
-`transfer_control(to=user)` creates a generation-scoped, sticky user-control
-state rather than merely releasing the agent lease. Agent writes fail with
-`user_has_control` until the user explicitly resumes the same conversation and
-target. The user can also take control from the AI panel, and ordinary keyboard
-or paste input takes control automatically when that conversation currently
-owns the terminal. User takeover cancels the active provider turn and pending
-tool wait, but never claims that an already-running local or remote process was
-interrupted. Reconnect, tab close, and conversation clear release stale control
-state.
+The lease serializes autonomous Agent conversations only. Ordinary keyboard and
+paste input always enters the existing ordered PTY input queue; it neither
+requires Take control nor creates a sticky user-owned state. The UI therefore
+has no transfer-control ceremony. Reconnect, tab close, and conversation clear
+still release stale Agent lease state.
 
 ### Tool lifecycle
 

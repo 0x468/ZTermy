@@ -175,7 +175,7 @@ revocable from Settings.
 - Cancel is immediate in the UI, idempotent, and cannot be overwritten by a
   synchronous completion callback. Retry creates a new request from the last
   user turn without duplicating that user message.
-- User typing immediately owns the next PTY write. Starting the next agent turn
-  transparently reacquires the lease; no persistent “take control” widget is
+- User typing is always accepted by the ordered PTY input queue and does not
+  cancel an Agent turn merely to change an ownership flag. The internal lease
+  serializes Agent conversations only; no persistent “take control” widget is
   shown in the normal flow.
-

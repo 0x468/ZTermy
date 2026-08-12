@@ -133,38 +133,35 @@ constexpr std::size_t maximumArgumentsBytes = std::size_t{20} * 1024;
 
 std::vector<AiToolDefinition> AiActionToolDispatcher::definitions()
 {
-    return {{.name = "run_command",
-             .description =
-                 "Queue one command in the exact target terminal session. Returns after input is accepted, not "
-                 "after the command finishes.",
-             .parametersJson =
-                 R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"command":{"type":"string","minLength":1,"maxLength":16384}},"required":["session_id","session_generation","command"],"additionalProperties":false})"},
-            {.name = "interrupt_command",
-             .description = "Request a soft interrupt for a tracked command in the exact target terminal session by "
-                            "writing Ctrl+C. The command outcome remains unknown until observed.",
-             .parametersJson =
-                 R"({"type":"object","properties":{"command_id":{"type":"string","minLength":1,"maxLength":256},"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"mode":{"type":"string","enum":["soft"]}},"required":["command_id","session_id","session_generation","mode"],"additionalProperties":false})"},
-            {.name = "write_to_pty",
-             .description = "Write bounded UTF-8 text to the exact target PTY, optionally followed by Enter. The input "
-                            "is not treated as a semantic command and is never echoed in the tool result.",
-             .parametersJson =
-                 R"({"type":"object","properties":{"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"data":{"type":"string","minLength":1,"maxLength":4096},"append_enter":{"type":"boolean"}},"required":["session_id","session_generation","data","append_enter"],"additionalProperties":false})"},
-            {.name = "transfer_control",
-             .description =
-                 "Hand terminal write control back to the user for the exact target session. The agent cannot "
-                 "write again until the user explicitly resumes agent control.",
-             .parametersJson =
-                 R"({"type":"object","properties":{"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"to":{"type":"string","enum":["user"]}},"required":["session_id","session_generation","to"],"additionalProperties":false})"},
-            {.name = "save_runbook", .description = "Save a reusable ztermy script according to the active agent mode and rules.", .parametersJson = R"({"type":"object","properties":{"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"runbook":{"type":"object","properties":{"name":{"type":"string","minLength":1,"maxLength":128},"description":{"type":"string","maxLength":4096},"shell":{"type":"string","enum":["any","powershell","bash","zsh","fish","sh"]},"steps":{"type":"array","minItems":1,"maxItems":64,"items":{"type":"object","properties":{"command":{"type":"string","minLength":1,"maxLength":16384},"continuation":{"type":"string","enum":["immediate","literal-output"]},"output_marker":{"type":"string","maxLength":1024},"timeout_ms":{"type":"integer","minimum":0,"maximum":4294967295}},"required":["command","continuation","output_marker","timeout_ms"],"additionalProperties":false}}},"required":["name","description","shell","steps"],"additionalProperties":false}},"required":["session_id","session_generation","runbook"],"additionalProperties":false})"},
-            {.name = "queue_sftp_download",
-             .description = "Queue one remote regular file for download according to the active agent mode and rules.",
-             .parametersJson =
-                 R"({"type":"object","properties":{"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"remote_path":{"type":"string","minLength":1,"maxLength":4096},"local_path":{"type":"string","minLength":1,"maxLength":4096}},"required":["session_id","session_generation","remote_path","local_path"],"additionalProperties":false})"},
-            {.name = "queue_sftp_upload",
-             .description =
-                 "Queue one local regular non-symlink file for upload according to the active agent mode and rules.",
-             .parametersJson =
-                 R"({"type":"object","properties":{"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"local_path":{"type":"string","minLength":1,"maxLength":4096},"remote_path":{"type":"string","minLength":1,"maxLength":4096}},"required":["session_id","session_generation","local_path","remote_path"],"additionalProperties":false})"}};
+    return {
+        {.name = "run_command",
+         .description = "Queue one command in the exact target terminal session. Returns after input is accepted, not "
+                        "after the command finishes.",
+         .parametersJson =
+             R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"command":{"type":"string","minLength":1,"maxLength":16384}},"required":["session_id","session_generation","command"],"additionalProperties":false})"},
+        {.name = "interrupt_command",
+         .description = "Request a soft interrupt for a tracked command in the exact target terminal session by "
+                        "writing Ctrl+C. The command outcome remains unknown until observed.",
+         .parametersJson =
+             R"({"type":"object","properties":{"command_id":{"type":"string","minLength":1,"maxLength":256},"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"mode":{"type":"string","enum":["soft"]}},"required":["command_id","session_id","session_generation","mode"],"additionalProperties":false})"},
+        {.name = "write_to_pty",
+         .description = "Write bounded UTF-8 text to the exact target PTY, optionally followed by Enter. The input "
+                        "is not treated as a semantic command and is never echoed in the tool result.",
+         .parametersJson =
+             R"({"type":"object","properties":{"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"data":{"type":"string","minLength":1,"maxLength":4096},"append_enter":{"type":"boolean"}},"required":["session_id","session_generation","data","append_enter"],"additionalProperties":false})"},
+        {.name = "save_runbook",
+         .description = "Save a reusable ztermy script according to the active agent mode and rules.",
+         .parametersJson =
+             R"({"type":"object","properties":{"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"runbook":{"type":"object","properties":{"name":{"type":"string","minLength":1,"maxLength":128},"description":{"type":"string","maxLength":4096},"shell":{"type":"string","enum":["any","powershell","bash","zsh","fish","sh"]},"steps":{"type":"array","minItems":1,"maxItems":64,"items":{"type":"object","properties":{"command":{"type":"string","minLength":1,"maxLength":16384},"continuation":{"type":"string","enum":["immediate","literal-output"]},"output_marker":{"type":"string","maxLength":1024},"timeout_ms":{"type":"integer","minimum":0,"maximum":4294967295}},"required":["command","continuation","output_marker","timeout_ms"],"additionalProperties":false}}},"required":["name","description","shell","steps"],"additionalProperties":false}},"required":["session_id","session_generation","runbook"],"additionalProperties":false})"},
+        {.name = "queue_sftp_download",
+         .description = "Queue one remote regular file for download according to the active agent mode and rules.",
+         .parametersJson =
+             R"({"type":"object","properties":{"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"remote_path":{"type":"string","minLength":1,"maxLength":4096},"local_path":{"type":"string","minLength":1,"maxLength":4096}},"required":["session_id","session_generation","remote_path","local_path"],"additionalProperties":false})"},
+        {.name = "queue_sftp_upload",
+         .description =
+             "Queue one local regular non-symlink file for upload according to the active agent mode and rules.",
+         .parametersJson =
+             R"({"type":"object","properties":{"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"local_path":{"type":"string","minLength":1,"maxLength":4096},"remote_path":{"type":"string","minLength":1,"maxLength":4096}},"required":["session_id","session_generation","local_path","remote_path"],"additionalProperties":false})"}};
 }
 
 AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const AiActionToolContext &context,
@@ -173,12 +170,10 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
     const bool runCommand = call.name == "run_command";
     const bool interruptCommand = call.name == "interrupt_command";
     const bool writeToPty = call.name == "write_to_pty";
-    const bool transferControl = call.name == "transfer_control";
     const bool saveRunbook = call.name == "save_runbook";
     const bool sftpDownload = call.name == "queue_sftp_download";
     const bool sftpUpload = call.name == "queue_sftp_upload";
-    if (!runCommand && !interruptCommand && !writeToPty && !transferControl && !saveRunbook && !sftpDownload
-        && !sftpUpload)
+    if (!runCommand && !interruptCommand && !writeToPty && !saveRunbook && !sftpDownload && !sftpUpload)
     {
         return response(
             failure(QStringLiteral("unsupported"), QStringLiteral("The requested action tool is unsupported.")), false);
@@ -194,7 +189,6 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
     const auto requestedMode = object.value(QStringLiteral("mode"));
     const auto requestedPtyData = object.value(QStringLiteral("data"));
     const auto requestedAppendEnter = object.value(QStringLiteral("append_enter"));
-    const auto requestedControlOwner = object.value(QStringLiteral("to"));
     const auto requestedRunbook = object.value(QStringLiteral("runbook"));
     const auto requestedLocalPath = object.value(QStringLiteral("local_path"));
     const auto requestedRemotePath = object.value(QStringLiteral("remote_path"));
@@ -221,11 +215,6 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
         && hasOnlyKeys(object, {QStringLiteral("session_id"), QStringLiteral("session_generation"),
                                 QStringLiteral("data"), QStringLiteral("append_enter")})
         && requestedPtyData.isString() && validPtyInput(requestedPtyData.toString()) && requestedAppendEnter.isBool();
-    const bool transferSchemaValid =
-        transferControl && commonSchemaValid
-        && hasOnlyKeys(object,
-                       {QStringLiteral("session_id"), QStringLiteral("session_generation"), QStringLiteral("to")})
-        && requestedControlOwner.isString() && requestedControlOwner.toString() == QStringLiteral("user");
     bool runbookSchemaValid = saveRunbook && commonSchemaValid
                               && hasOnlyKeys(object, {QStringLiteral("session_id"),
                                                       QStringLiteral("session_generation"), QStringLiteral("runbook")})
@@ -279,8 +268,8 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
         && requestedLocalPath.toString().size() <= 4096 && !requestedLocalPath.toString().contains(QChar::Null)
         && requestedRemotePath.isString() && !requestedRemotePath.toString().trimmed().isEmpty()
         && requestedRemotePath.toString().size() <= 4096 && !requestedRemotePath.toString().contains(QChar::Null);
-    const bool schemaValid = runSchemaValid || interruptSchemaValid || writeSchemaValid || transferSchemaValid
-                             || runbookSchemaValid || sftpSchemaValid;
+    const bool schemaValid =
+        runSchemaValid || interruptSchemaValid || writeSchemaValid || runbookSchemaValid || sftpSchemaValid;
     const auto sessionId = requestedSession.toString().toUtf8().toStdString();
     const auto command = requestedCommand.toString().toUtf8().toStdString();
     const auto commandId = requestedCommandId.toString().toUtf8().toStdString();
@@ -305,10 +294,6 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
     {
         canonical.insert(QStringLiteral("data"), requestedPtyData);
         canonical.insert(QStringLiteral("append_enter"), requestedAppendEnter);
-    }
-    else if (transferControl)
-    {
-        canonical.insert(QStringLiteral("to"), requestedControlOwner);
     }
     else if (saveRunbook)
     {
@@ -355,25 +340,6 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
     if (!scopeValid)
     {
         return fail(QStringLiteral("scope_changed"), QStringLiteral("The target terminal session changed."));
-    }
-    if (transferControl)
-    {
-        const auto budgetDecision = budget.authorize(false, "transfer_control:user", context.target.sessionGeneration);
-        if (budgetDecision != AiAgentBudgetDecision::allow)
-        {
-            return fail(budgetCode(budgetDecision), QStringLiteral("The AI turn action budget was exhausted."));
-        }
-        if (!m_ownership.handoffToUser(context.target, context.conversationId))
-        {
-            return fail(QStringLiteral("ownership_conflict"),
-                        QStringLiteral("Another AI conversation owns terminal write control."));
-        }
-        static_cast<void>(m_ledger.transition(key, AiToolDispatchState::running));
-        return AiActionToolPlan{.disposition = AiActionToolDisposition::execute,
-                                .action = AiTerminalAction{.dispatchKey = key,
-                                                           .target = context.target,
-                                                           .kind = AiTerminalActionKind::transferToUser},
-                                .sideEffecting = true};
     }
     if (saveRunbook)
     {
@@ -531,25 +497,10 @@ bool AiActionToolDispatcher::complete(const AiTerminalAction &action, const AiTo
     return m_ledger.transition(action.dispatchKey, state, std::move(resultJson));
 }
 
-bool AiActionToolDispatcher::handoffToUser(const AiSessionTarget &target, const std::string_view conversationId)
-{
-    return m_ownership.handoffToUser(target, conversationId);
-}
-
-bool AiActionToolDispatcher::resumeAgent(const AiSessionTarget &target, const std::string_view conversationId)
-{
-    return m_ownership.resumeAgent(target, conversationId);
-}
-
 bool AiActionToolDispatcher::agentHasControl(const AiSessionTarget &target, const std::string_view conversationId) const
 {
     const auto owner = m_ownership.owner(target);
     return owner.has_value() && *owner == conversationId;
-}
-
-bool AiActionToolDispatcher::userHasControl(const AiSessionTarget &target, const std::string_view conversationId) const
-{
-    return m_ownership.userHasControl(target, conversationId);
 }
 
 bool AiActionToolDispatcher::replacePermissionRules(std::vector<AiPermissionRule> rules)

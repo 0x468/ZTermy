@@ -27,6 +27,7 @@ private slots:
     void rejectsMalformedProviderJson();
     void mapsCompatibleTextToolsAndCompletion();
     void mapsAnthropicTextToolsUsageAndCompletion();
+    void mapsAnthropicThinkingSignature();
     void mapsOllamaThinkingToolsAndUsage();
     void mapsOllamaError();
 };
@@ -138,6 +139,19 @@ void ProviderStreamMapperTests::mapsAnthropicTextToolsUsageAndCompletion()
     QCOMPARE(events->front().usage.value_or(AiTokenUsage{}).outputTokens, std::uint64_t{4});
     events = mapper.map(ServerSentEvent{.event = "message_stop", .data = R"json({"type":"message_stop"})json"});
     QCOMPARE(events->front().type, AiStreamEventType::responseCompleted);
+}
+
+void ProviderStreamMapperTests::mapsAnthropicThinkingSignature()
+{
+    AnthropicStreamMapper mapper;
+    const auto events = mapper.map(ServerSentEvent{
+        .event = "content_block_delta",
+        .data =
+            R"json({"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"signed"}})json"});
+    QVERIFY(events.has_value());
+    QCOMPARE(events->size(), std::size_t{1});
+    QCOMPARE(events->front().type, AiStreamEventType::reasoningSignatureDelta);
+    QCOMPARE(events->front().delta, std::string("signed"));
 }
 
 void ProviderStreamMapperTests::mapsOllamaThinkingToolsAndUsage()

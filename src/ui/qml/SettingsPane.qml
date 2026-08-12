@@ -23,7 +23,9 @@ Rectangle {
     property string aiBaseUrlDraft: "https://api.openai.com"
     property string aiModelDraft: ""
     property string aiSelectedProviderToken: "openai-responses"
+    property string aiReasoningDraft: "auto"
     readonly property var aiProviderTokens: ["openai-responses", "anthropic", "deepseek", "kimi", "zai", "ollama", "openai-compatible"]
+    readonly property var aiReasoningOptions: controller.aiReasoningCapabilities(aiProviderToken(), aiModelDraft)
     property string mcpOriginalId: ""
     property string mcpEditingId: ""
     property string mcpNamespaceDraft: ""
@@ -194,6 +196,16 @@ Rectangle {
 
     function aiPermissionToken() {
         return ["read-only", "ask", "edit", "auto", "yolo"][aiPermissionBox.currentIndex];
+    }
+
+    function aiReasoningIndex(token) {
+        const index = aiReasoningOptions.tokens.indexOf(token);
+        return index < 0 ? 0 : index;
+    }
+
+    function aiReasoningToken() {
+        const tokens = aiReasoningOptions.tokens;
+        return tokens.length > 0 ? tokens[Math.max(0, aiReasoningBox.currentIndex)] : "auto";
     }
 
     function aiRuleMatcherIndex(token) {
@@ -415,6 +427,8 @@ Rectangle {
         aiPermissionBox.currentIndex = aiPermissionIndex(controller.aiPermissionPreference);
         aiBaseUrlDraft = controller.aiBaseUrl;
         aiModelDraft = controller.aiModel;
+        aiReasoningDraft = controller.aiReasoningPreference;
+        aiReasoningBox.currentIndex = aiReasoningIndex(aiReasoningDraft);
         aiAutomaticContextSwitch.checked = controller.aiAutomaticContext;
         aiDebugTraceSwitch.checked = controller.aiDebugTraceEnabled;
         aiConversationHistorySwitch.checked = controller.aiConversationHistoryEnabled;
@@ -1440,6 +1454,37 @@ Rectangle {
                         }
 
                         Label {
+                            text: qsTr("Reasoning")
+                            color: Theme.text
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 4
+
+                            AppComboBox {
+                                id: aiReasoningBox
+
+                                objectName: "settingsAiReasoning"
+                                Layout.fillWidth: true
+                                model: pane.aiReasoningOptions.tokens
+                                displayTextModel: pane.aiReasoningOptions.labels
+                                currentIndex: pane.aiReasoningIndex(pane.aiReasoningDraft)
+                                enabled: pane.aiReasoningOptions.configurable
+                                accessibleName: qsTr("Model reasoning effort")
+                                onActivated: index => pane.aiReasoningDraft = model[index]
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: pane.aiReasoningOptions.description
+                                color: Theme.textMuted
+                                wrapMode: Text.WordWrap
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.textCompact
+                            }
+                        }
+
+                        Label {
                             text: qsTr("Agent permissions")
                             color: Theme.text
                         }
@@ -1542,7 +1587,7 @@ Rectangle {
                             accessibleName: qsTr("Save AI provider")
                             variant: "primary"
                             onClicked: {
-                                const saved = pane.controller.saveAiProviderConfiguration(pane.aiProviderToken(), pane.aiBaseUrlDraft, pane.aiModelDraft, aiAutomaticContextSwitch.checked, pane.aiPermissionToken(), aiApiKeyField.text, aiDebugTraceSwitch.checked);
+                                const saved = pane.controller.saveAiProviderConfiguration(pane.aiProviderToken(), pane.aiBaseUrlDraft, pane.aiModelDraft, aiAutomaticContextSwitch.checked, pane.aiPermissionToken(), aiApiKeyField.text, aiDebugTraceSwitch.checked, pane.aiReasoningToken());
                                 pane.presentStatus(saved ? qsTr("AI provider saved.") : qsTr("The provider settings or API key could not be saved."), !saved, saved);
                                 if (saved)
                                     aiApiKeyField.text = "";

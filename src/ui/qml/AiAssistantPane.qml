@@ -71,6 +71,22 @@ Rectangle {
         }
     }
 
+    function toolStateLabel(state, resultCode) {
+        if (state === "queued")
+            return qsTr("Queued");
+        if (state === "awaiting_approval")
+            return qsTr("Waiting for approval");
+        if (state === "running")
+            return qsTr("Running");
+        if (state === "succeeded")
+            return qsTr("Completed");
+        if (state === "cancelled")
+            return qsTr("Cancelled");
+        if (state === "failed")
+            return resultCode.length > 0 ? qsTr("Failed · %1").arg(resultCode) : qsTr("Failed");
+        return state;
+    }
+
     function sendPrompt() {
         const prompt = promptEditor.text.trim();
         if (prompt.length === 0 || busy) {
@@ -951,6 +967,7 @@ Rectangle {
                 required property bool longContextRates
                 required property string commandSuggestion
                 required property bool hasCommandSuggestion
+                required property var toolActivities
                 width: ListView.view.width
                 height: messageBubble.implicitHeight
 
@@ -1009,34 +1026,102 @@ Rectangle {
                             }
                         }
 
-                        TextEdit {
+                        MarkdownMessage {
                             Layout.fillWidth: true
                             Layout.maximumHeight: 180
                             visible: reasoningToggle.visible && reasoningToggle.expanded
-                            text: messageItem.reasoning
+                            source: messageItem.reasoning
                             color: Theme.textMuted
-                            readOnly: true
-                            selectByMouse: true
-                            wrapMode: TextEdit.Wrap
-                            textFormat: messageItem.messageRole === "assistant" ? TextEdit.MarkdownText : TextEdit.PlainText
-                            font.family: Theme.uiFont
                             font.pixelSize: Theme.textCompact
-                            onLinkActivated: link => Qt.openUrlExternally(link)
                         }
 
-                        TextEdit {
+                        Repeater {
+                            model: messageItem.toolActivities
+
+                            delegate: Rectangle {
+                                id: toolCard
+
+                                required property var modelData
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: toolCardContent.implicitHeight + 14
+                                radius: Theme.radiusControl
+                                color: Theme.controlBackground
+                                border.width: 1
+                                border.color: modelData.highRisk ? Theme.dangerBorder : modelData.state === "failed" ? Theme.dangerBorder : Theme.border
+
+                                RowLayout {
+                                    id: toolCardContent
+
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 8
+                                    spacing: 7
+
+                                    BusyIndicator {
+                                        id: toolBusy
+
+                                        Layout.preferredWidth: 16
+                                        Layout.preferredHeight: 16
+                                        running: toolCard.modelData.state === "queued" || toolCard.modelData.state === "running" || toolCard.modelData.state === "awaiting_approval"
+                                        visible: running
+                                    }
+
+                                    AppIcon {
+                                        Layout.preferredWidth: 15
+                                        Layout.preferredHeight: 15
+                                        visible: !toolBusy.visible
+                                        name: toolCard.modelData.state === "succeeded" ? "check" : toolCard.modelData.state === "cancelled" || toolCard.modelData.state === "failed" ? "close" : toolCard.modelData.sideEffecting ? "terminal" : "search"
+                                        color: toolCard.modelData.state === "succeeded" ? Theme.successText : toolCard.modelData.state === "failed" ? Theme.dangerText : Theme.textMuted
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        Layout.minimumWidth: 0
+                                        spacing: 1
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: toolCard.modelData.name
+                                            color: Theme.text
+                                            elide: Text.ElideRight
+                                            font.family: Theme.terminalFont
+                                            font.pixelSize: Theme.textCompact
+                                            font.weight: Font.DemiBold
+                                        }
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            visible: toolCard.modelData.summary.length > 0
+                                            text: toolCard.modelData.summary
+                                            color: Theme.textMuted
+                                            elide: Text.ElideRight
+                                            font.family: Theme.terminalFont
+                                            font.pixelSize: Theme.textCompact
+                                        }
+                                    }
+
+                                    Text {
+                                        text: pane.toolStateLabel(toolCard.modelData.state, toolCard.modelData.resultCode)
+                                        color: toolCard.modelData.state === "succeeded" ? Theme.successText : toolCard.modelData.state === "failed" ? Theme.dangerText : toolCard.modelData.state === "cancelled" ? Theme.warning : Theme.textMuted
+                                        elide: Text.ElideRight
+                                        font.family: Theme.uiFont
+                                        font.pixelSize: Theme.textCompact
+                                        font.weight: Font.Medium
+                                    }
+                                }
+                            }
+                        }
+
+                        MarkdownMessage {
                             id: messageText
 
                             Layout.fillWidth: true
-                            text: messageItem.text.length > 0 ? messageItem.text : messageItem.state === "streaming" ? qsTr("Thinking…") : ""
+                            source: messageItem.text.length > 0 ? messageItem.text : messageItem.state === "streaming" ? qsTr("Thinking…") : ""
                             color: Theme.text
-                            readOnly: true
-                            selectByMouse: true
-                            wrapMode: TextEdit.Wrap
                             textFormat: messageItem.messageRole === "assistant" ? TextEdit.MarkdownText : TextEdit.PlainText
-                            font.family: Theme.uiFont
                             font.pixelSize: Theme.textBody
-                            onLinkActivated: link => Qt.openUrlExternally(link)
                         }
 
                         Text {
