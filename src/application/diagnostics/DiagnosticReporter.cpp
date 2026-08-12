@@ -45,7 +45,7 @@ namespace
     return summary;
 }
 
-[[nodiscard]] QJsonDocument buildReport(const config::ApplicationPaths &paths)
+[[nodiscard]] QJsonDocument buildReport(const config::ApplicationPaths &paths, const QJsonObject &aiPrivacySummary)
 {
     const QJsonObject application{
         {QStringLiteral("name"), QCoreApplication::applicationName()},
@@ -71,12 +71,13 @@ namespace
         {QStringLiteral("includesProfileData"), false},  {QStringLiteral("includesCommandHistory"), false},
     };
     return QJsonDocument{QJsonObject{
-        {QStringLiteral("schemaVersion"), 1},
+        {QStringLiteral("schemaVersion"), 2},
         {QStringLiteral("generatedAtUtc"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
         {QStringLiteral("application"), application},
         {QStringLiteral("system"), system},
         {QStringLiteral("artifacts"), artifacts},
         {QStringLiteral("privacy"), privacy},
+        {QStringLiteral("ai"), aiPrivacySummary},
     }};
 }
 
@@ -90,6 +91,11 @@ DiagnosticReporter::DiagnosticReporter(config::ApplicationPaths paths, QObject *
 QString DiagnosticReporter::lastError() const
 {
     return m_lastError;
+}
+
+void DiagnosticReporter::setAiPrivacySummary(QJsonObject summary)
+{
+    m_aiPrivacySummary = std::move(summary);
 }
 
 bool DiagnosticReporter::exportReport(const QUrl &destination)
@@ -124,7 +130,7 @@ bool DiagnosticReporter::exportReport(const QUrl &destination)
         setLastError(tr("Could not open the diagnostic report for writing."));
         return false;
     }
-    const QByteArray report = buildReport(m_paths).toJson(QJsonDocument::Indented);
+    const QByteArray report = buildReport(m_paths, m_aiPrivacySummary).toJson(QJsonDocument::Indented);
     if (reportFile.write(report) != report.size() || !reportFile.commit())
     {
         setLastError(tr("Could not save the diagnostic report."));

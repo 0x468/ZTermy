@@ -189,9 +189,12 @@ Delivery status:
 - automatic task/model routing remains intentionally absent: the current replay
   evidence does not establish a provider-independent quality, latency, or cost
   improvement. The remembered explicit model remains the predictable default;
-- provider contracts, privacy diagnostics, soak gates, localization,
-  accessibility, packaging, upgrade/recovery, and final manual evidence remain
-  release-candidate closure work.
+- privacy diagnostics now expose the live local request boundary and add only
+  content-free AI counts/policy state to diagnostic exports (`ADR 0075`);
+- provider contracts, soak gates, accessibility, packaging, upgrade/recovery,
+  and final manual evidence remain release-candidate closure work. English and
+  Simplified Chinese remain complete under the translation gate as each surface
+  lands.
 
 ## Explicit exclusions
 

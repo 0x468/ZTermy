@@ -128,6 +128,10 @@ evaluations serve different purposes and are reported separately.
     validate evidence, target, approval, allowed-tool, and duplicate-side-effect
     contracts without a provider. Live-provider observations use a separate
     result channel and cannot rewrite the baseline (`ADR 0072`).
+- [x] Privacy diagnostics expose only policy flags, coarse endpoint scope, and
+      bounded counts. Automated tests verify that endpoint host, model id,
+      credentials, prompts/responses, terminal content, and MCP arguments/results
+      cannot enter the report (`ADR 0075`).
 
 ### MCP manual release-candidate check
 

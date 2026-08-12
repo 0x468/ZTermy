@@ -539,6 +539,8 @@ add_library(ztermy_ai_application STATIC
     src/application/ai/AiConversationHistoryModel.h
     src/application/ai/AiNoteReadTool.cpp
     src/application/ai/AiNoteReadTool.h
+    src/application/ai/AiPrivacyDiagnostics.cpp
+    src/application/ai/AiPrivacyDiagnostics.h
     src/application/ai/McpRuntimeManager.cpp
     src/application/ai/McpRuntimeManager.h
     src/application/ai/AiReadToolDispatcher.cpp
@@ -2833,6 +2835,27 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME ai-evaluation-harness COMMAND ztermy_ai_evaluation_harness_tests)
+
+    qt_add_executable(ztermy_ai_privacy_diagnostics_tests
+        tests/ai_privacy_diagnostics_tests.cpp
+    )
+
+    target_compile_features(ztermy_ai_privacy_diagnostics_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ai_privacy_diagnostics_tests PRIVATE
+        ztermy_ai_application
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ai_privacy_diagnostics_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ai-privacy-diagnostics COMMAND ztermy_ai_privacy_diagnostics_tests)
 
     qt_add_executable(ztermy_provider_http_client_tests
         tests/provider_http_client_tests.cpp

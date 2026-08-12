@@ -22,6 +22,7 @@
 #include <QGuiApplication>
 #include <QIcon>
 #include <QImage>
+#include <QJsonObject>
 #include <QLoggingCategory>
 #include <QMetaType>
 #include <QQmlEngine>
@@ -3085,6 +3086,12 @@ int main(int argc, char *argv[])
 
     ztermy::AppController appController(paths->profilesFile, paths->knownHostsFile, paths->settingsFile,
                                         paths->credentialsFile, paths->mode);
+    const auto refreshAiPrivacyDiagnostics = [&appController, &diagnosticReporter] {
+        diagnosticReporter.setAiPrivacySummary(QJsonObject::fromVariantMap(appController.aiPrivacyDiagnostics()));
+    };
+    refreshAiPrivacyDiagnostics();
+    QObject::connect(&appController, &ztermy::AppController::aiPrivacyDiagnosticsChanged, &diagnosticReporter,
+                     refreshAiPrivacyDiagnostics);
     ztermy::FontCatalog fontCatalog;
     fontCatalog.applyUiFont(appController.uiFontFamily());
     const bool uiLayoutSmoke = QCoreApplication::arguments().contains(QStringLiteral("--ui-layout-smoke"));

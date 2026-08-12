@@ -1,5 +1,6 @@
 #include "application/AppController.h"
 
+#include "application/ai/AiPrivacyDiagnostics.h"
 #include "application/ai/AiTerminalFrameTool.h"
 #include "application/ai/AiWaitCommandTool.h"
 #include "domain/ai/AiContextSerializer.h"
@@ -1706,6 +1707,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
                      Qt::QueuedConnection);
     QObject::connect(this, &AppController::scriptOutputObserved, this, &AppController::observeScriptOutput,
                      Qt::QueuedConnection);
+    initializeAiPrivacySignals();
     initializePortForwardingSignalBridges();
     loadHostProfiles();
     loadPortForwardingRules();
@@ -1776,6 +1778,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
                      Qt::QueuedConnection);
     QObject::connect(this, &AppController::scriptOutputObserved, this, &AppController::observeScriptOutput,
                      Qt::QueuedConnection);
+    initializeAiPrivacySignals();
     initializePortForwardingSignalBridges();
     loadHostProfiles();
     loadPortForwardingRules();
@@ -2890,6 +2893,53 @@ QVariantList AppController::activeAiContextItems() const
     return tab == nullptr ? QVariantList{} : tab->aiContextItems;
 }
 
+QVariantMap AppController::aiPrivacyDiagnostics() const
+{
+    ai::AiPrivacySnapshot snapshot{
+        .providerKind = aiProviderPreference(),
+        .endpoint = QUrl(aiBaseUrl()),
+        .permissionMode = aiPermissionPreference(),
+        .modelConfigured = !aiModel().trimmed().isEmpty(),
+        .apiKeyConfigured = aiApiKeyConfigured(),
+        .automaticContext = aiAutomaticContext(),
+        .encryptedHistoryEnabled = aiConversationHistoryEnabled(),
+    };
+    for (const auto &tab : m_tabs)
+    {
+        if (!tab->aiConversationId.isEmpty())
+        {
+            ++snapshot.activeConversations;
+        }
+        if (tab->aiTurnRunner && tab->aiTurnRunner->active())
+        {
+            ++snapshot.activeRequests;
+        }
+    }
+    if (const TerminalTab *tab = activeTab(); tab != nullptr)
+    {
+        snapshot.contextItems = static_cast<std::size_t>(tab->aiContextItems.size());
+        snapshot.serializedContextBytes = static_cast<std::size_t>(tab->aiContextPreview.toUtf8().size());
+        for (const QVariant &itemValue : tab->aiContextItems)
+        {
+            const QVariantMap item = itemValue.toMap();
+            snapshot.redactedContextItems += item.value(QStringLiteral("redacted")).toBool() ? 1U : 0U;
+            snapshot.truncatedContextItems += item.value(QStringLiteral("truncated")).toBool() ? 1U : 0U;
+        }
+    }
+    const auto servers = m_mcpRuntime.servers();
+    snapshot.mcpServers = servers.size();
+    snapshot.readyMcpServers =
+        static_cast<std::size_t>(std::ranges::count_if(servers, [](const ai::McpServerSnapshot &server) {
+            return server.state == QStringLiteral("ready");
+        }));
+    const auto tools = m_mcpRuntime.tools();
+    snapshot.approvedMcpTools =
+        static_cast<std::size_t>(std::ranges::count_if(tools, [](const ai::McpToolSnapshot &tool) {
+            return tool.approved;
+        }));
+    return ai::buildAiPrivacyDiagnostics(snapshot).toVariantMap();
+}
+
 QVariantMap AppController::activeAiToolApproval() const
 {
     const TerminalTab *tab = activeTab();
@@ -3038,6 +3088,16 @@ QVariantList AppController::mcpTools() const
 QString AppController::mcpOperationError() const
 {
     return m_mcpRuntime.operationError();
+}
+
+void AppController::initializeAiPrivacySignals()
+{
+    QObject::connect(this, &AppController::applicationSettingsChanged, this,
+                     &AppController::aiPrivacyDiagnosticsChanged);
+    QObject::connect(this, &AppController::credentialVaultChanged, this, &AppController::aiPrivacyDiagnosticsChanged);
+    QObject::connect(this, &AppController::aiConversationChanged, this, &AppController::aiPrivacyDiagnosticsChanged);
+    QObject::connect(this, &AppController::mcpConfigurationChanged, this, &AppController::aiPrivacyDiagnosticsChanged);
+    QObject::connect(this, &AppController::terminalTabsChanged, this, &AppController::aiPrivacyDiagnosticsChanged);
 }
 
 void AppController::retranslateUiState()

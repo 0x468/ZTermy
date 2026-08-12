@@ -176,6 +176,7 @@ class AppController final : public QObject
     Q_PROPERTY(QString activeAiContextPreview READ activeAiContextPreview NOTIFY aiConversationChanged)
     Q_PROPERTY(QVariantList activeAiContextItems READ activeAiContextItems NOTIFY aiConversationChanged)
     Q_PROPERTY(QVariantMap activeAiToolApproval READ activeAiToolApproval NOTIFY aiConversationChanged)
+    Q_PROPERTY(QVariantMap aiPrivacyDiagnostics READ aiPrivacyDiagnostics NOTIFY aiPrivacyDiagnosticsChanged)
     Q_PROPERTY(QVariantList mcpServers READ mcpServers NOTIFY mcpConfigurationChanged)
     Q_PROPERTY(QVariantList mcpTools READ mcpTools NOTIFY mcpConfigurationChanged)
     Q_PROPERTY(QString mcpOperationError READ mcpOperationError NOTIFY mcpConfigurationChanged)
@@ -304,6 +305,7 @@ public:
     [[nodiscard]] QString activeAiContextPreview() const;
     [[nodiscard]] QVariantList activeAiContextItems() const;
     [[nodiscard]] QVariantMap activeAiToolApproval() const;
+    [[nodiscard]] QVariantMap aiPrivacyDiagnostics() const;
     [[nodiscard]] QVariantList mcpServers() const;
     [[nodiscard]] QVariantList mcpTools() const;
     [[nodiscard]] QString mcpOperationError() const;
@@ -545,6 +547,7 @@ signals:
     void applicationSettingsChanged();
     void credentialVaultChanged();
     void aiConversationChanged();
+    void aiPrivacyDiagnosticsChanged();
     void mcpConfigurationChanged();
     void portForwardingRulesChanged();
     void startupRecoveryNoticeChanged();
@@ -724,6 +727,7 @@ private:
     void initializeSessionLog(TerminalTab &tab);
     void initializeTerminalOutputSink(TerminalTab &tab);
     void initializeAiRuntime(TerminalTab &tab);
+    void initializeAiPrivacySignals();
     void initializeAiConversationHistory();
     void persistAiConversation(const TerminalTab &tab);
     [[nodiscard]] ai::AiContextBundle buildAiContext(TerminalTab &tab, bool preferLastFailure);

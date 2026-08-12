@@ -60,6 +60,9 @@ private slots:
         writeFixture(paths.crashDirectory + QStringLiteral("/secret-crash.dmp"), dumpSecret);
 
         ztermy::diagnostics::DiagnosticReporter reporter(paths);
+        reporter.setAiPrivacySummary(QJsonObject{
+            {QStringLiteral("provider"), QJsonObject{{QStringLiteral("kind"), QStringLiteral("ollama")}}},
+            {QStringLiteral("diagnosticExportBoundary"), QJsonObject{{QStringLiteral("includesCredentials"), false}}}});
         const QString reportPath = temporaryDirectory.path() + QStringLiteral("/exports/diagnostic.json");
         QVERIFY(reporter.exportReport(QUrl::fromLocalFile(reportPath)));
         QVERIFY(reporter.lastError().isEmpty());
@@ -71,7 +74,7 @@ private slots:
         QVERIFY(document.isObject());
 
         const QJsonObject root = document.object();
-        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 1);
+        QCOMPARE(root.value(QStringLiteral("schemaVersion")).toInt(), 2);
         QCOMPARE(root.value(QStringLiteral("application")).toObject().value(QStringLiteral("version")).toString(),
                  QStringLiteral("0.2.1-test"));
         QCOMPARE(root.value(QStringLiteral("application")).toObject().value(QStringLiteral("storageMode")).toString(),
@@ -90,6 +93,13 @@ private slots:
         {
             QVERIFY(!iterator.value().toBool());
         }
+        QCOMPARE(root.value(QStringLiteral("ai"))
+                     .toObject()
+                     .value(QStringLiteral("provider"))
+                     .toObject()
+                     .value(QStringLiteral("kind"))
+                     .toString(),
+                 QStringLiteral("ollama"));
 
         QVERIFY(!serialized.contains(logSecret));
         QVERIFY(!serialized.contains(dumpSecret));
