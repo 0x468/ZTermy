@@ -7,6 +7,7 @@
 #include "application/ai/AiConversationModel.h"
 #include "application/ai/AiReadToolDispatcher.h"
 #include "application/ai/AiSecretStore.h"
+#include "application/ai/AiSftpReadTool.h"
 #include "application/ai/AiTurnRunner.h"
 #include "application/forwarding/PortForwardingJob.h"
 #include "application/security/CredentialVaultCoordinator.h"
@@ -549,6 +550,13 @@ private:
 
     struct TerminalTab final
     {
+        struct PendingAiSftpRead final
+        {
+            quint64 requestId = 0;
+            ai::AiToolCall call;
+            ai::AiSftpReadRequest request;
+        };
+
         std::unique_ptr<terminal::LocalTerminalSessionBackend> local;
         std::unique_ptr<ssh::SshTerminalSession> ssh;
         std::unique_ptr<sftp::SftpSession> sftpSession;
@@ -557,6 +565,7 @@ private:
         std::unique_ptr<ai::AiTurnRunner> aiTurnRunner;
         std::unique_ptr<ai::AiAgentTurnBudget> aiTurnBudget;
         std::optional<ai::AiTerminalAction> pendingAiAction;
+        std::optional<PendingAiSftpRead> pendingAiSftpRead;
         qint64 connectedUtcMs = 0;
         qreal sessionBackgroundOpacity = -1.0;
         qint64 recordingStartedUtcMs = 0;
@@ -564,6 +573,7 @@ private:
         std::uint64_t reconnectGeneration = 0;
         std::uint64_t historyRequestId = 0;
         std::uint64_t sftpRequestId = 0;
+        std::uint64_t aiSftpReadRequestId = 0;
         std::uint64_t sftpGeneration = 0;
         std::uint64_t sftpTreeRequestId = 0;
         qreal workbenchWidth = 520.0;

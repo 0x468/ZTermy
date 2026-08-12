@@ -7656,6 +7656,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
     toolDefinitions.insert(toolDefinitions.end(), std::make_move_iterator(actionDefinitions.begin()),
                            std::make_move_iterator(actionDefinitions.end()));
     toolDefinitions.push_back(ai::AiWaitCommandTool::definition());
+    toolDefinitions.push_back(ai::AiSftpReadTool::definition());
     ai::AiGenerationRequest generation{.instructions = std::move(instructions),
                                        .messages = std::move(messages),
                                        .tools = std::move(toolDefinitions)};
@@ -7789,6 +7790,92 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                                      resultCode, false);
                 }
                 return handled;
+            }
+            if (call.name == "read_sftp_file")
+            {
+                if (target != nullptr)
+                {
+                    recordAiActivity(*target, call, QStringLiteral("queued"), QStringLiteral("pending"), false);
+                }
+                if (target == nullptr || !target->aiTurnRunner || !target->aiTurnBudget)
+                {
+                    return ai::AiTurnRunner::ToolHandlingResult{
+                        .output = ai::AiToolOutput{
+                            .callId = call.id,
+                            .name = call.name,
+                            .outputJson = ai::AiSftpReadTool::failure("session_unavailable",
+                                                                      "The target terminal session is unavailable.")}};
+                }
+                const auto signature = call.name + ':' + call.argumentsJson;
+                const auto budgetDecision =
+                    target->aiTurnBudget->authorize(false, signature, target->reconnectGeneration);
+                if (budgetDecision != ai::AiAgentBudgetDecision::allow)
+                {
+                    recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("budget_denied"), false);
+                    return ai::AiTurnRunner::ToolHandlingResult{
+                        .output = ai::AiToolOutput{.callId = call.id,
+                                                   .name = call.name,
+                                                   .outputJson = aiBudgetFailureJson(budgetDecision)}};
+                }
+                auto request = ai::AiSftpReadTool::parse(call.argumentsJson);
+                if (!request.has_value())
+                {
+                    recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("invalid_arguments"),
+                                     false);
+                    return ai::AiTurnRunner::ToolHandlingResult{
+                        .output = ai::AiToolOutput{.callId = call.id,
+                                                   .name = call.name,
+                                                   .outputJson = std::move(request.error())}};
+                }
+                const ai::AiSessionTarget actualTarget{.sessionId = utf8String(target->id),
+                                                       .sessionGeneration = target->reconnectGeneration};
+                if (request->target != actualTarget)
+                {
+                    const auto output = ai::AiSftpReadTool::failure(
+                        "scope_changed", "The requested terminal session or generation is no longer active.");
+                    recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("scope_changed"), false);
+                    return ai::AiTurnRunner::ToolHandlingResult{
+                        .output = ai::AiToolOutput{.callId = call.id, .name = call.name, .outputJson = output}};
+                }
+                if (!target->sftpSession || !target->sftpSession->running() || target->pendingAiSftpRead.has_value())
+                {
+                    const auto output = ai::AiSftpReadTool::failure(
+                        "sftp_unavailable", "Open and connect the session's SFTP browser before reading a file.");
+                    recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("sftp_unavailable"),
+                                     false);
+                    return ai::AiTurnRunner::ToolHandlingResult{
+                        .output = ai::AiToolOutput{.callId = call.id, .name = call.name, .outputJson = output}};
+                }
+                const quint64 requestId = ++target->aiSftpReadRequestId;
+                target->pendingAiSftpRead = TerminalTab::PendingAiSftpRead{.requestId = requestId,
+                                                                           .call = call,
+                                                                           .request = std::move(*request)};
+                target->sftpSession->requestReadFile(
+                    requestId, target->reconnectGeneration, utf8QString(target->pendingAiSftpRead->request.remotePath),
+                    static_cast<quint32>(target->pendingAiSftpRead->request.maximumBytes));
+                return ai::AiTurnRunner::ToolHandlingResult{.cancel = [this, tabId, requestId] noexcept {
+                    try
+                    {
+                        TerminalTab *cancelledTarget = findTab(tabId);
+                        if (cancelledTarget == nullptr || !cancelledTarget->pendingAiSftpRead.has_value()
+                            || cancelledTarget->pendingAiSftpRead->requestId != requestId)
+                        {
+                            return;
+                        }
+                        const auto call = cancelledTarget->pendingAiSftpRead->call;
+                        if (cancelledTarget->sftpSession)
+                        {
+                            cancelledTarget->sftpSession->cancelReadFile(requestId);
+                        }
+                        cancelledTarget->pendingAiSftpRead.reset();
+                        recordAiActivity(*cancelledTarget, call, QStringLiteral("cancelled"),
+                                         QStringLiteral("cancelled"), false);
+                    }
+                    catch (...)
+                    {
+                        qCCritical(appControllerLog) << "AI SFTP read cancellation suppressed an exception";
+                    }
+                }};
             }
             if (call.name == "run_command" || call.name == "interrupt_command" || call.name == "write_to_pty"
                 || call.name == "transfer_control")
@@ -9398,6 +9485,69 @@ void AppController::connectSftpTabSignals(TerminalTab &tab)
                          }
                          updated->sftpModel->applyTreeError(remotePath, tr("This folder could not be expanded."));
                      });
+    QObject::connect(
+        tab.sftpSession.get(), &sftp::SftpSession::fileReadReady, this,
+        [this, tabId](const quint64 requestId, const quint64 generation, const QString &remotePath,
+                      const sftp::FileReadBytesPtr &bytes, const bool truncated) {
+            TerminalTab *updated = findTab(tabId);
+            if (updated == nullptr || !updated->pendingAiSftpRead.has_value() || bytes == nullptr
+                || updated->pendingAiSftpRead->requestId != requestId
+                || updated->pendingAiSftpRead->request.target.sessionGeneration != generation
+                || utf8QString(updated->pendingAiSftpRead->request.remotePath) != remotePath || !updated->aiTurnRunner)
+            {
+                return;
+            }
+            const auto pending = std::move(*updated->pendingAiSftpRead);
+            updated->pendingAiSftpRead.reset();
+            if (updated->reconnectGeneration != generation)
+            {
+                const auto output = ai::AiSftpReadTool::failure(
+                    "scope_changed", "The requested terminal session or generation is no longer active.");
+                recordAiActivity(*updated, pending.call, QStringLiteral("failed"), QStringLiteral("scope_changed"),
+                                 false);
+                static_cast<void>(updated->aiTurnRunner->completePendingTool(
+                    ai::AiToolOutput{.callId = pending.call.id, .name = pending.call.name, .outputJson = output}));
+                return;
+            }
+            const auto output = ai::AiSftpReadTool::result(pending.request, *bytes, truncated);
+            const QString resultCode = aiActivityResultCode(output);
+            recordAiActivity(*updated, pending.call,
+                             resultCode == QStringLiteral("ok") ? QStringLiteral("succeeded")
+                                                                : QStringLiteral("failed"),
+                             resultCode, false);
+            static_cast<void>(updated->aiTurnRunner->completePendingTool(
+                ai::AiToolOutput{.callId = pending.call.id, .name = pending.call.name, .outputJson = output}));
+        });
+    QObject::connect(
+        tab.sftpSession.get(), &sftp::SftpSession::fileReadFailed, this,
+        [this, tabId](const quint64 requestId, const quint64 generation, const QString &remotePath,
+                      const ssh::SshTransportErrorKind error) {
+            TerminalTab *updated = findTab(tabId);
+            if (updated == nullptr || !updated->pendingAiSftpRead.has_value()
+                || updated->pendingAiSftpRead->requestId != requestId
+                || updated->pendingAiSftpRead->request.target.sessionGeneration != generation
+                || utf8QString(updated->pendingAiSftpRead->request.remotePath) != remotePath || !updated->aiTurnRunner)
+            {
+                return;
+            }
+            const auto pending = std::move(*updated->pendingAiSftpRead);
+            updated->pendingAiSftpRead.reset();
+            if (updated->reconnectGeneration != generation)
+            {
+                const auto output = ai::AiSftpReadTool::failure(
+                    "scope_changed", "The requested terminal session or generation is no longer active.");
+                recordAiActivity(*updated, pending.call, QStringLiteral("failed"), QStringLiteral("scope_changed"),
+                                 false);
+                static_cast<void>(updated->aiTurnRunner->completePendingTool(
+                    ai::AiToolOutput{.callId = pending.call.id, .name = pending.call.name, .outputJson = output}));
+                return;
+            }
+            const auto output = ai::AiSftpReadTool::failure(error);
+            const QString resultCode = aiActivityResultCode(output);
+            recordAiActivity(*updated, pending.call, QStringLiteral("failed"), resultCode, false);
+            static_cast<void>(updated->aiTurnRunner->completePendingTool(
+                ai::AiToolOutput{.callId = pending.call.id, .name = pending.call.name, .outputJson = output}));
+        });
     QObject::connect(tab.sftpSession.get(), &sftp::SftpSession::operationSucceeded, this,
                      [this, tabId](const quint64, const sftp::SftpOperationKind) {
                          TerminalTab *updated = findTab(tabId);

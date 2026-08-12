@@ -97,9 +97,11 @@ evaluations serve different purposes and are reported separately.
       data and preserve their existing ownership and privacy contracts.
   - Implemented: immutable session-generation snapshots, 100-item paging,
     metadata-only script/note lists, current SFTP listing, shell history,
-    telemetry, and forwarding status (`ADR 0062`).
-  - Remaining for 0.3.2: bounded content reads, asynchronous arbitrary SFTP
-    reads, mutations, and workspace target sets.
+    telemetry, and forwarding status (`ADR 0062`); cancellable, generation-bound
+    regular-file reads with 32 KiB, UTF-8/Base64, symlink, and cancellation
+    boundaries (`ADR 0063`).
+  - Remaining for 0.3.2: script/note content reads, arbitrary SFTP directory
+    navigation, mutations, and workspace target sets.
 - [ ] MCP tools use the same registry, permission, result, audit, cancellation,
       and namespace rules as native tools; server trust tier, credential scope,
       description/schema changes, untrusted elicitation, and disable/revoke are

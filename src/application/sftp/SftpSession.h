@@ -2,6 +2,7 @@
 
 #include "application/sftp/SftpClient.h"
 
+#include <QByteArray>
 #include <QObject>
 #include <QString>
 
@@ -12,8 +13,10 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <stop_token>
 #include <system_error>
 #include <thread>
+#include <unordered_map>
 #include <variant>
 
 namespace ztermy::sftp
@@ -31,6 +34,7 @@ enum class SftpOperationKind : std::uint8_t
 
 using DirectoryListing = std::vector<DirectoryEntry>;
 using DirectoryListingPtr = std::shared_ptr<const DirectoryListing>;
+using FileReadBytesPtr = std::shared_ptr<const QByteArray>;
 
 class SftpSession final : public QObject
 {
@@ -59,6 +63,8 @@ public slots:
     void requestCreateFile(quint64 requestId, const QString &remotePath);
     void requestRenameEntry(quint64 requestId, const QString &sourcePath, const QString &destinationPath);
     void requestRemoveEntry(quint64 requestId, const QString &remotePath, bool directory);
+    void requestReadFile(quint64 requestId, quint64 generation, const QString &remotePath, quint32 maximumBytes);
+    void cancelReadFile(quint64 requestId);
 
 signals:
     void runningChanged(bool running);
@@ -77,6 +83,10 @@ signals:
     void operationSucceeded(quint64 requestId, ztermy::sftp::SftpOperationKind operation);
     void operationFailed(quint64 requestId, ztermy::sftp::SftpOperationKind operation,
                          ztermy::ssh::SshTransportErrorKind error);
+    void fileReadReady(quint64 requestId, quint64 generation, const QString &remotePath,
+                       ztermy::sftp::FileReadBytesPtr bytes, bool truncated);
+    void fileReadFailed(quint64 requestId, quint64 generation, const QString &remotePath,
+                        ztermy::ssh::SshTransportErrorKind error);
 
 private slots:
     void deliverRunning(bool running);
@@ -94,6 +104,10 @@ private slots:
                                      ztermy::ssh::SshTransportErrorKind error);
     void deliverOperationSucceeded(quint64 requestId, ztermy::sftp::SftpOperationKind operation);
     void deliverOperationFailed(quint64 requestId, ztermy::sftp::SftpOperationKind operation,
+                                ztermy::ssh::SshTransportErrorKind error);
+    void deliverFileRead(quint64 requestId, quint64 generation, const QString &remotePath,
+                         ztermy::sftp::FileReadBytesPtr bytes, bool truncated);
+    void deliverFileReadFailure(quint64 requestId, quint64 generation, const QString &remotePath,
                                 ztermy::ssh::SshTransportErrorKind error);
 
 private:
@@ -131,8 +145,16 @@ private:
         std::string remotePath;
         bool directory = false;
     };
+    struct ReadFileCommand final
+    {
+        quint64 requestId = 0;
+        quint64 generation = 0;
+        std::string remotePath;
+        std::size_t maximumBytes = 0;
+        std::shared_ptr<std::stop_source> cancellation;
+    };
     using Command = std::variant<ListDirectoryCommand, ListTreeDirectoryCommand, CreateDirectoryCommand,
-                                 CreateFileCommand, RenameEntryCommand, RemoveEntryCommand>;
+                                 CreateFileCommand, RenameEntryCommand, RemoveEntryCommand, ReadFileCommand>;
 
     void run(ssh::SshConnectionRequest &request, const std::stop_token &stopToken);
     void processCommand(SftpClient &client, Command command, const std::stop_token &stopToken);
@@ -159,6 +181,10 @@ private:
                                   ssh::SshTransportErrorKind error);
     void postOperationSucceeded(quint64 requestId, SftpOperationKind operation);
     void postOperationFailed(quint64 requestId, SftpOperationKind operation, ssh::SshTransportErrorKind error);
+    void postFileRead(quint64 requestId, quint64 generation, const QString &remotePath, FileReadBytesPtr bytes,
+                      bool truncated);
+    void postFileReadFailure(quint64 requestId, quint64 generation, const QString &remotePath,
+                             ssh::SshTransportErrorKind error);
 
     SftpClientFactory m_clientFactory;
     std::string m_filenameEncoding = "utf-8";
@@ -173,6 +199,7 @@ private:
     std::atomic_bool m_acceptingCommands = false;
     quint64 m_latestDirectoryRequestId = 0;
     quint64 m_latestDirectoryGeneration = 0;
+    std::unordered_map<quint64, std::shared_ptr<std::stop_source>> m_readCancellations;
 
     std::mutex m_hostKeyMutex;
     std::condition_variable_any m_hostKeyAvailable;
@@ -183,4 +210,5 @@ private:
 } // namespace ztermy::sftp
 
 Q_DECLARE_METATYPE(ztermy::sftp::DirectoryListingPtr)
+Q_DECLARE_METATYPE(ztermy::sftp::FileReadBytesPtr)
 Q_DECLARE_METATYPE(ztermy::sftp::SftpOperationKind)

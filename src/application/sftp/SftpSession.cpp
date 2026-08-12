@@ -7,6 +7,7 @@
 #include <QThread>
 
 #include <algorithm>
+#include <array>
 #include <system_error>
 #include <type_traits>
 #include <utility>
@@ -71,6 +72,7 @@ std::error_code SftpSession::start(ssh::SshConnectionRequest request)
     {
         std::scoped_lock lock(m_commandMutex);
         m_commands.clear();
+        m_readCancellations.clear();
         m_latestDirectoryRequestId = 0;
         m_latestDirectoryGeneration = 0;
         m_acceptingCommands.store(true);
@@ -107,6 +109,11 @@ void SftpSession::requestStop() noexcept
     m_acceptingCommands.store(false);
     {
         std::scoped_lock lock(m_commandMutex);
+        for (const auto &[requestId, cancellation] : m_readCancellations)
+        {
+            Q_UNUSED(requestId);
+            cancellation->request_stop();
+        }
         m_commands.clear();
     }
     if (!m_worker.joinable())
@@ -128,6 +135,7 @@ void SftpSession::stop() noexcept
     {
         std::scoped_lock lock(m_commandMutex);
         m_commands.clear();
+        m_readCancellations.clear();
     }
     m_acceptingCommands.store(false);
     if (m_running.exchange(false))
@@ -299,6 +307,82 @@ void SftpSession::requestRemoveEntry(const quint64 requestId, const QString &rem
     }
 }
 
+void SftpSession::requestReadFile(const quint64 requestId, const quint64 generation, const QString &remotePath,
+                                  const quint32 maximumBytes)
+{
+    constexpr quint32 maximumAllowedBytes = 64 * 1024;
+    auto path = normalizedPath(remotePath);
+    if (!path || *path == "/" || maximumBytes == 0 || maximumBytes > maximumAllowedBytes)
+    {
+        postFileReadFailure(requestId, generation, remotePath, ssh::SshTransportErrorKind::InvalidArgument);
+        return;
+    }
+    auto cancellation = std::make_shared<std::stop_source>();
+    bool duplicateRequest = false;
+    {
+        std::scoped_lock lock(m_commandMutex);
+        if (m_readCancellations.contains(requestId))
+        {
+            duplicateRequest = true;
+        }
+        else
+        {
+            m_readCancellations.emplace(requestId, cancellation);
+        }
+    }
+    if (duplicateRequest)
+    {
+        postFileReadFailure(requestId, generation, remotePath, ssh::SshTransportErrorKind::InvalidArgument);
+        return;
+    }
+    const EnqueueResult result = enqueue(ReadFileCommand{.requestId = requestId,
+                                                         .generation = generation,
+                                                         .remotePath = std::move(*path),
+                                                         .maximumBytes = maximumBytes,
+                                                         .cancellation = std::move(cancellation)});
+    if (result != EnqueueResult::Accepted)
+    {
+        {
+            std::scoped_lock lock(m_commandMutex);
+            m_readCancellations.erase(requestId);
+        }
+        postFileReadFailure(requestId, generation, remotePath, ssh::SshTransportErrorKind::Cancelled);
+    }
+}
+
+void SftpSession::cancelReadFile(const quint64 requestId)
+{
+    std::shared_ptr<std::stop_source> cancellation;
+    std::optional<ReadFileCommand> pending;
+    {
+        std::scoped_lock lock(m_commandMutex);
+        const auto found = m_readCancellations.find(requestId);
+        if (found == m_readCancellations.end())
+        {
+            return;
+        }
+        cancellation = found->second;
+        const auto command = std::ranges::find_if(m_commands, [requestId](const Command &queued) {
+            const auto *read = std::get_if<ReadFileCommand>(&queued);
+            return read != nullptr && read->requestId == requestId;
+        });
+        if (command != m_commands.end())
+        {
+            pending = *std::get_if<ReadFileCommand>(&*command);
+            m_commands.erase(command);
+            m_readCancellations.erase(found);
+        }
+    }
+    cancellation->request_stop();
+    if (pending.has_value())
+    {
+        postFileReadFailure(
+            pending->requestId, pending->generation,
+            QString::fromUtf8(pending->remotePath.data(), static_cast<qsizetype>(pending->remotePath.size())),
+            ssh::SshTransportErrorKind::Cancelled);
+    }
+}
+
 void SftpSession::run(ssh::SshConnectionRequest &request, const std::stop_token &stopToken)
 {
     const ssh::SshConnectionCallbacks callbacks{
@@ -443,6 +527,71 @@ void SftpSession::processCommand(SftpClient &client, Command command, const std:
                 auto result = client.removeEntry(remove.remotePath, remove.directory, stopToken);
                 result ? postOperationSucceeded(remove.requestId, operation)
                        : postOperationFailed(remove.requestId, operation, result.error().kind);
+            },
+            [this, &client](const ReadFileCommand &read) {
+                const auto complete = [this, requestId = read.requestId] {
+                    std::scoped_lock lock(m_commandMutex);
+                    m_readCancellations.erase(requestId);
+                };
+                const auto token = read.cancellation->get_token();
+                const QString path =
+                    QString::fromUtf8(read.remotePath.data(), static_cast<qsizetype>(read.remotePath.size()));
+                auto entry = client.statEntry(read.remotePath, token);
+                if (!entry || !entry->has_value() || entry->value().type != EntryType::RegularFile)
+                {
+                    const auto error = !entry ? entry.error().kind : ssh::SshTransportErrorKind::InvalidArgument;
+                    complete();
+                    postFileReadFailure(read.requestId, read.generation, path, error);
+                    return;
+                }
+                auto opened = client.openFileForRead(read.remotePath, token);
+                if (!opened)
+                {
+                    complete();
+                    postFileReadFailure(read.requestId, read.generation, path, opened.error().kind);
+                    return;
+                }
+                QByteArray bytes;
+                bytes.reserve(static_cast<qsizetype>(read.maximumBytes + 1));
+                std::array<char, 8192> buffer{};
+                std::optional<ssh::SshTransportErrorKind> failure;
+                while (static_cast<std::size_t>(bytes.size()) <= read.maximumBytes && !token.stop_requested())
+                {
+                    const std::size_t remaining = read.maximumBytes + 1 - static_cast<std::size_t>(bytes.size());
+                    auto chunk = client.readFile(std::span(buffer.data(), std::min(buffer.size(), remaining)), token);
+                    if (!chunk)
+                    {
+                        failure = chunk.error().kind;
+                        break;
+                    }
+                    if (*chunk == 0)
+                    {
+                        break;
+                    }
+                    bytes.append(buffer.data(), static_cast<qsizetype>(*chunk));
+                }
+                const auto closed = client.closeFile(token);
+                if (!closed && !failure.has_value())
+                {
+                    failure = closed.error().kind;
+                }
+                if (token.stop_requested() && !failure.has_value())
+                {
+                    failure = ssh::SshTransportErrorKind::Cancelled;
+                }
+                complete();
+                if (failure.has_value())
+                {
+                    postFileReadFailure(read.requestId, read.generation, path, *failure);
+                    return;
+                }
+                const bool truncated = static_cast<std::size_t>(bytes.size()) > read.maximumBytes;
+                if (truncated)
+                {
+                    bytes.truncate(static_cast<qsizetype>(read.maximumBytes));
+                }
+                postFileRead(read.requestId, read.generation, path,
+                             std::make_shared<const QByteArray>(std::move(bytes)), truncated);
             }},
         command);
 }
@@ -732,6 +881,50 @@ void SftpSession::deliverOperationFailed(const quint64 requestId, const SftpOper
                                          const ssh::SshTransportErrorKind error)
 {
     emit operationFailed(requestId, operation, error);
+}
+
+void SftpSession::postFileRead(const quint64 requestId, const quint64 generation, const QString &remotePath,
+                               FileReadBytesPtr bytes, const bool truncated)
+{
+    if (QThread::currentThread() == thread())
+    {
+        deliverFileRead(requestId, generation, remotePath, std::move(bytes), truncated);
+        return;
+    }
+    if (!QMetaObject::invokeMethod(this, "deliverFileRead", Qt::QueuedConnection, Q_ARG(quint64, requestId),
+                                   Q_ARG(quint64, generation), Q_ARG(QString, remotePath),
+                                   Q_ARG(ztermy::sftp::FileReadBytesPtr, bytes), Q_ARG(bool, truncated)))
+    {
+        qWarning("SFTP file-read result could not be queued to its owner thread");
+    }
+}
+
+void SftpSession::deliverFileRead(const quint64 requestId, const quint64 generation, const QString &remotePath,
+                                  FileReadBytesPtr bytes, const bool truncated)
+{
+    emit fileReadReady(requestId, generation, remotePath, std::move(bytes), truncated);
+}
+
+void SftpSession::postFileReadFailure(const quint64 requestId, const quint64 generation, const QString &remotePath,
+                                      const ssh::SshTransportErrorKind error)
+{
+    if (QThread::currentThread() == thread())
+    {
+        deliverFileReadFailure(requestId, generation, remotePath, error);
+        return;
+    }
+    if (!QMetaObject::invokeMethod(this, "deliverFileReadFailure", Qt::QueuedConnection, Q_ARG(quint64, requestId),
+                                   Q_ARG(quint64, generation), Q_ARG(QString, remotePath),
+                                   Q_ARG(ztermy::ssh::SshTransportErrorKind, error)))
+    {
+        qWarning("SFTP file-read failure could not be queued to its owner thread");
+    }
+}
+
+void SftpSession::deliverFileReadFailure(const quint64 requestId, const quint64 generation, const QString &remotePath,
+                                         const ssh::SshTransportErrorKind error)
+{
+    emit fileReadFailed(requestId, generation, remotePath, error);
 }
 
 } // namespace ztermy::sftp

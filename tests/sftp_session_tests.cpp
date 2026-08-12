@@ -6,6 +6,7 @@
 #include <QSignalSpy>
 #include <QtTest/QTest>
 
+#include <algorithm>
 #include <atomic>
 #include <condition_variable>
 #include <memory>
@@ -22,11 +23,15 @@ struct FakeState final
     std::condition_variable_any available;
     std::atomic_bool slowListEntered = false;
     std::atomic_bool releaseSlowList = false;
+    std::atomic_bool slowReadEntered = false;
     std::vector<std::string> listed;
     std::vector<std::string> created;
     std::vector<std::string> createdFiles;
     std::vector<std::pair<std::string, std::string>> renamed;
     std::vector<std::pair<std::string, bool>> removed;
+    std::string openedPath;
+    std::string fileContents = "hello world";
+    std::size_t readOffset = 0;
 };
 
 class FakeSftpClient final : public ztermy::sftp::SftpClient
@@ -70,9 +75,14 @@ public:
     }
 
     std::expected<std::optional<ztermy::sftp::DirectoryEntry>, ztermy::ssh::SshTransportError>
-    statEntry(const std::string_view, const std::stop_token &) override
+    statEntry(const std::string_view remotePath, const std::stop_token &) override
     {
-        return std::optional<ztermy::sftp::DirectoryEntry>{};
+        return std::optional<ztermy::sftp::DirectoryEntry>{
+            ztermy::sftp::DirectoryEntry{.name = "file",
+                                         .remotePath = std::string(remotePath),
+                                         .type = remotePath == "/link" ? ztermy::sftp::EntryType::SymbolicLink
+                                                                       : ztermy::sftp::EntryType::RegularFile,
+                                         .size = static_cast<std::uint64_t>(m_state->fileContents.size())}};
     }
 
     std::expected<void, ztermy::ssh::SshTransportError> createDirectory(const std::string_view remotePath,
@@ -100,11 +110,13 @@ public:
         return {};
     }
 
-    std::expected<void, ztermy::ssh::SshTransportError> openFileForRead(const std::string_view,
+    std::expected<void, ztermy::ssh::SshTransportError> openFileForRead(const std::string_view remotePath,
                                                                         const std::stop_token &) override
     {
-        return std::unexpected(
-            ztermy::ssh::SshTransportError{.kind = ztermy::ssh::SshTransportErrorKind::InvalidState});
+        std::scoped_lock lock(m_state->mutex);
+        m_state->openedPath = remotePath;
+        m_state->readOffset = 0;
+        return {};
     }
 
     std::expected<void, ztermy::ssh::SshTransportError> openFileForWrite(const std::string_view remotePath, const bool,
@@ -115,11 +127,28 @@ public:
         return {};
     }
 
-    std::expected<std::size_t, ztermy::ssh::SshTransportError> readFile(const std::span<char>,
-                                                                        const std::stop_token &) override
+    std::expected<std::size_t, ztermy::ssh::SshTransportError> readFile(const std::span<char> output,
+                                                                        const std::stop_token &stopToken) override
     {
-        return std::unexpected(
-            ztermy::ssh::SshTransportError{.kind = ztermy::ssh::SshTransportErrorKind::InvalidState});
+        if (m_state->openedPath == "/slow-file")
+        {
+            m_state->slowReadEntered.store(true);
+            m_state->available.notify_all();
+            std::unique_lock lock(m_state->mutex);
+            if (!m_state->available.wait(lock, stopToken, [] {
+                    return false;
+                }))
+            {
+                return std::unexpected(
+                    ztermy::ssh::SshTransportError{.kind = ztermy::ssh::SshTransportErrorKind::Cancelled});
+            }
+        }
+        std::scoped_lock lock(m_state->mutex);
+        const std::size_t remaining = m_state->fileContents.size() - m_state->readOffset;
+        const std::size_t count = std::min(output.size(), remaining);
+        std::ranges::copy_n(m_state->fileContents.data() + m_state->readOffset, count, output.data());
+        m_state->readOffset += count;
+        return count;
     }
 
     std::expected<void, ztermy::ssh::SshTransportError> writeFile(const std::span<const char>,
@@ -172,12 +201,54 @@ private slots:
     void boundsBackgroundTreeRequestsAndPrioritizesMutations();
     void dropsStaleTreeBacklogWhenRootGenerationChanges();
     void rejectsCommandsAfterStopBegins();
+    void readsBoundedRegularFilesAndRejectsSymlinks();
+    void cancelsActiveFileReads();
 };
 
 void SftpSessionTests::initTestCase()
 {
     qRegisterMetaType<ztermy::sftp::DirectoryListingPtr>();
+    qRegisterMetaType<ztermy::sftp::FileReadBytesPtr>();
     qRegisterMetaType<ztermy::sftp::SftpOperationKind>();
+}
+
+void SftpSessionTests::readsBoundedRegularFilesAndRejectsSymlinks()
+{
+    const auto state = std::make_shared<FakeState>();
+    ztermy::sftp::SftpSession session(fakeFactory(state));
+    QSignalSpy readySpy(&session, &ztermy::sftp::SftpSession::fileReadReady);
+    QSignalSpy failedSpy(&session, &ztermy::sftp::SftpSession::fileReadFailed);
+
+    QVERIFY(!session.start(validRequest()));
+    QTRY_VERIFY(session.running());
+    session.requestReadFile(50, 3, QStringLiteral("/file"), 5);
+    QTRY_COMPARE(readySpy.count(), 1);
+    const auto bytes = readySpy.front().at(3).value<ztermy::sftp::FileReadBytesPtr>();
+    QVERIFY(bytes != nullptr);
+    QCOMPARE(*bytes, QByteArray("hello"));
+    QVERIFY(readySpy.front().at(4).toBool());
+
+    session.requestReadFile(51, 3, QStringLiteral("/link"), 64);
+    QTRY_COMPARE(failedSpy.count(), 1);
+    QCOMPARE(failedSpy.front().at(3).value<ztermy::ssh::SshTransportErrorKind>(),
+             ztermy::ssh::SshTransportErrorKind::InvalidArgument);
+}
+
+void SftpSessionTests::cancelsActiveFileReads()
+{
+    const auto state = std::make_shared<FakeState>();
+    ztermy::sftp::SftpSession session(fakeFactory(state));
+    QSignalSpy failedSpy(&session, &ztermy::sftp::SftpSession::fileReadFailed);
+
+    QVERIFY(!session.start(validRequest()));
+    QTRY_VERIFY(session.running());
+    session.requestReadFile(52, 3, QStringLiteral("/slow-file"), 64);
+    QTRY_VERIFY(state->slowReadEntered.load());
+    session.cancelReadFile(52);
+    QTRY_COMPARE(failedSpy.count(), 1);
+    QCOMPARE(failedSpy.front().at(3).value<ztermy::ssh::SshTransportErrorKind>(),
+             ztermy::ssh::SshTransportErrorKind::Cancelled);
+    QVERIFY(session.running());
 }
 
 void SftpSessionTests::deliversIndependentTreeDirectoryResults()
