@@ -1,5 +1,6 @@
 #include "application/ai/AiActionToolDispatcher.h"
 
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSet>
@@ -131,7 +132,8 @@ std::vector<AiToolDefinition> AiActionToolDispatcher::definitions()
          .description = "Hand terminal write control back to the user for the exact target session. The agent cannot "
                         "write again until the user explicitly resumes agent control.",
          .parametersJson =
-             R"({"type":"object","properties":{"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"to":{"type":"string","enum":["user"]}},"required":["session_id","session_generation","to"],"additionalProperties":false})"}};
+             R"({"type":"object","properties":{"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"to":{"type":"string","enum":["user"]}},"required":["session_id","session_generation","to"],"additionalProperties":false})"},
+        {.name = "save_runbook", .description = "Propose saving a reusable ztermy script. This always requires explicit visible user approval.", .parametersJson = R"({"type":"object","properties":{"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"runbook":{"type":"object","properties":{"name":{"type":"string","minLength":1,"maxLength":128},"description":{"type":"string","maxLength":4096},"shell":{"type":"string","enum":["any","powershell","bash","zsh","fish","sh"]},"steps":{"type":"array","minItems":1,"maxItems":64,"items":{"type":"object","properties":{"command":{"type":"string","minLength":1,"maxLength":16384},"continuation":{"type":"string","enum":["immediate","literal-output"]},"output_marker":{"type":"string","maxLength":1024},"timeout_ms":{"type":"integer","minimum":0,"maximum":4294967295}},"required":["command","continuation","output_marker","timeout_ms"],"additionalProperties":false}}},"required":["name","description","shell","steps"],"additionalProperties":false}},"required":["session_id","session_generation","runbook"],"additionalProperties":false})"}};
 }
 
 AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const AiActionToolContext &context,
@@ -141,7 +143,8 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
     const bool interruptCommand = call.name == "interrupt_command";
     const bool writeToPty = call.name == "write_to_pty";
     const bool transferControl = call.name == "transfer_control";
-    if (!runCommand && !interruptCommand && !writeToPty && !transferControl)
+    const bool saveRunbook = call.name == "save_runbook";
+    if (!runCommand && !interruptCommand && !writeToPty && !transferControl && !saveRunbook)
     {
         return response(
             failure(QStringLiteral("unsupported"), QStringLiteral("The requested action tool is unsupported.")), false);
@@ -158,6 +161,7 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
     const auto requestedPtyData = object.value(QStringLiteral("data"));
     const auto requestedAppendEnter = object.value(QStringLiteral("append_enter"));
     const auto requestedControlOwner = object.value(QStringLiteral("to"));
+    const auto requestedRunbook = object.value(QStringLiteral("runbook"));
     const bool commonSchemaValid = call.argumentsJson.size() <= maximumArgumentsBytes && document.isObject()
                                    && parseError.error == QJsonParseError::NoError && requestedSession.isString()
                                    && !requestedSession.toString().isEmpty() && requestedGeneration.has_value();
@@ -186,7 +190,52 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
         && hasOnlyKeys(object,
                        {QStringLiteral("session_id"), QStringLiteral("session_generation"), QStringLiteral("to")})
         && requestedControlOwner.isString() && requestedControlOwner.toString() == QStringLiteral("user");
-    const bool schemaValid = runSchemaValid || interruptSchemaValid || writeSchemaValid || transferSchemaValid;
+    bool runbookSchemaValid = saveRunbook && commonSchemaValid
+                              && hasOnlyKeys(object, {QStringLiteral("session_id"),
+                                                      QStringLiteral("session_generation"), QStringLiteral("runbook")})
+                              && requestedRunbook.isObject();
+    if (runbookSchemaValid)
+    {
+        const QJsonObject runbook = requestedRunbook.toObject();
+        const QString shell = runbook.value(QStringLiteral("shell")).toString();
+        const QJsonArray steps = runbook.value(QStringLiteral("steps")).toArray();
+        const QSet<QString> shells{QStringLiteral("any"), QStringLiteral("powershell"), QStringLiteral("bash"),
+                                   QStringLiteral("zsh"), QStringLiteral("fish"),       QStringLiteral("sh")};
+        runbookSchemaValid = hasOnlyKeys(runbook, {QStringLiteral("name"), QStringLiteral("description"),
+                                                   QStringLiteral("shell"), QStringLiteral("steps")})
+                             && runbook.value(QStringLiteral("name")).isString()
+                             && !runbook.value(QStringLiteral("name")).toString().trimmed().isEmpty()
+                             && runbook.value(QStringLiteral("name")).toString().size() <= 128
+                             && runbook.value(QStringLiteral("name")).toString().toUtf8().size() <= 512
+                             && runbook.value(QStringLiteral("description")).isString()
+                             && runbook.value(QStringLiteral("description")).toString().size() <= 4096
+                             && runbook.value(QStringLiteral("description")).toString().toUtf8().size() <= 4096
+                             && runbook.value(QStringLiteral("shell")).isString() && shells.contains(shell)
+                             && runbook.value(QStringLiteral("steps")).isArray() && !steps.isEmpty()
+                             && steps.size() <= 64;
+        for (const QJsonValue &stepValue : steps)
+        {
+            const QJsonObject step = stepValue.toObject();
+            const auto timeout = generation(step.value(QStringLiteral("timeout_ms")));
+            const QString continuation = step.value(QStringLiteral("continuation")).toString();
+            runbookSchemaValid =
+                runbookSchemaValid && stepValue.isObject()
+                && hasOnlyKeys(step, {QStringLiteral("command"), QStringLiteral("continuation"),
+                                      QStringLiteral("output_marker"), QStringLiteral("timeout_ms")})
+                && step.value(QStringLiteral("command")).isString()
+                && !step.value(QStringLiteral("command")).toString().trimmed().isEmpty()
+                && step.value(QStringLiteral("command")).toString().size() <= 16384
+                && step.value(QStringLiteral("command")).toString().toUtf8().size() <= maximumCommandBytes
+                && !step.value(QStringLiteral("command")).toString().contains(QChar::Null)
+                && (continuation == QStringLiteral("immediate") || continuation == QStringLiteral("literal-output"))
+                && step.value(QStringLiteral("output_marker")).isString()
+                && step.value(QStringLiteral("output_marker")).toString().size() <= 1024
+                && step.value(QStringLiteral("output_marker")).toString().toUtf8().size() <= 1024 && timeout.has_value()
+                && *timeout <= std::numeric_limits<std::uint32_t>::max();
+        }
+    }
+    const bool schemaValid =
+        runSchemaValid || interruptSchemaValid || writeSchemaValid || transferSchemaValid || runbookSchemaValid;
     const auto sessionId = requestedSession.toString().toUtf8().toStdString();
     const auto command = requestedCommand.toString().toUtf8().toStdString();
     const auto commandId = requestedCommandId.toString().toUtf8().toStdString();
@@ -212,9 +261,13 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
         canonical.insert(QStringLiteral("data"), requestedPtyData);
         canonical.insert(QStringLiteral("append_enter"), requestedAppendEnter);
     }
-    else
+    else if (transferControl)
     {
         canonical.insert(QStringLiteral("to"), requestedControlOwner);
+    }
+    else
+    {
+        canonical.insert(QStringLiteral("runbook"), requestedRunbook);
     }
     AiToolDispatchRequest request{
         .key = {.conversationId = context.conversationId, .turnId = context.turnId, .toolCallId = call.id},
@@ -270,6 +323,25 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
                                 .action = AiTerminalAction{.dispatchKey = key,
                                                            .target = context.target,
                                                            .kind = AiTerminalActionKind::transferToUser},
+                                .sideEffecting = true};
+    }
+    if (saveRunbook)
+    {
+        if (context.permissionMode == AiPermissionMode::observer)
+        {
+            return fail(QStringLiteral("permission_denied"),
+                        QStringLiteral("Observer mode does not allow saving a runbook."));
+        }
+        const auto budgetDecision = budget.authorize(true);
+        if (budgetDecision != AiAgentBudgetDecision::allow)
+        {
+            return fail(budgetCode(budgetDecision), QStringLiteral("The AI turn action budget was exhausted."));
+        }
+        return AiActionToolPlan{.disposition = AiActionToolDisposition::awaitApproval,
+                                .action = AiTerminalAction{.dispatchKey = key,
+                                                           .target = context.target,
+                                                           .kind = AiTerminalActionKind::saveRunbook,
+                                                           .payloadJson = json(requestedRunbook.toObject())},
                                 .sideEffecting = true};
     }
     if (!context.writable)
@@ -340,7 +412,7 @@ bool AiActionToolDispatcher::deny(const AiTerminalAction &action)
 {
     return m_ledger.transition(
         action.dispatchKey, AiToolDispatchState::failed,
-        failure(QStringLiteral("permission_denied"), QStringLiteral("The user denied this command.")));
+        failure(QStringLiteral("permission_denied"), QStringLiteral("The user denied this action.")));
 }
 
 bool AiActionToolDispatcher::complete(const AiTerminalAction &action, const AiToolDispatchState state,

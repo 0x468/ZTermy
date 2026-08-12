@@ -104,8 +104,10 @@ evaluations serve different purposes and are reported separately.
     (`ADR 0064`); immutable current-workspace target sets and explicit 16-target
     batch status reads with per-target results (`ADR 0065`); arbitrary bounded
     SFTP directory navigation isolated from the visible browser model
-    (`ADR 0066`).
-  - Remaining for 0.3.2: opt-in SFTP mutations and reusable runbook creation.
+    (`ADR 0066`); explicitly approved reusable runbooks persisted through the
+    owned script store with no terminal-control lease or hidden variable values
+    (`ADR 0067`).
+  - Remaining for 0.3.2: opt-in SFTP mutations through the transfer job graph.
 - [ ] MCP tools use the same registry, permission, result, audit, cancellation,
       and namespace rules as native tools; server trust tier, credential scope,
       description/schema changes, untrusted elicitation, and disable/revoke are

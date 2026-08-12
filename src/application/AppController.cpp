@@ -2884,6 +2884,26 @@ QVariantMap AppController::activeAiToolApproval() const
             actionText = tr("Return terminal control to the user");
             actionKind = QStringLiteral("transfer_control");
             break;
+        case ai::AiTerminalActionKind::saveRunbook:
+        {
+            const QJsonDocument document = QJsonDocument::fromJson(QByteArray::fromStdString(action.payloadJson));
+            const QJsonObject runbook = document.object();
+            actionText = tr("Save runbook: %1").arg(runbook.value(QStringLiteral("name")).toString());
+            const QString description = runbook.value(QStringLiteral("description")).toString().trimmed();
+            if (!description.isEmpty())
+            {
+                actionText += QStringLiteral("\n\n") + description;
+            }
+            const QJsonArray steps = runbook.value(QStringLiteral("steps")).toArray();
+            for (qsizetype index = 0; index < steps.size(); ++index)
+            {
+                actionText += QStringLiteral("\n\n%1. %2")
+                                  .arg(index + 1)
+                                  .arg(steps.at(index).toObject().value(QStringLiteral("command")).toString());
+            }
+            actionKind = QStringLiteral("save_runbook");
+            break;
+        }
     }
     return {{QStringLiteral("visible"), true},
             {QStringLiteral("toolCallId"), utf8QString(action.dispatchKey.toolCallId)},
@@ -7162,8 +7182,9 @@ bool AppController::approveAiTool()
     recordAiActivity(*tab, *pendingCall, QStringLiteral("executing"), QStringLiteral("pending"), true,
                      action.risk.highRisk());
     std::string output;
+    const bool requiresLiveTerminal = action.kind != ai::AiTerminalActionKind::saveRunbook;
     if (action.target.sessionId != utf8String(tab->id) || action.target.sessionGeneration != tab->reconnectGeneration
-        || !tab->running || (!tab->ssh && !tab->local))
+        || (requiresLiveTerminal && (!tab->running || (!tab->ssh && !tab->local))))
     {
         output = aiToolFailureJson(QStringLiteral("scope_changed"),
                                    tr("The target terminal session changed before approval."));
@@ -7172,7 +7193,10 @@ bool AppController::approveAiTool()
     else
     {
         output = executeAiTerminalAction(*tab, action);
-        tab->aiFirstWriteApproved = true;
+        if (requiresLiveTerminal)
+        {
+            tab->aiFirstWriteApproved = true;
+        }
         static_cast<void>(m_aiActionToolDispatcher.complete(action, ai::AiToolDispatchState::succeeded, output));
     }
     const QString activityResult = aiActivityResultCode(output);
@@ -8128,7 +8152,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                 }};
             }
             if (call.name == "run_command" || call.name == "interrupt_command" || call.name == "write_to_pty"
-                || call.name == "transfer_control")
+                || call.name == "transfer_control" || call.name == "save_runbook")
             {
                 if (target != nullptr)
                 {
@@ -8441,8 +8465,58 @@ std::string AppController::executeAiTerminalAction(TerminalTab &tab, const ai::A
             return executeAiInterruptCommand(tab, action);
         case ai::AiTerminalActionKind::transferToUser:
             return executeAiTransferControl(action);
+        case ai::AiTerminalActionKind::saveRunbook:
+            return executeAiSaveRunbook(action);
     }
     return aiToolFailureJson(QStringLiteral("unsupported"), tr("The terminal action is unsupported."));
+}
+
+std::string AppController::executeAiSaveRunbook(const ai::AiTerminalAction &action)
+{
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(QByteArray::fromStdString(action.payloadJson), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isObject())
+    {
+        return aiToolFailureJson(QStringLiteral("invalid_arguments"), tr("The proposed runbook is invalid."));
+    }
+
+    const QJsonObject runbook = document.object();
+    QVariantList steps;
+    const QJsonArray runbookSteps = runbook.value(QStringLiteral("steps")).toArray();
+    steps.reserve(runbookSteps.size());
+    for (const QJsonValue &stepValue : runbookSteps)
+    {
+        const QJsonObject step = stepValue.toObject();
+        steps.append(QVariantMap{
+            {QStringLiteral("command"), step.value(QStringLiteral("command")).toString()},
+            {QStringLiteral("continuation"), step.value(QStringLiteral("continuation")).toString()},
+            {QStringLiteral("outputMarker"), step.value(QStringLiteral("output_marker")).toString()},
+            {QStringLiteral("timeoutMs"),
+             QVariant::fromValue<qulonglong>(step.value(QStringLiteral("timeout_ms")).toVariant().toULongLong())}});
+    }
+
+    const std::size_t previousCount = m_scripts.size();
+    if (!saveScript(
+            QVariantMap{{QStringLiteral("name"), runbook.value(QStringLiteral("name")).toString()},
+                        {QStringLiteral("description"), runbook.value(QStringLiteral("description")).toString()},
+                        {QStringLiteral("shell"), runbook.value(QStringLiteral("shell")).toString()},
+                        {QStringLiteral("variables"), QVariantList{}},
+                        {QStringLiteral("steps"), steps}}))
+    {
+        const QString detail = m_quickCommandOperationError.isEmpty() ? tr("The runbook could not be saved.")
+                                                                      : m_quickCommandOperationError;
+        return aiToolFailureJson(QStringLiteral("save_failed"), detail);
+    }
+    if (m_scripts.size() <= previousCount)
+    {
+        return aiToolFailureJson(QStringLiteral("save_failed"), tr("The runbook could not be saved."));
+    }
+
+    return compactJson(QJsonObject{{QStringLiteral("ok"), true},
+                                   {QStringLiteral("status"), QStringLiteral("saved")},
+                                   {QStringLiteral("runbook_id"), utf8QString(m_scripts.back().id)},
+                                   {QStringLiteral("name"), runbook.value(QStringLiteral("name"))},
+                                   {QStringLiteral("step_count"), runbookSteps.size()}});
 }
 
 std::string AppController::executeAiTransferControl(const ai::AiTerminalAction &action)

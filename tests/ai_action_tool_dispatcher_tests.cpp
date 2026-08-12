@@ -61,6 +61,15 @@ using ztermy::ai::AiToolDispatchState;
                       .argumentsJson = R"({"session_id":"session-1","session_generation":3,"to":"user"})"};
 }
 
+[[nodiscard]] AiToolCall runbookCall(const std::string &id = "runbook-1")
+{
+    return AiToolCall{
+        .id = id,
+        .name = "save_runbook",
+        .argumentsJson =
+            R"({"session_id":"session-1","session_generation":3,"runbook":{"name":"Inspect host","description":"Inspect disk usage","shell":"bash","steps":[{"command":"df -h","continuation":"immediate","output_marker":"","timeout_ms":30000}]}})"};
+}
+
 [[nodiscard]] QJsonObject object(const std::string &value)
 {
     return QJsonDocument::fromJson(QByteArray::fromStdString(value)).object();
@@ -75,6 +84,7 @@ private slots:
     void preparesSoftInterruptAsWriteAction();
     void validatesInteractivePtyInput();
     void transfersControlToUserUntilResumed();
+    void requiresExplicitApprovalForRunbooks();
     void waitsForApprovalAndCachesCompletion();
     void rejectsScopeReplayAndObserverWrites();
     void appliesRiskBudgetAndOwnershipGuards();
@@ -83,11 +93,44 @@ private slots:
 void AiActionToolDispatcherTests::publishesStrictRunCommandDefinition()
 {
     const auto definitions = AiActionToolDispatcher::definitions();
-    QCOMPARE(definitions.size(), std::size_t{4});
+    QCOMPARE(definitions.size(), std::size_t{5});
     QCOMPARE(definitions.front().name, std::string("run_command"));
     const auto schema = QJsonDocument::fromJson(QByteArray::fromStdString(definitions.front().parametersJson));
     QVERIFY(schema.isObject());
     QVERIFY(!schema.object().value(QStringLiteral("additionalProperties")).toBool(true));
+}
+
+void AiActionToolDispatcherTests::requiresExplicitApprovalForRunbooks()
+{
+    AiActionToolDispatcher dispatcher;
+    AiAgentTurnBudget budget;
+    const auto plan = dispatcher.prepare(runbookCall(), context("runbook", AiPermissionMode::sessionAuto), budget);
+    QCOMPARE(plan.disposition, AiActionToolDisposition::awaitApproval);
+    const auto action = plan.action.value_or(AiTerminalAction{});
+    QCOMPARE(action.kind, AiTerminalActionKind::saveRunbook);
+    QVERIFY(!action.payloadJson.empty());
+    QCOMPARE(budget.writeActions(), std::uint32_t{1});
+    QVERIFY(!dispatcher.agentHasControl({.sessionId = "session-1", .sessionGeneration = 3}, "runbook"));
+
+    AiAgentTurnBudget observerBudget;
+    const auto denied = dispatcher.prepare(runbookCall("runbook-observer"),
+                                           context("observer-runbook", AiPermissionMode::observer), observerBudget);
+    QCOMPARE(
+        object(denied.outputJson).value(QStringLiteral("error")).toObject().value(QStringLiteral("code")).toString(),
+        QStringLiteral("permission_denied"));
+
+    auto oversized = runbookCall("oversized-runbook");
+    QJsonObject arguments = object(oversized.argumentsJson);
+    QJsonObject runbook = arguments.value(QStringLiteral("runbook")).toObject();
+    runbook.insert(QStringLiteral("name"), QString(129, QLatin1Char('a')));
+    arguments.insert(QStringLiteral("runbook"), runbook);
+    oversized.argumentsJson = QJsonDocument(arguments).toJson(QJsonDocument::Compact).toStdString();
+    AiAgentTurnBudget oversizedBudget;
+    const auto rejected = dispatcher.prepare(oversized, context("oversized-runbook"), oversizedBudget);
+    QCOMPARE(
+        object(rejected.outputJson).value(QStringLiteral("error")).toObject().value(QStringLiteral("code")).toString(),
+        QStringLiteral("invalid_arguments"));
+    QCOMPARE(oversizedBudget.writeActions(), std::uint32_t{0});
 }
 
 void AiActionToolDispatcherTests::transfersControlToUserUntilResumed()

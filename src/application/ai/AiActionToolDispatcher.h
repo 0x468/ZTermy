@@ -38,6 +38,7 @@ enum class AiTerminalActionKind : std::uint8_t
     writeToPty,
     interruptCommand,
     transferToUser,
+    saveRunbook,
 };
 
 struct AiTerminalAction final
@@ -48,6 +49,7 @@ struct AiTerminalAction final
     std::string command;
     std::string commandId;
     std::string ptyData;
+    std::string payloadJson;
     bool appendEnter = false;
     AiCommandRiskReport risk;
 };
