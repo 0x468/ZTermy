@@ -146,7 +146,7 @@ evaluations serve different purposes and are reported separately.
       layout captures without depending on Windows foreground activation (`ADR
       0078`).
 
-### Automated release-candidate execution — 2026-08-12
+### Automated release-candidate execution — 2026-08-12 through 2026-08-13
 
 The detailed handoff is `V3_0_3_0_RC_ACCEPTANCE.md`. The candidate was exercised
 on Windows 11 Pro build 26200, x64, with Qt 6.8.3 static, MSVC 2022 17.14.15,
@@ -176,6 +176,9 @@ CMake 4.4.0, Ninja 1.13.1, PowerShell 7.6.4, and clang-tidy 22.1.6.
   `SHA256SUMS.txt`, and `release-manifest.json`. The archive was unpacked,
   `portable.flag` was present, and its packaged executable passed the lifecycle
   smoke.
+- the final-source Debug and static Release suites both passed 102/102. The
+  protected clipboard contract additionally passed 100 consecutive Release
+  repetitions under active Windows clipboard contention.
 
 These results close the automated implementation and duration gates. They do
 not substitute for the unchecked live-provider, real-host, MSI interaction,

@@ -11,8 +11,8 @@ Identity:
 - codename: **糸**;
 - verse: **「剪不断，理还乱，是离愁」**;
 - supported release platform: Windows 11 x64;
-- candidate application source: `2d6a4c6` plus test-only acceptance hardening
-  `45cc411` and `1b8b70f`.
+- candidate package source: `05eb0a4`; the final application reliability change
+  is `7339b20`.
 
 ## Environment
 
@@ -27,10 +27,11 @@ Identity:
 
 The following gates completed with exit code zero:
 
-1. Dynamic Debug configure/build and 102/102 CTest tests.
+1. Dynamic Debug configure/build and 102/102 CTest tests. The final-source run
+   took 102.22 seconds.
 2. Static Release configure/build and 102/102 CTest tests. The initial full run
-   took 143.89 seconds; the final post-hardening warm run took 90.80 seconds.
-   Both included the 32-cycle MCP process lifecycle stress.
+   took 143.89 seconds; the final-source run took 89.94 seconds. Both included
+   the 32-cycle MCP process lifecycle stress.
 3. C++ format, QML format, QML lint, translation, branding, executable metadata,
    and package contracts.
 4. clang-tidy with warnings as errors over all 219 C++ translation units in the
@@ -64,6 +65,9 @@ The following gates completed with exit code zero:
     seconds with zero failures. The content-free report spans 2026-08-12
     15:45:37+08:00 through 23:45:38+08:00, records the static Release build
     directory, and passes the unified release-candidate evidence verifier.
+12. The final-source protected clipboard contract completed 100 consecutive
+    Release repetitions after adding bounded Win32 clipboard contention retry.
+    The same contract passed in the final Debug and Release 102-test suites.
 
 The formal soak reports are generated at
 `build/msvc-static-release/ai-concurrency-soak-2h.json` and
@@ -82,15 +86,20 @@ build/msvc-static-release/package/release/ztermy-0.3.0-windows-x64
 It contains exactly:
 
 - `ztermy-0.3.0-windows-x64-portable.zip` — SHA-256
-  `36bb9fc706925c75d3791be98a6d836c15c8307fc78731af1e72dd7b5ebcb1a0`;
+  `5d9de3006ccb0a602fc713eb880c0119ae61d8c5a670f5f2f52f11b71fe64aa2`;
 - `ztermy-0.3.0-windows-x64.msi` — SHA-256
-  `f39220dfced9ed97086281417c01ba16ffa000a5cf42f92cda3c9fe23873c6a2`;
+  `57640e8a48b55fc85a2f2ff6adeb13ac520cecf7ebff256b11c0f3475a8166de`;
 - `SHA256SUMS.txt`;
 - `release-manifest.json`.
 
 The manifest and checksum file are authoritative if packaging is run again,
 because MSI and ZIP container metadata can change artifact hashes without a
 source change.
+
+This final bundle was rebuilt and verified on 2026-08-13. WiX ICE validation
+completed through the Windows Installer service with only the reviewed ICE61,
+ICE69, and ICE91 warnings; structural decompilation, portable extraction, the
+packaged executable lifecycle smoke, and the unified RC verifier all passed.
 
 ## Owner acceptance — exact checks
 
