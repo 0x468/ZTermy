@@ -1,6 +1,7 @@
 # V3 AI program
 
-Status: approved product program for `0.3.x`; implementation not started
+Status: `0.3.0` implementation complete; release-candidate human and
+environment-dependent acceptance pending
 
 ## Decision
 
@@ -178,6 +179,9 @@ becomes conversation retention.
 
 Delivery status:
 
+- the planned `0.3.0` through `0.3.4` implementation slices are present in the
+  `0.3.0` candidate. Milestone numbers describe delivery slices inside V3, not
+  separately shipped patch releases;
 - the provider-independent evaluation corpus and deterministic replay harness
   are implemented (`ADR 0072`);
 - local MCP stdio transport, isolated namespaces, schema-drift revocation, and
@@ -191,12 +195,19 @@ Delivery status:
 - privacy diagnostics now expose the live local request boundary and add only
   content-free AI counts/policy state to diagnostic exports (`ADR 0075`);
 - provider-independent concurrency/lifecycle soak infrastructure and JSON
-  evidence are implemented (`ADR 0076`); the release-duration run remains a
-  final-candidate gate;
-- provider contracts, accessibility, packaging, upgrade/recovery, and final
-  manual evidence remain release-candidate closure work. English and
-  Simplified Chinese remain complete under the translation gate as each surface
-  lands.
+  evidence are implemented (`ADR 0076`); Debug and static Release developer
+  runs are green, while the release-duration run remains a final-candidate
+  gate;
+- deterministic provider wire contracts and real-window responsive and
+  accessibility contracts are implemented (`ADR 0077`, `ADR 0078`);
+- the static `0.3.0` MSI and portable ZIP pass the inherited installer,
+  manifest, checksum, portable-mode, and lifecycle contracts. English and
+  Simplified Chinese pass the translation gate;
+- the exact automated evidence and remaining owner/environment checks are
+  recorded in `testing/V3_0_3_0_RC_ACCEPTANCE.md`. Live-provider evaluation,
+  real-host shell coverage, MSI interaction, previous-Windows-build coverage,
+  and release-duration soak evidence remain acceptance work rather than hidden
+  implementation gaps.
 
 ## Explicit exclusions
 

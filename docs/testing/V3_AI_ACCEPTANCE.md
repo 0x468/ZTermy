@@ -1,6 +1,7 @@
 # V3 AI acceptance plan
 
-Status: accepted plan; no V3 checks are claimed executed yet
+Status: automated `0.3.0` release-candidate gates executed; owner/provider,
+real-host, installer-interaction, and release-duration checks pending
 
 ## Evidence rule
 
@@ -11,91 +12,91 @@ evaluations serve different purposes and are reported separately.
 
 ## 0.3.0 automated gates
 
-- [ ] SSE parser handles CRLF/LF, comments, split UTF-8, split JSON, multiple
+- [x] SSE parser handles CRLF/LF, comments, split UTF-8, split JSON, multiple
       events per read, final event, provider error, cancellation, and EOF.
-- [ ] NDJSON parser handles the same fragmentation and maximum-line contracts.
+- [x] NDJSON parser handles the same fragmentation and maximum-line contracts.
 - [x] Provider adapters map native payloads into identical ztermy stream events
       and reject invalid event order or oversized function arguments.
   - OpenAI Responses SSE, OpenAI-compatible chat-completions SSE, and Ollama
     NDJSON now have deterministic request/stream lifecycle fixtures (`ADR 0077`).
-- [ ] API keys remain absent from settings JSON, QML models, logs, diagnostics,
+- [x] API keys remain absent from settings JSON, QML models, logs, diagnostics,
       test snapshots, and error text.
-- [ ] Command blocks cover rich/basic/none integration, exact command, multiline
+- [x] Command blocks cover rich/basic/none integration, exact command, multiline
       command, exit status, CWD, truncation, disconnect, background interleave,
       unverified nonce, bounded-head-tail capture, explicit journal overrun,
       dropped-byte count, and a finished-but-partial block.
-- [ ] Derived frame/UI observation may coalesce without losing retained command
+- [x] Derived frame/UI observation may coalesce without losing retained command
       bytes; semantic journal overrun marks coverage `gapped` rather than silently
       returning a complete block.
-- [ ] Context broker covers explicit selection, last failure, terminal range,
+- [x] Context broker covers explicit selection, last failure, terminal range,
       frame, deduplication, redaction, provenance, byte/line/token bounds, and
       post-compaction reinjection.
-- [ ] Context chips support remove/pin and evidence-quality labels; pinning cannot
+- [x] Context chips support remove/pin and evidence-quality labels; pinning cannot
       bypass redaction or the 64 KiB/1,000-line/estimated-16k-token aggregate
       bound.
-- [ ] Explain last failure is exact in rich mode, visibly approximate only when
+- [x] Explain last failure is exact in rich mode, visibly approximate only when
       a basic integration observed a non-zero status, and unavailable in none or
       status-unknown modes.
-- [ ] Read tools reject wrong session, stale generation, missing block, invalid
+- [x] Read tools reject wrong session, stale generation, missing block, invalid
       range, oversized request, and unavailable capability.
-- [ ] Provider errors distinguish user-action and transient classes; 429 honors
+- [x] Provider errors distinguish user-action and transient classes; 429 honors
       `Retry-After`; capped jittered backoff never replays a side-effecting tool.
-- [ ] AI protected copy opts out of Windows history/cloud sync, and optional
+- [x] AI protected copy opts out of Windows history/cloud sync, and optional
       auto-clear does not erase a newer clipboard item.
-- [ ] Cancelling or closing a tab discards late stream events and releases every
+- [x] Cancelling or closing a tab discards late stream events and releases every
       request/tool/context observer.
-- [ ] Translation, QML lint, C++ formatting, clang-tidy, unit tests, and static
+- [x] Translation, QML lint, C++ formatting, clang-tidy, unit tests, and static
       Release packaging remain green.
 
 ## 0.3.1 automated gates
 
-- [ ] Command run/read/wait/interrupt/write/control tools cover queued, running,
+- [x] Command run/read/wait/interrupt/write/control tools cover queued, running,
       waiting, completed, failed, cancelled, timed-out, disconnected, and stale
       states.
-- [ ] Duplicate `(conversation, turn, tool-call id)` replays join or return the
+- [x] Duplicate `(conversation, turn, tool-call id)` replays join or return the
       cached result; same ID/different arguments fails; crash/restore never
       resumes an unresolved write automatically.
-- [ ] Cursor reads cover retained-more, end-of-stream, bounded head/tail,
+- [x] Cursor reads cover retained-more, end-of-stream, bounded head/tail,
       `cursor_expired`, gapped coverage, and no hidden command re-execution.
-- [ ] Cancelling one waiter does not cancel a command or another waiter; a soft
+- [x] Cancelling one waiter does not cancel a command or another waiter; a soft
       interrupt uses the owned PTY path and may return `outcome_unknown` rather
       than claiming a process was killed.
-- [ ] Permission precedence covers schema/scope failure, deny, explicit visible
+- [x] Permission precedence covers schema/scope failure, deny, explicit visible
       approval, allow, active mode, and default deny.
-- [ ] High-risk classification covers destructive disk/filesystem, recursive
+- [x] High-risk classification covers destructive disk/filesystem, recursive
       permissions, privilege/credential, shutdown, firewall/network, and opaque
       download/execute fixtures; direct visible Run executes once, while
       model-initiated high-risk auto follows the owner-approved overlay.
-- [ ] Observer never writes; ask-each asks every time; ask-first grants only the
+- [x] Observer never writes; ask-each asks every time; ask-first grants only the
       same conversation/scope; session auto expires; saved-host auto never
       applies to quick connections or another profile.
-- [ ] Alternate-screen results preserve frame generation, cursor, dimensions,
+- [x] Alternate-screen results preserve frame generation, cursor, dimensions,
       and takeover owner without appending unbounded snapshots to history.
-- [ ] Only one conversation holds a session's write lease; multiple read/wait
+- [x] Only one conversation holds a session's write lease; multiple read/wait
       observers receive fanout; ownership transfer and observer cancellation do
       not retarget or interrupt another conversation.
-- [ ] Watchdogs stop at configured total/write call, repeated-read, wall-time,
+- [x] Watchdogs stop at configured total/write call, repeated-read, wall-time,
       provider-retry, and token/cost bounds and require an explicit new Continue
       budget.
-- [ ] Encrypted transcript storage covers read/write, tamper, truncation,
+- [x] Encrypted transcript storage covers read/write, tamper, truncation,
       unsupported schema, key loss, migration, retention, export, and deletion.
-- [ ] Encrypted history is off by default; session storage and a locked portable
+- [x] Encrypted history is off by default; session storage and a locked portable
       vault cannot enable it; disabling retention preserves explicit
       export/delete access; portable lock forgets decrypted in-memory rows.
-- [ ] Migrating to session storage disables retention, and source cleanup is
+- [x] Migrating to session storage disables retention, and source cleanup is
       refused while an encrypted envelope exists so its durable key cannot be
       discarded outside the explicit history-delete action.
-- [ ] Restart reload and transcript restore preserve only user/assistant text.
+- [x] Restart reload and transcript restore preserve only user/assistant text.
       Restore never revives permissions, tool calls, pending actions, budgets,
       or write ownership, and one stored conversation cannot own two live tabs.
 
 ## 0.3.2–0.3.4 automated gates
 
-- [ ] SFTP and file tools enforce path, byte, encoding, symlink, transfer-job,
+- [x] SFTP and file tools enforce path, byte, encoding, symlink, transfer-job,
       cancellation, and mutation permission boundaries.
-- [ ] Multi-session tools use an explicit immutable target set and return one
+- [x] Multi-session tools use an explicit immutable target set and return one
       result per target without active-tab retargeting.
-- [ ] Scripts, notes, telemetry, forwarding, and history expose bounded typed
+- [x] Scripts, notes, telemetry, forwarding, and history expose bounded typed
       data and preserve their existing ownership and privacy contracts.
   - Implemented: immutable session-generation snapshots, 100-item paging,
     metadata-only script/note lists, current SFTP listing, shell history,
@@ -144,6 +145,35 @@ evaluations serve different purposes and are reported separately.
       layout captures without depending on Windows foreground activation (`ADR
       0078`).
 
+### Automated release-candidate execution — 2026-08-12
+
+The detailed handoff is `V3_0_3_0_RC_ACCEPTANCE.md`. The candidate was exercised
+on Windows 11 Pro build 26200, x64, with Qt 6.8.3 static, MSVC 2022 17.14.15,
+CMake 4.4.0, Ninja 1.13.1, PowerShell 7.6.4, and clang-tidy 22.1.6.
+
+- dynamic Debug and static Release each completed the 102-test suite with zero
+  failures;
+- the static compilation database completed all 219 clang-tidy translation
+  units with warnings as errors, and the C++/QML formatting and QML lint gates
+  passed;
+- all eight inherited real-window gates passed, including work-area geometry,
+  appearance, resize/hit testing, DPI 100/125/150/200, responsive AI layout,
+  keyboard navigation, terminal rendering, and bounded lifecycle shutdown;
+- the static AI concurrency gate completed four full iterations in 158.877
+  seconds with zero failures. The earlier dynamic Debug run completed three
+  iterations in 120.296 seconds with zero failures;
+- WiX generated and contract-validated the per-user MSI. ICE emitted only the
+  retained and reviewed ICE61, ICE69, and ICE91 warnings; decompilation and the
+  LocalAppData, icon, shortcut, upgrade, and uninstall-folder contracts passed;
+- the checksummed handoff contains exactly the MSI, portable ZIP,
+  `SHA256SUMS.txt`, and `release-manifest.json`. The archive was unpacked,
+  `portable.flag` was present, and its packaged executable passed the lifecycle
+  smoke.
+
+These results close the automated implementation gates. They do not substitute
+for the unchecked live-provider, real-host, MSI interaction, previous-Windows-
+build, long-duration, or owner UX checks below.
+
 ### MCP manual release-candidate check
 
 - [ ] Add an absolute local test-server executable in Settings. Observe trust
@@ -182,9 +212,10 @@ evaluations serve different purposes and are reported separately.
   are recorded.
 
 Developer evidence on 2026-08-12: dynamic Debug completed three full gate
-iterations in 120.296 seconds with zero failures. This validates the soak
-mechanism and the 32-cycle lifecycle stress; it is not the final two-hour or
-eight-hour release-duration claim.
+iterations in 120.296 seconds and static Release completed four full iterations
+in 158.877 seconds, both with zero failures. This validates the soak mechanism,
+the 32-cycle lifecycle stress, and both linkage modes; it is not the final
+two-hour or eight-hour release-duration claim.
 
 ## Evaluation corpus
 
