@@ -4,7 +4,9 @@
 #include <QJsonObject>
 #include <QtTest/QTest>
 
+#include <array>
 #include <string>
+#include <string_view>
 
 namespace
 {
@@ -102,11 +104,23 @@ private slots:
 void AiActionToolDispatcherTests::publishesStrictRunCommandDefinition()
 {
     const auto definitions = AiActionToolDispatcher::definitions();
-    QCOMPARE(definitions.size(), std::size_t{6});
-    QCOMPARE(definitions.front().name, std::string("run_command"));
-    const auto schema = QJsonDocument::fromJson(QByteArray::fromStdString(definitions.front().parametersJson));
-    QVERIFY(schema.isObject());
-    QVERIFY(!schema.object().value(QStringLiteral("additionalProperties")).toBool(true));
+    constexpr std::array expected{
+        std::string_view{"run_command"},
+        std::string_view{"interrupt_command"},
+        std::string_view{"write_to_pty"},
+        std::string_view{"save_runbook"},
+        std::string_view{"queue_sftp_download"},
+        std::string_view{"queue_sftp_upload"},
+    };
+    QCOMPARE(definitions.size(), expected.size());
+    for (std::size_t index = 0; index < definitions.size(); ++index)
+    {
+        QCOMPARE(definitions[index].name, expected[index]);
+        const auto schema =
+            QJsonDocument::fromJson(QByteArray::fromStdString(definitions[index].parametersJson));
+        QVERIFY(schema.isObject());
+        QVERIFY(!schema.object().value(QStringLiteral("additionalProperties")).toBool(true));
+    }
 }
 
 void AiActionToolDispatcherTests::requiresExplicitApprovalForSftpMutations()
