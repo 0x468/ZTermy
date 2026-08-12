@@ -70,6 +70,15 @@ using ztermy::ai::AiToolDispatchState;
             R"({"session_id":"session-1","session_generation":3,"runbook":{"name":"Inspect host","description":"Inspect disk usage","shell":"bash","steps":[{"command":"df -h","continuation":"immediate","output_marker":"","timeout_ms":30000}]}})"};
 }
 
+[[nodiscard]] AiToolCall transferCall(const bool upload, const std::string &id = "sftp-transfer-1")
+{
+    return AiToolCall{
+        .id = id,
+        .name = upload ? "queue_sftp_upload" : "queue_sftp_download",
+        .argumentsJson =
+            R"({"session_id":"session-1","session_generation":3,"local_path":"C:/Temp/report.txt","remote_path":"/tmp/report.txt"})"};
+}
+
 [[nodiscard]] QJsonObject object(const std::string &value)
 {
     return QJsonDocument::fromJson(QByteArray::fromStdString(value)).object();
@@ -85,6 +94,7 @@ private slots:
     void validatesInteractivePtyInput();
     void transfersControlToUserUntilResumed();
     void requiresExplicitApprovalForRunbooks();
+    void requiresExplicitApprovalForSftpMutations();
     void waitsForApprovalAndCachesCompletion();
     void rejectsScopeReplayAndObserverWrites();
     void appliesRiskBudgetAndOwnershipGuards();
@@ -93,11 +103,44 @@ private slots:
 void AiActionToolDispatcherTests::publishesStrictRunCommandDefinition()
 {
     const auto definitions = AiActionToolDispatcher::definitions();
-    QCOMPARE(definitions.size(), std::size_t{5});
+    QCOMPARE(definitions.size(), std::size_t{7});
     QCOMPARE(definitions.front().name, std::string("run_command"));
     const auto schema = QJsonDocument::fromJson(QByteArray::fromStdString(definitions.front().parametersJson));
     QVERIFY(schema.isObject());
     QVERIFY(!schema.object().value(QStringLiteral("additionalProperties")).toBool(true));
+}
+
+void AiActionToolDispatcherTests::requiresExplicitApprovalForSftpMutations()
+{
+    AiActionToolDispatcher dispatcher;
+    for (const bool upload : {false, true})
+    {
+        AiAgentTurnBudget budget;
+        const auto plan = dispatcher.prepare(transferCall(upload, upload ? "upload" : "download"),
+                                             context("sftp", AiPermissionMode::sessionAuto), budget);
+        QCOMPARE(plan.disposition, AiActionToolDisposition::awaitApproval);
+        const auto action = plan.action.value_or(AiTerminalAction{});
+        QCOMPARE(action.kind,
+                 upload ? AiTerminalActionKind::enqueueSftpUpload : AiTerminalActionKind::enqueueSftpDownload);
+        QVERIFY(!action.payloadJson.empty());
+        QCOMPARE(budget.writeActions(), std::uint32_t{1});
+        QVERIFY(!dispatcher.agentHasControl({.sessionId = "session-1", .sessionGeneration = 3}, "sftp"));
+    }
+
+    AiAgentTurnBudget observerBudget;
+    const auto observer = dispatcher.prepare(transferCall(false, "observer-sftp"),
+                                             context("observer-sftp", AiPermissionMode::observer), observerBudget);
+    QCOMPARE(
+        object(observer.outputJson).value(QStringLiteral("error")).toObject().value(QStringLiteral("code")).toString(),
+        QStringLiteral("permission_denied"));
+
+    auto unsavedContext = context("unsaved-sftp", AiPermissionMode::sessionAuto);
+    unsavedContext.savedHost = false;
+    AiAgentTurnBudget unsavedBudget;
+    const auto unsaved = dispatcher.prepare(transferCall(true, "unsaved-sftp"), unsavedContext, unsavedBudget);
+    QCOMPARE(
+        object(unsaved.outputJson).value(QStringLiteral("error")).toObject().value(QStringLiteral("code")).toString(),
+        QStringLiteral("permission_denied"));
 }
 
 void AiActionToolDispatcherTests::requiresExplicitApprovalForRunbooks()

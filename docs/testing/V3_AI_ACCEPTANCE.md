@@ -106,8 +106,9 @@ evaluations serve different purposes and are reported separately.
     SFTP directory navigation isolated from the visible browser model
     (`ADR 0066`); explicitly approved reusable runbooks persisted through the
     owned script store with no terminal-control lease or hidden variable values
-    (`ADR 0067`).
-  - Remaining for 0.3.2: opt-in SFTP mutations through the transfer job graph.
+    (`ADR 0067`); explicitly approved single-file SFTP uploads and downloads
+    queued through the existing cancellable transfer graph (`ADR 0068`).
+  - 0.3.2 implementation scope is complete.
 - [ ] MCP tools use the same registry, permission, result, audit, cancellation,
       and namespace rules as native tools; server trust tier, credential scope,
       description/schema changes, untrusted elicitation, and disable/revoke are

@@ -133,7 +133,17 @@ std::vector<AiToolDefinition> AiActionToolDispatcher::definitions()
                         "write again until the user explicitly resumes agent control.",
          .parametersJson =
              R"({"type":"object","properties":{"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"to":{"type":"string","enum":["user"]}},"required":["session_id","session_generation","to"],"additionalProperties":false})"},
-        {.name = "save_runbook", .description = "Propose saving a reusable ztermy script. This always requires explicit visible user approval.", .parametersJson = R"({"type":"object","properties":{"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"runbook":{"type":"object","properties":{"name":{"type":"string","minLength":1,"maxLength":128},"description":{"type":"string","maxLength":4096},"shell":{"type":"string","enum":["any","powershell","bash","zsh","fish","sh"]},"steps":{"type":"array","minItems":1,"maxItems":64,"items":{"type":"object","properties":{"command":{"type":"string","minLength":1,"maxLength":16384},"continuation":{"type":"string","enum":["immediate","literal-output"]},"output_marker":{"type":"string","maxLength":1024},"timeout_ms":{"type":"integer","minimum":0,"maximum":4294967295}},"required":["command","continuation","output_marker","timeout_ms"],"additionalProperties":false}}},"required":["name","description","shell","steps"],"additionalProperties":false}},"required":["session_id","session_generation","runbook"],"additionalProperties":false})"}};
+        {.name = "save_runbook", .description = "Propose saving a reusable ztermy script. This always requires explicit visible user approval.", .parametersJson = R"({"type":"object","properties":{"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"runbook":{"type":"object","properties":{"name":{"type":"string","minLength":1,"maxLength":128},"description":{"type":"string","maxLength":4096},"shell":{"type":"string","enum":["any","powershell","bash","zsh","fish","sh"]},"steps":{"type":"array","minItems":1,"maxItems":64,"items":{"type":"object","properties":{"command":{"type":"string","minLength":1,"maxLength":16384},"continuation":{"type":"string","enum":["immediate","literal-output"]},"output_marker":{"type":"string","maxLength":1024},"timeout_ms":{"type":"integer","minimum":0,"maximum":4294967295}},"required":["command","continuation","output_marker","timeout_ms"],"additionalProperties":false}}},"required":["name","description","shell","steps"],"additionalProperties":false}},"required":["session_id","session_generation","runbook"],"additionalProperties":false})"},
+        {.name = "queue_sftp_download",
+         .description = "Propose downloading one remote regular file through the transfer queue. Always requires "
+                        "visible user approval.",
+         .parametersJson =
+             R"({"type":"object","properties":{"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"remote_path":{"type":"string","minLength":1,"maxLength":4096},"local_path":{"type":"string","minLength":1,"maxLength":4096}},"required":["session_id","session_generation","remote_path","local_path"],"additionalProperties":false})"},
+        {.name = "queue_sftp_upload",
+         .description = "Propose uploading one local regular non-symlink file through the transfer queue. Always "
+                        "requires visible user approval.",
+         .parametersJson =
+             R"({"type":"object","properties":{"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"local_path":{"type":"string","minLength":1,"maxLength":4096},"remote_path":{"type":"string","minLength":1,"maxLength":4096}},"required":["session_id","session_generation","local_path","remote_path"],"additionalProperties":false})"}};
 }
 
 AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const AiActionToolContext &context,
@@ -144,7 +154,10 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
     const bool writeToPty = call.name == "write_to_pty";
     const bool transferControl = call.name == "transfer_control";
     const bool saveRunbook = call.name == "save_runbook";
-    if (!runCommand && !interruptCommand && !writeToPty && !transferControl && !saveRunbook)
+    const bool sftpDownload = call.name == "queue_sftp_download";
+    const bool sftpUpload = call.name == "queue_sftp_upload";
+    if (!runCommand && !interruptCommand && !writeToPty && !transferControl && !saveRunbook && !sftpDownload
+        && !sftpUpload)
     {
         return response(
             failure(QStringLiteral("unsupported"), QStringLiteral("The requested action tool is unsupported.")), false);
@@ -162,6 +175,8 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
     const auto requestedAppendEnter = object.value(QStringLiteral("append_enter"));
     const auto requestedControlOwner = object.value(QStringLiteral("to"));
     const auto requestedRunbook = object.value(QStringLiteral("runbook"));
+    const auto requestedLocalPath = object.value(QStringLiteral("local_path"));
+    const auto requestedRemotePath = object.value(QStringLiteral("remote_path"));
     const bool commonSchemaValid = call.argumentsJson.size() <= maximumArgumentsBytes && document.isObject()
                                    && parseError.error == QJsonParseError::NoError && requestedSession.isString()
                                    && !requestedSession.toString().isEmpty() && requestedGeneration.has_value();
@@ -234,8 +249,16 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
                 && *timeout <= std::numeric_limits<std::uint32_t>::max();
         }
     }
-    const bool schemaValid =
-        runSchemaValid || interruptSchemaValid || writeSchemaValid || transferSchemaValid || runbookSchemaValid;
+    const bool sftpSchemaValid =
+        (sftpDownload || sftpUpload) && commonSchemaValid
+        && hasOnlyKeys(object, {QStringLiteral("session_id"), QStringLiteral("session_generation"),
+                                QStringLiteral("local_path"), QStringLiteral("remote_path")})
+        && requestedLocalPath.isString() && !requestedLocalPath.toString().trimmed().isEmpty()
+        && requestedLocalPath.toString().size() <= 4096 && !requestedLocalPath.toString().contains(QChar::Null)
+        && requestedRemotePath.isString() && !requestedRemotePath.toString().trimmed().isEmpty()
+        && requestedRemotePath.toString().size() <= 4096 && !requestedRemotePath.toString().contains(QChar::Null);
+    const bool schemaValid = runSchemaValid || interruptSchemaValid || writeSchemaValid || transferSchemaValid
+                             || runbookSchemaValid || sftpSchemaValid;
     const auto sessionId = requestedSession.toString().toUtf8().toStdString();
     const auto command = requestedCommand.toString().toUtf8().toStdString();
     const auto commandId = requestedCommandId.toString().toUtf8().toStdString();
@@ -265,9 +288,14 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
     {
         canonical.insert(QStringLiteral("to"), requestedControlOwner);
     }
-    else
+    else if (saveRunbook)
     {
         canonical.insert(QStringLiteral("runbook"), requestedRunbook);
+    }
+    else
+    {
+        canonical.insert(QStringLiteral("local_path"), requestedLocalPath);
+        canonical.insert(QStringLiteral("remote_path"), requestedRemotePath);
     }
     AiToolDispatchRequest request{
         .key = {.conversationId = context.conversationId, .turnId = context.turnId, .toolCallId = call.id},
@@ -342,6 +370,29 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
                                                            .target = context.target,
                                                            .kind = AiTerminalActionKind::saveRunbook,
                                                            .payloadJson = json(requestedRunbook.toObject())},
+                                .sideEffecting = true};
+    }
+    if (sftpDownload || sftpUpload)
+    {
+        if (context.permissionMode == AiPermissionMode::observer || !context.savedHost)
+        {
+            return fail(QStringLiteral("permission_denied"),
+                        QStringLiteral("SFTP mutations require a saved host and a write-enabled permission mode."));
+        }
+        const auto budgetDecision = budget.authorize(true);
+        if (budgetDecision != AiAgentBudgetDecision::allow)
+        {
+            return fail(budgetCode(budgetDecision), QStringLiteral("The AI turn action budget was exhausted."));
+        }
+        const QJsonObject payload{{QStringLiteral("local_path"), requestedLocalPath},
+                                  {QStringLiteral("remote_path"), requestedRemotePath}};
+        return AiActionToolPlan{.disposition = AiActionToolDisposition::awaitApproval,
+                                .action =
+                                    AiTerminalAction{.dispatchKey = key,
+                                                     .target = context.target,
+                                                     .kind = sftpDownload ? AiTerminalActionKind::enqueueSftpDownload
+                                                                          : AiTerminalActionKind::enqueueSftpUpload,
+                                                     .payloadJson = json(payload)},
                                 .sideEffecting = true};
     }
     if (!context.writable)

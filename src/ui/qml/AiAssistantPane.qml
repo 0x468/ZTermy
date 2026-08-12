@@ -459,7 +459,7 @@ Rectangle {
             border.color: pane.toolApproval.highRisk ? Theme.dangerBorder : Theme.accent
             border.width: 1
             Accessible.role: Accessible.Pane
-            Accessible.name: pane.toolApproval.kind === "interrupt_command" ? qsTr("AI interrupt approval") : pane.toolApproval.kind === "write_to_pty" ? qsTr("AI terminal input approval") : pane.toolApproval.kind === "save_runbook" ? qsTr("AI runbook approval") : qsTr("AI command approval")
+            Accessible.name: pane.toolApproval.kind.indexOf("queue_sftp_") === 0 ? qsTr("AI SFTP transfer approval") : pane.toolApproval.kind === "interrupt_command" ? qsTr("AI interrupt approval") : pane.toolApproval.kind === "write_to_pty" ? qsTr("AI terminal input approval") : pane.toolApproval.kind === "save_runbook" ? qsTr("AI runbook approval") : qsTr("AI command approval")
 
             ColumnLayout {
                 id: approvalContent
@@ -481,7 +481,7 @@ Rectangle {
 
                     Text {
                         Layout.fillWidth: true
-                        text: pane.toolApproval.highRisk ? qsTr("High-risk command requires approval") : pane.toolApproval.kind === "interrupt_command" ? qsTr("Terminal interrupt requires approval") : pane.toolApproval.kind === "write_to_pty" ? qsTr("Terminal input requires approval") : pane.toolApproval.kind === "save_runbook" ? qsTr("Runbook save requires approval") : qsTr("Command requires approval")
+                        text: pane.toolApproval.highRisk ? qsTr("High-risk command requires approval") : pane.toolApproval.kind.indexOf("queue_sftp_") === 0 ? qsTr("SFTP transfer requires approval") : pane.toolApproval.kind === "interrupt_command" ? qsTr("Terminal interrupt requires approval") : pane.toolApproval.kind === "write_to_pty" ? qsTr("Terminal input requires approval") : pane.toolApproval.kind === "save_runbook" ? qsTr("Runbook save requires approval") : qsTr("Command requires approval")
                         color: pane.toolApproval.highRisk ? Theme.dangerText : Theme.text
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.textBody
@@ -534,10 +534,10 @@ Rectangle {
                     }
 
                     ActionButton {
-                        text: pane.toolApproval.kind === "interrupt_command" ? qsTr("Send Ctrl+C") : pane.toolApproval.kind === "write_to_pty" ? qsTr("Send input") : pane.toolApproval.kind === "save_runbook" ? qsTr("Save runbook") : qsTr("Run command")
-                        iconName: pane.toolApproval.kind === "interrupt_command" ? "close" : pane.toolApproval.kind === "write_to_pty" ? "composer" : pane.toolApproval.kind === "save_runbook" ? "save" : "play"
+                        text: pane.toolApproval.kind.indexOf("queue_sftp_") === 0 ? qsTr("Queue transfer") : pane.toolApproval.kind === "interrupt_command" ? qsTr("Send Ctrl+C") : pane.toolApproval.kind === "write_to_pty" ? qsTr("Send input") : pane.toolApproval.kind === "save_runbook" ? qsTr("Save runbook") : qsTr("Run command")
+                        iconName: pane.toolApproval.kind.indexOf("queue_sftp_") === 0 ? "transfer" : pane.toolApproval.kind === "interrupt_command" ? "close" : pane.toolApproval.kind === "write_to_pty" ? "composer" : pane.toolApproval.kind === "save_runbook" ? "save" : "play"
                         variant: pane.toolApproval.highRisk ? "destructive" : "primary"
-                        accessibleName: pane.toolApproval.kind === "interrupt_command" ? qsTr("Approve the pending soft interrupt") : pane.toolApproval.kind === "write_to_pty" ? qsTr("Approve the pending terminal input") : pane.toolApproval.kind === "save_runbook" ? qsTr("Approve and save the pending AI runbook") : qsTr("Approve and run the pending AI command")
+                        accessibleName: pane.toolApproval.kind.indexOf("queue_sftp_") === 0 ? qsTr("Approve and queue the pending AI SFTP transfer") : pane.toolApproval.kind === "interrupt_command" ? qsTr("Approve the pending soft interrupt") : pane.toolApproval.kind === "write_to_pty" ? qsTr("Approve the pending terminal input") : pane.toolApproval.kind === "save_runbook" ? qsTr("Approve and save the pending AI runbook") : qsTr("Approve and run the pending AI command")
                         onClicked: pane.controller.approveAiTool()
                     }
                 }

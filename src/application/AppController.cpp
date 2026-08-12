@@ -2904,6 +2904,21 @@ QVariantMap AppController::activeAiToolApproval() const
             actionKind = QStringLiteral("save_runbook");
             break;
         }
+        case ai::AiTerminalActionKind::enqueueSftpDownload:
+        case ai::AiTerminalActionKind::enqueueSftpUpload:
+        {
+            const QJsonObject transfer =
+                QJsonDocument::fromJson(QByteArray::fromStdString(action.payloadJson)).object();
+            const bool upload = action.kind == ai::AiTerminalActionKind::enqueueSftpUpload;
+            actionText = upload ? tr("Upload with SFTP") : tr("Download with SFTP");
+            actionText += QStringLiteral("\n\n%1\n→\n%2")
+                              .arg(upload ? transfer.value(QStringLiteral("local_path")).toString()
+                                          : transfer.value(QStringLiteral("remote_path")).toString(),
+                                   upload ? transfer.value(QStringLiteral("remote_path")).toString()
+                                          : transfer.value(QStringLiteral("local_path")).toString());
+            actionKind = upload ? QStringLiteral("queue_sftp_upload") : QStringLiteral("queue_sftp_download");
+            break;
+        }
     }
     return {{QStringLiteral("visible"), true},
             {QStringLiteral("toolCallId"), utf8QString(action.dispatchKey.toolCallId)},
@@ -7182,7 +7197,9 @@ bool AppController::approveAiTool()
     recordAiActivity(*tab, *pendingCall, QStringLiteral("executing"), QStringLiteral("pending"), true,
                      action.risk.highRisk());
     std::string output;
-    const bool requiresLiveTerminal = action.kind != ai::AiTerminalActionKind::saveRunbook;
+    const bool requiresLiveTerminal = action.kind != ai::AiTerminalActionKind::saveRunbook
+                                      && action.kind != ai::AiTerminalActionKind::enqueueSftpDownload
+                                      && action.kind != ai::AiTerminalActionKind::enqueueSftpUpload;
     if (action.target.sessionId != utf8String(tab->id) || action.target.sessionGeneration != tab->reconnectGeneration
         || (requiresLiveTerminal && (!tab->running || (!tab->ssh && !tab->local))))
     {
@@ -8152,7 +8169,8 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                 }};
             }
             if (call.name == "run_command" || call.name == "interrupt_command" || call.name == "write_to_pty"
-                || call.name == "transfer_control" || call.name == "save_runbook")
+                || call.name == "transfer_control" || call.name == "save_runbook" || call.name == "queue_sftp_download"
+                || call.name == "queue_sftp_upload")
             {
                 if (target != nullptr)
                 {
@@ -8467,6 +8485,9 @@ std::string AppController::executeAiTerminalAction(TerminalTab &tab, const ai::A
             return executeAiTransferControl(action);
         case ai::AiTerminalActionKind::saveRunbook:
             return executeAiSaveRunbook(action);
+        case ai::AiTerminalActionKind::enqueueSftpDownload:
+        case ai::AiTerminalActionKind::enqueueSftpUpload:
+            return executeAiSftpTransfer(tab, action);
     }
     return aiToolFailureJson(QStringLiteral("unsupported"), tr("The terminal action is unsupported."));
 }
@@ -8517,6 +8538,66 @@ std::string AppController::executeAiSaveRunbook(const ai::AiTerminalAction &acti
                                    {QStringLiteral("runbook_id"), utf8QString(m_scripts.back().id)},
                                    {QStringLiteral("name"), runbook.value(QStringLiteral("name"))},
                                    {QStringLiteral("step_count"), runbookSteps.size()}});
+}
+
+std::string AppController::executeAiSftpTransfer(TerminalTab &tab, const ai::AiTerminalAction &action)
+{
+    if (tab.kind != TerminalTabKind::Ssh || tab.sourceProfileId.isEmpty() || m_transferManager == nullptr)
+    {
+        return aiToolFailureJson(QStringLiteral("sftp_unavailable"), tr("SFTP transfer is unavailable."));
+    }
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(QByteArray::fromStdString(action.payloadJson), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isObject())
+    {
+        return aiToolFailureJson(QStringLiteral("invalid_arguments"), tr("The SFTP transfer paths are invalid."));
+    }
+    const QJsonObject payload = document.object();
+    const QString localPath = QDir::cleanPath(payload.value(QStringLiteral("local_path")).toString());
+    const auto remotePath =
+        sftp::normalizeRemotePath(utf8String(payload.value(QStringLiteral("remote_path")).toString()));
+    if (!QDir::isAbsolutePath(localPath) || !remotePath || *remotePath == "/")
+    {
+        return aiToolFailureJson(QStringLiteral("invalid_path"), tr("The SFTP transfer paths are invalid."));
+    }
+
+    const bool upload = action.kind == ai::AiTerminalActionKind::enqueueSftpUpload;
+    const QFileInfo localFile(localPath);
+    if (upload && (!localFile.exists() || !localFile.isFile() || localFile.isSymLink()))
+    {
+        return aiToolFailureJson(QStringLiteral("invalid_source"),
+                                 tr("The local upload source must be a regular non-symlink file."));
+    }
+    if (!upload
+        && (localFile.isSymLink() || (localFile.exists() && localFile.isDir()) || !localFile.absoluteDir().exists()))
+    {
+        return aiToolFailureJson(
+            QStringLiteral("invalid_destination"),
+            tr("The local download destination must be a non-symlink file path in an existing directory."));
+    }
+
+    const std::string taskId = utf8String(QUuid::createUuid().toString(QUuid::WithoutBraces));
+    sftp::TransferTask task{
+        .id = taskId,
+        .endpointId = utf8String(tab.sourceProfileId),
+        .displayName = utf8String(upload ? localFile.fileName() : QFileInfo(utf8QString(*remotePath)).fileName()),
+        .sourcePath = upload ? utf8String(localFile.absoluteFilePath()) : *remotePath,
+        .destinationPath = upload ? *remotePath : utf8String(localFile.absoluteFilePath()),
+        .filenameEncoding = utf8String(tab.sftpFilenameEncoding),
+        .direction = upload ? sftp::TransferDirection::Upload : sftp::TransferDirection::Download,
+        .totalBytes = upload ? static_cast<std::uint64_t>(localFile.size()) : 0,
+        .sourceModifiedUtcSeconds =
+            upload ? std::optional<std::int64_t>{localFile.lastModified().toSecsSinceEpoch()} : std::nullopt};
+    const auto queued = m_transferManager->enqueue(std::move(task), transferRequestProvider(tab.sourceProfileId), {});
+    if (!queued)
+    {
+        return aiToolFailureJson(QStringLiteral("queue_failed"), tr("The SFTP transfer could not be queued."));
+    }
+    return compactJson(
+        QJsonObject{{QStringLiteral("ok"), true},
+                    {QStringLiteral("status"), QStringLiteral("queued")},
+                    {QStringLiteral("transfer_id"), utf8QString(taskId)},
+                    {QStringLiteral("direction"), upload ? QStringLiteral("upload") : QStringLiteral("download")}});
 }
 
 std::string AppController::executeAiTransferControl(const ai::AiTerminalAction &action)

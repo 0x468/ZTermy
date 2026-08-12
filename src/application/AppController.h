@@ -713,6 +713,7 @@ private:
     [[nodiscard]] std::string executeAiInterruptCommand(TerminalTab &tab, const ai::AiTerminalAction &action);
     [[nodiscard]] std::string executeAiTransferControl(const ai::AiTerminalAction &action);
     [[nodiscard]] std::string executeAiSaveRunbook(const ai::AiTerminalAction &action);
+    [[nodiscard]] std::string executeAiSftpTransfer(TerminalTab &tab, const ai::AiTerminalAction &action);
     void recordAiActivity(const TerminalTab &tab, const ai::AiToolCall &call, const QString &state,
                           const QString &resultCode, bool sideEffecting, bool highRisk = false);
     [[nodiscard]] bool handoffAiControlToUser(TerminalTab &tab, bool cancelTurn);

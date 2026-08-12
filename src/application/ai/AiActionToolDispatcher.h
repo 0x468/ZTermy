@@ -39,6 +39,8 @@ enum class AiTerminalActionKind : std::uint8_t
     interruptCommand,
     transferToUser,
     saveRunbook,
+    enqueueSftpDownload,
+    enqueueSftpUpload,
 };
 
 struct AiTerminalAction final
