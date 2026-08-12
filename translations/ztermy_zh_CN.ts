@@ -332,412 +332,484 @@
 <context>
     <name>AiAssistantPane</name>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="41"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="43"/>
         <source>Starting</source>
         <translation>正在启动</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="43"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="45"/>
         <source>Retrying</source>
         <translation>正在重试</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="45"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="47"/>
         <source>Responding</source>
         <translation>正在回复</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="47"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="49"/>
         <source>Cancelling</source>
         <translation>正在取消</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="49"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="51"/>
         <source>Needs attention</source>
         <translation>需要处理</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="51"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="53"/>
         <source>Ready</source>
         <translation>就绪</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="72"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="74"/>
         <source>Terminal AI assistant</source>
         <translation>终端 AI 助手</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="107"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="109"/>
         <source>Terminal assistant</source>
         <translation>终端助手</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="152"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="154"/>
         <source>Explain last failure</source>
         <translation>解释上次失败</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="155"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="157"/>
         <source>Explain the last failed command</source>
         <translation>解释上次失败的命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="160"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="162"/>
         <source>Attach selection</source>
         <translation>附加选区</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="163"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="165"/>
         <source>Attach selected terminal text to this request</source>
         <translation>将选中的终端文本附加到本次请求</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="172"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="171"/>
+        <source>Activity</source>
+        <translation>活动</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="175"/>
+        <source>Hide AI activity</source>
+        <translation>隐藏 AI 活动</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="175"/>
+        <source>Show AI activity</source>
+        <translation>显示 AI 活动</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="184"/>
         <source>Clear</source>
         <translation>清除</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="175"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="187"/>
         <source>Clear this AI conversation</source>
         <translation>清除此 AI 对话</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="199"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="211"/>
         <source>User control</source>
         <translation>用户控制</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="199"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="211"/>
         <source>Agent ready</source>
         <translation>代理就绪</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="209"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="221"/>
         <source>AI terminal writes are paused until you resume them.</source>
         <translation>AI 终端写入已暂停，直到你明确恢复。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="209"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="221"/>
         <source>Typing in the terminal takes control immediately.</source>
         <translation>在终端中输入将立即取得控制权。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="218"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="230"/>
         <source>Resume agent</source>
         <translation>恢复代理</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="218"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="230"/>
         <source>Take control</source>
         <translation>取得控制权</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="221"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="233"/>
         <source>Resume AI terminal write control</source>
         <translation>恢复 AI 终端写入控制权</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="221"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="233"/>
         <source>Take terminal control from AI</source>
         <translation>从 AI 取得终端控制权</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="251"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="263"/>
         <source>Request context · %n item(s)</source>
         <translation>
             <numerusform>请求上下文 · %n 项</numerusform>
         </translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="352"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="364"/>
         <source>redacted</source>
         <translation>已脱敏</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="352"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="364"/>
         <source>truncated</source>
         <translation>已截断</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="363"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="375"/>
         <source>Unpin %1</source>
         <translation>取消固定 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="363"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="375"/>
         <source>Pin %1</source>
         <translation>固定 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="371"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="383"/>
         <source>Unpin context</source>
         <translation>取消固定上下文</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="371"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="383"/>
         <source>Pin context</source>
         <translation>固定上下文</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="376"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="388"/>
         <source>Remove %1 from context</source>
         <translation>从上下文中移除 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="384"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="396"/>
         <source>Remove from this request</source>
         <translation>从本次请求中移除</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="403"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="415"/>
         <source>Reset context</source>
         <translation>重置上下文</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="405"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="417"/>
         <source>Restore automatic context items</source>
         <translation>恢复自动选择的上下文项</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="427"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="439"/>
         <source>AI command approval</source>
         <translation>AI 命令审批</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="427"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="439"/>
         <source>AI interrupt approval</source>
         <translation>AI 中断操作批准</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="427"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="439"/>
         <source>AI terminal input approval</source>
         <translation>AI 终端输入批准</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="449"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="461"/>
         <source>High-risk command requires approval</source>
         <translation>高风险命令需要审批</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="449"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="461"/>
         <source>Command requires approval</source>
         <translation>命令需要审批</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="449"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="461"/>
         <source>Terminal interrupt requires approval</source>
         <translation>终端中断操作需要批准</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="449"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="461"/>
         <source>Terminal input requires approval</source>
         <translation>终端输入需要批准</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="468"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="480"/>
         <source>Command awaiting approval</source>
         <translation>等待审批的命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="468"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="480"/>
         <source>Interrupt awaiting approval</source>
         <translation>等待批准的中断操作</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="468"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="480"/>
         <source>Terminal input awaiting approval</source>
         <translation>等待批准的终端输入</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="495"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="507"/>
         <source>Deny</source>
         <translation>拒绝</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="497"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="509"/>
         <source>Deny the pending AI terminal action</source>
         <translation>拒绝待处理的 AI 终端操作</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="502"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="514"/>
         <source>Run command</source>
         <translation>运行命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="502"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="514"/>
         <source>Send Ctrl+C</source>
         <translation>发送 Ctrl+C</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="502"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="514"/>
         <source>Send input</source>
         <translation>发送输入</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="505"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="517"/>
         <source>Approve and run the pending AI command</source>
         <translation>批准并运行待处理的 AI 命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="505"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="517"/>
         <source>Approve the pending soft interrupt</source>
         <translation>批准待处理的软中断</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="505"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="517"/>
         <source>Approve the pending terminal input</source>
         <translation>批准待处理的终端输入</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="577"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="539"/>
+        <source>AI activity audit</source>
+        <translation>AI 活动审计</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="559"/>
+        <source>AI activity · %n item(s)</source>
+        <translation>
+            <numerusform>AI 活动 · %n 项</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="567"/>
+        <source>Metadata only</source>
+        <translation>仅元数据</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="574"/>
+        <source>Export AI activity</source>
+        <translation>导出 AI 活动</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="581"/>
+        <source>Export audit metadata</source>
+        <translation>导出审计元数据</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="587"/>
+        <source>Clear AI activity</source>
+        <translation>清空 AI 活动</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="594"/>
+        <source>Delete audit metadata</source>
+        <translation>删除审计元数据</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="677"/>
+        <source>No AI tool activity yet.</source>
+        <translation>暂无 AI 工具活动。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="751"/>
         <source>Thinking…</source>
         <translation>思考中…</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="590"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="764"/>
         <source>Message was truncated locally.</source>
         <translation>消息已在本地截断。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="602"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="776"/>
         <source>%1 in</source>
         <translation>%1 输入</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="602"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="776"/>
         <source>%1 out</source>
         <translation>%1 输出</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="604"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="778"/>
         <source>%1 cached</source>
         <translation>%1 缓存输入</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="606"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="780"/>
         <source>%1 reasoning</source>
         <translation>%1 推理</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="620"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="794"/>
         <source>%1 ms first · %2 ms total · %3 retries</source>
         <translation>首字 %1 ms · 总计 %2 ms · 重试 %3 次</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="620"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="794"/>
         <source>%1 ms total · %2 retries</source>
         <translation>总计 %1 ms · 重试 %2 次</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="632"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="806"/>
         <source>Est. $%1 · long-context rates · catalog %2</source>
         <translation>预估 $%1 · 长上下文费率 · 价目表 %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="632"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="806"/>
         <source>Est. $%1 · catalog %2</source>
         <translation>预估 $%1 · 价目表 %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="646"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="820"/>
         <source>Insert</source>
         <translation>插入</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="648"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="822"/>
         <source>Insert the suggested command without running it</source>
         <translation>插入建议的命令但不运行</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="654"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="828"/>
         <source>Run</source>
         <translation>运行</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="657"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="831"/>
         <source>Run the suggested command in the active terminal</source>
         <translation>在活动终端中运行建议的命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="663"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="837"/>
         <source>Retry</source>
         <translation>重试</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="665"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="839"/>
         <source>Retry the failed assistant response</source>
         <translation>重试失败的助手回复</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="671"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="845"/>
         <source>Protected copy</source>
         <translation>受保护复制</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="673"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="847"/>
         <source>Copy without Windows clipboard history or cloud sync</source>
         <translation>复制且不写入 Windows 剪贴板历史或云同步</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="685"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="859"/>
         <source>Ask about the active terminal. ztermy sends only the bounded context shown above, after local redaction.</source>
         <translation>询问当前终端。ztermy 仅发送上方所示、经过本地脱敏的有限上下文。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="710"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="884"/>
         <source>Command request</source>
         <translation>命令请求</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="710"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="884"/>
         <source>Ask</source>
         <translation>提问</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="716"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="890"/>
         <source>Toggle command generation mode</source>
         <translation>切换命令生成模式</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="722"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="896"/>
         <source>The response must contain one explicit shell command.</source>
         <translation>回复必须包含一条明确的 Shell 命令。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="722"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="896"/>
         <source>Ask, explain, or diagnose using the reviewed context.</source>
         <translation>使用已审阅的上下文提问、解释或诊断。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="744"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="918"/>
         <source>Ask about this terminal. Enter sends · Shift+Enter adds a new line</source>
         <translation>询问此终端。Enter 发送 · Shift+Enter 换行</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="744"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="918"/>
         <source>Describe the command you need. Enter sends · Shift+Enter adds a new line</source>
         <translation>描述你需要的命令。Enter 发送 · Shift+Enter 换行</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="752"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="926"/>
         <source>AI message</source>
         <translation>AI 消息</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="770"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="944"/>
         <source>Cancel</source>
         <translation>取消</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="770"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="944"/>
         <source>Send</source>
         <translation>发送</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="965"/>
+        <source>Export AI activity metadata</source>
+        <translation>导出 AI 活动元数据</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="968"/>
+        <source>JSON files (*.json)</source>
+        <translation>JSON 文件 (*.json)</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="968"/>
+        <source>All files (*)</source>
+        <translation>所有文件 (*)</translation>
     </message>
 </context>
 <context>
     <name>AiTools</name>
     <message>
-        <location filename="../src/application/AppController.cpp" line="423"/>
+        <location filename="../src/application/AppController.cpp" line="452"/>
         <source>The AI turn tool budget was exhausted.</source>
         <translation>AI 回合的工具预算已耗尽。</translation>
     </message>
@@ -745,183 +817,183 @@
 <context>
     <name>AppController</name>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1114"/>
+        <location filename="../src/application/AppController.cpp" line="1143"/>
         <source>Unlock the portable credential vault first.</source>
         <translation>请先解锁便携凭据保险库。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1116"/>
+        <location filename="../src/application/AppController.cpp" line="1145"/>
         <source>The selected credential store is unavailable in this Windows session.</source>
         <translation>所选凭据存储在当前 Windows 会话中不可用。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1119"/>
+        <location filename="../src/application/AppController.cpp" line="1148"/>
         <source>Windows denied access to the selected credential store.</source>
         <translation>Windows 拒绝访问所选凭据存储。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1122"/>
+        <location filename="../src/application/AppController.cpp" line="1151"/>
         <source>The vault password is incorrect, or the vault was modified.</source>
         <translation>保险库密码错误，或保险库已被修改。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1125"/>
+        <location filename="../src/application/AppController.cpp" line="1154"/>
         <source>Use a vault password with at least 8 UTF-8 bytes.</source>
         <translation>请使用至少包含 8 个 UTF-8 字节的保险库密码。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1127"/>
+        <location filename="../src/application/AppController.cpp" line="1156"/>
         <source>The portable credential vault is already initialized.</source>
         <translation>便携凭据保险库已初始化。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1130"/>
+        <location filename="../src/application/AppController.cpp" line="1159"/>
         <source>The portable credential vault is damaged or invalid.</source>
         <translation>便携凭据保险库已损坏或无效。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1132"/>
+        <location filename="../src/application/AppController.cpp" line="1161"/>
         <source>This credential vault was created by an unsupported ztermy version.</source>
         <translation>此凭据保险库由不受支持的 ztermy 版本创建。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1135"/>
+        <location filename="../src/application/AppController.cpp" line="1164"/>
         <source>Enter a password or key passphrase before saving it.</source>
         <translation>保存前请输入密码或密钥口令。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1137"/>
+        <location filename="../src/application/AppController.cpp" line="1166"/>
         <source>The credential is larger than the supported limit.</source>
         <translation>凭据大小超过支持的限制。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1139"/>
+        <location filename="../src/application/AppController.cpp" line="1168"/>
         <source>No saved credential was found for this host.</source>
         <translation>未找到此主机的已保存凭据。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1141"/>
+        <location filename="../src/application/AppController.cpp" line="1170"/>
         <source>The credential reference is invalid.</source>
         <translation>凭据引用无效。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1143"/>
+        <location filename="../src/application/AppController.cpp" line="1172"/>
         <source>The credential store could not be read or written.</source>
         <translation>无法读取或写入凭据存储。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1145"/>
+        <location filename="../src/application/AppController.cpp" line="1174"/>
         <source>Windows could not complete the credential encryption operation.</source>
         <translation>Windows 无法完成凭据加密操作。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1148"/>
+        <location filename="../src/application/AppController.cpp" line="1177"/>
         <source>Credential migration was rolled back because verification failed.</source>
         <translation>由于验证失败，凭据迁移已回滚。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1151"/>
+        <location filename="../src/application/AppController.cpp" line="1180"/>
         <source>The credential operation failed.</source>
         <translation>凭据操作失败。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1364"/>
+        <location filename="../src/application/AppController.cpp" line="1393"/>
         <source>Interrupted by the previous shutdown. Retry to start the transfer again.</source>
         <translation>上次关闭时传输被中断。请重试以重新开始传输。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1369"/>
+        <location filename="../src/application/AppController.cpp" line="1398"/>
         <source>Unlock the credential vault, then retry the transfer.</source>
         <translation>请解锁凭据保险库，然后重试传输。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1373"/>
+        <location filename="../src/application/AppController.cpp" line="1402"/>
         <source>Review the saved authentication method, then retry.</source>
         <translation>请检查已保存的身份验证方式，然后重试。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1377"/>
+        <location filename="../src/application/AppController.cpp" line="1406"/>
         <source>Authentication was rejected. Update the credential, then retry.</source>
         <translation>身份验证被拒绝。请更新凭据后重试。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1382"/>
+        <location filename="../src/application/AppController.cpp" line="1411"/>
         <source>The remote operation timed out. Check connectivity, then retry.</source>
         <translation>远程操作超时。请检查连接后重试。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1387"/>
+        <location filename="../src/application/AppController.cpp" line="1416"/>
         <source>The remote connection was lost. Reconnect, then retry.</source>
         <translation>远程连接已断开。请重新连接后重试。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1391"/>
+        <location filename="../src/application/AppController.cpp" line="1420"/>
         <source>The local file could not be written. Check the path, permissions, and free space.</source>
         <translation>无法写入本地文件。请检查路径、权限和可用空间。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1396"/>
+        <location filename="../src/application/AppController.cpp" line="1425"/>
         <source>The remote file operation failed. Check the path and permissions, then retry.</source>
         <translation>远程文件操作失败。请检查路径和权限后重试。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1401"/>
+        <location filename="../src/application/AppController.cpp" line="1430"/>
         <source>Choose whether to replace, rename, skip, or cancel.</source>
         <translation>请选择替换、重命名、跳过或取消。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1405"/>
+        <location filename="../src/application/AppController.cpp" line="1434"/>
         <source>Choose a compatible destination name and try again.</source>
         <translation>请选择兼容的目标名称后重试。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1409"/>
+        <location filename="../src/application/AppController.cpp" line="1438"/>
         <source>The source or destination is no longer valid.</source>
         <translation>源或目标已不再有效。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1413"/>
+        <location filename="../src/application/AppController.cpp" line="1442"/>
         <source>Authentication was cancelled.</source>
         <translation>身份验证已取消。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1417"/>
+        <location filename="../src/application/AppController.cpp" line="1446"/>
         <source>The transfer worker could not start. Retry the transfer.</source>
         <translation>无法启动传输工作线程。请重试传输。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1420"/>
+        <location filename="../src/application/AppController.cpp" line="1449"/>
         <source>The transfer failed. Review the paths and connection, then retry.</source>
         <translation>传输失败。请检查路径和连接后重试。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1485"/>
+        <location filename="../src/application/AppController.cpp" line="1514"/>
         <source>Enter a username before @.</source>
         <translation>请在 @ 前输入用户名。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1487"/>
+        <location filename="../src/application/AppController.cpp" line="1516"/>
         <source>Enter a host after @.</source>
         <translation>请在 @ 后输入主机。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1489"/>
+        <location filename="../src/application/AppController.cpp" line="1518"/>
         <source>Port must be a number from 1 to 65535.</source>
         <translation>端口必须是 1 到 65535 之间的数字。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1491"/>
+        <location filename="../src/application/AppController.cpp" line="1520"/>
         <source>Wrap an IPv6 host in brackets, for example user@[::1]:22.</source>
         <translation>请用方括号包住 IPv6 主机，例如 user@[::1]:22。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1494"/>
-        <location filename="../src/application/AppController.cpp" line="1496"/>
+        <location filename="../src/application/AppController.cpp" line="1523"/>
+        <location filename="../src/application/AppController.cpp" line="1525"/>
         <source>Use user@host or user@host:port.</source>
         <translation>请使用 user@host 或 user@host:port。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="2853"/>
+        <location filename="../src/application/AppController.cpp" line="2889"/>
         <source>Waiting to reconnect to the SSH host...</source>
         <translation>正在等待重新连接 SSH 主机...</translation>
     </message>
@@ -4938,81 +5010,81 @@
 <context>
     <name>SshTerminalSession</name>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1509"/>
+        <location filename="../src/application/AppController.cpp" line="1538"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="93"/>
         <source>SSH host name resolution failed</source>
         <translation>SSH 主机名解析失败</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1511"/>
+        <location filename="../src/application/AppController.cpp" line="1540"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="95"/>
         <source>SSH connection was refused</source>
         <translation>SSH 连接被拒绝</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1513"/>
+        <location filename="../src/application/AppController.cpp" line="1542"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="97"/>
         <source>SSH operation timed out</source>
         <translation>SSH 操作超时</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1515"/>
+        <location filename="../src/application/AppController.cpp" line="1544"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="99"/>
         <source>SSH transport failed</source>
         <translation>SSH 传输失败</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1517"/>
+        <location filename="../src/application/AppController.cpp" line="1546"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="101"/>
         <source>SSH host key changed</source>
         <translation>SSH 主机密钥已更改</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1519"/>
+        <location filename="../src/application/AppController.cpp" line="1548"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="103"/>
         <source>SSH host key could not be verified</source>
         <translation>无法验证 SSH 主机密钥</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1521"/>
+        <location filename="../src/application/AppController.cpp" line="1550"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="105"/>
         <source>SSH authentication was rejected</source>
         <translation>SSH 身份验证被拒绝</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1523"/>
+        <location filename="../src/application/AppController.cpp" line="1552"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="107"/>
         <source>SSH authentication method is unavailable</source>
         <translation>SSH 身份验证方式不可用</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1525"/>
+        <location filename="../src/application/AppController.cpp" line="1554"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="109"/>
         <source>SSH terminal channel could not be opened</source>
         <translation>无法打开 SSH 终端通道</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1527"/>
+        <location filename="../src/application/AppController.cpp" line="1556"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="111"/>
         <source>SSH remote host closed the connection</source>
         <translation>SSH 远程主机关闭了连接</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1529"/>
+        <location filename="../src/application/AppController.cpp" line="1558"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="113"/>
         <source>SSH connection cancelled</source>
         <translation>SSH 连接已取消</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1531"/>
+        <location filename="../src/application/AppController.cpp" line="1560"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="115"/>
         <source>SSH protocol error</source>
         <translation>SSH 协议错误</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1504"/>
         <location filename="../src/application/AppController.cpp" line="1533"/>
-        <location filename="../src/application/AppController.cpp" line="1564"/>
+        <location filename="../src/application/AppController.cpp" line="1562"/>
+        <location filename="../src/application/AppController.cpp" line="1593"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="117"/>
         <source>SSH connection failed</source>
         <translation>SSH 连接失败</translation>
@@ -6119,698 +6191,698 @@
 <context>
     <name>ztermy::AppController</name>
     <message>
-        <location filename="../src/application/AppController.cpp" line="2938"/>
-        <location filename="../src/application/AppController.cpp" line="5450"/>
+        <location filename="../src/application/AppController.cpp" line="2974"/>
+        <location filename="../src/application/AppController.cpp" line="5486"/>
         <source>The maximum of 32 terminal tabs is already open</source>
         <translation>已达到最多 32 个终端标签页的限制</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="2948"/>
-        <location filename="../src/application/AppController.cpp" line="3178"/>
-        <location filename="../src/application/AppController.cpp" line="9898"/>
+        <location filename="../src/application/AppController.cpp" line="2984"/>
+        <location filename="../src/application/AppController.cpp" line="3214"/>
+        <location filename="../src/application/AppController.cpp" line="10024"/>
         <source>PowerShell %1</source>
         <translation>PowerShell %1</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="2949"/>
-        <location filename="../src/application/AppController.cpp" line="3179"/>
+        <location filename="../src/application/AppController.cpp" line="2985"/>
+        <location filename="../src/application/AppController.cpp" line="3215"/>
         <source>Starting local terminal...</source>
         <translation>正在启动本地终端…</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="2985"/>
-        <location filename="../src/application/AppController.cpp" line="3230"/>
+        <location filename="../src/application/AppController.cpp" line="3021"/>
+        <location filename="../src/application/AppController.cpp" line="3266"/>
         <source>Unable to start local terminal: %1</source>
         <translation>无法启动本地终端：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="3167"/>
+        <location filename="../src/application/AppController.cpp" line="3203"/>
         <source>SSH pane duplicated; reconnecting...</source>
         <translation>SSH 窗格已复制；正在重新连接...</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="3639"/>
+        <location filename="../src/application/AppController.cpp" line="3675"/>
         <source>Session log could not be started.</source>
         <translation>无法启动会话日志。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="3955"/>
-        <location filename="../src/application/AppController.cpp" line="4018"/>
+        <location filename="../src/application/AppController.cpp" line="3991"/>
+        <location filename="../src/application/AppController.cpp" line="4054"/>
         <source>The script definition is invalid.</source>
         <translation>脚本定义无效。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="3977"/>
+        <location filename="../src/application/AppController.cpp" line="4013"/>
         <source>The script contains an invalid variable.</source>
         <translation>脚本包含无效变量。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4006"/>
+        <location filename="../src/application/AppController.cpp" line="4042"/>
         <source>The script contains an invalid step.</source>
         <translation>脚本包含无效步骤。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4027"/>
+        <location filename="../src/application/AppController.cpp" line="4063"/>
         <source>The script library has reached its 256 item limit.</source>
         <translation>脚本库已达到 256 项上限。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4037"/>
-        <location filename="../src/application/AppController.cpp" line="4169"/>
-        <location filename="../src/application/AppController.cpp" line="4195"/>
-        <location filename="../src/application/AppController.cpp" line="4222"/>
+        <location filename="../src/application/AppController.cpp" line="4073"/>
+        <location filename="../src/application/AppController.cpp" line="4205"/>
+        <location filename="../src/application/AppController.cpp" line="4231"/>
+        <location filename="../src/application/AppController.cpp" line="4258"/>
         <source>The script no longer exists.</source>
         <translation>该脚本已不存在。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4045"/>
-        <location filename="../src/application/AppController.cpp" line="4179"/>
+        <location filename="../src/application/AppController.cpp" line="4081"/>
+        <location filename="../src/application/AppController.cpp" line="4215"/>
         <source>The script could not be saved.</source>
         <translation>无法保存脚本。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4093"/>
+        <location filename="../src/application/AppController.cpp" line="4129"/>
         <source>Choose a running target terminal for the script.</source>
         <translation>请为脚本选择一个正在运行的目标终端。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4105"/>
+        <location filename="../src/application/AppController.cpp" line="4141"/>
         <source>Fill every required script variable with a valid value.</source>
         <translation>请为每个必填脚本变量填写有效值。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4112"/>
+        <location filename="../src/application/AppController.cpp" line="4148"/>
         <source>A script is already running in this terminal.</source>
         <translation>此终端中已有脚本正在运行。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4113"/>
+        <location filename="../src/application/AppController.cpp" line="4149"/>
         <source>The script could not be started.</source>
         <translation>无法启动脚本。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4143"/>
+        <location filename="../src/application/AppController.cpp" line="4179"/>
         <source>Enter a name and command, then choose a valid shell scope.</source>
         <translation>请输入名称和命令，然后选择有效的 Shell 适用范围。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4254"/>
-        <location filename="../src/application/AppController.cpp" line="4268"/>
-        <location filename="../src/application/AppController.cpp" line="4276"/>
+        <location filename="../src/application/AppController.cpp" line="4290"/>
+        <location filename="../src/application/AppController.cpp" line="4304"/>
+        <location filename="../src/application/AppController.cpp" line="4312"/>
         <source>The script library could not be imported.</source>
         <translation>无法导入脚本库。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4202"/>
+        <location filename="../src/application/AppController.cpp" line="4238"/>
         <source>The script could not be deleted.</source>
         <translation>无法删除脚本。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="2822"/>
+        <location filename="../src/application/AppController.cpp" line="2858"/>
         <source>Send Ctrl+C to tracked command %1</source>
         <translation>向跟踪的命令 %1 发送 Ctrl+C</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="2826"/>
+        <location filename="../src/application/AppController.cpp" line="2862"/>
         <source>Return terminal control to the user</source>
         <translation>将终端控制权交还用户</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="3906"/>
+        <location filename="../src/application/AppController.cpp" line="3942"/>
         <source>Stop and review a non-empty recording before saving it as a script.</source>
         <translation>请停止并检查非空录制，再将其保存为脚本。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="3923"/>
+        <location filename="../src/application/AppController.cpp" line="3959"/>
         <source>The recording does not contain any command actions.</source>
         <translation>录制中不包含任何命令操作。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4239"/>
+        <location filename="../src/application/AppController.cpp" line="4275"/>
         <source>The script order could not be saved.</source>
         <translation>无法保存脚本顺序。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4281"/>
+        <location filename="../src/application/AppController.cpp" line="4317"/>
         <source>The imported script library exceeds the 256 item limit.</source>
         <translation>导入的脚本库超过 256 项上限。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4305"/>
+        <location filename="../src/application/AppController.cpp" line="4341"/>
         <source>The imported script library could not be saved.</source>
         <translation>无法保存导入的脚本库。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4320"/>
+        <location filename="../src/application/AppController.cpp" line="4356"/>
         <source>The script library could not be exported.</source>
         <translation>无法导出脚本库。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4332"/>
+        <location filename="../src/application/AppController.cpp" line="4368"/>
         <source>The local notes folder could not be read.</source>
         <translation>无法读取本地笔记文件夹。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4358"/>
+        <location filename="../src/application/AppController.cpp" line="4394"/>
         <source>Save or discard the current note before opening another one.</source>
         <translation>请先保存或放弃当前笔记的更改，再打开其他笔记。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4364"/>
+        <location filename="../src/application/AppController.cpp" line="4400"/>
         <source>The note could not be opened.</source>
         <translation>无法打开笔记。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4390"/>
+        <location filename="../src/application/AppController.cpp" line="4426"/>
         <source>Open a note before saving.</source>
         <translation>请先打开笔记再保存。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4396"/>
+        <location filename="../src/application/AppController.cpp" line="4432"/>
         <source>The note exceeds the 2 MiB limit.</source>
         <translation>笔记超过 2 MiB 限制。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4397"/>
+        <location filename="../src/application/AppController.cpp" line="4433"/>
         <source>The note could not be saved.</source>
         <translation>无法保存笔记。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4419"/>
+        <location filename="../src/application/AppController.cpp" line="4455"/>
         <source>Save or discard the current note before creating another one.</source>
         <translation>请先保存或放弃当前笔记的更改，再创建其他笔记。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4424"/>
+        <location filename="../src/application/AppController.cpp" line="4460"/>
         <source>The note could not be created. Use a safe relative path ending in .md.</source>
         <translation>无法创建笔记。请使用以 .md 结尾的安全相对路径。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4435"/>
+        <location filename="../src/application/AppController.cpp" line="4471"/>
         <source>The note folder could not be created.</source>
         <translation>无法创建笔记文件夹。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4446"/>
+        <location filename="../src/application/AppController.cpp" line="4482"/>
         <source>The note or folder could not be moved or renamed.</source>
         <translation>无法移动或重命名笔记或文件夹。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4466"/>
+        <location filename="../src/application/AppController.cpp" line="4502"/>
         <source>Discard the active note changes before deleting it.</source>
         <translation>删除前请先放弃当前笔记的更改。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4471"/>
+        <location filename="../src/application/AppController.cpp" line="4507"/>
         <source>The note or folder could not be deleted.</source>
         <translation>无法删除笔记或文件夹。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4500"/>
+        <location filename="../src/application/AppController.cpp" line="4536"/>
         <source>The local notes search could not be completed.</source>
         <translation>无法完成本地笔记搜索。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4532"/>
+        <location filename="../src/application/AppController.cpp" line="4568"/>
         <source>Save or discard the current note before importing another one.</source>
         <translation>请先保存或放弃当前笔记的更改，再导入其他笔记。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4540"/>
+        <location filename="../src/application/AppController.cpp" line="4576"/>
         <source>Only valid UTF-8 Markdown notes up to 2 MiB can be imported.</source>
         <translation>只能导入不超过 2 MiB 的有效 UTF-8 Markdown 笔记。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4557"/>
+        <location filename="../src/application/AppController.cpp" line="4593"/>
         <source>The note could not be exported.</source>
         <translation>无法导出笔记。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4576"/>
+        <location filename="../src/application/AppController.cpp" line="4612"/>
         <source>Connect the SSH terminal before reading remote history.</source>
         <translation>请先连接 SSH 终端，再读取远程历史记录。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4592"/>
+        <location filename="../src/application/AppController.cpp" line="4628"/>
         <source>The PowerShell history location is unavailable.</source>
         <translation>PowerShell 历史记录位置不可用。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="4601"/>
+        <location filename="../src/application/AppController.cpp" line="4637"/>
         <source>PowerShell history could not be read.</source>
         <translation>无法读取 PowerShell 历史记录。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="5010"/>
+        <location filename="../src/application/AppController.cpp" line="5046"/>
         <source>Upload %1 items</source>
         <translation>上传 %1 个项目</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="5052"/>
+        <location filename="../src/application/AppController.cpp" line="5088"/>
         <source>Download %1 items</source>
         <translation>下载 %1 个项目</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="5298"/>
+        <location filename="../src/application/AppController.cpp" line="5334"/>
         <source>The shortcut could not be saved.</source>
         <translation>无法保存快捷键。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="5403"/>
+        <location filename="../src/application/AppController.cpp" line="5439"/>
         <source>Complete the SSH host, port, username, and private-key fields</source>
         <translation>请填写 SSH 主机、端口、用户名和私钥字段</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="5427"/>
+        <location filename="../src/application/AppController.cpp" line="5463"/>
         <source>Complete the SSH host, port, username, and password fields</source>
         <translation>请填写 SSH 主机、端口、用户名和密码字段</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="5468"/>
+        <location filename="../src/application/AppController.cpp" line="5504"/>
         <source>Starting SSH connection...</source>
         <translation>正在启动 SSH 连接…</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="5542"/>
+        <location filename="../src/application/AppController.cpp" line="5578"/>
         <source>Automatic reconnect stopped after %1 attempt(s).</source>
         <translation>自动重连在尝试 %1 次后停止。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="5554"/>
+        <location filename="../src/application/AppController.cpp" line="5590"/>
         <source>SSH connection lost. Reconnecting in %1 second(s) (attempt %2 of %3).</source>
         <translation>SSH 连接已中断。将在 %1 秒后重连（第 %2/%3 次）。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="5578"/>
+        <location filename="../src/application/AppController.cpp" line="5614"/>
         <source>SSH reconnect stopped because the saved host no longer exists.</source>
         <translation>已保存的主机不存在，SSH 重连已停止。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="5585"/>
+        <location filename="../src/application/AppController.cpp" line="5621"/>
         <source>SSH reconnect needs an available saved credential.</source>
         <translation>SSH 重连需要可用的已保存凭据。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="5592"/>
+        <location filename="../src/application/AppController.cpp" line="5628"/>
         <source>Reconnecting to SSH host...</source>
         <translation>正在重新连接 SSH 主机...</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="5599"/>
+        <location filename="../src/application/AppController.cpp" line="5635"/>
         <source>SSH reconnect could not start.</source>
         <translation>无法启动 SSH 重连。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="5659"/>
+        <location filename="../src/application/AppController.cpp" line="5695"/>
         <source>Automatic SSH reconnect cancelled.</source>
         <translation>已取消 SSH 自动重连。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="5889"/>
+        <location filename="../src/application/AppController.cpp" line="5925"/>
         <source>Transfer recovery unavailable</source>
         <translation>传输恢复不可用</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="5892"/>
+        <location filename="../src/application/AppController.cpp" line="5928"/>
         <source>The previous transfer state could not be read. New transfers are still available.</source>
         <translation>无法读取之前的传输状态。仍可创建新传输。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="5893"/>
+        <location filename="../src/application/AppController.cpp" line="5929"/>
         <source>Transfer recovery state could not be saved. Active transfers may not be recoverable after exit.</source>
         <translation>无法保存传输恢复状态。退出后可能无法恢复活动传输。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="5909"/>
+        <location filename="../src/application/AppController.cpp" line="5945"/>
         <source>Batch transfer recovery unavailable</source>
         <translation>批量传输恢复不可用</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="5912"/>
+        <location filename="../src/application/AppController.cpp" line="5948"/>
         <source>Previous batch transfer state could not be read. New transfers remain available.</source>
         <translation>无法读取上次的批量传输状态。仍可创建新的传输。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="5913"/>
+        <location filename="../src/application/AppController.cpp" line="5949"/>
         <source>Batch transfer state could not be saved. Active batches may not be recoverable after exit.</source>
         <translation>无法保存批量传输状态。退出后可能无法恢复活动批次。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="5953"/>
+        <location filename="../src/application/AppController.cpp" line="5989"/>
         <source>Download complete</source>
         <translation>下载完成</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="5953"/>
+        <location filename="../src/application/AppController.cpp" line="5989"/>
         <source>Upload complete</source>
         <translation>上传完成</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="5958"/>
+        <location filename="../src/application/AppController.cpp" line="5994"/>
         <source>File transfer failed</source>
         <translation>文件传输失败</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="5962"/>
+        <location filename="../src/application/AppController.cpp" line="5998"/>
         <source>File transfer cancelled</source>
         <translation>文件传输已取消</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6020"/>
+        <location filename="../src/application/AppController.cpp" line="6056"/>
         <source>Unlock the credential vault to browse remote files.</source>
         <translation>解锁凭据保险库后才能浏览远程文件。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6021"/>
+        <location filename="../src/application/AppController.cpp" line="6057"/>
         <source>This SSH session needs a saved credential before remote files can be opened.</source>
         <translation>此 SSH 会话需要已保存的凭据才能打开远程文件。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6037"/>
+        <location filename="../src/application/AppController.cpp" line="6073"/>
         <source>The SFTP session could not be started.</source>
         <translation>无法启动 SFTP 会话。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6158"/>
+        <location filename="../src/application/AppController.cpp" line="6194"/>
         <source>The profile was saved, but the connection could not be started.</source>
         <translation>配置已保存，但无法启动连接。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6215"/>
+        <location filename="../src/application/AppController.cpp" line="6251"/>
         <source>Select up to three distinct saved jump hosts.</source>
         <translation>请选择最多三个互不相同的已保存跳板主机。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6293"/>
+        <location filename="../src/application/AppController.cpp" line="6329"/>
         <source>Create the portable credential vault in Settings &gt; Security before saving a secret.</source>
         <translation>保存凭据前，请先在“设置 &gt; 安全”中创建便携凭据保险库。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6409"/>
+        <location filename="../src/application/AppController.cpp" line="6445"/>
         <source>Remove this host from the jump-host chain of &quot;%1&quot; before deleting it.</source>
         <translation>请先从“%1”的跳板链中移除此主机，然后再删除。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6415"/>
+        <location filename="../src/application/AppController.cpp" line="6451"/>
         <source>Delete the port forwarding rules that use this host before deleting it.</source>
         <translation>请先删除使用此主机的端口转发规则。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6596"/>
+        <location filename="../src/application/AppController.cpp" line="6632"/>
         <source>This host profile has no saved credential.</source>
         <translation>此主机配置没有已保存的凭据。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6619"/>
+        <location filename="../src/application/AppController.cpp" line="6655"/>
         <source>This host profile has no saved proxy credential.</source>
         <translation>此主机配置没有已保存的代理凭据。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6658"/>
+        <location filename="../src/application/AppController.cpp" line="6694"/>
         <source>Enter the credential required by this host.</source>
         <translation>请输入此主机所需的凭据。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6675"/>
+        <location filename="../src/application/AppController.cpp" line="6711"/>
         <source>Enter the credential required by this proxy.</source>
         <translation>请输入此代理所需的凭据。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6685"/>
+        <location filename="../src/application/AppController.cpp" line="6721"/>
         <source>A configured jump host no longer exists.</source>
         <translation>配置的某个跳板主机已不存在。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6704"/>
+        <location filename="../src/application/AppController.cpp" line="6740"/>
         <source>Save the credential for jump host &quot;%1&quot; before using this chain.</source>
         <translation>使用此链路前，请先保存跳板主机“%1”的凭据。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6722"/>
+        <location filename="../src/application/AppController.cpp" line="6758"/>
         <source>Save the proxy credential for jump host &quot;%1&quot; before using this chain.</source>
         <translation>使用此链路前，请先保存跳板主机“%1”的代理凭据。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6964"/>
+        <location filename="../src/application/AppController.cpp" line="7000"/>
         <source>No command failure with a reliable exit status is available in this session.</source>
         <translation>此会话中没有包含可靠退出状态的失败命令。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="6970"/>
+        <location filename="../src/application/AppController.cpp" line="7006"/>
         <source>Explain the last failed command, identify the likely cause, and suggest the safest next diagnostic step.</source>
         <translation>解释上次失败的命令，判断可能原因，并建议最安全的下一步诊断操作。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7006"/>
+        <location filename="../src/application/AppController.cpp" line="7044"/>
         <source>The target terminal session changed before approval.</source>
         <translation>终端会话在审批前已发生变化。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7019"/>
+        <location filename="../src/application/AppController.cpp" line="7061"/>
         <source>The command result could not resume the AI turn.</source>
         <translation>命令结果无法恢复 AI 回合。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7042"/>
+        <location filename="../src/application/AppController.cpp" line="7084"/>
         <source>The user denied this terminal action.</source>
         <translation>用户拒绝了此终端操作。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7047"/>
+        <location filename="../src/application/AppController.cpp" line="7091"/>
         <source>The denied command result could not resume the AI turn.</source>
         <translation>被拒绝的命令结果无法恢复 AI 回合。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7223"/>
-        <location filename="../src/application/AppController.cpp" line="7313"/>
+        <location filename="../src/application/AppController.cpp" line="7278"/>
+        <location filename="../src/application/AppController.cpp" line="7368"/>
         <source>Terminal selection</source>
         <translation>终端选区</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7305"/>
+        <location filename="../src/application/AppController.cpp" line="7360"/>
         <source>Select terminal text before attaching it.</source>
         <translation>请先选择终端文本再附加。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7341"/>
+        <location filename="../src/application/AppController.cpp" line="7410"/>
         <source>Configure an AI provider URL and model before starting a conversation.</source>
         <translation>开始对话前，请先配置 AI 提供商 URL 和模型。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7528"/>
+        <location filename="../src/application/AppController.cpp" line="7611"/>
         <source>The target terminal session is unavailable.</source>
         <translation>目标终端会话不可用。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7577"/>
+        <location filename="../src/application/AppController.cpp" line="7674"/>
         <source>The pending command was cancelled.</source>
         <translation>待处理的命令已取消。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7788"/>
+        <location filename="../src/application/AppController.cpp" line="7914"/>
         <source>The terminal action is unsupported.</source>
         <translation>不支持此终端操作。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7856"/>
-        <location filename="../src/application/AppController.cpp" line="7870"/>
+        <location filename="../src/application/AppController.cpp" line="7982"/>
+        <location filename="../src/application/AppController.cpp" line="7996"/>
         <source>The tracked command no longer exists.</source>
         <translation>跟踪的命令已不存在。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7860"/>
+        <location filename="../src/application/AppController.cpp" line="7986"/>
         <source>The tracked command scope changed.</source>
         <translation>跟踪命令的作用域已发生变化。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7877"/>
+        <location filename="../src/application/AppController.cpp" line="8003"/>
         <source>The tracked command is no longer running.</source>
         <translation>跟踪的命令已不再运行。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7882"/>
+        <location filename="../src/application/AppController.cpp" line="8008"/>
         <source>The tracked command could not be interrupted.</source>
         <translation>无法中断跟踪的命令。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7977"/>
-        <location filename="../src/application/AppController.cpp" line="8082"/>
+        <location filename="../src/application/AppController.cpp" line="8103"/>
+        <location filename="../src/application/AppController.cpp" line="8208"/>
         <source>Choose system, portable, or session credential storage.</source>
         <translation>请选择系统、便携或仅会话凭据存储。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="7998"/>
+        <location filename="../src/application/AppController.cpp" line="8124"/>
         <source>Credentials were copied, but the storage preference could not be saved. The old store remains active.</source>
         <translation>凭据已复制，但无法保存存储偏好。原存储仍处于活动状态。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8009"/>
+        <location filename="../src/application/AppController.cpp" line="8135"/>
         <source>Migration succeeded, but credentials remain in the previous store.</source>
         <translation>迁移成功，但凭据仍保留在原存储中。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8067"/>
+        <location filename="../src/application/AppController.cpp" line="8193"/>
         <source>Credentials were restored because host profiles could not be updated.</source>
         <translation>由于无法更新主机配置，凭据已恢复。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8111"/>
+        <location filename="../src/application/AppController.cpp" line="8237"/>
         <source>Choose a valid host profile, forwarding type, and bind port.</source>
         <translation>请选择有效的主机配置、转发类型和监听端口。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8118"/>
+        <location filename="../src/application/AppController.cpp" line="8244"/>
         <source>Enter a destination host and port for this forwarding rule.</source>
         <translation>请输入此转发规则的目标主机和端口。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8138"/>
+        <location filename="../src/application/AppController.cpp" line="8264"/>
         <source>Complete the forwarding rule with valid names and endpoints.</source>
         <translation>请使用有效的名称和端点补全转发规则。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8170"/>
-        <location filename="../src/application/AppController.cpp" line="8235"/>
+        <location filename="../src/application/AppController.cpp" line="8296"/>
+        <location filename="../src/application/AppController.cpp" line="8361"/>
         <source>The forwarding rule no longer exists.</source>
         <translation>此转发规则已不存在。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8177"/>
+        <location filename="../src/application/AppController.cpp" line="8303"/>
         <source>%1 copy</source>
         <translation>%1 副本</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8252"/>
+        <location filename="../src/application/AppController.cpp" line="8378"/>
         <source>Stop another forwarding rule before starting this one.</source>
         <translation>请先停止另一条转发规则，再启动此规则。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8260"/>
+        <location filename="../src/application/AppController.cpp" line="8386"/>
         <source>The host profile used by this forwarding rule no longer exists.</source>
         <translation>此转发规则使用的主机配置已不存在。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8283"/>
+        <location filename="../src/application/AppController.cpp" line="8409"/>
         <source>Unable to allocate the forwarding worker.</source>
         <translation>无法分配转发工作线程。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8349"/>
+        <location filename="../src/application/AppController.cpp" line="8475"/>
         <source>Unable to start the forwarding worker.</source>
         <translation>无法启动转发工作线程。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8458"/>
+        <location filename="../src/application/AppController.cpp" line="8584"/>
         <source>Session log failed: %1</source>
         <translation>会话日志失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8799"/>
+        <location filename="../src/application/AppController.cpp" line="8925"/>
         <source>Remote shell history exceeded the safety limit.</source>
         <translation>远程 Shell 历史记录超过安全限制。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8828"/>
+        <location filename="../src/application/AppController.cpp" line="8954"/>
         <source>This remote shell is not supported yet.</source>
         <translation>暂不支持此远程 Shell。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8833"/>
+        <location filename="../src/application/AppController.cpp" line="8959"/>
         <source>Remote shell history could not be parsed.</source>
         <translation>无法解析远程 Shell 历史记录。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8887"/>
+        <location filename="../src/application/AppController.cpp" line="9013"/>
         <source>SSH host key changed; connection blocked</source>
         <translation>SSH 主机密钥已更改；连接已阻止</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8973"/>
+        <location filename="../src/application/AppController.cpp" line="9099"/>
         <source>This folder could not be expanded.</source>
         <translation>无法展开此文件夹。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8994"/>
+        <location filename="../src/application/AppController.cpp" line="9120"/>
         <source>The remote directory could not be loaded.</source>
         <translation>无法加载远程目录。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="8998"/>
+        <location filename="../src/application/AppController.cpp" line="9124"/>
         <source>The remote file operation failed.</source>
         <translation>远程文件操作失败。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9013"/>
+        <location filename="../src/application/AppController.cpp" line="9139"/>
         <source>The SFTP connection failed.</source>
         <translation>SFTP 连接失败。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9476"/>
+        <location filename="../src/application/AppController.cpp" line="9602"/>
         <source>No terminal session</source>
         <translation>没有终端会话</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9636"/>
+        <location filename="../src/application/AppController.cpp" line="9762"/>
         <source>Unable to load the saved port forwarding rules.</source>
         <translation>无法加载已保存的端口转发规则。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9670"/>
+        <location filename="../src/application/AppController.cpp" line="9796"/>
         <source>Unable to save the port forwarding rules.</source>
         <translation>无法保存端口转发规则。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9690"/>
+        <location filename="../src/application/AppController.cpp" line="9816"/>
         <source>The SSH connection for the forwarding rule failed.</source>
         <translation>转发规则的 SSH 连接失败。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9693"/>
+        <location filename="../src/application/AppController.cpp" line="9819"/>
         <source>The local bind address or port is unavailable.</source>
         <translation>本地监听地址或端口不可用。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9696"/>
+        <location filename="../src/application/AppController.cpp" line="9822"/>
         <source>The SSH server rejected the remote listener.</source>
         <translation>SSH 服务器拒绝了远程监听。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9699"/>
+        <location filename="../src/application/AppController.cpp" line="9825"/>
         <source>The forwarding transport was disconnected.</source>
         <translation>转发传输连接已断开。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9702"/>
+        <location filename="../src/application/AppController.cpp" line="9828"/>
         <source>The forwarding worker exhausted an internal resource.</source>
         <translation>转发工作线程耗尽了内部资源。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9836"/>
+        <location filename="../src/application/AppController.cpp" line="9962"/>
         <source>Saved scripts could not be loaded.</source>
         <translation>无法加载已保存的脚本。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9871"/>
+        <location filename="../src/application/AppController.cpp" line="9997"/>
         <source>Some local settings were recovered from a last-known-good backup. Review them before continuing.</source>
         <translation>部分本地设置已从最后一次有效备份中恢复。请在继续前检查这些设置。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9900"/>
+        <location filename="../src/application/AppController.cpp" line="10026"/>
         <source>Restoring local terminal...</source>
         <translation>正在恢复本地终端...</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9918"/>
+        <location filename="../src/application/AppController.cpp" line="10044"/>
         <source>Unable to restore local terminal: %1</source>
         <translation>无法恢复本地终端：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9936"/>
+        <location filename="../src/application/AppController.cpp" line="10062"/>
         <source>SSH workspace restored; reconnect when ready.</source>
         <translation>SSH 工作区已恢复；准备好后可重新连接。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9940"/>
+        <location filename="../src/application/AppController.cpp" line="10066"/>
         <source>The saved SSH host for this workspace no longer exists.</source>
         <translation>此工作区保存的 SSH 主机已不存在。</translation>
     </message>
@@ -6852,7 +6924,7 @@
 <context>
     <name>ztermy::ssh::SshTerminalSession</name>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1543"/>
+        <location filename="../src/application/AppController.cpp" line="1572"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="211"/>
         <source>Resolving SSH host</source>
         <translation>正在解析 SSH 主机</translation>
@@ -6868,25 +6940,25 @@
         <translation>SSH 输入队列已满</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1545"/>
+        <location filename="../src/application/AppController.cpp" line="1574"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="514"/>
         <source>Connecting to SSH host</source>
         <translation>正在连接 SSH 主机</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1547"/>
+        <location filename="../src/application/AppController.cpp" line="1576"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="517"/>
         <source>Negotiating SSH connection</source>
         <translation>正在协商 SSH 连接</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1549"/>
+        <location filename="../src/application/AppController.cpp" line="1578"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="520"/>
         <source>Verifying SSH host key</source>
         <translation>正在验证 SSH 主机密钥</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1551"/>
+        <location filename="../src/application/AppController.cpp" line="1580"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="523"/>
         <source>SSH host key confirmation required</source>
         <translation>需要确认 SSH 主机密钥</translation>
@@ -6897,19 +6969,19 @@
         <translation>无法保存 SSH 主机密钥</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1553"/>
+        <location filename="../src/application/AppController.cpp" line="1582"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="526"/>
         <source>Authenticating SSH session</source>
         <translation>正在验证 SSH 会话身份</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1555"/>
+        <location filename="../src/application/AppController.cpp" line="1584"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="591"/>
         <source>Opening SSH terminal</source>
         <translation>正在打开 SSH 终端</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1557"/>
+        <location filename="../src/application/AppController.cpp" line="1586"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="629"/>
         <source>SSH terminal connected</source>
         <translation>SSH 终端已连接</translation>
@@ -7031,7 +7103,7 @@
         <translation>SSH 终端已关闭，但通道未完整关闭</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="1562"/>
+        <location filename="../src/application/AppController.cpp" line="1591"/>
         <location filename="../src/application/ssh/SshTerminalSession.cpp" line="1148"/>
         <source>SSH terminal disconnected</source>
         <translation>SSH 终端已断开连接</translation>
@@ -7045,7 +7117,7 @@
 <context>
     <name>ztermy::terminal::LocalTerminalSession</name>
     <message>
-        <location filename="../src/application/AppController.cpp" line="2846"/>
+        <location filename="../src/application/AppController.cpp" line="2882"/>
         <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="80"/>
         <source>Local PowerShell connected</source>
         <translation>本地 PowerShell 已连接</translation>
@@ -7071,7 +7143,7 @@
         <translation>终端写入线程遇到未知错误</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="2848"/>
+        <location filename="../src/application/AppController.cpp" line="2884"/>
         <location filename="../src/application/terminal/LocalTerminalSession.cpp" line="157"/>
         <source>Local terminal stopped</source>
         <translation>本地终端已停止</translation>

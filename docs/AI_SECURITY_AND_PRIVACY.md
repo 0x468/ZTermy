@@ -197,10 +197,12 @@ stale capabilities. A tool never silently retargets to the newly active tab.
 - Conversation history is session-only until the encrypted store ships.
 - Optional encrypted history uses a separate data key and bounded retention;
   credential stores never hold transcript bodies.
-- Audit records contain time, provider/model token, capability, target token,
-  decision, duration, result code, and redaction/truncation counts. They exclude
-  raw command text, raw output, prompts, tool arguments likely to contain paths,
-  and secrets.
+- Audit records contain time, hashed conversation/call references, owned tool
+  token, permission mode, session generation, lifecycle state, risk flags, and
+  result code. They exclude raw command text, raw output, prompts, tool
+  arguments, host identity, provider text, error prose, and secrets. The trail
+  is bounded to 500 records and its export is the same redacted document (ADR
+  0060).
 - Export is explicit, previews included fields, and warns only when the export
   actually contains sensitive transcript data.
 

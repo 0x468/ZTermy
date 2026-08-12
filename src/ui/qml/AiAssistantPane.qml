@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 
 Rectangle {
@@ -14,6 +15,7 @@ Rectangle {
     readonly property var conversation: controller.activeAiConversation
     readonly property var toolApproval: controller.activeAiToolApproval
     property bool contextExpanded: false
+    property bool activityExpanded: false
     property bool commandRequest: false
 
     component ContextToolButton: ToolButton {
@@ -162,6 +164,16 @@ Rectangle {
                 enabled: !pane.busy
                 accessibleName: qsTr("Attach selected terminal text to this request")
                 onClicked: pane.controller.attachAiSelection()
+            }
+
+            ActionButton {
+                objectName: "aiActivityToggle"
+                text: qsTr("Activity")
+                iconName: "activity"
+                checkable: true
+                checked: pane.activityExpanded
+                accessibleName: pane.activityExpanded ? qsTr("Hide AI activity") : qsTr("Show AI activity")
+                onClicked: pane.activityExpanded = !pane.activityExpanded
             }
 
             Item {
@@ -509,6 +521,168 @@ Rectangle {
             }
         }
 
+        Rectangle {
+            id: activityPanel
+
+            objectName: "aiActivityPanel"
+            Layout.fillWidth: true
+            Layout.leftMargin: 10
+            Layout.rightMargin: 10
+            Layout.topMargin: pane.activityExpanded ? 6 : 0
+            Layout.preferredHeight: pane.activityExpanded ? 196 : 0
+            visible: pane.activityExpanded
+            clip: true
+            radius: Theme.radiusPanel
+            color: Theme.raisedBackground
+            border.color: Theme.border
+            Accessible.role: Accessible.Pane
+            Accessible.name: qsTr("AI activity audit")
+
+            Behavior on Layout.preferredHeight {
+                NumberAnimation {
+                    duration: Theme.motionFast
+                    easing.type: Easing.OutCubic
+                }
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 8
+                spacing: 6
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 7
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("AI activity · %n item(s)", "", pane.controller.aiActivity.count)
+                        color: Theme.text
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textBody
+                        font.weight: Font.DemiBold
+                    }
+
+                    Text {
+                        text: qsTr("Metadata only")
+                        color: Theme.textMuted
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textCompact
+                    }
+
+                    ContextToolButton {
+                        Accessible.name: qsTr("Export AI activity")
+                        onClicked: activityExportDialog.open()
+                        contentItem: AppIcon {
+                            name: "save"
+                            color: Theme.textMuted
+                        }
+                        AppToolTip {
+                            text: qsTr("Export audit metadata")
+                        }
+                    }
+
+                    ContextToolButton {
+                        enabled: pane.controller.aiActivity.count > 0
+                        Accessible.name: qsTr("Clear AI activity")
+                        onClicked: pane.controller.clearAiActivity()
+                        contentItem: AppIcon {
+                            name: "trash"
+                            color: Theme.textMuted
+                        }
+                        AppToolTip {
+                            text: qsTr("Delete audit metadata")
+                        }
+                    }
+                }
+
+                ListView {
+                    id: activityList
+
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+                    spacing: 5
+                    model: pane.controller.aiActivity
+                    boundsBehavior: Flickable.StopAtBounds
+                    onCountChanged: Qt.callLater(positionViewAtEnd)
+
+                    delegate: Rectangle {
+                        id: activityItem
+
+                        required property string timestamp
+                        required property string toolName
+                        required property string state
+                        required property string resultCode
+                        required property string permissionMode
+                        required property bool sideEffecting
+                        required property bool highRisk
+                        width: ListView.view.width
+                        height: 42
+                        radius: Theme.radiusSmall
+                        color: Theme.controlBackground
+                        border.color: activityItem.highRisk ? Theme.dangerBorder : Theme.border
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            spacing: 7
+
+                            AppIcon {
+                                Layout.preferredWidth: 15
+                                Layout.preferredHeight: 15
+                                name: activityItem.sideEffecting ? "terminal" : "search"
+                                color: activityItem.highRisk ? Theme.dangerText : Theme.accent
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 0
+                                spacing: 0
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: activityItem.toolName
+                                    color: Theme.text
+                                    elide: Text.ElideRight
+                                    font.family: Theme.terminalFont
+                                    font.pixelSize: Theme.textCompact
+                                    font.weight: Font.Medium
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: activityItem.permissionMode + " · " + activityItem.resultCode
+                                    color: Theme.textMuted
+                                    elide: Text.ElideRight
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.textCompact
+                                }
+                            }
+
+                            Text {
+                                text: activityItem.state
+                                color: activityItem.state === "failed" || activityItem.state === "cancelled" ? Theme.dangerText : activityItem.state === "succeeded" ? Theme.successText : Theme.warning
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.textCompact
+                                font.weight: Font.Medium
+                            }
+                        }
+                    }
+
+                    Text {
+                        anchors.centerIn: parent
+                        visible: activityList.count === 0
+                        text: qsTr("No AI tool activity yet.")
+                        color: Theme.textMuted
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textCompact
+                    }
+                }
+            }
+        }
+
         ListView {
             id: conversationList
 
@@ -783,5 +957,15 @@ Rectangle {
                 }
             }
         }
+    }
+
+    FileDialog {
+        id: activityExportDialog
+
+        title: qsTr("Export AI activity metadata")
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "json"
+        nameFilters: [qsTr("JSON files (*.json)"), qsTr("All files (*)")]
+        onAccepted: pane.controller.exportAiActivity(selectedFile.toString())
     }
 }

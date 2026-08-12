@@ -139,6 +139,10 @@ SFTP writes, run unattended background agents, or depend on MCP.
 - encrypted optional conversation history, audit metadata, export, and deletion;
 - a user-visible AI activity/audit view with redacted metadata and tool outcomes.
 
+The activity/audit half is implemented as a bounded metadata-only trail in ADR
+0060. Encrypted transcript persistence remains a separate opt-in deliverable so
+audit never silently becomes conversation retention.
+
 ### 0.3.2 — SSH operations intelligence
 
 - read-only SFTP navigation and file-reading tools with byte and path bounds;

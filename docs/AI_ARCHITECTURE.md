@@ -335,6 +335,11 @@ QML owns presentation only:
   unknown-cost providers show tokens only;
 - an AI activity view exposes redacted audit metadata, permission decisions,
   target identity, tool lifecycle, and result codes without raw secrets;
+- the first activity implementation stores one bounded card per tool call,
+  hashes conversation/call identity, validates every persisted token, caps the
+  trail at 500 records, and performs atomic last-known-good rewrites on a
+  single worker queue; arguments and terminal/provider text never enter the
+  activity model or export (ADR 0060);
 - UI cancellation calls an owned C++ handle and immediately reflects cancelling
   state while teardown completes asynchronously.
 

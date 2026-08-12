@@ -485,6 +485,8 @@ target_link_libraries(ztermy_ai_provider
 )
 
 add_library(ztermy_ai_application STATIC
+    src/application/ai/AiActivityModel.cpp
+    src/application/ai/AiActivityModel.h
     src/application/ai/AiActionToolDispatcher.cpp
     src/application/ai/AiActionToolDispatcher.h
     src/application/ai/AiConversationModel.cpp
@@ -501,6 +503,7 @@ target_compile_features(ztermy_ai_application PUBLIC cxx_std_23)
 target_include_directories(ztermy_ai_application PUBLIC src)
 target_link_libraries(ztermy_ai_application
     PUBLIC ztermy_ai_context ztermy_ai_domain ztermy_ai_provider Qt6::Core
+    PRIVATE ztermy_core_persistence
 )
 
 add_library(ztermy_session_logging STATIC
@@ -2856,6 +2859,26 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME ai-wait-command-tool COMMAND ztermy_ai_wait_command_tool_tests)
+
+    qt_add_executable(ztermy_ai_activity_model_tests
+        tests/ai_activity_model_tests.cpp
+    )
+
+    target_compile_features(ztermy_ai_activity_model_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ai_activity_model_tests PRIVATE
+        ztermy_ai_application
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ai_activity_model_tests PRIVATE
+            /permissive-
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ai-activity-model COMMAND ztermy_ai_activity_model_tests)
 
     qt_add_executable(ztermy_ai_conversation_model_tests
         tests/ai_conversation_model_tests.cpp

@@ -155,6 +155,11 @@ private:
     return QFileInfo(settingsPath).dir().filePath(QStringLiteral("workspace_state.json"));
 }
 
+[[nodiscard]] QString siblingAiAuditFile(const QString &settingsPath)
+{
+    return QFileInfo(settingsPath).dir().filePath(QStringLiteral("ai_activity.json"));
+}
+
 [[nodiscard]] QString siblingTransferRecoveryFile(const QString &settingsPath)
 {
     return QFileInfo(settingsPath).dir().filePath(QStringLiteral("transfer_recovery.json"));
@@ -396,6 +401,30 @@ aiPermissionMode(const ztermy::config::AiPermissionPreference preference) noexce
     return compactJson(QJsonObject{
         {QStringLiteral("ok"), false},
         {QStringLiteral("error"), QJsonObject{{QStringLiteral("code"), code}, {QStringLiteral("message"), message}}}});
+}
+
+[[nodiscard]] QString aiActivityResultCode(const std::string &outputJson)
+{
+    QJsonParseError error;
+    const auto document =
+        QJsonDocument::fromJson(QByteArray(outputJson.data(), static_cast<qsizetype>(outputJson.size())), &error);
+    if (error.error != QJsonParseError::NoError || !document.isObject())
+    {
+        return QStringLiteral("invalid_result");
+    }
+    const auto object = document.object();
+    if (object.value(QStringLiteral("ok")).toBool())
+    {
+        return QStringLiteral("ok");
+    }
+    QString code = object.value(QStringLiteral("error")).toObject().value(QStringLiteral("code")).toString();
+    if (!code.isEmpty() && code.size() <= 48 && std::ranges::all_of(code, [](const QChar character) {
+            return character.isLetterOrNumber() || character == QLatin1Char('_') || character == QLatin1Char('-');
+        }))
+    {
+        return code;
+    }
+    return QStringLiteral("failed");
 }
 
 [[nodiscard]] std::string aiBudgetFailureJson(const ztermy::ai::AiAgentBudgetDecision decision)
@@ -1617,6 +1646,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
       m_legacyQuickCommandPath(siblingQuickCommandsFile(m_settingsStore.filePath())),
       m_noteStore(siblingNotesDirectory(m_settingsStore.filePath())),
       m_workspaceStateStore(siblingWorkspaceStateFile(m_settingsStore.filePath())),
+      m_aiActivity(siblingAiAuditFile(m_settingsStore.filePath())),
       m_credentialVaults(std::make_unique<security::CredentialVaultCoordinator>(
           siblingCredentialsFile(m_profileStore.filePath()), security::CredentialStorage::Session)),
       m_knownHostsPath(std::move(knownHostsPath))
@@ -1675,6 +1705,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
       m_legacyQuickCommandPath(siblingQuickCommandsFile(m_settingsStore.filePath())),
       m_noteStore(siblingNotesDirectory(m_settingsStore.filePath())),
       m_workspaceStateStore(siblingWorkspaceStateFile(m_settingsStore.filePath())),
+      m_aiActivity(siblingAiAuditFile(m_settingsStore.filePath())),
       m_credentialVaults(std::make_unique<security::CredentialVaultCoordinator>(
           credentialsPath.isEmpty() ? siblingCredentialsFile(m_profileStore.filePath()) : std::move(credentialsPath),
           defaultCredentialStorage(storageMode))),
@@ -2750,6 +2781,11 @@ bool AppController::aiApiKeyConfigured() const
 {
     const ai::AiSecretStore store(m_credentialVaults->active());
     return store.readApiKey(m_settings.aiCredentialReference.toStdString()).has_value();
+}
+
+QObject *AppController::aiActivity() noexcept
+{
+    return &m_aiActivity;
 }
 
 QObject *AppController::activeAiConversation() const noexcept
@@ -6998,6 +7034,8 @@ bool AppController::approveAiTool()
         return false;
     }
     tab->pendingAiAction.reset();
+    recordAiActivity(*tab, *pendingCall, QStringLiteral("executing"), QStringLiteral("pending"), true,
+                     action.risk.highRisk());
     std::string output;
     if (action.target.sessionId != utf8String(tab->id) || action.target.sessionGeneration != tab->reconnectGeneration
         || !tab->running || (!tab->ssh && !tab->local))
@@ -7012,6 +7050,10 @@ bool AppController::approveAiTool()
         tab->aiFirstWriteApproved = true;
         static_cast<void>(m_aiActionToolDispatcher.complete(action, ai::AiToolDispatchState::succeeded, output));
     }
+    const QString activityResult = aiActivityResultCode(output);
+    recordAiActivity(*tab, *pendingCall,
+                     activityResult == QStringLiteral("ok") ? QStringLiteral("succeeded") : QStringLiteral("failed"),
+                     activityResult, true, action.risk.highRisk());
     const bool resumed = tab->aiTurnRunner->completePendingTool(
         ai::AiToolOutput{.callId = pendingCall->id, .name = pendingCall->name, .outputJson = std::move(output)});
     if (!resumed)
@@ -7040,6 +7082,8 @@ bool AppController::denyAiTool()
     tab->pendingAiAction.reset();
     const auto output =
         aiToolFailureJson(QStringLiteral("permission_denied"), tr("The user denied this terminal action."));
+    recordAiActivity(*tab, *pendingCall, QStringLiteral("cancelled"), QStringLiteral("permission_denied"), true,
+                     action.risk.highRisk());
     const bool resumed = tab->aiTurnRunner->completePendingTool(
         ai::AiToolOutput{.callId = pendingCall->id, .name = pendingCall->name, .outputJson = output});
     if (!resumed)
@@ -7124,6 +7168,17 @@ void AppController::clearAiConversation()
     m_aiActionToolDispatcher.clearConversation(utf8String(tab->aiConversationId));
     m_aiCommandTracker.clearConversation(utf8String(tab->aiConversationId));
     emit aiConversationChanged();
+}
+
+void AppController::clearAiActivity()
+{
+    m_aiActivity.clear();
+}
+
+bool AppController::exportAiActivity(const QString &localFileUrl) const
+{
+    const QUrl url(localFileUrl);
+    return m_aiActivity.exportTo(url.isLocalFile() ? url.toLocalFile() : localFileUrl);
 }
 
 bool AppController::copyAiText(const QString &text)
@@ -7328,6 +7383,20 @@ void AppController::acceptAiSelectedText(TerminalTab &tab, const QString &text)
     emit aiConversationChanged();
 }
 
+void AppController::recordAiActivity(const TerminalTab &tab, const ai::AiToolCall &call, const QString &state,
+                                     const QString &resultCode, const bool sideEffecting, const bool highRisk)
+{
+    m_aiActivity.record({.conversationId = tab.aiConversationId,
+                         .toolCallId = utf8QString(call.id),
+                         .toolName = utf8QString(call.name),
+                         .state = state,
+                         .resultCode = resultCode,
+                         .permissionMode = config::aiPermissionPreferenceToken(m_settings.aiPermission),
+                         .sessionGeneration = tab.reconnectGeneration,
+                         .sideEffecting = sideEffecting,
+                         .highRisk = highRisk});
+}
+
 bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const bool preferLastFailure,
                                   const bool appendPrompt, const bool commandRequest)
 {
@@ -7513,11 +7582,25 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
             auto *target = findTab(tabId);
             if (call.name == "wait_command" && target != nullptr)
             {
-                return handleAiWaitCommand(*target, tabId, call);
+                recordAiActivity(*target, call, QStringLiteral("queued"), QStringLiteral("pending"), false);
+                auto handled = handleAiWaitCommand(*target, tabId, call);
+                if (handled.output.has_value())
+                {
+                    const QString resultCode = aiActivityResultCode(handled.output->outputJson);
+                    recordAiActivity(*target, call,
+                                     resultCode == QStringLiteral("ok") ? QStringLiteral("succeeded")
+                                                                        : QStringLiteral("failed"),
+                                     resultCode, false);
+                }
+                return handled;
             }
             if (call.name == "run_command" || call.name == "interrupt_command" || call.name == "write_to_pty"
                 || call.name == "transfer_control")
             {
+                if (target != nullptr)
+                {
+                    recordAiActivity(*target, call, QStringLiteral("queued"), QStringLiteral("pending"), true);
+                }
                 if (target == nullptr || !target->aiTurnRunner || !target->aiTurnBudget)
                 {
                     return ai::AiTurnRunner::ToolHandlingResult{
@@ -7541,6 +7624,11 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                     *target->aiTurnBudget);
                 if (plan.disposition == ai::AiActionToolDisposition::respond || !plan.action.has_value())
                 {
+                    const QString resultCode = aiActivityResultCode(plan.outputJson);
+                    recordAiActivity(*target, call,
+                                     resultCode == QStringLiteral("ok") ? QStringLiteral("succeeded")
+                                                                        : QStringLiteral("failed"),
+                                     resultCode, plan.sideEffecting);
                     return ai::AiTurnRunner::ToolHandlingResult{
                         .output = ai::AiToolOutput{.callId = call.id, .name = call.name, .outputJson = plan.outputJson},
                         .sideEffecting = plan.sideEffecting};
@@ -7548,21 +7636,30 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                 const auto action = *plan.action;
                 if (plan.disposition == ai::AiActionToolDisposition::execute)
                 {
+                    recordAiActivity(*target, call, QStringLiteral("executing"), QStringLiteral("pending"), true,
+                                     action.risk.highRisk());
                     const auto output = executeAiTerminalAction(*target, action);
                     static_cast<void>(
                         m_aiActionToolDispatcher.complete(action, ai::AiToolDispatchState::succeeded, output));
+                    const QString resultCode = aiActivityResultCode(output);
+                    recordAiActivity(*target, call,
+                                     resultCode == QStringLiteral("ok") ? QStringLiteral("succeeded")
+                                                                        : QStringLiteral("failed"),
+                                     resultCode, true, action.risk.highRisk());
                     return ai::AiTurnRunner::ToolHandlingResult{
                         .output = ai::AiToolOutput{.callId = call.id, .name = call.name, .outputJson = output},
                         .sideEffecting = true};
                 }
                 target->pendingAiAction = action;
+                recordAiActivity(*target, call, QStringLiteral("awaiting_approval"), QStringLiteral("pending"), true,
+                                 action.risk.highRisk());
                 if (m_activeTabId == tabId || m_focusedTabId == tabId)
                 {
                     emit aiConversationChanged();
                 }
                 return ai::AiTurnRunner::ToolHandlingResult{
                     .cancel =
-                        [this, tabId] noexcept {
+                        [this, tabId, callId = call.id, toolName = call.name] noexcept {
                             try
                             {
                                 TerminalTab *cancelledTarget = findTab(tabId);
@@ -7575,6 +7672,9 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                                     cancelledAction, ai::AiToolDispatchState::cancelled,
                                     aiToolFailureJson(QStringLiteral("cancelled"),
                                                       tr("The pending command was cancelled."))));
+                                const ai::AiToolCall cancelledCall{.id = callId, .name = toolName};
+                                recordAiActivity(*cancelledTarget, cancelledCall, QStringLiteral("cancelled"),
+                                                 QStringLiteral("cancelled"), true, cancelledAction.risk.highRisk());
                                 cancelledTarget->pendingAiAction.reset();
                                 if (m_activeTabId == tabId || m_focusedTabId == tabId)
                                 {
@@ -7591,11 +7691,13 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
             }
             if (target != nullptr && target->aiTurnBudget)
             {
+                recordAiActivity(*target, call, QStringLiteral("queued"), QStringLiteral("pending"), false);
                 const auto signature = call.name + ':' + call.argumentsJson;
                 const auto budgetDecision =
                     target->aiTurnBudget->authorize(false, signature, target->reconnectGeneration);
                 if (budgetDecision != ai::AiAgentBudgetDecision::allow)
                 {
+                    recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("budget_denied"), false);
                     return ai::AiTurnRunner::ToolHandlingResult{
                         .output = ai::AiToolOutput{.callId = call.id,
                                                    .name = call.name,
@@ -7604,11 +7706,17 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
             }
             const auto snapshots =
                 target == nullptr ? std::vector<ai::AiTerminalReadSnapshot>{} : aiReadSnapshots(*target);
+            const auto output = m_aiReadToolDispatcher.execute(call.name, call.argumentsJson, snapshots);
+            if (target != nullptr)
+            {
+                const QString resultCode = aiActivityResultCode(output);
+                recordAiActivity(*target, call,
+                                 resultCode == QStringLiteral("ok") ? QStringLiteral("succeeded")
+                                                                    : QStringLiteral("failed"),
+                                 resultCode, false);
+            }
             return ai::AiTurnRunner::ToolHandlingResult{
-                .output = ai::AiToolOutput{
-                    .callId = call.id,
-                    .name = call.name,
-                    .outputJson = m_aiReadToolDispatcher.execute(call.name, call.argumentsJson, snapshots)}};
+                .output = ai::AiToolOutput{.callId = call.id, .name = call.name, .outputJson = output}};
         });
     if (!started.has_value())
     {
@@ -7729,6 +7837,7 @@ ai::AiTurnRunner::ToolHandlingResult AppController::handleAiWaitCommand(Terminal
             {
                 timerGuard->stop();
                 timerGuard->deleteLater();
+                recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("command_not_found"), false);
                 static_cast<void>(target->aiTurnRunner->completePendingTool(ai::AiToolOutput{
                     .callId = call.id,
                     .name = call.name,
@@ -7749,6 +7858,11 @@ ai::AiTurnRunner::ToolHandlingResult AppController::handleAiWaitCommand(Terminal
             timerGuard->deleteLater();
             const auto output = completed ? ai::AiWaitCommandTool::result(*currentCommand)
                                           : ai::AiWaitCommandTool::timeout(*currentCommand);
+            const QString resultCode = aiActivityResultCode(output);
+            recordAiActivity(*target, call,
+                             resultCode == QStringLiteral("ok") ? QStringLiteral("succeeded")
+                                                                : QStringLiteral("failed"),
+                             resultCode, false);
             static_cast<void>(target->aiTurnRunner->completePendingTool(
                 ai::AiToolOutput{.callId = call.id, .name = call.name, .outputJson = output}));
         }
@@ -7763,11 +7877,23 @@ ai::AiTurnRunner::ToolHandlingResult AppController::handleAiWaitCommand(Terminal
         }
     });
     timer->start();
-    return {.cancel = [timerGuard] noexcept {
+    const auto callGuard = std::make_shared<const ai::AiToolCall>(call);
+    return {.cancel = [this, timerGuard, tabId, callGuard] {
         if (timerGuard)
         {
             timerGuard->stop();
             timerGuard->deleteLater();
+        }
+        try
+        {
+            if (TerminalTab *target = findTab(tabId); target != nullptr)
+            {
+                recordAiActivity(*target, *callGuard, QStringLiteral("cancelled"), QStringLiteral("cancelled"), false);
+            }
+        }
+        catch (...)
+        {
+            qCCritical(appControllerLog) << "AI wait cancellation suppressed an exception for tab" << tabId;
         }
     }};
 }

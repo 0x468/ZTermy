@@ -2,6 +2,7 @@
 
 #include "application/actions/ActionRegistry.h"
 #include "application/ai/AiActionToolDispatcher.h"
+#include "application/ai/AiActivityModel.h"
 #include "application/ai/AiConversationModel.h"
 #include "application/ai/AiReadToolDispatcher.h"
 #include "application/ai/AiSecretStore.h"
@@ -158,6 +159,7 @@ class AppController final : public QObject
     Q_PROPERTY(bool aiAutomaticContext READ aiAutomaticContext NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString aiPermissionPreference READ aiPermissionPreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool aiApiKeyConfigured READ aiApiKeyConfigured NOTIFY credentialVaultChanged)
+    Q_PROPERTY(QObject *aiActivity READ aiActivity CONSTANT)
     Q_PROPERTY(QObject *activeAiConversation READ activeAiConversation NOTIFY aiConversationChanged)
     Q_PROPERTY(QString activeAiState READ activeAiState NOTIFY aiConversationChanged)
     Q_PROPERTY(QString activeAiError READ activeAiError NOTIFY aiConversationChanged)
@@ -280,6 +282,7 @@ public:
     [[nodiscard]] bool aiAutomaticContext() const noexcept;
     [[nodiscard]] QString aiPermissionPreference() const;
     [[nodiscard]] bool aiApiKeyConfigured() const;
+    [[nodiscard]] QObject *aiActivity() noexcept;
     [[nodiscard]] QObject *activeAiConversation() const noexcept;
     [[nodiscard]] QString activeAiState() const;
     [[nodiscard]] QString activeAiError() const;
@@ -468,6 +471,8 @@ public:
     Q_INVOKABLE bool resumeAiAgentControl();
     Q_INVOKABLE bool retryAiMessage();
     Q_INVOKABLE void clearAiConversation();
+    Q_INVOKABLE void clearAiActivity();
+    Q_INVOKABLE [[nodiscard]] bool exportAiActivity(const QString &localFileUrl) const;
     Q_INVOKABLE bool copyAiText(const QString &text);
     Q_INVOKABLE bool attachAiSelection();
     Q_INVOKABLE bool removeAiContextItem(const QString &itemId);
@@ -665,6 +670,8 @@ private:
     [[nodiscard]] std::string executeAiWriteToPty(TerminalTab &tab, const ai::AiTerminalAction &action);
     [[nodiscard]] std::string executeAiInterruptCommand(TerminalTab &tab, const ai::AiTerminalAction &action);
     [[nodiscard]] std::string executeAiTransferControl(const ai::AiTerminalAction &action);
+    void recordAiActivity(const TerminalTab &tab, const ai::AiToolCall &call, const QString &state,
+                          const QString &resultCode, bool sideEffecting, bool highRisk = false);
     [[nodiscard]] bool handoffAiControlToUser(TerminalTab &tab, bool cancelTurn);
     void observeScriptOutput(const QString &tabId, const QByteArray &bytes);
     void dispatchScriptCommands(TerminalTab &tab, const std::vector<std::string> &commands);
@@ -773,6 +780,7 @@ private:
     QString m_legacyQuickCommandPath;
     workbench::NoteStore m_noteStore;
     workbench::WorkspaceStateStore m_workspaceStateStore;
+    ai::AiActivityModel m_aiActivity;
     workbench::WorkspaceState m_workspaceState;
     std::vector<workbench::ScriptDefinition> m_scripts;
     QString m_quickCommandOperationError;
