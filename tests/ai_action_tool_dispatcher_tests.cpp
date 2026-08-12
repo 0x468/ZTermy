@@ -96,6 +96,7 @@ private slots:
     void rejectsScopeReplayAndObserverWrites();
     void appliesRiskBudgetAndOwnershipGuards();
     void appliesReusableRulesBeforeModeDefaults();
+    void appliesModesAndRulesToMcpTools();
 };
 
 void AiActionToolDispatcherTests::publishesStrictRunCommandDefinition()
@@ -353,6 +354,61 @@ void AiActionToolDispatcherTests::appliesReusableRulesBeforeModeDefaults()
     plan = dispatcher.prepare(runbookCall("rule-runbook"), context("rule-runbook", AiPermissionMode::readOnly),
                               runbookBudget);
     QCOMPARE(plan.disposition, AiActionToolDisposition::execute);
+}
+
+void AiActionToolDispatcherTests::appliesModesAndRulesToMcpTools()
+{
+    AiActionToolDispatcher dispatcher;
+    const std::string tool = "mcp.ops.restart_service";
+
+    QCOMPARE(dispatcher
+                 .permissionDecision(AiPermissionCapability::mcpTool, tool,
+                                     context("mcp-read-only", AiPermissionMode::readOnly))
+                 .disposition,
+             AiPermissionDisposition::deny);
+    QCOMPARE(
+        dispatcher.permissionDecision(AiPermissionCapability::mcpTool, tool, context("mcp-ask", AiPermissionMode::ask))
+            .disposition,
+        AiPermissionDisposition::ask);
+    QCOMPARE(dispatcher
+                 .permissionDecision(AiPermissionCapability::mcpTool, tool, context("mcp-edit", AiPermissionMode::edit))
+                 .disposition,
+             AiPermissionDisposition::ask);
+    QCOMPARE(
+        dispatcher
+            .permissionDecision(AiPermissionCapability::mcpTool, tool, context("mcp-auto", AiPermissionMode::automatic))
+            .disposition,
+        AiPermissionDisposition::allow);
+    QCOMPARE(dispatcher
+                 .permissionDecision(AiPermissionCapability::mcpTool, tool, context("mcp-yolo", AiPermissionMode::yolo))
+                 .disposition,
+             AiPermissionDisposition::allow);
+
+    QVERIFY(dispatcher.addPermissionRule({.id = "ask-mcp-restart",
+                                          .capability = AiPermissionCapability::mcpTool,
+                                          .matcher = AiPermissionRuleMatcher::exact,
+                                          .pattern = tool,
+                                          .disposition = AiPermissionDisposition::ask,
+                                          .duration = AiPermissionRuleDuration::global}));
+    QCOMPARE(
+        dispatcher
+            .permissionDecision(AiPermissionCapability::mcpTool, tool, context("mcp-yolo-rule", AiPermissionMode::yolo))
+            .disposition,
+        AiPermissionDisposition::ask);
+
+    AiActionToolDispatcher allowDispatcher;
+    QVERIFY(allowDispatcher.addPermissionRule({.id = "allow-mcp-session",
+                                               .capability = AiPermissionCapability::mcpTool,
+                                               .matcher = AiPermissionRuleMatcher::prefix,
+                                               .pattern = "mcp.ops.",
+                                               .disposition = AiPermissionDisposition::allow,
+                                               .duration = AiPermissionRuleDuration::session,
+                                               .sessionId = "session-1"}));
+    QCOMPARE(
+        allowDispatcher
+            .permissionDecision(AiPermissionCapability::mcpTool, tool, context("mcp-ask-rule", AiPermissionMode::ask))
+            .disposition,
+        AiPermissionDisposition::allow);
 }
 
 } // namespace

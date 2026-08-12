@@ -119,13 +119,17 @@ evaluations serve different purposes and are reported separately.
       covered.
   - Implemented: local stdio servers run as exact executables with a reduced
     environment and no stored credential channel; discovered definitions remain
-    hidden until execute trust and exact schema review; every call still needs
-    explicit approval, is deduplicated by the native dispatch ledger, is
-    cancellable, and returns a bounded untrusted envelope (`ADR 0073`,
-    `ADR 0074`). Server-originated elicitation is unsupported and grants no
-    authority. Store, registry, protocol, process, runtime-manager, and
-    AppController tests cover backup recovery, drift, disable/revoke, duplicate
-    dispatch, cancellation, and application configuration.
+    hidden until execute trust and exact schema review. Reviewed calls follow
+    Read-only/Ask/Edit/Auto/YOLO plus exact/prefix/glob/regex/all rules with
+    once/session/Profile/global duration; Auto and YOLO do not acquire an
+    accidental per-call prompt, while explicit ask/deny still override them.
+    Every call is deduplicated by the native dispatch ledger, is cancellable,
+    and returns a bounded untrusted envelope (`ADR 0073`, `ADR 0074`,
+    `ADR 0082`). Server-originated elicitation is unsupported and grants no
+    authority. Store, registry, protocol, process, runtime-manager, permission,
+    and AppController tests cover backup recovery, drift, disable/revoke,
+    duplicate dispatch, cancellation, modes, rules, and application
+    configuration.
 - [x] Evaluation replay works with recorded synthetic/provider-independent tool
       traces and separately reports live-provider results.
   - Implemented: the versioned 12-case corpus and deterministic replay harness

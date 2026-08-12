@@ -3256,7 +3256,11 @@ QVariantMap AppController::activeAiToolApproval() const
                 {QStringLiteral("kind"), QStringLiteral("mcp_tool")},
                 {QStringLiteral("sessionId"), tab->id},
                 {QStringLiteral("sessionGeneration"), QVariant::fromValue<qulonglong>(tab->reconnectGeneration)},
-                {QStringLiteral("ruleSupported"), false},
+                {QStringLiteral("ruleSupported"), true},
+                {QStringLiteral("ruleSubject"), utf8QString(pending.call.name)},
+                {QStringLiteral("ruleCapability"), QStringLiteral("mcp-tool")},
+                {QStringLiteral("ruleDefaultMatcher"), QStringLiteral("exact")},
+                {QStringLiteral("profileAvailable"), !tab->sourceProfileId.isEmpty()},
                 {QStringLiteral("highRisk"), true},
                 {QStringLiteral("riskReason"),
                  tr("MCP tools run in an external process and their descriptions and results are untrusted.")}};
@@ -7965,7 +7969,7 @@ bool AppController::applyPendingAiPermissionRule(TerminalTab &tab, const QString
                                                  const QString &matcherToken, const QString &pattern,
                                                  const ai::AiPermissionDisposition disposition)
 {
-    if (!tab.pendingAiAction.has_value())
+    if (!tab.pendingAiAction.has_value() && !tab.pendingAiMcpCall.has_value())
     {
         return false;
     }
@@ -7990,14 +7994,17 @@ bool AppController::applyPendingAiPermissionRule(TerminalTab &tab, const QString
         return false;
     }
 
-    const auto &action = *tab.pendingAiAction;
+    const auto capability = tab.pendingAiMcpCall.has_value() ? ai::AiPermissionCapability::mcpTool
+                                                             : tab.pendingAiAction->permissionCapability;
+    const std::string subject =
+        tab.pendingAiMcpCall.has_value() ? tab.pendingAiMcpCall->call.name : tab.pendingAiAction->permissionSubject;
     ai::AiPermissionRule rule{
         .id = utf8String(QUuid::createUuid().toString(QUuid::WithoutBraces)),
-        .capability = action.permissionCapability,
+        .capability = capability,
         .matcher = *matcher,
         .pattern = *matcher == ai::AiPermissionRuleMatcher::all
                        ? std::string{}
-                       : utf8String(pattern.isEmpty() ? utf8QString(action.permissionSubject) : pattern),
+                       : utf8String(pattern.isEmpty() ? utf8QString(subject) : pattern),
         .disposition = disposition,
         .duration = *duration,
         .sessionId = *duration == ai::AiPermissionRuleDuration::session ? utf8String(tab.id) : std::string{},
@@ -8012,7 +8019,7 @@ bool AppController::applyPendingAiPermissionRule(TerminalTab &tab, const QString
 bool AppController::approveAiToolWithRule(const QString &duration, const QString &matcher, const QString &pattern)
 {
     TerminalTab *tab = activeTab();
-    if (tab == nullptr || tab->pendingAiMcpCall.has_value() || !tab->pendingAiAction.has_value()
+    if (tab == nullptr || (!tab->pendingAiMcpCall.has_value() && !tab->pendingAiAction.has_value())
         || !applyPendingAiPermissionRule(*tab, duration, matcher, pattern, ai::AiPermissionDisposition::allow))
     {
         return false;
@@ -8023,7 +8030,7 @@ bool AppController::approveAiToolWithRule(const QString &duration, const QString
 bool AppController::denyAiToolWithRule(const QString &duration, const QString &matcher, const QString &pattern)
 {
     TerminalTab *tab = activeTab();
-    if (tab == nullptr || tab->pendingAiMcpCall.has_value() || !tab->pendingAiAction.has_value()
+    if (tab == nullptr || (!tab->pendingAiMcpCall.has_value() && !tab->pendingAiAction.has_value())
         || !applyPendingAiPermissionRule(*tab, duration, matcher, pattern, ai::AiPermissionDisposition::deny))
     {
         return false;
@@ -9188,18 +9195,6 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                                                        tr("The MCP tool cannot be queued for this session."))},
                         .sideEffecting = true};
                 }
-                const auto budgetDecision = target->aiTurnBudget->authorize(true, call.name + ':' + call.argumentsJson,
-                                                                            target->reconnectGeneration);
-                if (budgetDecision != ai::AiAgentBudgetDecision::allow)
-                {
-                    recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("budget_denied"), true,
-                                     true);
-                    return ai::AiTurnRunner::ToolHandlingResult{
-                        .output = ai::AiToolOutput{.callId = call.id,
-                                                   .name = call.name,
-                                                   .outputJson = aiBudgetFailureJson(budgetDecision)},
-                        .sideEffecting = true};
-                }
                 const ai::AiToolDispatchKey key{.conversationId = utf8String(target->aiConversationId),
                                                 .turnId = target->aiTurnRunner->activeTurnId(),
                                                 .toolCallId = call.id};
@@ -9217,8 +9212,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                                                    .outputJson = admission.record->resultJson},
                         .sideEffecting = true};
                 }
-                if (admission.admission != ai::AiToolDispatchAdmission::accepted
-                    || !m_mcpDispatchLedger.transition(key, ai::AiToolDispatchState::awaitingApproval))
+                if (admission.admission != ai::AiToolDispatchAdmission::accepted)
                 {
                     const QString code = admission.admission == ai::AiToolDispatchAdmission::joined
                                              ? QStringLiteral("duplicate_in_progress")
@@ -9234,12 +9228,99 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                                     tr("The MCP tool call was duplicated, changed, or exceeded dispatch bounds."))},
                         .sideEffecting = true};
                 }
+
+                const auto permission = m_aiActionToolDispatcher.permissionDecision(
+                    ai::AiPermissionCapability::mcpTool, call.name,
+                    ai::AiActionToolContext{.conversationId = utf8String(target->aiConversationId),
+                                            .turnId = target->aiTurnRunner->activeTurnId(),
+                                            .target = {.sessionId = utf8String(target->id),
+                                                       .sessionGeneration = target->reconnectGeneration},
+                                            .permissionMode = aiPermissionMode(m_settings.aiPermission),
+                                            .profileId = utf8String(target->sourceProfileId),
+                                            .writable = true});
+                if (permission.disposition == ai::AiPermissionDisposition::deny)
+                {
+                    const auto output =
+                        aiToolFailureJson(QStringLiteral("permission_denied"),
+                                          tr("The active mode or permission rule denied the MCP tool call."));
+                    static_cast<void>(m_mcpDispatchLedger.transition(key, ai::AiToolDispatchState::failed, output));
+                    recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("permission_denied"), true,
+                                     true);
+                    return ai::AiTurnRunner::ToolHandlingResult{
+                        .output = ai::AiToolOutput{.callId = call.id, .name = call.name, .outputJson = output},
+                        .sideEffecting = true};
+                }
+                const auto budgetDecision = target->aiTurnBudget->authorize(true, call.name + ':' + call.argumentsJson,
+                                                                            target->reconnectGeneration);
+                if (budgetDecision != ai::AiAgentBudgetDecision::allow)
+                {
+                    const auto output = aiBudgetFailureJson(budgetDecision);
+                    static_cast<void>(m_mcpDispatchLedger.transition(key, ai::AiToolDispatchState::failed, output));
+                    recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("budget_denied"), true,
+                                     true);
+                    return ai::AiTurnRunner::ToolHandlingResult{
+                        .output = ai::AiToolOutput{.callId = call.id, .name = call.name, .outputJson = output},
+                        .sideEffecting = true};
+                }
+                const bool execute = permission.disposition == ai::AiPermissionDisposition::allow;
+                if (!m_mcpDispatchLedger.transition(key, execute ? ai::AiToolDispatchState::running
+                                                                 : ai::AiToolDispatchState::awaitingApproval))
+                {
+                    const auto output =
+                        aiToolFailureJson(QStringLiteral("dispatch_state_changed"),
+                                          tr("The MCP tool dispatch state changed before it could be started."));
+                    static_cast<void>(m_mcpDispatchLedger.transition(key, ai::AiToolDispatchState::failed, output));
+                    recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("dispatch_state_changed"),
+                                     true, true);
+                    return ai::AiTurnRunner::ToolHandlingResult{
+                        .output = ai::AiToolOutput{.callId = call.id, .name = call.name, .outputJson = output},
+                        .sideEffecting = true};
+                }
                 target->pendingAiMcpCall = TerminalTab::PendingAiMcpCall{.call = call,
                                                                          .dispatchKey = key,
                                                                          .tool = *mcpTool,
                                                                          .activeCall = std::nullopt};
-                recordAiActivity(*target, call, QStringLiteral("awaiting_approval"), QStringLiteral("pending"), true,
-                                 true);
+                if (execute)
+                {
+                    recordAiActivity(*target, call, QStringLiteral("executing"), QStringLiteral("pending"), true, true);
+                    const QString targetTabId = target->id;
+                    const std::uint64_t targetGeneration = target->reconnectGeneration;
+                    const auto callbackKey = std::make_shared<const ai::AiToolDispatchKey>(key);
+                    const auto callbackCall = std::make_shared<const ai::AiToolCall>(call);
+                    auto request = m_mcpRuntime.call(
+                        call.name, call.argumentsJson,
+                        [this, targetTabId, targetGeneration, callbackKey, callbackCall](auto result) noexcept {
+                            try
+                            {
+                                completeAiMcpTool(targetTabId, targetGeneration, *callbackKey, *callbackCall,
+                                                  std::move(result));
+                            }
+                            catch (...)
+                            {
+                                qCCritical(appControllerLog) << "Automatic MCP completion suppressed an exception";
+                            }
+                        });
+                    if (!request.has_value())
+                    {
+                        const auto output = aiToolFailureJson(QStringLiteral("mcp_call_failed"), request.error());
+                        static_cast<void>(m_mcpDispatchLedger.transition(key, ai::AiToolDispatchState::failed, output));
+                        target->pendingAiMcpCall.reset();
+                        recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("mcp_call_failed"),
+                                         true, true);
+                        return ai::AiTurnRunner::ToolHandlingResult{
+                            .output = ai::AiToolOutput{.callId = call.id, .name = call.name, .outputJson = output},
+                            .sideEffecting = true};
+                    }
+                    if (target->pendingAiMcpCall.has_value() && target->pendingAiMcpCall->dispatchKey == key)
+                    {
+                        target->pendingAiMcpCall->activeCall = *request;
+                    }
+                }
+                else
+                {
+                    recordAiActivity(*target, call, QStringLiteral("awaiting_approval"), QStringLiteral("pending"),
+                                     true, true);
+                }
                 if (m_activeTabId == tabId || m_focusedTabId == tabId)
                 {
                     emit aiConversationChanged();

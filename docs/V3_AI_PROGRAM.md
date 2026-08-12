@@ -233,6 +233,15 @@ becomes conversation retention.
   provider compatibility gates;
 - produce the owner-facing V3 acceptance matrix and release candidate artifacts.
 
+Current closure work:
+
+- reviewed MCP tools now obey Read-only/Ask/Edit/Auto/YOLO and reusable
+  `mcp-tool` rules instead of forcing a confirmation in every mode; executable
+  trust and exact-schema review remain prerequisites (`ADR 0082`);
+- cached MCP replay is resolved before consuming another turn-budget action,
+  while automatic calls retain the same cancellation, audit, schema-identity,
+  and untrusted-result contracts as approved calls.
+
 Delivery status:
 
 - the planned `0.3.0` through `0.3.4` implementation slices are present in the

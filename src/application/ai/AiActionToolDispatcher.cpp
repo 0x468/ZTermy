@@ -479,6 +479,22 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
                             .sideEffecting = true};
 }
 
+AiPermissionDecision AiActionToolDispatcher::permissionDecision(const AiPermissionCapability capability,
+                                                                const std::string_view subject,
+                                                                const AiActionToolContext &context)
+{
+    const auto rule = m_permissionRules.evaluate({.capability = capability,
+                                                  .subject = subject,
+                                                  .sessionId = context.target.sessionId,
+                                                  .profileId = context.profileId});
+    return m_permissionPolicy.decide(
+        AiPermissionRequest{.mode = context.permissionMode,
+                            .write = true,
+                            .explicitDeny = rule.has_value() && rule->disposition == AiPermissionDisposition::deny,
+                            .explicitAsk = rule.has_value() && rule->disposition == AiPermissionDisposition::ask,
+                            .explicitAllow = rule.has_value() && rule->disposition == AiPermissionDisposition::allow});
+}
+
 bool AiActionToolDispatcher::approve(const AiTerminalAction &action)
 {
     return m_ledger.transition(action.dispatchKey, AiToolDispatchState::running);

@@ -69,6 +69,8 @@ public:
     [[nodiscard]] static std::vector<AiToolDefinition> definitions();
     [[nodiscard]] AiActionToolPlan prepare(const AiToolCall &call, const AiActionToolContext &context,
                                            AiAgentTurnBudget &budget);
+    [[nodiscard]] AiPermissionDecision permissionDecision(AiPermissionCapability capability, std::string_view subject,
+                                                          const AiActionToolContext &context);
     [[nodiscard]] bool approve(const AiTerminalAction &action);
     [[nodiscard]] bool deny(const AiTerminalAction &action);
     [[nodiscard]] bool complete(const AiTerminalAction &action, AiToolDispatchState state, std::string resultJson);
