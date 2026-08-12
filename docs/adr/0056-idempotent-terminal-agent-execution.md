@@ -35,6 +35,16 @@ but at most one write/control owner. Another conversation must wait, request an
 explicit transfer, or remain read-only. Closing/cancelling one observer removes
 only its subscriptions. It cannot interrupt the owner's process.
 
+`transfer_control(to=user)` creates a generation-scoped, sticky user-control
+state rather than merely releasing the agent lease. Agent writes fail with
+`user_has_control` until the user explicitly resumes the same conversation and
+target. The user can also take control from the AI panel, and ordinary keyboard
+or paste input takes control automatically when that conversation currently
+owns the terminal. User takeover cancels the active provider turn and pending
+tool wait, but never claims that an already-running local or remote process was
+interrupted. Reconnect, tab close, and conversation clear release stale control
+state.
+
 ### Tool lifecycle
 
 - `run_command` returns a stable command/block handle when the owned input queue

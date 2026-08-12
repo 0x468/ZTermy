@@ -1001,6 +1001,11 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
     QCOMPARE(controller.activeTerminalTabId(), first);
     QVERIFY(controller.activeAiConversation() != nullptr);
     QCOMPARE(controller.activeAiState(), QStringLiteral("idle"));
+    QCOMPARE(controller.activeAiControlOwner(), QStringLiteral("agent"));
+    QVERIFY(controller.takeAiControl());
+    QCOMPARE(controller.activeAiControlOwner(), QStringLiteral("user"));
+    QVERIFY(controller.resumeAiAgentControl());
+    QCOMPARE(controller.activeAiControlOwner(), QStringLiteral("agent"));
     QVERIFY(controller.activeAiContextItems().isEmpty());
     QVERIFY(controller.activeAiToolApproval().isEmpty());
     QVERIFY(!controller.approveAiTool());

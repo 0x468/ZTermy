@@ -161,6 +161,7 @@ class AppController final : public QObject
     Q_PROPERTY(QObject *activeAiConversation READ activeAiConversation NOTIFY aiConversationChanged)
     Q_PROPERTY(QString activeAiState READ activeAiState NOTIFY aiConversationChanged)
     Q_PROPERTY(QString activeAiError READ activeAiError NOTIFY aiConversationChanged)
+    Q_PROPERTY(QString activeAiControlOwner READ activeAiControlOwner NOTIFY aiConversationChanged)
     Q_PROPERTY(QString activeAiContextPreview READ activeAiContextPreview NOTIFY aiConversationChanged)
     Q_PROPERTY(QVariantList activeAiContextItems READ activeAiContextItems NOTIFY aiConversationChanged)
     Q_PROPERTY(QVariantMap activeAiToolApproval READ activeAiToolApproval NOTIFY aiConversationChanged)
@@ -282,6 +283,7 @@ public:
     [[nodiscard]] QObject *activeAiConversation() const noexcept;
     [[nodiscard]] QString activeAiState() const;
     [[nodiscard]] QString activeAiError() const;
+    [[nodiscard]] QString activeAiControlOwner() const;
     [[nodiscard]] QString activeAiContextPreview() const;
     [[nodiscard]] QVariantList activeAiContextItems() const;
     [[nodiscard]] QVariantMap activeAiToolApproval() const;
@@ -462,6 +464,8 @@ public:
     Q_INVOKABLE bool cancelAiMessage();
     Q_INVOKABLE bool approveAiTool();
     Q_INVOKABLE bool denyAiTool();
+    Q_INVOKABLE bool takeAiControl();
+    Q_INVOKABLE bool resumeAiAgentControl();
     Q_INVOKABLE bool retryAiMessage();
     Q_INVOKABLE void clearAiConversation();
     Q_INVOKABLE bool copyAiText(const QString &text);
@@ -660,6 +664,8 @@ private:
     [[nodiscard]] std::string executeAiRunCommand(TerminalTab &tab, const ai::AiTerminalAction &action);
     [[nodiscard]] std::string executeAiWriteToPty(TerminalTab &tab, const ai::AiTerminalAction &action);
     [[nodiscard]] std::string executeAiInterruptCommand(TerminalTab &tab, const ai::AiTerminalAction &action);
+    [[nodiscard]] std::string executeAiTransferControl(const ai::AiTerminalAction &action);
+    [[nodiscard]] bool handoffAiControlToUser(TerminalTab &tab, bool cancelTurn);
     void observeScriptOutput(const QString &tabId, const QByteArray &bytes);
     void dispatchScriptCommands(TerminalTab &tab, const std::vector<std::string> &commands);
     void initializeScriptExecutionTimer();

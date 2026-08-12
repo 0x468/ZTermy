@@ -2770,6 +2770,18 @@ QString AppController::activeAiError() const
     return tab == nullptr ? QString{} : tab->aiError;
 }
 
+QString AppController::activeAiControlOwner() const
+{
+    const TerminalTab *tab = activeTab();
+    if (tab == nullptr || tab->aiConversationId.isEmpty() || (!tab->ssh && !tab->local))
+    {
+        return QStringLiteral("unavailable");
+    }
+    const ai::AiSessionTarget target{.sessionId = utf8String(tab->id), .sessionGeneration = tab->reconnectGeneration};
+    return m_aiActionToolDispatcher.userHasControl(target, utf8String(tab->aiConversationId)) ? QStringLiteral("user")
+                                                                                              : QStringLiteral("agent");
+}
+
 QString AppController::activeAiContextPreview() const
 {
     const TerminalTab *tab = activeTab();
@@ -2809,6 +2821,10 @@ QVariantMap AppController::activeAiToolApproval() const
         case ai::AiTerminalActionKind::interruptCommand:
             actionText = tr("Send Ctrl+C to tracked command %1").arg(utf8QString(action.commandId));
             actionKind = QStringLiteral("interrupt_command");
+            break;
+        case ai::AiTerminalActionKind::transferToUser:
+            actionText = tr("Return terminal control to the user");
+            actionKind = QStringLiteral("transfer_control");
             break;
     }
     return {{QStringLiteral("visible"), true},
@@ -3217,6 +3233,8 @@ bool AppController::splitActiveTerminal(const QString &orientation, const bool d
     else if (created != nullptr && created->ssh && !created->sourceProfileId.isEmpty())
     {
         created->reconnectPending = true;
+        m_aiActionToolDispatcher.clearSession(
+            {.sessionId = utf8String(created->id), .sessionGeneration = created->reconnectGeneration});
         attemptSshReconnect(created->id, ++created->reconnectGeneration);
     }
     emit terminalTabsChanged();
@@ -5528,6 +5546,8 @@ void AppController::scheduleSshReconnect(TerminalTab &tab, const ssh::SshFailure
     }
 
     ++tab.reconnectAttempt;
+    m_aiActionToolDispatcher.clearSession(
+        {.sessionId = utf8String(tab.id), .sessionGeneration = tab.reconnectGeneration});
     ++tab.reconnectGeneration;
     tab.reconnectPending = true;
     const std::uint32_t delay = ssh::reconnectBackoffMilliseconds(profile->sessionOptions, tab.reconnectAttempt);
@@ -5609,6 +5629,8 @@ bool AppController::reconnectTerminalTab(const QString &id)
     {
         return false;
     }
+    m_aiActionToolDispatcher.clearSession(
+        {.sessionId = utf8String(tab->id), .sessionGeneration = tab->reconnectGeneration});
     ++tab->reconnectGeneration;
     tab->reconnectAttempt = 0;
     tab->reconnectPending = true;
@@ -5631,6 +5653,8 @@ bool AppController::cancelTerminalReconnect(const QString &id)
         return false;
     }
     tab->reconnectPending = false;
+    m_aiActionToolDispatcher.clearSession(
+        {.sessionId = utf8String(tab->id), .sessionGeneration = tab->reconnectGeneration});
     ++tab->reconnectGeneration;
     tab->status = tr("Automatic SSH reconnect cancelled.");
     emit terminalTabsChanged();
@@ -7027,6 +7051,47 @@ bool AppController::denyAiTool()
     return resumed;
 }
 
+bool AppController::takeAiControl()
+{
+    TerminalTab *tab = activeTab();
+    return tab != nullptr && handoffAiControlToUser(*tab, true);
+}
+
+bool AppController::handoffAiControlToUser(TerminalTab &tab, const bool cancelTurn)
+{
+    if (tab.aiConversationId.isEmpty() || (!tab.ssh && !tab.local))
+    {
+        return false;
+    }
+    const ai::AiSessionTarget target{.sessionId = utf8String(tab.id), .sessionGeneration = tab.reconnectGeneration};
+    if (!m_aiActionToolDispatcher.handoffToUser(target, utf8String(tab.aiConversationId)))
+    {
+        return false;
+    }
+    if (cancelTurn && tab.aiTurnRunner && tab.aiTurnRunner->active() && tab.aiTurnRunner->cancel())
+    {
+        tab.aiState = QStringLiteral("cancelling");
+    }
+    emit aiConversationChanged();
+    return true;
+}
+
+bool AppController::resumeAiAgentControl()
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || tab->aiConversationId.isEmpty() || (!tab->ssh && !tab->local))
+    {
+        return false;
+    }
+    const ai::AiSessionTarget target{.sessionId = utf8String(tab->id), .sessionGeneration = tab->reconnectGeneration};
+    if (!m_aiActionToolDispatcher.resumeAgent(target, utf8String(tab->aiConversationId)))
+    {
+        return false;
+    }
+    emit aiConversationChanged();
+    return true;
+}
+
 bool AppController::retryAiMessage()
 {
     TerminalTab *tab = activeTab();
@@ -7450,7 +7515,8 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
             {
                 return handleAiWaitCommand(*target, tabId, call);
             }
-            if (call.name == "run_command" || call.name == "interrupt_command" || call.name == "write_to_pty")
+            if (call.name == "run_command" || call.name == "interrupt_command" || call.name == "write_to_pty"
+                || call.name == "transfer_control")
             {
                 if (target == nullptr || !target->aiTurnRunner || !target->aiTurnBudget)
                 {
@@ -7716,8 +7782,22 @@ std::string AppController::executeAiTerminalAction(TerminalTab &tab, const ai::A
             return executeAiWriteToPty(tab, action);
         case ai::AiTerminalActionKind::interruptCommand:
             return executeAiInterruptCommand(tab, action);
+        case ai::AiTerminalActionKind::transferToUser:
+            return executeAiTransferControl(action);
     }
     return aiToolFailureJson(QStringLiteral("unsupported"), tr("The terminal action is unsupported."));
+}
+
+std::string AppController::executeAiTransferControl(const ai::AiTerminalAction &action)
+{
+    emit aiConversationChanged();
+    return compactJson(
+        QJsonObject{{QStringLiteral("ok"), true},
+                    {QStringLiteral("status"), QStringLiteral("transferred")},
+                    {QStringLiteral("control_owner"), QStringLiteral("user")},
+                    {QStringLiteral("session_id"), utf8QString(action.target.sessionId)},
+                    {QStringLiteral("session_generation"), static_cast<qint64>(action.target.sessionGeneration)},
+                    {QStringLiteral("process_interrupted"), false}});
 }
 
 std::string AppController::executeAiWriteToPty(TerminalTab &tab, const ai::AiTerminalAction &action)
@@ -9058,6 +9138,12 @@ void AppController::queueInput(const QByteArray &bytes)
     {
         return;
     }
+    const ai::AiSessionTarget target{.sessionId = utf8String(tab->id), .sessionGeneration = tab->reconnectGeneration};
+    if (!tab->aiConversationId.isEmpty()
+        && m_aiActionToolDispatcher.agentHasControl(target, utf8String(tab->aiConversationId)))
+    {
+        static_cast<void>(handoffAiControlToUser(*tab, true));
+    }
     observeTerminalInput(*tab, bytes);
     dispatchInput(*tab, bytes);
 }
@@ -9068,6 +9154,12 @@ void AppController::queuePaste(const QByteArray &bytes)
     if (tab == nullptr || bytes.isEmpty())
     {
         return;
+    }
+    const ai::AiSessionTarget target{.sessionId = utf8String(tab->id), .sessionGeneration = tab->reconnectGeneration};
+    if (!tab->aiConversationId.isEmpty()
+        && m_aiActionToolDispatcher.agentHasControl(target, utf8String(tab->aiConversationId)))
+    {
+        static_cast<void>(handoffAiControlToUser(*tab, true));
     }
     observeTerminalInput(*tab, bytes);
     dispatchPaste(*tab, bytes);

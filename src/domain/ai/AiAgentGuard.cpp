@@ -27,13 +27,19 @@ AiWriteOwnershipResult AiSessionWriteOwnership::claim(const AiSessionTarget &tar
         return AiWriteOwnershipResult::invalid;
     }
     std::scoped_lock lock(m_mutex);
+    const auto userControl = std::ranges::find(m_userControl, target, &AiWriteOwnership::target);
+    if (userControl != m_userControl.end())
+    {
+        return userControl->conversationId == conversationId ? AiWriteOwnershipResult::userHasControl
+                                                             : AiWriteOwnershipResult::conflict;
+    }
     const auto existing = std::ranges::find(m_owners, target, &AiWriteOwnership::target);
     if (existing != m_owners.end())
     {
         return existing->conversationId == conversationId ? AiWriteOwnershipResult::alreadyOwned
                                                           : AiWriteOwnershipResult::conflict;
     }
-    if (m_owners.size() >= m_maximumSessions)
+    if (m_owners.size() + m_userControl.size() >= m_maximumSessions)
     {
         return AiWriteOwnershipResult::capacityExceeded;
     }
@@ -58,6 +64,68 @@ bool AiSessionWriteOwnership::transfer(const AiSessionTarget &target, const std:
     return true;
 }
 
+bool AiSessionWriteOwnership::handoffToUser(const AiSessionTarget &target, const std::string_view currentOwner)
+{
+    if (!validIdentifier(target.sessionId) || !validIdentifier(currentOwner))
+    {
+        return false;
+    }
+    std::scoped_lock lock(m_mutex);
+    const auto userControl = std::ranges::find(m_userControl, target, &AiWriteOwnership::target);
+    if (userControl != m_userControl.end())
+    {
+        return userControl->conversationId == currentOwner;
+    }
+    const auto existing = std::ranges::find(m_owners, target, &AiWriteOwnership::target);
+    if (existing != m_owners.end() && existing->conversationId != currentOwner)
+    {
+        return false;
+    }
+    if (existing == m_owners.end() && m_owners.size() + m_userControl.size() >= m_maximumSessions)
+    {
+        return false;
+    }
+    if (existing != m_owners.end())
+    {
+        m_owners.erase(existing);
+    }
+    m_userControl.push_back(AiWriteOwnership{.target = target, .conversationId = std::string(currentOwner)});
+    return true;
+}
+
+bool AiSessionWriteOwnership::resumeAgent(const AiSessionTarget &target, const std::string_view conversationId)
+{
+    if (!validIdentifier(target.sessionId) || !validIdentifier(conversationId))
+    {
+        return false;
+    }
+    std::scoped_lock lock(m_mutex);
+    const auto existing = std::ranges::find(m_owners, target, &AiWriteOwnership::target);
+    if (existing != m_owners.end())
+    {
+        return existing->conversationId == conversationId;
+    }
+    const auto userControl = std::ranges::find(m_userControl, target, &AiWriteOwnership::target);
+    if (userControl == m_userControl.end() || userControl->conversationId != conversationId)
+    {
+        return false;
+    }
+    m_userControl.erase(userControl);
+    m_owners.push_back(AiWriteOwnership{.target = target, .conversationId = std::string(conversationId)});
+    return true;
+}
+
+bool AiSessionWriteOwnership::userHasControl(const AiSessionTarget &target, const std::string_view conversationId) const
+{
+    if (!validIdentifier(target.sessionId) || !validIdentifier(conversationId))
+    {
+        return false;
+    }
+    std::scoped_lock lock(m_mutex);
+    const auto existing = std::ranges::find(m_userControl, target, &AiWriteOwnership::target);
+    return existing != m_userControl.end() && existing->conversationId == conversationId;
+}
+
 std::optional<std::string> AiSessionWriteOwnership::owner(const AiSessionTarget &target) const
 {
     std::scoped_lock lock(m_mutex);
@@ -71,12 +139,18 @@ void AiSessionWriteOwnership::releaseConversation(const std::string_view convers
     std::erase_if(m_owners, [conversationId](const AiWriteOwnership &ownerValue) {
         return ownerValue.conversationId == conversationId;
     });
+    std::erase_if(m_userControl, [conversationId](const AiWriteOwnership &ownerValue) {
+        return ownerValue.conversationId == conversationId;
+    });
 }
 
 void AiSessionWriteOwnership::releaseSession(const AiSessionTarget &target)
 {
     std::scoped_lock lock(m_mutex);
     std::erase_if(m_owners, [&target](const AiWriteOwnership &ownerValue) {
+        return ownerValue.target == target;
+    });
+    std::erase_if(m_userControl, [&target](const AiWriteOwnership &ownerValue) {
         return ownerValue.target == target;
     });
 }

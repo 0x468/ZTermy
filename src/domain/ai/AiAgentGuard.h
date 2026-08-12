@@ -24,6 +24,7 @@ enum class AiWriteOwnershipResult : std::uint8_t
 {
     acquired,
     alreadyOwned,
+    userHasControl,
     conflict,
     invalid,
     capacityExceeded,
@@ -43,6 +44,9 @@ public:
     [[nodiscard]] AiWriteOwnershipResult claim(const AiSessionTarget &target, std::string_view conversationId);
     [[nodiscard]] bool transfer(const AiSessionTarget &target, std::string_view currentOwner,
                                 std::string_view nextOwner);
+    [[nodiscard]] bool handoffToUser(const AiSessionTarget &target, std::string_view currentOwner);
+    [[nodiscard]] bool resumeAgent(const AiSessionTarget &target, std::string_view conversationId);
+    [[nodiscard]] bool userHasControl(const AiSessionTarget &target, std::string_view conversationId) const;
     [[nodiscard]] std::optional<std::string> owner(const AiSessionTarget &target) const;
     void releaseConversation(std::string_view conversationId);
     void releaseSession(const AiSessionTarget &target);
@@ -51,6 +55,7 @@ private:
     std::size_t m_maximumSessions;
     mutable std::mutex m_mutex;
     std::vector<AiWriteOwnership> m_owners;
+    std::vector<AiWriteOwnership> m_userControl;
 };
 
 struct AiAgentTurnLimits final

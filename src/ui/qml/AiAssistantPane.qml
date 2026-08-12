@@ -177,6 +177,58 @@ Rectangle {
             }
         }
 
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: 10
+            Layout.rightMargin: 10
+            Layout.bottomMargin: 4
+            visible: pane.controller.activeAiControlOwner !== "unavailable"
+            spacing: 7
+
+            Rectangle {
+                Layout.preferredHeight: 24
+                Layout.preferredWidth: controlOwnerLabel.implicitWidth + 18
+                radius: 12
+                color: pane.controller.activeAiControlOwner === "user" ? Theme.selectedBackground : Theme.controlBackground
+                border.color: pane.controller.activeAiControlOwner === "user" ? Theme.warning : Theme.success
+
+                Text {
+                    id: controlOwnerLabel
+
+                    anchors.centerIn: parent
+                    text: pane.controller.activeAiControlOwner === "user" ? qsTr("User control") : qsTr("Agent ready")
+                    color: pane.controller.activeAiControlOwner === "user" ? Theme.warning : Theme.successText
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.textCompact
+                    font.weight: Font.Medium
+                }
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: pane.controller.activeAiControlOwner === "user" ? qsTr("AI terminal writes are paused until you resume them.") : qsTr("Typing in the terminal takes control immediately.")
+                color: Theme.textSubtle
+                elide: Text.ElideRight
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.textCompact
+            }
+
+            ActionButton {
+                objectName: "aiControlHandoffButton"
+                text: pane.controller.activeAiControlOwner === "user" ? qsTr("Resume agent") : qsTr("Take control")
+                iconName: pane.controller.activeAiControlOwner === "user" ? "play" : "terminal"
+                enabled: pane.controller.activeAiControlOwner !== "user" || !pane.busy
+                accessibleName: pane.controller.activeAiControlOwner === "user" ? qsTr("Resume AI terminal write control") : qsTr("Take terminal control from AI")
+                onClicked: {
+                    if (pane.controller.activeAiControlOwner === "user") {
+                        pane.controller.resumeAiAgentControl();
+                    } else {
+                        pane.controller.takeAiControl();
+                    }
+                }
+            }
+        }
+
         StatusMessage {
             Layout.fillWidth: true
             Layout.leftMargin: 10

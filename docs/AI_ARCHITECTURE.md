@@ -287,6 +287,10 @@ language description.
 - At most one conversation owns write/control capability for a terminal session.
   Other conversations may observe and wait. Ownership transfer is explicit;
   cancelling an observer never interrupts another owner's command.
+- User control is sticky for the exact session generation. `transfer_control`
+  and direct terminal input hand control to the user; later agent writes return
+  `user_has_control` until the user explicitly resumes the same conversation.
+  Handoff cancels model orchestration, not the terminal process.
 
 ADR 0056 owns dispatch idempotency, risk overlay, ownership, budgets, and these
 tool lifecycle semantics.

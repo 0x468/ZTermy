@@ -54,6 +54,13 @@ using ztermy::ai::AiToolDispatchState;
                           R"({"session_id":"session-1","session_generation":3,"data":"yes","append_enter":true})"};
 }
 
+[[nodiscard]] AiToolCall transferControlCall(const std::string &id = "transfer-1")
+{
+    return AiToolCall{.id = id,
+                      .name = "transfer_control",
+                      .argumentsJson = R"({"session_id":"session-1","session_generation":3,"to":"user"})"};
+}
+
 [[nodiscard]] QJsonObject object(const std::string &value)
 {
     return QJsonDocument::fromJson(QByteArray::fromStdString(value)).object();
@@ -67,6 +74,7 @@ private slots:
     void publishesStrictRunCommandDefinition();
     void preparesSoftInterruptAsWriteAction();
     void validatesInteractivePtyInput();
+    void transfersControlToUserUntilResumed();
     void waitsForApprovalAndCachesCompletion();
     void rejectsScopeReplayAndObserverWrites();
     void appliesRiskBudgetAndOwnershipGuards();
@@ -75,11 +83,37 @@ private slots:
 void AiActionToolDispatcherTests::publishesStrictRunCommandDefinition()
 {
     const auto definitions = AiActionToolDispatcher::definitions();
-    QCOMPARE(definitions.size(), std::size_t{3});
+    QCOMPARE(definitions.size(), std::size_t{4});
     QCOMPARE(definitions.front().name, std::string("run_command"));
     const auto schema = QJsonDocument::fromJson(QByteArray::fromStdString(definitions.front().parametersJson));
     QVERIFY(schema.isObject());
     QVERIFY(!schema.object().value(QStringLiteral("additionalProperties")).toBool(true));
+}
+
+void AiActionToolDispatcherTests::transfersControlToUserUntilResumed()
+{
+    AiActionToolDispatcher dispatcher;
+    AiAgentTurnBudget budget;
+    const auto transfer =
+        dispatcher.prepare(transferControlCall(), context("owner", AiPermissionMode::sessionAuto), budget);
+    QCOMPARE(transfer.disposition, AiActionToolDisposition::execute);
+    QCOMPARE(transfer.action.value_or(AiTerminalAction{}).kind, AiTerminalActionKind::transferToUser);
+    QCOMPARE(budget.toolCalls(), std::uint32_t{1});
+    QCOMPARE(budget.writeActions(), std::uint32_t{0});
+    QVERIFY(dispatcher.userHasControl({.sessionId = "session-1", .sessionGeneration = 3}, "owner"));
+
+    AiAgentTurnBudget blockedBudget;
+    const auto blocked =
+        dispatcher.prepare(commandCall("blocked-call"), context("owner", AiPermissionMode::sessionAuto), blockedBudget);
+    QCOMPARE(
+        object(blocked.outputJson).value(QStringLiteral("error")).toObject().value(QStringLiteral("code")).toString(),
+        QStringLiteral("user_has_control"));
+    QVERIFY(dispatcher.resumeAgent({.sessionId = "session-1", .sessionGeneration = 3}, "owner"));
+
+    AiAgentTurnBudget resumedBudget;
+    const auto resumed =
+        dispatcher.prepare(commandCall("resumed-call"), context("owner", AiPermissionMode::sessionAuto), resumedBudget);
+    QCOMPARE(resumed.disposition, AiActionToolDisposition::execute);
 }
 
 void AiActionToolDispatcherTests::validatesInteractivePtyInput()

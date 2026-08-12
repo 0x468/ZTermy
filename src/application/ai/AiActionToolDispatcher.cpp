@@ -126,7 +126,12 @@ std::vector<AiToolDefinition> AiActionToolDispatcher::definitions()
          .description = "Write bounded UTF-8 text to the exact target PTY, optionally followed by Enter. The input "
                         "is not treated as a semantic command and is never echoed in the tool result.",
          .parametersJson =
-             R"({"type":"object","properties":{"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"data":{"type":"string","minLength":1,"maxLength":4096},"append_enter":{"type":"boolean"}},"required":["session_id","session_generation","data","append_enter"],"additionalProperties":false})"}};
+             R"({"type":"object","properties":{"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"data":{"type":"string","minLength":1,"maxLength":4096},"append_enter":{"type":"boolean"}},"required":["session_id","session_generation","data","append_enter"],"additionalProperties":false})"},
+        {.name = "transfer_control",
+         .description = "Hand terminal write control back to the user for the exact target session. The agent cannot "
+                        "write again until the user explicitly resumes agent control.",
+         .parametersJson =
+             R"({"type":"object","properties":{"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"to":{"type":"string","enum":["user"]}},"required":["session_id","session_generation","to"],"additionalProperties":false})"}};
 }
 
 AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const AiActionToolContext &context,
@@ -135,7 +140,8 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
     const bool runCommand = call.name == "run_command";
     const bool interruptCommand = call.name == "interrupt_command";
     const bool writeToPty = call.name == "write_to_pty";
-    if (!runCommand && !interruptCommand && !writeToPty)
+    const bool transferControl = call.name == "transfer_control";
+    if (!runCommand && !interruptCommand && !writeToPty && !transferControl)
     {
         return response(
             failure(QStringLiteral("unsupported"), QStringLiteral("The requested action tool is unsupported.")), false);
@@ -151,6 +157,7 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
     const auto requestedMode = object.value(QStringLiteral("mode"));
     const auto requestedPtyData = object.value(QStringLiteral("data"));
     const auto requestedAppendEnter = object.value(QStringLiteral("append_enter"));
+    const auto requestedControlOwner = object.value(QStringLiteral("to"));
     const bool commonSchemaValid = call.argumentsJson.size() <= maximumArgumentsBytes && document.isObject()
                                    && parseError.error == QJsonParseError::NoError && requestedSession.isString()
                                    && !requestedSession.toString().isEmpty() && requestedGeneration.has_value();
@@ -174,7 +181,12 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
         && hasOnlyKeys(object, {QStringLiteral("session_id"), QStringLiteral("session_generation"),
                                 QStringLiteral("data"), QStringLiteral("append_enter")})
         && requestedPtyData.isString() && validPtyInput(requestedPtyData.toString()) && requestedAppendEnter.isBool();
-    const bool schemaValid = runSchemaValid || interruptSchemaValid || writeSchemaValid;
+    const bool transferSchemaValid =
+        transferControl && commonSchemaValid
+        && hasOnlyKeys(object,
+                       {QStringLiteral("session_id"), QStringLiteral("session_generation"), QStringLiteral("to")})
+        && requestedControlOwner.isString() && requestedControlOwner.toString() == QStringLiteral("user");
+    const bool schemaValid = runSchemaValid || interruptSchemaValid || writeSchemaValid || transferSchemaValid;
     const auto sessionId = requestedSession.toString().toUtf8().toStdString();
     const auto command = requestedCommand.toString().toUtf8().toStdString();
     const auto commandId = requestedCommandId.toString().toUtf8().toStdString();
@@ -195,10 +207,14 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
         canonical.insert(QStringLiteral("command_id"), requestedCommandId);
         canonical.insert(QStringLiteral("mode"), requestedMode);
     }
-    else
+    else if (writeToPty)
     {
         canonical.insert(QStringLiteral("data"), requestedPtyData);
         canonical.insert(QStringLiteral("append_enter"), requestedAppendEnter);
+    }
+    else
+    {
+        canonical.insert(QStringLiteral("to"), requestedControlOwner);
     }
     AiToolDispatchRequest request{
         .key = {.conversationId = context.conversationId, .turnId = context.turnId, .toolCallId = call.id},
@@ -237,6 +253,25 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
     {
         return fail(QStringLiteral("scope_changed"), QStringLiteral("The target terminal session changed."));
     }
+    if (transferControl)
+    {
+        const auto budgetDecision = budget.authorize(false, "transfer_control:user", context.target.sessionGeneration);
+        if (budgetDecision != AiAgentBudgetDecision::allow)
+        {
+            return fail(budgetCode(budgetDecision), QStringLiteral("The AI turn action budget was exhausted."));
+        }
+        if (!m_ownership.handoffToUser(context.target, context.conversationId))
+        {
+            return fail(QStringLiteral("ownership_conflict"),
+                        QStringLiteral("Another AI conversation owns terminal write control."));
+        }
+        static_cast<void>(m_ledger.transition(key, AiToolDispatchState::running));
+        return AiActionToolPlan{.disposition = AiActionToolDisposition::execute,
+                                .action = AiTerminalAction{.dispatchKey = key,
+                                                           .target = context.target,
+                                                           .kind = AiTerminalActionKind::transferToUser},
+                                .sideEffecting = true};
+    }
     if (!context.writable)
     {
         return fail(QStringLiteral("session_unavailable"),
@@ -273,6 +308,11 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
         return fail(budgetCode(budgetDecision), QStringLiteral("The AI turn action budget was exhausted."));
     }
     const auto ownership = m_ownership.claim(context.target, context.conversationId);
+    if (ownership == AiWriteOwnershipResult::userHasControl)
+    {
+        return fail(QStringLiteral("user_has_control"),
+                    QStringLiteral("The user has terminal write control. Resume agent control explicitly first."));
+    }
     if (ownership != AiWriteOwnershipResult::acquired && ownership != AiWriteOwnershipResult::alreadyOwned)
     {
         return fail(QStringLiteral("ownership_conflict"),
@@ -307,6 +347,32 @@ bool AiActionToolDispatcher::complete(const AiTerminalAction &action, const AiTo
                                       std::string resultJson)
 {
     return m_ledger.transition(action.dispatchKey, state, std::move(resultJson));
+}
+
+bool AiActionToolDispatcher::handoffToUser(const AiSessionTarget &target, const std::string_view conversationId)
+{
+    return m_ownership.handoffToUser(target, conversationId);
+}
+
+bool AiActionToolDispatcher::resumeAgent(const AiSessionTarget &target, const std::string_view conversationId)
+{
+    return m_ownership.resumeAgent(target, conversationId);
+}
+
+bool AiActionToolDispatcher::agentHasControl(const AiSessionTarget &target, const std::string_view conversationId) const
+{
+    const auto owner = m_ownership.owner(target);
+    return owner.has_value() && *owner == conversationId;
+}
+
+bool AiActionToolDispatcher::userHasControl(const AiSessionTarget &target, const std::string_view conversationId) const
+{
+    return m_ownership.userHasControl(target, conversationId);
+}
+
+void AiActionToolDispatcher::clearSession(const AiSessionTarget &target)
+{
+    m_ownership.releaseSession(target);
 }
 
 void AiActionToolDispatcher::clearConversation(const std::string_view conversationId)

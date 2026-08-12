@@ -21,6 +21,7 @@ class AiAgentGuardTests final : public QObject
 private slots:
     void grantsOneWriteOwnerPerSessionGeneration();
     void transfersAndReleasesOwnershipExplicitly();
+    void handsControlToUserUntilExplicitResume();
     void enforcesToolAndWriteBudgets();
     void detectsReadLoopsOnlyWithoutStateProgress();
     void enforcesTimeAndTokenBudgets();
@@ -55,6 +56,22 @@ void AiAgentGuardTests::transfersAndReleasesOwnershipExplicitly()
     QVERIFY(ownership.owner(first).has_value());
     ownership.releaseSession(first);
     QVERIFY(!ownership.owner(first).has_value());
+}
+
+void AiAgentGuardTests::handsControlToUserUntilExplicitResume()
+{
+    AiSessionWriteOwnership ownership;
+    const AiSessionTarget target{.sessionId = "session-1", .sessionGeneration = 4};
+    QCOMPARE(ownership.claim(target, "conversation-1"), AiWriteOwnershipResult::acquired);
+    QVERIFY(ownership.handoffToUser(target, "conversation-1"));
+    QVERIFY(ownership.userHasControl(target, "conversation-1"));
+    QVERIFY(!ownership.owner(target).has_value());
+    QCOMPARE(ownership.claim(target, "conversation-1"), AiWriteOwnershipResult::userHasControl);
+    QCOMPARE(ownership.claim(target, "conversation-2"), AiWriteOwnershipResult::conflict);
+    QVERIFY(!ownership.resumeAgent(target, "conversation-2"));
+    QVERIFY(ownership.resumeAgent(target, "conversation-1"));
+    QVERIFY(!ownership.userHasControl(target, "conversation-1"));
+    QCOMPARE(ownership.owner(target), std::optional<std::string>{"conversation-1"});
 }
 
 void AiAgentGuardTests::enforcesToolAndWriteBudgets()
