@@ -22,6 +22,7 @@
 #include "core/config/ApplicationSettings.h"
 #include "domain/ai/AiCommandTracker.h"
 #include "domain/ai/AiContextBroker.h"
+#include "domain/ai/AiTerminalFrameTracker.h"
 #include "domain/terminal/SemanticTerminalObserver.h"
 #include "domain/workbench/ScriptExecution.h"
 #include "domain/workbench/ScriptRecorder.h"
@@ -604,6 +605,7 @@ private:
         std::shared_ptr<logging::SessionLogWriter> sessionLog;
         std::shared_ptr<terminal::TerminalOutputSink> outputSink;
         std::shared_ptr<terminal::SemanticTerminalObserver> semanticObserver;
+        std::shared_ptr<ai::AiTerminalFrameTracker> aiFrameTracker;
         QString id;
         QString workspaceId;
         QString paneId;

@@ -261,6 +261,27 @@ aiPermissionMode(const ztermy::config::AiPermissionPreference preference) noexce
     return frame;
 }
 
+[[nodiscard]] ztermy::ai::AiTerminalFrameInput terminalFrameInput(const ztermy::terminal::TerminalSnapshotPtr &snapshot)
+{
+    if (!snapshot)
+    {
+        return {};
+    }
+    const QStringList textLines = terminalFrameText(snapshot).split(QLatin1Char('\n'), Qt::KeepEmptyParts);
+    std::vector<std::string> lines;
+    lines.reserve(static_cast<std::size_t>(textLines.size()));
+    for (const QString &line : textLines)
+    {
+        lines.push_back(utf8String(line));
+    }
+    return ztermy::ai::AiTerminalFrameInput{.lines = std::move(lines),
+                                            .columns = snapshot->columns,
+                                            .rows = snapshot->rows,
+                                            .cursorColumn = snapshot->cursor.column,
+                                            .cursorRow = snapshot->cursor.row,
+                                            .cursorVisible = snapshot->cursor.visible};
+}
+
 [[nodiscard]] QString authenticationToken(const ztermy::ssh::SshAuthenticationMethod authentication)
 {
     switch (authentication)
@@ -9334,18 +9355,21 @@ void AppController::initializeTerminalOutputSink(TerminalTab &tab)
             .sessionGeneration = tab.reconnectGeneration,
         },
         nonce);
+    tab.aiFrameTracker = std::make_shared<ai::AiTerminalFrameTracker>();
     const auto semanticObserver = tab.semanticObserver;
+    const auto frameTracker = tab.aiFrameTracker;
     if (tab.local)
     {
         tab.local->setShellIntegrationNonce(nonce);
     }
     tab.outputSink = std::make_shared<TerminalOutputFanout>(
-        tab.sessionLog, [this, tabId, semanticObserver](const std::span<const std::byte> bytes) {
+        tab.sessionLog, [this, tabId, semanticObserver, frameTracker](const std::span<const std::byte> bytes) {
             if (bytes.empty())
             {
                 return;
             }
             semanticObserver->append(bytes);
+            frameTracker->observeOutput(bytes);
             const QByteArray copy(reinterpret_cast<const char *>(bytes.data()), static_cast<qsizetype>(bytes.size()));
             emit scriptOutputObserved(tabId, copy);
         });
@@ -9506,6 +9530,10 @@ void AppController::connectLocalTabSignals(TerminalTab &tab)
                              return;
                          }
                          updated->snapshot = snapshot;
+                         if (updated->aiFrameTracker)
+                         {
+                             updated->aiFrameTracker->observeFrame(terminalFrameInput(snapshot));
+                         }
                          if (ui::TerminalItem *terminal = m_terminalViewports.value(updated->paneId))
                          {
                              terminal->setSnapshot(snapshot);
@@ -9583,6 +9611,10 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
                              return;
                          }
                          updated->snapshot = snapshot;
+                         if (updated->aiFrameTracker)
+                         {
+                             updated->aiFrameTracker->observeFrame(terminalFrameInput(snapshot));
+                         }
                          const QString workingDirectory =
                              snapshot ? normalizedTerminalWorkingDirectory(snapshot->workingDirectory) : QString{};
                          const bool workingDirectoryChanged = updated->terminalWorkingDirectory != workingDirectory;
