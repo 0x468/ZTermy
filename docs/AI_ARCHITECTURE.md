@@ -313,6 +313,12 @@ Optional history in `0.3.1` uses:
 - bounded total bytes, conversation count, and retention age;
 - explicit export/delete and fail-closed schema handling.
 
+ADR 0061 fixes the concrete first-store contract at AES-256-GCM, a dedicated
+vault-managed data key, schema/generation AAD, fresh nonce per rewrite, and
+bounded 50-conversation/90-day retention. The infrastructure store and its
+tamper/key-loss/bounds tests are implemented; application worker and opt-in UI
+integration sit above this synchronous boundary.
+
 No transcript is written to diagnostic logs, generic workspace JSON, or Windows
 Credential Manager.
 

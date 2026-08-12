@@ -29,6 +29,8 @@ std::string_view credentialKindToken(const CredentialKind kind) noexcept
             return "proxy-password";
         case CredentialKind::AiApiKey:
             return "ai-api-key";
+        case CredentialKind::AiConversationKey:
+            return "ai-conversation-key";
     }
     return {};
 }

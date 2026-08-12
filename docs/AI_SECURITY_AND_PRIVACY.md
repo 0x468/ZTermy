@@ -197,6 +197,10 @@ stale capabilities. A tool never silently retargets to the newly active tab.
 - Conversation history is session-only until the encrypted store ships.
 - Optional encrypted history uses a separate data key and bounded retention;
   credential stores never hold transcript bodies.
+- The first history-store contract (ADR 0061) binds schema and rewrite
+  generation into AES-256-GCM authentication, rotates the nonce on every
+  rewrite, refuses non-persistent session vaults, and deletes both encrypted
+  recovery data and the vault key on explicit clear.
 - Audit records contain time, hashed conversation/call references, owned tool
   token, permission mode, session generation, lifecycle state, risk flags, and
   result code. They exclude raw command text, raw output, prompts, tool

@@ -211,6 +211,8 @@ void CredentialVaultTests::portableVaultPersistsAndAuthenticates()
                                                         .kind = ztermy::security::CredentialKind::ProxyPassword};
     const ztermy::security::CredentialKey apiKey{.profileId = "provider-default",
                                                  .kind = ztermy::security::CredentialKind::AiApiKey};
+    const ztermy::security::CredentialKey conversationKey{.profileId = "ai-conversation-history",
+                                                          .kind = ztermy::security::CredentialKind::AiConversationKey};
 
     {
         ztermy::security::PortableCredentialVault vault(path);
@@ -220,6 +222,7 @@ void CredentialVaultTests::portableVaultPersistsAndAuthenticates()
         QVERIFY(vault.store(passphrase, sensitive("key-secret")));
         QVERIFY(vault.store(proxyPassword, sensitive("proxy-secret")));
         QVERIFY(vault.store(apiKey, sensitive("api-secret")));
+        QVERIFY(vault.store(conversationKey, sensitive("01234567890123456789012345678901")));
     }
 
     QFile encryptedFile(path);
@@ -229,6 +232,7 @@ void CredentialVaultTests::portableVaultPersistsAndAuthenticates()
     QVERIFY(!encryptedBytes.contains("key-secret"));
     QVERIFY(!encryptedBytes.contains("proxy-secret"));
     QVERIFY(!encryptedBytes.contains("api-secret"));
+    QVERIFY(!encryptedBytes.contains("01234567890123456789012345678901"));
     QVERIFY(!encryptedBytes.contains("correct horse battery staple"));
     encryptedFile.close();
 
@@ -253,9 +257,12 @@ void CredentialVaultTests::portableVaultPersistsAndAuthenticates()
     auto loadedApiKey = reopened.read(apiKey);
     QVERIFY(loadedApiKey);
     QCOMPARE(bytes(*loadedApiKey), QByteArrayLiteral("api-secret"));
-    QCOMPARE(reopened.listKeys()->size(), std::size_t{4});
+    auto loadedConversationKey = reopened.read(conversationKey);
+    QVERIFY(loadedConversationKey);
+    QCOMPARE(bytes(*loadedConversationKey), QByteArrayLiteral("01234567890123456789012345678901"));
+    QCOMPARE(reopened.listKeys()->size(), std::size_t{5});
     QVERIFY(reopened.remove(passphrase));
-    QCOMPARE(reopened.listKeys()->size(), std::size_t{3});
+    QCOMPARE(reopened.listKeys()->size(), std::size_t{4});
 }
 
 void CredentialVaultTests::portableVaultUsesFreshNonceForEveryRewrite()
@@ -332,7 +339,7 @@ void CredentialVaultTests::windowsVaultRoundTripsGenericCredential()
     ztermy::security::WindowsCredentialVault vault;
     const std::string profileId = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
     const ztermy::security::CredentialKey key{.profileId = profileId,
-                                              .kind = ztermy::security::CredentialKind::ProxyPassword};
+                                              .kind = ztermy::security::CredentialKind::AiConversationKey};
 
     const auto stored = vault.store(key, sensitive("windows-credential-test"));
     if (!stored && stored.error() == ztermy::security::CredentialVaultError::Unavailable)

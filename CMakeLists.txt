@@ -484,6 +484,18 @@ target_link_libraries(ztermy_ai_provider
     PRIVATE Qt6::Core
 )
 
+add_library(ztermy_ai_conversation_store STATIC
+    src/infrastructure/ai/AiConversationStore.cpp
+    src/infrastructure/ai/AiConversationStore.h
+)
+
+target_compile_features(ztermy_ai_conversation_store PUBLIC cxx_std_23)
+target_include_directories(ztermy_ai_conversation_store PUBLIC src)
+target_link_libraries(ztermy_ai_conversation_store
+    PUBLIC ztermy_credential_vault Qt6::Core
+    PRIVATE ztermy_core_persistence OpenSSL::Crypto
+)
+
 add_library(ztermy_ai_application STATIC
     src/application/ai/AiActivityModel.cpp
     src/application/ai/AiActivityModel.h
@@ -2880,6 +2892,27 @@ if(BUILD_TESTING)
 
     add_test(NAME ai-activity-model COMMAND ztermy_ai_activity_model_tests)
 
+    qt_add_executable(ztermy_ai_conversation_store_tests
+        tests/ai_conversation_store_tests.cpp
+    )
+
+    target_compile_features(ztermy_ai_conversation_store_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ai_conversation_store_tests PRIVATE
+        ztermy_ai_conversation_store
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ai_conversation_store_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ai-conversation-store COMMAND ztermy_ai_conversation_store_tests)
+
     qt_add_executable(ztermy_ai_conversation_model_tests
         tests/ai_conversation_model_tests.cpp
     )
@@ -3349,6 +3382,7 @@ if(BUILD_TESTING)
             ztermy_ai_action_tool_dispatcher_tests
             ztermy_ai_wait_command_tool_tests
             ztermy_ai_turn_runner_tests
+            ztermy_ai_conversation_store_tests
             ztermy_ai_conversation_model_tests
             ztermy_ai_read_tool_dispatcher_tests
             ztermy_ai_context_broker_tests

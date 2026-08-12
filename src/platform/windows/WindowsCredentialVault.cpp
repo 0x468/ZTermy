@@ -20,6 +20,7 @@ constexpr std::wstring_view PasswordSuffix = L":password";
 constexpr std::wstring_view PassphraseSuffix = L":key-passphrase";
 constexpr std::wstring_view ProxyPasswordSuffix = L":proxy-password";
 constexpr std::wstring_view AiApiKeySuffix = L":ai-api-key";
+constexpr std::wstring_view AiConversationKeySuffix = L":ai-conversation-key";
 
 struct CredentialDeleter final
 {
@@ -78,6 +79,9 @@ using CredentialPointer = std::unique_ptr<CREDENTIALW, CredentialDeleter>;
         case ztermy::security::CredentialKind::AiApiKey:
             target.append(AiApiKeySuffix);
             break;
+        case ztermy::security::CredentialKind::AiConversationKey:
+            target.append(AiConversationKeySuffix);
+            break;
     }
     return target;
 }
@@ -109,6 +113,12 @@ using CredentialPointer = std::unique_ptr<CREDENTIALW, CredentialDeleter>;
     {
         kind = ztermy::security::CredentialKind::AiApiKey;
         profile = target.substr(TargetPrefix.size(), target.size() - TargetPrefix.size() - AiApiKeySuffix.size());
+    }
+    else if (target.ends_with(AiConversationKeySuffix))
+    {
+        kind = ztermy::security::CredentialKind::AiConversationKey;
+        profile =
+            target.substr(TargetPrefix.size(), target.size() - TargetPrefix.size() - AiConversationKeySuffix.size());
     }
     else
     {
