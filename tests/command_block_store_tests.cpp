@@ -153,7 +153,10 @@ void CommandBlockStoreTests::preservesInterleavedEvidence()
         store.append(*id, {.bytes = bytes("background output"), .streamOffset = 0, .interleaved = true}).has_value());
 
     const auto *block = store.find(*id);
-    QVERIFY(block != nullptr);
+    if (block == nullptr)
+    {
+        QFAIL("The retained command block was not found.");
+    }
     QVERIFY(block->hasInterleavedOutput);
     QCOMPARE(block->outputCoverage, CommandOutputCoverage::interleaved);
 }
