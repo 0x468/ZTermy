@@ -215,3 +215,24 @@ installations:
 
 The `window-hit-test`, `conpty-process`, and `terminal-engine` suites pass in
 both configurations.
+
+### Long-running V3 gates
+
+The ordinary test suite keeps bounded timeouts and skips opt-in soak functions.
+Release-candidate duration evidence uses dedicated drivers:
+
+```powershell
+pwsh -NoProfile -File .\scripts\run_ai_concurrency_soak.ps1 `
+  -BuildDirectory .\build\msvc-static-release `
+  -DurationSeconds 7200
+
+pwsh -NoProfile -File .\scripts\run_terminal_stability_soak.ps1 `
+  -BuildDirectory .\build\msvc-static-release `
+  -DurationSeconds 28800
+```
+
+Both write content-free JSON reports below the selected build directory. The
+terminal driver raises `QTEST_FUNCTION_TIMEOUT` to the requested duration plus
+a ten-minute shutdown margin; without that override QtTest intentionally aborts
+any single test function after five minutes. A watchdog remains active so a
+deadlocked long run still fails.

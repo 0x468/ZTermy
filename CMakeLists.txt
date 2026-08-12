@@ -3436,6 +3436,21 @@ if(BUILD_TESTING)
         ENVIRONMENT "QTEST_FUNCTION_TIMEOUT=3600000"
     )
 
+    set(ZTERMY_TERMINAL_SOAK_SECONDS "1800" CACHE STRING
+        "Duration of the local terminal stability soak")
+    add_custom_target(ztermy_terminal_stability_soak
+        COMMAND
+            "${ZTERMY_PWSH_EXECUTABLE}" -NoProfile -File
+            "${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_terminal_stability_soak.ps1"
+            -BuildDirectory "${CMAKE_CURRENT_BINARY_DIR}"
+            -DurationSeconds "${ZTERMY_TERMINAL_SOAK_SECONDS}"
+            -ReportPath "${CMAKE_CURRENT_BINARY_DIR}/terminal-stability-soak.json"
+        DEPENDS ztermy_local_terminal_session_tests
+        COMMENT "Running the bounded local terminal latency and lifecycle soak"
+        USES_TERMINAL
+        VERBATIM
+    )
+
     qt_add_executable(ztermy_app_controller_tests
         tests/app_controller_tests.cpp
         src/application/AppController.cpp

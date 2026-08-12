@@ -217,12 +217,10 @@ pwsh -NoProfile -File .\scripts\run_ai_concurrency_soak.ps1 `
   -DurationSeconds 7200 `
   -ReportPath .\build\msvc-static-release\ai-concurrency-soak-2h.json
 
-$env:ZTERMY_RUN_LOCAL_SOAK_GATE = "1"
-$env:ZTERMY_LOCAL_SOAK_SECONDS = "28800"
-.\build\msvc-static-release\ztermy_local_terminal_session_tests.exe `
-  survivesSustainedInteractionWithoutLatencyGrowth
-Remove-Item Env:ZTERMY_RUN_LOCAL_SOAK_GATE
-Remove-Item Env:ZTERMY_LOCAL_SOAK_SECONDS
+pwsh -NoProfile -File .\scripts\run_terminal_stability_soak.ps1 `
+  -BuildDirectory .\build\msvc-static-release `
+  -DurationSeconds 28800 `
+  -ReportPath .\build\msvc-static-release\terminal-stability-soak-8h.json
 ```
 
 Also required before declaring the final release rather than an RC:
