@@ -1670,6 +1670,8 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
                      &AppController::applyTerminalHistoryTaskResult, Qt::QueuedConnection);
     QObject::connect(this, &AppController::noteSearchTaskCompleted, this, &AppController::applyNoteSearchTaskResult,
                      Qt::QueuedConnection);
+    QObject::connect(this, &AppController::aiNoteReadTaskCompleted, this, &AppController::applyAiNoteReadTaskResult,
+                     Qt::QueuedConnection);
     QObject::connect(this, &AppController::scriptOutputObserved, this, &AppController::observeScriptOutput,
                      Qt::QueuedConnection);
     initializePortForwardingSignalBridges();
@@ -1732,6 +1734,8 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     QObject::connect(this, &AppController::terminalHistoryTaskCompleted, this,
                      &AppController::applyTerminalHistoryTaskResult, Qt::QueuedConnection);
     QObject::connect(this, &AppController::noteSearchTaskCompleted, this, &AppController::applyNoteSearchTaskResult,
+                     Qt::QueuedConnection);
+    QObject::connect(this, &AppController::aiNoteReadTaskCompleted, this, &AppController::applyAiNoteReadTaskResult,
                      Qt::QueuedConnection);
     QObject::connect(this, &AppController::scriptOutputObserved, this, &AppController::observeScriptOutput,
                      Qt::QueuedConnection);
@@ -5445,6 +5449,33 @@ void AppController::applyNoteSearchTaskResult(const quint64 requestId, const Not
     emit notesChanged();
 }
 
+void AppController::applyAiNoteReadTaskResult(const QString &tabId, const quint64 requestId, const quint64 generation,
+                                              const QString &relativePath, const QByteArray &outputJson)
+{
+    TerminalTab *tab = findTab(tabId);
+    if (tab == nullptr || !tab->pendingAiNoteRead.has_value() || !tab->aiTurnRunner
+        || tab->pendingAiNoteRead->requestId != requestId
+        || tab->pendingAiNoteRead->request.target.sessionGeneration != generation
+        || tab->pendingAiNoteRead->request.relativePath != relativePath)
+    {
+        return;
+    }
+    const auto pending = std::move(*tab->pendingAiNoteRead);
+    tab->pendingAiNoteRead.reset();
+    std::string output = outputJson.toStdString();
+    if (tab->reconnectGeneration != generation)
+    {
+        output = ai::AiNoteReadTool::failure("scope_changed",
+                                             "The requested terminal session or generation is no longer active.");
+    }
+    const QString resultCode = aiActivityResultCode(output);
+    recordAiActivity(*tab, pending.call,
+                     resultCode == QStringLiteral("ok") ? QStringLiteral("succeeded") : QStringLiteral("failed"),
+                     resultCode, false);
+    static_cast<void>(tab->aiTurnRunner->completePendingTool(
+        ai::AiToolOutput{.callId = pending.call.id, .name = pending.call.name, .outputJson = std::move(output)}));
+}
+
 bool AppController::connectPrivateKey(const QString &host, const int port, const QString &username,
                                       const QString &privateKeyPath, const QString &passphrase)
 {
@@ -7476,14 +7507,33 @@ std::vector<ai::AiTerminalReadSnapshot> AppController::aiReadSnapshots(const Ter
     operations.scripts.reserve(m_scripts.size());
     for (const auto &script : m_scripts)
     {
-        operations.scripts.push_back(
-            ai::AiScriptSnapshot{.id = script.id,
-                                 .name = script.name,
-                                 .description = utf8String(utf8QString(script.description).left(4096)),
-                                 .shell = utf8String(quickCommandShellScopeToken(script.shellScope)),
-                                 .variableCount = script.variables.size(),
-                                 .stepCount = script.steps.size(),
-                                 .modifiedUtcMs = script.modifiedUtcMs});
+        ai::AiScriptSnapshot snapshot{.id = script.id,
+                                      .name = script.name,
+                                      .description = utf8String(utf8QString(script.description).left(4096)),
+                                      .shell = utf8String(quickCommandShellScopeToken(script.shellScope)),
+                                      .variableCount = script.variables.size(),
+                                      .stepCount = script.steps.size(),
+                                      .modifiedUtcMs = script.modifiedUtcMs};
+        snapshot.variables.reserve(script.variables.size());
+        for (const auto &variable : script.variables)
+        {
+            snapshot.variables.push_back(
+                ai::AiScriptSnapshot::Variable{.name = variable.name,
+                                               .label = variable.label,
+                                               .type = utf8String(scriptVariableTypeToken(variable.type)),
+                                               .choices = variable.choices,
+                                               .required = variable.required});
+        }
+        snapshot.steps.reserve(script.steps.size());
+        for (const auto &step : script.steps)
+        {
+            snapshot.steps.push_back(
+                ai::AiScriptSnapshot::Step{.command = step.command,
+                                           .continuation = utf8String(scriptContinuationToken(step.continuation)),
+                                           .outputMarker = step.outputMarker,
+                                           .timeoutMs = step.timeoutMs});
+        }
+        operations.scripts.push_back(std::move(snapshot));
     }
     operations.notes.reserve(static_cast<std::size_t>(m_notes.size()));
     for (const QVariant &noteValue : m_notes)
@@ -7657,6 +7707,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                            std::make_move_iterator(actionDefinitions.end()));
     toolDefinitions.push_back(ai::AiWaitCommandTool::definition());
     toolDefinitions.push_back(ai::AiSftpReadTool::definition());
+    toolDefinitions.push_back(ai::AiNoteReadTool::definition());
     ai::AiGenerationRequest generation{.instructions = std::move(instructions),
                                        .messages = std::move(messages),
                                        .tools = std::move(toolDefinitions)};
@@ -7874,6 +7925,108 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                     catch (...)
                     {
                         qCCritical(appControllerLog) << "AI SFTP read cancellation suppressed an exception";
+                    }
+                }};
+            }
+            if (call.name == "read_note")
+            {
+                if (target != nullptr)
+                {
+                    recordAiActivity(*target, call, QStringLiteral("queued"), QStringLiteral("pending"), false);
+                }
+                if (target == nullptr || !target->aiTurnRunner || !target->aiTurnBudget)
+                {
+                    return ai::AiTurnRunner::ToolHandlingResult{
+                        .output = ai::AiToolOutput{
+                            .callId = call.id,
+                            .name = call.name,
+                            .outputJson = ai::AiNoteReadTool::failure("session_unavailable",
+                                                                      "The target terminal session is unavailable.")}};
+                }
+                const auto signature = call.name + ':' + call.argumentsJson;
+                const auto budgetDecision =
+                    target->aiTurnBudget->authorize(false, signature, target->reconnectGeneration);
+                if (budgetDecision != ai::AiAgentBudgetDecision::allow)
+                {
+                    recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("budget_denied"), false);
+                    return ai::AiTurnRunner::ToolHandlingResult{
+                        .output = ai::AiToolOutput{.callId = call.id,
+                                                   .name = call.name,
+                                                   .outputJson = aiBudgetFailureJson(budgetDecision)}};
+                }
+                auto request = ai::AiNoteReadTool::parse(call.argumentsJson);
+                if (!request.has_value())
+                {
+                    recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("invalid_arguments"),
+                                     false);
+                    return ai::AiTurnRunner::ToolHandlingResult{
+                        .output = ai::AiToolOutput{.callId = call.id,
+                                                   .name = call.name,
+                                                   .outputJson = std::move(request.error())}};
+                }
+                const ai::AiSessionTarget actualTarget{.sessionId = utf8String(target->id),
+                                                       .sessionGeneration = target->reconnectGeneration};
+                if (request->target != actualTarget)
+                {
+                    const auto output = ai::AiNoteReadTool::failure(
+                        "scope_changed", "The requested terminal session or generation is no longer active.");
+                    recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("scope_changed"), false);
+                    return ai::AiTurnRunner::ToolHandlingResult{
+                        .output = ai::AiToolOutput{.callId = call.id, .name = call.name, .outputJson = output}};
+                }
+                if (target->pendingAiNoteRead.has_value())
+                {
+                    const auto output = ai::AiNoteReadTool::failure(
+                        "busy", "Another note read is already active for this terminal assistant.");
+                    recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("busy"), false);
+                    return ai::AiTurnRunner::ToolHandlingResult{
+                        .output = ai::AiToolOutput{.callId = call.id, .name = call.name, .outputJson = output}};
+                }
+                const quint64 requestId = ++target->aiNoteReadRequestId;
+                target->pendingAiNoteRead = TerminalTab::PendingAiNoteRead{.requestId = requestId,
+                                                                           .call = call,
+                                                                           .request = std::move(*request)};
+                const QString rootPath = m_noteStore.rootPath();
+                const QString relativePath = target->pendingAiNoteRead->request.relativePath;
+                const ai::AiNoteReadRequest noteRequest = target->pendingAiNoteRead->request;
+                const quint64 generation = target->reconnectGeneration;
+                const QPointer<AppController> self(this);
+                QThreadPool::globalInstance()->start(
+                    [self, rootPath, relativePath, noteRequest, tabId, requestId, generation] {
+                        std::string output;
+                        try
+                        {
+                            auto read = workbench::NoteStore(rootPath).read(relativePath);
+                            output = read.has_value() ? ai::AiNoteReadTool::result(noteRequest, *read)
+                                                      : ai::AiNoteReadTool::failure(read.error());
+                        }
+                        catch (const std::bad_alloc &)
+                        {
+                            output = ai::AiNoteReadTool::failure(workbench::NoteStoreError::io);
+                        }
+                        if (self)
+                        {
+                            emit self->aiNoteReadTaskCompleted(tabId, requestId, generation, relativePath,
+                                                               QByteArray::fromStdString(output));
+                        }
+                    });
+                return ai::AiTurnRunner::ToolHandlingResult{.cancel = [this, tabId, requestId] noexcept {
+                    try
+                    {
+                        TerminalTab *cancelledTarget = findTab(tabId);
+                        if (cancelledTarget == nullptr || !cancelledTarget->pendingAiNoteRead.has_value()
+                            || cancelledTarget->pendingAiNoteRead->requestId != requestId)
+                        {
+                            return;
+                        }
+                        const auto cancelledCall = cancelledTarget->pendingAiNoteRead->call;
+                        cancelledTarget->pendingAiNoteRead.reset();
+                        recordAiActivity(*cancelledTarget, cancelledCall, QStringLiteral("cancelled"),
+                                         QStringLiteral("cancelled"), false);
+                    }
+                    catch (...)
+                    {
+                        qCCritical(appControllerLog) << "AI note read cancellation suppressed an exception";
                     }
                 }};
             }

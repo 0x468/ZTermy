@@ -5,6 +5,7 @@
 #include "application/ai/AiActivityModel.h"
 #include "application/ai/AiConversationHistoryModel.h"
 #include "application/ai/AiConversationModel.h"
+#include "application/ai/AiNoteReadTool.h"
 #include "application/ai/AiReadToolDispatcher.h"
 #include "application/ai/AiSecretStore.h"
 #include "application/ai/AiSftpReadTool.h"
@@ -534,6 +535,8 @@ private:
     Q_SIGNAL void terminalHistoryTaskCompleted(const QString &tabId, quint64 requestId, ShellHistoryEntries entries,
                                                const QString &error);
     Q_SIGNAL void noteSearchTaskCompleted(quint64 requestId, NoteSearchResults results, const QString &error);
+    Q_SIGNAL void aiNoteReadTaskCompleted(const QString &tabId, quint64 requestId, quint64 generation,
+                                          const QString &relativePath, const QByteArray &outputJson);
     Q_SIGNAL void scriptOutputObserved(const QString &tabId, const QByteArray &bytes);
     Q_SIGNAL void portForwardingSnapshotReady(const QString &ruleId, int state, int failure, qulonglong activeClients,
                                               qulonglong bytesFromClients, qulonglong bytesToClients,
@@ -557,6 +560,13 @@ private:
             ai::AiSftpReadRequest request;
         };
 
+        struct PendingAiNoteRead final
+        {
+            quint64 requestId = 0;
+            ai::AiToolCall call;
+            ai::AiNoteReadRequest request;
+        };
+
         std::unique_ptr<terminal::LocalTerminalSessionBackend> local;
         std::unique_ptr<ssh::SshTerminalSession> ssh;
         std::unique_ptr<sftp::SftpSession> sftpSession;
@@ -566,6 +576,7 @@ private:
         std::unique_ptr<ai::AiAgentTurnBudget> aiTurnBudget;
         std::optional<ai::AiTerminalAction> pendingAiAction;
         std::optional<PendingAiSftpRead> pendingAiSftpRead;
+        std::optional<PendingAiNoteRead> pendingAiNoteRead;
         qint64 connectedUtcMs = 0;
         qreal sessionBackgroundOpacity = -1.0;
         qint64 recordingStartedUtcMs = 0;
@@ -574,6 +585,7 @@ private:
         std::uint64_t historyRequestId = 0;
         std::uint64_t sftpRequestId = 0;
         std::uint64_t aiSftpReadRequestId = 0;
+        std::uint64_t aiNoteReadRequestId = 0;
         std::uint64_t sftpGeneration = 0;
         std::uint64_t sftpTreeRequestId = 0;
         qreal workbenchWidth = 520.0;
@@ -727,6 +739,8 @@ private:
     void applyTerminalHistoryTaskResult(const QString &tabId, quint64 requestId, ShellHistoryEntries entries,
                                         const QString &error);
     void applyNoteSearchTaskResult(quint64 requestId, const NoteSearchResults &results, const QString &error);
+    void applyAiNoteReadTaskResult(const QString &tabId, quint64 requestId, quint64 generation,
+                                   const QString &relativePath, const QByteArray &outputJson);
     void setNoteOperationError(QString message);
     void setQuickCommandOperationError(QString message);
     [[nodiscard]] bool persistApplicationSettings(const config::ApplicationSettings &settings);

@@ -45,13 +45,19 @@ using ztermy::terminal::TerminalSemanticCapability;
     operations.sftpListingAvailable = true;
     operations.sftpEntries = {{.name = "file.txt", .remotePath = "/home/test/file.txt", .type = "file", .size = 12}};
     operations.shellHistory = {{.command = "pwd", .shell = "bash", .timestampUtcSeconds = 123}};
-    operations.scripts = {{.id = "script-1",
-                           .name = "Inspect",
-                           .description = "Inspect host",
-                           .shell = "bash",
-                           .variableCount = 1,
-                           .stepCount = 2,
-                           .modifiedUtcMs = 456}};
+    operations.scripts = {
+        {.id = "script-1",
+         .name = "Inspect",
+         .description = "Inspect host",
+         .shell = "bash",
+         .variableCount = 1,
+         .stepCount = 2,
+         .modifiedUtcMs = 456,
+         .variables =
+             {{.name = "path", .label = "Path", .type = "text", .choices = {"/tmp", "/var/tmp"}, .required = true}},
+         .steps = {{.command = "OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz123456 ls {{path}}",
+                    .continuation = "immediate",
+                    .timeoutMs = 30000}}}};
     operations.notes = {{.path = "ops.md", .name = "ops.md", .size = 24, .modifiedUtcMs = 789}};
     operations.portForwarding = {{.id = "forward-1",
                                   .label = "Web",
@@ -98,7 +104,7 @@ private slots:
 void AiReadToolDispatcherTests::publishesStrictReadOnlyCatalog()
 {
     const auto definitions = AiReadToolDispatcher::definitions();
-    QCOMPARE(definitions.size(), std::size_t{11});
+    QCOMPARE(definitions.size(), std::size_t{12});
     QCOMPARE(definitions.front().name, std::string("list_sessions"));
     for (const auto &definition : definitions)
     {
@@ -159,6 +165,18 @@ void AiReadToolDispatcherTests::executesBoundedReads()
     QVERIFY(!script.contains("command"));
 
     result = object(dispatcher.execute(
+        "read_script", R"({"session_id":"session-1","session_generation":4,"script_id":"script-1"})", snapshots));
+    const auto scriptContent = result.value("script").toObject();
+    QVERIFY(result.value("ok").toBool());
+    const QString command = scriptContent.value("steps").toArray().at(0).toObject().value("command").toString();
+    QVERIFY(!command.contains(QStringLiteral("sk-abcdefghijklmnopqrstuvwxyz")));
+    QVERIFY(scriptContent.value("redacted").toBool());
+    const auto variable = scriptContent.value("variables").toArray().at(0).toObject();
+    QCOMPARE(variable.value("name").toString(), QStringLiteral("path"));
+    QVERIFY(!variable.contains("default_value"));
+    QVERIFY(scriptContent.value("untrusted_evidence").toBool());
+
+    result = object(dispatcher.execute(
         "list_notes", R"({"session_id":"session-1","session_generation":4,"offset":0,"limit":10})", snapshots));
     QCOMPARE(result.value("notes").toObject().value("items").toArray().at(0).toObject().value("path").toString(),
              QStringLiteral("ops.md"));
@@ -204,6 +222,10 @@ void AiReadToolDispatcherTests::rejectsMalformedStaleAndUnknownRequests()
     result = object(dispatcher.execute(
         "list_notes", R"({"session_id":"session-1","session_generation":3,"offset":0,"limit":10})", snapshots));
     QCOMPARE(result.value("error").toObject().value("code").toString(), QStringLiteral("scope_changed"));
+
+    result = object(dispatcher.execute(
+        "read_script", R"({"session_id":"session-1","session_generation":4,"script_id":"missing"})", snapshots));
+    QCOMPARE(result.value("error").toObject().value("code").toString(), QStringLiteral("not_found"));
 }
 
 void AiReadToolDispatcherTests::rejectsOversizedOperationsResults()

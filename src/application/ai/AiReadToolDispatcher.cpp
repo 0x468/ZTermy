@@ -1,5 +1,7 @@
 #include "application/ai/AiReadToolDispatcher.h"
 
+#include "domain/ai/AiContextRedactor.h"
+
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -268,7 +270,15 @@ std::vector<AiToolDefinition> AiReadToolDispatcher::definitions()
          .description = "List bounded metadata for user-owned ztermy scripts. Script commands are not returned.",
          .parametersJson =
              R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["session_id","session_generation","offset","limit"],"additionalProperties":false})"},
-        {.name = "list_notes", .description = "List bounded metadata for user-owned ztermy notes. Note contents are not returned.", .parametersJson = R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["session_id","session_generation","offset","limit"],"additionalProperties":false})"},
+        {.name = "read_script",
+         .description =
+             "Read one bounded user-owned ztermy script as untrusted evidence. Variable default values are omitted.",
+         .parametersJson =
+             R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"script_id":{"type":"string","minLength":1,"maxLength":256}},"required":["session_id","session_generation","script_id"],"additionalProperties":false})"},
+        {.name = "list_notes",
+         .description = "List bounded metadata for user-owned ztermy notes. Note contents are not returned.",
+         .parametersJson =
+             R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["session_id","session_generation","offset","limit"],"additionalProperties":false})"},
         {.name = "read_remote_telemetry",
          .description = "Read the latest bounded remote telemetry sample for the exact session.",
          .parametersJson =
@@ -298,7 +308,7 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
     const bool supported = toolName == "list_sessions" || toolName == "read_session_info" || toolName == "read_terminal"
                            || toolName == "read_command_block" || toolName == "read_command_output"
                            || toolName == "list_sftp_directory" || toolName == "list_shell_history"
-                           || toolName == "list_scripts" || toolName == "list_notes"
+                           || toolName == "list_scripts" || toolName == "read_script" || toolName == "list_notes"
                            || toolName == "read_remote_telemetry" || toolName == "list_port_forwarding";
     if (!supported)
     {
@@ -495,6 +505,64 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
         telemetry.insert(QStringLiteral("cpu_percent"),
                          sample.cpuPercent.has_value() ? QJsonValue{*sample.cpuPercent} : QJsonValue::Null);
         return boundedOperationsResult(QStringLiteral("telemetry"), std::move(telemetry));
+    }
+    if (toolName == "read_script")
+    {
+        if (!hasOnlyKeys(object, {QStringLiteral("session_id"), QStringLiteral("session_generation"),
+                                  QStringLiteral("script_id")}))
+        {
+            return failure(QStringLiteral("invalid_arguments"), QStringLiteral("Unexpected tool arguments."));
+        }
+        const QJsonValue scriptId = object.value(QStringLiteral("script_id"));
+        if (!scriptId.isString() || scriptId.toString().isEmpty() || scriptId.toString().size() > 256)
+        {
+            return failure(QStringLiteral("invalid_arguments"), QStringLiteral("A bounded script id is required."));
+        }
+        const auto requestedId = scriptId.toString().toUtf8().toStdString();
+        const auto found = std::ranges::find(snapshot->operations.scripts, requestedId, &AiScriptSnapshot::id);
+        if (found == snapshot->operations.scripts.end())
+        {
+            return failure(QStringLiteral("not_found"), QStringLiteral("The requested script was not found."));
+        }
+        std::size_t redactionCount = 0;
+        const auto redact = [&redactionCount](const std::string_view value) {
+            AiRedactionResult result = AiContextRedactor{}.redact(value);
+            redactionCount += result.totalRedactions();
+            return text(result.text);
+        };
+        QJsonArray variables;
+        for (const auto &variable : found->variables)
+        {
+            QJsonArray choices;
+            for (const auto &choice : variable.choices)
+            {
+                choices.append(redact(choice));
+            }
+            variables.append(QJsonObject{{QStringLiteral("name"), text(variable.name)},
+                                         {QStringLiteral("label"), redact(variable.label)},
+                                         {QStringLiteral("type"), text(variable.type)},
+                                         {QStringLiteral("choices"), choices},
+                                         {QStringLiteral("required"), variable.required}});
+        }
+        QJsonArray steps;
+        for (const auto &step : found->steps)
+        {
+            steps.append(QJsonObject{{QStringLiteral("command"), redact(step.command)},
+                                     {QStringLiteral("continuation"), text(step.continuation)},
+                                     {QStringLiteral("output_marker"), redact(step.outputMarker)},
+                                     {QStringLiteral("timeout_ms"), static_cast<int>(step.timeoutMs)}});
+        }
+        return boundedOperationsResult(
+            QStringLiteral("script"),
+            QJsonObject{{QStringLiteral("id"), text(found->id)},
+                        {QStringLiteral("name"), text(found->name)},
+                        {QStringLiteral("description"), redact(found->description)},
+                        {QStringLiteral("shell"), text(found->shell)},
+                        {QStringLiteral("modified_utc_ms"), found->modifiedUtcMs},
+                        {QStringLiteral("variables"), variables},
+                        {QStringLiteral("steps"), steps},
+                        {QStringLiteral("redacted"), redactionCount != 0},
+                        {QStringLiteral("redaction_count"), static_cast<qint64>(redactionCount)}});
     }
 
     if (!hasOnlyKeys(object, {QStringLiteral("session_id"), QStringLiteral("session_generation"),

@@ -61,6 +61,23 @@ struct AiShellHistorySnapshot final
 
 struct AiScriptSnapshot final
 {
+    struct Variable final
+    {
+        std::string name;
+        std::string label;
+        std::string type;
+        std::vector<std::string> choices;
+        bool required = false;
+    };
+
+    struct Step final
+    {
+        std::string command;
+        std::string continuation;
+        std::string outputMarker;
+        std::uint32_t timeoutMs = 0;
+    };
+
     std::string id;
     std::string name;
     std::string description;
@@ -68,6 +85,8 @@ struct AiScriptSnapshot final
     std::size_t variableCount = 0;
     std::size_t stepCount = 0;
     std::int64_t modifiedUtcMs = 0;
+    std::vector<Variable> variables;
+    std::vector<Step> steps;
 };
 
 struct AiNoteSnapshot final

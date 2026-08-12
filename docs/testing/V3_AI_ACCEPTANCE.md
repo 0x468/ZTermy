@@ -99,9 +99,11 @@ evaluations serve different purposes and are reported separately.
     metadata-only script/note lists, current SFTP listing, shell history,
     telemetry, and forwarding status (`ADR 0062`); cancellable, generation-bound
     regular-file reads with 32 KiB, UTF-8/Base64, symlink, and cancellation
-    boundaries (`ADR 0063`).
-  - Remaining for 0.3.2: script/note content reads, arbitrary SFTP directory
-    navigation, mutations, and workspace target sets.
+    boundaries (`ADR 0063`); redacted script and asynchronous Markdown note
+    reads with omitted variable defaults and logical late-result cancellation
+    (`ADR 0064`).
+  - Remaining for 0.3.2: arbitrary SFTP directory navigation, mutations, and
+    workspace target sets.
 - [ ] MCP tools use the same registry, permission, result, audit, cancellation,
       and namespace rules as native tools; server trust tier, credential scope,
       description/schema changes, untrusted elicitation, and disable/revoke are
