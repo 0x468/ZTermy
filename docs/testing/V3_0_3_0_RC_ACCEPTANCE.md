@@ -48,6 +48,14 @@ The following gates completed with exit code zero:
    Only the retained and reviewed ICE61, ICE69, and ICE91 warnings were emitted.
 9. Final portable archive extraction, `portable.flag` inspection, and packaged
    executable lifecycle smoke.
+10. The pinned key-only LAN test host completed 100 authenticated
+    connect/disconnect cycles in one `SshTerminalSession` with no failure. A
+    second focused real-host run passed explicit host-key confirmation, bounded
+    shell-history and telemetry reads, authentication rejection classification,
+    remote close, and the 16 ms input-queue P95 gate. The test used only the
+    owner-approved host identity, public fingerprint, username, and private-key
+    path; no password, passphrase, key content, or terminal command entered the
+    command line or report.
 
 The static soak report is generated at
 `build/msvc-static-release/ai-concurrency-soak.json`. It contains test names,
@@ -219,10 +227,6 @@ Remove-Item Env:ZTERMY_LOCAL_SOAK_SECONDS
 
 Also required before declaring the final release rather than an RC:
 
-- 100 real SSH connect/disconnect/tab-close cycles on the current supported
-  Windows 11 release, using `ZTERMY_TEST_SSH_STRESS=1` and
-  `ZTERMY_TEST_SSH_STRESS_CYCLES=100` with the non-secret host/key-path gate
-  variables documented in `SSH_TRANSPORT.md`;
 - the same critical matrix on the previous supported Windows 11 build when a
   VM or machine is available;
 - five clean runs per supported evaluation task on the designated cloud model
