@@ -439,6 +439,8 @@ add_library(ztermy_ai_domain STATIC
     src/domain/ai/AiToolDispatchLedger.h
     src/domain/ai/AiUsageReporting.cpp
     src/domain/ai/AiUsageReporting.h
+    src/domain/ai/McpToolRegistry.cpp
+    src/domain/ai/McpToolRegistry.h
     src/domain/ai/NdjsonParser.cpp
     src/domain/ai/NdjsonParser.h
     src/domain/ai/ServerSentEventParser.cpp
@@ -447,6 +449,7 @@ add_library(ztermy_ai_domain STATIC
 
 target_compile_features(ztermy_ai_domain PUBLIC cxx_std_23)
 target_include_directories(ztermy_ai_domain PUBLIC src)
+target_link_libraries(ztermy_ai_domain PRIVATE Qt6::Core)
 
 add_library(ztermy_ai_context STATIC
     src/domain/ai/AiCommandTracker.cpp
@@ -496,6 +499,17 @@ add_library(ztermy_ai_evaluation STATIC
 target_compile_features(ztermy_ai_evaluation PUBLIC cxx_std_23)
 target_include_directories(ztermy_ai_evaluation PUBLIC src)
 target_link_libraries(ztermy_ai_evaluation PUBLIC Qt6::Core)
+
+add_library(ztermy_mcp_protocol STATIC
+    src/infrastructure/ai/McpJsonRpcProtocol.cpp
+    src/infrastructure/ai/McpJsonRpcProtocol.h
+    src/infrastructure/ai/McpStdioClient.cpp
+    src/infrastructure/ai/McpStdioClient.h
+)
+
+target_compile_features(ztermy_mcp_protocol PUBLIC cxx_std_23)
+target_include_directories(ztermy_mcp_protocol PUBLIC src)
+target_link_libraries(ztermy_mcp_protocol PUBLIC ztermy_ai_domain Qt6::Core)
 
 add_library(ztermy_ai_conversation_store STATIC
     src/infrastructure/ai/AiConversationStore.cpp
@@ -2638,6 +2652,73 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME ai-stream-parser COMMAND ztermy_ai_stream_parser_tests)
+
+    qt_add_executable(ztermy_mcp_tool_registry_tests
+        tests/mcp_tool_registry_tests.cpp
+    )
+
+    target_compile_features(ztermy_mcp_tool_registry_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_mcp_tool_registry_tests PRIVATE
+        ztermy_ai_domain
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_mcp_tool_registry_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME mcp-tool-registry COMMAND ztermy_mcp_tool_registry_tests)
+
+    qt_add_executable(ztermy_mcp_json_rpc_protocol_tests
+        tests/mcp_json_rpc_protocol_tests.cpp
+    )
+
+    target_compile_features(ztermy_mcp_json_rpc_protocol_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_mcp_json_rpc_protocol_tests PRIVATE
+        ztermy_mcp_protocol
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_mcp_json_rpc_protocol_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME mcp-json-rpc-protocol COMMAND ztermy_mcp_json_rpc_protocol_tests)
+
+    add_executable(ztermy_mcp_test_server tests/mcp_test_server.cpp)
+    target_compile_features(ztermy_mcp_test_server PRIVATE cxx_std_23)
+
+    qt_add_executable(ztermy_mcp_stdio_client_tests
+        tests/mcp_stdio_client_tests.cpp
+    )
+
+    target_compile_features(ztermy_mcp_stdio_client_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_mcp_stdio_client_tests PRIVATE
+        ztermy_mcp_protocol
+        Qt6::Test
+    )
+    add_dependencies(ztermy_mcp_stdio_client_tests ztermy_mcp_test_server)
+
+    if(MSVC)
+        target_compile_options(ztermy_mcp_stdio_client_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME mcp-stdio-client COMMAND ztermy_mcp_stdio_client_tests)
 
     qt_add_executable(ztermy_provider_stream_mapper_tests
         tests/provider_stream_mapper_tests.cpp
