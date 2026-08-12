@@ -488,6 +488,15 @@ target_link_libraries(ztermy_ai_provider
     PRIVATE Qt6::Core
 )
 
+add_library(ztermy_ai_evaluation STATIC
+    src/infrastructure/ai/AiEvaluationHarness.cpp
+    src/infrastructure/ai/AiEvaluationHarness.h
+)
+
+target_compile_features(ztermy_ai_evaluation PUBLIC cxx_std_23)
+target_include_directories(ztermy_ai_evaluation PUBLIC src)
+target_link_libraries(ztermy_ai_evaluation PUBLIC Qt6::Core)
+
 add_library(ztermy_ai_conversation_store STATIC
     src/infrastructure/ai/AiConversationStore.cpp
     src/infrastructure/ai/AiConversationStore.h
@@ -2672,6 +2681,27 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME provider-request-factory COMMAND ztermy_provider_request_factory_tests)
+
+    qt_add_executable(ztermy_ai_evaluation_harness_tests
+        tests/ai_evaluation_harness_tests.cpp
+    )
+
+    target_compile_features(ztermy_ai_evaluation_harness_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ai_evaluation_harness_tests PRIVATE
+        ztermy_ai_evaluation
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ai_evaluation_harness_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ai-evaluation-harness COMMAND ztermy_ai_evaluation_harness_tests)
 
     qt_add_executable(ztermy_provider_http_client_tests
         tests/provider_http_client_tests.cpp
