@@ -28,6 +28,7 @@
 #include "domain/terminal/SemanticTerminalObserver.h"
 #include "domain/workbench/ScriptExecution.h"
 #include "domain/workbench/ScriptRecorder.h"
+#include "infrastructure/ai/AiPermissionRuleStore.h"
 #include "infrastructure/ai/ProviderModelCatalog.h"
 #include "infrastructure/forwarding/PortForwardingRuleStore.h"
 #include "infrastructure/logging/SessionLogWriter.h"
@@ -185,6 +186,8 @@ class AppController final : public QObject
     Q_PROPERTY(QString activeAiContextPreview READ activeAiContextPreview NOTIFY aiConversationChanged)
     Q_PROPERTY(QVariantList activeAiContextItems READ activeAiContextItems NOTIFY aiConversationChanged)
     Q_PROPERTY(QVariantMap activeAiToolApproval READ activeAiToolApproval NOTIFY aiConversationChanged)
+    Q_PROPERTY(QVariantList aiPermissionRules READ aiPermissionRules NOTIFY aiPermissionRulesChanged)
+    Q_PROPERTY(QString aiPermissionRuleError READ aiPermissionRuleError NOTIFY aiPermissionRulesChanged)
     Q_PROPERTY(QVariantMap aiPrivacyDiagnostics READ aiPrivacyDiagnostics NOTIFY aiPrivacyDiagnosticsChanged)
     Q_PROPERTY(QVariantList mcpServers READ mcpServers NOTIFY mcpConfigurationChanged)
     Q_PROPERTY(QVariantList mcpTools READ mcpTools NOTIFY mcpConfigurationChanged)
@@ -319,6 +322,8 @@ public:
     [[nodiscard]] QString activeAiContextPreview() const;
     [[nodiscard]] QVariantList activeAiContextItems() const;
     [[nodiscard]] QVariantMap activeAiToolApproval() const;
+    [[nodiscard]] QVariantList aiPermissionRules() const;
+    [[nodiscard]] QString aiPermissionRuleError() const;
     [[nodiscard]] QVariantMap aiPrivacyDiagnostics() const;
     [[nodiscard]] QVariantList mcpServers() const;
     [[nodiscard]] QVariantList mcpTools() const;
@@ -515,6 +520,11 @@ public:
     Q_INVOKABLE bool cancelAiMessage();
     Q_INVOKABLE bool approveAiTool();
     Q_INVOKABLE bool denyAiTool();
+    Q_INVOKABLE bool approveAiToolWithRule(const QString &duration, const QString &matcher, const QString &pattern);
+    Q_INVOKABLE bool denyAiToolWithRule(const QString &duration, const QString &matcher, const QString &pattern);
+    Q_INVOKABLE bool updateAiPermissionRule(const QString &id, const QString &matcher, const QString &pattern,
+                                            bool enabled);
+    Q_INVOKABLE bool deleteAiPermissionRule(const QString &id);
     Q_INVOKABLE bool takeAiControl();
     Q_INVOKABLE bool resumeAiAgentControl();
     Q_INVOKABLE bool retryAiMessage();
@@ -567,6 +577,7 @@ signals:
     void applicationSettingsChanged();
     void credentialVaultChanged();
     void aiConversationChanged();
+    void aiPermissionRulesChanged();
     void aiModelsChanged();
     void aiPrivacyDiagnosticsChanged();
     void mcpConfigurationChanged();
@@ -722,7 +733,6 @@ private:
         bool inputHistoryBufferReliable = true;
         bool aiLastPreferFailure = false;
         bool aiLastCommandRequest = false;
-        bool aiFirstWriteApproved = false;
         bool workbenchOpen = false;
         bool composerOpen = false;
         bool running = false;
@@ -753,6 +763,10 @@ private:
     void configureAiDebugTrace();
     void appendAiDebugTrace(const QString &event, const QJsonObject &payload = {});
     void initializeAiConversationHistory();
+    void loadAiPermissionRules();
+    [[nodiscard]] bool replaceAndPersistAiPermissionRules(std::vector<ai::AiPermissionRule> rules);
+    [[nodiscard]] bool applyPendingAiPermissionRule(TerminalTab &tab, const QString &duration, const QString &matcher,
+                                                    const QString &pattern, ai::AiPermissionDisposition disposition);
     void persistAiConversation(const TerminalTab &tab);
     [[nodiscard]] ai::AiContextBundle buildAiContext(TerminalTab &tab, bool preferLastFailure);
     [[nodiscard]] ai::AiTerminalReadSnapshot aiReadSnapshot(const TerminalTab &tab) const;
@@ -889,6 +903,7 @@ private:
     workbench::NoteStore m_noteStore;
     workbench::WorkspaceStateStore m_workspaceStateStore;
     ai::AiActivityModel m_aiActivity;
+    ai::AiPermissionRuleStore m_aiPermissionRuleStore;
     ai::McpRuntimeManager m_mcpRuntime;
     workbench::WorkspaceState m_workspaceState;
     std::vector<workbench::ScriptDefinition> m_scripts;
@@ -921,6 +936,7 @@ private:
     QPointer<QNetworkReply> m_aiModelsReply;
     QStringList m_aiAvailableModels;
     QString m_aiModelsError;
+    QString m_aiPermissionRuleError;
     quint64 m_aiModelsRequestGeneration = 0;
     bool m_aiModelsLoading = false;
     ai::AiContextBroker m_aiContextBroker;

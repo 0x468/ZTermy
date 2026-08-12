@@ -196,6 +196,34 @@ Rectangle {
         return ["read-only", "ask", "edit", "auto", "yolo"][aiPermissionBox.currentIndex];
     }
 
+    function aiRuleMatcherIndex(token) {
+        return token === "prefix" ? 1 : token === "glob" ? 2 : token === "regex" ? 3 : token === "all" ? 4 : 0;
+    }
+
+    function aiRuleCapabilityLabel(token) {
+        if (token === "pty-input")
+            return qsTr("Terminal input");
+        if (token === "terminal-interrupt")
+            return qsTr("Terminal interrupt");
+        if (token === "runbook")
+            return qsTr("Runbook changes");
+        if (token === "sftp-download")
+            return qsTr("SFTP download");
+        if (token === "sftp-upload")
+            return qsTr("SFTP upload");
+        if (token === "mcp-tool")
+            return qsTr("MCP tool");
+        return qsTr("Terminal command");
+    }
+
+    function aiRuleScopeLabel(rule) {
+        if (rule.duration === "profile")
+            return rule.profileName.length > 0 ? qsTr("Profile · %1").arg(rule.profileName) : qsTr("Profile");
+        if (rule.duration === "global")
+            return qsTr("All Profiles");
+        return qsTr("This session");
+    }
+
     function aiEndpointScopeLabel(token) {
         if (token === "loopback")
             return qsTr("Loopback device");
@@ -1459,7 +1487,7 @@ Rectangle {
                             id: aiPermissionNote
 
                             Layout.fillWidth: true
-                            text: qsTr("High-risk commands always require explicit approval unless a separate high-risk session grant is active.")
+                            text: qsTr("The mode supplies the default behavior. Rules created from an approval card override it for a matching action and scope.")
                             color: Theme.textMuted
                             wrapMode: Text.WordWrap
                             font.family: Theme.uiFont
@@ -1518,6 +1546,154 @@ Rectangle {
                                 pane.presentStatus(saved ? qsTr("AI provider saved.") : qsTr("The provider settings or API key could not be saved."), !saved, saved);
                                 if (saved)
                                     aiApiKeyField.text = "";
+                            }
+                        }
+                    }
+                }
+            }
+
+            SectionCard {
+                Layout.fillWidth: true
+                visible: pane.currentCategory === "ai"
+                compact: true
+                heading: qsTr("Agent permission rules")
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacingControl
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("Ask mode can remember an allow or deny choice for this session, one saved Profile, or all Profiles. Exact, prefix, wildcard, and regular-expression matching are supported.")
+                        color: Theme.textMuted
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        visible: pane.controller.aiPermissionRuleError.length > 0
+                        text: pane.controller.aiPermissionRuleError
+                        color: Theme.danger
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textCompact
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        visible: pane.controller.aiPermissionRules.length === 0
+                        text: qsTr("No remembered Agent rules yet.")
+                        color: Theme.textSubtle
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
+                    }
+
+                    Repeater {
+                        model: pane.controller.aiPermissionRules
+
+                        delegate: Rectangle {
+                            id: aiRuleRow
+
+                            required property var modelData
+                            property string patternDraft: modelData.pattern
+                            property bool enabledDraft: modelData.enabled
+                            Layout.fillWidth: true
+                            implicitHeight: aiRuleContent.implicitHeight + 18
+                            radius: Theme.radiusControl
+                            color: Theme.controlBackground
+                            border.color: Theme.border
+
+                            ColumnLayout {
+                                id: aiRuleContent
+
+                                anchors.fill: parent
+                                anchors.margins: 9
+                                spacing: 7
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 7
+
+                                    Rectangle {
+                                        Layout.preferredWidth: 8
+                                        Layout.preferredHeight: 8
+                                        radius: 4
+                                        color: aiRuleRow.modelData.decision === "allow" ? Theme.success : aiRuleRow.modelData.decision === "deny" ? Theme.danger : Theme.warning
+                                    }
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: "%1 · %2 · %3".arg(aiRuleRow.modelData.decision === "allow" ? qsTr("Allow") : aiRuleRow.modelData.decision === "deny" ? qsTr("Deny") : qsTr("Ask")).arg(pane.aiRuleCapabilityLabel(aiRuleRow.modelData.capability)).arg(pane.aiRuleScopeLabel(aiRuleRow.modelData))
+                                        color: Theme.text
+                                        elide: Text.ElideRight
+                                        font.family: Theme.uiFont
+                                        font.pixelSize: Theme.textLabel
+                                        font.weight: Font.DemiBold
+                                    }
+
+                                    AppSwitch {
+                                        id: aiRuleEnabledSwitch
+
+                                        checked: aiRuleRow.enabledDraft
+                                        accessibleName: qsTr("Enable this Agent rule")
+                                        onToggled: aiRuleRow.enabledDraft = checked
+                                    }
+                                }
+
+                                GridLayout {
+                                    Layout.fillWidth: true
+                                    columns: pane.compactLayout ? 1 : 2
+                                    columnSpacing: 8
+                                    rowSpacing: 7
+
+                                    AppComboBox {
+                                        id: aiRuleMatcherBox
+
+                                        Layout.fillWidth: true
+                                        model: ["exact", "prefix", "glob", "regex", "all"]
+                                        displayTextModel: [qsTr("Exact action"), qsTr("Starts with"), qsTr("Wildcard"), qsTr("Regular expression"), qsTr("Any action of this type")]
+                                        currentIndex: pane.aiRuleMatcherIndex(aiRuleRow.modelData.matcher)
+                                        accessibleName: qsTr("Rule matcher")
+                                    }
+
+                                    AppTextField {
+                                        Layout.fillWidth: true
+                                        visible: aiRuleMatcherBox.currentValue !== "all"
+                                        compact: true
+                                        text: aiRuleRow.patternDraft
+                                        placeholderText: qsTr("Command or action pattern")
+                                        accessibleName: placeholderText
+                                        onTextEdited: aiRuleRow.patternDraft = text
+                                    }
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+
+                                    Item {
+                                        Layout.fillWidth: true
+                                    }
+
+                                    ActionButton {
+                                        text: qsTr("Remove")
+                                        iconName: "trash"
+                                        accessibleName: qsTr("Remove this Agent permission rule")
+                                        onClicked: pane.controller.deleteAiPermissionRule(aiRuleRow.modelData.id)
+                                    }
+
+                                    ActionButton {
+                                        text: qsTr("Save")
+                                        iconName: "save"
+                                        variant: "primary"
+                                        accessibleName: qsTr("Save this Agent permission rule")
+                                        onClicked: {
+                                            const saved = pane.controller.updateAiPermissionRule(aiRuleRow.modelData.id, aiRuleMatcherBox.currentValue, aiRuleRow.patternDraft, aiRuleRow.enabledDraft);
+                                            pane.presentStatus(saved ? qsTr("Agent rule saved.") : qsTr("The Agent rule could not be saved."), !saved, saved);
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

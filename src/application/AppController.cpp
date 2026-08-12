@@ -164,6 +164,11 @@ private:
     return QFileInfo(settingsPath).dir().filePath(QStringLiteral("ai_activity.json"));
 }
 
+[[nodiscard]] QString siblingAiPermissionRulesFile(const QString &settingsPath)
+{
+    return QFileInfo(settingsPath).dir().filePath(QStringLiteral("ai_permission_rules.json"));
+}
+
 [[nodiscard]] QString siblingMcpServersFile(const QString &settingsPath)
 {
     return QFileInfo(settingsPath).dir().filePath(QStringLiteral("mcp_servers.json"));
@@ -231,6 +236,128 @@ aiPermissionMode(const ztermy::config::AiPermissionPreference preference) noexce
             return ztermy::ai::AiPermissionMode::ask;
     }
     return ztermy::ai::AiPermissionMode::ask;
+}
+
+[[nodiscard]] QString aiPermissionCapabilityToken(const ztermy::ai::AiPermissionCapability capability)
+{
+    using ztermy::ai::AiPermissionCapability;
+    switch (capability)
+    {
+        case AiPermissionCapability::terminalCommand:
+            return QStringLiteral("terminal-command");
+        case AiPermissionCapability::ptyInput:
+            return QStringLiteral("pty-input");
+        case AiPermissionCapability::terminalInterrupt:
+            return QStringLiteral("terminal-interrupt");
+        case AiPermissionCapability::runbookMutation:
+            return QStringLiteral("runbook");
+        case AiPermissionCapability::sftpDownload:
+            return QStringLiteral("sftp-download");
+        case AiPermissionCapability::sftpUpload:
+            return QStringLiteral("sftp-upload");
+        case AiPermissionCapability::mcpTool:
+            return QStringLiteral("mcp-tool");
+    }
+    return QStringLiteral("terminal-command");
+}
+
+[[nodiscard]] QString aiPermissionMatcherToken(const ztermy::ai::AiPermissionRuleMatcher matcher)
+{
+    using ztermy::ai::AiPermissionRuleMatcher;
+    switch (matcher)
+    {
+        case AiPermissionRuleMatcher::exact:
+            return QStringLiteral("exact");
+        case AiPermissionRuleMatcher::prefix:
+            return QStringLiteral("prefix");
+        case AiPermissionRuleMatcher::glob:
+            return QStringLiteral("glob");
+        case AiPermissionRuleMatcher::regex:
+            return QStringLiteral("regex");
+        case AiPermissionRuleMatcher::all:
+            return QStringLiteral("all");
+    }
+    return QStringLiteral("exact");
+}
+
+[[nodiscard]] QString aiPermissionDurationToken(const ztermy::ai::AiPermissionRuleDuration duration)
+{
+    using ztermy::ai::AiPermissionRuleDuration;
+    switch (duration)
+    {
+        case AiPermissionRuleDuration::once:
+            return QStringLiteral("once");
+        case AiPermissionRuleDuration::session:
+            return QStringLiteral("session");
+        case AiPermissionRuleDuration::profile:
+            return QStringLiteral("profile");
+        case AiPermissionRuleDuration::global:
+            return QStringLiteral("global");
+    }
+    return QStringLiteral("session");
+}
+
+[[nodiscard]] QString aiPermissionDispositionToken(const ztermy::ai::AiPermissionDisposition disposition)
+{
+    using ztermy::ai::AiPermissionDisposition;
+    switch (disposition)
+    {
+        case AiPermissionDisposition::allow:
+            return QStringLiteral("allow");
+        case AiPermissionDisposition::ask:
+            return QStringLiteral("ask");
+        case AiPermissionDisposition::deny:
+            return QStringLiteral("deny");
+    }
+    return QStringLiteral("ask");
+}
+
+[[nodiscard]] std::optional<ztermy::ai::AiPermissionRuleMatcher> parseAiPermissionMatcher(const QString &token)
+{
+    using ztermy::ai::AiPermissionRuleMatcher;
+    if (token == QStringLiteral("exact"))
+    {
+        return AiPermissionRuleMatcher::exact;
+    }
+    if (token == QStringLiteral("prefix"))
+    {
+        return AiPermissionRuleMatcher::prefix;
+    }
+    if (token == QStringLiteral("glob"))
+    {
+        return AiPermissionRuleMatcher::glob;
+    }
+    if (token == QStringLiteral("regex"))
+    {
+        return AiPermissionRuleMatcher::regex;
+    }
+    if (token == QStringLiteral("all"))
+    {
+        return AiPermissionRuleMatcher::all;
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] std::optional<ztermy::ai::AiPermissionRuleDuration> parseAiPermissionDuration(const QString &token)
+{
+    using ztermy::ai::AiPermissionRuleDuration;
+    if (token == QStringLiteral("once"))
+    {
+        return AiPermissionRuleDuration::once;
+    }
+    if (token == QStringLiteral("session"))
+    {
+        return AiPermissionRuleDuration::session;
+    }
+    if (token == QStringLiteral("profile"))
+    {
+        return AiPermissionRuleDuration::profile;
+    }
+    if (token == QStringLiteral("global"))
+    {
+        return AiPermissionRuleDuration::global;
+    }
+    return std::nullopt;
 }
 
 [[nodiscard]] QString semanticCapabilityToken(const ztermy::terminal::TerminalSemanticCapability capability)
@@ -1692,6 +1819,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
       m_noteStore(siblingNotesDirectory(m_settingsStore.filePath())),
       m_workspaceStateStore(siblingWorkspaceStateFile(m_settingsStore.filePath())),
       m_aiActivity(siblingAiAuditFile(m_settingsStore.filePath())),
+      m_aiPermissionRuleStore(siblingAiPermissionRulesFile(m_settingsStore.filePath())),
       m_mcpRuntime(siblingMcpServersFile(m_settingsStore.filePath()),
                    [this] {
                        emit mcpConfigurationChanged();
@@ -1723,6 +1851,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     loadHostProfiles();
     loadPortForwardingRules();
     loadApplicationSettings();
+    loadAiPermissionRules();
     initializeAiDebugTrace();
     m_mcpRuntime.initialize();
     initializeAiConversationHistory();
@@ -1761,6 +1890,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
       m_noteStore(siblingNotesDirectory(m_settingsStore.filePath())),
       m_workspaceStateStore(siblingWorkspaceStateFile(m_settingsStore.filePath())),
       m_aiActivity(siblingAiAuditFile(m_settingsStore.filePath())),
+      m_aiPermissionRuleStore(siblingAiPermissionRulesFile(m_settingsStore.filePath())),
       m_mcpRuntime(siblingMcpServersFile(m_settingsStore.filePath()),
                    [this] {
                        emit mcpConfigurationChanged();
@@ -1795,6 +1925,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     loadHostProfiles();
     loadPortForwardingRules();
     loadApplicationSettings();
+    loadAiPermissionRules();
     initializeAiDebugTrace();
     m_mcpRuntime.initialize();
     initializeAiConversationHistory();
@@ -2994,6 +3125,43 @@ QVariantMap AppController::aiPrivacyDiagnostics() const
     return ai::buildAiPrivacyDiagnostics(snapshot).toVariantMap();
 }
 
+QVariantList AppController::aiPermissionRules() const
+{
+    QVariantList values;
+    values.reserve(static_cast<qsizetype>(m_aiActionToolDispatcher.permissionRules().size()));
+    for (const auto &rule : m_aiActionToolDispatcher.permissionRules())
+    {
+        QString profileName;
+        if (!rule.profileId.empty())
+        {
+            const auto profile = std::ranges::find_if(m_profiles, [&rule](const ssh::SshProfile &candidate) {
+                return candidate.id == rule.profileId;
+            });
+            if (profile != m_profiles.end())
+            {
+                profileName = utf8QString(profile->name);
+            }
+        }
+        values.push_back(QVariantMap{
+            {QStringLiteral("id"), utf8QString(rule.id)},
+            {QStringLiteral("capability"), aiPermissionCapabilityToken(rule.capability)},
+            {QStringLiteral("matcher"), aiPermissionMatcherToken(rule.matcher)},
+            {QStringLiteral("pattern"), utf8QString(rule.pattern)},
+            {QStringLiteral("decision"), aiPermissionDispositionToken(rule.disposition)},
+            {QStringLiteral("duration"), aiPermissionDurationToken(rule.duration)},
+            {QStringLiteral("profileId"), utf8QString(rule.profileId)},
+            {QStringLiteral("profileName"), profileName},
+            {QStringLiteral("enabled"), rule.enabled},
+        });
+    }
+    return values;
+}
+
+QString AppController::aiPermissionRuleError() const
+{
+    return m_aiPermissionRuleError;
+}
+
 QVariantMap AppController::activeAiToolApproval() const
 {
     const TerminalTab *tab = activeTab();
@@ -3014,6 +3182,7 @@ QVariantMap AppController::activeAiToolApproval() const
                 {QStringLiteral("kind"), QStringLiteral("mcp_tool")},
                 {QStringLiteral("sessionId"), tab->id},
                 {QStringLiteral("sessionGeneration"), QVariant::fromValue<qulonglong>(tab->reconnectGeneration)},
+                {QStringLiteral("ruleSupported"), false},
                 {QStringLiteral("highRisk"), true},
                 {QStringLiteral("riskReason"),
                  tr("MCP tools run in an external process and their descriptions and results are untrusted.")}};
@@ -3089,6 +3258,13 @@ QVariantMap AppController::activeAiToolApproval() const
             {QStringLiteral("kind"), actionKind},
             {QStringLiteral("sessionId"), utf8QString(action.target.sessionId)},
             {QStringLiteral("sessionGeneration"), QVariant::fromValue<qulonglong>(action.target.sessionGeneration)},
+            {QStringLiteral("ruleSupported"), true},
+            {QStringLiteral("ruleSubject"), utf8QString(action.permissionSubject)},
+            {QStringLiteral("ruleCapability"), aiPermissionCapabilityToken(action.permissionCapability)},
+            {QStringLiteral("ruleDefaultMatcher"), action.permissionCapability == ai::AiPermissionCapability::ptyInput
+                                                       ? QStringLiteral("all")
+                                                       : QStringLiteral("exact")},
+            {QStringLiteral("profileAvailable"), !tab->sourceProfileId.isEmpty()},
             {QStringLiteral("highRisk"), action.risk.highRisk()},
             {QStringLiteral("riskReason"), utf8QString(action.risk.reason)}};
 }
@@ -7592,7 +7768,6 @@ bool AppController::restoreAiConversationHistory(const QString &conversationId)
     tab->aiConversationId = stored->id;
     tab->aiState = QStringLiteral("complete");
     tab->aiError.clear();
-    tab->aiFirstWriteApproved = false;
     tab->aiTurnBudget.reset();
     tab->pendingAiAction.reset();
     emit aiConversationChanged();
@@ -7660,6 +7835,109 @@ bool AppController::cancelAiMessage()
     return tab->aiTurnRunner->cancel();
 }
 
+bool AppController::applyPendingAiPermissionRule(TerminalTab &tab, const QString &durationToken,
+                                                 const QString &matcherToken, const QString &pattern,
+                                                 const ai::AiPermissionDisposition disposition)
+{
+    if (!tab.pendingAiAction.has_value())
+    {
+        return false;
+    }
+    const auto duration = parseAiPermissionDuration(durationToken);
+    if (!duration.has_value())
+    {
+        return false;
+    }
+    if (*duration == ai::AiPermissionRuleDuration::once)
+    {
+        return true;
+    }
+    const auto matcher = parseAiPermissionMatcher(matcherToken);
+    if (!matcher.has_value())
+    {
+        return false;
+    }
+    if (*duration == ai::AiPermissionRuleDuration::profile && tab.sourceProfileId.isEmpty())
+    {
+        m_aiPermissionRuleError = tr("This terminal is not linked to a saved Profile.");
+        emit aiPermissionRulesChanged();
+        return false;
+    }
+
+    const auto &action = *tab.pendingAiAction;
+    ai::AiPermissionRule rule{
+        .id = utf8String(QUuid::createUuid().toString(QUuid::WithoutBraces)),
+        .capability = action.permissionCapability,
+        .matcher = *matcher,
+        .pattern = *matcher == ai::AiPermissionRuleMatcher::all
+                       ? std::string{}
+                       : utf8String(pattern.isEmpty() ? utf8QString(action.permissionSubject) : pattern),
+        .disposition = disposition,
+        .duration = *duration,
+        .sessionId = *duration == ai::AiPermissionRuleDuration::session ? utf8String(tab.id) : std::string{},
+        .profileId =
+            *duration == ai::AiPermissionRuleDuration::profile ? utf8String(tab.sourceProfileId) : std::string{},
+    };
+    std::vector<ai::AiPermissionRule> rules = m_aiActionToolDispatcher.permissionRules();
+    rules.push_back(std::move(rule));
+    return replaceAndPersistAiPermissionRules(std::move(rules));
+}
+
+bool AppController::approveAiToolWithRule(const QString &duration, const QString &matcher, const QString &pattern)
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || tab->pendingAiMcpCall.has_value() || !tab->pendingAiAction.has_value()
+        || !applyPendingAiPermissionRule(*tab, duration, matcher, pattern, ai::AiPermissionDisposition::allow))
+    {
+        return false;
+    }
+    return approveAiTool();
+}
+
+bool AppController::denyAiToolWithRule(const QString &duration, const QString &matcher, const QString &pattern)
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || tab->pendingAiMcpCall.has_value() || !tab->pendingAiAction.has_value()
+        || !applyPendingAiPermissionRule(*tab, duration, matcher, pattern, ai::AiPermissionDisposition::deny))
+    {
+        return false;
+    }
+    return denyAiTool();
+}
+
+bool AppController::updateAiPermissionRule(const QString &id, const QString &matcherToken, const QString &pattern,
+                                           const bool enabled)
+{
+    const auto matcher = parseAiPermissionMatcher(matcherToken);
+    if (!matcher.has_value())
+    {
+        return false;
+    }
+    std::vector<ai::AiPermissionRule> rules = m_aiActionToolDispatcher.permissionRules();
+    const auto target = std::ranges::find_if(rules, [&id](const ai::AiPermissionRule &rule) {
+        return rule.id == utf8String(id);
+    });
+    if (target == rules.end())
+    {
+        return false;
+    }
+    target->matcher = *matcher;
+    target->pattern = *matcher == ai::AiPermissionRuleMatcher::all ? std::string{} : utf8String(pattern);
+    target->enabled = enabled;
+    return replaceAndPersistAiPermissionRules(std::move(rules));
+}
+
+bool AppController::deleteAiPermissionRule(const QString &id)
+{
+    std::vector<ai::AiPermissionRule> rules = m_aiActionToolDispatcher.permissionRules();
+    const std::string ruleId = utf8String(id);
+    const auto previousSize = rules.size();
+    std::erase_if(rules, [&ruleId](const ai::AiPermissionRule &rule) {
+        return rule.id == ruleId;
+    });
+    return rules.size() != previousSize && replaceAndPersistAiPermissionRules(std::move(rules));
+}
+
 bool AppController::approveAiTool()
 {
     TerminalTab *tab = activeTab();
@@ -7695,10 +7973,6 @@ bool AppController::approveAiTool()
     else
     {
         output = executeAiTerminalAction(*tab, action);
-        if (requiresLiveTerminal)
-        {
-            tab->aiFirstWriteApproved = true;
-        }
         static_cast<void>(m_aiActionToolDispatcher.complete(action, ai::AiToolDispatchState::succeeded, output));
     }
     const QString activityResult = aiActivityResultCode(output);
@@ -7922,7 +8196,6 @@ void AppController::clearAiConversation()
     tab->aiLastCommandRequest = false;
     tab->aiContextPreview.clear();
     tab->aiContextItems.clear();
-    tab->aiFirstWriteApproved = false;
     tab->aiTurnBudget.reset();
     tab->pendingAiAction.reset();
     tab->pendingAiMcpCall.reset();
@@ -8941,9 +9214,8 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                                             .target = {.sessionId = utf8String(target->id),
                                                        .sessionGeneration = target->reconnectGeneration},
                                             .permissionMode = aiPermissionMode(m_settings.aiPermission),
-                                            .writable = target->running && (target->ssh || target->local),
-                                            .savedHost = !target->sourceProfileId.isEmpty(),
-                                            .firstWriteApproved = target->aiFirstWriteApproved},
+                                            .profileId = utf8String(target->sourceProfileId),
+                                            .writable = target->running && (target->ssh || target->local)},
                     *target->aiTurnBudget);
                 if (plan.disposition == ai::AiActionToolDisposition::respond || !plan.action.has_value())
                 {
@@ -11754,6 +12026,62 @@ void AppController::loadApplicationSettings()
             break;
     }
     m_credentialVaults->select(selected);
+}
+
+void AppController::loadAiPermissionRules()
+{
+    auto rules = m_aiPermissionRuleStore.load();
+    if (!rules)
+    {
+        m_aiPermissionRuleError = tr("Agent permission rules could not be loaded.");
+        qCWarning(appControllerLog) << "Unable to load AI permission rules:" << rules.error();
+        return;
+    }
+    if (!m_aiActionToolDispatcher.replacePermissionRules(std::move(*rules)))
+    {
+        m_aiPermissionRuleError = tr("Agent permission rules are invalid.");
+        qCWarning(appControllerLog) << "Loaded AI permission rules failed validation";
+        return;
+    }
+    if (m_aiPermissionRuleStore.lastLoadRecoveredFromBackup())
+    {
+        qCWarning(appControllerLog) << "Recovered AI permission rules from the last-known-good backup";
+        recordPersistenceRecovery();
+    }
+    m_aiPermissionRuleError.clear();
+}
+
+bool AppController::replaceAndPersistAiPermissionRules(std::vector<ai::AiPermissionRule> rules)
+{
+    const std::vector<ai::AiPermissionRule> previous = m_aiActionToolDispatcher.permissionRules();
+    if (!m_aiActionToolDispatcher.replacePermissionRules(std::move(rules)))
+    {
+        m_aiPermissionRuleError = tr("The Agent permission rule is invalid.");
+        emit aiPermissionRulesChanged();
+        return false;
+    }
+
+    std::vector<ai::AiPermissionRule> persistent;
+    for (const auto &rule : m_aiActionToolDispatcher.permissionRules())
+    {
+        if (rule.duration == ai::AiPermissionRuleDuration::profile
+            || rule.duration == ai::AiPermissionRuleDuration::global)
+        {
+            persistent.push_back(rule);
+        }
+    }
+    const auto saved = m_aiPermissionRuleStore.save(persistent);
+    if (!saved)
+    {
+        static_cast<void>(m_aiActionToolDispatcher.replacePermissionRules(previous));
+        m_aiPermissionRuleError = tr("Agent permission rules could not be saved.");
+        qCWarning(appControllerLog) << "Unable to save AI permission rules:" << saved.error();
+        emit aiPermissionRulesChanged();
+        return false;
+    }
+    m_aiPermissionRuleError.clear();
+    emit aiPermissionRulesChanged();
+    return true;
 }
 
 void AppController::initializeActionRegistry()

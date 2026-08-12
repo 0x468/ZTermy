@@ -19,10 +19,8 @@ struct AiActionToolContext final
     std::uint64_t turnId = 0;
     AiSessionTarget target;
     AiPermissionMode permissionMode = AiPermissionMode::ask;
+    std::string profileId;
     bool writable = true;
-    bool savedHost = false;
-    bool firstWriteApproved = false;
-    bool highRiskSessionGrant = false;
 };
 
 enum class AiActionToolDisposition : std::uint8_t
@@ -52,6 +50,8 @@ struct AiTerminalAction final
     std::string commandId;
     std::string ptyData;
     std::string payloadJson;
+    std::string permissionSubject;
+    AiPermissionCapability permissionCapability = AiPermissionCapability::terminalCommand;
     bool appendEnter = false;
     AiCommandRiskReport risk;
 };
@@ -77,11 +77,16 @@ public:
     [[nodiscard]] bool resumeAgent(const AiSessionTarget &target, std::string_view conversationId);
     [[nodiscard]] bool agentHasControl(const AiSessionTarget &target, std::string_view conversationId) const;
     [[nodiscard]] bool userHasControl(const AiSessionTarget &target, std::string_view conversationId) const;
+    [[nodiscard]] bool replacePermissionRules(std::vector<AiPermissionRule> rules);
+    [[nodiscard]] bool addPermissionRule(AiPermissionRule rule);
+    [[nodiscard]] bool removePermissionRule(std::string_view ruleId);
+    [[nodiscard]] const std::vector<AiPermissionRule> &permissionRules() const noexcept;
     void clearSession(const AiSessionTarget &target);
     void clearConversation(std::string_view conversationId);
 
 private:
     AiPermissionPolicy m_permissionPolicy;
+    AiPermissionRuleEngine m_permissionRules;
     AiToolDispatchLedger m_ledger{AiToolDispatchLimits{.maximumArgumentsBytes = std::size_t{20} * 1024}};
     AiSessionWriteOwnership m_ownership;
 };

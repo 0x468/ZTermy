@@ -73,3 +73,11 @@ use a profile-scoped rule.
 - YOLO is intentionally literal. Its remaining failures are technical
   invariants, not disguised approval prompts.
 
+## Implementation note
+
+The `0.3.6` implementation stores session rules only in memory and persists
+Profile/global rules in a bounded, versioned `ai_permission_rules.json` file
+with last-known-good recovery. Deny wins over ask, which wins over allow when
+multiple rules match. A once choice approves or denies only the visible card
+and is not persisted. The Settings rule manager edits matching, toggles a rule,
+and revokes it without requiring a separate security workflow.

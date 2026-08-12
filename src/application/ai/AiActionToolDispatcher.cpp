@@ -108,6 +108,27 @@ constexpr std::size_t maximumArgumentsBytes = std::size_t{20} * 1024;
     return AiActionToolPlan{.outputJson = std::move(output), .sideEffecting = sideEffecting};
 }
 
+[[nodiscard]] AiPermissionDisposition mutationDisposition(const AiPermissionMode mode,
+                                                          const std::optional<AiPermissionRuleMatch> &rule)
+{
+    if (rule.has_value())
+    {
+        return rule->disposition;
+    }
+    switch (mode)
+    {
+        case AiPermissionMode::readOnly:
+            return AiPermissionDisposition::deny;
+        case AiPermissionMode::ask:
+            return AiPermissionDisposition::ask;
+        case AiPermissionMode::edit:
+        case AiPermissionMode::automatic:
+        case AiPermissionMode::yolo:
+            return AiPermissionDisposition::allow;
+    }
+    return AiPermissionDisposition::deny;
+}
+
 } // namespace
 
 std::vector<AiToolDefinition> AiActionToolDispatcher::definitions()
@@ -356,35 +377,50 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
     }
     if (saveRunbook)
     {
-        if (context.permissionMode == AiPermissionMode::readOnly)
+        const auto runbookName =
+            requestedRunbook.toObject().value(QStringLiteral("name")).toString().toUtf8().toStdString();
+        const auto rule = m_permissionRules.evaluate({.capability = AiPermissionCapability::runbookMutation,
+                                                      .subject = runbookName,
+                                                      .sessionId = context.target.sessionId,
+                                                      .profileId = context.profileId});
+        const auto disposition = mutationDisposition(context.permissionMode, rule);
+        if (disposition == AiPermissionDisposition::deny)
         {
             return fail(QStringLiteral("permission_denied"),
-                        QStringLiteral("Read-only mode does not allow saving a runbook."));
+                        QStringLiteral("The active mode or permission rule denied saving the runbook."));
         }
         const auto budgetDecision = budget.authorize(true);
         if (budgetDecision != AiAgentBudgetDecision::allow)
         {
             return fail(budgetCode(budgetDecision), QStringLiteral("The AI turn action budget was exhausted."));
         }
-        const bool execute = context.permissionMode == AiPermissionMode::edit
-                             || context.permissionMode == AiPermissionMode::automatic
-                             || context.permissionMode == AiPermissionMode::yolo;
+        const bool execute = disposition == AiPermissionDisposition::allow;
         static_cast<void>(
             m_ledger.transition(key, execute ? AiToolDispatchState::running : AiToolDispatchState::awaitingApproval));
-        return AiActionToolPlan{.disposition =
-                                    execute ? AiActionToolDisposition::execute : AiActionToolDisposition::awaitApproval,
-                                .action = AiTerminalAction{.dispatchKey = key,
-                                                           .target = context.target,
-                                                           .kind = AiTerminalActionKind::saveRunbook,
-                                                           .payloadJson = json(requestedRunbook.toObject())},
-                                .sideEffecting = true};
+        return AiActionToolPlan{
+            .disposition = execute ? AiActionToolDisposition::execute : AiActionToolDisposition::awaitApproval,
+            .action = AiTerminalAction{.dispatchKey = key,
+                                       .target = context.target,
+                                       .kind = AiTerminalActionKind::saveRunbook,
+                                       .payloadJson = json(requestedRunbook.toObject()),
+                                       .permissionSubject = runbookName,
+                                       .permissionCapability = AiPermissionCapability::runbookMutation},
+            .sideEffecting = true};
     }
     if (sftpDownload || sftpUpload)
     {
-        if (context.permissionMode == AiPermissionMode::readOnly)
+        const auto capability =
+            sftpDownload ? AiPermissionCapability::sftpDownload : AiPermissionCapability::sftpUpload;
+        const auto subject = requestedRemotePath.toString().toUtf8().toStdString();
+        const auto rule = m_permissionRules.evaluate({.capability = capability,
+                                                      .subject = subject,
+                                                      .sessionId = context.target.sessionId,
+                                                      .profileId = context.profileId});
+        const auto disposition = mutationDisposition(context.permissionMode, rule);
+        if (disposition == AiPermissionDisposition::deny)
         {
             return fail(QStringLiteral("permission_denied"),
-                        QStringLiteral("Read-only mode does not allow SFTP mutations."));
+                        QStringLiteral("The active mode or permission rule denied the SFTP mutation."));
         }
         const auto budgetDecision = budget.authorize(true);
         if (budgetDecision != AiAgentBudgetDecision::allow)
@@ -393,9 +429,7 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
         }
         const QJsonObject payload{{QStringLiteral("local_path"), requestedLocalPath},
                                   {QStringLiteral("remote_path"), requestedRemotePath}};
-        const bool execute = context.permissionMode == AiPermissionMode::edit
-                             || context.permissionMode == AiPermissionMode::automatic
-                             || context.permissionMode == AiPermissionMode::yolo;
+        const bool execute = disposition == AiPermissionDisposition::allow;
         static_cast<void>(
             m_ledger.transition(key, execute ? AiToolDispatchState::running : AiToolDispatchState::awaitingApproval));
         return AiActionToolPlan{
@@ -404,7 +438,9 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
                                        .target = context.target,
                                        .kind = sftpDownload ? AiTerminalActionKind::enqueueSftpDownload
                                                             : AiTerminalActionKind::enqueueSftpUpload,
-                                       .payloadJson = json(payload)},
+                                       .payloadJson = json(payload),
+                                       .permissionSubject = subject,
+                                       .permissionCapability = capability},
             .sideEffecting = true};
     }
     if (!context.writable)
@@ -413,15 +449,24 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
                     QStringLiteral("The target terminal session is not writable."));
     }
     const auto risk = runCommand ? AiPermissionPolicy::classifyCommand(command) : AiCommandRiskReport{};
-    const auto decision =
-        m_permissionPolicy.decide(AiPermissionRequest{.mode = context.permissionMode,
-                                                      .write = true,
-                                                      .schemaValid = schemaValid,
-                                                      .scopeValid = scopeValid,
-                                                      .firstWriteApproved = context.firstWriteApproved,
-                                                      .savedHost = context.savedHost,
-                                                      .highRisk = risk.highRisk(),
-                                                      .highRiskSessionGrant = context.highRiskSessionGrant});
+    const auto capability = runCommand   ? AiPermissionCapability::terminalCommand
+                            : writeToPty ? AiPermissionCapability::ptyInput
+                                         : AiPermissionCapability::terminalInterrupt;
+    const std::string_view permissionSubject = runCommand   ? std::string_view{command}
+                                               : writeToPty ? std::string_view{ptyData}
+                                                            : std::string_view{commandId};
+    const auto rule = m_permissionRules.evaluate({.capability = capability,
+                                                  .subject = permissionSubject,
+                                                  .sessionId = context.target.sessionId,
+                                                  .profileId = context.profileId});
+    const auto decision = m_permissionPolicy.decide(
+        AiPermissionRequest{.mode = context.permissionMode,
+                            .write = true,
+                            .schemaValid = schemaValid,
+                            .scopeValid = scopeValid,
+                            .explicitDeny = rule.has_value() && rule->disposition == AiPermissionDisposition::deny,
+                            .explicitAsk = rule.has_value() && rule->disposition == AiPermissionDisposition::ask,
+                            .explicitAllow = rule.has_value() && rule->disposition == AiPermissionDisposition::allow});
     AiTerminalAction action{.dispatchKey = key,
                             .target = context.target,
                             .kind = runCommand   ? AiTerminalActionKind::runCommand
@@ -430,6 +475,8 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
                             .command = command,
                             .commandId = commandId,
                             .ptyData = ptyData,
+                            .permissionSubject = std::string(permissionSubject),
+                            .permissionCapability = capability,
                             .appendEnter = requestedAppendEnter.toBool(),
                             .risk = risk};
     if (decision.disposition == AiPermissionDisposition::deny)
@@ -505,9 +552,30 @@ bool AiActionToolDispatcher::userHasControl(const AiSessionTarget &target, const
     return m_ownership.userHasControl(target, conversationId);
 }
 
+bool AiActionToolDispatcher::replacePermissionRules(std::vector<AiPermissionRule> rules)
+{
+    return m_permissionRules.replace(std::move(rules));
+}
+
+bool AiActionToolDispatcher::addPermissionRule(AiPermissionRule rule)
+{
+    return m_permissionRules.add(std::move(rule));
+}
+
+bool AiActionToolDispatcher::removePermissionRule(const std::string_view ruleId)
+{
+    return m_permissionRules.remove(ruleId);
+}
+
+const std::vector<AiPermissionRule> &AiActionToolDispatcher::permissionRules() const noexcept
+{
+    return m_permissionRules.rules();
+}
+
 void AiActionToolDispatcher::clearSession(const AiSessionTarget &target)
 {
     m_ownership.releaseSession(target);
+    m_permissionRules.clearSession(target.sessionId);
 }
 
 void AiActionToolDispatcher::clearConversation(const std::string_view conversationId)

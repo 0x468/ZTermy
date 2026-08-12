@@ -74,15 +74,20 @@ addition.
 The five user-facing modes (`read-only`, `ask`, `edit`, `auto`, and `yolo`),
 legacy-settings migration, and the in-panel mode selector are implemented and
 covered by `application-settings`, `ai-permission-policy`,
-`ai-action-tool-dispatcher`, and `app-controller`. Exact/prefix/glob/regex/all
-rules with once/session/profile/global lifetimes remain the next implementation
-slice and are not yet claimed complete.
+`ai-action-tool-dispatcher`, and `app-controller`.
+
+| Approved boundary | Representative implementation | Focused CTest contracts | Decisions |
+| --- | --- | --- | --- |
+| Typed capability rules, exact/prefix/glob/regex/all matching, scope, precedence, and once consumption | `src/domain/ai/AiPermissionPolicy.*` | `ai-permission-policy` | ADR 0080 |
+| Session-only ephemeral rules plus bounded Profile/global persistence and backup recovery | `src/infrastructure/ai/AiPermissionRuleStore.*`, `src/application/AppController.*` | `ai-permission-rule-store`, `app-controller` | ADR 0080 |
+| Rule overrides across terminal, PTY, interrupt, runbook, and SFTP actions | `src/application/ai/AiActionToolDispatcher.*` | `ai-action-tool-dispatcher` | ADR 0080 |
+| Compact approval-card scope/matcher editor and Settings view/edit/toggle/revoke manager | `src/ui/qml/AiAssistantPane.qml`, `src/ui/qml/SettingsPane.qml` | QML compilation, translation gate, real-window smoke | ADR 0078, 0080 |
 
 ## Evidence classification
 
-- **Implementation complete:** every approved `0.3.0`–`0.3.4` boundary and the
-  `0.3.5` repair boundary above have production code and at least one focused
-  executable contract.
+- **Implementation complete:** every approved `0.3.0`–`0.3.6` boundary above
+  has production code and at least one focused executable or real-window
+  contract.
 - **Automated candidate evidence:** the exact builds, test totals, static
   analysis, real-window gates, real-host key-only runs, and package hashes are
   recorded in `V3_0_3_0_RC_ACCEPTANCE.md`.

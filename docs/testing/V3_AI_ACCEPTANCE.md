@@ -363,4 +363,26 @@ the `0.3.5` conversation-repair slice:
    serialized agent lease.
 
 The reusable-rule UI and exact/prefix/glob/regex/all lifetime matrix belong to
-the subsequent `0.3.6` gate and are intentionally not marked complete here.
+the `0.3.6` gate below.
+
+## 0.3.6 reusable-rule acceptance
+
+1. In Ask mode, trigger a terminal command approval. Run it with the default
+   `This time` scope. The command runs once and no remembered rule appears in
+   Settings > AI.
+2. Trigger another command, choose `This session` plus Exact/Prefix/Glob/Regex
+   or Any action, and select Allow or Deny. A matching later action follows the
+   choice without another card; closing that terminal session removes the rule.
+3. From a saved SSH Profile, create Profile-scoped allow and deny rules. They
+   survive restart and affect only that Profile. Quick connections and local
+   terminals do not offer Profile scope.
+4. Create a global rule, restart ztermy, edit its matcher and pattern, disable
+   and re-enable it, then remove it in Settings > AI. Each change applies
+   immediately and persists. Conflicting matches resolve deny > ask > allow.
+5. Repeat with terminal command, raw PTY input, interrupt, runbook save, SFTP
+   download, and SFTP upload capabilities. Rules never bypass stale target,
+   invalid schema, unavailable capability, or exhausted turn budget checks.
+6. Resize the Agent workbench to its minimum width in light and dark themes.
+   The command, scope/matcher controls, and action buttons remain clipped
+   inside the panel and keyboard reachable. MCP approvals retain their existing
+   per-call contract and do not display terminal-rule controls.

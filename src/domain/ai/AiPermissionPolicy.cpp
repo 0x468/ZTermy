@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <regex>
+#include <unordered_set>
 #include <utility>
 
 namespace ztermy::ai
@@ -50,7 +52,217 @@ template <std::size_t Size>
     return {.category = category, .reason = std::move(reason)};
 }
 
+[[nodiscard]] bool globMatches(const std::string_view pattern, const std::string_view value) noexcept
+{
+    std::size_t patternIndex = 0;
+    std::size_t valueIndex = 0;
+    std::size_t starIndex = std::string_view::npos;
+    std::size_t starValueIndex = 0;
+    while (valueIndex < value.size())
+    {
+        if (patternIndex < pattern.size()
+            && (pattern[patternIndex] == '?' || pattern[patternIndex] == value[valueIndex]))
+        {
+            ++patternIndex;
+            ++valueIndex;
+            continue;
+        }
+        if (patternIndex < pattern.size() && pattern[patternIndex] == '*')
+        {
+            starIndex = patternIndex++;
+            starValueIndex = valueIndex;
+            continue;
+        }
+        if (starIndex == std::string_view::npos)
+        {
+            return false;
+        }
+        patternIndex = starIndex + 1;
+        valueIndex = ++starValueIndex;
+    }
+    while (patternIndex < pattern.size() && pattern[patternIndex] == '*')
+    {
+        ++patternIndex;
+    }
+    return patternIndex == pattern.size();
+}
+
+[[nodiscard]] bool subjectMatches(const AiPermissionRule &rule, const std::string_view subject)
+{
+    switch (rule.matcher)
+    {
+        case AiPermissionRuleMatcher::exact:
+            return subject == rule.pattern;
+        case AiPermissionRuleMatcher::prefix:
+            return subject.starts_with(rule.pattern);
+        case AiPermissionRuleMatcher::glob:
+            return globMatches(rule.pattern, subject);
+        case AiPermissionRuleMatcher::regex:
+            try
+            {
+                return std::regex_match(
+                    subject.begin(), subject.end(),
+                    std::regex(rule.pattern, std::regex_constants::ECMAScript | std::regex_constants::optimize));
+            }
+            catch (const std::regex_error &)
+            {
+                return false;
+            }
+        case AiPermissionRuleMatcher::all:
+            return true;
+    }
+    return false;
+}
+
+[[nodiscard]] bool scopeMatches(const AiPermissionRule &rule, const AiPermissionRuleQuery &query) noexcept
+{
+    switch (rule.duration)
+    {
+        case AiPermissionRuleDuration::once:
+        case AiPermissionRuleDuration::session:
+            return !query.sessionId.empty() && rule.sessionId == query.sessionId;
+        case AiPermissionRuleDuration::profile:
+            return !query.profileId.empty() && rule.profileId == query.profileId;
+        case AiPermissionRuleDuration::global:
+            return true;
+    }
+    return false;
+}
+
+[[nodiscard]] int dispositionPriority(const AiPermissionDisposition disposition) noexcept
+{
+    switch (disposition)
+    {
+        case AiPermissionDisposition::deny:
+            return 0;
+        case AiPermissionDisposition::ask:
+            return 1;
+        case AiPermissionDisposition::allow:
+            return 2;
+    }
+    return 3;
+}
+
 } // namespace
+
+bool AiPermissionRuleEngine::replace(std::vector<AiPermissionRule> rules)
+{
+    if (rules.size() > maximumRules)
+    {
+        return false;
+    }
+    std::unordered_set<std::string> ids;
+    for (const auto &rule : rules)
+    {
+        if (!valid(rule) || !ids.insert(rule.id).second)
+        {
+            return false;
+        }
+    }
+    m_rules = std::move(rules);
+    return true;
+}
+
+bool AiPermissionRuleEngine::add(AiPermissionRule rule)
+{
+    if (m_rules.size() >= maximumRules || !valid(rule)
+        || std::ranges::any_of(m_rules, [&rule](const AiPermissionRule &existing) {
+               return existing.id == rule.id;
+           }))
+    {
+        return false;
+    }
+    m_rules.push_back(std::move(rule));
+    return true;
+}
+
+bool AiPermissionRuleEngine::remove(const std::string_view ruleId)
+{
+    const auto iterator = std::ranges::find(m_rules, ruleId, &AiPermissionRule::id);
+    if (iterator == m_rules.end())
+    {
+        return false;
+    }
+    m_rules.erase(iterator);
+    return true;
+}
+
+std::optional<AiPermissionRuleMatch> AiPermissionRuleEngine::evaluate(const AiPermissionRuleQuery &query)
+{
+    std::optional<std::size_t> bestIndex;
+    int bestPriority = 4;
+    for (std::size_t index = 0; index < m_rules.size(); ++index)
+    {
+        const auto &rule = m_rules[index];
+        const int priority = dispositionPriority(rule.disposition);
+        if (!rule.enabled || priority >= bestPriority || rule.capability != query.capability
+            || !scopeMatches(rule, query) || !subjectMatches(rule, query.subject))
+        {
+            continue;
+        }
+        bestIndex = index;
+        bestPriority = priority;
+    }
+    if (!bestIndex.has_value())
+    {
+        return std::nullopt;
+    }
+    const AiPermissionRule rule = m_rules[*bestIndex];
+    if (rule.duration == AiPermissionRuleDuration::once)
+    {
+        m_rules.erase(m_rules.begin() + static_cast<std::ptrdiff_t>(*bestIndex));
+    }
+    return AiPermissionRuleMatch{.ruleId = rule.id, .disposition = rule.disposition, .duration = rule.duration};
+}
+
+void AiPermissionRuleEngine::clearSession(const std::string_view sessionId)
+{
+    std::erase_if(m_rules, [sessionId](const AiPermissionRule &rule) {
+        return (rule.duration == AiPermissionRuleDuration::once || rule.duration == AiPermissionRuleDuration::session)
+               && rule.sessionId == sessionId;
+    });
+}
+
+const std::vector<AiPermissionRule> &AiPermissionRuleEngine::rules() const noexcept
+{
+    return m_rules;
+}
+
+bool AiPermissionRuleEngine::valid(const AiPermissionRule &rule)
+{
+    constexpr std::size_t maximumIdentityBytes = 128;
+    constexpr std::size_t maximumPatternBytes = 1024;
+    if (rule.id.empty() || rule.id.size() > maximumIdentityBytes || rule.pattern.size() > maximumPatternBytes)
+    {
+        return false;
+    }
+    if (rule.matcher != AiPermissionRuleMatcher::all && rule.pattern.empty())
+    {
+        return false;
+    }
+    if ((rule.duration == AiPermissionRuleDuration::once || rule.duration == AiPermissionRuleDuration::session)
+        && (rule.sessionId.empty() || rule.sessionId.size() > maximumIdentityBytes))
+    {
+        return false;
+    }
+    if (rule.duration == AiPermissionRuleDuration::profile
+        && (rule.profileId.empty() || rule.profileId.size() > maximumIdentityBytes))
+    {
+        return false;
+    }
+    if (rule.matcher == AiPermissionRuleMatcher::regex)
+    {
+        try
+        {
+            static_cast<void>(std::regex(rule.pattern, std::regex_constants::ECMAScript));
+        }
+        catch (const std::regex_error &)
+        {
+            return false;
+        }
+    }
+    return true;
+}
 
 AiPermissionDecision AiPermissionPolicy::decide(const AiPermissionRequest &request) const noexcept
 {
@@ -77,6 +289,10 @@ AiPermissionDecision AiPermissionPolicy::decide(const AiPermissionRequest &reque
     if (request.explicitVisibleApproval)
     {
         return {.disposition = AiPermissionDisposition::allow, .reason = AiPermissionReason::explicitVisibleApproval};
+    }
+    if (request.explicitAsk)
+    {
+        return {.disposition = AiPermissionDisposition::ask, .reason = AiPermissionReason::explicitAsk};
     }
 
     AiPermissionDecision decision;

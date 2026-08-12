@@ -24,6 +24,10 @@ Rectangle {
     readonly property string approvalCommand: typeof toolApproval.command === "string" ? toolApproval.command : ""
     readonly property string approvalRiskReason: typeof toolApproval.riskReason === "string" ? toolApproval.riskReason : ""
     readonly property bool approvalHighRisk: toolApproval.highRisk === true
+    readonly property bool approvalRuleSupported: toolApproval.ruleSupported === true
+    readonly property string approvalRuleSubject: typeof toolApproval.ruleSubject === "string" ? toolApproval.ruleSubject : ""
+    readonly property string approvalRuleDefaultMatcher: typeof toolApproval.ruleDefaultMatcher === "string" ? toolApproval.ruleDefaultMatcher : "exact"
+    readonly property bool approvalProfileAvailable: toolApproval.profileAvailable === true
     property bool contextExpanded: false
     property bool activityExpanded: false
     property bool historyExpanded: false
@@ -84,6 +88,42 @@ Rectangle {
 
     function permissionModeIndex(token) {
         return token === "read-only" ? 0 : token === "edit" ? 2 : token === "auto" ? 3 : token === "yolo" ? 4 : 1;
+    }
+
+    function approvalScopeTokens() {
+        return approvalProfileAvailable ? ["once", "session", "profile", "global"] : ["once", "session", "global"];
+    }
+
+    function approvalScopeLabels() {
+        return approvalProfileAvailable ? [qsTr("This time"), qsTr("This session"), qsTr("This Profile"), qsTr("All Profiles")] : [qsTr("This time"), qsTr("This session"), qsTr("All Profiles")];
+    }
+
+    function matcherIndex(token) {
+        return token === "prefix" ? 1 : token === "glob" ? 2 : token === "regex" ? 3 : token === "all" ? 4 : 0;
+    }
+
+    function approvePendingTool() {
+        if (!approvalRuleSupported || approvalScopeBox.currentValue === "once") {
+            controller.approveAiTool();
+            return;
+        }
+        controller.approveAiToolWithRule(approvalScopeBox.currentValue, approvalMatcherBox.currentValue, approvalPatternField.text);
+    }
+
+    function denyPendingTool() {
+        if (!approvalRuleSupported || approvalScopeBox.currentValue === "once") {
+            controller.denyAiTool();
+            return;
+        }
+        controller.denyAiToolWithRule(approvalScopeBox.currentValue, approvalMatcherBox.currentValue, approvalPatternField.text);
+    }
+
+    onToolApprovalChanged: {
+        if (!toolApproval.visible)
+            return;
+        approvalScopeBox.currentIndex = 0;
+        approvalMatcherBox.currentIndex = matcherIndex(approvalRuleDefaultMatcher);
+        approvalPatternField.text = approvalRuleSubject;
     }
 
     color: Theme.panelBackground
@@ -504,23 +544,61 @@ Rectangle {
                     font.pixelSize: Theme.textCompact
                 }
 
+                GridLayout {
+                    Layout.fillWidth: true
+                    visible: pane.approvalRuleSupported
+                    columns: width < 330 ? 1 : 2
+                    columnSpacing: 7
+                    rowSpacing: 7
+
+                    AppComboBox {
+                        id: approvalScopeBox
+
+                        Layout.fillWidth: true
+                        model: pane.approvalScopeTokens()
+                        displayTextModel: pane.approvalScopeLabels()
+                        accessibleName: qsTr("Permission rule duration")
+                    }
+
+                    AppComboBox {
+                        id: approvalMatcherBox
+
+                        Layout.fillWidth: true
+                        visible: approvalScopeBox.currentValue !== "once"
+                        model: ["exact", "prefix", "glob", "regex", "all"]
+                        displayTextModel: [qsTr("Exact action"), qsTr("Starts with"), qsTr("Wildcard"), qsTr("Regular expression"), qsTr("Any action of this type")]
+                        accessibleName: qsTr("Permission rule matcher")
+                    }
+
+                    AppTextField {
+                        id: approvalPatternField
+
+                        Layout.fillWidth: true
+                        Layout.columnSpan: parent.columns
+                        visible: approvalScopeBox.currentValue !== "once" && approvalMatcherBox.currentValue !== "all"
+                        compact: true
+                        placeholderText: qsTr("Command or action pattern")
+                        accessibleName: placeholderText
+                    }
+                }
+
                 RowLayout {
                     Layout.alignment: Qt.AlignRight
                     spacing: 7
 
                     ActionButton {
-                        text: qsTr("Deny")
+                        text: pane.approvalRuleSupported && approvalScopeBox.currentValue !== "once" ? qsTr("Deny & remember") : qsTr("Deny")
                         iconName: "close"
                         accessibleName: qsTr("Deny the pending AI terminal action")
-                        onClicked: pane.controller.denyAiTool()
+                        onClicked: pane.denyPendingTool()
                     }
 
                     ActionButton {
-                        text: pane.approvalKind.indexOf("queue_sftp_") === 0 ? qsTr("Queue transfer") : pane.approvalKind === "interrupt_command" ? qsTr("Send Ctrl+C") : pane.approvalKind === "write_to_pty" ? qsTr("Send input") : pane.approvalKind === "save_runbook" ? qsTr("Save runbook") : qsTr("Run command")
+                        text: pane.approvalRuleSupported && approvalScopeBox.currentValue !== "once" ? qsTr("Allow & remember") : pane.approvalKind.indexOf("queue_sftp_") === 0 ? qsTr("Queue transfer") : pane.approvalKind === "interrupt_command" ? qsTr("Send Ctrl+C") : pane.approvalKind === "write_to_pty" ? qsTr("Send input") : pane.approvalKind === "save_runbook" ? qsTr("Save runbook") : qsTr("Run command")
                         iconName: pane.approvalKind.indexOf("queue_sftp_") === 0 ? "transfer" : pane.approvalKind === "interrupt_command" ? "close" : pane.approvalKind === "write_to_pty" ? "composer" : pane.approvalKind === "save_runbook" ? "save" : "play"
                         variant: pane.approvalHighRisk ? "destructive" : "primary"
                         accessibleName: pane.approvalKind.indexOf("queue_sftp_") === 0 ? qsTr("Approve and queue the pending AI SFTP transfer") : pane.approvalKind === "interrupt_command" ? qsTr("Approve the pending soft interrupt") : pane.approvalKind === "write_to_pty" ? qsTr("Approve the pending terminal input") : pane.approvalKind === "save_runbook" ? qsTr("Approve and save the pending AI runbook") : qsTr("Approve and run the pending AI command")
-                        onClicked: pane.controller.approveAiTool()
+                        onClicked: pane.approvePendingTool()
                     }
                 }
             }

@@ -14,7 +14,12 @@ using ztermy::ai::AiActionToolDispatcher;
 using ztermy::ai::AiActionToolDisposition;
 using ztermy::ai::AiAgentTurnBudget;
 using ztermy::ai::AiAgentTurnLimits;
+using ztermy::ai::AiPermissionCapability;
+using ztermy::ai::AiPermissionDisposition;
 using ztermy::ai::AiPermissionMode;
+using ztermy::ai::AiPermissionRule;
+using ztermy::ai::AiPermissionRuleDuration;
+using ztermy::ai::AiPermissionRuleMatcher;
 using ztermy::ai::AiTerminalAction;
 using ztermy::ai::AiTerminalActionKind;
 using ztermy::ai::AiToolCall;
@@ -27,7 +32,7 @@ using ztermy::ai::AiToolDispatchState;
                                .turnId = 7,
                                .target = {.sessionId = "session-1", .sessionGeneration = 3},
                                .permissionMode = mode,
-                               .savedHost = true};
+                               .profileId = "profile-1"};
 }
 
 [[nodiscard]] AiToolCall commandCall(const std::string &id = "call-1", const std::string &command = "pwd")
@@ -98,6 +103,7 @@ private slots:
     void waitsForApprovalAndCachesCompletion();
     void rejectsScopeReplayAndObserverWrites();
     void appliesRiskBudgetAndOwnershipGuards();
+    void appliesReusableRulesBeforeModeDefaults();
 };
 
 void AiActionToolDispatcherTests::publishesStrictRunCommandDefinition()
@@ -135,7 +141,7 @@ void AiActionToolDispatcherTests::requiresExplicitApprovalForSftpMutations()
         QStringLiteral("permission_denied"));
 
     auto unsavedContext = context("unsaved-sftp", AiPermissionMode::automatic);
-    unsavedContext.savedHost = false;
+    unsavedContext.profileId.clear();
     AiAgentTurnBudget unsavedBudget;
     const auto unsaved = dispatcher.prepare(transferCall(true, "unsaved-sftp"), unsavedContext, unsavedBudget);
     QCOMPARE(unsaved.disposition, AiActionToolDisposition::execute);
@@ -332,6 +338,55 @@ void AiActionToolDispatcherTests::appliesRiskBudgetAndOwnershipGuards()
                  .value(QStringLiteral("code"))
                  .toString(),
              QStringLiteral("write_action_limit"));
+}
+
+void AiActionToolDispatcherTests::appliesReusableRulesBeforeModeDefaults()
+{
+    AiActionToolDispatcher dispatcher;
+    QVERIFY(dispatcher.addPermissionRule({.id = "allow-status",
+                                          .capability = AiPermissionCapability::terminalCommand,
+                                          .matcher = AiPermissionRuleMatcher::exact,
+                                          .pattern = "git status",
+                                          .disposition = AiPermissionDisposition::allow,
+                                          .duration = AiPermissionRuleDuration::profile,
+                                          .profileId = "profile-1"}));
+    AiAgentTurnBudget allowedBudget;
+    auto plan = dispatcher.prepare(commandCall("rule-allow", "git status"), context("rule-allow"), allowedBudget);
+    QCOMPARE(plan.disposition, AiActionToolDisposition::execute);
+    dispatcher.clearConversation("rule-allow");
+
+    QVERIFY(dispatcher.addPermissionRule({.id = "deny-reboot",
+                                          .capability = AiPermissionCapability::terminalCommand,
+                                          .matcher = AiPermissionRuleMatcher::glob,
+                                          .pattern = "*reboot*",
+                                          .disposition = AiPermissionDisposition::deny,
+                                          .duration = AiPermissionRuleDuration::global}));
+    AiAgentTurnBudget deniedBudget;
+    plan = dispatcher.prepare(commandCall("rule-deny", "sudo reboot"), context("rule-deny", AiPermissionMode::yolo),
+                              deniedBudget);
+    QCOMPARE(object(plan.outputJson).value(QStringLiteral("error")).toObject().value(QStringLiteral("code")).toString(),
+             QStringLiteral("permission_denied"));
+
+    QVERIFY(dispatcher.addPermissionRule({.id = "ask-downloads",
+                                          .capability = AiPermissionCapability::sftpDownload,
+                                          .matcher = AiPermissionRuleMatcher::prefix,
+                                          .pattern = "/tmp/",
+                                          .disposition = AiPermissionDisposition::ask,
+                                          .duration = AiPermissionRuleDuration::global}));
+    AiAgentTurnBudget askBudget;
+    plan = dispatcher.prepare(transferCall(false, "rule-ask"), context("rule-ask", AiPermissionMode::yolo), askBudget);
+    QCOMPARE(plan.disposition, AiActionToolDisposition::awaitApproval);
+
+    QVERIFY(dispatcher.addPermissionRule({.id = "allow-runbook",
+                                          .capability = AiPermissionCapability::runbookMutation,
+                                          .matcher = AiPermissionRuleMatcher::all,
+                                          .disposition = AiPermissionDisposition::allow,
+                                          .duration = AiPermissionRuleDuration::profile,
+                                          .profileId = "profile-1"}));
+    AiAgentTurnBudget runbookBudget;
+    plan = dispatcher.prepare(runbookCall("rule-runbook"), context("rule-runbook", AiPermissionMode::readOnly),
+                              runbookBudget);
+    QCOMPARE(plan.disposition, AiActionToolDisposition::execute);
 }
 
 } // namespace

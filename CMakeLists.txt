@@ -451,6 +451,18 @@ target_compile_features(ztermy_ai_domain PUBLIC cxx_std_23)
 target_include_directories(ztermy_ai_domain PUBLIC src)
 target_link_libraries(ztermy_ai_domain PRIVATE Qt6::Core)
 
+add_library(ztermy_ai_permission_store STATIC
+    src/infrastructure/ai/AiPermissionRuleStore.cpp
+    src/infrastructure/ai/AiPermissionRuleStore.h
+)
+
+target_compile_features(ztermy_ai_permission_store PUBLIC cxx_std_23)
+target_include_directories(ztermy_ai_permission_store PUBLIC src)
+target_link_libraries(ztermy_ai_permission_store
+    PUBLIC ztermy_ai_domain Qt6::Core
+    PRIVATE ztermy_core_persistence
+)
+
 add_library(ztermy_ai_context STATIC
     src/domain/ai/AiCommandTracker.cpp
     src/domain/ai/AiCommandTracker.h
@@ -1155,6 +1167,7 @@ endif()
 target_link_libraries(ztermy PRIVATE
     ztermy_ai_application
     ztermy_ai_context
+    ztermy_ai_permission_store
     ztermy_application_actions
     ztermy_application_diagnostics
     ztermy_credential_vault
@@ -2972,6 +2985,27 @@ if(BUILD_TESTING)
 
     add_test(NAME ai-permission-policy COMMAND ztermy_ai_permission_policy_tests)
 
+    qt_add_executable(ztermy_ai_permission_rule_store_tests
+        tests/ai_permission_rule_store_tests.cpp
+    )
+
+    target_compile_features(ztermy_ai_permission_rule_store_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ai_permission_rule_store_tests PRIVATE
+        ztermy_ai_permission_store
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ai_permission_rule_store_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ai-permission-rule-store COMMAND ztermy_ai_permission_rule_store_tests)
+
     qt_add_executable(ztermy_ai_tool_dispatch_ledger_tests
         tests/ai_tool_dispatch_ledger_tests.cpp
     )
@@ -3472,6 +3506,7 @@ if(BUILD_TESTING)
     target_link_libraries(ztermy_app_controller_tests PRIVATE
         ztermy_ai_application
         ztermy_ai_context
+        ztermy_ai_permission_store
         ztermy_application_actions
         ztermy_credential_vault
         ztermy_core_config
@@ -3767,6 +3802,7 @@ if(BUILD_TESTING)
             ztermy_provider_http_client_tests
             ztermy_ai_provider_retry_policy_tests
             ztermy_ai_permission_policy_tests
+            ztermy_ai_permission_rule_store_tests
             ztermy_ai_tool_dispatch_ledger_tests
             ztermy_ai_agent_guard_tests
             ztermy_ai_command_tracker_tests
