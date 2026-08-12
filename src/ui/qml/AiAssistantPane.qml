@@ -152,6 +152,7 @@ Rectangle {
             spacing: 6
 
             ActionButton {
+                objectName: "aiExplainFailureButton"
                 text: qsTr("Explain last failure")
                 iconName: "activity"
                 enabled: !pane.busy
@@ -160,6 +161,7 @@ Rectangle {
             }
 
             ActionButton {
+                objectName: "aiAttachSelectionButton"
                 text: qsTr("Attach selection")
                 iconName: "copy"
                 enabled: !pane.busy
@@ -204,6 +206,7 @@ Rectangle {
             }
 
             ActionButton {
+                objectName: "aiClearConversationButton"
                 text: qsTr("Clear")
                 iconName: "trash"
                 enabled: !pane.busy && pane.conversation !== null && pane.conversation.count > 0
@@ -1109,6 +1112,7 @@ Rectangle {
                     }
 
                     ActionButton {
+                        objectName: "aiSendButton"
                         Layout.alignment: Qt.AlignBottom
                         text: pane.busy ? qsTr("Cancel") : qsTr("Send")
                         iconName: pane.busy ? "close" : "play"

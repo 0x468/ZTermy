@@ -31,6 +31,7 @@
 #include <QQuickWindow>
 #include <QSet>
 #include <QStandardPaths>
+#include <QTextStream>
 #include <QTimer>
 #include <QUrl>
 #include <QUuid>
@@ -665,6 +666,10 @@ struct ResizeHitRuntimeCase
            && sftpCaptured;
 }
 
+[[nodiscard]] QQuickItem *quickItem(QQuickItem *rootObject, const char *objectName);
+[[nodiscard]] bool verifyAccessibleButton(QQuickItem *rootObject, const char *objectName, const char *expectedName);
+[[nodiscard]] bool verifyAccessibleToggle(QQuickItem *rootObject, const char *objectName, const char *expectedName);
+
 [[nodiscard]] bool applyUiLayoutSmokeTheme(ztermy::AppController &controller, const QString &theme,
                                            const QString &language)
 {
@@ -802,10 +807,76 @@ struct ResizeHitRuntimeCase
     const bool missingProviderShown =
         !controller.sendAiMessage(QStringLiteral("Explain this terminal")) && !controller.activeAiError().isEmpty();
     processWindowEventsFor(std::chrono::milliseconds{100});
+    QQuickItem *aiContextToggle = quickItem(rootObject, "aiContextToggle");
+    QAccessibleInterface *aiContextInterface =
+        aiContextToggle == nullptr ? nullptr : QAccessible::queryAccessibleInterface(aiContextToggle);
+    const bool aiLauncherAccessible =
+        verifyAccessibleToggle(rootObject, "terminalAiAssistantButton", "Terminal AI assistant");
+    const bool aiExplainAccessible =
+        verifyAccessibleButton(rootObject, "aiExplainFailureButton", "Explain the last failed command");
+    const bool aiAttachAccessible =
+        verifyAccessibleButton(rootObject, "aiAttachSelectionButton", "Attach selected terminal text to this request");
+    const bool aiActivityAccessible = verifyAccessibleToggle(rootObject, "aiActivityToggle", "Show AI activity");
+    const bool aiControlAccessible =
+        verifyAccessibleButton(rootObject, "aiControlHandoffButton", "Take terminal control from AI");
+    const bool aiClearAccessible =
+        verifyAccessibleButton(rootObject, "aiClearConversationButton", "Clear this AI conversation");
+    const bool aiSendAccessible = verifyAccessibleButton(rootObject, "aiSendButton", "Send");
+    const bool aiContextAccessible =
+        aiContextInterface != nullptr && aiContextInterface->role() == QAccessible::Button
+        && aiContextInterface->text(QAccessible::Name)
+               == QStringLiteral("Request context · %1 item(s)").arg(controller.activeAiContextItems().size());
+    const bool aiAccessibilityPassed = aiLauncherAccessible && aiExplainAccessible && aiAttachAccessible
+                                       && aiActivityAccessible && aiControlAccessible && aiClearAccessible
+                                       && aiSendAccessible && aiContextAccessible;
+    QAccessibleInterface *aiPaneInterface =
+        aiAssistantPane == nullptr ? nullptr : QAccessible::queryAccessibleInterface(aiAssistantPane);
+    QAccessibleInterface *aiPromptInterface =
+        aiPromptEditor == nullptr ? nullptr : QAccessible::queryAccessibleInterface(aiPromptEditor);
+    const bool aiSemanticRolesPassed =
+        aiPaneInterface != nullptr && aiPaneInterface->role() == QAccessible::Pane
+        && aiPaneInterface->text(QAccessible::Name) == QStringLiteral("Terminal AI assistant")
+        && aiPromptInterface != nullptr && aiPromptInterface->role() == QAccessible::EditableText
+        && aiPromptInterface->text(QAccessible::Name) == QStringLiteral("AI message");
+    QFile aiAccessibilityArtifact{QDir(outputDirectory).filePath(QStringLiteral("ai-accessibility-contract.txt"))};
+    if (aiAccessibilityArtifact.open(QIODevice::WriteOnly | QIODevice::Text))
+    {
+        QTextStream artifact{&aiAccessibilityArtifact};
+        artifact << "buttons=" << aiAccessibilityPassed << '\n';
+        artifact << "launcher=" << aiLauncherAccessible << '\n';
+        artifact << "explain=" << aiExplainAccessible << '\n';
+        artifact << "attach=" << aiAttachAccessible << '\n';
+        artifact << "activity=" << aiActivityAccessible << '\n';
+        artifact << "control=" << aiControlAccessible << '\n';
+        artifact << "clear=" << aiClearAccessible << '\n';
+        artifact << "send=" << aiSendAccessible << '\n';
+        artifact << "context=" << aiContextAccessible << '\n';
+        artifact << "semanticRoles=" << aiSemanticRolesPassed << '\n';
+        artifact << "contextRole="
+                 << (aiContextInterface == nullptr ? -1 : static_cast<int>(aiContextInterface->role())) << '\n';
+        artifact << "contextName="
+                 << (aiContextInterface == nullptr ? QString{} : aiContextInterface->text(QAccessible::Name)) << '\n';
+        artifact << "paneRole=" << (aiPaneInterface == nullptr ? -1 : static_cast<int>(aiPaneInterface->role()))
+                 << '\n';
+        artifact << "paneName=" << (aiPaneInterface == nullptr ? QString{} : aiPaneInterface->text(QAccessible::Name))
+                 << '\n';
+        artifact << "promptRole=" << (aiPromptInterface == nullptr ? -1 : static_cast<int>(aiPromptInterface->role()))
+                 << '\n';
+        artifact << "promptName="
+                 << (aiPromptInterface == nullptr ? QString{} : aiPromptInterface->text(QAccessible::Name)) << '\n';
+    }
     const bool aiDarkCaptured = aiWorkbenchOpened && contextRestored && aiAssistantPane != nullptr
-                                && aiAssistantPane->isVisible() && aiPromptEditor != nullptr
-                                && aiPromptEditor->hasActiveFocus()
+                                && aiAssistantPane->isVisible() && aiPromptEditor != nullptr && aiAccessibilityPassed
+                                && aiSemanticRolesPassed
                                 && captureLayout(window, outputDirectory, QStringLiteral("dark-regular-ai-assistant"));
+    window.resize(QSize{500, 360});
+    processWindowEventsFor(std::chrono::milliseconds{250});
+    const bool aiCompactCaptured =
+        aiAssistantPane != nullptr && aiAssistantPane->isVisible() && aiAssistantPane->width() > 0.0
+        && aiAssistantPane->width() <= window.width()
+        && captureLayout(window, outputDirectory, QStringLiteral("dark-compact-ai-assistant"));
+    window.resize(QSize{1120, 800});
+    processWindowEventsFor(std::chrono::milliseconds{250});
     const bool aiLightTheme = applyUiLayoutSmokeTheme(controller, QStringLiteral("light"), QStringLiteral("en"));
     processWindowEventsFor(std::chrono::milliseconds{250});
     const bool aiLightCaptured =
@@ -817,7 +888,8 @@ struct ResizeHitRuntimeCase
         static_cast<void>(controller.closeTerminalTab(aiTerminalId));
     }
     return titleBrandPalettePassed && lightCompactPassed && lightRegularPassed && chineseShortcuts && chinesePalette
-           && aiWorkbenchOpened && missingProviderShown && aiDarkCaptured && aiLightCaptured && restoredDark;
+           && aiWorkbenchOpened && missingProviderShown && aiDarkCaptured && aiCompactCaptured && aiLightCaptured
+           && restoredDark;
 }
 
 [[nodiscard]] QQuickItem *quickItem(QQuickItem *rootObject, const char *objectName)
@@ -954,6 +1026,26 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
         || interface->text(QAccessible::Name) != expected)
     {
         qCWarning(applicationLog) << "Accessible button contract mismatch"
+                                  << "object=" << objectName << "expectedName=" << expected
+                                  << "hasInterface=" << (interface != nullptr)
+                                  << "actualRole=" << (interface == nullptr ? -1 : static_cast<int>(interface->role()))
+                                  << "actualName="
+                                  << (interface == nullptr ? QString{} : interface->text(QAccessible::Name));
+        return false;
+    }
+    return true;
+}
+
+[[nodiscard]] bool verifyAccessibleToggle(QQuickItem *rootObject, const char *objectName, const char *expectedName)
+{
+    QQuickItem *item = quickItem(rootObject, objectName);
+    QAccessibleInterface *interface = item == nullptr ? nullptr : QAccessible::queryAccessibleInterface(item);
+    const QString expected = QString::fromLatin1(expectedName);
+    const bool toggleRole = interface != nullptr
+                            && (interface->role() == QAccessible::Button || interface->role() == QAccessible::CheckBox);
+    if (!toggleRole || interface->text(QAccessible::Name) != expected)
+    {
+        qCWarning(applicationLog) << "Accessible toggle contract mismatch"
                                   << "object=" << objectName << "expectedName=" << expected
                                   << "hasInterface=" << (interface != nullptr)
                                   << "actualRole=" << (interface == nullptr ? -1 : static_cast<int>(interface->role()))

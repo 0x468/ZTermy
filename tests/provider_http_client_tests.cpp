@@ -149,6 +149,8 @@ class ProviderHttpClientTests final : public QObject
 
 private slots:
     void streamsTypedEventsAndFinishes();
+    void streamsCompatibleTypedEvents();
+    void streamsOllamaTypedEvents();
     void classifiesRateLimitAndRetryDelay();
     void cancelsInFlightRequest();
 };
@@ -177,6 +179,68 @@ void ProviderHttpClientTests::streamsTypedEventsAndFinishes()
     QCOMPARE(events.at(0).type, AiStreamEventType::responseStarted);
     QCOMPARE(events.at(1).type, AiStreamEventType::textDelta);
     QCOMPARE(events.at(2).type, AiStreamEventType::responseCompleted);
+}
+
+void ProviderHttpClientTests::streamsCompatibleTypedEvents()
+{
+    FakeNetworkAccessManager network;
+    network.enqueue(FakeResponse{
+        .payload = "data: {\"id\":\"chat_1\",\"choices\":[{\"delta\":{\"content\":\"hi\"},\"finish_reason\":null}]}\n\n"
+                   "data: [DONE]\n\n"});
+    ProviderHttpClient client(&network);
+    const AiProviderConfiguration configuration{.kind = AiProviderKind::openAiCompatible,
+                                                .baseUrl = "https://compatible.example/v1",
+                                                .model = "model"};
+    std::vector<AiStreamEvent> events;
+    bool finished = false;
+    QVERIFY(client
+                .start(
+                    configuration, AiGenerationRequest{}, SensitiveByteArray{},
+                    [&events](const auto, const AiStreamEvent &event) {
+                        events.push_back(event);
+                    },
+                    [&finished](const auto) {
+                        finished = true;
+                    })
+                .has_value());
+    QTRY_VERIFY_WITH_TIMEOUT(finished, 1000);
+    QVERIFY(std::ranges::any_of(events, [](const AiStreamEvent &event) {
+        return event.type == AiStreamEventType::textDelta && event.delta == "hi";
+    }));
+    QCOMPARE(events.back().type, AiStreamEventType::responseCompleted);
+}
+
+void ProviderHttpClientTests::streamsOllamaTypedEvents()
+{
+    FakeNetworkAccessManager network;
+    network.enqueue(FakeResponse{
+        .payload = "{\"message\":{\"content\":\"first\"},\"done\":false}\n"
+                   "{\"message\":{\"content\":\"second\"},\"done\":true,\"prompt_eval_count\":3,\"eval_count\":2}\n"});
+    ProviderHttpClient client(&network);
+    const AiProviderConfiguration configuration{.kind = AiProviderKind::ollama,
+                                                .baseUrl = "http://127.0.0.1:11434",
+                                                .model = "model"};
+    std::vector<AiStreamEvent> events;
+    bool finished = false;
+    QVERIFY(client
+                .start(
+                    configuration, AiGenerationRequest{}, SensitiveByteArray{},
+                    [&events](const auto, const AiStreamEvent &event) {
+                        events.push_back(event);
+                    },
+                    [&finished](const auto) {
+                        finished = true;
+                    })
+                .has_value());
+    QTRY_VERIFY_WITH_TIMEOUT(finished, 1000);
+    QVERIFY(std::ranges::any_of(events, [](const AiStreamEvent &event) {
+        return event.type == AiStreamEventType::textDelta && event.delta == "first";
+    }));
+    QVERIFY(std::ranges::any_of(events, [](const AiStreamEvent &event) {
+        return event.type == AiStreamEventType::usageUpdated && event.usage.has_value()
+               && event.usage->outputTokens == 2;
+    }));
+    QCOMPARE(events.back().type, AiStreamEventType::responseCompleted);
 }
 
 void ProviderHttpClientTests::classifiesRateLimitAndRetryDelay()

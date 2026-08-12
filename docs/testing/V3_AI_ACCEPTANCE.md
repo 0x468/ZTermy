@@ -14,8 +14,10 @@ evaluations serve different purposes and are reported separately.
 - [ ] SSE parser handles CRLF/LF, comments, split UTF-8, split JSON, multiple
       events per read, final event, provider error, cancellation, and EOF.
 - [ ] NDJSON parser handles the same fragmentation and maximum-line contracts.
-- [ ] Provider adapters map native payloads into identical ztermy stream events
+- [x] Provider adapters map native payloads into identical ztermy stream events
       and reject invalid event order or oversized function arguments.
+  - OpenAI Responses SSE, OpenAI-compatible chat-completions SSE, and Ollama
+    NDJSON now have deterministic request/stream lifecycle fixtures (`ADR 0077`).
 - [ ] API keys remain absent from settings JSON, QML models, logs, diagnostics,
       test snapshots, and error text.
 - [ ] Command blocks cover rich/basic/none integration, exact command, multiline
@@ -137,6 +139,10 @@ evaluations serve different purposes and are reported separately.
       runtime restart, and 32-cycle process lifecycle stress. The gate emits a
       versioned content-free JSON report and is duration-configurable (`ADR
       0076`).
+- [x] The real Qt window validates AI action/toggle roles and names, prompt and
+      pane semantics, and dark regular, dark 500 x 360 compact, and light regular
+      layout captures without depending on Windows foreground activation (`ADR
+      0078`).
 
 ### MCP manual release-candidate check
 
