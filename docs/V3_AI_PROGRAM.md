@@ -191,8 +191,11 @@ Delivery status:
   improvement. The remembered explicit model remains the predictable default;
 - privacy diagnostics now expose the live local request boundary and add only
   content-free AI counts/policy state to diagnostic exports (`ADR 0075`);
-- provider contracts, soak gates, accessibility, packaging, upgrade/recovery,
-  and final manual evidence remain release-candidate closure work. English and
+- provider-independent concurrency/lifecycle soak infrastructure and JSON
+  evidence are implemented (`ADR 0076`); the release-duration run remains a
+  final-candidate gate;
+- provider contracts, accessibility, packaging, upgrade/recovery, and final
+  manual evidence remain release-candidate closure work. English and
   Simplified Chinese remain complete under the translation gate as each surface
   lands.
 

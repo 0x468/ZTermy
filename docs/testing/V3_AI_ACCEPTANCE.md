@@ -132,6 +132,11 @@ evaluations serve different purposes and are reported separately.
       bounded counts. Automated tests verify that endpoint host, model id,
       credentials, prompts/responses, terminal content, and MCP arguments/results
       cannot enter the report (`ADR 0075`).
+- [x] A provider-independent concurrency gate repeatedly exercises streaming,
+      retry, budgets, deduplication, read fanout, frame tracking, MCP call/cancel,
+      runtime restart, and 32-cycle process lifecycle stress. The gate emits a
+      versioned content-free JSON report and is duration-configurable (`ADR
+      0076`).
 
 ### MCP manual release-candidate check
 
@@ -169,6 +174,11 @@ evaluations serve different purposes and are reported separately.
   Windows 11 release is covered before final `0.3.0` when test hardware/VM is
   available. Exact OS, Qt, PowerShell/OpenSSH, provider, model, and build versions
   are recorded.
+
+Developer evidence on 2026-08-12: dynamic Debug completed three full gate
+iterations in 120.296 seconds with zero failures. This validates the soak
+mechanism and the 32-cycle lifecycle stress; it is not the final two-hour or
+eight-hour release-duration claim.
 
 ## Evaluation corpus
 

@@ -2772,6 +2772,52 @@ if(BUILD_TESTING)
 
     add_test(NAME mcp-runtime-manager COMMAND ztermy_mcp_runtime_manager_tests)
 
+    qt_add_executable(ztermy_ai_mcp_lifecycle_stress_tests
+        tests/ai_mcp_lifecycle_stress_tests.cpp
+    )
+
+    target_compile_features(ztermy_ai_mcp_lifecycle_stress_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ai_mcp_lifecycle_stress_tests PRIVATE
+        ztermy_ai_application
+        Qt6::Test
+    )
+    add_dependencies(ztermy_ai_mcp_lifecycle_stress_tests ztermy_mcp_test_server)
+
+    if(MSVC)
+        target_compile_options(ztermy_ai_mcp_lifecycle_stress_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ai-mcp-lifecycle-stress COMMAND ztermy_ai_mcp_lifecycle_stress_tests)
+    set_tests_properties(ai-mcp-lifecycle-stress PROPERTIES LABELS "ai;stress" TIMEOUT 120)
+
+    set(ZTERMY_AI_SOAK_SECONDS "120" CACHE STRING "Duration of the provider-independent AI concurrency soak")
+    add_custom_target(ztermy_ai_concurrency_soak
+        COMMAND
+            "${ZTERMY_PWSH_EXECUTABLE}" -NoProfile -File
+            "${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_ai_concurrency_soak.ps1"
+            -BuildDirectory "${CMAKE_CURRENT_BINARY_DIR}"
+            -DurationSeconds "${ZTERMY_AI_SOAK_SECONDS}"
+            -ReportPath "${CMAKE_CURRENT_BINARY_DIR}/ai-concurrency-soak.json"
+        DEPENDS
+            ztermy_ai_mcp_lifecycle_stress_tests
+            ztermy_ai_turn_runner_tests
+            ztermy_ai_agent_guard_tests
+            ztermy_ai_tool_dispatch_ledger_tests
+            ztermy_ai_read_tool_dispatcher_tests
+            ztermy_ai_terminal_frame_tracker_tests
+            ztermy_provider_http_client_tests
+            ztermy_mcp_stdio_client_tests
+            ztermy_mcp_runtime_manager_tests
+        COMMENT "Running the bounded provider-independent AI concurrency and cancellation soak"
+        USES_TERMINAL
+        VERBATIM
+    )
+
     qt_add_executable(ztermy_provider_stream_mapper_tests
         tests/provider_stream_mapper_tests.cpp
     )
