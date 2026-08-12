@@ -709,6 +709,9 @@ private:
                                      bool appendPrompt = true, bool commandRequest = false);
     [[nodiscard]] ai::AiTurnRunner::ToolHandlingResult handleAiWaitCommand(TerminalTab &tab, const QString &tabId,
                                                                            const ai::AiToolCall &call);
+    [[nodiscard]] ai::AiTurnRunner::ToolHandlingResult
+    handleAiTerminalFrameTool(TerminalTab &owner, const QString &ownerTabId, const ai::AiToolCall &call,
+                              std::span<const ai::AiTerminalReadSnapshot> allowedTargets);
     [[nodiscard]] std::string executeAiTerminalAction(TerminalTab &tab, const ai::AiTerminalAction &action);
     [[nodiscard]] std::string executeAiRunCommand(TerminalTab &tab, const ai::AiTerminalAction &action);
     [[nodiscard]] std::string executeAiWriteToPty(TerminalTab &tab, const ai::AiTerminalAction &action);

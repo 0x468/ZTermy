@@ -517,6 +517,8 @@ add_library(ztermy_ai_application STATIC
     src/application/ai/AiSftpListTool.h
     src/application/ai/AiTurnRunner.cpp
     src/application/ai/AiTurnRunner.h
+    src/application/ai/AiTerminalFrameTool.cpp
+    src/application/ai/AiTerminalFrameTool.h
     src/application/ai/AiWaitCommandTool.cpp
     src/application/ai/AiWaitCommandTool.h
 )
@@ -2817,6 +2819,27 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME ai-terminal-frame-tracker COMMAND ztermy_ai_terminal_frame_tracker_tests)
+
+    qt_add_executable(ztermy_ai_terminal_frame_tool_tests
+        tests/ai_terminal_frame_tool_tests.cpp
+    )
+
+    target_compile_features(ztermy_ai_terminal_frame_tool_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ai_terminal_frame_tool_tests PRIVATE
+        ztermy_ai_application
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ai_terminal_frame_tool_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ai-terminal-frame-tool COMMAND ztermy_ai_terminal_frame_tool_tests)
 
     qt_add_executable(ztermy_ai_usage_reporting_tests
         tests/ai_usage_reporting_tests.cpp
