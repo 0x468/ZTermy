@@ -31,6 +31,9 @@ void McpToolRegistryTests::requiresReviewAndIsolatesNamespaces()
     QVERIFY(registry.definitions().empty());
     QVERIFY(registry.approve(server.id, update->tools.front().exposedName, update->tools.front().schemaDigest));
     QCOMPARE(registry.definitions().size(), std::size_t{1});
+    QVERIFY(registry.revoke(server.id, update->tools.front().exposedName));
+    QVERIFY(registry.definitions().empty());
+    QVERIFY(registry.approve(server.id, update->tools.front().exposedName, update->tools.front().schemaDigest));
     registry.disableServer(server.id);
     QVERIFY(registry.definitions().empty());
 }

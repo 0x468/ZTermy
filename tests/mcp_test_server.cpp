@@ -15,8 +15,13 @@ int main()
         else if (line.find("\"method\":\"tools/list\"") != std::string::npos)
         {
             std::cout
-                << R"({"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"echo","description":"Echo untrusted input","inputSchema":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}}]}})"
+                << R"({"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"echo","description":"Echo untrusted input","inputSchema":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}},{"name":"slow","description":"Wait until cancelled","inputSchema":{"type":"object"}}]}})"
                 << std::endl;
+        }
+        else if (line.find("\"method\":\"tools/call\"") != std::string::npos
+                 && line.find("\"name\":\"slow\"") != std::string::npos)
+        {
+            // The client cancellation path intentionally resolves this request locally.
         }
         else if (line.find("\"method\":\"tools/call\"") != std::string::npos)
         {

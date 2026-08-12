@@ -23,6 +23,13 @@ Rectangle {
     property string aiBaseUrlDraft: "https://api.openai.com/v1"
     property string aiEndpointPathDraft: ""
     property string aiModelDraft: ""
+    property string mcpOriginalId: ""
+    property string mcpEditingId: ""
+    property string mcpNamespaceDraft: ""
+    property string mcpProgramDraft: ""
+    property string mcpArgumentsDraft: "[]"
+    property string mcpWorkingDirectoryDraft: ""
+    property var mcpReviewTool: null
     property real contentReveal: 1.0
     readonly property bool shortcutRecording: shortcutSettings.recording
     readonly property bool draftDark: themeBox.currentIndex === 1 || (themeBox.currentIndex === 0 && Theme.systemDark)
@@ -159,6 +166,48 @@ Rectangle {
 
     function aiPermissionToken() {
         return ["observer", "ask-each-write", "ask-first-write", "session-auto", "saved-host-auto"][aiPermissionBox.currentIndex];
+    }
+
+    function resetMcpDraft() {
+        mcpOriginalId = "";
+        mcpEditingId = "";
+        mcpNamespaceDraft = "";
+        mcpProgramDraft = "";
+        mcpArgumentsDraft = "[]";
+        mcpWorkingDirectoryDraft = "";
+        mcpTrustBox.currentIndex = 1;
+        mcpEnabledSwitch.checked = true;
+    }
+
+    function editMcpServer(server) {
+        mcpOriginalId = server.id;
+        mcpEditingId = server.id;
+        mcpNamespaceDraft = server.namespace;
+        mcpProgramDraft = server.program;
+        mcpArgumentsDraft = JSON.stringify(server.arguments);
+        mcpWorkingDirectoryDraft = server.workingDirectory;
+        mcpTrustBox.currentIndex = server.trust === "execute" ? 2 : server.trust === "observe" ? 1 : 0;
+        mcpEnabledSwitch.checked = server.enabled;
+    }
+
+    function saveMcpDraft() {
+        let argumentsValue;
+        try {
+            argumentsValue = JSON.parse(mcpArgumentsDraft);
+        } catch (error) {
+            presentStatus(qsTr("MCP arguments must be a JSON string array."), true, false);
+            return;
+        }
+        if (!Array.isArray(argumentsValue) || argumentsValue.some(value => typeof value !== "string")) {
+            presentStatus(qsTr("MCP arguments must be a JSON string array."), true, false);
+            return;
+        }
+        const trust = ["disabled", "observe", "execute"][mcpTrustBox.currentIndex];
+        const saved = controller.saveMcpServer(mcpEditingId, mcpNamespaceDraft, mcpProgramDraft, argumentsValue, mcpWorkingDirectoryDraft, trust, mcpEnabledSwitch.checked);
+        presentStatus(saved ? qsTr("MCP server saved. Review each discovered tool before enabling it for AI.") : (controller.mcpOperationError.length > 0 ? controller.mcpOperationError : qsTr("The MCP server configuration is invalid.")), !saved, saved);
+        if (saved) {
+            resetMcpDraft();
+        }
     }
 
     function systemFontOptions(families) {
@@ -1336,6 +1385,369 @@ Rectangle {
                                 pane.showCredentialResult(saved, qsTr("AI provider API key saved in the active credential vault."));
                                 if (saved) {
                                     aiApiKeyField.text = "";
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            SectionCard {
+                Layout.fillWidth: true
+                visible: pane.currentCategory === "ai"
+                compact: true
+                heading: qsTr("MCP extensions")
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacingControl
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("MCP servers run as local stdio child processes with a reduced environment. Server descriptions and results are untrusted; execution requires server trust, an exact schema review, and approval for every call.")
+                        color: Theme.textMuted
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        visible: pane.controller.mcpOperationError.length > 0
+                        text: pane.controller.mcpOperationError
+                        color: Theme.danger
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textCompact
+                    }
+
+                    Repeater {
+                        model: pane.controller.mcpServers
+
+                        delegate: Rectangle {
+                            id: mcpServerRow
+
+                            required property var modelData
+                            Layout.fillWidth: true
+                            implicitHeight: mcpServerContent.implicitHeight + 18
+                            radius: Theme.radiusControl
+                            color: Theme.controlBackground
+                            border.color: Theme.border
+
+                            RowLayout {
+                                id: mcpServerContent
+                                anchors.fill: parent
+                                anchors.margins: 9
+                                spacing: 10
+
+                                Rectangle {
+                                    Layout.preferredWidth: 8
+                                    Layout.preferredHeight: 8
+                                    radius: 4
+                                    color: mcpServerRow.modelData.state === "ready" ? Theme.success : mcpServerRow.modelData.state === "error" ? Theme.danger : Theme.textMuted
+                                }
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: mcpServerRow.modelData.namespace + "  ·  " + mcpServerRow.modelData.id
+                                        color: Theme.text
+                                        elide: Text.ElideRight
+                                        font.family: Theme.uiFont
+                                        font.pixelSize: Theme.textLabel
+                                        font.weight: Font.DemiBold
+                                    }
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: mcpServerRow.modelData.state + (mcpServerRow.modelData.error.length > 0 ? " · " + mcpServerRow.modelData.error : "")
+                                        color: mcpServerRow.modelData.state === "error" ? Theme.danger : Theme.textMuted
+                                        elide: Text.ElideRight
+                                        font.family: Theme.uiFont
+                                        font.pixelSize: Theme.textCompact
+                                    }
+                                }
+
+                                ActionButton {
+                                    text: qsTr("Edit")
+                                    accessibleName: qsTr("Edit MCP server %1").arg(mcpServerRow.modelData.id)
+                                    onClicked: pane.editMcpServer(mcpServerRow.modelData)
+                                }
+
+                                ActionButton {
+                                    text: qsTr("Restart")
+                                    accessibleName: qsTr("Restart MCP server %1").arg(mcpServerRow.modelData.id)
+                                    onClicked: {
+                                        const restarted = pane.controller.restartMcpServer(mcpServerRow.modelData.id);
+                                        pane.presentStatus(restarted ? qsTr("MCP server restarted.") : qsTr("The MCP server could not be restarted."), !restarted, restarted);
+                                    }
+                                }
+
+                                ActionButton {
+                                    text: qsTr("Remove")
+                                    accessibleName: qsTr("Remove MCP server %1").arg(mcpServerRow.modelData.id)
+                                    variant: "danger"
+                                    onClicked: {
+                                        const removed = pane.controller.removeMcpServer(mcpServerRow.modelData.id);
+                                        pane.presentStatus(removed ? qsTr("MCP server removed.") : qsTr("The MCP server could not be removed."), !removed, removed);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: pane.compactLayout ? 1 : 2
+                        columnSpacing: 18
+                        rowSpacing: 10
+
+                        Label {
+                            text: qsTr("Server id")
+                            color: Theme.text
+                        }
+                        AppTextField {
+                            Layout.fillWidth: true
+                            text: pane.mcpEditingId
+                            enabled: pane.mcpOriginalId.length === 0
+                            placeholderText: qsTr("local-files")
+                            accessibleName: qsTr("MCP server id")
+                            onTextEdited: pane.mcpEditingId = text
+                        }
+
+                        Label {
+                            text: qsTr("Tool namespace")
+                            color: Theme.text
+                        }
+                        AppTextField {
+                            Layout.fillWidth: true
+                            text: pane.mcpNamespaceDraft
+                            placeholderText: qsTr("files")
+                            accessibleName: qsTr("MCP tool namespace")
+                            onTextEdited: pane.mcpNamespaceDraft = text
+                        }
+
+                        Label {
+                            text: qsTr("Executable")
+                            color: Theme.text
+                        }
+                        AppTextField {
+                            Layout.fillWidth: true
+                            text: pane.mcpProgramDraft
+                            placeholderText: qsTr("Absolute path to node.exe or server.exe")
+                            accessibleName: qsTr("MCP executable path")
+                            onTextEdited: pane.mcpProgramDraft = text
+                        }
+
+                        Label {
+                            text: qsTr("Arguments")
+                            color: Theme.text
+                        }
+                        AppTextField {
+                            Layout.fillWidth: true
+                            text: pane.mcpArgumentsDraft
+                            placeholderText: qsTr("[\"server.js\", \"--stdio\"]")
+                            accessibleName: qsTr("MCP arguments as a JSON string array")
+                            onTextEdited: pane.mcpArgumentsDraft = text
+                        }
+
+                        Label {
+                            text: qsTr("Working directory")
+                            color: Theme.text
+                        }
+                        AppTextField {
+                            Layout.fillWidth: true
+                            text: pane.mcpWorkingDirectoryDraft
+                            placeholderText: qsTr("Optional absolute directory")
+                            accessibleName: qsTr("MCP working directory")
+                            onTextEdited: pane.mcpWorkingDirectoryDraft = text
+                        }
+
+                        Label {
+                            text: qsTr("Server trust")
+                            color: Theme.text
+                        }
+                        AppComboBox {
+                            id: mcpTrustBox
+                            Layout.fillWidth: true
+                            currentIndex: 1
+                            model: ["disabled", "observe", "execute"]
+                            displayTextModel: [qsTr("Disabled"), qsTr("Discover only"), qsTr("Allow reviewed tools")]
+                            accessibleName: qsTr("MCP server trust")
+                        }
+
+                        Item {
+                            visible: !pane.compactLayout
+                            implicitHeight: mcpEnabledSwitch.implicitHeight
+                        }
+                        AppSwitch {
+                            id: mcpEnabledSwitch
+                            Layout.fillWidth: true
+                            checked: true
+                            text: qsTr("Start this stdio server with ztermy")
+                            accessibleName: text
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+
+                        ActionButton {
+                            text: qsTr("New server")
+                            accessibleName: text
+                            onClicked: pane.resetMcpDraft()
+                        }
+
+                        Item {
+                            Layout.fillWidth: true
+                        }
+
+                        ActionButton {
+                            text: pane.mcpOriginalId.length > 0 ? qsTr("Save server") : qsTr("Add server")
+                            accessibleName: text
+                            variant: "primary"
+                            enabled: pane.mcpEditingId.length > 0 && pane.mcpNamespaceDraft.length > 0 && pane.mcpProgramDraft.length > 0
+                            onClicked: pane.saveMcpDraft()
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        visible: pane.mcpReviewTool !== null
+                        implicitHeight: mcpReviewColumn.implicitHeight + 22
+                        radius: Theme.radiusControl
+                        color: Theme.raisedBackground
+                        border.color: Theme.focus
+
+                        ColumnLayout {
+                            id: mcpReviewColumn
+                            anchors.fill: parent
+                            anchors.margins: 11
+                            spacing: 8
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: pane.mcpReviewTool ? pane.mcpReviewTool.exposedName : ""
+                                color: Theme.text
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.textBody
+                                font.weight: Font.DemiBold
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: pane.mcpReviewTool ? qsTr("Untrusted server description: %1").arg(pane.mcpReviewTool.description) : ""
+                                color: Theme.textMuted
+                                wrapMode: Text.WordWrap
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.textLabel
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: pane.mcpReviewTool ? qsTr("Schema digest: %1").arg(pane.mcpReviewTool.schemaDigest) : ""
+                                color: Theme.textSoft
+                                wrapMode: Text.WrapAnywhere
+                                font.family: Theme.terminalFont
+                                font.pixelSize: Theme.textCompact
+                            }
+
+                            ScrollView {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 180
+                                clip: true
+
+                                TextArea {
+                                    readOnly: true
+                                    selectByMouse: true
+                                    text: pane.mcpReviewTool ? pane.mcpReviewTool.inputSchema : ""
+                                    color: Theme.text
+                                    selectionColor: Theme.accent
+                                    selectedTextColor: Theme.accentText
+                                    font.family: Theme.terminalFont
+                                    font.pixelSize: Theme.textCompact
+                                    wrapMode: TextEdit.NoWrap
+                                    background: Rectangle {
+                                        color: Theme.controlBackground
+                                        radius: Theme.radiusControl
+                                        border.color: Theme.border
+                                    }
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: qsTr("Approval is invalidated automatically if the description or schema changes.")
+                                    color: Theme.textMuted
+                                    wrapMode: Text.WordWrap
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.textCompact
+                                }
+                                ActionButton {
+                                    text: qsTr("Close")
+                                    onClicked: pane.mcpReviewTool = null
+                                }
+                                ActionButton {
+                                    text: pane.mcpReviewTool && pane.mcpReviewTool.approved ? qsTr("Revoke") : qsTr("Approve exact schema")
+                                    variant: pane.mcpReviewTool && pane.mcpReviewTool.approved ? "danger" : "primary"
+                                    onClicked: {
+                                        const tool = pane.mcpReviewTool;
+                                        const changed = pane.controller.setMcpToolApproved(tool.serverId, tool.exposedName, tool.schemaDigest, !tool.approved);
+                                        pane.presentStatus(changed ? (tool.approved ? qsTr("MCP tool approval revoked.") : qsTr("MCP tool schema approved.")) : qsTr("The MCP tool approval could not be changed."), !changed, changed);
+                                        pane.mcpReviewTool = null;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Repeater {
+                        model: pane.controller.mcpTools
+
+                        delegate: Rectangle {
+                            id: mcpToolRow
+                            required property var modelData
+                            Layout.fillWidth: true
+                            implicitHeight: mcpToolContent.implicitHeight + 18
+                            radius: Theme.radiusControl
+                            color: "transparent"
+                            border.color: Theme.border
+
+                            RowLayout {
+                                id: mcpToolContent
+                                anchors.fill: parent
+                                anchors.margins: 9
+                                spacing: 10
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: mcpToolRow.modelData.exposedName
+                                        color: Theme.text
+                                        elide: Text.ElideRight
+                                        font.family: Theme.terminalFont
+                                        font.pixelSize: Theme.textLabel
+                                    }
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: mcpToolRow.modelData.approved ? qsTr("Approved exact schema") : qsTr("Review required")
+                                        color: mcpToolRow.modelData.approved ? Theme.success : Theme.warning
+                                        font.family: Theme.uiFont
+                                        font.pixelSize: Theme.textCompact
+                                    }
+                                }
+
+                                ActionButton {
+                                    text: qsTr("Review")
+                                    accessibleName: qsTr("Review schema for %1").arg(mcpToolRow.modelData.exposedName)
+                                    onClicked: pane.mcpReviewTool = mcpToolRow.modelData
                                 }
                             }
                         }

@@ -86,6 +86,16 @@ std::expected<QByteArray, QString> McpJsonRpcProtocol::callToolRequest(const std
                                                            {QStringLiteral("arguments"), arguments.object()}}}});
 }
 
+QByteArray McpJsonRpcProtocol::cancelRequestNotification(const std::uint64_t id, const std::string_view reason) const
+{
+    const QString boundedReason = QString::fromUtf8(reason.data(), static_cast<qsizetype>(reason.size())).left(256);
+    return line(
+        QJsonObject{{QStringLiteral("jsonrpc"), QStringLiteral("2.0")},
+                    {QStringLiteral("method"), QStringLiteral("notifications/cancelled")},
+                    {QStringLiteral("params"), QJsonObject{{QStringLiteral("requestId"), static_cast<qint64>(id)},
+                                                           {QStringLiteral("reason"), boundedReason}}}});
+}
+
 std::expected<std::vector<McpJsonRpcMessage>, QString> McpJsonRpcProtocol::append(QByteArray bytes)
 {
     if (bytes.size() > maximumBufferedBytes || m_buffer.size() > maximumBufferedBytes - bytes.size())

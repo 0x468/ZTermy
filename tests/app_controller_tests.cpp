@@ -4,6 +4,7 @@
 #include "infrastructure/workbench/WorkspaceStateStore.h"
 #include "platform/windows/WindowsCredentialVault.h"
 
+#include <QCoreApplication>
 #include <QFile>
 #include <QSet>
 #include <QSignalSpy>
@@ -117,6 +118,7 @@ private slots:
     void usesContextualSshTabTitles();
     void rejectsIncompleteConnections();
     void persistsApplicationSettings();
+    void managesMcpServerConfiguration();
     void managesActionShortcutsAndDispatchContext();
     void managesMultipleLocalTerminalTabs();
     void managesPersistentTerminalWorkspaceSplits();
@@ -989,6 +991,40 @@ void AppControllerTests::managesActionShortcutsAndDispatchContext()
             QCOMPARE(action.value(QStringLiteral("shortcut")).toString(), QStringLiteral("Ctrl+Shift+F"));
         }
     }
+}
+
+void AppControllerTests::managesMcpServerConfiguration()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString profiles = directory.filePath(QStringLiteral("profiles.json"));
+    const QString knownHosts = directory.filePath(QStringLiteral("known_hosts.json"));
+    const QString settings = directory.filePath(QStringLiteral("settings.json"));
+    const auto factory = [] {
+        return std::make_unique<FakeLocalTerminalSession>(std::make_shared<FakeLocalSessionState>());
+    };
+
+    {
+        ztermy::AppController controller(profiles, knownHosts, settings, factory);
+        QSignalSpy changes(&controller, &ztermy::AppController::mcpConfigurationChanged);
+        QVERIFY(controller.saveMcpServer(QStringLiteral("local-test"), QStringLiteral("local_test"),
+                                         QCoreApplication::applicationFilePath(), {}, {}, QStringLiteral("observe"),
+                                         false));
+        QVERIFY(changes.count() > 0);
+        QCOMPARE(controller.mcpServers().size(), 1);
+        const QVariantMap server = controller.mcpServers().constFirst().toMap();
+        QCOMPARE(server.value(QStringLiteral("namespace")).toString(), QStringLiteral("local_test"));
+        QCOMPARE(server.value(QStringLiteral("state")).toString(), QStringLiteral("disabled"));
+        QVERIFY(controller.mcpTools().isEmpty());
+        QVERIFY(controller.restartMcpServer(QStringLiteral("local-test")));
+        QVERIFY(!controller.setMcpToolApproved(QStringLiteral("local-test"), QStringLiteral("missing"),
+                                               QString(64, QLatin1Char('a')), true));
+    }
+
+    ztermy::AppController reloaded(profiles, knownHosts, settings, factory);
+    QCOMPARE(reloaded.mcpServers().size(), 1);
+    QVERIFY(reloaded.removeMcpServer(QStringLiteral("local-test")));
+    QVERIFY(reloaded.mcpServers().isEmpty());
 }
 
 void AppControllerTests::managesMultipleLocalTerminalTabs()

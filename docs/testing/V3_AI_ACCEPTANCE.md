@@ -109,12 +109,38 @@ evaluations serve different purposes and are reported separately.
     (`ADR 0067`); explicitly approved single-file SFTP uploads and downloads
     queued through the existing cancellable transfer graph (`ADR 0068`).
   - 0.3.2 implementation scope is complete.
-- [ ] MCP tools use the same registry, permission, result, audit, cancellation,
+- [x] MCP tools use the same registry, permission, result, audit, cancellation,
       and namespace rules as native tools; server trust tier, credential scope,
       description/schema changes, untrusted elicitation, and disable/revoke are
       covered.
-- [ ] Evaluation replay works with recorded synthetic/provider-independent tool
+  - Implemented: local stdio servers run as exact executables with a reduced
+    environment and no stored credential channel; discovered definitions remain
+    hidden until execute trust and exact schema review; every call still needs
+    explicit approval, is deduplicated by the native dispatch ledger, is
+    cancellable, and returns a bounded untrusted envelope (`ADR 0073`,
+    `ADR 0074`). Server-originated elicitation is unsupported and grants no
+    authority. Store, registry, protocol, process, runtime-manager, and
+    AppController tests cover backup recovery, drift, disable/revoke, duplicate
+    dispatch, cancellation, and application configuration.
+- [x] Evaluation replay works with recorded synthetic/provider-independent tool
       traces and separately reports live-provider results.
+  - Implemented: the versioned 12-case corpus and deterministic replay harness
+    validate evidence, target, approval, allowed-tool, and duplicate-side-effect
+    contracts without a provider. Live-provider observations use a separate
+    result channel and cannot rewrite the baseline (`ADR 0072`).
+
+### MCP manual release-candidate check
+
+- [ ] Add an absolute local test-server executable in Settings. Observe trust
+      may discover tools but must not expose them to an AI request.
+- [ ] Change to execute trust, inspect the complete schema, and approve one
+      digest. Only that tool becomes available; editing its schema or revoking
+      approval removes it immediately.
+- [ ] Request the approved tool. The approval card shows the exact server,
+      namespaced tool, target, arguments, and untrusted-data warning. Deny sends
+      nothing; approve dispatches once; cancel resolves without a late action.
+- [ ] Restart, disable, remove, crash, and relaunch the server. No stale tool,
+      pending call, secret log, UI hang, or application crash remains.
 
 ## Performance budgets
 

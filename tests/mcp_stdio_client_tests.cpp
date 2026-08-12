@@ -63,12 +63,24 @@ void McpStdioClientTests::discoversApprovesAndCallsTool()
         callLoop.quit();
     });
     QVERIFY(called.has_value());
+    QVERIFY(!client.cancel(*called + 100));
     QTimer::singleShot(5'000, &callLoop, &QEventLoop::quit);
     callLoop.exec();
     QVERIFY(!output.empty());
     const QJsonObject envelope = QJsonDocument::fromJson(QByteArray::fromStdString(output)).object();
     QVERIFY(envelope.value(QStringLiteral("ok")).toBool());
     QVERIFY(envelope.value(QStringLiteral("untrusted_evidence")).toBool());
+
+    const auto slow = update->tools.at(1);
+    QVERIFY(registry.approve(slow.serverId, slow.exposedName, slow.schemaDigest));
+    bool cancelledHandlerCalled = false;
+    auto slowCall = client.call(slow.exposedName, R"({})", [&cancelledHandlerCalled](auto result) {
+        cancelledHandlerCalled = true;
+        QVERIFY(!result.has_value());
+    });
+    QVERIFY(slowCall.has_value());
+    QVERIFY(client.cancel(*slowCall));
+    QVERIFY(cancelledHandlerCalled);
     client.stop();
     QVERIFY(registry.definitions().empty());
 }

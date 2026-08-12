@@ -111,6 +111,19 @@ bool McpToolRegistry::approve(const std::string_view serverId, const std::string
     return true;
 }
 
+bool McpToolRegistry::revoke(const std::string_view serverId, const std::string_view exposedName)
+{
+    const auto found = std::ranges::find_if(m_tools, [=](const auto &tool) {
+        return tool.serverId == serverId && tool.exposedName == exposedName;
+    });
+    if (found == m_tools.end())
+    {
+        return false;
+    }
+    found->schemaApproved = false;
+    return true;
+}
+
 std::vector<AiToolDefinition> McpToolRegistry::definitions() const
 {
     std::vector<AiToolDefinition> result;

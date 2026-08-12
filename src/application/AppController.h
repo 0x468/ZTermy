@@ -11,6 +11,7 @@
 #include "application/ai/AiSftpListTool.h"
 #include "application/ai/AiSftpReadTool.h"
 #include "application/ai/AiTurnRunner.h"
+#include "application/ai/McpRuntimeManager.h"
 #include "application/forwarding/PortForwardingJob.h"
 #include "application/security/CredentialVaultCoordinator.h"
 #include "application/sftp/SftpDirectoryModel.h"
@@ -23,6 +24,7 @@
 #include "domain/ai/AiCommandTracker.h"
 #include "domain/ai/AiContextBroker.h"
 #include "domain/ai/AiTerminalFrameTracker.h"
+#include "domain/ai/AiToolDispatchLedger.h"
 #include "domain/terminal/SemanticTerminalObserver.h"
 #include "domain/workbench/ScriptExecution.h"
 #include "domain/workbench/ScriptRecorder.h"
@@ -174,6 +176,9 @@ class AppController final : public QObject
     Q_PROPERTY(QString activeAiContextPreview READ activeAiContextPreview NOTIFY aiConversationChanged)
     Q_PROPERTY(QVariantList activeAiContextItems READ activeAiContextItems NOTIFY aiConversationChanged)
     Q_PROPERTY(QVariantMap activeAiToolApproval READ activeAiToolApproval NOTIFY aiConversationChanged)
+    Q_PROPERTY(QVariantList mcpServers READ mcpServers NOTIFY mcpConfigurationChanged)
+    Q_PROPERTY(QVariantList mcpTools READ mcpTools NOTIFY mcpConfigurationChanged)
+    Q_PROPERTY(QString mcpOperationError READ mcpOperationError NOTIFY mcpConfigurationChanged)
     Q_PROPERTY(QString credentialStoragePreference READ credentialStoragePreference NOTIFY credentialVaultChanged)
     Q_PROPERTY(QString effectiveCredentialStorage READ effectiveCredentialStorage NOTIFY credentialVaultChanged)
     Q_PROPERTY(bool portableVaultInitialized READ portableVaultInitialized NOTIFY credentialVaultChanged)
@@ -299,6 +304,9 @@ public:
     [[nodiscard]] QString activeAiContextPreview() const;
     [[nodiscard]] QVariantList activeAiContextItems() const;
     [[nodiscard]] QVariantMap activeAiToolApproval() const;
+    [[nodiscard]] QVariantList mcpServers() const;
+    [[nodiscard]] QVariantList mcpTools() const;
+    [[nodiscard]] QString mcpOperationError() const;
     void retranslateUiState();
     [[nodiscard]] QString credentialStoragePreference() const;
     [[nodiscard]] QString effectiveCredentialStorage() const;
@@ -470,6 +478,13 @@ public:
                                             const QString &permissionMode);
     Q_INVOKABLE bool saveAiApiKey(const QString &apiKey);
     Q_INVOKABLE bool removeAiApiKey();
+    Q_INVOKABLE bool saveMcpServer(const QString &id, const QString &nameSpace, const QString &program,
+                                   const QStringList &arguments, const QString &workingDirectory, const QString &trust,
+                                   bool enabled);
+    Q_INVOKABLE bool removeMcpServer(const QString &id);
+    Q_INVOKABLE bool restartMcpServer(const QString &id);
+    Q_INVOKABLE bool setMcpToolApproved(const QString &serverId, const QString &exposedName,
+                                        const QString &schemaDigest, bool approved);
     Q_INVOKABLE bool setAiConversationHistoryEnabled(bool enabled);
     Q_INVOKABLE bool restoreAiConversationHistory(const QString &conversationId);
     Q_INVOKABLE bool sendAiMessage(const QString &prompt);
@@ -530,6 +545,7 @@ signals:
     void applicationSettingsChanged();
     void credentialVaultChanged();
     void aiConversationChanged();
+    void mcpConfigurationChanged();
     void portForwardingRulesChanged();
     void startupRecoveryNoticeChanged();
 
@@ -576,6 +592,14 @@ private:
             ai::AiNoteReadRequest request;
         };
 
+        struct PendingAiMcpCall final
+        {
+            ai::AiToolCall call;
+            ai::AiToolDispatchKey dispatchKey;
+            ai::McpRegisteredTool tool;
+            std::optional<ai::McpCallHandle> activeCall;
+        };
+
         std::unique_ptr<terminal::LocalTerminalSessionBackend> local;
         std::unique_ptr<ssh::SshTerminalSession> ssh;
         std::unique_ptr<sftp::SftpSession> sftpSession;
@@ -587,6 +611,7 @@ private:
         std::optional<PendingAiSftpRead> pendingAiSftpRead;
         std::optional<PendingAiSftpList> pendingAiSftpList;
         std::optional<PendingAiNoteRead> pendingAiNoteRead;
+        std::optional<PendingAiMcpCall> pendingAiMcpCall;
         qint64 connectedUtcMs = 0;
         qreal sessionBackgroundOpacity = -1.0;
         qint64 recordingStartedUtcMs = 0;
@@ -719,6 +744,10 @@ private:
     [[nodiscard]] std::string executeAiTransferControl(const ai::AiTerminalAction &action);
     [[nodiscard]] std::string executeAiSaveRunbook(const ai::AiTerminalAction &action);
     [[nodiscard]] std::string executeAiSftpTransfer(TerminalTab &tab, const ai::AiTerminalAction &action);
+    [[nodiscard]] bool approveAiMcpTool(TerminalTab &tab);
+    [[nodiscard]] bool denyAiMcpTool(TerminalTab &tab);
+    void completeAiMcpTool(const QString &tabId, std::uint64_t generation, const ai::AiToolDispatchKey &dispatchKey,
+                           const ai::AiToolCall &call, std::expected<std::string, QString> result);
     void recordAiActivity(const TerminalTab &tab, const ai::AiToolCall &call, const QString &state,
                           const QString &resultCode, bool sideEffecting, bool highRisk = false);
     [[nodiscard]] bool handoffAiControlToUser(TerminalTab &tab, bool cancelTurn);
@@ -832,6 +861,7 @@ private:
     workbench::NoteStore m_noteStore;
     workbench::WorkspaceStateStore m_workspaceStateStore;
     ai::AiActivityModel m_aiActivity;
+    ai::McpRuntimeManager m_mcpRuntime;
     workbench::WorkspaceState m_workspaceState;
     std::vector<workbench::ScriptDefinition> m_scripts;
     QString m_quickCommandOperationError;
@@ -861,6 +891,7 @@ private:
     ai::AiCommandTracker m_aiCommandTracker;
     ai::AiActionToolDispatcher m_aiActionToolDispatcher;
     ai::AiReadToolDispatcher m_aiReadToolDispatcher;
+    ai::AiToolDispatchLedger m_mcpDispatchLedger;
     std::vector<std::unique_ptr<TerminalTab>> m_tabs;
     std::vector<std::unique_ptr<sftp::SftpSession>> m_stoppingSftpSessions;
     QString m_activeTabId;

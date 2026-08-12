@@ -32,13 +32,22 @@ constexpr std::uint64_t listToolsRequestId = 2;
 [[nodiscard]] std::string toolResult(const McpJsonRpcMessage &message)
 {
     QJsonObject envelope{{QStringLiteral("ok"), message.error.isEmpty()}, {QStringLiteral("untrusted_evidence"), true}};
+    const QJsonObject payload = message.error.isEmpty() ? message.result : message.error;
+    const QByteArray serialized = QJsonDocument(payload).toJson(QJsonDocument::Compact);
+    QJsonValue boundedPayload = payload;
+    if (serialized.size() > 48 * 1024)
+    {
+        boundedPayload = QJsonObject{{QStringLiteral("truncated"), true},
+                                     {QStringLiteral("original_bytes"), serialized.size()},
+                                     {QStringLiteral("preview"), QString::fromUtf8(serialized.left(48 * 1024))}};
+    }
     if (!message.error.isEmpty())
     {
-        envelope.insert(QStringLiteral("error"), message.error);
+        envelope.insert(QStringLiteral("error"), boundedPayload);
     }
     else
     {
-        envelope.insert(QStringLiteral("result"), message.result);
+        envelope.insert(QStringLiteral("result"), boundedPayload);
     }
     return QJsonDocument(envelope).toJson(QJsonDocument::Compact).toStdString();
 }
@@ -97,8 +106,8 @@ std::expected<void, QString> McpStdioClient::start(McpStdioConfiguration configu
     return {};
 }
 
-std::expected<void, QString> McpStdioClient::call(const std::string_view exposedToolName,
-                                                  const std::string_view argumentsJson, CallHandler handler)
+std::expected<std::uint64_t, QString> McpStdioClient::call(const std::string_view exposedToolName,
+                                                           const std::string_view argumentsJson, CallHandler handler)
 {
     if (m_state != State::ready || m_pendingCalls.size() >= 16)
     {
@@ -121,7 +130,19 @@ std::expected<void, QString> McpStdioClient::call(const std::string_view exposed
         m_pendingCalls.remove(id);
         return std::unexpected(QStringLiteral("The MCP tool request could not be written."));
     }
-    return {};
+    return id;
+}
+
+bool McpStdioClient::cancel(const std::uint64_t requestId, const std::string_view reason)
+{
+    const auto handler = m_pendingCalls.take(requestId);
+    if (!handler)
+    {
+        return false;
+    }
+    static_cast<void>(write(m_protocol.cancelRequestNotification(requestId, reason)));
+    handler(std::unexpected(QStringLiteral("The MCP tool call was cancelled.")));
+    return true;
 }
 
 void McpStdioClient::stop()

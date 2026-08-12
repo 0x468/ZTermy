@@ -22,6 +22,9 @@ void McpJsonRpcProtocolTests::buildsStrictLifecycleAndCallRequests()
     auto call = protocol.callToolRequest(3, "read", R"({"path":"/tmp"})");
     QVERIFY(call.has_value());
     QVERIFY(call->contains("tools/call"));
+    const QByteArray cancelled = protocol.cancelRequestNotification(3, "user cancelled");
+    QVERIFY(cancelled.contains("notifications/cancelled"));
+    QVERIFY(cancelled.contains("user cancelled"));
     QVERIFY(!protocol.callToolRequest(3, "read", "not-json").has_value());
 }
 

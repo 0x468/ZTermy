@@ -59,6 +59,7 @@ public:
     [[nodiscard]] std::expected<McpDiscoveryUpdate, std::string> update(const McpServerIdentity &server,
                                                                         std::span<const McpDiscoveredTool> discovered);
     [[nodiscard]] bool approve(std::string_view serverId, std::string_view exposedName, std::string_view schemaDigest);
+    [[nodiscard]] bool revoke(std::string_view serverId, std::string_view exposedName);
     [[nodiscard]] std::vector<AiToolDefinition> definitions() const;
     [[nodiscard]] std::optional<McpRegisteredTool> resolve(std::string_view exposedName) const;
     void disableServer(std::string_view serverId);

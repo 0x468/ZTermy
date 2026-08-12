@@ -177,6 +177,22 @@ becomes conversation retention.
 - complete English/Chinese, accessibility, package, upgrade, recovery, and
   manual real-host acceptance for the V3 surface.
 
+Delivery status:
+
+- the provider-independent evaluation corpus and deterministic replay harness
+  are implemented (`ADR 0072`);
+- local MCP stdio transport, isolated namespaces, schema-drift revocation, and
+  bounded untrusted results are implemented (`ADR 0073`);
+- persistent server management and the executable-trust -> exact-schema-review
+  -> per-call-approval chain are integrated with cancellation, replay
+  protection, audit, Settings UI, and backup recovery (`ADR 0074`);
+- automatic task/model routing remains intentionally absent: the current replay
+  evidence does not establish a provider-independent quality, latency, or cost
+  improvement. The remembered explicit model remains the predictable default;
+- provider contracts, privacy diagnostics, soak gates, localization,
+  accessibility, packaging, upgrade/recovery, and final manual evidence remain
+  release-candidate closure work.
+
 ## Explicit exclusions
 
 - copying Warp, NetCatty, VS Code, Wave, or Tabby implementation or assets;
