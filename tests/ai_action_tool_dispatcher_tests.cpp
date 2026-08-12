@@ -105,19 +105,15 @@ void AiActionToolDispatcherTests::publishesStrictRunCommandDefinition()
 {
     const auto definitions = AiActionToolDispatcher::definitions();
     constexpr std::array expected{
-        std::string_view{"run_command"},
-        std::string_view{"interrupt_command"},
-        std::string_view{"write_to_pty"},
-        std::string_view{"save_runbook"},
-        std::string_view{"queue_sftp_download"},
-        std::string_view{"queue_sftp_upload"},
+        std::string_view{"run_command"},         std::string_view{"interrupt_command"},
+        std::string_view{"write_to_pty"},        std::string_view{"save_runbook"},
+        std::string_view{"queue_sftp_download"}, std::string_view{"queue_sftp_upload"},
     };
     QCOMPARE(definitions.size(), expected.size());
     for (std::size_t index = 0; index < definitions.size(); ++index)
     {
         QCOMPARE(definitions[index].name, expected[index]);
-        const auto schema =
-            QJsonDocument::fromJson(QByteArray::fromStdString(definitions[index].parametersJson));
+        const auto schema = QJsonDocument::fromJson(QByteArray::fromStdString(definitions[index].parametersJson));
         QVERIFY(schema.isObject());
         QVERIFY(!schema.object().value(QStringLiteral("additionalProperties")).toBool(true));
     }
