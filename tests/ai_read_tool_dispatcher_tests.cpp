@@ -5,6 +5,8 @@
 #include <QJsonObject>
 #include <QtTest/QTest>
 
+#include <array>
+#include <string_view>
 #include <vector>
 
 namespace
@@ -104,10 +106,26 @@ private slots:
 void AiReadToolDispatcherTests::publishesStrictReadOnlyCatalog()
 {
     const auto definitions = AiReadToolDispatcher::definitions();
-    QCOMPARE(definitions.size(), std::size_t{13});
-    QCOMPARE(definitions.front().name, std::string("list_sessions"));
-    for (const auto &definition : definitions)
+    constexpr std::array expected{
+        std::string_view{"list_sessions"},
+        std::string_view{"read_multi_session_status"},
+        std::string_view{"read_session_info"},
+        std::string_view{"read_terminal"},
+        std::string_view{"read_command_block"},
+        std::string_view{"read_command_output"},
+        std::string_view{"list_sftp_directory"},
+        std::string_view{"list_shell_history"},
+        std::string_view{"list_scripts"},
+        std::string_view{"read_script"},
+        std::string_view{"list_notes"},
+        std::string_view{"read_remote_telemetry"},
+        std::string_view{"list_port_forwarding"},
+    };
+    QCOMPARE(definitions.size(), expected.size());
+    for (std::size_t index = 0; index < definitions.size(); ++index)
     {
+        const auto &definition = definitions[index];
+        QCOMPARE(definition.name, expected[index]);
         QVERIFY(QJsonDocument::fromJson(QByteArray::fromStdString(definition.parametersJson)).isObject());
         QVERIFY(!definition.name.contains("run"));
         QVERIFY(!definition.name.contains("write"));
