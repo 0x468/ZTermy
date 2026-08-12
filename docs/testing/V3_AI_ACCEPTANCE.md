@@ -156,15 +156,15 @@ evaluations serve different purposes and are reported separately.
       layout captures without depending on Windows foreground activation (`ADR
       0078`).
 
-### Historical pre-0.3.8 release-candidate execution — 2026-08-12 through 2026-08-13
+### Final-source release-candidate execution — 2026-08-12 through 2026-08-13
 
 The detailed handoff is `V3_0_3_0_RC_ACCEPTANCE.md`. The candidate was exercised
 on Windows 11 Pro build 26200, x64, with Qt 6.8.3 static, MSVC 2022 17.14.15,
 CMake 4.4.0, Ninja 1.13.1, PowerShell 7.6.4, and clang-tidy 22.1.6.
 
-- dynamic Debug and static Release each completed the 102-test suite with zero
+- dynamic Debug and static Release each completed the 105-test suite with zero
   failures;
-- the static compilation database completed all 219 clang-tidy translation
+- the static compilation database completed all 224 clang-tidy translation
   units with warnings as errors, and the C++/QML formatting and QML lint gates
   passed;
 - all eight inherited real-window gates passed, including work-area geometry,
@@ -173,9 +173,10 @@ CMake 4.4.0, Ninja 1.13.1, PowerShell 7.6.4, and clang-tidy 22.1.6.
 - the static AI concurrency gate completed four full iterations in 158.877
   seconds with zero failures. The earlier dynamic Debug run completed three
   iterations in 120.296 seconds with zero failures;
-- the formal static Release AI/MCP concurrency gate completed 179 full
-  iterations in 7207.7 seconds with zero failures. Its content-free report
-  covers the nine approved runtime and lifecycle contracts;
+- the formal static Release schema-2 Agent/MCP concurrency gate completed 182
+  full iterations in 7232.8 seconds with zero failures. Its content-free report
+  covers the exact 11-test approved runtime and lifecycle set, including the
+  deterministic local Agent scenario;
 - the formal static Release AI-idle terminal gate completed 28800.1 seconds
   with zero failures. Its content-free report covers the sustained local
   terminal interaction and latency-growth contract;
@@ -186,7 +187,7 @@ CMake 4.4.0, Ninja 1.13.1, PowerShell 7.6.4, and clang-tidy 22.1.6.
   `SHA256SUMS.txt`, and `release-manifest.json`. The archive was unpacked,
   `portable.flag` was present, and its packaged executable passed the lifecycle
   smoke.
-- the final-source Debug and static Release suites both passed 102/102. The
+- the final-source Debug and static Release suites both passed 105/105. The
   protected clipboard contract additionally passed 100 consecutive Release
   repetitions under active Windows clipboard contention.
 
@@ -231,18 +232,18 @@ previous-Windows-build, or owner UX checks below.
   available. Exact OS, Qt, PowerShell/OpenSSH, provider, model, and build versions
   are recorded.
 
-Duration evidence on 2026-08-12: dynamic Debug completed three developer gate
-iterations in 120.296 seconds and static Release completed four developer gate
-iterations in 158.877 seconds, both with zero failures. The formal static
-Release run then completed 179 full iterations in 7207.7 seconds with zero
-failures, satisfying the two-hour mixed AI/MCP concurrency requirement. The
-formal AI-idle terminal run completed 28800.1 seconds with zero failures,
+Duration evidence on 2026-08-12 through 2026-08-13: schema-2 developer runs in
+dynamic Debug and static Release each completed a full iteration with zero
+failures. The formal static Release run then completed 182 full iterations in
+7232.8 seconds with zero failures, satisfying the two-hour mixed Agent/MCP
+concurrency requirement. The formal AI-idle terminal run completed 28800.1
+seconds with zero failures,
 satisfying the eight-hour terminal requirement. Both content-free reports pass
 the unified release-candidate verifier.
 
-### 0.3.8 Agent closure developer evidence — 2026-08-13
+### 0.3.8 Agent closure final-source evidence — 2026-08-13
 
-- dynamic Debug and static Release each pass 104/104 tests;
+- dynamic Debug and static Release each pass 105/105 tests;
 - `ai-agent-scenario` passes 20 consecutive focused runs and exercises all five
   permission modes, real local ConPTY/PowerShell, semantic command completion,
   replay, user input during a long command, interactive PTY input, and the
@@ -250,11 +251,12 @@ the unified release-candidate verifier.
 - `ai-agent-real-host` passes against the owner-provided key-authenticated Linux
   host and exercises automatic Agent execution, user input queued during a long
   command, and an interactive remote `read` answered through `write_to_pty`;
-- schema-2 mixed Agent/MCP developer soaks completed one iteration in both
-  configurations with zero failures;
-- the final candidate still requires a fresh schema-2 two-hour duration report,
-  refreshed packages and hashes, and the owner/environment matrix. The earlier
-  eight-hour AI-idle terminal report remains applicable.
+- the schema-2 mixed Agent/MCP formal soak completed 182 iterations in 7232.8
+  seconds with zero failures; the retained eight-hour AI-idle terminal report
+  completed 28800.1 seconds with zero failures;
+- final MSI and portable artifacts, hashes, WiX contract, and the unified RC
+  verifier pass. The owner/provider and previous-Windows-build matrix remains
+  explicit manual/environment acceptance.
 
 ## Evaluation corpus
 

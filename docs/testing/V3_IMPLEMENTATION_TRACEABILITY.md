@@ -108,15 +108,15 @@ covered by `application-settings`, `ai-permission-policy`,
 - **Automated candidate evidence:** the exact builds, test totals, static
   analysis, real-window gates, real-host key-only runs, and package hashes are
   recorded in `V3_0_3_0_RC_ACCEPTANCE.md`.
-- **Duration evidence:** the earlier two-hour report covers the pre-`0.3.8`
-  set. ADR 0083 expands and versions that set, so final V3 acceptance requires
-  a fresh two-hour report plus the retained eight-hour terminal report and
-  final rebuilt release bundle.
+- **Duration evidence:** the final schema-2 Agent/MCP report covers the expanded
+  `0.3.8` set: 182 complete iterations in 7232.8 seconds with zero failures.
+  The retained AI-idle terminal report covers 28800.1 seconds with zero
+  failures. Both reports pass the unified RC verifier with the final rebuilt
+  release bundle.
 - **Current developer evidence:** dynamic Debug and static Release each pass
-  104/104 tests; the end-to-end scenario also passes 20 consecutive focused
-  runs. Schema-2 mixed Agent/MCP developer soaks completed one iteration in
-  each configuration with zero failures. These short runs prove the new report
-  contract but do not replace the formal two-hour duration gate.
+  105/105 tests; the end-to-end scenario also passes 20 consecutive focused
+  runs. C++/QML format, 1577/1577 translations, 224 clang-tidy translation
+  units, and all eight real-window gates pass.
 - **Current real-host evidence:** `ai-agent-real-host` passed against the
   owner-provided key-authenticated Linux SSH host in 1.681 seconds, covering
   automatic execution, user input queued behind a long command, and

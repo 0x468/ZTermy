@@ -271,14 +271,16 @@ Delivery status:
   content-free AI counts/policy state to diagnostic exports (`ADR 0075`);
 - provider-independent concurrency/lifecycle soak infrastructure and JSON
   evidence are implemented (`ADR 0076`); Debug and static Release developer
-  runs are green, the static Release two-hour AI/MCP duration gate completed
-  179 iterations in 7207.7 seconds with zero failures, and the AI-idle terminal
-  gate completed 28800.1 seconds with zero failures;
+  runs are green, the final schema-2 static Release two-hour Agent/MCP duration
+  gate completed 182 iterations in 7232.8 seconds with zero failures, and the
+  AI-idle terminal gate completed 28800.1 seconds with zero failures;
 - deterministic provider wire contracts and real-window responsive and
   accessibility contracts are implemented (`ADR 0077`, `ADR 0078`);
 - the static `0.3.0` MSI and portable ZIP pass the inherited installer,
   manifest, checksum, portable-mode, and lifecycle contracts. English and
-  Simplified Chinese pass the translation gate;
+  Simplified Chinese pass the 1577/1577 translation gate; the final Debug and
+  static Release suites pass 105/105 and static clang-tidy passes all 224 C++
+  translation units;
 - the exact automated evidence and remaining owner/environment checks are
   recorded in `testing/V3_0_3_0_RC_ACCEPTANCE.md`. Live-provider evaluation,
   real-host shell coverage, MSI interaction, and previous-Windows-build coverage

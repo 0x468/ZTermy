@@ -1,9 +1,9 @@
 # V3 0.3.0 release-candidate acceptance
 
-Status: historical pre-`0.3.8` automated candidate; superseded by Agent
-hardening and awaiting a rebuilt final candidate
+Status: final-source automated release candidate; owner/provider and
+environment-dependent interaction checks remain
 
-Date: 2026-08-12
+Date: 2026-08-13
 
 Identity:
 
@@ -11,14 +11,13 @@ Identity:
 - codename: **糸**;
 - verse: **「剪不断，理还乱，是离愁」**;
 - supported release platform: Windows 11 x64;
-- candidate package source: `05eb0a4`; the final application reliability change
-  is `7339b20`.
+- candidate package source: `aabd724`.
 
-This document preserves the evidence for that exact package. Commits after the
-recorded source add the mainstream Agent conversation, mode/rule, Markdown,
-reasoning, and deterministic end-to-end scenario slices. Their final candidate
-must refresh the build/test totals, the expanded schema-2 AI/MCP duration
-report, package hashes, and owner matrix rather than inheriting this sign-off.
+This document records the final-source automated evidence for that exact
+package. It includes the mainstream Agent conversation, five-mode/rule model,
+Markdown and reasoning presentation, local and real-SSH end-to-end scenarios,
+and the expanded schema-2 Agent/MCP duration gate. It does not convert the
+unchecked owner/provider matrix below into a pass.
 
 ## Environment
 
@@ -33,14 +32,14 @@ report, package hashes, and owner matrix rather than inheriting this sign-off.
 
 The following gates completed with exit code zero:
 
-1. Dynamic Debug configure/build and 102/102 CTest tests. The final-source run
-   took 102.22 seconds.
-2. Static Release configure/build and 102/102 CTest tests. The initial full run
-   took 143.89 seconds; the final-source run took 89.94 seconds. Both included
-   the 32-cycle MCP process lifecycle stress.
+1. Dynamic Debug configure/build and 105/105 CTest tests. The final-source run
+   took 98.03 seconds.
+2. Static Release configure/build and 105/105 CTest tests. The final-source run
+   took 94.70 seconds. Both configurations include the 32-cycle MCP process
+   lifecycle stress and the deterministic local Agent scenario.
 3. C++ format, QML format, QML lint, translation, branding, executable metadata,
    and package contracts.
-4. clang-tidy with warnings as errors over all 219 C++ translation units in the
+4. clang-tidy with warnings as errors over all 224 C++ translation units in the
    static compilation database.
 5. The inherited 30-second local-terminal interaction gate and its 16-test
    persistence/lifecycle core.
@@ -48,13 +47,13 @@ The following gates completed with exit code zero:
    appearance, resize/hit testing, DPI 100/125/150/200, responsive AI layout and
    accessibility, keyboard navigation, terminal rendering, and lifecycle
    shutdown.
-7. Provider-independent AI concurrency soak:
-   - dynamic Debug: three iterations, 120.296 seconds, zero failures;
-   - static Release developer run: four iterations, 158.877 seconds, zero
-     failures;
-   - static Release formal duration run: 179 iterations, 7207.7 seconds, zero
-     failures. The content-free report spans 2026-08-12 07:36:34Z through
-     09:36:42Z and belongs to the static Release build directory.
+7. Provider-independent schema-2 Agent/MCP concurrency soak:
+   - dynamic Debug and static Release developer runs each completed one full
+     iteration with zero failures;
+   - static Release formal duration run completed 182 iterations in 7232.8
+     seconds with zero failures. The content-free report spans 2026-08-12
+     21:27:30Z through 23:28:03Z, belongs to the static Release build directory,
+     and contains the exact 11-test approved set.
 8. WiX generation, ICE validation, decompilation, and structural inspection.
    Only the retained and reviewed ICE61, ICE69, and ICE91 warnings were emitted.
 9. Final portable archive extraction, `portable.flag` inspection, and packaged
@@ -67,16 +66,20 @@ The following gates completed with exit code zero:
     owner-approved host identity, public fingerprint, username, and private-key
     path; no password, passphrase, key content, or terminal command entered the
     command line or report.
+    The final Agent-specific real-host gate additionally passed automatic
+    command execution, user input queued behind a long remote command, and an
+    interactive remote read answered through `write_to_pty`. The integrated
+    real-window SSH/SFTP UI smoke also passed against the same pinned host.
 11. The formal AI-idle local-terminal stability gate completed 28800.148
     seconds with zero failures. The content-free report spans 2026-08-12
     15:45:37+08:00 through 23:45:38+08:00, records the static Release build
     directory, and passes the unified release-candidate evidence verifier.
 12. The final-source protected clipboard contract completed 100 consecutive
     Release repetitions after adding bounded Win32 clipboard contention retry.
-    The same contract passed in the final Debug and Release 102-test suites.
+    The same contract passed in the final Debug and Release 105-test suites.
 
 The formal soak reports are generated at
-`build/msvc-static-release/ai-concurrency-soak-2h.json` and
+`build/msvc-static-release/ai-concurrency-soak-2h-schema2.json` and
 `build/msvc-static-release/terminal-stability-soak-8h.json`. They contain test
 names, timings, iteration counts or requested duration, and failures only; they
 contain no terminal or AI content.
@@ -92,9 +95,9 @@ build/msvc-static-release/package/release/ztermy-0.3.0-windows-x64
 It contains exactly:
 
 - `ztermy-0.3.0-windows-x64-portable.zip` — SHA-256
-  `5d9de3006ccb0a602fc713eb880c0119ae61d8c5a670f5f2f52f11b71fe64aa2`;
+  `ad831637c897172f5f0eae2294a5d4ebe33b9db696407b8f7b6cfc41217dacec`;
 - `ztermy-0.3.0-windows-x64.msi` — SHA-256
-  `57640e8a48b55fc85a2f2ff6adeb13ac520cecf7ebff256b11c0f3475a8166de`;
+  `40663e8984a6cb98573d46bb4ae1d493b664ebc1e0540e84c7bd810f2adee744`;
 - `SHA256SUMS.txt`;
 - `release-manifest.json`.
 
@@ -242,7 +245,7 @@ unified release-candidate evidence verifier:
 pwsh -NoProfile -File .\scripts\run_ai_concurrency_soak.ps1 `
   -BuildDirectory .\build\msvc-static-release `
   -DurationSeconds 7200 `
-  -ReportPath .\build\msvc-static-release\ai-concurrency-soak-2h.json
+  -ReportPath .\build\msvc-static-release\ai-concurrency-soak-2h-schema2.json
 
 pwsh -NoProfile -File .\scripts\run_terminal_stability_soak.ps1 `
   -BuildDirectory .\build\msvc-static-release `
