@@ -7,7 +7,7 @@
 
 ## 节点 N1 — 研究基线 + P0 正确性修复（2026-08）
 
-**commit**: 待 N1 提交后回填（`git rev-parse --short HEAD`）
+**commit**: `c66a3e1`（fix(ai): close correctness gaps found in product research）
 
 **范围**：
 1. 研究完成：Netcatty 源码实测（A-F 六部分 + 16 项差距）、opencode commit 6c035e1（V1/V2 双架构）、Codex CLI（`docs/research/CODEX_CLI_ARCHITECTURE.md`）、Warp 官方文档；
