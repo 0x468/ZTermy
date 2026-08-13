@@ -79,6 +79,14 @@
 
 **验证**：Debug 构建通过；36/36（AI + terminal-engine）测试通过。
 
+## 节点 N8 — 权限一致性：edit 模式对所有变更先询问（2026-08）
+
+**commit**: `8bc495a`（fix(ai): edit mode asks before mutations like run_command）
+
+**范围**（对应研究 §5.2 模式矩阵一致性）：save_runbook 与 SFTP 传输此前在 edit 模式静默放行而 run_command 询问——所有变更工具现在统一在 edit 模式先询问。
+
+**验证**：35/35 AI 测试通过；全量 108/108 通过。
+
 **范围**：
 1. 研究完成：Netcatty 源码实测（A-F 六部分 + 16 项差距）、opencode commit 6c035e1（V1/V2 双架构）、Codex CLI（`docs/research/CODEX_CLI_ARCHITECTURE.md`）、Warp 官方文档；
 2. 对比研究文档落盘：`docs/reviews/ai-product-design-research-2026-08.md`；
