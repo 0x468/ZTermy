@@ -67,6 +67,18 @@
 
 **验证**：Debug 构建通过；35/35 AI 测试通过。
 
+## 节点 N7 — 上下文管理：scrollback 分页读取（2026-08）
+
+**commit**: `99044eb`（feat(ai): read_terminal_output pages through the real scrollback）
+
+**范围**（对应研究 §8.1 Netcatty terminal_read_context 分页语义）：
+1. `TerminalEngine::scrollbackPage(firstLine, lineCount)` 新接口 + Ghostty 实现（全文格式化 + 行范围切片，SCREEN 坐标含历史+当前屏，返回 total/scrollback 行数供分页）；
+2. Local/SSH backend 转发（ghostty 内部同步，调用线程查询与 worker feed 安全并发）；
+3. 新工具 `read_terminal_output`：最多 300 行 / 16 KiB 分页、has_more 续读、UTF-8 安全截断、untrusted 标注、turn 预算；scrollback 是追加式证据，实时读取不适用冻结快照规则；
+4. 测试：引擎分页（中间页/越界/非法参数）；工具目录更新为 14；fake backend 实现接口。
+
+**验证**：Debug 构建通过；36/36（AI + terminal-engine）测试通过。
+
 **范围**：
 1. 研究完成：Netcatty 源码实测（A-F 六部分 + 16 项差距）、opencode commit 6c035e1（V1/V2 双架构）、Codex CLI（`docs/research/CODEX_CLI_ARCHITECTURE.md`）、Warp 官方文档；
 2. 对比研究文档落盘：`docs/reviews/ai-product-design-research-2026-08.md`；
