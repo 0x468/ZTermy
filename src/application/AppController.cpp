@@ -5,6 +5,7 @@
 #include "application/ai/AiTerminalFrameTool.h"
 #include "application/ai/AiWaitCommandTool.h"
 #include "domain/ai/AiContextCompactor.h"
+#include "domain/ai/AiCommandEcho.h"
 #include "domain/ai/AiContextCompactor.h"
 #include "domain/ai/AiContextSerializer.h"
 #include "domain/ssh/SshTarget.h"
@@ -10237,6 +10238,15 @@ std::string AppController::executeAiRunCommand(TerminalTab &tab, const ai::AiTer
     {
         bytes.append('\r');
     }
+    // Synthetic echo: announce the command as a shell comment line so the
+    // user sees the agent's action in the terminal before it executes. The
+    // marker is dispatched directly (never fed to observeTerminalInput) so it
+    // cannot pollute the user input reconstruction or the command history.
+    const QString shell = tab.kind == TerminalTabKind::Local ? QStringLiteral("pwsh") : QString{};
+    const std::string marker = ai::AiCommandEcho::markerLine(action.command, utf8String(shell));
+    QByteArray markerBytes(marker.data(), static_cast<qsizetype>(marker.size()));
+    markerBytes.append('\r');
+    dispatchInput(tab, markerBytes);
     observeTerminalInput(tab, bytes);
     dispatchInput(tab, bytes);
     return ai::AiWaitCommandTool::accepted(action.target, commandId, tracked, capability, frameRevision);
@@ -10275,9 +10285,13 @@ std::string AppController::executeAiInterruptCommand(TerminalTab &tab, const ai:
         return aiToolFailureJson(QStringLiteral("interrupt_unavailable"),
                                  tr("The tracked command could not be interrupted."));
     }
-    const QByteArray interrupt(1, '\x03');
-    observeTerminalInput(tab, interrupt);
-    dispatchInput(tab, interrupt);
+    // Announce the interrupt in the terminal before sending Ctrl+C.
+    const std::string marker = ai::AiCommandEcho::markerLine(
+        "<interrupt>", tab.kind == TerminalTabKind::Local ? std::string_view{"pwsh"} : std::string_view{});
+    QByteArray markerBytes(marker.data(), static_cast<qsizetype>(marker.size()));
+    markerBytes.append('\x03');
+    observeTerminalInput(tab, markerBytes);
+    dispatchInput(tab, markerBytes);
     return compactJson(QJsonObject{{QStringLiteral("ok"), true},
                                    {QStringLiteral("status"), QStringLiteral("interrupt_requested")},
                                    {QStringLiteral("command_id"), utf8QString(action.commandId)},
