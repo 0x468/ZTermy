@@ -519,6 +519,16 @@ bool AiActionToolDispatcher::agentHasControl(const AiSessionTarget &target, cons
     return owner.has_value() && *owner == conversationId;
 }
 
+bool AiActionToolDispatcher::handoffToUser(const AiSessionTarget &target, const std::string_view conversationId)
+{
+    return m_ownership.handoffToUser(target, conversationId);
+}
+
+bool AiActionToolDispatcher::resumeAgent(const AiSessionTarget &target, const std::string_view conversationId)
+{
+    return m_ownership.resumeAgent(target, conversationId);
+}
+
 bool AiActionToolDispatcher::replacePermissionRules(std::vector<AiPermissionRule> rules)
 {
     return m_permissionRules.replace(std::move(rules));

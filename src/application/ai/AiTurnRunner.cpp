@@ -176,9 +176,17 @@ AiTurnRunner::TurnId AiTurnRunner::activeTurnId() const noexcept
 
 std::expected<void, AiProviderError> AiTurnRunner::startAttempt()
 {
+    // A fresh attempt must not inherit state from a failed predecessor:
+    // the response id, in-flight tool calls, and reasoning of the previous
+    // attempt are invalid for the new request and must never be replayed.
     m_bufferedStart.reset();
     m_pendingError.reset();
     m_visibleOutputObserved = false;
+    m_responseId.clear();
+    m_pendingToolCalls.clear();
+    m_currentReasoning.clear();
+    m_currentReasoningSignature.clear();
+    m_toolContinuationPending = false;
 
     auto secret = m_secretLoader();
     if (!secret.has_value())
@@ -267,9 +275,15 @@ void AiTurnRunner::handleEvent(const ProviderHttpClient::RequestId requestId, co
     }
     if (event.type == AiStreamEventType::responseFailed)
     {
-        m_pendingError = event.error.value_or(AiProviderError{.code = AiProviderErrorCode::protocol,
-                                                              .message = "Provider failed without an error payload.",
-                                                              .retryable = false});
+        // Keep the first failure cause. A later cancellation event (which the
+        // client emits when this side aborts the request, e.g. after a local
+        // size-limit violation) must not clobber the original error.
+        if (!m_pendingError.has_value())
+        {
+            m_pendingError = event.error.value_or(AiProviderError{.code = AiProviderErrorCode::protocol,
+                                                                  .message = "Provider failed without an error payload.",
+                                                                  .retryable = false});
+        }
         return;
     }
 
@@ -443,6 +457,14 @@ void AiTurnRunner::observeToolEvent(const AiStreamEvent &event)
     }
     if (event.type == AiStreamEventType::toolCallCompleted && !event.delta.empty())
     {
+        if (event.delta.size() > maximumArgumentsBytes - std::min(maximumArgumentsBytes, tool->argumentsJson.size()))
+        {
+            m_pendingError = AiProviderError{.code = AiProviderErrorCode::protocol,
+                                             .message = "Tool arguments exceed the 16 KiB limit.",
+                                             .retryable = false};
+            static_cast<void>(m_client.cancel(*m_requestId));
+            return;
+        }
         tool->argumentsJson = event.delta;
     }
     else if (event.type == AiStreamEventType::toolArgumentsDelta && !event.delta.empty())

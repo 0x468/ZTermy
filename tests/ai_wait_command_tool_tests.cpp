@@ -38,6 +38,7 @@ private slots:
     void guidesUnavailableLifecycleToFrameWait();
     void serializesLifecycleTimeoutAndUnknownOutcome();
     void returnsFinishedCommandOutput();
+    void capsOversizedFinishedOutput();
 };
 
 void AiWaitCommandToolTests::publishesAndParsesStrictContract()
@@ -113,6 +114,22 @@ void AiWaitCommandToolTests::returnsFinishedCommandOutput()
              QStringLiteral("Filesystem Size Used Avail Use% Mounted on\n/dev/sda1 80G 20G 60G 25% /\n"));
     QVERIFY(serialized.value(QStringLiteral("output_complete")).toBool());
     QCOMPARE(serialized.value(QStringLiteral("omitted_output_bytes")).toInteger(), qint64{0});
+}
+
+void AiWaitCommandToolTests::capsOversizedFinishedOutput()
+{
+    auto tracked = command(AiTrackedCommandState::finished);
+    tracked.output = std::string(std::size_t{40} * 1024, 'x');
+    tracked.outputCoverage = ztermy::terminal::CommandOutputCoverage::complete;
+
+    const auto result = object(AiWaitCommandTool::result(tracked));
+    const auto serialized = result.value(QStringLiteral("command")).toObject();
+    const QString output = serialized.value(QStringLiteral("output")).toString();
+    // The embedded output must stay far below the 64 KiB tool-output bound so
+    // JSON escaping can never push the serialized result over it.
+    QVERIFY(output.size() <= 24 * 1024);
+    QVERIFY(serialized.value(QStringLiteral("output_truncated")).toBool());
+    QVERIFY(!serialized.value(QStringLiteral("output_complete")).toBool());
 }
 
 } // namespace

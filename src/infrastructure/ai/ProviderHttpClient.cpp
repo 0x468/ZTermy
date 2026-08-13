@@ -33,6 +33,14 @@ constexpr qsizetype maxErrorBodyBytes = qsizetype{64} * 1024;
     {
         return seconds * 1000;
     }
+    // RFC 9110 also allows an HTTP-date in Retry-After. Parse it defensively and
+    // fall back to "no instruction" (exponential backoff) when malformed.
+    const auto date = QDateTime::fromString(QString::fromLatin1(header), Qt::RFC2822Date);
+    if (date.isValid())
+    {
+        const auto delay = date.toMSecsSinceEpoch() - QDateTime::currentMSecsSinceEpoch();
+        return delay > 0 ? std::optional{static_cast<std::uint64_t>(delay)} : std::optional{std::uint64_t{1}};
+    }
     return std::nullopt;
 }
 

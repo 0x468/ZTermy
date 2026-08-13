@@ -34,6 +34,7 @@ public:
     [[nodiscard]] std::expected<std::vector<McpJsonRpcMessage>, QString> append(const QByteArray &bytes);
     [[nodiscard]] static std::expected<std::vector<McpDiscoveredTool>, QString>
     discoveredTools(const McpJsonRpcMessage &message);
+    void reset() noexcept;
 
 private:
     QByteArray m_buffer;

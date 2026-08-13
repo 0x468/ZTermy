@@ -801,6 +801,8 @@ private:
     void dispatchInput(TerminalTab &tab, const QByteArray &bytes);
     void dispatchPaste(TerminalTab &tab, const QByteArray &bytes);
     void observeTerminalInput(TerminalTab &tab, const QByteArray &bytes);
+    void observeUserInput(TerminalTab &tab, const QByteArray &bytes);
+    [[nodiscard]] bool aiUserHasPendingLine(const TerminalTab &tab) const;
     void appendCapturedHistory(TerminalTab &tab, const QString &command);
     void requestResize(quint16 columns, quint16 rows, quint32 cellWidthPixels, quint32 cellHeightPixels);
     void requestScroll(int rows);

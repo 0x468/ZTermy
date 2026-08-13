@@ -99,10 +99,27 @@ constexpr std::uint32_t maximumTimeoutMilliseconds = 120'000;
     }
     if (command.state == AiTrackedCommandState::finished)
     {
-        value.insert(QStringLiteral("output"), text(AiContextBroker::normalizeTerminalText(command.output)));
+        // Cap the embedded output so the serialized result stays below the
+        // AiTurnRunner tool-output bound (64 KiB after JSON escaping). Without
+        // this cap a large retained output could hang the turn forever.
+        constexpr std::size_t maximumOutputBytes = std::size_t{24} * 1024;
+        auto normalized = AiContextBroker::normalizeTerminalText(command.output);
+        const bool outputTruncated = normalized.size() > maximumOutputBytes;
+        if (outputTruncated)
+        {
+            auto count = maximumOutputBytes;
+            while (count > 0 && count < normalized.size()
+                   && (static_cast<unsigned char>(normalized[count]) & 0xC0U) == 0x80U)
+            {
+                --count;
+            }
+            normalized.resize(count);
+        }
+        value.insert(QStringLiteral("output"), text(normalized));
         value.insert(QStringLiteral("output_complete"),
-                     command.outputCoverage == terminal::CommandOutputCoverage::complete
+                     !outputTruncated && command.outputCoverage == terminal::CommandOutputCoverage::complete
                          && command.omittedOutputBytes == 0);
+        value.insert(QStringLiteral("output_truncated"), outputTruncated);
         value.insert(QStringLiteral("omitted_output_bytes"), static_cast<qint64>(command.omittedOutputBytes));
     }
     return value;

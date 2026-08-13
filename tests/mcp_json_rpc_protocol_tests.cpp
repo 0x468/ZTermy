@@ -11,6 +11,7 @@ class McpJsonRpcProtocolTests final : public QObject
 private slots:
     void buildsStrictLifecycleAndCallRequests();
     void parsesFragmentedDiscoveryAndBoundsInput();
+    void rejectsDiscoveryErrorsAndResetsBuffer();
 };
 
 void McpJsonRpcProtocolTests::buildsStrictLifecycleAndCallRequests()
@@ -43,6 +44,30 @@ void McpJsonRpcProtocolTests::parsesFragmentedDiscoveryAndBoundsInput()
     QCOMPARE(tools->front().name, std::string("read"));
     QByteArray oversized(1024 * 1024 + 1, 'x');
     QVERIFY(!protocol.append(oversized).has_value());
+}
+
+void McpJsonRpcProtocolTests::rejectsDiscoveryErrorsAndResetsBuffer()
+{
+    ztermy::ai::McpJsonRpcProtocol protocol;
+
+    // A JSON-RPC error on tools/list must be an explicit discovery failure,
+    // never a silent empty success. Plain escaped strings keep the payload
+    // free of raw-string delimiter traps.
+    const auto errorReply = protocol.append(
+        QByteArrayLiteral("{\"jsonrpc\":\"2.0\",\"id\":2,\"error\":{\"code\":-32000,\"message\":\"permission "
+                           "denied\"}}\n"));
+    QVERIFY(errorReply.has_value());
+    QCOMPARE(errorReply->size(), std::size_t{1});
+    QVERIFY(!ztermy::ai::McpJsonRpcProtocol::discoveredTools(errorReply->front()).has_value());
+
+    // A half-framed message left in the buffer must not leak into the next
+    // server session after reset().
+    const auto halfFramed = protocol.append(QByteArrayLiteral("{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"tool"));
+    QVERIFY(halfFramed.has_value());
+    protocol.reset();
+    auto afterReset = protocol.append("\n");
+    QVERIFY(afterReset.has_value());
+    QVERIFY(afterReset->empty());
 }
 } // namespace
 

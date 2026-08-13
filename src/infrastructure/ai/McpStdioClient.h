@@ -6,6 +6,7 @@
 #include <QHash>
 #include <QProcess>
 #include <QStringList>
+#include <QTimer>
 
 #include <cstdint>
 #include <functional>
@@ -51,17 +52,25 @@ private:
         failed
     };
 
+    struct PendingCall final
+    {
+        CallHandler handler;
+        QTimer *deadline = nullptr;
+    };
+
     void handleReadyRead();
     void handleMessage(const McpJsonRpcMessage &message);
     void fail(const QString &message);
     [[nodiscard]] bool write(const QByteArray &bytes);
+    void armHandshakeDeadline();
 
     McpToolRegistry &m_registry;
     QProcess m_process;
     McpJsonRpcProtocol m_protocol;
     McpStdioConfiguration m_configuration;
     DiscoveryHandler m_discoveryHandler;
-    QHash<std::uint64_t, CallHandler> m_pendingCalls;
+    QHash<std::uint64_t, PendingCall> m_pendingCalls;
+    QTimer m_handshakeDeadline;
     std::uint64_t m_nextRequestId = 3;
     State m_state = State::stopped;
 };

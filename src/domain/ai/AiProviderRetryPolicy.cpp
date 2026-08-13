@@ -58,9 +58,13 @@ AiProviderRetryDecision AiProviderRetryPolicy::decide(const AiProviderError &err
 
     if (error.retryAfterMilliseconds.has_value())
     {
+        // Honor the server's rate-limit instruction instead of truncating it to
+        // the exponential-backoff cap. A separate absolute ceiling prevents an
+        // absurd server value from pinning the turn for an unreasonable time.
+        constexpr std::uint64_t maximumRetryAfterMilliseconds = std::uint64_t{5} * 60 * 1000;
         return {.retry = true,
                 .delayMilliseconds =
-                    std::clamp(*error.retryAfterMilliseconds, std::uint64_t{1}, m_limits.maxDelayMilliseconds)};
+                    std::clamp(*error.retryAfterMilliseconds, std::uint64_t{1}, maximumRetryAfterMilliseconds)};
     }
 
     auto delay = m_limits.baseDelayMilliseconds;

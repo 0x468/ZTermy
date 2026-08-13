@@ -52,8 +52,15 @@ void AiProviderRetryPolicyTests::honorsBoundedRetryAfter()
                                  .retryable = true};
     QCOMPARE(policy.decide(error, 0).delayMilliseconds, std::uint64_t{2'500});
 
+    // Retry-After must be honored beyond the exponential-backoff cap: the
+    // server rate-limit instruction is the authority, not the local ceiling.
     error.retryAfterMilliseconds = 60'000;
-    QCOMPARE(policy.decide(error, 0).delayMilliseconds, std::uint64_t{8'000});
+    QCOMPARE(policy.decide(error, 0).delayMilliseconds, std::uint64_t{60'000});
+
+    // An absurd server value still gets an absolute ceiling so a turn is not
+    // pinned for an unreasonable time.
+    error.retryAfterMilliseconds = 10 * 60 * 1000;
+    QCOMPARE(policy.decide(error, 0).delayMilliseconds, std::uint64_t{5 * 60 * 1000});
 }
 
 void AiProviderRetryPolicyTests::rejectsPermanentAndCancelledFailures()

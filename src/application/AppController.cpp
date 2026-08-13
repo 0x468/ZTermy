@@ -9829,8 +9829,17 @@ AppController::handleAiTerminalFrameTool(TerminalTab &owner, const QString &owne
                 recordAiActivity(*owner, *callGuard,
                                  code == QStringLiteral("ok") ? QStringLiteral("succeeded") : QStringLiteral("failed"),
                                  code, false);
-                static_cast<void>(owner->aiTurnRunner->completePendingTool(
-                    ai::AiToolOutput{.callId = callGuard->id, .name = callGuard->name, .outputJson = output}));
+                const bool resumed = owner->aiTurnRunner->completePendingTool(
+                    ai::AiToolOutput{.callId = callGuard->id, .name = callGuard->name, .outputJson = output});
+                if (!resumed)
+                {
+                    owner->aiError = tr("The terminal-frame wait result could not resume the AI turn.");
+                    owner->aiState = QStringLiteral("error");
+                    if (m_activeTabId == ownerTabId || m_focusedTabId == ownerTabId)
+                    {
+                        emit aiConversationChanged();
+                    }
+                }
             }
             catch (...)
             {
@@ -9939,7 +9948,23 @@ ai::AiTurnRunner::ToolHandlingResult AppController::handleAiWaitCommand(Terminal
     timer->setProperty("ztermyAiCommandId", utf8QString(request->commandId));
     timer->setProperty("ztermyAiRemainingMs", static_cast<qint64>(request->timeoutMilliseconds));
     const QPointer<QTimer> timerGuard(timer);
-    QObject::connect(timer, &QTimer::timeout, this, [this, timerGuard] noexcept {
+    const auto resumeWithOutput = [this](TerminalTab *target, const ai::AiToolCall &call, const QString &tabId,
+                                         const std::string &output) {
+        // A rejected tool output (size/identity mismatch) would otherwise
+        // leave the turn waiting forever; surface it as a visible failure.
+        const bool resumed = target->aiTurnRunner->completePendingTool(
+            ai::AiToolOutput{.callId = call.id, .name = call.name, .outputJson = output});
+        if (!resumed)
+        {
+            target->aiError = tr("The command-wait result could not resume the AI turn.");
+            target->aiState = QStringLiteral("error");
+            if (m_activeTabId == tabId || m_focusedTabId == tabId)
+            {
+                emit aiConversationChanged();
+            }
+        }
+    };
+    QObject::connect(timer, &QTimer::timeout, this, [this, timerGuard, resumeWithOutput] noexcept {
         try
         {
             if (!timerGuard)
@@ -9968,10 +9993,9 @@ ai::AiTurnRunner::ToolHandlingResult AppController::handleAiWaitCommand(Terminal
                 timerGuard->stop();
                 timerGuard->deleteLater();
                 recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("command_not_found"), false);
-                static_cast<void>(target->aiTurnRunner->completePendingTool(ai::AiToolOutput{
-                    .callId = call.id,
-                    .name = call.name,
-                    .outputJson = ai::AiWaitCommandTool::failure("command_not_found", "The command id is unknown.")}));
+                resumeWithOutput(
+                    target, call, tabId,
+                    ai::AiWaitCommandTool::failure("command_not_found", "The command id is unknown."));
                 return;
             }
             const bool completed = currentCommand->state == ai::AiTrackedCommandState::finished
@@ -9993,8 +10017,7 @@ ai::AiTurnRunner::ToolHandlingResult AppController::handleAiWaitCommand(Terminal
                              resultCode == QStringLiteral("ok") ? QStringLiteral("succeeded")
                                                                 : QStringLiteral("failed"),
                              resultCode, false);
-            static_cast<void>(target->aiTurnRunner->completePendingTool(
-                ai::AiToolOutput{.callId = call.id, .name = call.name, .outputJson = output}));
+            resumeWithOutput(target, call, tabId, output);
         }
         catch (...)
         {
@@ -10157,6 +10180,11 @@ std::string AppController::executeAiSftpTransfer(TerminalTab &tab, const ai::AiT
 
 std::string AppController::executeAiWriteToPty(TerminalTab &tab, const ai::AiTerminalAction &action)
 {
+    if (aiUserHasPendingLine(tab))
+    {
+        return aiToolFailureJson(QStringLiteral("user_input_pending"),
+                                 tr("The user is typing a command line; wait for it to finish."));
+    }
     QByteArray bytes(action.ptyData.data(), static_cast<qsizetype>(action.ptyData.size()));
     if (action.appendEnter)
     {
@@ -10175,6 +10203,11 @@ std::string AppController::executeAiWriteToPty(TerminalTab &tab, const ai::AiTer
 
 std::string AppController::executeAiRunCommand(TerminalTab &tab, const ai::AiTerminalAction &action)
 {
+    if (aiUserHasPendingLine(tab))
+    {
+        return aiToolFailureJson(QStringLiteral("user_input_pending"),
+                                 tr("The user is typing a command line; wait for it to finish."));
+    }
     terminal::CommandBlockId baselineBlockId = 0;
     terminal::TerminalSemanticCapability capability = terminal::TerminalSemanticCapability::none;
     if (tab.semanticObserver)
@@ -11728,6 +11761,7 @@ void AppController::queueInput(const QByteArray &bytes)
     {
         return;
     }
+    observeUserInput(*tab, bytes);
     observeTerminalInput(*tab, bytes);
     dispatchInput(*tab, bytes);
 }
@@ -11739,8 +11773,36 @@ void AppController::queuePaste(const QByteArray &bytes)
     {
         return;
     }
+    observeUserInput(*tab, bytes);
     observeTerminalInput(*tab, bytes);
     dispatchPaste(*tab, bytes);
+}
+
+void AppController::observeUserInput(TerminalTab &tab, const QByteArray &bytes)
+{
+    const ai::AiSessionTarget target{.sessionId = utf8String(tab.id),
+                                     .sessionGeneration = tab.reconnectGeneration};
+    const std::string conversationId = utf8String(tab.aiConversationId);
+    // Live user input preempts an Agent that holds the session write lease:
+    // a completed line hands control back, any other keystroke takes control.
+    // Without this handoff the Agent would keep writing into the middle of the
+    // user's in-progress command line.
+    const bool lineCompleted = std::ranges::any_of(bytes, [](const char value) {
+        return value == '\r' || value == '\n';
+    });
+    if (lineCompleted)
+    {
+        static_cast<void>(m_aiActionToolDispatcher.resumeAgent(target, conversationId));
+    }
+    else if (m_aiActionToolDispatcher.agentHasControl(target, conversationId))
+    {
+        static_cast<void>(m_aiActionToolDispatcher.handoffToUser(target, conversationId));
+    }
+}
+
+bool AppController::aiUserHasPendingLine(const TerminalTab &tab) const
+{
+    return tab.inputHistoryBufferReliable && !tab.inputHistoryBuffer.isEmpty();
 }
 
 void AppController::dispatchInput(TerminalTab &tab, const QByteArray &bytes)

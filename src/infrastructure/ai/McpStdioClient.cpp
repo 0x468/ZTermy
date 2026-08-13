@@ -70,6 +70,13 @@ McpStdioClient::McpStdioClient(McpToolRegistry &registry, QObject *parent) : QOb
                              fail(QStringLiteral("The MCP server process exited."));
                          }
                      });
+    m_handshakeDeadline.setSingleShot(true);
+    QObject::connect(&m_handshakeDeadline, &QTimer::timeout, this, [this] {
+        if (m_state == State::initializing || m_state == State::listing)
+        {
+            fail(QStringLiteral("The MCP server did not complete its handshake in time."));
+        }
+    });
 }
 
 McpStdioClient::~McpStdioClient()
@@ -93,6 +100,7 @@ std::expected<void, QString> McpStdioClient::start(McpStdioConfiguration configu
     }
     m_configuration = std::move(configuration);
     m_discoveryHandler = std::move(discoveryHandler);
+    m_protocol.reset();
     m_process.setProgram(m_configuration.program);
     m_process.setArguments(m_configuration.arguments);
     m_process.setWorkingDirectory(m_configuration.workingDirectory);
@@ -105,6 +113,7 @@ std::expected<void, QString> McpStdioClient::start(McpStdioConfiguration configu
         fail(QStringLiteral("The MCP server could not be started."));
         return std::unexpected(QStringLiteral("The MCP server could not be started."));
     }
+    m_handshakeDeadline.start(10'000);
     return {};
 }
 
@@ -127,38 +136,65 @@ std::expected<std::uint64_t, QString> McpStdioClient::call(const std::string_vie
     {
         return std::unexpected(request.error());
     }
-    m_pendingCalls.insert(id, handler);
+    auto *deadline = new QTimer(this);
+    deadline->setSingleShot(true);
+    const auto callId = id;
+    QObject::connect(deadline, &QTimer::timeout, this, [this, callId] {
+        auto pending = m_pendingCalls.take(callId);
+        if (pending.deadline != nullptr)
+        {
+            pending.deadline->deleteLater();
+        }
+        if (pending.handler)
+        {
+            pending.handler(std::unexpected(QStringLiteral("The MCP tool call timed out.")));
+        }
+    });
+    m_pendingCalls.insert(id, PendingCall{.handler = handler, .deadline = deadline});
     if (!write(*request))
     {
         m_pendingCalls.remove(id);
+        deadline->deleteLater();
         return std::unexpected(QStringLiteral("The MCP tool request could not be written."));
     }
+    deadline->start(60'000);
     return id;
 }
 
 bool McpStdioClient::cancel(const std::uint64_t requestId, const std::string_view reason)
 {
-    const auto handler = m_pendingCalls.take(requestId);
-    if (!handler)
+    const auto pending = m_pendingCalls.take(requestId);
+    if (!pending.handler)
     {
         return false;
     }
+    if (pending.deadline != nullptr)
+    {
+        pending.deadline->stop();
+        pending.deadline->deleteLater();
+    }
     static_cast<void>(write(m_protocol.cancelRequestNotification(requestId, reason)));
-    handler(std::unexpected(QStringLiteral("The MCP tool call was cancelled.")));
+    pending.handler(std::unexpected(QStringLiteral("The MCP tool call was cancelled.")));
     return true;
 }
 
 void McpStdioClient::stop()
 {
+    m_handshakeDeadline.stop();
     m_state = State::stopped;
     m_registry.disableServer(m_configuration.identity.id);
     const auto pendingHandlers = m_pendingCalls.values();
     m_pendingCalls.clear();
-    for (const auto &handler : pendingHandlers)
+    for (const auto &pending : pendingHandlers)
     {
-        if (handler)
+        if (pending.deadline != nullptr)
         {
-            handler(std::unexpected(QStringLiteral("The MCP server stopped.")));
+            pending.deadline->stop();
+            pending.deadline->deleteLater();
+        }
+        if (pending.handler)
+        {
+            pending.handler(std::unexpected(QStringLiteral("The MCP server stopped.")));
         }
     }
     if (m_process.state() != QProcess::NotRunning)
@@ -222,6 +258,7 @@ void McpStdioClient::handleMessage(const McpJsonRpcMessage &message)
             fail(QString::fromUtf8(update.error()));
             return;
         }
+        m_handshakeDeadline.stop();
         m_state = State::ready;
         if (m_discoveryHandler)
         {
@@ -229,10 +266,15 @@ void McpStdioClient::handleMessage(const McpJsonRpcMessage &message)
         }
         return;
     }
-    const auto handler = m_pendingCalls.take(*message.id);
-    if (handler)
+    const auto pending = m_pendingCalls.take(*message.id);
+    if (pending.deadline != nullptr)
     {
-        handler(toolResult(message));
+        pending.deadline->stop();
+        pending.deadline->deleteLater();
+    }
+    if (pending.handler)
+    {
+        pending.handler(toolResult(message));
     }
 }
 
@@ -242,6 +284,7 @@ void McpStdioClient::fail(const QString &message)
     {
         return;
     }
+    m_handshakeDeadline.stop();
     m_state = State::failed;
     m_registry.disableServer(m_configuration.identity.id);
     if (m_discoveryHandler)
@@ -250,12 +293,24 @@ void McpStdioClient::fail(const QString &message)
     }
     const auto pendingHandlers = m_pendingCalls.values();
     m_pendingCalls.clear();
-    for (const auto &handler : pendingHandlers)
+    for (const auto &pending : pendingHandlers)
     {
-        if (handler)
+        if (pending.deadline != nullptr)
         {
-            handler(std::unexpected(message));
+            pending.deadline->stop();
+            pending.deadline->deleteLater();
         }
+        if (pending.handler)
+        {
+            pending.handler(std::unexpected(message));
+        }
+    }
+    // A failed server must not keep running: it may hold OS resources and
+    // continue executing side effects after the client stopped trusting it.
+    if (m_process.state() != QProcess::NotRunning)
+    {
+        m_process.kill();
+        static_cast<void>(m_process.waitForFinished(1'000));
     }
 }
 

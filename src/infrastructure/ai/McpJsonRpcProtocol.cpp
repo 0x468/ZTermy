@@ -153,9 +153,21 @@ std::expected<std::vector<McpJsonRpcMessage>, QString> McpJsonRpcProtocol::appen
     return messages;
 }
 
+void McpJsonRpcProtocol::reset() noexcept
+{
+    m_buffer.clear();
+}
+
 std::expected<std::vector<McpDiscoveredTool>, QString>
 McpJsonRpcProtocol::discoveredTools(const McpJsonRpcMessage &message)
 {
+    if (!message.error.isEmpty())
+    {
+        const QString code = message.error.value(QStringLiteral("code")).toString();
+        const QString detail = message.error.value(QStringLiteral("message")).toString();
+        return std::unexpected(QStringLiteral("The MCP server rejected tools/list: %1 %2")
+                                   .arg(code, detail.trimmed().isEmpty() ? QStringLiteral("unknown error") : detail));
+    }
     const QJsonArray values = message.result.value(QStringLiteral("tools")).toArray();
     if (values.size() > static_cast<qsizetype>(maximumTools))
     {

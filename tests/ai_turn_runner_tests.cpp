@@ -184,6 +184,7 @@ private slots:
     void waitsForDeferredToolCompletion();
     void cancelsDeferredToolWait();
     void doesNotRetryAfterSideEffectingTool();
+    void rejectsOversizedCompletedToolArguments();
 };
 
 void AiTurnRunnerTests::retriesBeforeVisibleOutput()
@@ -541,6 +542,53 @@ void AiTurnRunnerTests::doesNotRetryAfterSideEffectingTool()
     QTRY_VERIFY_WITH_TIMEOUT(finished, 1000);
     QCOMPARE(network.requestCount(), std::size_t{2});
     QCOMPARE(events.back().type, AiStreamEventType::responseFailed);
+}
+
+void AiTurnRunnerTests::rejectsOversizedCompletedToolArguments()
+{
+    // The full-arguments path (response.function_call_arguments.done) must be
+    // held to the same 16 KiB limit as incremental deltas; otherwise a
+    // provider could smuggle an unbounded argument blob to tool execution.
+    const std::string oversizedArguments(17 * 1024, 'a');
+    std::string payload = "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\"}}\n\n"
+                          "data: {\"type\":\"response.output_item.added\",\"item\":{\"type\":\"function_"
+                          "call\",\"id\":\"item_1\",\"call_id\":\"call_1\",\"name\":\"run_command\"}}\n\n"
+                          "data: {\"type\":\"response.function_call_arguments.done\",\"item_id\":\"item_1\","
+                          "\"arguments\":\""
+        + oversizedArguments + "\"}\n\n"
+                          "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\"}}\n\n";
+    FakeNetworkAccessManager network;
+    network.enqueue(FakeResponse{.payload = QByteArray::fromStdString(payload)});
+    ProviderHttpClient client(&network);
+    AiTurnRunner runner(client, fastRetryPolicy());
+    std::vector<AiStreamEvent> events;
+    bool finished = false;
+    std::size_t toolCalls = 0;
+
+    QVERIFY(runner
+                .start(
+                    openAiConfiguration(), AiGenerationRequest{}, emptySecretLoader(),
+                    [&events](const auto, const AiStreamEvent &event) {
+                        events.push_back(event);
+                    },
+                    [&finished](const auto, const AiTurnMetrics &) {
+                        finished = true;
+                    },
+                    {}, {},
+                    [&toolCalls](const ztermy::ai::AiToolCall &)
+                        -> std::expected<AiTurnRunner::ToolHandlingResult, AiProviderError> {
+                        ++toolCalls;
+                        return AiTurnRunner::ToolHandlingResult{
+                            .output = AiToolOutput{.callId = "call_1", .name = "run_command", .outputJson = "{}"}};
+                    })
+                .has_value());
+
+    QTRY_VERIFY_WITH_TIMEOUT(finished, 1000);
+    QCOMPARE(toolCalls, std::size_t{0});
+    QCOMPARE(events.back().type, AiStreamEventType::responseFailed);
+    QVERIFY(events.back().error.has_value());
+    QCOMPARE(events.back().error->code, AiProviderErrorCode::protocol);
+    QVERIFY(QString::fromStdString(events.back().error->message).contains(QStringLiteral("16 KiB")));
 }
 
 } // namespace
