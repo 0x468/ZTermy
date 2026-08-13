@@ -9,6 +9,19 @@
 
 **commit**: `c66a3e1`（fix(ai): close correctness gaps found in product research）
 
+## 节点 N2 — 指令注入重构：分层 system prompt + 读取策略教学（2026-08）
+
+**commit**: `09d6d31`（feat(ai): layered system prompt and reading-strategy guidance）
+
+**范围**（对应研究 §4/§8.2 opencode 分层、Netcatty guidelines）：
+1. 新建 `AiSystemPromptBuilder`（src/application/ai/）：身份/证据边界/读取策略/命令协议/工具策略/输出格式六段式；
+   读取策略明确：长输出用 read_command_output 游标续读（has_more 循环）；read_terminal 仅当前屏；
+   禁止 cat/type/Get-Content 打印文件内容到终端再读；user_input_pending 时不要立即重试；
+2. read_terminal / read_command_block / read_command_output 工具描述升级为多行自然语言（何时用/何时不用/截断语义）；
+3. 测试：`tests/ai_system_prompt_builder_tests.cpp` 锁定 prompt 各段。
+
+**验证**：Debug 构建通过；33/33 AI 测试通过。
+
 **范围**：
 1. 研究完成：Netcatty 源码实测（A-F 六部分 + 16 项差距）、opencode commit 6c035e1（V1/V2 双架构）、Codex CLI（`docs/research/CODEX_CLI_ARCHITECTURE.md`）、Warp 官方文档；
 2. 对比研究文档落盘：`docs/reviews/ai-product-design-research-2026-08.md`；
