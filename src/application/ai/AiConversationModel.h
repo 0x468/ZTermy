@@ -63,7 +63,10 @@ public:
     [[nodiscard]] bool streaming() const noexcept;
     [[nodiscard]] const AiConversationLimits &limits() const noexcept;
     [[nodiscard]] std::vector<AiChatMessage> providerMessages() const;
+    [[nodiscard]] std::vector<AiChatMessage> evidenceMessages() const;
     [[nodiscard]] bool restoreProviderMessages(const std::vector<AiChatMessage> &messages);
+    [[nodiscard]] bool restoreEvidenceMessages(const std::vector<AiChatMessage> &messages);
+    [[nodiscard]] bool appendEvidenceMessage(QString text);
     [[nodiscard]] std::uint64_t appendUserMessage(QString text);
     [[nodiscard]] std::uint64_t beginAssistantMessage();
     [[nodiscard]] bool appendAssistantDelta(std::uint64_t messageId, QString delta);
@@ -122,7 +125,9 @@ private:
 
     AiConversationLimits m_limits;
     std::vector<Message> m_messages;
+    std::vector<QString> m_evidenceMessages;
     std::size_t m_totalBytes = 0;
+    std::size_t m_evidenceBytes = 0;
     std::uint64_t m_nextMessageId = 1;
     bool m_streaming = false;
 };

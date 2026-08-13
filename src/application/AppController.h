@@ -530,9 +530,11 @@ public:
     Q_INVOKABLE bool retryAiMessage();
     Q_INVOKABLE void clearAiConversation();
     Q_INVOKABLE void clearAiActivity();
+    Q_INVOKABLE [[nodiscard]] bool exportAiConversation(const QString &localFileUrl) const;
     Q_INVOKABLE [[nodiscard]] bool exportAiActivity(const QString &localFileUrl) const;
     Q_INVOKABLE bool copyAiText(const QString &text);
     Q_INVOKABLE bool attachAiSelection();
+    Q_INVOKABLE bool attachAiRecentCommands(int count);
     Q_INVOKABLE bool removeAiContextItem(const QString &itemId);
     Q_INVOKABLE bool setAiContextItemPinned(const QString &itemId, bool pinned);
     Q_INVOKABLE void resetAiContextItems();

@@ -31,7 +31,9 @@ constexpr qint64 aiConversationHistorySchemaVersion = 13;
 constexpr qint64 aiDebugTraceSchemaVersion = 14;
 constexpr qint64 aiAgentModeSchemaVersion = 15;
 constexpr qint64 aiReasoningSchemaVersion = 16;
-constexpr qint64 currentSchemaVersion = aiReasoningSchemaVersion;
+constexpr qint64 aiExplicitContextSchemaVersion = 17;
+constexpr qint64 aiConversationFirstSchemaVersion = 18;
+constexpr qint64 currentSchemaVersion = aiConversationFirstSchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::AiPermissionPreference;
@@ -307,7 +309,8 @@ template <>
         && version != workbenchSchemaVersion && version != shortcutSchemaVersion && version != sftpSchemaVersion
         && version != aiProviderSchemaVersion && version != aiPermissionSchemaVersion
         && version != aiConversationHistorySchemaVersion && version != aiDebugTraceSchemaVersion
-        && version != aiAgentModeSchemaVersion && version != currentSchemaVersion)
+        && version != aiAgentModeSchemaVersion && version != aiReasoningSchemaVersion
+        && version != currentSchemaVersion)
     {
         return std::unexpected(ApplicationSettingsStoreError::unsupportedVersion);
     }
@@ -475,10 +478,10 @@ template <>
         .aiModel = version >= aiProviderSchemaVersion ? aiModelValue.toString() : QString{},
         .aiCredentialReference =
             version >= aiProviderSchemaVersion ? aiCredentialReferenceValue.toString() : QStringLiteral("ai-default"),
-        .aiAutomaticContext = version < aiProviderSchemaVersion || aiAutomaticContextValue.toBool(),
+        .aiAutomaticContext = version >= aiExplicitContextSchemaVersion && aiAutomaticContextValue.toBool(),
         .aiPermission = *aiPermission,
         .aiConversationHistoryEnabled =
-            version >= aiConversationHistorySchemaVersion && aiConversationHistoryEnabledValue.toBool(),
+            version < aiConversationFirstSchemaVersion || aiConversationHistoryEnabledValue.toBool(),
         .aiDebugTraceEnabled = version >= aiDebugTraceSchemaVersion && aiDebugTraceEnabledValue.toBool(),
         .aiReasoning = *aiReasoning,
     };

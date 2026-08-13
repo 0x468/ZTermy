@@ -112,9 +112,9 @@ struct ApplicationSettings final
     QString aiEndpointPath;
     QString aiModel;
     QString aiCredentialReference = QStringLiteral("ai-default");
-    bool aiAutomaticContext = true;
+    bool aiAutomaticContext = false;
     AiPermissionPreference aiPermission = AiPermissionPreference::ask;
-    bool aiConversationHistoryEnabled = false;
+    bool aiConversationHistoryEnabled = true;
     bool aiDebugTraceEnabled = false;
     AiReasoningPreference aiReasoning = AiReasoningPreference::automatic;
 

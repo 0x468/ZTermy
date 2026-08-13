@@ -156,7 +156,7 @@ void ApplicationSettingsTests::migratesLegacyWindowOpacityAndNoneBackdrop()
     QFile saved(path);
     QVERIFY(saved.open(QIODevice::ReadOnly));
     const QByteArray persisted = saved.readAll();
-    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 16")));
+    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 18")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdropOpacity\": 0.75")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdrop\": \"transparent\"")));
     QVERIFY(!persisted.contains(QByteArrayLiteral("windowOpacity")));
@@ -371,9 +371,9 @@ void ApplicationSettingsTests::migratesEveryIntermediateSchema()
         QCOMPARE(loaded->aiBaseUrl, QStringLiteral("https://api.openai.com/v1"));
         QVERIFY(loaded->aiModel.isEmpty());
         QCOMPARE(loaded->aiCredentialReference, QStringLiteral("ai-default"));
-        QVERIFY(loaded->aiAutomaticContext);
+        QVERIFY(!loaded->aiAutomaticContext);
         QCOMPARE(loaded->aiPermission, ztermy::config::AiPermissionPreference::ask);
-        QVERIFY(!loaded->aiConversationHistoryEnabled);
+        QVERIFY(loaded->aiConversationHistoryEnabled);
     }
 }
 
@@ -403,7 +403,7 @@ void ApplicationSettingsTests::migratesAiProviderSchemaWithPermissionDefault()
     QCOMPARE(loaded->aiProvider, ztermy::config::AiProviderPreference::ollama);
     QCOMPARE(loaded->aiModel, QStringLiteral("qwen3"));
     QCOMPARE(loaded->aiPermission, ztermy::config::AiPermissionPreference::ask);
-    QVERIFY(!loaded->aiConversationHistoryEnabled);
+    QVERIFY(loaded->aiConversationHistoryEnabled);
 }
 
 void ApplicationSettingsTests::rejectsMalformedUnsupportedAndIncompleteDocuments()
@@ -418,7 +418,7 @@ void ApplicationSettingsTests::rejectsMalformedUnsupportedAndIncompleteDocuments
     QVERIFY(!malformed);
     QCOMPARE(malformed.error(), ztermy::config::ApplicationSettingsStoreError::invalidFormat);
 
-    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":17})")));
+    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":19})")));
     const auto unsupported = store.load();
     QVERIFY(!unsupported);
     QCOMPARE(unsupported.error(), ztermy::config::ApplicationSettingsStoreError::unsupportedVersion);

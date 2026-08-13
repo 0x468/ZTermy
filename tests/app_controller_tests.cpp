@@ -1,4 +1,5 @@
 #include "application/AppController.h"
+#include "application/ai/AiConversationModel.h"
 #include "infrastructure/security/PortableCredentialVault.h"
 #include "infrastructure/ssh/SshProfileStore.h"
 #include "infrastructure/workbench/WorkspaceStateStore.h"
@@ -831,7 +832,7 @@ void AppControllerTests::persistsApplicationSettings()
     QCOMPARE(controller.aiBaseUrl(), QStringLiteral("https://api.openai.com/v1"));
     QVERIFY(controller.aiEndpointPath().isEmpty());
     QVERIFY(controller.aiModel().isEmpty());
-    QVERIFY(controller.aiAutomaticContext());
+    QVERIFY(!controller.aiAutomaticContext());
     QCOMPARE(controller.aiPermissionPreference(), QStringLiteral("ask"));
 
     QVERIFY(controller.saveAiProviderSettings(QStringLiteral("ollama"), QStringLiteral("http://127.0.0.1:11434"),
@@ -1046,6 +1047,22 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
     QCOMPARE(controller.terminalTabs().size(), 1);
     QCOMPARE(controller.activeTerminalTabId(), first);
     QVERIFY(controller.activeAiConversation() != nullptr);
+    auto *aiConversation = qobject_cast<ztermy::ai::AiConversationModel *>(controller.activeAiConversation());
+    QVERIFY(aiConversation != nullptr);
+    QVERIFY(aiConversation->appendUserMessage(QStringLiteral("Show disk usage")));
+    const auto assistantId = aiConversation->beginAssistantMessage();
+    QVERIFY(assistantId != 0);
+    QVERIFY(aiConversation->appendAssistantDelta(assistantId, QStringLiteral("Use `df -h`.")));
+    QVERIFY(aiConversation->completeAssistantMessage(assistantId));
+    const QString conversationExport = directory.filePath(QStringLiteral("conversation.md"));
+    QVERIFY(controller.exportAiConversation(QUrl::fromLocalFile(conversationExport).toString()));
+    QFile conversationFile(conversationExport);
+    QVERIFY(conversationFile.open(QIODevice::ReadOnly));
+    const QByteArray conversationMarkdown = conversationFile.readAll();
+    QVERIFY(conversationMarkdown.contains("## User"));
+    QVERIFY(conversationMarkdown.contains("Show disk usage"));
+    QVERIFY(conversationMarkdown.contains("## Assistant"));
+    QVERIFY(conversationMarkdown.contains("Use `df -h`."));
     QCOMPARE(controller.activeAiState(), QStringLiteral("idle"));
     QVERIFY(controller.activeAiContextItems().isEmpty());
     QVERIFY(controller.activeAiToolApproval().isEmpty());
@@ -1108,6 +1125,9 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
     QVERIFY(!firstTabHistory.isEmpty());
     QCOMPARE(firstTabHistory.constFirst().toMap().value(QStringLiteral("command")).toString(),
              QStringLiteral("Get-Date"));
+    QVERIFY(controller.attachAiRecentCommands(1));
+    QVERIFY(controller.activeAiContextPreview().contains(QStringLiteral("Get-Date")));
+    QVERIFY(controller.activeAiContextPreview().contains(QStringLiteral("Approximate terminal context")));
     QVERIFY(controller.runTerminalCommand(QStringLiteral("Write-Output one\r\nWrite-Output two")));
     QCOMPARE(sessionState->inputs.constLast(), QByteArray("Write-Output one\rWrite-Output two\r"));
     QVERIFY(!controller.runTerminalCommand(QStringLiteral("  \n  ")));
@@ -1287,6 +1307,7 @@ void AppControllerTests::restoresSavedSshWorkspaceWithoutConnecting()
     QVERIFY(!tab.value(QStringLiteral("running")).toBool());
     QVERIFY(!tab.value(QStringLiteral("connecting")).toBool());
     QVERIFY(!tab.value(QStringLiteral("reconnecting")).toBool());
+    QVERIFY(tab.value(QStringLiteral("canReconnect")).toBool());
     QVERIFY(tab.value(QStringLiteral("status")).toString().contains(QStringLiteral("reconnect"), Qt::CaseInsensitive));
     QVERIFY(!controller.hostKeyPromptVisible());
 

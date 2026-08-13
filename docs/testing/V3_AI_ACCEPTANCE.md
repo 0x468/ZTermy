@@ -29,9 +29,10 @@ evaluations serve different purposes and are reported separately.
 - [x] Derived frame/UI observation may coalesce without losing retained command
       bytes; semantic journal overrun marks coverage `gapped` rather than silently
       returning a complete block.
-- [x] Context broker covers explicit selection, last failure, terminal range,
-      frame, deduplication, redaction, provenance, byte/line/token bounds, and
-      post-compaction reinjection.
+- [x] Context broker covers explicit selection, recent semantic commands, last
+      failure, terminal range, frame, deduplication, redaction, provenance,
+      byte/line/token bounds, and post-compaction reinjection. Ambient terminal
+      context is disabled by default.
 - [x] Context chips support remove/pin and evidence-quality labels; pinning cannot
       bypass redaction or the 64 KiB/1,000-line/estimated-16k-token aggregate
       bound.
@@ -81,15 +82,37 @@ evaluations serve different purposes and are reported separately.
       budget.
 - [x] Encrypted transcript storage covers read/write, tamper, truncation,
       unsupported schema, key loss, migration, retention, export, and deletion.
-- [x] Encrypted history is off by default; session storage and a locked portable
-      vault cannot enable it; disabling retention preserves explicit
+- [x] Encrypted history is on by default when a persistent vault is available;
+      session storage and a locked portable vault cannot enable it; disabling
+      retention preserves explicit
       export/delete access; portable lock forgets decrypted in-memory rows.
 - [x] Migrating to session storage disables retention, and source cleanup is
       refused while an encrypted envelope exists so its durable key cannot be
       discarded outside the explicit history-delete action.
-- [x] Restart reload and transcript restore preserve only user/assistant text.
-      Restore never revives permissions, tool calls, pending actions, budgets,
-      or write ownership, and one stored conversation cannot own two live tabs.
+- [x] Restart reload and transcript restore preserve visible user/assistant text
+      plus bounded hidden evidence from explicit attachments and completed Agent
+      tools. History counts and previews ignore evidence. Restore never revives
+      permissions, executable tool calls, pending actions, budgets, or write
+      ownership, and one stored conversation cannot own two live tabs.
+- [ ] Owner check: prose wraps inside the assistant pane; fenced code and Markdown tables use
+      local horizontal scrolling and cannot widen or overlap the terminal.
+- [ ] Owner check: every fenced code block has a top-right Copy action that copies only the
+      original code body and briefly confirms success.
+- [ ] Owner check: the composer footer contains context attachment, command generation,
+      current model, execution mode, and send/cancel controls without overflowing at the
+      minimum workbench width.
+- [ ] Owner check: Export conversation writes the current user/assistant transcript as raw
+      Markdown and does not export UI-rendered text or diagnostic activity metadata.
+- [ ] Owner check: streaming follows while the conversation is at the bottom; scrolling upward
+      preserves the reading position and exposes Return to latest until the user returns.
+- [ ] Owner check: provider-exposed reasoning opens while reasoning streams, collapses when the
+      answer begins, and remains manually expandable afterward.
+- [ ] Owner check: on a plain SSH shell without OSC 133/633, attaching the last 1/3/5 commands
+      succeeds with an explicitly labelled approximate recent-activity attachment.
+- [ ] Owner check: typing `/` opens the built-in command picker; Up/Down, Tab, Enter, and click
+      invoke the selected local action without sending the literal slash command to the provider.
+- [ ] Owner check: restored SSH tabs expose Reconnect in both the disconnected terminal card
+      and tab context menu without reconnecting implicitly.
 
 ## 0.3.2–0.3.4 automated gates
 

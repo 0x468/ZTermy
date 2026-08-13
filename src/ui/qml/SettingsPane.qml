@@ -1507,7 +1507,7 @@ Rectangle {
 
                             objectName: "settingsAiAutomaticContext"
                             Layout.fillWidth: true
-                            text: qsTr("Attach bounded recent terminal context automatically")
+                            text: qsTr("Automatically attach recent terminal context (not recommended)")
                             accessibleName: text
                         }
 

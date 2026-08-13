@@ -88,7 +88,8 @@ private:
             .title = QStringLiteral("Explain the failure"),
             .updatedAtUtc = QDateTime::currentDateTimeUtc(),
             .messages = {{.role = QStringLiteral("user"), .text = QStringLiteral("question")},
-                         {.role = QStringLiteral("assistant"), .text = QStringLiteral("answer")}}};
+                         {.role = QStringLiteral("assistant"), .text = QStringLiteral("answer")},
+                         {.role = QStringLiteral("evidence"), .text = QStringLiteral("tool output")}}};
 }
 } // namespace
 
@@ -116,7 +117,10 @@ void AiConversationHistoryModelTests::persistsLoadsExportsAndRemovesOffTheCaller
     QVERIFY(model.errorCode().isEmpty());
     const auto restored = model.conversation(QStringLiteral("conversation-1"));
     QVERIFY(restored.has_value());
-    QCOMPARE(restored.value_or(ai::AiStoredConversation{}).messages.size(), 2ULL);
+    QCOMPARE(restored.value_or(ai::AiStoredConversation{}).messages.size(), 3ULL);
+    QCOMPARE(model.data(model.index(0), ai::AiConversationHistoryModel::MessageCountRole).toULongLong(), 2ULL);
+    QCOMPARE(model.data(model.index(0), ai::AiConversationHistoryModel::PreviewRole).toString(),
+             QStringLiteral("answer"));
 
     const QString exported = directory.filePath(QStringLiteral("history.json"));
     model.exportDecrypted(exported);

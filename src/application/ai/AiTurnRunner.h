@@ -33,6 +33,7 @@ public:
         bool sideEffecting = false;
     };
     using ToolHandler = std::function<std::expected<ToolHandlingResult, AiProviderError>(const AiToolCall &)>;
+    using ToolOutputHandler = std::function<void(const AiToolCall &, const AiToolOutput &)>;
 
     explicit AiTurnRunner(ProviderHttpClient &client, AiProviderRetryPolicy retryPolicy = AiProviderRetryPolicy{},
                           QObject *parent = nullptr);
@@ -44,7 +45,7 @@ public:
     [[nodiscard]] std::expected<TurnId, AiProviderError>
     start(AiProviderConfiguration configuration, AiGenerationRequest generation, SecretLoader secretLoader,
           EventHandler eventHandler, FinishedHandler finishedHandler, RetryHandler retryHandler = {},
-          JitterSource jitterSource = {}, ToolHandler toolHandler = {});
+          JitterSource jitterSource = {}, ToolHandler toolHandler = {}, ToolOutputHandler toolOutputHandler = {});
     [[nodiscard]] bool cancel();
     [[nodiscard]] bool completePendingTool(AiToolOutput output);
     [[nodiscard]] std::optional<AiToolCall> pendingToolCall() const;
@@ -74,6 +75,7 @@ private:
     RetryHandler m_retryHandler;
     JitterSource m_jitterSource;
     ToolHandler m_toolHandler;
+    ToolOutputHandler m_toolOutputHandler;
     std::optional<ProviderHttpClient::RequestId> m_requestId;
     std::optional<AiStreamEvent> m_bufferedStart;
     std::optional<AiProviderError> m_pendingError;

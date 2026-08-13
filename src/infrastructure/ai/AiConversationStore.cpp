@@ -256,7 +256,8 @@ decrypt(const QByteArray &ciphertext, const QByteArray &tag, const std::string_v
         return false;
     }
     return std::ranges::all_of(conversation.messages, [&limits](const AiStoredMessage &message) {
-        return (message.role == QStringLiteral("user") || message.role == QStringLiteral("assistant"))
+        return (message.role == QStringLiteral("user") || message.role == QStringLiteral("assistant")
+                || message.role == QStringLiteral("evidence"))
                && std::cmp_less_equal(message.text.toUtf8().size(), limits.maximumMessageBytes);
     });
 }

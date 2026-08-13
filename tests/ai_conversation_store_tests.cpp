@@ -91,7 +91,8 @@ private:
             .title = QStringLiteral("Conversation ") + id,
             .updatedAtUtc = QDateTime::currentDateTimeUtc().addDays(dayOffset),
             .messages = {{.role = QStringLiteral("user"), .text = text},
-                         {.role = QStringLiteral("assistant"), .text = QStringLiteral("answer-") + text}}};
+                         {.role = QStringLiteral("assistant"), .text = QStringLiteral("answer-") + text},
+                         {.role = QStringLiteral("evidence"), .text = QStringLiteral("tool-") + text}}};
 }
 
 [[nodiscard]] QByteArray readFile(const QString &path)
@@ -146,6 +147,7 @@ void AiConversationStoreTests::roundTripsWithoutPlaintextAndRotatesNonce()
     QVERIFY(loaded.has_value());
     QCOMPARE(loaded->size(), 1ULL);
     QCOMPARE(loaded->front().messages.front().text, QStringLiteral("updated-secret"));
+    QCOMPARE(loaded->front().messages.back().role, QStringLiteral("evidence"));
 }
 
 void AiConversationStoreTests::rejectsTamperingAndMissingKeys()

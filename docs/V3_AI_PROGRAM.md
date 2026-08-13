@@ -1,7 +1,8 @@
 # V3 AI program
 
-Status: `0.3.0`-`0.3.8` implementation and automated closure in progress;
-release-candidate human and environment-dependent acceptance pending
+Status: `0.3.0`-`0.3.9` implementation complete; deeper NetCatty-class context
+and Agent ecosystem parity is planned for `0.3.10`-`0.3.11`; release-candidate
+human and environment-dependent acceptance pending
 
 ## Decision
 
@@ -75,9 +76,10 @@ V3 succeeds when ztermy can:
    the product's personality.
 6. **Untrusted terminal data.** Remote output can contain prompt injection,
    escape sequences, or secrets. It is evidence, never authority.
-7. **No hidden global scrape.** The user can inspect, remove, or pin individual
-   context items in a bounded preview. Pinning never bypasses redaction or hard
-   limits. Automatic context has declared provenance, evidence quality, and size.
+7. **Explicit terminal context.** A normal question contains the accumulated AI
+   conversation, not ambient terminal activity. The user explicitly attaches a
+   selection or recent semantic command blocks. Attached evidence and Agent tool
+   results remain bounded conversation evidence for coherent follow-up turns.
 8. **No UI-thread I/O.** Model networking, token estimation beyond small local
    work, compaction, encryption, and tool execution never block Qt Quick.
 9. **No inert breadth.** A visible tool ships with backend behavior, errors,
@@ -116,7 +118,8 @@ Deliver the smallest complete vertical slice:
   or unknown);
 - OSC 133 plus compatible OSC 633 lifecycle handling, including verified nonce
   support for ztermy-owned rich integration;
-- AI terminal side panel, removable/pinnable context chips, context preview,
+- AI terminal side panel, explicit selection/recent-command attachments,
+  removable context chips, context preview,
   evidence-quality badges, streaming answer, cancel/retry, selection attachment,
   ordinary copy behavior backed by the existing clipboard implementation, and
   keyboard/focus behavior;
@@ -127,7 +130,8 @@ Deliver the smallest complete vertical slice:
   blocks;
 - local redaction, concrete bounded context defaults, usage/latency/token and
   estimated-cost reporting, bounded provider backoff, remembered last model,
-  and session-only conversation retention by default.
+  session-only conversation retention by default, and visible New conversation
+  plus History actions.
 
 The first release does not control arbitrary interactive applications, expose
 SFTP writes, run unattended background agents, or depend on MCP.
@@ -146,7 +150,8 @@ SFTP writes, run unattended background agents, or depend on MCP.
   user/Agent PTY input;
 - one Agent write lease per terminal session, read-only observer fanout,
   queued/cancelled/completed tool cards, exact action results, and bounded retry;
-- encrypted optional conversation history, audit metadata, export, and deletion;
+- encrypted conversation history enabled by default when a persistent vault is
+  available, with explicit disable, audit metadata, export, and deletion;
 - a user-visible AI activity/audit view with redacted metadata and tool outcomes.
 
 The activity/audit half is implemented as a bounded metadata-only trail in ADR
@@ -234,6 +239,42 @@ becomes conversation retention.
   provider compatibility gates;
 - produce the owner-facing V3 acceptance matrix and release candidate artifacts.
 
+### 0.3.9 — NetCatty-class conversation surface
+
+- make the conversation the primary object with compact New, History, Export,
+  and overflow actions;
+- align the composer hierarchy around message input, explicit context, model,
+  execution mode, and send/cancel without exposing implementation diagnostics
+  as primary navigation;
+- provide sticky streaming, Return to latest, auto-managed reasoning, per-code
+  copy, local table/code overflow, and narrow-panel responsive layout;
+- provide a keyboard-first built-in slash-command picker for conversation,
+  history, context attachment, explanation, and command-generation actions;
+- preserve explicit selection/recent-command evidence across follow-up turns,
+  with a clearly labelled approximate fallback for shells without semantic
+  command marks.
+
+### 0.3.10 — explicit context and reusable skills
+
+- add explicit local text/file and provider-capable image attachments with
+  previews, removal, bounded ingestion, and no ambient filesystem scraping;
+- add reusable user-authored skills, surfaced through the same slash-command
+  picker without coupling them to one provider;
+- add optional web search as a typed Agent tool with visible provenance and
+  citations;
+- cover attachment, skill, and search persistence/compaction boundaries in the
+  deterministic evaluation corpus.
+
+### 0.3.11 — external Agent ecosystem
+
+- expose an Agent selector that keeps the built-in ztermy Agent as the default;
+- define native adapters for selected external Agent/SDK protocols without
+  embedding a Web or Node runtime in the application;
+- keep terminal target ownership, permission modes, audit, cancellation, and
+  tool-result contracts identical across built-in and external Agents;
+- close provider/Agent switching, resume, failure-recovery, and packaging
+  acceptance before declaring the expanded V3 program complete.
+
 Current closure work:
 
 - a deterministic provider-independent Agent scenario now crosses mode
@@ -277,10 +318,12 @@ Delivery status:
 - deterministic provider wire contracts and real-window responsive and
   accessibility contracts are implemented (`ADR 0077`, `ADR 0078`);
 - the static `0.3.0` MSI and portable ZIP pass the inherited installer,
-  manifest, checksum, portable-mode, and lifecycle contracts. English and
-  Simplified Chinese pass the 1577/1577 translation gate; the final Debug and
-  static Release suites pass 105/105 and static clang-tidy passes all 224 C++
-  translation units;
+  manifest, checksum, portable-mode, and lifecycle contracts. That formal RC
+  passed the then-current 1577/1577 translation gate, Debug and static Release
+  suites at 105/105, and all 224 static clang-tidy translation units. The
+  subsequent `0.3.9` developer slice passes the expanded 1619/1619 translation
+  gate and Debug 105/105 suite; its final static package/tidy rerun remains a
+  release-candidate gate rather than a developer-iteration claim;
 - the exact automated evidence and remaining owner/environment checks are
   recorded in `testing/V3_0_3_0_RC_ACCEPTANCE.md`. Live-provider evaluation,
   real-host shell coverage, MSI interaction, and previous-Windows-build coverage

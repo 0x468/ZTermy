@@ -139,6 +139,17 @@ std::vector<AiChatMessage> AiConversationModel::providerMessages() const
     return messages;
 }
 
+std::vector<AiChatMessage> AiConversationModel::evidenceMessages() const
+{
+    std::vector<AiChatMessage> messages;
+    messages.reserve(m_evidenceMessages.size());
+    for (const auto &evidence : m_evidenceMessages)
+    {
+        messages.push_back(AiChatMessage{.role = AiMessageRole::user, .content = evidence.toUtf8().toStdString()});
+    }
+    return messages;
+}
+
 bool AiConversationModel::restoreProviderMessages(const std::vector<AiChatMessage> &messages)
 {
     std::size_t totalBytes = 0;
@@ -175,6 +186,61 @@ bool AiConversationModel::restoreProviderMessages(const std::vector<AiChatMessag
             return false;
         }
     }
+    return true;
+}
+
+bool AiConversationModel::restoreEvidenceMessages(const std::vector<AiChatMessage> &messages)
+{
+    std::size_t totalBytes = 0;
+    if (messages.size() > m_limits.maxMessages
+        || !std::ranges::all_of(messages, [this, &totalBytes](const AiChatMessage &message) {
+               if (message.role != AiMessageRole::user || !message.toolCallId.empty()
+                   || message.content.size() > m_limits.maxMessageBytes)
+               {
+                   return false;
+               }
+               totalBytes += message.content.size();
+               return totalBytes <= m_limits.maxConversationBytes;
+           }))
+    {
+        return false;
+    }
+    m_evidenceMessages.clear();
+    m_evidenceBytes = 0;
+    for (const auto &message : messages)
+    {
+        if (!appendEvidenceMessage(QString::fromUtf8(message.content)))
+        {
+            m_evidenceMessages.clear();
+            m_evidenceBytes = 0;
+            return false;
+        }
+    }
+    return true;
+}
+
+bool AiConversationModel::appendEvidenceMessage(QString text)
+{
+    bool truncated = false;
+    text = boundedUtf8(std::move(text), m_limits.maxMessageBytes, truncated);
+    if (text.trimmed().isEmpty())
+    {
+        return false;
+    }
+    const auto bytes = static_cast<std::size_t>(text.toUtf8().size());
+    while (!m_evidenceMessages.empty()
+           && (m_evidenceMessages.size() >= m_limits.maxMessages
+               || m_evidenceBytes + bytes > m_limits.maxConversationBytes))
+    {
+        m_evidenceBytes -= static_cast<std::size_t>(m_evidenceMessages.front().toUtf8().size());
+        m_evidenceMessages.erase(m_evidenceMessages.begin());
+    }
+    if (bytes > m_limits.maxConversationBytes)
+    {
+        return false;
+    }
+    m_evidenceBytes += bytes;
+    m_evidenceMessages.push_back(std::move(text));
     return true;
 }
 
@@ -377,13 +443,15 @@ bool AiConversationModel::cancelAssistantMessage(const std::uint64_t messageId)
 
 void AiConversationModel::clear()
 {
-    if (m_messages.empty())
+    if (m_messages.empty() && m_evidenceMessages.empty())
     {
         return;
     }
     beginResetModel();
     m_messages.clear();
+    m_evidenceMessages.clear();
     m_totalBytes = 0;
+    m_evidenceBytes = 0;
     endResetModel();
     emit countChanged();
     updateStreaming();

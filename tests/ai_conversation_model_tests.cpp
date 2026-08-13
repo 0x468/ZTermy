@@ -24,6 +24,7 @@ private slots:
     void exposesBoundedNativeToolActivities();
     void exposesOnlyOneBoundedShellCommandSuggestion();
     void restoresOnlyBoundedUserAndAssistantMessages();
+    void preservesHiddenAgentEvidenceWithoutAddingVisibleRows();
 };
 
 void AiConversationModelTests::streamsAssistantMessageAndUsage()
@@ -149,6 +150,27 @@ void AiConversationModelTests::restoresOnlyBoundedUserAndAssistantMessages()
     invalid.push_back({.role = ztermy::ai::AiMessageRole::tool, .content = "untrusted tool replay"});
     QVERIFY(!model.restoreProviderMessages(invalid));
     QCOMPARE(model.rowCount(), 2);
+}
+
+void AiConversationModelTests::preservesHiddenAgentEvidenceWithoutAddingVisibleRows()
+{
+    AiConversationModel model;
+    static_cast<void>(model.appendUserMessage(QStringLiteral("check disks")));
+    QVERIFY(model.appendEvidenceMessage(QStringLiteral("[Agent tool evidence]\nTool: run_command\nResult: df output")));
+    QCOMPARE(model.rowCount(), 1);
+    const auto evidence = model.evidenceMessages();
+    QCOMPARE(evidence.size(), std::size_t{1});
+    QVERIFY(QString::fromUtf8(evidence.front().content).contains(QStringLiteral("df output")));
+
+    AiConversationModel restored;
+    QVERIFY(restored.restoreEvidenceMessages(evidence));
+    QCOMPARE(restored.rowCount(), 0);
+    const auto restoredEvidence = restored.evidenceMessages();
+    QCOMPARE(restoredEvidence.size(), evidence.size());
+    QCOMPARE(restoredEvidence.front().role, evidence.front().role);
+    QCOMPARE(restoredEvidence.front().content, evidence.front().content);
+    restored.clear();
+    QVERIFY(restored.evidenceMessages().empty());
 }
 
 } // namespace

@@ -8,6 +8,7 @@ Rectangle {
     required property string title
     property bool selected: false
     property bool running: false
+    property bool canReconnect: false
     property string iconName: ""
     property string actionObjectName: ""
     property string closeActionObjectName: ""
@@ -16,6 +17,7 @@ Rectangle {
     readonly property bool hovered: activateAction.hovered || closeAction.hovered
     signal activated
     signal closeRequested
+    signal reconnectRequested
 
     implicitWidth: Math.min(184, Math.max(112, titleText.implicitWidth + 54))
     implicitHeight: Theme.titleBarHeight
@@ -113,6 +115,32 @@ Rectangle {
         anchors.margins: 2
         accessibleName: qsTr("Activate %1").arg(control.title)
         onActivated: control.activated()
+    }
+
+    TapHandler {
+        acceptedButtons: Qt.RightButton
+        onTapped: eventPoint => {
+            tabMenu.x = Math.max(0, Math.min(control.width - tabMenu.width, eventPoint.position.x));
+            tabMenu.y = eventPoint.position.y;
+            tabMenu.open();
+        }
+    }
+
+    AppMenu {
+        id: tabMenu
+
+        AppMenuItem {
+            visible: control.canReconnect
+            text: qsTr("Reconnect")
+            onTriggered: control.reconnectRequested()
+        }
+        AppMenuSeparator {
+            visible: control.canReconnect
+        }
+        AppMenuItem {
+            text: qsTr("Close tab")
+            onTriggered: control.closeRequested()
+        }
     }
 
     Rectangle {

@@ -372,6 +372,7 @@ void AiTurnRunnerTests::executesReadToolAndContinuesTheSameTurn()
     std::vector<AiStreamEvent> events;
     bool finished = false;
     std::size_t toolCalls = 0;
+    std::size_t observedToolOutputs = 0;
 
     QVERIFY(runner
                 .start(
@@ -389,12 +390,18 @@ void AiTurnRunnerTests::executesReadToolAndContinuesTheSameTurn()
                         return AiTurnRunner::ToolHandlingResult{
                             .output =
                                 AiToolOutput{.callId = call.id, .name = call.name, .outputJson = R"({"ok":true})"}};
+                    },
+                    [&observedToolOutputs](const ztermy::ai::AiToolCall &call, const AiToolOutput &output) {
+                        ++observedToolOutputs;
+                        QCOMPARE(call.id, output.callId);
+                        QCOMPARE(call.name, output.name);
                     })
                 .has_value());
 
     QTRY_VERIFY_WITH_TIMEOUT(finished, 1000);
     QCOMPARE(network.requestCount(), std::size_t{2});
     QCOMPARE(toolCalls, std::size_t{1});
+    QCOMPARE(observedToolOutputs, std::size_t{1});
     QCOMPARE(events.back().type, AiStreamEventType::responseCompleted);
     QCOMPARE(events.at(events.size() - 2).delta, std::string("done"));
 }

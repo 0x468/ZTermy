@@ -755,6 +755,7 @@ Rectangle {
                     title: modelData.title
                     selected: root.currentPage === "terminal" && root.controller.activeTerminalTabId === modelData.id
                     running: modelData.running
+                    canReconnect: modelData.canReconnect
                     width: implicitWidth
                     height: titleTerminalTabs.height
                     onActivated: {
@@ -763,6 +764,11 @@ Rectangle {
                         terminalViewport.forceActiveFocus();
                     }
                     onCloseRequested: root.controller.closeTerminalTab(modelData.id)
+                    onReconnectRequested: {
+                        root.controller.activateTerminalTab(modelData.id);
+                        root.currentPage = "terminal";
+                        root.controller.reconnectTerminalTab(modelData.id);
+                    }
                 }
             }
 

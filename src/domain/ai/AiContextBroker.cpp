@@ -338,7 +338,9 @@ AiContextBundle AiContextBroker::build(const std::span<const terminal::CommandBl
     }
 
     const auto *primary = primaryBlock(blocks, request);
-    if (primary != nullptr)
+    const bool terminalBlocksRequested =
+        request.automaticContextEnabled || request.preferLastFailure || request.primaryBlockId.has_value();
+    if (terminalBlocksRequested && primary != nullptr)
     {
         const auto id = blockId(*primary);
         if (!request.excludedItemIds.contains(id))
@@ -349,7 +351,7 @@ AiContextBundle AiContextBroker::build(const std::span<const terminal::CommandBl
         }
     }
 
-    if (request.currentFrame.has_value())
+    if (request.automaticContextEnabled && request.currentFrame.has_value())
     {
         const auto &frame = request.currentFrame.value();
         const auto id = frameId(frame);

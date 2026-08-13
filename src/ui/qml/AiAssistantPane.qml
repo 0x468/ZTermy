@@ -32,6 +32,48 @@ Rectangle {
     property bool activityExpanded: false
     property bool historyExpanded: false
     property bool commandRequest: false
+    readonly property var slashCommands: [
+        {
+            "command": "/new",
+            "title": qsTr("New conversation"),
+            "description": qsTr("Start a clean Agent conversation")
+        },
+        {
+            "command": "/history",
+            "title": qsTr("Conversation history"),
+            "description": qsTr("Open saved AI conversations")
+        },
+        {
+            "command": "/explain",
+            "title": qsTr("Explain last failure"),
+            "description": qsTr("Explain the most recent failed command")
+        },
+        {
+            "command": "/selection",
+            "title": qsTr("Attach selection"),
+            "description": qsTr("Attach selected terminal text")
+        },
+        {
+            "command": "/last",
+            "title": qsTr("Attach last command"),
+            "description": qsTr("Attach the most recent terminal command")
+        },
+        {
+            "command": "/last3",
+            "title": qsTr("Attach last 3 commands"),
+            "description": qsTr("Attach the three most recent terminal commands")
+        },
+        {
+            "command": "/last5",
+            "title": qsTr("Attach last 5 commands"),
+            "description": qsTr("Attach the five most recent terminal commands")
+        },
+        {
+            "command": "/command",
+            "title": qsTr("Generate command"),
+            "description": qsTr("Switch to an explicit shell-command request")
+        }
+    ]
 
     component ContextToolButton: ToolButton {
         id: contextButton
@@ -92,6 +134,10 @@ Rectangle {
         if (prompt.length === 0 || busy) {
             return;
         }
+        if (prompt.startsWith("/") && executeSlashCommand(prompt)) {
+            promptEditor.clear();
+            return;
+        }
         const accepted = commandRequest ? controller.sendAiCommandRequest(prompt) : controller.sendAiMessage(prompt);
         if (accepted) {
             promptEditor.clear();
@@ -104,6 +150,84 @@ Rectangle {
 
     function permissionModeIndex(token) {
         return token === "read-only" ? 0 : token === "edit" ? 2 : token === "auto" ? 3 : token === "yolo" ? 4 : 1;
+    }
+
+    function modelOptions() {
+        const models = [];
+        const configured = pane.controller.aiModel || "";
+        if (configured.length > 0)
+            models.push(configured);
+        const available = pane.controller.aiAvailableModels || [];
+        for (let index = 0; index < available.length; ++index) {
+            if (models.indexOf(available[index]) < 0)
+                models.push(available[index]);
+        }
+        return models;
+    }
+
+    function selectModel(model) {
+        if (!model || model === pane.controller.aiModel)
+            return;
+        pane.controller.saveAiProviderSettings(pane.controller.aiProviderPreference, pane.controller.aiBaseUrl, pane.controller.aiEndpointPath, model, pane.controller.aiAutomaticContext, pane.controller.aiPermissionPreference);
+    }
+
+    function slashSuggestions() {
+        const text = promptEditor ? promptEditor.text.trim().toLocaleLowerCase() : "";
+        if (!text.startsWith("/") || text.indexOf(" ") >= 0)
+            return [];
+        return slashCommands.filter(item => item.command.startsWith(text));
+    }
+
+    function applySlashSuggestion(item) {
+        if (!item)
+            return;
+        promptEditor.text = item.command + (item.command === "/command" ? " " : "");
+        promptEditor.cursorPosition = promptEditor.text.length;
+        promptEditor.forceActiveFocus();
+    }
+
+    function activateSlashSuggestion(item) {
+        if (!item)
+            return;
+        if (item.command === "/command") {
+            applySlashSuggestion(item);
+            return;
+        }
+        if (executeSlashCommand(item.command))
+            promptEditor.clear();
+    }
+
+    function executeSlashCommand(prompt) {
+        const separator = prompt.indexOf(" ");
+        const command = (separator < 0 ? prompt : prompt.slice(0, separator)).toLocaleLowerCase();
+        const argument = separator < 0 ? "" : prompt.slice(separator + 1).trim();
+        switch (command) {
+        case "/new":
+            pane.historyExpanded = false;
+            pane.activityExpanded = false;
+            pane.controller.clearAiConversation();
+            return true;
+        case "/history":
+            pane.historyExpanded = true;
+            pane.activityExpanded = false;
+            pane.controller.aiConversationHistory.reload();
+            return true;
+        case "/explain":
+            return pane.controller.explainAiLastFailure();
+        case "/selection":
+            return pane.controller.attachAiSelection();
+        case "/last":
+            return pane.controller.attachAiRecentCommands(1);
+        case "/last3":
+            return pane.controller.attachAiRecentCommands(3);
+        case "/last5":
+            return pane.controller.attachAiRecentCommands(5);
+        case "/command":
+            pane.commandRequest = true;
+            return argument.length === 0 || pane.controller.sendAiCommandRequest(argument);
+        default:
+            return false;
+        }
     }
 
     function approvalScopeTokens() {
@@ -182,7 +306,7 @@ Rectangle {
 
                     Text {
                         Layout.fillWidth: true
-                        text: qsTr("Terminal assistant")
+                        text: qsTr("ztermy Agent")
                         elide: Text.ElideRight
                         color: Theme.text
                         font.family: Theme.uiFont
@@ -217,72 +341,30 @@ Rectangle {
                         font.pixelSize: Theme.textCompact
                     }
                 }
-
-                AppComboBox {
-                    id: agentModeBox
-
-                    objectName: "aiAgentModeBox"
-                    Layout.preferredWidth: 112
-                    model: ["read-only", "ask", "edit", "auto", "yolo"]
-                    displayTextModel: [qsTr("Read-only"), qsTr("Ask"), qsTr("Edit"), qsTr("Auto"), qsTr("YOLO")]
-                    currentIndex: pane.permissionModeIndex(pane.controller.aiPermissionPreference)
-                    accessibleName: qsTr("Agent execution mode")
-                    onActivated: index => pane.controller.setAiPermissionMode(model[index])
-                }
             }
         }
 
-        Flow {
+        RowLayout {
             Layout.fillWidth: true
             Layout.minimumWidth: 0
-            Layout.preferredHeight: implicitHeight
             Layout.leftMargin: 10
             Layout.rightMargin: 10
             Layout.topMargin: 8
             Layout.bottomMargin: 4
             spacing: 6
 
-            ActionButton {
-                objectName: "aiExplainFailureButton"
-                text: qsTr("Explain last failure")
-                iconName: "activity"
-                enabled: !pane.busy
-                accessibleName: qsTr("Explain the last failed command")
-                onClicked: pane.controller.explainAiLastFailure()
+            Text {
+                Layout.fillWidth: true
+                text: pane.conversation && pane.conversation.count > 0 ? qsTr("Conversation") : qsTr("New conversation")
+                color: Theme.textMuted
+                font.family: Theme.uiFont
+                font.pixelSize: Theme.textCompact
             }
 
-            ActionButton {
-                objectName: "aiAttachSelectionButton"
-                text: qsTr("Attach selection")
-                iconName: "copy"
-                enabled: !pane.busy
-                accessibleName: qsTr("Attach selected terminal text to this request")
-                onClicked: pane.controller.attachAiSelection()
-            }
-
-            ActionButton {
-                objectName: "aiActivityToggle"
-                text: qsTr("Activity")
-                iconName: "activity"
-                checkable: true
-                checked: pane.activityExpanded
-                accessibleName: pane.activityExpanded ? qsTr("Hide AI activity") : qsTr("Show AI activity")
-                onClicked: {
-                    pane.activityExpanded = !pane.activityExpanded;
-                    if (pane.activityExpanded) {
-                        pane.historyExpanded = false;
-                    }
-                }
-            }
-
-            ActionButton {
+            ContextToolButton {
                 objectName: "aiHistoryToggle"
-                text: qsTr("History")
-                iconName: "history"
-                checkable: true
-                checked: pane.historyExpanded
                 enabled: pane.controller.aiConversationHistoryEnabled
-                accessibleName: pane.historyExpanded ? qsTr("Hide AI conversation history") : qsTr("Show AI conversation history")
+                Accessible.name: pane.historyExpanded ? qsTr("Hide AI conversation history") : qsTr("Show AI conversation history")
                 onClicked: {
                     pane.historyExpanded = !pane.historyExpanded;
                     if (pane.historyExpanded) {
@@ -290,15 +372,44 @@ Rectangle {
                         pane.controller.aiConversationHistory.reload();
                     }
                 }
+                contentItem: AppIcon {
+                    name: "history"
+                    color: pane.historyExpanded ? Theme.accent : Theme.textMuted
+                }
+                AppToolTip {
+                    text: qsTr("Conversation history")
+                }
             }
 
-            ActionButton {
-                objectName: "aiClearConversationButton"
-                text: qsTr("Clear")
-                iconName: "trash"
-                enabled: !pane.busy && pane.conversation !== null && pane.conversation.count > 0
-                accessibleName: qsTr("Clear this AI conversation")
-                onClicked: pane.controller.clearAiConversation()
+            ContextToolButton {
+                objectName: "aiNewConversationButton"
+                enabled: !pane.busy
+                Accessible.name: qsTr("Start a new AI conversation")
+                onClicked: {
+                    pane.historyExpanded = false;
+                    pane.activityExpanded = false;
+                    pane.controller.clearAiConversation();
+                }
+                contentItem: AppIcon {
+                    name: "plus"
+                    color: Theme.textMuted
+                }
+                AppToolTip {
+                    text: qsTr("New conversation")
+                }
+            }
+
+            ContextToolButton {
+                objectName: "aiConversationMoreButton"
+                Accessible.name: qsTr("More conversation actions")
+                onClicked: conversationMenu.popup()
+                contentItem: AppIcon {
+                    name: "more"
+                    color: Theme.textMuted
+                }
+                AppToolTip {
+                    text: qsTr("More")
+                }
             }
         }
 
@@ -928,294 +1039,368 @@ Rectangle {
             }
         }
 
-        ListView {
-            id: conversationList
+        Item {
+            id: conversationArea
 
-            objectName: "aiConversationList"
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.leftMargin: 8
             Layout.rightMargin: 8
             Layout.topMargin: 6
-            clip: true
-            spacing: 8
-            model: pane.conversation
-            boundsBehavior: Flickable.StopAtBounds
-            onCountChanged: Qt.callLater(positionViewAtEnd)
 
-            delegate: Item {
-                id: messageItem
+            ListView {
+                id: conversationList
 
-                required property int index
-                required property string messageRole
-                required property string text
-                required property string reasoning
-                required property string state
-                required property string error
-                required property bool truncated
-                required property var inputTokens
-                required property var outputTokens
-                required property var cachedInputTokens
-                required property var reasoningTokens
-                required property bool usageAvailable
-                required property var wallTimeMilliseconds
-                required property var firstTokenMilliseconds
-                required property var retryCount
-                required property bool estimatedCostKnown
-                required property real estimatedCostUsd
-                required property string costCatalogDate
-                required property bool longContextRates
-                required property string commandSuggestion
-                required property bool hasCommandSuggestion
-                required property var toolActivities
-                width: ListView.view.width
-                height: messageBubble.implicitHeight
+                property bool stickToBottom: true
+                readonly property bool closeToBottom: contentHeight <= height || contentY >= contentHeight - height - 24
 
-                Rectangle {
-                    id: messageBubble
+                objectName: "aiConversationList"
+                anchors.fill: parent
+                clip: true
+                spacing: 8
+                model: pane.conversation
+                boundsBehavior: Flickable.StopAtBounds
+                onCountChanged: scrollToBottomIfNeeded()
+                onContentHeightChanged: scrollToBottomIfNeeded()
+                onContentYChanged: {
+                    if (moving || dragging || flicking)
+                        stickToBottom = closeToBottom;
+                }
+                onMovementEnded: stickToBottom = closeToBottom
 
-                    anchors.right: messageItem.messageRole === "user" ? parent.right : undefined
-                    anchors.left: messageItem.messageRole === "user" ? undefined : parent.left
-                    width: messageItem.messageRole === "user" ? Math.min(parent.width * 0.92, Math.max(150, messageText.implicitWidth + 24)) : parent.width * 0.92
-                    implicitHeight: messageColumn.implicitHeight + 18
-                    radius: Theme.radiusPanel
-                    color: messageItem.messageRole === "user" ? Theme.selectedBackground : Theme.elevatedBackground
-                    border.color: messageItem.state === "failed" ? Theme.dangerBorder : Theme.border
+                function scrollToBottomIfNeeded() {
+                    if (!stickToBottom)
+                        return;
+                    Qt.callLater(() => {
+                        if (conversationList.stickToBottom)
+                            conversationList.positionViewAtEnd();
+                    });
+                }
 
-                    ColumnLayout {
-                        id: messageColumn
+                delegate: Item {
+                    id: messageItem
 
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        anchors.margins: 9
-                        spacing: 5
+                    required property int index
+                    required property string messageRole
+                    required property string text
+                    required property string reasoning
+                    required property string state
+                    required property string error
+                    required property bool truncated
+                    required property var inputTokens
+                    required property var outputTokens
+                    required property var cachedInputTokens
+                    required property var reasoningTokens
+                    required property bool usageAvailable
+                    required property var wallTimeMilliseconds
+                    required property var firstTokenMilliseconds
+                    required property var retryCount
+                    required property bool estimatedCostKnown
+                    required property real estimatedCostUsd
+                    required property string costCatalogDate
+                    required property bool longContextRates
+                    required property string commandSuggestion
+                    required property bool hasCommandSuggestion
+                    required property var toolActivities
+                    readonly property bool reasoningActive: state === "streaming" && reasoning.length > 0 && text.length === 0
+                    width: ListView.view.width
+                    height: messageBubble.implicitHeight
 
-                        Button {
-                            id: reasoningToggle
+                    Rectangle {
+                        id: messageBubble
 
-                            property bool expanded: false
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: visible ? 30 : 0
-                            visible: messageItem.messageRole === "assistant" && messageItem.reasoning.length > 0
-                            text: expanded ? qsTr("Hide model reasoning") : qsTr("Show model reasoning")
-                            Accessible.name: text
-                            onClicked: expanded = !expanded
+                        anchors.right: messageItem.messageRole === "user" ? parent.right : undefined
+                        anchors.left: messageItem.messageRole === "user" ? undefined : parent.left
+                        width: messageItem.messageRole === "user" ? Math.min(parent.width * 0.92, Math.max(150, messageText.implicitWidth + 24)) : parent.width * 0.92
+                        implicitHeight: messageColumn.implicitHeight + 18
+                        radius: Theme.radiusPanel
+                        color: messageItem.messageRole === "user" ? Theme.selectedBackground : Theme.elevatedBackground
+                        border.color: messageItem.state === "failed" ? Theme.dangerBorder : Theme.border
 
-                            contentItem: RowLayout {
-                                spacing: 6
+                        ColumnLayout {
+                            id: messageColumn
 
-                                AppIcon {
-                                    Layout.preferredWidth: 14
-                                    Layout.preferredHeight: 14
-                                    name: reasoningToggle.expanded ? "chevron-down" : "chevron-right"
-                                    color: Theme.textMuted
-                                }
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.margins: 9
+                            spacing: 5
 
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: reasoningToggle.text
-                                    color: Theme.textSoft
-                                    font.family: Theme.uiFont
-                                    font.pixelSize: Theme.textCompact
-                                }
-                            }
-                            background: Rectangle {
-                                radius: Theme.radiusSmall
-                                color: reasoningToggle.down ? Theme.controlPressed : reasoningToggle.hovered ? Theme.controlHover : "transparent"
-                            }
-                        }
+                            Button {
+                                id: reasoningToggle
 
-                        MarkdownMessage {
-                            Layout.fillWidth: true
-                            Layout.maximumHeight: 180
-                            visible: reasoningToggle.visible && reasoningToggle.expanded
-                            source: messageItem.reasoning
-                            color: Theme.textMuted
-                            font.pixelSize: Theme.textCompact
-                        }
-
-                        Repeater {
-                            model: messageItem.toolActivities
-
-                            delegate: Rectangle {
-                                id: toolCard
-
-                                required property var modelData
+                                property bool autoManaged: true
+                                property bool manualExpanded: false
+                                readonly property bool expanded: autoManaged ? messageItem.reasoningActive : manualExpanded
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: toolCardContent.implicitHeight + 14
-                                radius: Theme.radiusControl
-                                color: Theme.controlBackground
-                                border.width: 1
-                                border.color: modelData.highRisk ? Theme.dangerBorder : modelData.state === "failed" ? Theme.dangerBorder : Theme.border
+                                Layout.preferredHeight: visible ? 30 : 0
+                                visible: messageItem.messageRole === "assistant" && messageItem.reasoning.length > 0
+                                text: messageItem.reasoningActive ? qsTr("Thinking…") : expanded ? qsTr("Hide model reasoning") : qsTr("Show model reasoning")
+                                Accessible.name: text
+                                onClicked: {
+                                    manualExpanded = !expanded;
+                                    autoManaged = false;
+                                }
 
-                                RowLayout {
-                                    id: toolCardContent
-
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    anchors.leftMargin: 8
-                                    anchors.rightMargin: 8
-                                    spacing: 7
-
-                                    BusyIndicator {
-                                        id: toolBusy
-
-                                        Layout.preferredWidth: 16
-                                        Layout.preferredHeight: 16
-                                        running: toolCard.modelData.state === "queued" || toolCard.modelData.state === "running" || toolCard.modelData.state === "awaiting_approval"
-                                        visible: running
-                                    }
+                                contentItem: RowLayout {
+                                    spacing: 6
 
                                     AppIcon {
-                                        Layout.preferredWidth: 15
-                                        Layout.preferredHeight: 15
-                                        visible: !toolBusy.visible
-                                        name: toolCard.modelData.state === "succeeded" ? "check" : toolCard.modelData.state === "cancelled" || toolCard.modelData.state === "failed" ? "close" : toolCard.modelData.sideEffecting ? "terminal" : "search"
-                                        color: toolCard.modelData.state === "succeeded" ? Theme.successText : toolCard.modelData.state === "failed" ? Theme.dangerText : Theme.textMuted
-                                    }
-
-                                    ColumnLayout {
-                                        Layout.fillWidth: true
-                                        Layout.minimumWidth: 0
-                                        spacing: 1
-
-                                        Text {
-                                            Layout.fillWidth: true
-                                            text: toolCard.modelData.name
-                                            color: Theme.text
-                                            elide: Text.ElideRight
-                                            font.family: Theme.terminalFont
-                                            font.pixelSize: Theme.textCompact
-                                            font.weight: Font.DemiBold
-                                        }
-
-                                        Text {
-                                            Layout.fillWidth: true
-                                            visible: toolCard.modelData.summary.length > 0
-                                            text: toolCard.modelData.summary
-                                            color: Theme.textMuted
-                                            elide: Text.ElideRight
-                                            font.family: Theme.terminalFont
-                                            font.pixelSize: Theme.textCompact
-                                        }
+                                        Layout.preferredWidth: 14
+                                        Layout.preferredHeight: 14
+                                        name: reasoningToggle.expanded ? "chevron-down" : "chevron-right"
+                                        color: Theme.textMuted
                                     }
 
                                     Text {
-                                        text: pane.toolStateLabel(toolCard.modelData.state, toolCard.modelData.resultCode)
-                                        color: toolCard.modelData.state === "succeeded" ? Theme.successText : toolCard.modelData.state === "failed" ? Theme.dangerText : toolCard.modelData.state === "cancelled" ? Theme.warning : Theme.textMuted
-                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
+                                        text: reasoningToggle.text
+                                        color: Theme.textSoft
                                         font.family: Theme.uiFont
                                         font.pixelSize: Theme.textCompact
-                                        font.weight: Font.Medium
+                                    }
+                                }
+                                background: Rectangle {
+                                    radius: Theme.radiusSmall
+                                    color: reasoningToggle.down ? Theme.controlPressed : reasoningToggle.hovered ? Theme.controlHover : "transparent"
+                                }
+                            }
+
+                            MarkdownMessage {
+                                Layout.fillWidth: true
+                                Layout.maximumHeight: 180
+                                visible: reasoningToggle.visible && reasoningToggle.expanded
+                                source: messageItem.reasoning
+                                color: Theme.textMuted
+                                font.pixelSize: Theme.textCompact
+                                onCopyRequested: text => pane.controller.copyAiText(text)
+                            }
+
+                            Repeater {
+                                model: messageItem.toolActivities
+
+                                delegate: Rectangle {
+                                    id: toolCard
+
+                                    required property var modelData
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: toolCardContent.implicitHeight + 14
+                                    radius: Theme.radiusControl
+                                    color: Theme.controlBackground
+                                    border.width: 1
+                                    border.color: modelData.highRisk ? Theme.dangerBorder : modelData.state === "failed" ? Theme.dangerBorder : Theme.border
+
+                                    RowLayout {
+                                        id: toolCardContent
+
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        anchors.leftMargin: 8
+                                        anchors.rightMargin: 8
+                                        spacing: 7
+
+                                        BusyIndicator {
+                                            id: toolBusy
+
+                                            Layout.preferredWidth: 16
+                                            Layout.preferredHeight: 16
+                                            running: toolCard.modelData.state === "queued" || toolCard.modelData.state === "running" || toolCard.modelData.state === "awaiting_approval"
+                                            visible: running
+                                        }
+
+                                        AppIcon {
+                                            Layout.preferredWidth: 15
+                                            Layout.preferredHeight: 15
+                                            visible: !toolBusy.visible
+                                            name: toolCard.modelData.state === "succeeded" ? "check" : toolCard.modelData.state === "cancelled" || toolCard.modelData.state === "failed" ? "close" : toolCard.modelData.sideEffecting ? "terminal" : "search"
+                                            color: toolCard.modelData.state === "succeeded" ? Theme.successText : toolCard.modelData.state === "failed" ? Theme.dangerText : Theme.textMuted
+                                        }
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            Layout.minimumWidth: 0
+                                            spacing: 1
+
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: toolCard.modelData.name
+                                                color: Theme.text
+                                                elide: Text.ElideRight
+                                                font.family: Theme.terminalFont
+                                                font.pixelSize: Theme.textCompact
+                                                font.weight: Font.DemiBold
+                                            }
+
+                                            Text {
+                                                Layout.fillWidth: true
+                                                visible: toolCard.modelData.summary.length > 0
+                                                text: toolCard.modelData.summary
+                                                color: Theme.textMuted
+                                                elide: Text.ElideRight
+                                                font.family: Theme.terminalFont
+                                                font.pixelSize: Theme.textCompact
+                                            }
+                                        }
+
+                                        Text {
+                                            text: pane.toolStateLabel(toolCard.modelData.state, toolCard.modelData.resultCode)
+                                            color: toolCard.modelData.state === "succeeded" ? Theme.successText : toolCard.modelData.state === "failed" ? Theme.dangerText : toolCard.modelData.state === "cancelled" ? Theme.warning : Theme.textMuted
+                                            elide: Text.ElideRight
+                                            font.family: Theme.uiFont
+                                            font.pixelSize: Theme.textCompact
+                                            font.weight: Font.Medium
+                                        }
                                     }
                                 }
                             }
-                        }
 
-                        MarkdownMessage {
-                            id: messageText
+                            MarkdownMessage {
+                                id: messageText
 
-                            Layout.fillWidth: true
-                            source: messageItem.text.length > 0 ? messageItem.text : messageItem.state === "streaming" ? qsTr("Thinking…") : ""
-                            color: Theme.text
-                            textFormat: messageItem.messageRole === "assistant" ? TextEdit.MarkdownText : TextEdit.PlainText
-                            font.pixelSize: Theme.textBody
-                        }
-
-                        Text {
-                            Layout.fillWidth: true
-                            visible: messageItem.state === "failed" || messageItem.state === "cancelled" || messageItem.truncated
-                            text: messageItem.state === "failed" ? messageItem.error : messageItem.state === "cancelled" ? qsTr("Cancelled") : qsTr("Message was truncated locally.")
-                            color: messageItem.state === "failed" ? Theme.dangerText : Theme.warning
-                            wrapMode: Text.WordWrap
-                            font.family: Theme.uiFont
-                            font.pixelSize: Theme.textCompact
-                        }
-
-                        Text {
-                            Layout.fillWidth: true
-                            Layout.alignment: Qt.AlignRight
-                            visible: messageItem.usageAvailable
-                            text: {
-                                let parts = [qsTr("%1 in").arg(messageItem.inputTokens), qsTr("%1 out").arg(messageItem.outputTokens)];
-                                if (Number(messageItem.cachedInputTokens) > 0)
-                                    parts.push(qsTr("%1 cached").arg(messageItem.cachedInputTokens));
-                                if (Number(messageItem.reasoningTokens) > 0)
-                                    parts.push(qsTr("%1 reasoning").arg(messageItem.reasoningTokens));
-                                return parts.join(" · ");
-                            }
-                            color: Theme.textSubtle
-                            horizontalAlignment: Text.AlignRight
-                            wrapMode: Text.WordWrap
-                            font.family: Theme.terminalFont
-                            font.pixelSize: Theme.textCompact
-                        }
-
-                        Text {
-                            Layout.fillWidth: true
-                            Layout.alignment: Qt.AlignRight
-                            visible: Number(messageItem.wallTimeMilliseconds) > 0 || Number(messageItem.retryCount) > 0
-                            text: Number(messageItem.firstTokenMilliseconds) >= 0 ? qsTr("%1 ms first · %2 ms total · %3 retries").arg(messageItem.firstTokenMilliseconds).arg(messageItem.wallTimeMilliseconds).arg(messageItem.retryCount) : qsTr("%1 ms total · %2 retries").arg(messageItem.wallTimeMilliseconds).arg(messageItem.retryCount)
-                            color: Theme.textSubtle
-                            horizontalAlignment: Text.AlignRight
-                            wrapMode: Text.WordWrap
-                            font.family: Theme.terminalFont
-                            font.pixelSize: Theme.textCompact
-                        }
-
-                        Text {
-                            Layout.fillWidth: true
-                            Layout.alignment: Qt.AlignRight
-                            visible: messageItem.estimatedCostKnown
-                            text: (messageItem.longContextRates ? qsTr("Est. $%1 · long-context rates · catalog %2") : qsTr("Est. $%1 · catalog %2")).arg(Number(messageItem.estimatedCostUsd).toFixed(6)).arg(messageItem.costCatalogDate)
-                            color: Theme.textSubtle
-                            horizontalAlignment: Text.AlignRight
-                            wrapMode: Text.WordWrap
-                            font.family: Theme.terminalFont
-                            font.pixelSize: Theme.textCompact
-                        }
-
-                        Flow {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: implicitHeight
-                            spacing: 6
-
-                            ActionButton {
-                                visible: messageItem.messageRole === "assistant" && messageItem.state === "complete" && messageItem.hasCommandSuggestion
-                                text: qsTr("Insert")
-                                iconName: "composer"
-                                accessibleName: qsTr("Insert the suggested command without running it")
-                                onClicked: pane.controller.insertTerminalCommand(messageItem.commandSuggestion)
+                                Layout.fillWidth: true
+                                source: messageItem.text.length > 0 ? messageItem.text : messageItem.state === "streaming" ? qsTr("Thinking…") : ""
+                                color: Theme.text
+                                textFormat: messageItem.messageRole === "assistant" ? TextEdit.MarkdownText : TextEdit.PlainText
+                                font.pixelSize: Theme.textBody
+                                onCopyRequested: text => pane.controller.copyAiText(text)
                             }
 
-                            ActionButton {
-                                visible: messageItem.messageRole === "assistant" && messageItem.state === "complete" && messageItem.hasCommandSuggestion
-                                text: qsTr("Run")
-                                iconName: "play"
-                                variant: "primary"
-                                accessibleName: qsTr("Run the suggested command in the active terminal")
-                                onClicked: pane.controller.runTerminalCommand(messageItem.commandSuggestion)
+                            Text {
+                                Layout.fillWidth: true
+                                visible: messageItem.state === "failed" || messageItem.state === "cancelled" || messageItem.truncated
+                                text: messageItem.state === "failed" ? messageItem.error : messageItem.state === "cancelled" ? qsTr("Cancelled") : qsTr("Message was truncated locally.")
+                                color: messageItem.state === "failed" ? Theme.dangerText : Theme.warning
+                                wrapMode: Text.WordWrap
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.textCompact
                             }
 
-                            ActionButton {
-                                visible: messageItem.messageRole === "assistant" && (messageItem.state === "failed" || messageItem.state === "cancelled") && messageItem.index === conversationList.count - 1
-                                text: qsTr("Retry")
-                                iconName: "refresh"
-                                accessibleName: qsTr("Retry the failed assistant response")
-                                onClicked: pane.controller.retryAiMessage()
+                            Text {
+                                Layout.fillWidth: true
+                                Layout.alignment: Qt.AlignRight
+                                visible: messageItem.usageAvailable
+                                text: {
+                                    let parts = [qsTr("%1 in").arg(messageItem.inputTokens), qsTr("%1 out").arg(messageItem.outputTokens)];
+                                    if (Number(messageItem.cachedInputTokens) > 0)
+                                        parts.push(qsTr("%1 cached").arg(messageItem.cachedInputTokens));
+                                    if (Number(messageItem.reasoningTokens) > 0)
+                                        parts.push(qsTr("%1 reasoning").arg(messageItem.reasoningTokens));
+                                    return parts.join(" · ");
+                                }
+                                color: Theme.textSubtle
+                                horizontalAlignment: Text.AlignRight
+                                wrapMode: Text.WordWrap
+                                font.family: Theme.terminalFont
+                                font.pixelSize: Theme.textCompact
                             }
 
-                            ActionButton {
-                                visible: messageItem.messageRole === "assistant" && messageItem.text.length > 0
-                                text: qsTr("Copy")
-                                iconName: "copy"
-                                accessibleName: qsTr("Copy assistant response")
-                                onClicked: pane.controller.copyAiText(messageItem.text)
+                            Text {
+                                Layout.fillWidth: true
+                                Layout.alignment: Qt.AlignRight
+                                visible: Number(messageItem.wallTimeMilliseconds) > 0 || Number(messageItem.retryCount) > 0
+                                text: Number(messageItem.firstTokenMilliseconds) >= 0 ? qsTr("%1 ms first · %2 ms total · %3 retries").arg(messageItem.firstTokenMilliseconds).arg(messageItem.wallTimeMilliseconds).arg(messageItem.retryCount) : qsTr("%1 ms total · %2 retries").arg(messageItem.wallTimeMilliseconds).arg(messageItem.retryCount)
+                                color: Theme.textSubtle
+                                horizontalAlignment: Text.AlignRight
+                                wrapMode: Text.WordWrap
+                                font.family: Theme.terminalFont
+                                font.pixelSize: Theme.textCompact
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
+                                Layout.alignment: Qt.AlignRight
+                                visible: messageItem.estimatedCostKnown
+                                text: (messageItem.longContextRates ? qsTr("Est. $%1 · long-context rates · catalog %2") : qsTr("Est. $%1 · catalog %2")).arg(Number(messageItem.estimatedCostUsd).toFixed(6)).arg(messageItem.costCatalogDate)
+                                color: Theme.textSubtle
+                                horizontalAlignment: Text.AlignRight
+                                wrapMode: Text.WordWrap
+                                font.family: Theme.terminalFont
+                                font.pixelSize: Theme.textCompact
+                            }
+
+                            Flow {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: implicitHeight
+                                spacing: 6
+
+                                ActionButton {
+                                    visible: messageItem.messageRole === "assistant" && messageItem.state === "complete" && messageItem.hasCommandSuggestion
+                                    text: qsTr("Insert")
+                                    iconName: "composer"
+                                    accessibleName: qsTr("Insert the suggested command without running it")
+                                    onClicked: pane.controller.insertTerminalCommand(messageItem.commandSuggestion)
+                                }
+
+                                ActionButton {
+                                    visible: messageItem.messageRole === "assistant" && messageItem.state === "complete" && messageItem.hasCommandSuggestion
+                                    text: qsTr("Run")
+                                    iconName: "play"
+                                    variant: "primary"
+                                    accessibleName: qsTr("Run the suggested command in the active terminal")
+                                    onClicked: pane.controller.runTerminalCommand(messageItem.commandSuggestion)
+                                }
+
+                                ActionButton {
+                                    visible: messageItem.messageRole === "assistant" && (messageItem.state === "failed" || messageItem.state === "cancelled") && messageItem.index === conversationList.count - 1
+                                    text: qsTr("Retry")
+                                    iconName: "refresh"
+                                    accessibleName: qsTr("Retry the failed assistant response")
+                                    onClicked: pane.controller.retryAiMessage()
+                                }
+
+                                ActionButton {
+                                    visible: messageItem.messageRole === "assistant" && messageItem.text.length > 0
+                                    text: qsTr("Copy")
+                                    iconName: "copy"
+                                    accessibleName: qsTr("Copy assistant response")
+                                    onClicked: pane.controller.copyAiText(messageItem.text)
+                                }
                             }
                         }
                     }
+                }
+            }
+
+            Button {
+                id: returnToLatestButton
+
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 10
+                z: 4
+                width: 34
+                height: 34
+                visible: conversationList.count > 0 && !conversationList.closeToBottom
+                hoverEnabled: true
+                focusPolicy: Qt.StrongFocus
+                Accessible.name: qsTr("Return to latest response")
+                onClicked: {
+                    conversationList.stickToBottom = true;
+                    conversationList.positionViewAtEnd();
+                }
+
+                contentItem: AppIcon {
+                    anchors.centerIn: parent
+                    width: 16
+                    height: 16
+                    name: "chevron-down"
+                    color: Theme.text
+                }
+
+                background: Rectangle {
+                    radius: width / 2
+                    color: returnToLatestButton.down ? Theme.controlPressed : returnToLatestButton.hovered ? Theme.controlHover : Theme.elevatedBackground
+                    border.color: returnToLatestButton.activeFocus ? Theme.focus : Theme.borderStrong
+                    border.width: returnToLatestButton.activeFocus ? 2 : 1
+                }
+
+                AppToolTip {
+                    text: qsTr("Return to latest response")
+                }
+
+                HoverHandler {
+                    cursorShape: Qt.PointingHandCursor
                 }
             }
 
@@ -1234,7 +1419,7 @@ Rectangle {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: Math.max(116, Math.min(200, promptEditor.contentHeight + 78))
+            Layout.preferredHeight: Math.max(132, Math.min(352, promptEditor.contentHeight + 92 + slashCommandList.implicitHeight))
             color: Theme.elevatedBackground
             border.color: Theme.border
 
@@ -1243,74 +1428,210 @@ Rectangle {
                 anchors.margins: 8
                 spacing: 6
 
-                RowLayout {
+                ScrollView {
                     Layout.fillWidth: true
-                    spacing: 6
+                    Layout.fillHeight: true
+                    clip: true
 
-                    ActionButton {
-                        text: pane.commandRequest ? qsTr("Command request") : qsTr("Ask")
-                        iconName: pane.commandRequest ? "terminal" : "ai"
-                        variant: pane.commandRequest ? "primary" : "default"
-                        checkable: true
-                        checked: pane.commandRequest
-                        enabled: !pane.busy
-                        accessibleName: qsTr("Toggle command generation mode")
-                        onClicked: pane.commandRequest = !pane.commandRequest
-                    }
+                    TextArea {
+                        id: promptEditor
 
-                    Text {
-                        Layout.fillWidth: true
-                        Layout.minimumWidth: 0
-                        text: pane.commandRequest ? qsTr("The response must contain one explicit shell command.") : qsTr("Ask, explain, or diagnose using the reviewed context.")
-                        color: Theme.textMuted
-                        elide: Text.ElideRight
+                        objectName: "aiPromptEditor"
+                        placeholderText: pane.commandRequest ? qsTr("Describe the command you need · Enter sends · Shift+Enter adds a new line") : qsTr("Message ztermy Agent · Enter sends · Shift+Enter adds a new line")
+                        color: Theme.text
+                        placeholderTextColor: Theme.textMuted
+                        selectionColor: Theme.accent
+                        selectedTextColor: Theme.accentText
+                        wrapMode: TextEdit.Wrap
                         font.family: Theme.uiFont
-                        font.pixelSize: Theme.textCompact
+                        font.pixelSize: Theme.textBody
+                        Accessible.name: qsTr("AI message")
+                        Keys.onPressed: event => {
+                            if (slashCommandList.visible && (event.key === Qt.Key_Down || event.key === Qt.Key_Up)) {
+                                const offset = event.key === Qt.Key_Down ? 1 : -1;
+                                slashCommandList.currentIndex = Math.max(0, Math.min(slashCommandList.count - 1, slashCommandList.currentIndex + offset));
+                                event.accepted = true;
+                                return;
+                            }
+                            if (slashCommandList.visible && event.key === Qt.Key_Tab) {
+                                pane.applySlashSuggestion(slashCommandList.currentIndex >= 0 ? slashCommandList.suggestions[slashCommandList.currentIndex] : null);
+                                event.accepted = true;
+                                return;
+                            }
+                            if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && (event.modifiers & Qt.ShiftModifier) === 0 && !promptEditor.inputMethodComposing) {
+                                if (slashCommandList.visible && slashCommandList.currentIndex >= 0) {
+                                    pane.activateSlashSuggestion(slashCommandList.suggestions[slashCommandList.currentIndex]);
+                                    event.accepted = true;
+                                    return;
+                                }
+                                pane.sendPrompt();
+                                event.accepted = true;
+                            }
+                        }
+                        background: Rectangle {
+                            radius: Theme.radiusControl
+                            color: Theme.controlBackground
+                            border.color: promptEditor.activeFocus ? Theme.focus : Theme.border
+                            border.width: promptEditor.activeFocus ? 2 : 1
+                        }
                     }
+                }
+
+                ListView {
+                    id: slashCommandList
+
+                    readonly property var suggestions: pane.slashSuggestions()
+
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: implicitHeight
+                    implicitHeight: visible ? Math.min(132, contentHeight) : 0
+                    visible: suggestions.length > 0
+                    clip: true
+                    spacing: 2
+                    model: suggestions
+                    currentIndex: 0
+                    boundsBehavior: Flickable.StopAtBounds
+                    onSuggestionsChanged: currentIndex = 0
+
+                    delegate: Rectangle {
+                        id: slashCommandDelegate
+
+                        required property var modelData
+                        required property int index
+
+                        width: ListView.view.width
+                        height: 40
+                        radius: Theme.radiusSmall
+                        color: slashCommandDelegate.ListView.isCurrentItem ? Theme.selectedBackground : slashCommandHover.hovered ? Theme.controlHover : "transparent"
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            spacing: 8
+
+                            Text {
+                                Layout.preferredWidth: 76
+                                text: slashCommandDelegate.modelData.command
+                                color: Theme.accent
+                                font.family: Theme.terminalFont
+                                font.pixelSize: Theme.textCompact
+                                font.weight: Font.DemiBold
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 0
+                                spacing: 0
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: slashCommandDelegate.modelData.title
+                                    color: Theme.text
+                                    elide: Text.ElideRight
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.textCompact
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: slashCommandDelegate.modelData.description
+                                    color: Theme.textSubtle
+                                    elide: Text.ElideRight
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.textCompact
+                                }
+                            }
+                        }
+
+                        TapHandler {
+                            onTapped: {
+                                slashCommandList.currentIndex = slashCommandDelegate.index;
+                                pane.activateSlashSuggestion(slashCommandDelegate.modelData);
+                            }
+                        }
+
+                        HoverHandler {
+                            id: slashCommandHover
+                        }
+                    }
+
+                    ScrollBar.vertical: ScrollBar {}
                 }
 
                 RowLayout {
                     Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    spacing: 8
+                    spacing: 4
 
-                    ScrollView {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        clip: true
+                    ContextToolButton {
+                        id: attachContextButton
 
-                        TextArea {
-                            id: promptEditor
-
-                            objectName: "aiPromptEditor"
-                            placeholderText: pane.commandRequest ? qsTr("Describe the command you need. Enter sends · Shift+Enter adds a new line") : qsTr("Ask about this terminal. Enter sends · Shift+Enter adds a new line")
-                            color: Theme.text
-                            placeholderTextColor: Theme.textMuted
-                            selectionColor: Theme.accent
-                            selectedTextColor: Theme.accentText
-                            wrapMode: TextEdit.Wrap
-                            font.family: Theme.uiFont
-                            font.pixelSize: Theme.textBody
-                            Accessible.name: qsTr("AI message")
-                            Keys.onPressed: event => {
-                                if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && (event.modifiers & Qt.ShiftModifier) === 0 && !promptEditor.inputMethodComposing) {
-                                    pane.sendPrompt();
-                                    event.accepted = true;
-                                }
-                            }
-                            background: Rectangle {
-                                radius: Theme.radiusControl
-                                color: Theme.controlBackground
-                                border.color: promptEditor.activeFocus ? Theme.focus : Theme.border
-                                border.width: promptEditor.activeFocus ? 2 : 1
-                            }
+                        enabled: !pane.busy
+                        Accessible.name: qsTr("Attach terminal context")
+                        onClicked: attachmentMenu.popup()
+                        contentItem: AppIcon {
+                            name: "plus"
+                            color: Theme.textMuted
                         }
+                        AppToolTip {
+                            text: qsTr("Attach selected text or recent commands")
+                        }
+                    }
+
+                    ContextToolButton {
+                        id: commandRequestButton
+
+                        checkable: true
+                        checked: pane.commandRequest
+                        enabled: !pane.busy
+                        Accessible.name: qsTr("Toggle command generation mode")
+                        onClicked: pane.commandRequest = !pane.commandRequest
+                        contentItem: AppIcon {
+                            name: "terminal"
+                            color: commandRequestButton.checked ? Theme.accent : Theme.textMuted
+                        }
+                        AppToolTip {
+                            text: pane.commandRequest ? qsTr("Command generation enabled") : qsTr("Generate a shell command")
+                        }
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                    }
+
+                    AppComboBox {
+                        id: modelBox
+
+                        objectName: "aiModelBox"
+                        Layout.preferredWidth: pane.width < 380 ? 94 : 124
+                        model: pane.modelOptions()
+                        currentIndex: Math.max(0, model.indexOf(pane.controller.aiModel))
+                        accessibleName: qsTr("AI model")
+                        enabled: !pane.busy && model.length > 0
+                        onActivated: index => pane.selectModel(model[index])
+
+                        AppToolTip {
+                            text: qsTr("Model · %1").arg(pane.controller.aiModel)
+                        }
+                    }
+
+                    AppComboBox {
+                        id: agentModeBox
+
+                        objectName: "aiAgentModeBox"
+                        Layout.preferredWidth: pane.width < 380 ? 82 : 96
+                        model: ["read-only", "ask", "edit", "auto", "yolo"]
+                        displayTextModel: [qsTr("Read-only"), qsTr("Ask"), qsTr("Edit"), qsTr("Auto"), qsTr("YOLO")]
+                        currentIndex: pane.permissionModeIndex(pane.controller.aiPermissionPreference)
+                        accessibleName: qsTr("Agent execution mode")
+                        enabled: !pane.busy
+                        onActivated: index => pane.controller.setAiPermissionMode(model[index])
                     }
 
                     ActionButton {
                         objectName: "aiSendButton"
-                        Layout.alignment: Qt.AlignBottom
-                        text: pane.busy ? qsTr("Cancel") : qsTr("Send")
+                        Layout.preferredWidth: pane.busy ? 82 : 36
+                        text: pane.busy ? qsTr("Cancel") : ""
                         iconName: pane.busy ? "close" : "play"
                         variant: pane.busy ? "destructive" : "primary"
                         enabled: pane.busy || promptEditor.text.trim().length > 0
@@ -1329,6 +1650,16 @@ Rectangle {
     }
 
     FileDialog {
+        id: conversationExportDialog
+
+        title: qsTr("Export AI conversation")
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "md"
+        nameFilters: [qsTr("Markdown files (*.md)"), qsTr("All files (*)")]
+        onAccepted: pane.controller.exportAiConversation(selectedFile.toString())
+    }
+
+    FileDialog {
         id: activityExportDialog
 
         title: qsTr("Export AI activity metadata")
@@ -1336,5 +1667,54 @@ Rectangle {
         defaultSuffix: "json"
         nameFilters: [qsTr("JSON files (*.json)"), qsTr("All files (*)")]
         onAccepted: pane.controller.exportAiActivity(selectedFile.toString())
+    }
+
+    AppMenu {
+        id: attachmentMenu
+
+        AppMenuItem {
+            text: qsTr("Selected terminal text")
+            onTriggered: pane.controller.attachAiSelection()
+        }
+        AppMenuSeparator {}
+        AppMenuItem {
+            text: qsTr("Last command")
+            onTriggered: pane.controller.attachAiRecentCommands(1)
+        }
+        AppMenuItem {
+            text: qsTr("Last 3 commands")
+            onTriggered: pane.controller.attachAiRecentCommands(3)
+        }
+        AppMenuItem {
+            text: qsTr("Last 5 commands")
+            onTriggered: pane.controller.attachAiRecentCommands(5)
+        }
+    }
+
+    AppMenu {
+        id: conversationMenu
+
+        AppMenuItem {
+            text: qsTr("Export conversation")
+            enabled: !pane.busy && pane.conversation !== null && pane.conversation.count > 0
+            onTriggered: conversationExportDialog.open()
+        }
+
+        AppMenuSeparator {}
+
+        AppMenuItem {
+            text: pane.activityExpanded ? qsTr("Hide activity details") : qsTr("Show activity details")
+            onTriggered: {
+                pane.activityExpanded = !pane.activityExpanded;
+                if (pane.activityExpanded) {
+                    pane.historyExpanded = false;
+                }
+            }
+        }
+        AppMenuItem {
+            text: qsTr("Explain last failed command")
+            enabled: !pane.busy
+            onTriggered: pane.controller.explainAiLastFailure()
+        }
     }
 }

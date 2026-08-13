@@ -61,9 +61,18 @@ QVariant AiConversationHistoryModel::data(const QModelIndex &index, const int ro
         case UpdatedAtRole:
             return conversation.updatedAtUtc;
         case MessageCountRole:
-            return QVariant::fromValue<qulonglong>(conversation.messages.size());
+            return QVariant::fromValue<qulonglong>(static_cast<qulonglong>(
+                std::ranges::count_if(conversation.messages, [](const AiStoredMessage &message) {
+                    return message.role != QStringLiteral("evidence");
+                })));
         case PreviewRole:
-            return conversation.messages.empty() ? QString{} : conversation.messages.back().text.left(180);
+        {
+            const auto visible = std::ranges::find_if(conversation.messages.rbegin(), conversation.messages.rend(),
+                                                      [](const AiStoredMessage &message) {
+                                                          return message.role != QStringLiteral("evidence");
+                                                      });
+            return visible == conversation.messages.rend() ? QString{} : visible->text.left(180);
+        }
         default:
             return {};
     }

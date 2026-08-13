@@ -281,6 +281,30 @@ Item {
             StatePanel {
                 anchors.centerIn: parent
                 width: Math.max(180, Math.min(440, parent.width - 24))
+                visible: leaf.tab.kind === "ssh" && leaf.tab.canReconnect && !leaf.tab.connecting && !leaf.tab.reconnecting && !leaf.tab.remoteClosed && !leaf.tab.failed
+                z: 9
+                kind: "disconnected"
+                heading: qsTr("SSH session is disconnected")
+                description: qsTr("Reconnect to continue using this restored terminal tab.")
+                detail: qsTr("The tab layout was restored, but SSH connections are not kept alive after ztermy exits.")
+
+                ActionButton {
+                    text: qsTr("Reconnect")
+                    accessibleName: qsTr("Reconnect restored SSH terminal pane")
+                    variant: "primary"
+                    onClicked: root.controller.reconnectTerminalTab(leaf.tab.sessionId)
+                }
+
+                ActionButton {
+                    text: qsTr("Close pane")
+                    accessibleName: qsTr("Close disconnected SSH terminal pane")
+                    onClicked: leaf.closePane()
+                }
+            }
+
+            StatePanel {
+                anchors.centerIn: parent
+                width: Math.max(180, Math.min(440, parent.width - 24))
                 visible: leaf.tab.kind === "ssh" && leaf.tab.remoteClosed && !leaf.tab.reconnecting
                 z: 9
                 kind: "disconnected"

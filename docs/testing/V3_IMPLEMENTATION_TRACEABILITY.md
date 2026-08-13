@@ -1,7 +1,7 @@
 # V3 implementation traceability
 
-Status: `0.3.0`-`0.3.8` implementation audit in progress; owner/environment
-release acceptance tracked separately
+Status: `0.3.0`-`0.3.9` implementation audit in progress; owner/environment
+release acceptance tracked separately; `0.3.10`-`0.3.11` planned
 
 Date: 2026-08-13
 
@@ -100,6 +100,16 @@ covered by `application-settings`, `ai-permission-policy`,
 | Edit/Auto/YOLO consistency for terminal, runbook, SFTP, and reviewed MCP tools | `src/application/ai/AiActionToolDispatcher.*`, `src/application/AppController.*` | `ai-action-tool-dispatcher`, `app-controller`, `mcp-runtime-manager` | ADR 0080, 0082 |
 | Expanded mixed Agent/MCP duration set rejects stale reports that predate the end-to-end scenario | `scripts/run_ai_concurrency_soak.ps1`, `scripts/verify_v3_release_candidate.ps1` | dynamic Debug and static Release schema-2 developer runs plus formal duration report before final RC | ADR 0076, 0083 |
 
+## 0.3.9 — NetCatty-class conversation surface
+
+| Approved boundary | Representative implementation | Focused contracts | Decisions |
+| --- | --- | --- | --- |
+| Conversation-first header, composer footer, current model/mode selection, and Markdown export | `src/ui/qml/AiAssistantPane.qml`, `src/application/AppController.*` | `app-controller`, QML compilation, translation gate | Product review 2026-08-13 |
+| Sticky streaming, Return to latest, reasoning lifecycle, and coalesced Markdown layout | `src/ui/qml/AiAssistantPane.qml`, `MarkdownMessage.qml` | QML compilation and owner real-window acceptance | ADR 0078, 0081 |
+| Local table/code overflow and per-code raw copy | `src/ui/qml/MarkdownMessage.qml`, `src/platform/windows/WindowsProtectedClipboard.*` | `windows-protected-clipboard`, owner real-window acceptance | ADR 0078 |
+| Explicit recent commands with honest non-semantic fallback | `src/application/AppController.*`, `src/domain/terminal/SemanticTerminalObserver.*` | `app-controller`, `semantic-terminal-observer` | ADR 0055, product review 2026-08-13 |
+| Keyboard-first built-in slash commands | `src/ui/qml/AiAssistantPane.qml`, existing `AppController` AI actions | QML compilation, translation gate, owner keyboard acceptance | Product review 2026-08-13 |
+
 ## Evidence classification
 
 - **Implementation coverage:** every approved `0.3.0`–`0.3.8` boundary above
@@ -113,10 +123,13 @@ covered by `application-settings`, `ai-permission-policy`,
   The retained AI-idle terminal report covers 28800.1 seconds with zero
   failures. Both reports pass the unified RC verifier with the final rebuilt
   release bundle.
-- **Current developer evidence:** dynamic Debug and static Release each pass
-  105/105 tests; the end-to-end scenario also passes 20 consecutive focused
-  runs. C++/QML format, 1577/1577 translations, 224 clang-tidy translation
-  units, and all eight real-window gates pass.
+- **Current developer evidence:** the `0.3.9` dynamic Debug candidate passes
+  105/105 tests, the static Release application builds, QML/C++ format and lint
+  pass, and the expanded translation catalog passes 1619/1619. The prior formal
+  `0.3.8` evidence retains its 20-run scenario, 224-unit clang-tidy, static
+  suite, package, and eight-gate real-window results; those full release gates
+  are rerun for the next release candidate rather than inferred from this UI
+  iteration.
 - **Current real-host evidence:** `ai-agent-real-host` passed against the
   owner-provided key-authenticated Linux SSH host in 1.681 seconds, covering
   automatic execution, user input queued behind a long command, and

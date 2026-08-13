@@ -40,7 +40,7 @@ AiTurnRunner::~AiTurnRunner()
 std::expected<AiTurnRunner::TurnId, AiProviderError>
 AiTurnRunner::start(AiProviderConfiguration configuration, AiGenerationRequest generation, SecretLoader secretLoader,
                     EventHandler eventHandler, FinishedHandler finishedHandler, RetryHandler retryHandler,
-                    JitterSource jitterSource, ToolHandler toolHandler)
+                    JitterSource jitterSource, ToolHandler toolHandler, ToolOutputHandler toolOutputHandler)
 {
     if (active())
     {
@@ -63,6 +63,7 @@ AiTurnRunner::start(AiProviderConfiguration configuration, AiGenerationRequest g
     m_retryHandler = std::move(retryHandler);
     m_jitterSource = std::move(jitterSource);
     m_toolHandler = std::move(toolHandler);
+    m_toolOutputHandler = std::move(toolOutputHandler);
     m_turnId = m_nextTurnId++;
     m_completedRetries = 0;
     m_completedToolCalls = 0;
@@ -140,6 +141,10 @@ bool AiTurnRunner::completePendingTool(AiToolOutput output)
 
     m_pendingToolCancellation = {};
     m_waitingForTool = false;
+    if (m_toolOutputHandler)
+    {
+        m_toolOutputHandler(call, output);
+    }
     m_activeToolExchange->outputs.push_back(std::move(output));
     ++m_nextToolIndex;
     const auto continued = executeNextTool();
@@ -398,6 +403,10 @@ std::expected<void, AiProviderError> AiTurnRunner::executeNextTool()
                                                    .message = "The tool handler returned an invalid output.",
                                                    .retryable = false});
         }
+        if (m_toolOutputHandler)
+        {
+            m_toolOutputHandler(call, output);
+        }
         m_activeToolExchange->outputs.push_back(std::move(output));
         ++m_nextToolIndex;
     }
@@ -504,6 +513,7 @@ void AiTurnRunner::clearTurn()
     m_retryHandler = {};
     m_jitterSource = {};
     m_toolHandler = {};
+    m_toolOutputHandler = {};
     m_requestId.reset();
     m_bufferedStart.reset();
     m_pendingError.reset();

@@ -25,6 +25,7 @@
 #include <QJsonObject>
 #include <QLoggingCategory>
 #include <QPointer>
+#include <QSaveFile>
 #include <QSet>
 #include <QStandardPaths>
 #include <QThreadPool>
@@ -7880,14 +7881,22 @@ bool AppController::restoreAiConversationHistory(const QString &conversationId)
         return false;
     }
     std::vector<ai::AiChatMessage> messages;
+    std::vector<ai::AiChatMessage> evidence;
     messages.reserve(stored->messages.size());
+    evidence.reserve(stored->messages.size());
     for (const auto &message : stored->messages)
     {
+        if (message.role == QStringLiteral("evidence"))
+        {
+            evidence.push_back({.role = ai::AiMessageRole::user, .content = utf8String(message.text)});
+            continue;
+        }
         messages.push_back(
             {.role = message.role == QStringLiteral("user") ? ai::AiMessageRole::user : ai::AiMessageRole::assistant,
              .content = utf8String(message.text)});
     }
-    if (!tab->aiConversation->restoreProviderMessages(messages))
+    if (!tab->aiConversation->restoreProviderMessages(messages)
+        || !tab->aiConversation->restoreEvidenceMessages(evidence))
     {
         return false;
     }
@@ -8305,6 +8314,43 @@ bool AppController::exportAiActivity(const QString &localFileUrl) const
     return m_aiActivity.exportTo(url.isLocalFile() ? url.toLocalFile() : localFileUrl);
 }
 
+bool AppController::exportAiConversation(const QString &localFileUrl) const
+{
+    const TerminalTab *tab = activeTab();
+    if (tab == nullptr || !tab->aiConversation)
+    {
+        return false;
+    }
+    const auto messages = tab->aiConversation->providerMessages();
+    if (messages.empty())
+    {
+        return false;
+    }
+
+    const QUrl url(localFileUrl);
+    const QString path = url.isLocalFile() ? url.toLocalFile() : localFileUrl;
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly))
+    {
+        return false;
+    }
+
+    QByteArray markdown("# ztermy AI conversation\n\n");
+    for (const auto &message : messages)
+    {
+        const auto heading = message.role == ai::AiMessageRole::user ? QByteArrayView("## User\n\n")
+                                                                     : QByteArrayView("## Assistant\n\n");
+        markdown.append(heading);
+        markdown.append(message.content);
+        if (!markdown.endsWith('\n'))
+        {
+            markdown.append('\n');
+        }
+        markdown.append('\n');
+    }
+    return file.write(markdown) == markdown.size() && file.commit();
+}
+
 bool AppController::copyAiText(const QString &text)
 {
     return m_aiClipboard != nullptr && m_aiClipboard->setProtectedText(text);
@@ -8331,6 +8377,115 @@ bool AppController::attachAiSelection()
         return true;
     }
     return false;
+}
+
+bool AppController::attachAiRecentCommands(const int count)
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || !tab->semanticObserver || count < 1)
+    {
+        return false;
+    }
+    const auto snapshot = tab->semanticObserver->snapshot();
+    const auto maximum = static_cast<std::size_t>(std::clamp(count, 1, 5));
+    std::vector<const terminal::CommandBlock *> selected;
+    selected.reserve(maximum);
+    for (auto iterator = snapshot.commandBlocks.rbegin(); iterator != snapshot.commandBlocks.rend(); ++iterator)
+    {
+        if (iterator->state != terminal::CommandBlockState::finished)
+        {
+            continue;
+        }
+        selected.push_back(&*iterator);
+        if (selected.size() == maximum)
+        {
+            break;
+        }
+    }
+    std::erase_if(tab->aiExplicitContextItems, [](const ai::AiExplicitContext &item) {
+        return item.source == "terminal_command";
+    });
+    if (selected.empty())
+    {
+        std::vector<QString> commands;
+        commands.reserve(maximum);
+        const auto appendRecent = [&commands, maximum](const std::vector<workbench::ShellHistoryEntry> &entries) {
+            for (const auto &entry : entries)
+            {
+                const QString command = utf8QString(entry.command).trimmed();
+                if (command.isEmpty() || std::ranges::find(commands, command) != commands.end())
+                {
+                    continue;
+                }
+                commands.push_back(command);
+                if (commands.size() == maximum)
+                {
+                    break;
+                }
+            }
+        };
+        appendRecent(tab->capturedHistory);
+        if (commands.size() < maximum)
+        {
+            appendRecent(tab->history);
+        }
+
+        const QString terminalFrame = terminalFrameText(tab->snapshot).trimmed();
+        if (commands.empty() && terminalFrame.isEmpty())
+        {
+            tab->aiError = tr("No recent terminal activity is available to attach.");
+            emit aiConversationChanged();
+            return false;
+        }
+
+        QString content =
+            tr("Approximate terminal context. Command and output boundaries are not available for this shell.");
+        if (!commands.empty())
+        {
+            content += tr("\nRecent commands (newest first):");
+            for (const QString &command : commands)
+            {
+                content += QStringLiteral("\n$ ") + command;
+            }
+        }
+        if (!terminalFrame.isEmpty())
+        {
+            content += tr("\nCurrent terminal frame:\n%1").arg(terminalFrame);
+        }
+        tab->aiExplicitContextItems.push_back(
+            ai::AiExplicitContext{.id = "terminal-command:approximate",
+                                  .title = utf8String(tr("Recent terminal activity (approximate)")),
+                                  .content = utf8String(content),
+                                  .source = "terminal_command"});
+        tab->aiError.clear();
+        static_cast<void>(buildAiContext(*tab, false));
+        emit aiConversationChanged();
+        return true;
+    }
+    for (auto iterator = selected.rbegin(); iterator != selected.rend(); ++iterator)
+    {
+        const auto &block = **iterator;
+        const auto outputBytes = QByteArray(reinterpret_cast<const char *>(block.retainedOutput.data()),
+                                            static_cast<qsizetype>(block.retainedOutput.size()));
+        QString content = tr("Command: %1").arg(utf8QString(block.command));
+        if (block.exitStatus.has_value())
+        {
+            content += tr("\nExit status: %1").arg(*block.exitStatus);
+        }
+        if (!outputBytes.isEmpty())
+        {
+            content += tr("\nOutput:\n%1").arg(QString::fromUtf8(outputBytes));
+        }
+        tab->aiExplicitContextItems.push_back(ai::AiExplicitContext{
+            .id = "terminal-command:" + std::to_string(block.id),
+            .title = utf8String(tr("Terminal command: %1").arg(utf8QString(block.command).left(80))),
+            .content = utf8String(content),
+            .source = "terminal_command"});
+    }
+    tab->aiError.clear();
+    static_cast<void>(buildAiContext(*tab, false));
+    emit aiConversationChanged();
+    return true;
 }
 
 bool AppController::removeAiContextItem(const QString &itemId)
@@ -8695,6 +8850,8 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
         static_cast<void>(tab.aiConversation->appendUserMessage(normalizedPrompt));
         messages = tab.aiConversation->providerMessages();
     }
+    const auto priorEvidence = tab.aiConversation->evidenceMessages();
+    messages.insert(messages.end() - 1, priorEvidence.begin(), priorEvidence.end());
     if (!context.items.empty())
     {
         messages.insert(messages.end() - 1, ai::AiContextSerializer::asUntrustedEvidenceMessage(context));
@@ -9492,6 +9649,17 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
             }
             return ai::AiTurnRunner::ToolHandlingResult{
                 .output = ai::AiToolOutput{.callId = call.id, .name = call.name, .outputJson = output}};
+        },
+        [this, tabId](const ai::AiToolCall &call, const ai::AiToolOutput &output) {
+            TerminalTab *target = findTab(tabId);
+            if (target == nullptr || !target->aiConversation)
+            {
+                return;
+            }
+            const QString evidence =
+                QStringLiteral("[Agent tool evidence]\nTool: %1\nArguments: %2\nResult: %3")
+                    .arg(utf8QString(call.name), utf8QString(call.argumentsJson), utf8QString(output.outputJson));
+            static_cast<void>(target->aiConversation->appendEvidenceMessage(evidence));
         });
     if (!started.has_value())
     {
@@ -9500,6 +9668,15 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
         tab.aiState = QStringLiteral("error");
         emit aiConversationChanged();
         return false;
+    }
+    if (appendPrompt && !context.items.empty())
+    {
+        const auto serialized = ai::AiContextSerializer::serialize(context);
+        static_cast<void>(tab.aiConversation->appendEvidenceMessage(utf8QString(serialized.text)));
+        tab.aiExplicitContextItems.clear();
+        tab.aiExcludedContextIds.clear();
+        tab.aiPinnedContextIds.clear();
+        static_cast<void>(buildAiContext(tab, false));
     }
     emit aiConversationChanged();
     return true;
@@ -10776,12 +10953,13 @@ void AppController::persistAiConversation(const TerminalTab &tab)
         return;
     }
     const auto providerMessages = tab.aiConversation->providerMessages();
+    const auto evidenceMessages = tab.aiConversation->evidenceMessages();
     if (providerMessages.empty())
     {
         return;
     }
     ai::AiStoredConversation stored{.id = tab.aiConversationId, .updatedAtUtc = QDateTime::currentDateTimeUtc()};
-    stored.messages.reserve(providerMessages.size());
+    stored.messages.reserve(providerMessages.size() + evidenceMessages.size());
     for (const auto &message : providerMessages)
     {
         if (message.role != ai::AiMessageRole::user && message.role != ai::AiMessageRole::assistant)
@@ -10796,6 +10974,10 @@ void AppController::persistAiConversation(const TerminalTab &tab)
         stored.messages.push_back(
             {.role = message.role == ai::AiMessageRole::user ? QStringLiteral("user") : QStringLiteral("assistant"),
              .text = text});
+    }
+    for (const auto &message : evidenceMessages)
+    {
+        stored.messages.push_back({.role = QStringLiteral("evidence"), .text = utf8QString(message.content)});
     }
     if (stored.title.isEmpty())
     {

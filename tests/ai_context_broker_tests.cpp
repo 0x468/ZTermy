@@ -51,6 +51,7 @@ class AiContextBrokerTests final : public QObject
 private slots:
     void selectsFailureAndFivePrecedingBlocks();
     void exposesEvidenceQualityAndNormalizesOutput();
+    void omitsTerminalEvidenceUnlessExplicitlyRequested();
     void appliesExclusionAndPinPriority();
     void enforcesItemAndAggregateBounds();
     void redactsBeforePublishingPreview();
@@ -86,11 +87,21 @@ void AiContextBrokerTests::exposesEvidenceQualityAndNormalizesOutput()
                                                                  .content = "\x1b]0;title\x07screen",
                                                                  .sessionId = "session",
                                                                  .capability = TerminalSemanticCapability::basic}});
-    QCOMPARE(bundle.items.size(), std::size_t{2});
+    QCOMPARE(bundle.items.size(), std::size_t{1});
     QCOMPARE(bundle.items.front().content, std::string("red\nline\nnext"));
     QCOMPARE(bundle.items.front().capability, TerminalSemanticCapability::rich);
-    QCOMPARE(bundle.items.at(1).content, std::string("screen"));
     QVERIFY(bundle.items.front().untrustedEvidence);
+}
+
+void AiContextBrokerTests::omitsTerminalEvidenceUnlessExplicitlyRequested()
+{
+    CommandBlockStore store;
+    static_cast<void>(addBlock(store, "manual-command", "ordinary terminal output", 0));
+    AiContextBroker broker;
+    const auto bundle = broker.build(
+        store, AiContextRequest{.automaticContextEnabled = false,
+                                .currentFrame = AiTerminalFrameContext{.id = "frame", .content = "screen"}});
+    QVERIFY(bundle.items.empty());
 }
 
 void AiContextBrokerTests::appliesExclusionAndPinPriority()
