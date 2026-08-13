@@ -169,6 +169,14 @@ void AiActionToolDispatcherTests::requiresExplicitApprovalForRunbooks()
         object(denied.outputJson).value(QStringLiteral("error")).toObject().value(QStringLiteral("code")).toString(),
         QStringLiteral("permission_denied"));
 
+    // Edit mode asks before mutations, consistent with run_command.
+    AiAgentTurnBudget editBudget;
+    const auto editPlan = dispatcher.prepare(runbookCall("runbook-edit"),
+                                             context("edit-runbook", AiPermissionMode::edit), editBudget);
+    QCOMPARE(editPlan.disposition, AiActionToolDisposition::awaitApproval);
+    QVERIFY(editPlan.action.has_value());
+    QCOMPARE(editBudget.writeActions(), std::uint32_t{1});
+
     auto oversized = runbookCall("oversized-runbook");
     QJsonObject arguments = object(oversized.argumentsJson);
     QJsonObject runbook = arguments.value(QStringLiteral("runbook")).toObject();

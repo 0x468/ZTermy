@@ -120,8 +120,10 @@ constexpr std::size_t maximumArgumentsBytes = std::size_t{20} * 1024;
         case AiPermissionMode::readOnly:
             return AiPermissionDisposition::deny;
         case AiPermissionMode::ask:
-            return AiPermissionDisposition::ask;
         case AiPermissionMode::edit:
+            // Edit mode asks before every mutation, exactly like run_command:
+            // a mutation is a side effect regardless of which tool performs it.
+            return AiPermissionDisposition::ask;
         case AiPermissionMode::automatic:
         case AiPermissionMode::yolo:
             return AiPermissionDisposition::allow;
