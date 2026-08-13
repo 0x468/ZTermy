@@ -31,6 +31,7 @@ private slots:
     void searchesAcrossScrollbackAndWrappedLines();
     void encodesPasteForTerminalMode();
     void exposesShellWorkingDirectorySequences();
+    void pagesThroughScrollback();
 };
 
 void TerminalEngineTests::exposesShellWorkingDirectorySequences()
@@ -474,6 +475,53 @@ void TerminalEngineTests::encodesPasteForTerminalMode()
         QFAIL(encoded.error().message().c_str());
     }
     QCOMPARE(std::string(reinterpret_cast<const char *>(encoded->data()), encoded->size()), "\x1b[200~a\nb\x1b[201~");
+}
+
+void TerminalEngineTests::pagesThroughScrollback()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 16, .rows = 3});
+    if (!result)
+    {
+        QFAIL(result.error().message().c_str());
+    }
+    auto &engine = **result;
+
+    constexpr std::string_view content = "line-00\r\nline-11\r\nline-22\r\nline-33\r\nline-44\r\nline-55";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(content))));
+
+    auto page = engine.scrollbackPage(0, 10);
+    if (!page)
+    {
+        QFAIL(page.error().message().c_str());
+    }
+    QCOMPARE(page->totalLines, std::size_t{6});
+    QCOMPARE(page->scrollbackLines, std::size_t{3});
+    QCOMPARE(page->lines.size(), std::size_t{6});
+    QCOMPARE(page->lines.at(0), std::string("line-00"));
+    QCOMPARE(page->lines.at(5), std::string("line-55"));
+
+    // A bounded page from the middle.
+    auto middle = engine.scrollbackPage(2, 2);
+    if (!middle)
+    {
+        QFAIL(middle.error().message().c_str());
+    }
+    QCOMPARE(middle->firstLine, std::size_t{2});
+    QCOMPARE(middle->lines.size(), std::size_t{2});
+    QCOMPARE(middle->lines.at(0), std::string("line-22"));
+    QCOMPARE(middle->lines.at(1), std::string("line-33"));
+
+    // Out-of-range requests return an empty page instead of failing.
+    auto beyond = engine.scrollbackPage(100, 4);
+    if (!beyond)
+    {
+        QFAIL(beyond.error().message().c_str());
+    }
+    QVERIFY(beyond->lines.empty());
+    QCOMPARE(beyond->firstLine, std::size_t{100});
+
+    // Invalid arguments are rejected.
+    QVERIFY(!engine.scrollbackPage(0, 0));
 }
 
 } // namespace

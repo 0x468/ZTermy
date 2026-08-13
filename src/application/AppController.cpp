@@ -9347,6 +9347,44 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                     }
                 }};
             }
+            if (call.name == "read_terminal_output")
+            {
+                if (target != nullptr)
+                {
+                    recordAiActivity(*target, call, QStringLiteral("queued"), QStringLiteral("pending"), false);
+                }
+                if (target == nullptr || !target->aiTurnRunner || !target->aiTurnBudget)
+                {
+                    return ai::AiTurnRunner::ToolHandlingResult{
+                        .output = ai::AiToolOutput{
+                            .callId = call.id,
+                            .name = call.name,
+                            .outputJson = aiToolFailureJson(QStringLiteral("session_unavailable"),
+                                                            tr("The target terminal session is unavailable."))}};
+                }
+                const auto signature = call.name + ':' + call.argumentsJson;
+                const auto budgetDecision =
+                    target->aiTurnBudget->authorize(false, signature, target->reconnectGeneration);
+                if (budgetDecision != ai::AiAgentBudgetDecision::allow)
+                {
+                    recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("budget_denied"), false);
+                    return ai::AiTurnRunner::ToolHandlingResult{
+                        .output = ai::AiToolOutput{.callId = call.id,
+                                                   .name = call.name,
+                                                   .outputJson = aiBudgetFailureJson(budgetDecision)}};
+                }
+                const auto output = executeAiScrollbackRead(*target, call);
+                if (target != nullptr)
+                {
+                    const QString resultCode = aiActivityResultCode(output);
+                    recordAiActivity(*target, call,
+                                     resultCode == QStringLiteral("ok") ? QStringLiteral("succeeded")
+                                                                        : QStringLiteral("failed"),
+                                     resultCode, false);
+                }
+                return ai::AiTurnRunner::ToolHandlingResult{
+                    .output = ai::AiToolOutput{.callId = call.id, .name = call.name, .outputJson = output}};
+            }
             if (const auto mcpTool = m_mcpRuntime.resolve(call.name); mcpTool.has_value())
             {
                 if (target != nullptr)
@@ -10053,6 +10091,99 @@ ai::AiTurnRunner::ToolHandlingResult AppController::handleAiWaitCommand(Terminal
             qCCritical(appControllerLog) << "AI wait cancellation suppressed an exception for tab" << tabId;
         }
     }};
+}
+
+std::string AppController::executeAiScrollbackRead(TerminalTab &tab, const ai::AiToolCall &call)
+{
+    QJsonParseError parseError;
+    const auto document = QJsonDocument::fromJson(QByteArray::fromStdString(call.argumentsJson), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isObject())
+    {
+        return aiToolFailureJson(QStringLiteral("invalid_arguments"), tr("The scrollback read arguments are invalid."));
+    }
+    const QJsonObject object = document.object();
+    const auto firstLineValue = object.value(QStringLiteral("first_line"));
+    const auto lineCountValue = object.value(QStringLiteral("line_count"));
+    const auto maximumBytesValue = object.value(QStringLiteral("max_bytes"));
+    const bool numbersValid = firstLineValue.isDouble() && lineCountValue.isDouble() && maximumBytesValue.isDouble()
+                              && firstLineValue.toDouble() >= 0.0 && lineCountValue.toDouble() >= 1.0
+                              && lineCountValue.toDouble() <= 300.0 && maximumBytesValue.toDouble() >= 256.0
+                              && maximumBytesValue.toDouble() <= 16384.0;
+    if (!numbersValid)
+    {
+        return aiToolFailureJson(QStringLiteral("invalid_arguments"), tr("The scrollback read bounds are invalid."));
+    }
+    const auto firstLine = static_cast<std::size_t>(firstLineValue.toDouble());
+    const auto lineCount = static_cast<std::size_t>(lineCountValue.toDouble());
+    const auto maximumBytes = static_cast<std::size_t>(maximumBytesValue.toDouble());
+
+    std::expected<terminal::TerminalScrollbackPage, std::error_code> page =
+        std::unexpected(std::make_error_code(std::errc::not_connected));
+    if (tab.ssh != nullptr)
+    {
+        page = tab.ssh->scrollbackPage(firstLine, lineCount);
+    }
+    else if (tab.local != nullptr)
+    {
+        page = tab.local->scrollbackPage(firstLine, lineCount);
+    }
+    if (!page)
+    {
+        return aiToolFailureJson(QStringLiteral("session_unavailable"),
+                                 tr("The terminal scrollback is unavailable for this session: %1.")
+                                     .arg(QString::fromStdString(page.error().message())));
+    }
+
+    QString content;
+    qsizetype remaining = static_cast<qsizetype>(maximumBytes);
+    bool truncated = false;
+    for (std::size_t index = 0; index < page->lines.size() && remaining > 0; ++index)
+    {
+        QString line =
+            QString::fromUtf8(page->lines[index].data(), static_cast<qsizetype>(page->lines[index].size()));
+        while (line.endsWith(QLatin1Char(' ')) || line.endsWith(QLatin1Char('\t')))
+        {
+            line.chop(1);
+        }
+        const QByteArray lineBytes = line.toUtf8();
+        if (lineBytes.size() > remaining)
+        {
+            auto count = remaining;
+            while (count > 0 && count < lineBytes.size()
+                   && (static_cast<unsigned char>(lineBytes.at(count)) & 0xC0U) == 0x80U)
+            {
+                --count;
+            }
+            content += QString::fromUtf8(lineBytes.constData(), count);
+            truncated = true;
+            break;
+        }
+        if (!content.isEmpty())
+        {
+            content += QLatin1Char('\n');
+            --remaining;
+            if (remaining <= 0)
+            {
+                truncated = true;
+                break;
+            }
+        }
+        content += line;
+        remaining -= lineBytes.size();
+    }
+    const bool hasMore = page->lines.size() == lineCount || truncated;
+    return compactJson(QJsonObject{
+        {QStringLiteral("ok"), true},
+        {QStringLiteral("terminal_output"),
+         QJsonObject{{QStringLiteral("session_id"), tab.id},
+                     {QStringLiteral("session_generation"), static_cast<qint64>(tab.reconnectGeneration)},
+                     {QStringLiteral("first_line"), static_cast<qint64>(firstLine)},
+                     {QStringLiteral("line_count"), static_cast<qint64>(page->lines.size())},
+                     {QStringLiteral("total_lines"), static_cast<qint64>(page->totalLines)},
+                     {QStringLiteral("content"), content},
+                     {QStringLiteral("has_more"), hasMore},
+                     {QStringLiteral("truncated"), truncated},
+                     {QStringLiteral("untrusted_evidence"), true}}}});
 }
 
 std::string AppController::executeAiTerminalAction(TerminalTab &tab, const ai::AiTerminalAction &action)

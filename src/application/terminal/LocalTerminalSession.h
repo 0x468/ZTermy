@@ -55,6 +55,8 @@ public slots:
     virtual void requestSelectedText() = 0;
     virtual void search(const QString &query, bool backwards, bool caseSensitive) = 0;
     virtual void clearSearch() = 0;
+    [[nodiscard]] virtual std::expected<ztermy::terminal::TerminalScrollbackPage, std::error_code>
+    scrollbackPage(std::size_t firstLine, std::size_t lineCount) const = 0;
 
 signals:
     void snapshotReady(ztermy::terminal::TerminalSnapshotPtr snapshot);
@@ -95,6 +97,8 @@ public slots:
     void requestSelectedText() override;
     void search(const QString &query, bool backwards, bool caseSensitive) override;
     void clearSearch() override;
+    [[nodiscard]] std::expected<ztermy::terminal::TerminalScrollbackPage, std::error_code>
+    scrollbackPage(std::size_t firstLine, std::size_t lineCount) const override;
 
 private slots:
     void deliverLatestSnapshot();

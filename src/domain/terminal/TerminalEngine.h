@@ -136,6 +136,20 @@ struct TerminalSnapshot
     }
 };
 
+// A bounded page of scrollback text. Line 0 is the top of the retained
+// history (the oldest scrollback row); the active screen rows follow, so the
+// page space is "full screen including scrollback" (the same space as
+// GhosttyPoint SCREEN coordinates).
+struct TerminalScrollbackPage final
+{
+    std::vector<std::string> lines;
+    std::size_t firstLine = 0;
+    std::size_t totalLines = 0;
+    std::size_t scrollbackLines = 0;
+
+    friend bool operator==(const TerminalScrollbackPage &, const TerminalScrollbackPage &) = default;
+};
+
 using TerminalSnapshotPtr = std::shared_ptr<const TerminalSnapshot>;
 
 class TerminalEngine
@@ -160,6 +174,14 @@ public:
     [[nodiscard]] virtual std::error_code clearSearch() = 0;
     [[nodiscard]] virtual std::expected<std::vector<std::byte>, std::error_code>
     encodePaste(std::span<const std::byte> bytes) const = 0;
+
+    // Read a bounded page of scrollback text (including the active screen at
+    // the tail). firstLine is zero-based from the top of the retained
+    // history. This API is not intended for the render path; it is used by
+    // the AI terminal tools to page through output that scrolled off the
+    // screen.
+    [[nodiscard]] virtual std::expected<TerminalScrollbackPage, std::error_code>
+    scrollbackPage(std::size_t firstLine, std::size_t lineCount) const = 0;
 
     // Diagnostic representation of the active screen.
     [[nodiscard]] virtual std::expected<std::string, std::error_code> plainText() const = 0;

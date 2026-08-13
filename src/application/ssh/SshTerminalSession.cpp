@@ -437,6 +437,16 @@ void SshTerminalSession::search(const QString &query, const bool backwards, cons
     signalCommandWake();
 }
 
+std::expected<ztermy::terminal::TerminalScrollbackPage, std::error_code>
+SshTerminalSession::scrollbackPage(const std::size_t firstLine, const std::size_t lineCount) const
+{
+    if (!m_running.load() || m_engine == nullptr)
+    {
+        return std::unexpected(std::make_error_code(std::errc::not_connected));
+    }
+    return m_engine->scrollbackPage(firstLine, lineCount);
+}
+
 void SshTerminalSession::clearSearch()
 {
     if (!m_running.load())

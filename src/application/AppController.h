@@ -787,6 +787,7 @@ private:
     [[nodiscard]] std::string executeAiInterruptCommand(TerminalTab &tab, const ai::AiTerminalAction &action);
     [[nodiscard]] std::string executeAiSaveRunbook(const ai::AiTerminalAction &action);
     [[nodiscard]] std::string executeAiSftpTransfer(TerminalTab &tab, const ai::AiTerminalAction &action);
+    [[nodiscard]] std::string executeAiScrollbackRead(TerminalTab &tab, const ai::AiToolCall &call);
     [[nodiscard]] bool approveAiMcpTool(TerminalTab &tab);
     [[nodiscard]] bool denyAiMcpTool(TerminalTab &tab);
     void completeAiMcpTool(const QString &tabId, std::uint64_t generation, const ai::AiToolDispatchKey &dispatchKey,

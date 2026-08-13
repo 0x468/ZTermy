@@ -72,6 +72,18 @@ public:
     void requestSelectedText() override { emit selectedTextReady(m_state->selectedText); }
     void search(const QString &, bool, bool) override {}
     void clearSearch() override {}
+    [[nodiscard]] std::expected<ztermy::terminal::TerminalScrollbackPage, std::error_code>
+    scrollbackPage(const std::size_t firstLine, const std::size_t lineCount) const override
+    {
+        ztermy::terminal::TerminalScrollbackPage page;
+        page.firstLine = firstLine;
+        page.totalLines = lineCount;
+        for (std::size_t index = 0; index < lineCount; ++index)
+        {
+            page.lines.push_back("fake scrollback line");
+        }
+        return page;
+    }
 
 private:
     std::shared_ptr<FakeLocalSessionState> m_state;

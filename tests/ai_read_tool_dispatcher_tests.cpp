@@ -110,9 +110,10 @@ void AiReadToolDispatcherTests::publishesStrictReadOnlyCatalog()
         std::string_view{"list_sessions"},        std::string_view{"read_multi_session_status"},
         std::string_view{"read_session_info"},    std::string_view{"read_terminal"},
         std::string_view{"read_command_block"},   std::string_view{"read_command_output"},
-        std::string_view{"list_sftp_directory"},  std::string_view{"list_shell_history"},
-        std::string_view{"list_scripts"},         std::string_view{"read_script"},
-        std::string_view{"list_notes"},           std::string_view{"read_remote_telemetry"},
+        std::string_view{"read_terminal_output"}, std::string_view{"list_sftp_directory"},
+        std::string_view{"list_shell_history"},   std::string_view{"list_scripts"},
+        std::string_view{"read_script"},          std::string_view{"list_notes"},
+        std::string_view{"read_remote_telemetry"},
         std::string_view{"list_port_forwarding"},
     };
     QCOMPARE(definitions.size(), expected.size());

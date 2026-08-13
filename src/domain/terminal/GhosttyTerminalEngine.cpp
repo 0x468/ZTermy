@@ -1050,4 +1050,89 @@ std::expected<std::string, std::error_code> GhosttyTerminalEngine::plainText() c
     return std::string(reinterpret_cast<const char *>(buffer.data), buffer.length);
 }
 
+std::expected<TerminalScrollbackPage, std::error_code> GhosttyTerminalEngine::scrollbackPage(const std::size_t firstLine,
+                                                                                             const std::size_t lineCount) const
+{
+    if (lineCount == 0)
+    {
+        return std::unexpected(invalidArgument());
+    }
+
+    std::size_t totalRows = 0;
+    if (const GhosttyResult totalResult =
+            ghostty_terminal_get(m_impl->terminal, GHOSTTY_TERMINAL_DATA_TOTAL_ROWS, &totalRows);
+        totalResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(totalResult));
+    }
+    std::size_t scrollbackRows = 0;
+    if (const GhosttyResult scrollbackResult =
+            ghostty_terminal_get(m_impl->terminal, GHOSTTY_TERMINAL_DATA_SCROLLBACK_ROWS, &scrollbackRows);
+        scrollbackResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(scrollbackResult));
+    }
+
+    TerminalScrollbackPage result;
+    result.firstLine = firstLine;
+    result.totalLines = totalRows;
+    result.scrollbackLines = scrollbackRows;
+    if (firstLine >= totalRows)
+    {
+        return result;
+    }
+    const auto endLine = std::min(totalRows, firstLine + lineCount);
+
+    // Format the full terminal content (history plus active screen) once and
+    // slice the requested row range. The formatter API cannot represent a
+    // selection that ends at the very last row (SCREEN coordinates must stay
+    // below total rows), and AI tool calls are far too infrequent for the
+    // formatting cost to matter.
+    GhosttyFormatterTerminalOptions options{};
+    options.size = sizeof(options);
+    options.emit = GHOSTTY_FORMATTER_FORMAT_PLAIN;
+    options.unwrap = false;
+    options.trim = true;
+
+    UniqueFormatter formatter;
+    const GhosttyResult createResult =
+        ghostty_formatter_terminal_new(nullptr, &formatter.handle, m_impl->terminal, options);
+    if (createResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(createResult));
+    }
+
+    GhosttyOwnedBuffer buffer;
+    const GhosttyResult formatResult =
+        ghostty_formatter_format_alloc(formatter.handle, nullptr, &buffer.data, &buffer.length);
+    if (formatResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(formatResult));
+    }
+
+    const std::string_view text(reinterpret_cast<const char *>(buffer.data), buffer.length);
+    std::size_t start = 0;
+    std::size_t currentLine = 0;
+    while (start <= text.size())
+    {
+        const auto newline = text.find('\n', start);
+        const auto lineEnd = newline == std::string_view::npos ? text.size() : newline;
+        if (currentLine >= firstLine && currentLine < endLine)
+        {
+            result.lines.emplace_back(text.substr(start, lineEnd - start));
+            if (result.lines.size() >= lineCount)
+            {
+                break;
+            }
+        }
+        if (newline == std::string_view::npos)
+        {
+            break;
+        }
+        start = newline + 1;
+        ++currentLine;
+    }
+    return result;
+}
+
 } // namespace ztermy::terminal

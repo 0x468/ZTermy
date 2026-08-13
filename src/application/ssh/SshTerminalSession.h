@@ -64,6 +64,8 @@ public slots:
     void requestSelectedText();
     void search(const QString &query, bool backwards, bool caseSensitive);
     void clearSearch();
+    [[nodiscard]] std::expected<ztermy::terminal::TerminalScrollbackPage, std::error_code>
+    scrollbackPage(std::size_t firstLine, std::size_t lineCount) const;
     void setEncoding(const QString &encoding);
     void requestShellHistory(quint64 requestId);
     void setRemoteTelemetryVisible(bool visible);
