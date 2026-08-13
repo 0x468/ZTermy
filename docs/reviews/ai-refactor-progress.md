@@ -56,6 +56,17 @@
 
 **验证**：Debug 构建通过；34/34 AI 测试通过。
 
+## 节点 N6 — 命令管理：合成回显（终端可见性）（2026-08）
+
+**commit**: `aeac771`（feat(ai): synthetic echo makes agent commands visible in the terminal）
+
+**范围**（对应研究 §8.1 Netcatty 合成回显）：
+1. `AiCommandEcho::markerLine`：命令以单行 shell 注释形式在终端内宣告（pwsh/POSIX `#`、cmd `rem`），空白/换行折叠为单空格防逃逸；
+2. `run_command` 执行前直接派发 marker（不经 observeTerminalInput，不污染输入重建与历史）；`interrupt_command` 发送 \x03 前宣告；
+3. 测试：各 shell 标记形式、多行折叠、注释逃逸加固。
+
+**验证**：Debug 构建通过；35/35 AI 测试通过。
+
 **范围**：
 1. 研究完成：Netcatty 源码实测（A-F 六部分 + 16 项差距）、opencode commit 6c035e1（V1/V2 双架构）、Codex CLI（`docs/research/CODEX_CLI_ARCHITECTURE.md`）、Warp 官方文档；
 2. 对比研究文档落盘：`docs/reviews/ai-product-design-research-2026-08.md`；
