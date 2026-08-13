@@ -31,6 +31,17 @@
 
 **验证**：qmlcachegen/qmllint 通过；33/33 AI 测试通过。
 
+## 节点 N4 — 会话存储加固：跨进程锁 + .bak 认证回退（2026-08）
+
+**commit**: `82a547f`（fix(ai): lock conversation store and recover from backup on auth failure）
+
+**范围**（对应评审 H6）：
+1. 所有 load/upsert/erase/clear/export 读-改-写周期持有跨进程 `QLockFile`（5s 超时、30s 陈旧锁回收）——消除双实例静默丢更新与首写密钥创建竞态；
+2. 主文件密文认证失败时回退 .bak envelope 解密（LKG 结构校验覆盖不到的比特翻转场景），暴露 `lastLoadRecoveredFromBackup()` 供 UI 提示；
+3. 测试：认证失败回退、双实例交错更新保留。
+
+**验证**：Debug 构建通过；33/33 AI 测试通过（含 2 个新用例）。
+
 **范围**：
 1. 研究完成：Netcatty 源码实测（A-F 六部分 + 16 项差距）、opencode commit 6c035e1（V1/V2 双架构）、Codex CLI（`docs/research/CODEX_CLI_ARCHITECTURE.md`）、Warp 官方文档；
 2. 对比研究文档落盘：`docs/reviews/ai-product-design-research-2026-08.md`；
