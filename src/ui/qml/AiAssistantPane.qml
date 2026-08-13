@@ -607,8 +607,24 @@ Rectangle {
             color: pane.approvalHighRisk ? Theme.dangerSurface : Theme.raisedBackground
             border.color: pane.approvalHighRisk ? Theme.dangerBorder : Theme.accent
             border.width: 1
+            focusPolicy: Qt.StrongFocus
+            activeFocusOnTab: true
             Accessible.role: Accessible.Pane
             Accessible.name: pane.approvalKind.indexOf("queue_sftp_") === 0 ? qsTr("AI SFTP transfer approval") : pane.approvalKind === "interrupt_command" ? qsTr("AI interrupt approval") : pane.approvalKind === "write_to_pty" ? qsTr("AI terminal input approval") : pane.approvalKind === "save_runbook" ? qsTr("AI runbook approval") : qsTr("AI command approval")
+            Keys.onPressed: event => {
+                if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                    pane.approvePendingTool();
+                    event.accepted = true;
+                } else if (event.key === Qt.Key_Escape) {
+                    pane.denyPendingTool();
+                    event.accepted = true;
+                }
+            }
+            onVisibleChanged: {
+                if (visible) {
+                    forceActiveFocus();
+                }
+            }
 
             ColumnLayout {
                 id: approvalContent
@@ -712,6 +728,14 @@ Rectangle {
                 RowLayout {
                     Layout.alignment: Qt.AlignRight
                     spacing: 7
+
+                    Text {
+                        Layout.alignment: Qt.AlignVCenter
+                        text: qsTr("Enter approve · Esc deny")
+                        color: Theme.textSubtle
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textCompact
+                    }
 
                     ActionButton {
                         text: pane.approvalRuleSupported && approvalScopeBox.currentValue !== "once" ? qsTr("Deny & remember") : qsTr("Deny")
