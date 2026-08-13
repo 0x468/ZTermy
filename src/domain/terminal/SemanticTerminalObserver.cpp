@@ -93,6 +93,7 @@ SemanticTerminalSnapshot SemanticTerminalObserver::snapshot() const
         .lastStoreError = m_lastStoreError,
         .rawStreamOffset = m_decoder.rawStreamOffset(),
         .outputStreamOffset = m_decoder.outputStreamOffset(),
+        .richCapabilityClaimed = m_assembler.richCapabilityClaimed(),
         .internalFailure = m_internalFailure,
         .finished = m_finished,
     };

@@ -22,6 +22,7 @@ struct SemanticTerminalSnapshot final
     std::optional<CommandBlockStoreError> lastStoreError;
     std::uint64_t rawStreamOffset = 0;
     std::uint64_t outputStreamOffset = 0;
+    bool richCapabilityClaimed = false;
     bool internalFailure = false;
     bool finished = false;
 };

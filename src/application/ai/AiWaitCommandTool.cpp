@@ -114,10 +114,50 @@ AiToolDefinition AiWaitCommandTool::definition()
 {
     return {
         .name = "wait_command",
-        .description = "Wait for a tracked command lifecycle change without cancelling the command when the wait "
-                       "is cancelled.",
+        .description = "Wait for a semantic command lifecycle change. Use only when run_command reports "
+                       "lifecycle_tracked=true; otherwise use wait_terminal_frame and read_terminal_frame.",
         .parametersJson =
             R"({"type":"object","properties":{"command_id":{"type":"string","minLength":1},"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"timeout_ms":{"type":"integer","minimum":0,"maximum":120000}},"required":["command_id","session_id","session_generation","timeout_ms"],"additionalProperties":false})"};
+}
+
+bool AiWaitCommandTool::supportsLifecycleWait(const terminal::TerminalSemanticCapability capability) noexcept
+{
+    return capability != terminal::TerminalSemanticCapability::none;
+}
+
+std::string AiWaitCommandTool::accepted(const AiSessionTarget &target, const std::string_view commandId,
+                                        const bool trackingRegistered,
+                                        const terminal::TerminalSemanticCapability capability,
+                                        const std::uint64_t frameRevision)
+{
+    QString quality = QStringLiteral("unavailable");
+    if (capability == terminal::TerminalSemanticCapability::rich)
+    {
+        quality = QStringLiteral("rich_verified");
+    }
+    else if (capability == terminal::TerminalSemanticCapability::basic)
+    {
+        quality = QStringLiteral("basic_unverified");
+    }
+    const bool lifecycleTracked = trackingRegistered && supportsLifecycleWait(capability);
+    QJsonObject value{{QStringLiteral("ok"), true},
+                      {QStringLiteral("status"), QStringLiteral("accepted")},
+                      {QStringLiteral("command_id"), text(commandId)},
+                      {QStringLiteral("session_id"), text(target.sessionId)},
+                      {QStringLiteral("session_generation"), static_cast<qint64>(target.sessionGeneration)},
+                      {QStringLiteral("tracking_registered"), trackingRegistered},
+                      {QStringLiteral("lifecycle_tracked"), lifecycleTracked},
+                      {QStringLiteral("lifecycle_quality"), quality},
+                      {QStringLiteral("frame_revision_before_dispatch"), static_cast<qint64>(frameRevision)},
+                      {QStringLiteral("recommended_wait_tool"),
+                       lifecycleTracked ? QStringLiteral("wait_command") : QStringLiteral("wait_terminal_frame")},
+                      {QStringLiteral("completion_confirmed"), false}};
+    if (!lifecycleTracked)
+    {
+        value.insert(QStringLiteral("frame_wait_strategy"), QStringLiteral("changed_then_idle"));
+        value.insert(QStringLiteral("recommended_idle_ms"), 750);
+    }
+    return json(value);
 }
 
 std::expected<AiWaitCommandRequest, std::string> AiWaitCommandTool::parse(const std::string_view argumentsJson)

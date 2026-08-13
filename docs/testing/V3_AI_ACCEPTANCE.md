@@ -365,10 +365,15 @@ Run this matrix against the current dynamic Debug candidate before accepting
 the final `0.3.8` Agent candidate:
 
 1. Ask the agent to run `df -h`, approve it in Ask mode, and let it finish.
-   The following model turn must receive the command's retained normalized
-   output directly, including the header and root filesystem when present. The
-   tool result must expose `output_complete` and `omitted_output_bytes`; the
-   assistant must not invent a viewport-truncation diagnosis.
+   With rich/basic lifecycle evidence, the following model turn must receive
+   retained normalized command output; rich results expose `output_complete`
+   and `omitted_output_bytes`. With an ordinary SSH shell that has no lifecycle
+   markers, `run_command` must instead report `lifecycle_tracked=false`, omit
+   `wait_command` from that turn, and guide the agent through changed-frame,
+   idle-frame, then frame-read observation. That degraded path must not show a
+   failed `wait_command`, invent an exit status, or invent a viewport-truncation
+   diagnosis; the visible frame must still include the header and root
+   filesystem when they are present in the viewport.
 2. Cancel once during provider streaming and once while a command wait is
    active. Cancellation must settle as neutral `Cancelled`, the Cancel button
    must disappear, Retry must become available, and Retry must start one new

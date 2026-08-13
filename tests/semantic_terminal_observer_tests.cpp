@@ -42,7 +42,8 @@ void SemanticTerminalObserverTests::capturesOutputBeforeQueuedUiConsumers()
         "nonce", {}, {}, [] {
             return std::int64_t{123};
         });
-    observer.append(bytes("\x1b]633;B\x07"
+    observer.append(bytes("\x1b]633;P;HasRichCommandDetection=True\x07"
+                          "\x1b]633;B\x07"
                           "\x1b]633;E;Get-Date;nonce\x07"
                           "\x1b]633;C\x07"
                           "2026-08-12\r\n"
@@ -51,6 +52,7 @@ void SemanticTerminalObserverTests::capturesOutputBeforeQueuedUiConsumers()
     const auto snapshot = observer.snapshot();
     QVERIFY(!snapshot.internalFailure);
     QVERIFY(!snapshot.lastStoreError.has_value());
+    QVERIFY(snapshot.richCapabilityClaimed);
     QCOMPARE(snapshot.commandBlocks.size(), std::size_t{1});
     QCOMPARE(snapshot.commandBlocks.front().command, std::string("Get-Date"));
     QCOMPARE(snapshot.commandBlocks.front().capability, TerminalSemanticCapability::rich);
@@ -70,6 +72,7 @@ void SemanticTerminalObserverTests::finalizesOnceOnDisconnect()
 
     const auto snapshot = observer.snapshot();
     QVERIFY(snapshot.finished);
+    QVERIFY(!snapshot.richCapabilityClaimed);
     QCOMPARE(snapshot.commandBlocks.size(), std::size_t{1});
     QCOMPARE(snapshot.commandBlocks.front().completionReason, std::optional{CommandCompletionReason::disconnect});
 }

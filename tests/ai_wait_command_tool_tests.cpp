@@ -10,6 +10,7 @@ namespace
 using ztermy::ai::AiTrackedCommand;
 using ztermy::ai::AiTrackedCommandState;
 using ztermy::ai::AiWaitCommandTool;
+using ztermy::terminal::TerminalSemanticCapability;
 
 [[nodiscard]] QJsonObject object(const std::string &value)
 {
@@ -34,6 +35,7 @@ class AiWaitCommandToolTests final : public QObject
 
 private slots:
     void publishesAndParsesStrictContract();
+    void guidesUnavailableLifecycleToFrameWait();
     void serializesLifecycleTimeoutAndUnknownOutcome();
     void returnsFinishedCommandOutput();
 };
@@ -58,6 +60,26 @@ void AiWaitCommandToolTests::publishesAndParsesStrictContract()
         !AiWaitCommandTool::parse(
              R"({"command_id":"9:call-1","session_id":"session-1","session_generation":3,"timeout_ms":1,"extra":true})")
              .has_value());
+}
+
+void AiWaitCommandToolTests::guidesUnavailableLifecycleToFrameWait()
+{
+    const ztermy::ai::AiSessionTarget target{.sessionId = "session-1", .sessionGeneration = 3};
+    const auto unavailable = object(
+        AiWaitCommandTool::accepted(target, "command-1", true, TerminalSemanticCapability::none, std::uint64_t{17}));
+    QVERIFY(unavailable.value(QStringLiteral("tracking_registered")).toBool());
+    QVERIFY(!unavailable.value(QStringLiteral("lifecycle_tracked")).toBool(true));
+    QCOMPARE(unavailable.value(QStringLiteral("lifecycle_quality")).toString(), QStringLiteral("unavailable"));
+    QCOMPARE(unavailable.value(QStringLiteral("recommended_wait_tool")).toString(),
+             QStringLiteral("wait_terminal_frame"));
+    QCOMPARE(unavailable.value(QStringLiteral("frame_wait_strategy")).toString(), QStringLiteral("changed_then_idle"));
+    QCOMPARE(unavailable.value(QStringLiteral("recommended_idle_ms")).toInt(), 750);
+    QCOMPARE(unavailable.value(QStringLiteral("frame_revision_before_dispatch")).toInteger(), qint64{17});
+
+    const auto rich = object(
+        AiWaitCommandTool::accepted(target, "command-2", true, TerminalSemanticCapability::rich, std::uint64_t{18}));
+    QVERIFY(rich.value(QStringLiteral("lifecycle_tracked")).toBool());
+    QCOMPARE(rich.value(QStringLiteral("recommended_wait_tool")).toString(), QStringLiteral("wait_command"));
 }
 
 void AiWaitCommandToolTests::serializesLifecycleTimeoutAndUnknownOutcome()
