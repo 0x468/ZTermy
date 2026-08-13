@@ -134,7 +134,11 @@ AiCompactionResult AiContextCompactor::compact(AiGenerationRequest request, cons
         const auto head = truncatedPrefix(message.content, limits.oldMessageHeadCharacters);
         const auto tail = truncatedSuffix(message.content, limits.oldMessageTailCharacters);
         compactedCharacters += message.content.size() - (head.size() + tail.size());
-        message.content = head + "\n...[older content truncated]...\n" + tail;
+        message.content.clear();
+        message.content.reserve(head.size() + tail.size() + std::size_t{32});
+        message.content += head;
+        message.content += "\n...[older content truncated]...\n";
+        message.content += tail;
         ++compactedMessages;
     }
     // Tool results in retained exchanges get a tighter cap so the transcript
