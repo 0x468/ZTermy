@@ -22,6 +22,15 @@
 
 **验证**：Debug 构建通过；33/33 AI 测试通过。
 
+## 节点 N3 — UX：审批键盘流（2026-08）
+
+**commit**: `d26c60b`（feat(ai): keyboard-first approval card (Enter approve / Esc deny)）
+
+**范围**（对应研究 §5.1 Netcatty Enter=批准/Esc=拒绝）：
+- 审批卡出现时自动强聚焦；Enter/Return 批准、Escape 拒绝；按钮旁显示快捷键提示。
+
+**验证**：qmlcachegen/qmllint 通过；33/33 AI 测试通过。
+
 **范围**：
 1. 研究完成：Netcatty 源码实测（A-F 六部分 + 16 项差距）、opencode commit 6c035e1（V1/V2 双架构）、Codex CLI（`docs/research/CODEX_CLI_ARCHITECTURE.md`）、Warp 官方文档；
 2. 对比研究文档落盘：`docs/reviews/ai-product-design-research-2026-08.md`；
