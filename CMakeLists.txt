@@ -565,6 +565,8 @@ add_library(ztermy_ai_application STATIC
     src/application/ai/AiSftpReadTool.h
     src/application/ai/AiSftpListTool.cpp
     src/application/ai/AiSftpListTool.h
+    src/application/ai/AiSystemPromptBuilder.cpp
+    src/application/ai/AiSystemPromptBuilder.h
     src/application/ai/AiTurnRunner.cpp
     src/application/ai/AiTurnRunner.h
     src/application/ai/AiTerminalFrameTool.cpp
@@ -3179,6 +3181,27 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME ai-turn-runner COMMAND ztermy_ai_turn_runner_tests)
+
+    qt_add_executable(ztermy_ai_system_prompt_builder_tests
+        tests/ai_system_prompt_builder_tests.cpp
+    )
+
+    target_compile_features(ztermy_ai_system_prompt_builder_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ai_system_prompt_builder_tests PRIVATE
+        ztermy_ai_application
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ai_system_prompt_builder_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ai-system-prompt-builder COMMAND ztermy_ai_system_prompt_builder_tests)
 
     qt_add_executable(ztermy_ai_action_tool_dispatcher_tests
         tests/ai_action_tool_dispatcher_tests.cpp
