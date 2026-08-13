@@ -60,6 +60,7 @@ public:
 
     [[nodiscard]] const QString &filePath() const noexcept;
     [[nodiscard]] const AiConversationStoreLimits &limits() const noexcept;
+    [[nodiscard]] bool lastLoadRecoveredFromBackup() const noexcept;
     [[nodiscard]] std::expected<std::vector<AiStoredConversation>, AiConversationStoreError> load() const;
     [[nodiscard]] std::expected<void, AiConversationStoreError> upsert(AiStoredConversation conversation) const;
     [[nodiscard]] std::expected<void, AiConversationStoreError> erase(const QString &conversationId) const;
@@ -70,6 +71,7 @@ private:
     QString m_filePath;
     security::CredentialVault &m_vault;
     AiConversationStoreLimits m_limits;
+    mutable bool m_lastLoadRecoveredFromBackup = false;
 };
 
 } // namespace ztermy::ai

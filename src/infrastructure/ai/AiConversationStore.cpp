@@ -8,6 +8,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLockFile>
 #include <QSaveFile>
 
 #include <openssl/crypto.h>
@@ -335,18 +336,9 @@ parsePlaintext(const QByteArray &plaintext, const AiConversationStoreLimits &lim
 }
 
 [[nodiscard]] std::expected<LoadedStore, AiConversationStoreError>
-loadStore(const QString &filePath, security::CredentialVault &vault, const AiConversationStoreLimits &limits)
+decryptEnvelope(const QByteArray &envelopeBytes, security::CredentialVault &vault, const AiConversationStoreLimits &limits)
 {
-    auto loaded = persistence::loadLastKnownGood(filePath, maximumEnvelopeBytes, validateEnvelope);
-    if (!loaded)
-    {
-        return std::unexpected(mapPersistenceError(loaded.error()));
-    }
-    if (!loaded->has_value())
-    {
-        return LoadedStore{};
-    }
-    const auto envelope = QJsonDocument::fromJson((*loaded)->bytes).object();
+    const auto envelope = QJsonDocument::fromJson(envelopeBytes).object();
     const auto generationValue = envelope.value(QStringLiteral("generation"));
     const qint64 signedGeneration = generationValue.toInteger(-1);
     if (signedGeneration < 1 || generationValue.toDouble() != static_cast<double>(signedGeneration))
@@ -375,6 +367,56 @@ loadStore(const QString &filePath, security::CredentialVault &vault, const AiCon
     }
     return LoadedStore{.conversations = std::move(*conversations),
                        .generation = static_cast<std::uint64_t>(signedGeneration)};
+}
+
+[[nodiscard]] std::expected<LoadedStore, AiConversationStoreError>
+loadStore(const QString &filePath, security::CredentialVault &vault, const AiConversationStoreLimits &limits,
+          bool *recoveredFromBackup = nullptr)
+{
+    auto loaded = persistence::loadLastKnownGood(filePath, maximumEnvelopeBytes, validateEnvelope);
+    if (!loaded)
+    {
+        return std::unexpected(mapPersistenceError(loaded.error()));
+    }
+    if (!loaded->has_value())
+    {
+        return LoadedStore{};
+    }
+    auto decrypted = decryptEnvelope((*loaded)->bytes, vault, limits);
+    if (!decrypted)
+    {
+        // The envelope is structurally valid but failed authentication (a
+        // single flipped byte is enough). Try the last-known-good backup
+        // before declaring the whole history unrecoverable.
+        if (decrypted.error() == AiConversationStoreError::authenticationFailed
+            || decrypted.error() == AiConversationStoreError::invalidData)
+        {
+            QFile backup(filePath + QStringLiteral(".bak"));
+            if (backup.open(QIODevice::ReadOnly) && backup.size() >= 0 && backup.size() <= maximumEnvelopeBytes)
+            {
+                const QByteArray backupBytes = backup.readAll();
+                if (backupBytes.size() == backup.size()
+                    && validateEnvelope(backupBytes) == persistence::PayloadValidation::valid)
+                {
+                    auto recovered = decryptEnvelope(backupBytes, vault, limits);
+                    if (recovered)
+                    {
+                        if (recoveredFromBackup != nullptr)
+                        {
+                            *recoveredFromBackup = true;
+                        }
+                        return recovered;
+                    }
+                }
+            }
+        }
+        return std::unexpected(decrypted.error());
+    }
+    if (recoveredFromBackup != nullptr)
+    {
+        *recoveredFromBackup = (*loaded)->recoveredFromBackup;
+    }
+    return decrypted;
 }
 
 [[nodiscard]] std::expected<void, AiConversationStoreError>
@@ -443,6 +485,26 @@ void applyRetention(std::vector<AiStoredConversation> &conversations, const AiCo
 }
 } // namespace
 
+namespace
+{
+// Cross-process mutual exclusion for the read-modify-write cycles. The
+// in-process caller (AiConversationHistoryModel) already serializes on one
+// worker; the lock protects a second application instance from silently
+// overwriting this instance's updates (or racing the data-key creation).
+// QLockFile derives from QObject and is neither copyable nor movable, so the
+// held lock is owned through a pointer that releases on scope exit.
+[[nodiscard]] std::unique_ptr<QLockFile> acquireLock(const QString &filePath)
+{
+    auto lock = std::make_unique<QLockFile>(filePath + QStringLiteral(".lock"));
+    lock->setStaleLockTime(30'000);
+    if (!lock->tryLock(5'000))
+    {
+        return nullptr;
+    }
+    return lock;
+}
+} // namespace
+
 AiConversationStore::AiConversationStore(QString filePath, security::CredentialVault &vault,
                                          AiConversationStoreLimits limits)
     : m_filePath(std::move(filePath)), m_vault(vault), m_limits(limits)
@@ -459,9 +521,19 @@ const AiConversationStoreLimits &AiConversationStore::limits() const noexcept
     return m_limits;
 }
 
+bool AiConversationStore::lastLoadRecoveredFromBackup() const noexcept
+{
+    return m_lastLoadRecoveredFromBackup;
+}
+
 std::expected<std::vector<AiStoredConversation>, AiConversationStoreError> AiConversationStore::load() const
 {
-    auto loaded = loadStore(m_filePath, m_vault, m_limits);
+    auto lock = acquireLock(m_filePath);
+    if (!lock)
+    {
+        return std::unexpected(AiConversationStoreError::ioError);
+    }
+    auto loaded = loadStore(m_filePath, m_vault, m_limits, &m_lastLoadRecoveredFromBackup);
     if (!loaded)
     {
         return std::unexpected(loaded.error());
@@ -475,8 +547,13 @@ std::expected<void, AiConversationStoreError> AiConversationStore::upsert(AiStor
     {
         return std::unexpected(AiConversationStoreError::invalidData);
     }
+    auto lock = acquireLock(m_filePath);
+    if (!lock)
+    {
+        return std::unexpected(AiConversationStoreError::ioError);
+    }
     conversation.updatedAtUtc = conversation.updatedAtUtc.toUTC();
-    auto loaded = loadStore(m_filePath, m_vault, m_limits);
+    auto loaded = loadStore(m_filePath, m_vault, m_limits, &m_lastLoadRecoveredFromBackup);
     if (!loaded)
     {
         return std::unexpected(loaded.error());
@@ -496,7 +573,12 @@ std::expected<void, AiConversationStoreError> AiConversationStore::upsert(AiStor
 
 std::expected<void, AiConversationStoreError> AiConversationStore::erase(const QString &conversationId) const
 {
-    auto loaded = loadStore(m_filePath, m_vault, m_limits);
+    auto lock = acquireLock(m_filePath);
+    if (!lock)
+    {
+        return std::unexpected(AiConversationStoreError::ioError);
+    }
+    auto loaded = loadStore(m_filePath, m_vault, m_limits, &m_lastLoadRecoveredFromBackup);
     if (!loaded)
     {
         return std::unexpected(loaded.error());
@@ -509,6 +591,11 @@ std::expected<void, AiConversationStoreError> AiConversationStore::erase(const Q
 
 std::expected<void, AiConversationStoreError> AiConversationStore::clear() const
 {
+    auto lock = acquireLock(m_filePath);
+    if (!lock)
+    {
+        return std::unexpected(AiConversationStoreError::ioError);
+    }
     bool removed = true;
     for (const QString &path : {m_filePath, m_filePath + QStringLiteral(".bak")})
     {
@@ -531,7 +618,12 @@ std::expected<void, AiConversationStoreError> AiConversationStore::clear() const
 
 std::expected<void, AiConversationStoreError> AiConversationStore::exportDecrypted(const QString &destinationPath) const
 {
-    auto loaded = loadStore(m_filePath, m_vault, m_limits);
+    auto lock = acquireLock(m_filePath);
+    if (!lock)
+    {
+        return std::unexpected(AiConversationStoreError::ioError);
+    }
+    auto loaded = loadStore(m_filePath, m_vault, m_limits, &m_lastLoadRecoveredFromBackup);
     if (!loaded)
     {
         return std::unexpected(loaded.error());

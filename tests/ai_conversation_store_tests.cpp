@@ -122,6 +122,8 @@ private slots:
     void enforcesRetentionAndConversationBounds();
     void rejectsUnsupportedEnvelopeAndSessionVault();
     void exportsPlaintextAndDeletesStoreAndKey();
+    void recoversFromBackupOnAuthenticationFailure();
+    void preservesUpdatesAcrossStoreInstances();
 };
 
 void AiConversationStoreTests::roundTripsWithoutPlaintextAndRotatesNonce()
@@ -233,6 +235,56 @@ void AiConversationStoreTests::exportsPlaintextAndDeletesStoreAndKey()
     const auto keys = vault.listKeys();
     QVERIFY(keys.has_value());
     QVERIFY(keys->empty());
+}
+
+void AiConversationStoreTests::recoversFromBackupOnAuthenticationFailure()
+{
+    QTemporaryDir directory;
+    TestVault vault;
+    const QString path = directory.filePath(QStringLiteral("history.enc"));
+    ai::AiConversationStore store(path, vault);
+    QVERIFY(store.upsert(conversation(QStringLiteral("one"), QStringLiteral("first"))).has_value());
+    // A second save backs up the first envelope into .bak.
+    QVERIFY(store.upsert(conversation(QStringLiteral("two"), QStringLiteral("second"))).has_value());
+    QVERIFY(QFileInfo::exists(path + QStringLiteral(".bak")));
+
+    // Corrupt the primary ciphertext while keeping the envelope structure
+    // valid (the exact case the LKG structural validator cannot detect).
+    auto envelope = QJsonDocument::fromJson(readFile(path)).object();
+    QByteArray ciphertext = QByteArray::fromBase64(envelope.value(QStringLiteral("ciphertext")).toString().toLatin1());
+    ciphertext[0] = static_cast<char>(ciphertext[0] ^ 0x1);
+    envelope.insert(QStringLiteral("ciphertext"), QString::fromLatin1(ciphertext.toBase64()));
+    QVERIFY(writeFile(path, QJsonDocument(envelope).toJson(QJsonDocument::Compact)));
+
+    QVERIFY(!store.lastLoadRecoveredFromBackup());
+    const auto loaded = store.load();
+    QVERIFY(loaded.has_value());
+    QVERIFY(store.lastLoadRecoveredFromBackup());
+    // The backup holds the previous successful save (last-known-good), so the
+    // recovered history contains the state before the second upsert.
+    QCOMPARE(loaded->size(), 1ULL);
+    QCOMPARE(loaded->front().messages.front().text, QStringLiteral("first"));
+}
+
+void AiConversationStoreTests::preservesUpdatesAcrossStoreInstances()
+{
+    QTemporaryDir directory;
+    TestVault vault;
+    const QString path = directory.filePath(QStringLiteral("history.enc"));
+    ai::AiConversationStore first(path, vault);
+    ai::AiConversationStore second(path, vault);
+
+    // Interleaved read-modify-write cycles from two store objects (the
+    // cross-instance equivalent of two application processes) must not drop
+    // either update; the file lock serializes the cycles.
+    QVERIFY(first.upsert(conversation(QStringLiteral("one"), QStringLiteral("secret-one"))).has_value());
+    QVERIFY(second.upsert(conversation(QStringLiteral("two"), QStringLiteral("secret-two"))).has_value());
+    QVERIFY(first.upsert(conversation(QStringLiteral("three"), QStringLiteral("secret-three"))).has_value());
+
+    const auto loaded = first.load();
+    QVERIFY(loaded.has_value());
+    QCOMPARE(loaded->size(), 3ULL);
+    QVERIFY(!QFileInfo::exists(path + QStringLiteral(".lock")));
 }
 
 QTEST_GUILESS_MAIN(AiConversationStoreTests)
