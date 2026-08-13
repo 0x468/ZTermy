@@ -42,6 +42,20 @@
 
 **验证**：Debug 构建通过；33/33 AI 测试通过（含 2 个新用例）。
 
+## 节点 N5 — 上下文压缩：预算感知 + typed 压缩 + 413 强制压缩重试（2026-08）
+
+**commits**:
+- `42bd658`（feat(ai): typed context compaction bounds requests to the model window）
+- `e01204a`（feat(ai): retry with forced compaction on provider context overflow）
+
+**范围**（对应研究 §8.1 Netcatty typed 压缩链 / §8.2 opencode preserve-recent 预算）：
+1. 新建 `AiContextCompactor`（domain，纯函数）：token 估算（UTF-8 字节/4，与 context broker 同口径）、usable 预算（context − 输出预留 − 缓冲）、typed 压缩（旧消息 head/tail 截断、最近 N 条保留原文、工具输出 2k 字符封顶、UTF-8 边界安全）；
+2. `sendAiMessage` 发送前压缩请求视图（会话模型不改动，后续轮次确定性重复压缩）；
+3. `AiProviderErrorCode::contextOverflow`：HTTP 413 映射为可重试；`AiTurnRunner` 在无可见输出/无副作用工具时以更紧预算强制压缩并立即重试，仍超预算则保留原错误失败；
+4. 测试：小请求不动、旧消息截断+尾部保留、工具输出封顶、UTF-8 安全、413 分类、端到端压缩重试（重试 payload 更小）。
+
+**验证**：Debug 构建通过；34/34 AI 测试通过。
+
 **范围**：
 1. 研究完成：Netcatty 源码实测（A-F 六部分 + 16 项差距）、opencode commit 6c035e1（V1/V2 双架构）、Codex CLI（`docs/research/CODEX_CLI_ARCHITECTURE.md`）、Warp 官方文档；
 2. 对比研究文档落盘：`docs/reviews/ai-product-design-research-2026-08.md`；
