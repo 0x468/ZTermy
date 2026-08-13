@@ -4,6 +4,8 @@
 #include "application/ai/AiSystemPromptBuilder.h"
 #include "application/ai/AiTerminalFrameTool.h"
 #include "application/ai/AiWaitCommandTool.h"
+#include "domain/ai/AiContextCompactor.h"
+#include "domain/ai/AiContextCompactor.h"
 #include "domain/ai/AiContextSerializer.h"
 #include "domain/ssh/SshTarget.h"
 #include "infrastructure/ai/ProviderEndpointResolver.h"
@@ -8903,6 +8905,19 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                                        .messages = std::move(messages),
                                        .tools = std::move(toolDefinitions),
                                        .reasoningEffort = aiReasoningEffort(m_settings.aiReasoning)};
+    // Bound the request to the model context window before dispatch: a long
+    // conversation is typed-compacted (old messages head/tail truncated,
+    // recent turns preserved verbatim) instead of failing at the provider.
+    // The conversation model itself is untouched; only the request view
+    // changes, so follow-up turns re-compact deterministically.
+    const auto compacted = ai::AiContextCompactor::compact(std::move(generation));
+    if (compacted.compacted)
+    {
+        qCInfo(appControllerLog) << "AI context compacted for" << compacted.compactedMessageCount
+                                 << "message(s), saving" << compacted.compactedCharacters << "character(s),"
+                                 << (compacted.overBudget ? "still over budget" : "within budget");
+    }
+    generation = std::move(compacted.request);
     tab.aiTurnBudget = std::make_unique<ai::AiAgentTurnBudget>();
     tab.pendingAiAction.reset();
     tab.pendingAiMcpCall.reset();

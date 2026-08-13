@@ -445,6 +445,8 @@ add_library(ztermy_ai_domain STATIC
     src/domain/ai/NdjsonParser.h
     src/domain/ai/ServerSentEventParser.cpp
     src/domain/ai/ServerSentEventParser.h
+    src/domain/ai/AiContextCompactor.cpp
+    src/domain/ai/AiContextCompactor.h
 )
 
 target_compile_features(ztermy_ai_domain PUBLIC cxx_std_23)
@@ -3202,6 +3204,27 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME ai-system-prompt-builder COMMAND ztermy_ai_system_prompt_builder_tests)
+
+    qt_add_executable(ztermy_ai_context_compactor_tests
+        tests/ai_context_compactor_tests.cpp
+    )
+
+    target_compile_features(ztermy_ai_context_compactor_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ai_context_compactor_tests PRIVATE
+        ztermy_ai_domain
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ai_context_compactor_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ai-context-compactor COMMAND ztermy_ai_context_compactor_tests)
 
     qt_add_executable(ztermy_ai_action_tool_dispatcher_tests
         tests/ai_action_tool_dispatcher_tests.cpp
