@@ -126,14 +126,15 @@ class FakeNetworkAccessManager final : public QNetworkAccessManager
 public:
     void enqueue(FakeResponse response) { m_responses.push_back(std::move(response)); }
     [[nodiscard]] std::size_t requestCount() const noexcept { return m_requestCount; }
+    [[nodiscard]] const std::vector<qint64> &requestBodySizes() const noexcept { return m_requestBodySizes; }
 
 protected:
     QNetworkReply *createRequest(const Operation operation, const QNetworkRequest &request,
                                  QIODevice *outgoingData) override
     {
         static_cast<void>(operation);
-        static_cast<void>(outgoingData);
         ++m_requestCount;
+        m_requestBodySizes.push_back(outgoingData != nullptr ? outgoingData->size() : 0);
         if (m_responses.empty())
         {
             return new FakeReply(request, FakeResponse{.status = 500}, this);
@@ -146,6 +147,7 @@ protected:
 private:
     std::vector<FakeResponse> m_responses;
     std::size_t m_requestCount = 0;
+    std::vector<qint64> m_requestBodySizes;
 };
 
 [[nodiscard]] AiProviderConfiguration openAiConfiguration()
@@ -185,6 +187,7 @@ private slots:
     void cancelsDeferredToolWait();
     void doesNotRetryAfterSideEffectingTool();
     void rejectsOversizedCompletedToolArguments();
+    void compactsAndRetriesOnContextOverflow();
 };
 
 void AiTurnRunnerTests::retriesBeforeVisibleOutput()
@@ -589,6 +592,50 @@ void AiTurnRunnerTests::rejectsOversizedCompletedToolArguments()
     QVERIFY(events.back().error.has_value());
     QCOMPARE(events.back().error->code, AiProviderErrorCode::protocol);
     QVERIFY(QString::fromStdString(events.back().error->message).contains(QStringLiteral("16 KiB")));
+}
+
+void AiTurnRunnerTests::compactsAndRetriesOnContextOverflow()
+{
+    FakeNetworkAccessManager network;
+    network.enqueue(FakeResponse{.status = 413, .payload = "request entity too large"});
+    network.enqueue(FakeResponse{.payload =
+                                     "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\"}}\n\n"
+                                     "data: {\"type\":\"response.output_text.delta\",\"delta\":\"ok\"}\n\n"
+                                     "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\"}}\n\n"});
+    ProviderHttpClient client(&network);
+    AiTurnRunner runner(client, fastRetryPolicy());
+    std::vector<AiStreamEvent> events;
+    bool finished = false;
+
+    AiGenerationRequest generation;
+    // 8 x 80k-char messages: over the tighter 413 retry budget so the
+    // compaction pass actually truncates, while the preserved recent tail
+    // still fits the budget afterwards.
+    const std::string longMessage(80'000, 'x');
+    for (int index = 0; index < 8; ++index)
+    {
+        generation.messages.push_back(ztermy::ai::AiChatMessage{
+            .role = ztermy::ai::AiMessageRole::user, .content = longMessage});
+    }
+
+    QVERIFY(runner
+                .start(
+                    openAiConfiguration(), std::move(generation), emptySecretLoader(),
+                    [&events](const auto, const AiStreamEvent &event) {
+                        events.push_back(event);
+                    },
+                    [&finished](const auto, const AiTurnMetrics &) {
+                        finished = true;
+                    })
+                .has_value());
+
+    QTRY_VERIFY_WITH_TIMEOUT(finished, 1000);
+    QCOMPARE(network.requestCount(), std::size_t{2});
+    QCOMPARE(network.requestBodySizes().size(), std::size_t{2});
+    // The retried payload must be smaller: the 413 forced a tighter
+    // compaction of the request view.
+    QVERIFY(network.requestBodySizes().at(1) < network.requestBodySizes().at(0));
+    QCOMPARE(events.back().type, AiStreamEventType::responseCompleted);
 }
 
 } // namespace

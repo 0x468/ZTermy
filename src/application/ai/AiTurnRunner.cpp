@@ -1,5 +1,7 @@
 #include "application/ai/AiTurnRunner.h"
 
+#include "domain/ai/AiContextCompactor.h"
+
 #include <QPointer>
 #include <QRandomGenerator>
 
@@ -328,6 +330,37 @@ void AiTurnRunner::handleFinished(const ProviderHttpClient::RequestId requestId)
         ++m_completedRetries;
         m_bufferedStart.reset();
         m_pendingError.reset();
+        if (error.code == AiProviderErrorCode::contextOverflow)
+        {
+            // The provider rejected the payload as too large: force a tighter
+            // compaction of the request view and retry immediately instead of
+            // applying the normal backoff.
+            const ai::AiCompactionLimits tighterLimits{
+                .contextWindowTokens = m_compactionLimits.contextWindowTokens,
+                .reservedOutputTokens = m_compactionLimits.reservedOutputTokens / 2,
+                .reserveBufferTokens = m_compactionLimits.reserveBufferTokens / 2,
+                .preserveRecentMessages = std::max<std::size_t>(1, m_compactionLimits.preserveRecentMessages / 2),
+                .oldMessageHeadCharacters = m_compactionLimits.oldMessageHeadCharacters / 2,
+                .oldMessageTailCharacters = m_compactionLimits.oldMessageTailCharacters / 2,
+                .maximumToolOutputCharacters = m_compactionLimits.maximumToolOutputCharacters / 2};
+            auto compacted = ai::AiContextCompactor::compact(std::move(m_generation), tighterLimits);
+            m_generation = std::move(compacted.request);
+            if (m_retryHandler)
+            {
+                m_retryHandler(m_turnId, m_completedRetries, 0);
+            }
+            if (compacted.overBudget)
+            {
+                finishWithError(error);
+                return;
+            }
+            const auto restarted = startAttempt();
+            if (!restarted.has_value())
+            {
+                finishWithError(restarted.error());
+            }
+            return;
+        }
         m_retryTimer.start(static_cast<int>(std::min<std::uint64_t>(
             decision.delayMilliseconds, static_cast<std::uint64_t>(std::numeric_limits<int>::max()))));
         if (m_retryHandler)

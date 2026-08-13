@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/security/SensitiveByteArray.h"
+#include "domain/ai/AiContextCompactor.h"
 #include "domain/ai/AiProviderRetryPolicy.h"
 #include "domain/ai/AiUsageReporting.h"
 #include "infrastructure/ai/ProviderHttpClient.h"
@@ -79,6 +80,7 @@ private:
     std::optional<ProviderHttpClient::RequestId> m_requestId;
     std::optional<AiStreamEvent> m_bufferedStart;
     std::optional<AiProviderError> m_pendingError;
+    AiCompactionLimits m_compactionLimits;
     std::vector<AiToolCall> m_pendingToolCalls;
     std::string m_currentReasoning;
     std::string m_currentReasoningSignature;

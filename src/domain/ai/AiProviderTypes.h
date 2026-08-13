@@ -124,6 +124,7 @@ enum class AiProviderErrorCode : std::uint8_t
     server,
     cancelled,
     protocol,
+    contextOverflow,
 };
 
 struct AiTokenUsage final

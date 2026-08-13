@@ -153,6 +153,7 @@ private slots:
     void streamsCompatibleTypedEvents();
     void streamsOllamaTypedEvents();
     void classifiesRateLimitAndRetryDelay();
+    void classifiesContextOverflowAsRetryable();
     void cancelsInFlightRequest();
     void tracesExactPayloadWithoutAuthorizationSecret();
 };
@@ -303,6 +304,31 @@ void ProviderHttpClientTests::classifiesRateLimitAndRetryDelay()
     const auto error = events.front().error.value_or(ztermy::ai::AiProviderError{});
     QCOMPARE(error.code, AiProviderErrorCode::rateLimited);
     QCOMPARE(error.retryAfterMilliseconds, std::optional<std::uint64_t>{3000});
+    QVERIFY(error.retryable);
+}
+
+void ProviderHttpClientTests::classifiesContextOverflowAsRetryable()
+{
+    FakeNetworkAccessManager network;
+    network.enqueue(FakeResponse{.status = 413, .payload = "request entity too large"});
+    ProviderHttpClient client(&network);
+    std::vector<AiStreamEvent> events;
+    bool finished = false;
+    QVERIFY(client
+                .start(
+                    openAiConfiguration(), AiGenerationRequest{}, SensitiveByteArray{},
+                    [&events](const auto, const AiStreamEvent &event) {
+                        events.push_back(event);
+                    },
+                    [&finished](const auto) {
+                        finished = true;
+                    })
+                .has_value());
+    QTRY_VERIFY_WITH_TIMEOUT(finished, 1000);
+    QCOMPARE(events.size(), std::size_t{1});
+    QVERIFY(events.front().error.has_value());
+    const auto error = events.front().error.value_or(ztermy::ai::AiProviderError{});
+    QCOMPARE(error.code, AiProviderErrorCode::contextOverflow);
     QVERIFY(error.retryable);
 }
 

@@ -63,6 +63,11 @@ constexpr qsizetype maxErrorBodyBytes = qsizetype{64} * 1024;
         code = AiProviderErrorCode::network;
         retryable = true;
     }
+    else if (status == 413)
+    {
+        code = AiProviderErrorCode::contextOverflow;
+        retryable = true;
+    }
     else if (status >= 400 && status < 500)
     {
         code = AiProviderErrorCode::invalidRequest;

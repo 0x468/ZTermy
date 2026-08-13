@@ -17,6 +17,7 @@ namespace
         case AiProviderErrorCode::rateLimited:
         case AiProviderErrorCode::server:
         case AiProviderErrorCode::protocol:
+        case AiProviderErrorCode::contextOverflow:
             return true;
         case AiProviderErrorCode::authentication:
         case AiProviderErrorCode::quotaExceeded:
