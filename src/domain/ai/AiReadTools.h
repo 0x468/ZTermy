@@ -34,7 +34,6 @@ struct AiReadToolError final
 
 struct AiReadToolLimits final
 {
-    std::size_t maxSessions = 64;
     std::size_t maxTerminalLines = 200;
     std::size_t maxTerminalBytes = std::size_t{32} * 1024;
     std::size_t maxCommandOutputBytes = std::size_t{16} * 1024;
@@ -233,8 +232,6 @@ public:
     explicit AiReadTools(AiReadToolLimits limits = {});
 
     [[nodiscard]] const AiReadToolLimits &limits() const noexcept;
-    [[nodiscard]] std::expected<std::vector<AiSessionSummary>, AiReadToolError>
-    listSessions(std::span<const AiTerminalReadSnapshot> sessions) const;
     [[nodiscard]] std::expected<AiSessionSummary, AiReadToolError>
     readSessionInfo(std::span<const AiTerminalReadSnapshot> sessions, std::string_view sessionId,
                     std::uint64_t sessionGeneration) const;

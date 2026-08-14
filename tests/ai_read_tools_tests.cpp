@@ -57,29 +57,11 @@ class AiReadToolsTests final : public QObject
     Q_OBJECT
 
 private slots:
-    void listsBoundedSessionMetadata();
     void rejectsWrongAndStaleSessions();
     void readsBoundedTerminalRangesWithoutSplittingUtf8();
     void readsOnlyBlocksOwnedByTargetGeneration();
     void readsCommandOutputWithExplicitCursorGaps();
 };
-
-void AiReadToolsTests::listsBoundedSessionMetadata()
-{
-    const AiReadTools tools(AiReadToolLimits{.maxSessions = 1});
-    const std::vector sessions{session("session-1", 3)};
-    const auto summaries = tools.listSessions(sessions);
-    QVERIFY(summaries.has_value());
-    QCOMPARE(summaries->size(), std::size_t{1});
-    QCOMPARE(summaries->front().sessionId, std::string("session-1"));
-    QCOMPARE(summaries->front().sessionGeneration, std::uint64_t{3});
-    QCOMPARE(summaries->front().commandBlockCount, std::size_t{1});
-
-    const std::vector tooMany{session("session-1", 3), session("session-2", 1)};
-    const auto rejected = tools.listSessions(tooMany);
-    QVERIFY(!rejected.has_value());
-    QCOMPARE(rejected.error().code, AiReadToolErrorCode::limitExceeded);
-}
 
 void AiReadToolsTests::rejectsWrongAndStaleSessions()
 {

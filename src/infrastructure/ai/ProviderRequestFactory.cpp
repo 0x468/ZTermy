@@ -113,20 +113,110 @@ void applyCompatibleReasoning(QJsonObject &body, const AiProviderConfiguration &
     }
 }
 
-[[nodiscard]] QJsonArray messages(const AiGenerationRequest &generation)
+[[nodiscard]] QString imageDataUrl(const AiImageAttachment &image)
+{
+    return QStringLiteral("data:%1;base64,%2")
+        .arg(fromUtf8(image.mediaType), fromUtf8(image.base64Data));
+}
+
+[[nodiscard]] QJsonObject compatibleMessage(const AiChatMessage &message, const bool ollamaFormat)
+{
+    QJsonObject object{{QStringLiteral("role"), roleName(message.role)},
+                       {QStringLiteral("content"), fromUtf8(message.content)}};
+    if (message.role == AiMessageRole::tool && !message.toolCallId.empty())
+    {
+        object.insert(QStringLiteral("tool_call_id"), fromUtf8(message.toolCallId));
+    }
+    if (message.images.empty())
+    {
+        return object;
+    }
+    if (ollamaFormat)
+    {
+        QJsonArray images;
+        for (const auto &image : message.images)
+        {
+            images.append(fromUtf8(image.base64Data));
+        }
+        object.insert(QStringLiteral("images"), images);
+        return object;
+    }
+
+    QJsonArray content;
+    if (!message.content.empty())
+    {
+        content.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("text")},
+                                   {QStringLiteral("text"), fromUtf8(message.content)}});
+    }
+    for (const auto &image : message.images)
+    {
+        content.append(QJsonObject{
+            {QStringLiteral("type"), QStringLiteral("image_url")},
+            {QStringLiteral("image_url"), QJsonObject{{QStringLiteral("url"), imageDataUrl(image)},
+                                                       {QStringLiteral("detail"), QStringLiteral("auto")}}}});
+    }
+    object.insert(QStringLiteral("content"), content);
+    return object;
+}
+
+[[nodiscard]] QJsonArray messages(const AiGenerationRequest &generation, const bool ollamaFormat = false)
 {
     QJsonArray result;
     for (const auto &message : generation.messages)
     {
-        QJsonObject object{{QStringLiteral("role"), roleName(message.role)},
-                           {QStringLiteral("content"), fromUtf8(message.content)}};
-        if (message.role == AiMessageRole::tool && !message.toolCallId.empty())
-        {
-            object.insert(QStringLiteral("tool_call_id"), fromUtf8(message.toolCallId));
-        }
-        result.append(object);
+        result.append(compatibleMessage(message, ollamaFormat));
     }
     return result;
+}
+
+[[nodiscard]] QJsonObject responsesMessage(const AiChatMessage &message)
+{
+    if (message.images.empty())
+    {
+        return QJsonObject{{QStringLiteral("role"), roleName(message.role)},
+                           {QStringLiteral("content"), fromUtf8(message.content)}};
+    }
+    QJsonArray content;
+    if (!message.content.empty())
+    {
+        content.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("input_text")},
+                                   {QStringLiteral("text"), fromUtf8(message.content)}});
+    }
+    for (const auto &image : message.images)
+    {
+        content.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("input_image")},
+                                   {QStringLiteral("image_url"), imageDataUrl(image)},
+                                   {QStringLiteral("detail"), QStringLiteral("auto")}});
+    }
+    return QJsonObject{{QStringLiteral("role"), roleName(message.role)}, {QStringLiteral("content"), content}};
+}
+
+[[nodiscard]] std::optional<AiProviderError> validateImages(const AiGenerationRequest &generation)
+{
+    constexpr std::size_t maximumImagesPerMessage = 4;
+    constexpr std::size_t maximumBase64Bytes = std::size_t{16} * 1024 * 1024;
+    for (const auto &message : generation.messages)
+    {
+        if (message.images.size() > maximumImagesPerMessage
+            || (!message.images.empty() && message.role != AiMessageRole::user))
+        {
+            return AiProviderError{.code = AiProviderErrorCode::invalidRequest,
+                                   .message = "Only user messages may contain up to four image attachments.",
+                                   .retryable = false};
+        }
+        for (const auto &image : message.images)
+        {
+            const bool supported = image.mediaType == "image/png" || image.mediaType == "image/jpeg"
+                                   || image.mediaType == "image/webp" || image.mediaType == "image/gif";
+            if (!supported || image.base64Data.empty() || image.base64Data.size() > maximumBase64Bytes)
+            {
+                return AiProviderError{.code = AiProviderErrorCode::invalidRequest,
+                                       .message = "An image attachment has an unsupported type or size.",
+                                       .retryable = false};
+            }
+        }
+    }
+    return std::nullopt;
 }
 
 [[nodiscard]] std::expected<QJsonArray, AiProviderError> toolDefinitions(const AiGenerationRequest &generation,
@@ -165,9 +255,9 @@ void applyCompatibleReasoning(QJsonObject &body, const AiProviderConfiguration &
 }
 
 [[nodiscard]] QJsonArray conversationMessages(const AiGenerationRequest &generation, const bool objectArguments,
-                                              const QString &reasoningKey = {})
+                                              const QString &reasoningKey = {}, const bool ollamaFormat = false)
 {
-    auto result = messages(generation);
+    auto result = messages(generation, ollamaFormat);
     for (const auto &exchange : generation.toolHistory)
     {
         QJsonArray calls;
@@ -215,7 +305,12 @@ void applyCompatibleReasoning(QJsonObject &body, const AiProviderConfiguration &
 {
     if (generation.toolHistory.empty() || generation.toolHistory.back().outputs.empty())
     {
-        return messages(generation);
+        QJsonArray result;
+        for (const auto &message : generation.messages)
+        {
+            result.append(responsesMessage(message));
+        }
+        return result;
     }
     QJsonArray result;
     for (const auto &output : generation.toolHistory.back().outputs)
@@ -294,8 +389,28 @@ void applyCompatibleReasoning(QJsonObject &body, const AiProviderConfiguration &
         {
             continue;
         }
+        QJsonValue content = fromUtf8(message.content);
+        if (!message.images.empty())
+        {
+            QJsonArray parts;
+            if (!message.content.empty())
+            {
+                parts.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("text")},
+                                         {QStringLiteral("text"), fromUtf8(message.content)}});
+            }
+            for (const auto &image : message.images)
+            {
+                parts.append(QJsonObject{
+                    {QStringLiteral("type"), QStringLiteral("image")},
+                    {QStringLiteral("source"),
+                     QJsonObject{{QStringLiteral("type"), QStringLiteral("base64")},
+                                 {QStringLiteral("media_type"), fromUtf8(image.mediaType)},
+                                 {QStringLiteral("data"), fromUtf8(image.base64Data)}}}});
+            }
+            content = parts;
+        }
         result.append(QJsonObject{{QStringLiteral("role"), roleName(message.role)},
-                                  {QStringLiteral("content"), fromUtf8(message.content)}});
+                                  {QStringLiteral("content"), content}});
     }
     for (const auto &exchange : generation.toolHistory)
     {
@@ -383,7 +498,7 @@ void applyCompatibleReasoning(QJsonObject &body, const AiProviderConfiguration &
 [[nodiscard]] QJsonObject ollamaBody(const AiProviderConfiguration &configuration,
                                      const AiGenerationRequest &generation, const QJsonArray &tools)
 {
-    auto input = conversationMessages(generation, true, QStringLiteral("thinking"));
+    auto input = conversationMessages(generation, true, QStringLiteral("thinking"), true);
     if (!generation.instructions.empty())
     {
         input.prepend(QJsonObject{{QStringLiteral("role"), QStringLiteral("system")},
@@ -410,6 +525,10 @@ ProviderRequestFactory::prepare(const AiProviderConfiguration &configuration, co
         return std::unexpected(AiProviderError{.code = AiProviderErrorCode::invalidRequest,
                                                .message = "Provider model is required.",
                                                .retryable = false});
+    }
+    if (const auto imageError = validateImages(generation); imageError.has_value())
+    {
+        return std::unexpected(*imageError);
     }
     const auto url = endpointUrl(configuration);
     if (!url.has_value())

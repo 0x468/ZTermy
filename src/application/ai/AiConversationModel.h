@@ -19,7 +19,7 @@ struct AiConversationLimits final
 {
     std::size_t maxMessages = 64;
     std::size_t maxMessageBytes = std::size_t{256} * 1024;
-    std::size_t maxConversationBytes = std::size_t{1024} * 1024;
+    std::size_t maxConversationBytes = std::size_t{20} * 1024 * 1024;
 };
 
 enum class AiConversationTranscriptRole : std::uint8_t
@@ -69,6 +69,7 @@ public:
         CommandSuggestionRole,
         HasCommandSuggestionRole,
         ToolActivitiesRole,
+        ImageAttachmentsRole,
     };
 
     explicit AiConversationModel(AiConversationLimits limits = {}, QObject *parent = nullptr);
@@ -84,7 +85,7 @@ public:
     [[nodiscard]] std::vector<AiConversationTranscriptEntry> transcript() const;
     [[nodiscard]] bool restoreTranscript(const std::vector<AiConversationTranscriptEntry> &entries);
     [[nodiscard]] bool appendEvidenceMessage(QString text);
-    [[nodiscard]] std::uint64_t appendUserMessage(QString text);
+    [[nodiscard]] std::uint64_t appendUserMessage(QString text, std::vector<AiImageAttachment> images = {});
     [[nodiscard]] std::uint64_t beginAssistantMessage();
     [[nodiscard]] bool appendAssistantDelta(std::uint64_t messageId, QString delta);
     [[nodiscard]] bool appendAssistantReasoningDelta(std::uint64_t messageId, QString delta);
@@ -133,6 +134,7 @@ private:
         bool longContextRates = false;
         QString commandSuggestion;
         QVariantList toolActivities;
+        std::vector<AiImageAttachment> images;
     };
 
     struct EvidenceMessage final

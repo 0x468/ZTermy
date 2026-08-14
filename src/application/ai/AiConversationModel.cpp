@@ -1,14 +1,75 @@
 #include "application/ai/AiConversationModel.h"
 
 #include <QByteArray>
+#include <QStringList>
 #include <QVariant>
+#include <QVariantMap>
 
 #include <algorithm>
 #include <limits>
+#include <span>
 #include <utility>
 
 namespace ztermy::ai
 {
+namespace
+{
+
+[[nodiscard]] std::size_t imageStorageBytes(const std::span<const AiImageAttachment> images) noexcept
+{
+    std::size_t bytes = 0;
+    for (const auto &image : images)
+    {
+        bytes += image.id.size() + image.fileName.size() + image.mediaType.size() + image.base64Data.size()
+                 + image.previewBase64Data.size();
+    }
+    return bytes;
+}
+
+[[nodiscard]] QString historicalImageMarker(const std::span<const AiImageAttachment> images)
+{
+    QStringList lines;
+    lines.reserve(static_cast<qsizetype>(images.size()));
+    for (const auto &image : images)
+    {
+        lines.push_back(QStringLiteral("[Historical image attachment omitted from replay: %1 · %2 · %3 bytes]")
+                            .arg(QString::fromUtf8(image.fileName), QString::fromUtf8(image.mediaType))
+                            .arg(image.byteSize));
+    }
+    return lines.join(QLatin1Char('\n'));
+}
+
+[[nodiscard]] QString replayText(const QString &text, const std::span<const AiImageAttachment> images)
+{
+    if (images.empty())
+    {
+        return text;
+    }
+    const QString marker = historicalImageMarker(images);
+    return text.isEmpty() ? marker : text + QStringLiteral("\n\n") + marker;
+}
+
+[[nodiscard]] QVariantList imageValues(const std::span<const AiImageAttachment> images)
+{
+    QVariantList values;
+    values.reserve(static_cast<qsizetype>(images.size()));
+    for (const auto &image : images)
+    {
+        values.push_back(QVariantMap{
+            {QStringLiteral("id"), QString::fromUtf8(image.id)},
+            {QStringLiteral("fileName"), QString::fromUtf8(image.fileName)},
+            {QStringLiteral("mediaType"), QString::fromUtf8(image.mediaType)},
+            {QStringLiteral("byteSize"), QVariant::fromValue<qulonglong>(image.byteSize)},
+            {QStringLiteral("pixelWidth"), image.pixelWidth},
+            {QStringLiteral("pixelHeight"), image.pixelHeight},
+            {QStringLiteral("previewUrl"),
+             QStringLiteral("data:image/png;base64,%1").arg(QString::fromLatin1(image.previewBase64Data))},
+        });
+    }
+    return values;
+}
+
+} // namespace
 
 AiConversationModel::AiConversationModel(AiConversationLimits limits, QObject *parent)
     : QAbstractListModel(parent), m_limits(limits)
@@ -82,6 +143,8 @@ QVariant AiConversationModel::data(const QModelIndex &index, const int role) con
             return !message.commandSuggestion.isEmpty();
         case ToolActivitiesRole:
             return message.toolActivities;
+        case ImageAttachmentsRole:
+            return imageValues(message.images);
         default:
             return {};
     }
@@ -110,7 +173,8 @@ QHash<int, QByteArray> AiConversationModel::roleNames() const
             {LongContextRatesRole, "longContextRates"},
             {CommandSuggestionRole, "commandSuggestion"},
             {HasCommandSuggestionRole, "hasCommandSuggestion"},
-            {ToolActivitiesRole, "toolActivities"}};
+            {ToolActivitiesRole, "toolActivities"},
+            {ImageAttachmentsRole, "imageAttachments"}};
 }
 
 bool AiConversationModel::streaming() const noexcept
@@ -127,6 +191,15 @@ std::vector<AiChatMessage> AiConversationModel::providerMessages() const
 {
     std::vector<AiChatMessage> messages;
     messages.reserve(m_messages.size());
+    std::uint64_t latestUserMessageId = 0;
+    for (auto iterator = m_messages.rbegin(); iterator != m_messages.rend(); ++iterator)
+    {
+        if (iterator->role == AiMessageRole::user && iterator->state == MessageState::complete)
+        {
+            latestUserMessageId = iterator->id;
+            break;
+        }
+    }
     for (const auto &message : m_messages)
     {
         if (message.state == MessageState::streaming || message.state == MessageState::failed
@@ -134,7 +207,11 @@ std::vector<AiChatMessage> AiConversationModel::providerMessages() const
         {
             continue;
         }
-        messages.push_back(AiChatMessage{.role = message.role, .content = message.text.toUtf8().toStdString()});
+        const bool includeImages = message.id == latestUserMessageId;
+        const QString content = includeImages ? message.text : replayText(message.text, message.images);
+        messages.push_back(AiChatMessage{.role = message.role,
+                                         .content = content.toUtf8().toStdString(),
+                                         .images = includeImages ? message.images : std::vector<AiImageAttachment>{}});
     }
     return messages;
 }
@@ -148,9 +225,10 @@ std::vector<AiConversationTranscriptEntry> AiConversationModel::transcript() con
         if (message.state != MessageState::streaming && message.state != MessageState::failed
             && message.state != MessageState::cancelled)
         {
-            entries.push_back({.role = message.role == AiMessageRole::user ? AiConversationTranscriptRole::user
-                                                                           : AiConversationTranscriptRole::assistant,
-                               .content = message.text.toUtf8().toStdString()});
+            entries.push_back(
+                {.role = message.role == AiMessageRole::user ? AiConversationTranscriptRole::user
+                                                              : AiConversationTranscriptRole::assistant,
+                 .content = replayText(message.text, message.images).toUtf8().toStdString()});
         }
         for (const auto &evidence : m_evidenceMessages)
         {
@@ -167,13 +245,35 @@ std::vector<AiConversationTranscriptEntry> AiConversationModel::transcript() con
 std::vector<AiChatMessage> AiConversationModel::providerMessagesWithEvidence() const
 {
     std::vector<AiChatMessage> messages;
-    const auto entries = transcript();
-    messages.reserve(entries.size());
-    for (const auto &entry : entries)
+    messages.reserve(m_messages.size() + m_evidenceMessages.size());
+    std::uint64_t latestUserMessageId = 0;
+    for (auto iterator = m_messages.rbegin(); iterator != m_messages.rend(); ++iterator)
     {
-        messages.push_back({.role = entry.role == AiConversationTranscriptRole::assistant ? AiMessageRole::assistant
-                                                                                          : AiMessageRole::user,
-                            .content = entry.content});
+        if (iterator->role == AiMessageRole::user && iterator->state == MessageState::complete)
+        {
+            latestUserMessageId = iterator->id;
+            break;
+        }
+    }
+    for (const auto &message : m_messages)
+    {
+        if (message.state == MessageState::streaming || message.state == MessageState::failed
+            || message.state == MessageState::cancelled)
+        {
+            continue;
+        }
+        const bool includeImages = message.id == latestUserMessageId;
+        const QString content = includeImages ? message.text : replayText(message.text, message.images);
+        messages.push_back({.role = message.role,
+                            .content = content.toUtf8().toStdString(),
+                            .images = includeImages ? message.images : std::vector<AiImageAttachment>{}});
+        for (const auto &evidence : m_evidenceMessages)
+        {
+            if (evidence.afterMessageId == message.id)
+            {
+                messages.push_back({.role = AiMessageRole::user, .content = evidence.text.toUtf8().toStdString()});
+            }
+        }
     }
     return messages;
 }
@@ -271,11 +371,11 @@ bool AiConversationModel::appendEvidenceMessage(QString text)
     return true;
 }
 
-std::uint64_t AiConversationModel::appendUserMessage(QString text)
+std::uint64_t AiConversationModel::appendUserMessage(QString text, std::vector<AiImageAttachment> images)
 {
     bool truncated = false;
     text = boundedUtf8(std::move(text), m_limits.maxMessageBytes, truncated);
-    const auto bytes = static_cast<std::size_t>(text.toUtf8().size());
+    const auto bytes = static_cast<std::size_t>(text.toUtf8().size()) + imageStorageBytes(images);
     evictFor(bytes);
     const auto row = rowCount();
     beginInsertRows({}, row, row);
@@ -284,7 +384,8 @@ std::uint64_t AiConversationModel::appendUserMessage(QString text)
                                  .role = AiMessageRole::user,
                                  .text = std::move(text),
                                  .bytes = bytes,
-                                 .truncated = truncated});
+                                 .truncated = truncated,
+                                 .images = std::move(images)});
     m_totalBytes += bytes;
     endInsertRows();
     emit countChanged();

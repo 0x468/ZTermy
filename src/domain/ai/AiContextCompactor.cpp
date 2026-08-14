@@ -59,6 +59,16 @@ namespace
     return (text.size() + 3) / 4;
 }
 
+[[nodiscard]] std::size_t estimateImageTokens(const AiImageAttachment &image) noexcept
+{
+    constexpr std::size_t tilePixels = 512;
+    const auto width = std::max<std::size_t>(1, image.pixelWidth);
+    const auto height = std::max<std::size_t>(1, image.pixelHeight);
+    const auto horizontalTiles = (width + tilePixels - 1) / tilePixels;
+    const auto verticalTiles = (height + tilePixels - 1) / tilePixels;
+    return 85 + horizontalTiles * verticalTiles * 170;
+}
+
 [[nodiscard]] QString utf8(const std::string_view value)
 {
     return QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size()));
@@ -79,6 +89,10 @@ std::size_t AiContextCompactor::estimateRequestTokens(const AiGenerationRequest 
     {
         // Role marker overhead plus content.
         total += 2 + estimateTextTokens(message.content);
+        for (const auto &image : message.images)
+        {
+            total += estimateImageTokens(image);
+        }
     }
     for (const auto &definition : request.tools)
     {

@@ -11,6 +11,7 @@ using ztermy::ai::AiChatMessage;
 using ztermy::ai::AiCompactionLimits;
 using ztermy::ai::AiContextCompactor;
 using ztermy::ai::AiGenerationRequest;
+using ztermy::ai::AiImageAttachment;
 
 class AiContextCompactorTests final : public QObject
 {
@@ -21,6 +22,7 @@ private slots:
     void truncatesOldMessagesAndPreservesRecentTail();
     void capsToolOutputsInHistory();
     void utf8TruncationNeverSplitsCodePoints();
+    void accountsForImageTilesWithoutCountingBase64AsText();
 };
 
 void AiContextCompactorTests::leavesSmallRequestsUntouched()
@@ -117,6 +119,20 @@ void AiContextCompactorTests::utf8TruncationNeverSplitsCodePoints()
     // A valid UTF-8 payload decodes without replacement characters.
     QVERIFY(!decoded.contains(QChar::ReplacementCharacter));
     QVERIFY(decoded.contains(QStringLiteral("...[older content truncated]...")));
+}
+
+void AiContextCompactorTests::accountsForImageTilesWithoutCountingBase64AsText()
+{
+    const AiGenerationRequest request{
+        .messages = {AiChatMessage{
+            .content = "inspect",
+            .images = {AiImageAttachment{.mediaType = "image/png",
+                                         .base64Data = std::string(2'000'000, 'A'),
+                                         .pixelWidth = 1024,
+                                         .pixelHeight = 1024}}}}};
+    const auto estimate = AiContextCompactor::estimateRequestTokens(request);
+    QVERIFY(estimate >= std::size_t{765});
+    QVERIFY(estimate < std::size_t{2'000});
 }
 
 } // namespace

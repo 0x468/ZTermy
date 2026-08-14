@@ -45,11 +45,26 @@ enum class AiMessageRole : std::uint8_t
     tool,
 };
 
+struct AiImageAttachment final
+{
+    std::string id;
+    std::string fileName;
+    std::string mediaType;
+    std::string base64Data;
+    std::string previewBase64Data;
+    std::uint64_t byteSize = 0;
+    std::uint32_t pixelWidth = 0;
+    std::uint32_t pixelHeight = 0;
+
+    [[nodiscard]] friend bool operator==(const AiImageAttachment &, const AiImageAttachment &) = default;
+};
+
 struct AiChatMessage final
 {
     AiMessageRole role = AiMessageRole::user;
     std::string content;
     std::string toolCallId;
+    std::vector<AiImageAttachment> images;
 };
 
 struct AiProviderConfiguration final

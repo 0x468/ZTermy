@@ -5,7 +5,6 @@
 #include "application/ai/AiTerminalFrameTool.h"
 #include "application/ai/AiUserSkillTool.h"
 #include "application/ai/AiWaitCommandTool.h"
-#include "domain/ai/AiContextCompactor.h"
 #include "domain/ai/AiCommandEcho.h"
 #include "domain/ai/AiContextCompactor.h"
 #include "domain/ai/AiContextSerializer.h"
@@ -16,6 +15,7 @@
 #include "platform/windows/WindowsProtectedClipboard.h"
 #include "ui/terminal/TerminalItem.h"
 
+#include <QBuffer>
 #include <QClipboard>
 #include <QColor>
 #include <QCoreApplication>
@@ -27,6 +27,8 @@
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QHash>
+#include <QImage>
+#include <QImageReader>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -64,10 +66,20 @@ constexpr std::size_t maximumRecentHostProfiles = 6;
 constexpr quint64 aiSftpListRequestFlag = quint64{1} << 63U;
 constexpr qsizetype maximumAiTextAttachmentBytes = qsizetype{256} * 1024;
 constexpr qsizetype maximumAiTextAttachmentFiles = 4;
+constexpr qsizetype maximumAiImageAttachmentBytes = qsizetype{5} * 1024 * 1024;
+constexpr qsizetype maximumAiImageAttachmentTotalBytes = qsizetype{12} * 1024 * 1024;
+constexpr qsizetype maximumAiImageAttachmentFiles = 4;
+constexpr quint64 maximumAiImagePixels = quint64{40} * 1024 * 1024;
 
 struct AiTextAttachmentLoadResult final
 {
     std::vector<ztermy::ai::AiExplicitContext> attachments;
+    QStringList rejectedFiles;
+};
+
+struct AiImageAttachmentLoadResult final
+{
+    std::vector<ztermy::ai::AiImageAttachment> attachments;
     QStringList rejectedFiles;
 };
 
@@ -221,6 +233,28 @@ private:
 {
     const QByteArray bytes = value.toUtf8();
     return {bytes.constData(), static_cast<std::size_t>(bytes.size())};
+}
+
+[[nodiscard]] std::optional<std::string> imageMediaType(QByteArray format)
+{
+    format = format.toLower();
+    if (format == QByteArrayLiteral("jpg") || format == QByteArrayLiteral("jpeg"))
+    {
+        return std::string{"image/jpeg"};
+    }
+    if (format == QByteArrayLiteral("png"))
+    {
+        return std::string{"image/png"};
+    }
+    if (format == QByteArrayLiteral("webp"))
+    {
+        return std::string{"image/webp"};
+    }
+    if (format == QByteArrayLiteral("gif"))
+    {
+        return std::string{"image/gif"};
+    }
+    return std::nullopt;
 }
 
 [[nodiscard]] ztermy::ai::AiProviderKind aiProviderKind(const ztermy::config::AiProviderPreference provider) noexcept
@@ -8587,6 +8621,10 @@ void AppController::clearAiConversation()
     tab->aiLastCommandRequest = false;
     tab->aiContextPreview.clear();
     tab->aiContextItems.clear();
+    tab->aiExplicitContextItems.clear();
+    tab->aiImageAttachments.clear();
+    tab->aiExcludedContextIds.clear();
+    tab->aiPinnedContextIds.clear();
     tab->aiTurnBudget.reset();
     tab->pendingAiAction.reset();
     tab->pendingAiMcpCall.reset();
@@ -8900,6 +8938,158 @@ bool AppController::attachAiTextFiles(const QVariantList &localFileUrls)
     return true;
 }
 
+bool AppController::attachAiImageFiles(const QVariantList &localFileUrls)
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || localFileUrls.isEmpty()
+        || localFileUrls.size() > static_cast<qsizetype>(maximumAiImageAttachmentFiles)
+        || tab->aiImageAttachments.size() + static_cast<std::size_t>(localFileUrls.size())
+               > static_cast<std::size_t>(maximumAiImageAttachmentFiles))
+    {
+        if (tab != nullptr)
+        {
+            tab->aiError = tr("Attach no more than four images to one message.");
+            emit aiConversationChanged();
+        }
+        return false;
+    }
+
+    QStringList paths;
+    paths.reserve(localFileUrls.size());
+    for (const QVariant &value : localFileUrls)
+    {
+        const QUrl url = value.toUrl();
+        const QString path = url.isLocalFile() ? url.toLocalFile() : value.toString();
+        if (path.trimmed().isEmpty())
+        {
+            return false;
+        }
+        paths.push_back(path);
+    }
+
+    const auto existingBytes = std::accumulate(
+        tab->aiImageAttachments.begin(), tab->aiImageAttachments.end(), qsizetype{0},
+        [](const qsizetype total, const ai::AiImageAttachment &image) {
+            return total + static_cast<qsizetype>(image.byteSize);
+        });
+    tab->aiError.clear();
+    const QString tabId = tab->id;
+    const QPointer<AppController> self(this);
+    QThreadPool::globalInstance()->start([self, tabId, paths = std::move(paths), existingBytes] {
+        AiImageAttachmentLoadResult result;
+        result.attachments.reserve(static_cast<std::size_t>(paths.size()));
+        qsizetype totalBytes = existingBytes;
+        for (const QString &path : paths)
+        {
+            const QFileInfo info(path);
+            const QString canonicalPath = info.canonicalFilePath();
+            if (canonicalPath.isEmpty() || !info.isFile() || info.size() <= 0
+                || info.size() > maximumAiImageAttachmentBytes
+                || totalBytes + info.size() > maximumAiImageAttachmentTotalBytes)
+            {
+                result.rejectedFiles.push_back(info.fileName().isEmpty() ? path : info.fileName());
+                continue;
+            }
+
+            QImageReader reader(canonicalPath);
+            reader.setDecideFormatFromContent(true);
+            if (!reader.canRead())
+            {
+                result.rejectedFiles.push_back(info.fileName());
+                continue;
+            }
+            const auto mediaType = imageMediaType(reader.format());
+            const QSize imageSize = reader.size();
+            if (!mediaType.has_value() || !imageSize.isValid() || imageSize.width() <= 0 || imageSize.height() <= 0
+                || static_cast<quint64>(imageSize.width()) * static_cast<quint64>(imageSize.height())
+                       > maximumAiImagePixels)
+            {
+                result.rejectedFiles.push_back(info.fileName());
+                continue;
+            }
+
+            QFile file(canonicalPath);
+            if (!file.open(QIODevice::ReadOnly))
+            {
+                result.rejectedFiles.push_back(info.fileName());
+                continue;
+            }
+            const QByteArray bytes = file.readAll();
+            if (bytes.size() != info.size())
+            {
+                result.rejectedFiles.push_back(info.fileName());
+                continue;
+            }
+
+            reader.setAutoTransform(true);
+            reader.setScaledSize(imageSize.scaled(QSize(512, 384), Qt::KeepAspectRatio));
+            const QImage preview = reader.read();
+            QByteArray previewBytes;
+            QBuffer previewBuffer(&previewBytes);
+            if (preview.isNull() || !previewBuffer.open(QIODevice::WriteOnly)
+                || !preview.save(&previewBuffer, "PNG"))
+            {
+                result.rejectedFiles.push_back(info.fileName());
+                continue;
+            }
+
+            const QByteArray digest = QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex();
+            result.attachments.push_back(ai::AiImageAttachment{
+                .id = "image:" + digest.toStdString(),
+                .fileName = utf8String(info.fileName()),
+                .mediaType = *mediaType,
+                .base64Data = bytes.toBase64().toStdString(),
+                .previewBase64Data = previewBytes.toBase64().toStdString(),
+                .byteSize = static_cast<std::uint64_t>(bytes.size()),
+                .pixelWidth = static_cast<std::uint32_t>(imageSize.width()),
+                .pixelHeight = static_cast<std::uint32_t>(imageSize.height()),
+            });
+            totalBytes += bytes.size();
+        }
+
+        if (!self)
+        {
+            return;
+        }
+        QMetaObject::invokeMethod(
+            self,
+            [self, tabId, result = std::move(result)]() mutable {
+                if (!self)
+                {
+                    return;
+                }
+                TerminalTab *target = self->findTab(tabId);
+                if (target == nullptr)
+                {
+                    return;
+                }
+                for (auto &attachment : result.attachments)
+                {
+                    const auto existing = std::ranges::find(target->aiImageAttachments, attachment.id,
+                                                            &ai::AiImageAttachment::id);
+                    if (existing == target->aiImageAttachments.end())
+                    {
+                        target->aiImageAttachments.push_back(std::move(attachment));
+                    }
+                    else
+                    {
+                        *existing = std::move(attachment);
+                    }
+                }
+                target->aiError = result.rejectedFiles.isEmpty()
+                                      ? QString{}
+                                      : QCoreApplication::translate("ztermy::AppController",
+                                                                    "Could not attach these images: %1")
+                                            .arg(result.rejectedFiles.join(QStringLiteral(", ")));
+                static_cast<void>(self->buildAiContext(*target, false));
+                emit self->aiConversationChanged();
+            },
+            Qt::QueuedConnection);
+    });
+    emit aiConversationChanged();
+    return true;
+}
+
 bool AppController::removeAiContextItem(const QString &itemId)
 {
     TerminalTab *tab = activeTab();
@@ -8907,6 +9097,14 @@ bool AppController::removeAiContextItem(const QString &itemId)
     if (tab == nullptr || id.empty())
     {
         return false;
+    }
+    const auto image = std::ranges::find(tab->aiImageAttachments, id, &ai::AiImageAttachment::id);
+    if (image != tab->aiImageAttachments.end())
+    {
+        tab->aiImageAttachments.erase(image);
+        static_cast<void>(buildAiContext(*tab, false));
+        emit aiConversationChanged();
+        return true;
     }
     tab->aiPinnedContextIds.erase(id);
     const bool changed = tab->aiExcludedContextIds.insert(id).second;
@@ -8943,6 +9141,7 @@ void AppController::resetAiContextItems()
     tab->aiExcludedContextIds.clear();
     tab->aiPinnedContextIds.clear();
     tab->aiExplicitContextItems.clear();
+    tab->aiImageAttachments.clear();
     static_cast<void>(buildAiContext(*tab, false));
     emit aiConversationChanged();
 }
@@ -9011,6 +9210,25 @@ ai::AiContextBundle AppController::buildAiContext(TerminalTab &tab, const bool p
                                                  {QStringLiteral("truncated"), item.truncated},
                                                  {QStringLiteral("pinned"), item.pinned},
                                                  {QStringLiteral("automatic"), item.automatic}});
+    }
+    for (const auto &image : tab.aiImageAttachments)
+    {
+        const QString previewBase64 = QString::fromLatin1(
+            image.previewBase64Data.data(), static_cast<qsizetype>(image.previewBase64Data.size()));
+        tab.aiContextItems.push_back(
+            QVariantMap{{QStringLiteral("id"), utf8QString(image.id)},
+                        {QStringLiteral("title"), utf8QString(image.fileName)},
+                        {QStringLiteral("kind"), QStringLiteral("image")},
+                        {QStringLiteral("quality"), QStringLiteral("image")},
+                        {QStringLiteral("redacted"), false},
+                        {QStringLiteral("truncated"), false},
+                        {QStringLiteral("pinned"), false},
+                        {QStringLiteral("automatic"), false},
+                        {QStringLiteral("mediaType"), utf8QString(image.mediaType)},
+                        {QStringLiteral("byteSize"), QVariant::fromValue<qulonglong>(image.byteSize)},
+                        {QStringLiteral("pixelWidth"), image.pixelWidth},
+                        {QStringLiteral("pixelHeight"), image.pixelHeight},
+                        {QStringLiteral("previewUrl"), QStringLiteral("data:image/png;base64,%1").arg(previewBase64)}});
     }
     return context;
 }
@@ -9231,7 +9449,8 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                                   const QStringList &selectedSkillIds)
 {
     const QString normalizedPrompt = prompt.trimmed();
-    if (normalizedPrompt.isEmpty() || !tab.aiConversation || !tab.aiTurnRunner || tab.aiTurnRunner->active())
+    if ((normalizedPrompt.isEmpty() && tab.aiImageAttachments.empty()) || !tab.aiConversation || !tab.aiTurnRunner
+        || tab.aiTurnRunner->active())
     {
         return false;
     }
@@ -9277,7 +9496,10 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
 
     if (appendPrompt)
     {
-        static_cast<void>(tab.aiConversation->appendUserMessage(normalizedPrompt));
+        static_cast<void>(
+            tab.aiConversation->appendUserMessage(normalizedPrompt, std::move(tab.aiImageAttachments)));
+        tab.aiImageAttachments.clear();
+        static_cast<void>(buildAiContext(tab, preferLastFailure));
         tab.aiLastPrompt = normalizedPrompt;
         tab.aiLastPreferFailure = preferLastFailure;
         tab.aiLastCommandRequest = commandRequest;

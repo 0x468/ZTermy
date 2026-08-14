@@ -11,6 +11,7 @@ using ztermy::ai::AiConversationModel;
 using ztermy::ai::AiConversationTranscriptEntry;
 using ztermy::ai::AiConversationTranscriptRole;
 using ztermy::ai::AiCostEstimate;
+using ztermy::ai::AiImageAttachment;
 using ztermy::ai::AiMessageRole;
 using ztermy::ai::AiTokenUsage;
 using ztermy::ai::AiTurnMetrics;
@@ -21,6 +22,7 @@ class AiConversationModelTests final : public QObject
 
 private slots:
     void streamsAssistantMessageAndUsage();
+    void preservesOnlyCurrentTurnImagePayloads();
     void boundsMessagesAndUtf8Text();
     void exposesFailureWithoutLeakingIntoLogs();
     void exposesCancellationAsRetryableNeutralState();
@@ -59,6 +61,42 @@ void AiConversationModelTests::streamsAssistantMessageAndUsage()
              QStringLiteral("2026-08-12"));
     QVERIFY(!model.streaming());
     QCOMPARE(streamingSpy.count(), 2);
+}
+
+void AiConversationModelTests::preservesOnlyCurrentTurnImagePayloads()
+{
+    AiConversationModel model;
+    const AiImageAttachment image{.id = "image:test",
+                                  .fileName = "terminal.png",
+                                  .mediaType = "image/png",
+                                  .base64Data = "aW1hZ2U=",
+                                  .previewBase64Data = "cHJldmlldw==",
+                                  .byteSize = 5,
+                                  .pixelWidth = 640,
+                                  .pixelHeight = 480};
+    static_cast<void>(model.appendUserMessage(QStringLiteral("Inspect this"), {image}));
+
+    auto providerMessages = model.providerMessagesWithEvidence();
+    QCOMPARE(providerMessages.size(), std::size_t{1});
+    QCOMPARE(providerMessages.front().images.size(), std::size_t{1});
+    const QVariantList values = model.data(model.index(0), AiConversationModel::ImageAttachmentsRole).toList();
+    QCOMPARE(values.size(), 1);
+    QCOMPARE(values.constFirst().toMap().value(QStringLiteral("fileName")).toString(),
+             QStringLiteral("terminal.png"));
+    QVERIFY(values.constFirst().toMap().value(QStringLiteral("previewUrl")).toString().startsWith(
+        QStringLiteral("data:image/png;base64,")));
+
+    const auto assistant = model.beginAssistantMessage();
+    QVERIFY(model.appendAssistantDelta(assistant, QStringLiteral("It is a terminal screenshot.")));
+    QVERIFY(model.completeAssistantMessage(assistant));
+    static_cast<void>(model.appendUserMessage(QStringLiteral("What should I do next?")));
+
+    providerMessages = model.providerMessagesWithEvidence();
+    QCOMPARE(providerMessages.size(), std::size_t{3});
+    QVERIFY(providerMessages.front().images.empty());
+    QVERIFY(QString::fromUtf8(providerMessages.front().content).contains(
+        QStringLiteral("Historical image attachment omitted from replay")));
+    QVERIFY(model.transcript().front().content.contains("Historical image attachment omitted from replay"));
 }
 
 void AiConversationModelTests::boundsMessagesAndUtf8Text()

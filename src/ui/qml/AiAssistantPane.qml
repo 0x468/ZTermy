@@ -133,7 +133,7 @@ Rectangle {
 
     function sendPrompt() {
         const prompt = promptEditor.text.trim();
-        if (prompt.length === 0 || busy) {
+        if ((prompt.length === 0 && pendingImageCount() === 0) || busy) {
             return;
         }
         if (prompt.startsWith("/") && executeSlashCommand(prompt)) {
@@ -145,6 +145,16 @@ Rectangle {
             promptEditor.clear();
             selectedSkillSlugs = [];
         }
+    }
+
+    function pendingImageCount() {
+        const items = pane.controller.activeAiContextItems || [];
+        let count = 0;
+        for (let index = 0; index < items.length; ++index) {
+            if (items[index].kind === "image")
+                ++count;
+        }
+        return count;
     }
 
     function addSelectedSkill(slug) {
@@ -578,7 +588,7 @@ Rectangle {
 
                             required property var modelData
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 30
+                            Layout.preferredHeight: contextItem.modelData.kind === "image" ? 44 : 30
                             radius: Theme.radiusSmall
                             color: Theme.controlBackground
 
@@ -587,6 +597,16 @@ Rectangle {
                                 anchors.leftMargin: 8
                                 anchors.rightMargin: 8
                                 spacing: 6
+
+                                Image {
+                                    Layout.preferredWidth: 32
+                                    Layout.preferredHeight: 32
+                                    visible: contextItem.modelData.kind === "image"
+                                    source: visible ? contextItem.modelData.previewUrl : ""
+                                    fillMode: Image.PreserveAspectCrop
+                                    asynchronous: true
+                                    cache: true
+                                }
 
                                 Text {
                                     Layout.fillWidth: true
@@ -600,7 +620,7 @@ Rectangle {
 
                                 Text {
                                     text: contextItem.modelData.quality
-                                    color: contextItem.modelData.quality === "rich" ? Theme.successText : Theme.warning
+                                    color: contextItem.modelData.quality === "rich" ? Theme.successText : contextItem.modelData.quality === "image" ? Theme.accent : Theme.warning
                                     font.family: Theme.terminalFont
                                     font.pixelSize: Theme.textCompact
                                 }
@@ -616,6 +636,7 @@ Rectangle {
                                 ContextToolButton {
                                     id: pinButton
 
+                                    visible: contextItem.modelData.kind !== "image"
                                     checked: contextItem.modelData.pinned
                                     checkable: true
                                     Accessible.name: checked ? qsTr("Unpin %1").arg(contextItem.modelData.title) : qsTr("Pin %1").arg(contextItem.modelData.title)
@@ -1253,6 +1274,7 @@ Rectangle {
                     required property string commandSuggestion
                     required property bool hasCommandSuggestion
                     required property var toolActivities
+                    required property var imageAttachments
                     readonly property bool reasoningActive: state === "streaming" && reasoning.length > 0 && text.length === 0
                     width: ListView.view.width
                     height: messageBubble.implicitHeight
@@ -1401,6 +1423,60 @@ Rectangle {
                                             font.family: Theme.uiFont
                                             font.pixelSize: Theme.textCompact
                                             font.weight: Font.Medium
+                                        }
+                                    }
+                                }
+                            }
+
+                            Flow {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: visible ? implicitHeight : 0
+                                visible: messageItem.imageAttachments.length > 0
+                                spacing: 6
+
+                                Repeater {
+                                    model: messageItem.imageAttachments
+
+                                    delegate: Rectangle {
+                                        id: messageImageCard
+
+                                        required property var modelData
+                                        width: Math.min(164, Math.max(112, messageColumn.width))
+                                        height: 112
+                                        radius: Theme.radiusControl
+                                        color: Theme.controlBackground
+                                        border.color: Theme.border
+                                        clip: true
+                                        Accessible.role: Accessible.Graphic
+                                        Accessible.name: qsTr("Attached image %1").arg(modelData.fileName)
+
+                                        Image {
+                                            anchors.fill: parent
+                                            anchors.margins: 1
+                                            source: messageImageCard.modelData.previewUrl
+                                            fillMode: Image.PreserveAspectCrop
+                                            asynchronous: true
+                                            cache: true
+                                        }
+
+                                        Rectangle {
+                                            anchors.left: parent.left
+                                            anchors.right: parent.right
+                                            anchors.bottom: parent.bottom
+                                            height: 25
+                                            color: Qt.rgba(0, 0, 0, 0.62)
+
+                                            Text {
+                                                anchors.fill: parent
+                                                anchors.leftMargin: 7
+                                                anchors.rightMargin: 7
+                                                text: messageImageCard.modelData.fileName
+                                                color: "white"
+                                                elide: Text.ElideMiddle
+                                                verticalAlignment: Text.AlignVCenter
+                                                font.family: Theme.uiFont
+                                                font.pixelSize: Theme.textCompact
+                                            }
                                         }
                                     }
                                 }
@@ -1919,7 +1995,7 @@ Rectangle {
                             color: Theme.textMuted
                         }
                         AppToolTip {
-                            text: qsTr("Attach selected text or recent commands")
+                            text: qsTr("Attach images, text files, selected text, or recent commands")
                         }
                     }
 
@@ -1984,7 +2060,7 @@ Rectangle {
                         text: pane.busy ? qsTr("Cancel") : ""
                         iconName: pane.busy ? "close" : "play"
                         variant: pane.busy ? "destructive" : "primary"
-                        enabled: pane.busy || promptEditor.text.trim().length > 0
+                        enabled: pane.busy || promptEditor.text.trim().length > 0 || pane.pendingImageCount() > 0
                         accessibleName: pane.busy ? qsTr("Cancel") : qsTr("Send")
                         onClicked: {
                             if (pane.busy) {
@@ -2006,6 +2082,15 @@ Rectangle {
         fileMode: FileDialog.OpenFiles
         nameFilters: [qsTr("Text files (*.txt *.md *.json *.yaml *.yml *.toml *.ini *.cfg *.conf *.log *.csv *.xml *.html *.css *.js *.ts *.py *.sh *.ps1)"), qsTr("All files (*)")]
         onAccepted: pane.controller.attachAiTextFiles(selectedFiles)
+    }
+
+    FileDialog {
+        id: imageAttachmentDialog
+
+        title: qsTr("Attach images")
+        fileMode: FileDialog.OpenFiles
+        nameFilters: [qsTr("Images (*.png *.jpg *.jpeg *.webp *.gif)"), qsTr("All files (*)")]
+        onAccepted: pane.controller.attachAiImageFiles(selectedFiles)
     }
 
     FileDialog {
@@ -2038,6 +2123,10 @@ Rectangle {
         AppMenuItem {
             text: qsTr("Local text files…")
             onTriggered: textAttachmentDialog.open()
+        }
+        AppMenuItem {
+            text: qsTr("Images…")
+            onTriggered: imageAttachmentDialog.open()
         }
         AppMenuSeparator {}
         AppMenuItem {

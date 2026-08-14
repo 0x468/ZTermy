@@ -558,6 +558,7 @@ public:
     Q_INVOKABLE bool attachAiSelection();
     Q_INVOKABLE bool attachAiRecentCommands(int count);
     Q_INVOKABLE bool attachAiTextFiles(const QVariantList &localFileUrls);
+    Q_INVOKABLE bool attachAiImageFiles(const QVariantList &localFileUrls);
     Q_INVOKABLE bool removeAiContextItem(const QString &itemId);
     Q_INVOKABLE bool setAiContextItemPinned(const QString &itemId, bool pinned);
     Q_INVOKABLE void resetAiContextItems();
@@ -732,6 +733,7 @@ private:
         std::unordered_set<std::string> aiExcludedContextIds;
         std::unordered_set<std::string> aiPinnedContextIds;
         std::vector<ai::AiExplicitContext> aiExplicitContextItems;
+        std::vector<ai::AiImageAttachment> aiImageAttachments;
         std::vector<ssh::SshKeywordHighlightRule> keywordHighlightRules;
         std::vector<workbench::ShellHistoryEntry> history;
         std::vector<workbench::ShellHistoryEntry> capturedHistory;

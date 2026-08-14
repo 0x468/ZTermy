@@ -6,8 +6,10 @@
 #include "platform/windows/WindowsCredentialVault.h"
 
 #include <QCoreApplication>
+#include <QColor>
 #include <QDir>
 #include <QFile>
+#include <QImage>
 #include <QSet>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -1105,6 +1107,21 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
         return value.value(QStringLiteral("kind")).toString() == QStringLiteral("attachment")
                && value.value(QStringLiteral("title")).toString() == QStringLiteral("agent-context.md");
     }));
+
+    const QString imagePath = directory.filePath(QStringLiteral("terminal-screenshot.png"));
+    QImage image(64, 48, QImage::Format_ARGB32_Premultiplied);
+    image.fill(QColor(QStringLiteral("#2457d6")));
+    QVERIFY(image.save(imagePath, "PNG"));
+    QVERIFY(controller.attachAiImageFiles(QVariantList{QUrl::fromLocalFile(imagePath)}));
+    QTRY_VERIFY_WITH_TIMEOUT(std::ranges::any_of(controller.activeAiContextItems(), [](const QVariant &item) {
+                                 const QVariantMap value = item.toMap();
+                                 return value.value(QStringLiteral("kind")).toString() == QStringLiteral("image")
+                                        && value.value(QStringLiteral("title")).toString()
+                                               == QStringLiteral("terminal-screenshot.png")
+                                        && value.value(QStringLiteral("previewUrl")).toString().startsWith(
+                                            QStringLiteral("data:image/png;base64,"));
+                             }),
+                             2'000);
 
     sessionState->selectedText.clear();
     QVERIFY(controller.attachAiSelection());

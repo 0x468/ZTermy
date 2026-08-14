@@ -1,7 +1,6 @@
 #include "domain/ai/AiReadTools.h"
 
 #include <algorithm>
-#include <iterator>
 
 namespace ztermy::ai
 {
@@ -75,7 +74,6 @@ namespace
 
 AiReadTools::AiReadTools(AiReadToolLimits limits) : m_limits(limits)
 {
-    m_limits.maxSessions = std::max<std::size_t>(1, m_limits.maxSessions);
     m_limits.maxTerminalLines = std::max<std::size_t>(1, m_limits.maxTerminalLines);
     m_limits.maxTerminalBytes = std::max<std::size_t>(1, m_limits.maxTerminalBytes);
     m_limits.maxCommandOutputBytes = std::max<std::size_t>(1, m_limits.maxCommandOutputBytes);
@@ -84,20 +82,6 @@ AiReadTools::AiReadTools(AiReadToolLimits limits) : m_limits(limits)
 const AiReadToolLimits &AiReadTools::limits() const noexcept
 {
     return m_limits;
-}
-
-std::expected<std::vector<AiSessionSummary>, AiReadToolError>
-AiReadTools::listSessions(const std::span<const AiTerminalReadSnapshot> sessions) const
-{
-    if (sessions.size() > m_limits.maxSessions)
-    {
-        return std::unexpected(AiReadToolError{.code = AiReadToolErrorCode::limitExceeded,
-                                               .message = "The session list exceeds the configured read-tool limit."});
-    }
-    std::vector<AiSessionSummary> summaries;
-    summaries.reserve(sessions.size());
-    std::ranges::transform(sessions, std::back_inserter(summaries), &summarize);
-    return summaries;
 }
 
 std::expected<AiSessionSummary, AiReadToolError>

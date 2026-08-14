@@ -13,6 +13,7 @@ namespace
 
 using ztermy::ai::AiChatMessage;
 using ztermy::ai::AiGenerationRequest;
+using ztermy::ai::AiImageAttachment;
 using ztermy::ai::AiMessageRole;
 using ztermy::ai::AiProviderConfiguration;
 using ztermy::ai::AiProviderErrorCode;
@@ -35,6 +36,7 @@ private slots:
     void preparesOllamaRequest();
     void preparesCompatibleRequest();
     void preparesAnthropicRequest();
+    void preparesProviderNativeMultimodalRequests();
     void appliesProviderSpecificReasoningControls();
     void preservesAnthropicThinkingSignatureAcrossTools();
     void resolvesFriendlyApiAddressesAndModels();
@@ -141,6 +143,70 @@ void ProviderRequestFactoryTests::preparesAnthropicRequest()
     QCOMPARE(body.value("max_tokens").toInt(), 8192);
     QCOMPARE(body.value("tools").toArray().first().toObject().value("input_schema").toObject().value("type").toString(),
              QStringLiteral("object"));
+}
+
+void ProviderRequestFactoryTests::preparesProviderNativeMultimodalRequests()
+{
+    const AiImageAttachment image{.id = "image:test",
+                                  .fileName = "terminal.png",
+                                  .mediaType = "image/png",
+                                  .base64Data = "aW1hZ2U=",
+                                  .byteSize = 5,
+                                  .pixelWidth = 640,
+                                  .pixelHeight = 480};
+    const AiGenerationRequest generation{
+        .messages = {AiChatMessage{.role = AiMessageRole::user, .content = "Inspect this", .images = {image}}}};
+
+    auto prepared = ProviderRequestFactory::prepare(
+        AiProviderConfiguration{.kind = AiProviderKind::openAiResponses,
+                                .baseUrl = "https://api.openai.com/v1",
+                                .model = "gpt-5.6"},
+        generation, "key");
+    QVERIFY(prepared.has_value());
+    auto body = QJsonDocument::fromJson(prepared->body).object();
+    auto content = body.value("input").toArray().first().toObject().value("content").toArray();
+    QCOMPARE(content.size(), 2);
+    QCOMPARE(content.at(0).toObject().value("type").toString(), QStringLiteral("input_text"));
+    QCOMPARE(content.at(1).toObject().value("type").toString(), QStringLiteral("input_image"));
+    QVERIFY(content.at(1).toObject().value("image_url").toString().startsWith(
+        QStringLiteral("data:image/png;base64,")));
+
+    prepared = ProviderRequestFactory::prepare(
+        AiProviderConfiguration{.kind = AiProviderKind::openAiCompatible,
+                                .baseUrl = "https://gateway.example.test/v1",
+                                .model = "vision"},
+        generation, "key");
+    QVERIFY(prepared.has_value());
+    body = QJsonDocument::fromJson(prepared->body).object();
+    content = body.value("messages").toArray().first().toObject().value("content").toArray();
+    QCOMPARE(content.at(1).toObject().value("type").toString(), QStringLiteral("image_url"));
+    QVERIFY(content.at(1).toObject().value("image_url").toObject().value("url").toString().startsWith(
+        QStringLiteral("data:image/png;base64,")));
+
+    prepared = ProviderRequestFactory::prepare(
+        AiProviderConfiguration{.kind = AiProviderKind::anthropicMessages,
+                                .baseUrl = "https://api.anthropic.com",
+                                .model = "claude-sonnet-4-6"},
+        generation, "key");
+    QVERIFY(prepared.has_value());
+    body = QJsonDocument::fromJson(prepared->body).object();
+    content = body.value("messages").toArray().first().toObject().value("content").toArray();
+    const auto source = content.at(1).toObject().value("source").toObject();
+    QCOMPARE(content.at(1).toObject().value("type").toString(), QStringLiteral("image"));
+    QCOMPARE(source.value("type").toString(), QStringLiteral("base64"));
+    QCOMPARE(source.value("media_type").toString(), QStringLiteral("image/png"));
+    QCOMPARE(source.value("data").toString(), QStringLiteral("aW1hZ2U="));
+
+    prepared = ProviderRequestFactory::prepare(
+        AiProviderConfiguration{.kind = AiProviderKind::ollama,
+                                .baseUrl = "http://127.0.0.1:11434",
+                                .model = "gemma3"},
+        generation, {});
+    QVERIFY(prepared.has_value());
+    body = QJsonDocument::fromJson(prepared->body).object();
+    const auto ollamaMessage = body.value("messages").toArray().first().toObject();
+    QCOMPARE(ollamaMessage.value("content").toString(), QStringLiteral("Inspect this"));
+    QCOMPARE(ollamaMessage.value("images").toArray().first().toString(), QStringLiteral("aW1hZ2U="));
 }
 
 void ProviderRequestFactoryTests::appliesProviderSpecificReasoningControls()
