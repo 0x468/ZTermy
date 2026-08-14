@@ -77,8 +77,6 @@ constexpr std::uint32_t maximumTimeoutMilliseconds = 120'000;
 [[nodiscard]] QJsonObject commandValue(const AiTrackedCommand &command)
 {
     QJsonObject value{{QStringLiteral("command_id"), text(command.id)},
-                      {QStringLiteral("session_id"), text(command.target.sessionId)},
-                      {QStringLiteral("session_generation"), static_cast<qint64>(command.target.sessionGeneration)},
                       {QStringLiteral("state"), state(command.state)},
                       {QStringLiteral("interrupt_requested"), command.interruptRequested}};
     if (command.blockId.has_value())
@@ -134,7 +132,7 @@ AiToolDefinition AiWaitCommandTool::definition()
         .description = "Wait for a semantic command lifecycle change. Use only when run_command reports "
                        "lifecycle_tracked=true; otherwise use wait_terminal_frame and read_terminal_frame.",
         .parametersJson =
-            R"({"type":"object","properties":{"command_id":{"type":"string","minLength":1},"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"timeout_ms":{"type":"integer","minimum":0,"maximum":120000}},"required":["command_id","session_id","session_generation","timeout_ms"],"additionalProperties":false})"};
+            R"({"type":"object","properties":{"command_id":{"type":"string","minLength":1},"timeout_ms":{"type":"integer","minimum":1,"maximum":120000,"default":30000}},"required":["command_id"],"additionalProperties":false})"};
 }
 
 bool AiWaitCommandTool::supportsLifecycleWait(const terminal::TerminalSemanticCapability capability) noexcept
@@ -142,8 +140,7 @@ bool AiWaitCommandTool::supportsLifecycleWait(const terminal::TerminalSemanticCa
     return capability != terminal::TerminalSemanticCapability::none;
 }
 
-std::string AiWaitCommandTool::accepted(const AiSessionTarget &target, const std::string_view commandId,
-                                        const bool trackingRegistered,
+std::string AiWaitCommandTool::accepted(const std::string_view commandId, const bool trackingRegistered,
                                         const terminal::TerminalSemanticCapability capability,
                                         const std::uint64_t frameRevision)
 {
@@ -160,8 +157,6 @@ std::string AiWaitCommandTool::accepted(const AiSessionTarget &target, const std
     QJsonObject value{{QStringLiteral("ok"), true},
                       {QStringLiteral("status"), QStringLiteral("accepted")},
                       {QStringLiteral("command_id"), text(commandId)},
-                      {QStringLiteral("session_id"), text(target.sessionId)},
-                      {QStringLiteral("session_generation"), static_cast<qint64>(target.sessionGeneration)},
                       {QStringLiteral("tracking_registered"), trackingRegistered},
                       {QStringLiteral("lifecycle_tracked"), lifecycleTracked},
                       {QStringLiteral("lifecycle_quality"), quality},
@@ -177,7 +172,8 @@ std::string AiWaitCommandTool::accepted(const AiSessionTarget &target, const std
     return json(value);
 }
 
-std::expected<AiWaitCommandRequest, std::string> AiWaitCommandTool::parse(const std::string_view argumentsJson)
+std::expected<AiWaitCommandRequest, std::string> AiWaitCommandTool::parse(const std::string_view argumentsJson,
+                                                                         const AiSessionTarget &target)
 {
     if (argumentsJson.size() > maximumArgumentsBytes)
     {
@@ -188,21 +184,19 @@ std::expected<AiWaitCommandRequest, std::string> AiWaitCommandTool::parse(const 
         QByteArray(argumentsJson.data(), static_cast<qsizetype>(argumentsJson.size())), &parseError);
     const auto object = document.object();
     const auto commandId = object.value(QStringLiteral("command_id"));
-    const auto sessionId = object.value(QStringLiteral("session_id"));
-    const auto generation = unsignedInteger(object.value(QStringLiteral("session_generation")));
-    const auto timeout = unsignedInteger(object.value(QStringLiteral("timeout_ms")));
+    const QJsonValue timeoutValue = object.value(QStringLiteral("timeout_ms"));
+    const auto timeout = timeoutValue.isUndefined() ? std::optional<std::uint64_t>{30'000}
+                                                    : unsignedInteger(timeoutValue);
     if (!document.isObject() || parseError.error != QJsonParseError::NoError
-        || !hasOnlyKeys(object, {QStringLiteral("command_id"), QStringLiteral("session_id"),
-                                 QStringLiteral("session_generation"), QStringLiteral("timeout_ms")})
-        || !commandId.isString() || commandId.toString().isEmpty() || !sessionId.isString()
-        || sessionId.toString().isEmpty() || !generation.has_value() || !timeout.has_value()
+        || !hasOnlyKeys(object, {QStringLiteral("command_id"), QStringLiteral("timeout_ms")})
+        || !commandId.isString() || commandId.toString().isEmpty() || !timeout.has_value() || *timeout == 0
         || *timeout > maximumTimeoutMilliseconds)
     {
         return std::unexpected(failure("invalid_arguments", "The wait-command arguments are invalid."));
     }
     return AiWaitCommandRequest{
         .commandId = commandId.toString().toUtf8().toStdString(),
-        .target = {.sessionId = sessionId.toString().toUtf8().toStdString(), .sessionGeneration = *generation},
+        .target = target,
         .timeoutMilliseconds = static_cast<std::uint32_t>(*timeout)};
 }
 

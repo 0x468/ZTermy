@@ -40,9 +40,9 @@ public:
     [[nodiscard]] static AiToolDefinition readDefinition();
     [[nodiscard]] static AiToolDefinition waitDefinition();
     [[nodiscard]] static std::expected<AiTerminalFrameReadRequest, std::string>
-    parseRead(std::string_view argumentsJson);
+    parseRead(std::string_view argumentsJson, const AiSessionTarget &target);
     [[nodiscard]] static std::expected<AiTerminalFrameWaitRequest, std::string>
-    parseWait(std::string_view argumentsJson);
+    parseWait(std::string_view argumentsJson, const AiSessionTarget &target);
     [[nodiscard]] static bool satisfied(const AiTerminalFrameWaitRequest &request,
                                         const AiTerminalFrameDelta &frame) noexcept;
     [[nodiscard]] static std::string result(const AiTerminalFrameDelta &frame, std::string_view controlOwner,

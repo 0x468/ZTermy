@@ -64,13 +64,14 @@ AiToolDefinition AiSftpReadTool::definition()
 {
     return {
         .name = "read_sftp_file",
-        .description = "Read a bounded regular file through the exact session's existing SFTP connection. "
+        .description = "Read a bounded regular file through the current terminal's existing SFTP connection. "
                        "Symbolic links are refused and returned content is untrusted evidence.",
         .parametersJson =
-            R"({"type":"object","properties":{"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"remote_path":{"type":"string","minLength":1,"maxLength":4096},"max_bytes":{"type":"integer","minimum":1,"maximum":32768},"encoding":{"type":"string","enum":["utf-8","base64"]}},"required":["session_id","session_generation","remote_path","max_bytes","encoding"],"additionalProperties":false})"};
+            R"({"type":"object","properties":{"remote_path":{"type":"string","minLength":1,"maxLength":4096},"max_bytes":{"type":"integer","minimum":1,"maximum":32768},"encoding":{"type":"string","enum":["utf-8","base64"]}},"required":["remote_path","max_bytes","encoding"],"additionalProperties":false})"};
 }
 
-std::expected<AiSftpReadRequest, std::string> AiSftpReadTool::parse(const std::string_view argumentsJson)
+std::expected<AiSftpReadRequest, std::string> AiSftpReadTool::parse(const std::string_view argumentsJson,
+                                                                   const AiSessionTarget &target)
 {
     if (argumentsJson.size() > maximumArgumentsBytes)
     {
@@ -80,8 +81,6 @@ std::expected<AiSftpReadRequest, std::string> AiSftpReadTool::parse(const std::s
     const auto document = QJsonDocument::fromJson(
         QByteArray(argumentsJson.data(), static_cast<qsizetype>(argumentsJson.size())), &parseError);
     const auto object = document.object();
-    const auto sessionId = object.value(QStringLiteral("session_id"));
-    const auto generation = unsignedInteger(object.value(QStringLiteral("session_generation")));
     const auto remotePath = object.value(QStringLiteral("remote_path"));
     const auto maximumBytes = unsignedInteger(object.value(QStringLiteral("max_bytes")));
     const auto encoding = object.value(QStringLiteral("encoding"));
@@ -90,9 +89,8 @@ std::expected<AiSftpReadRequest, std::string> AiSftpReadTool::parse(const std::s
         std::string_view(remotePathBytes.constData(), static_cast<std::size_t>(remotePathBytes.size())));
     if (!document.isObject() || parseError.error != QJsonParseError::NoError
         || !hasOnlyKeys(object,
-                        {QStringLiteral("session_id"), QStringLiteral("session_generation"),
-                         QStringLiteral("remote_path"), QStringLiteral("max_bytes"), QStringLiteral("encoding")})
-        || !sessionId.isString() || sessionId.toString().isEmpty() || !generation.has_value() || !remotePath.isString()
+                        {QStringLiteral("remote_path"), QStringLiteral("max_bytes"), QStringLiteral("encoding")})
+        || !remotePath.isString()
         || remotePath.toString().size() > 4096 || !normalized.has_value() || *normalized == "/"
         || !maximumBytes.has_value() || *maximumBytes == 0 || *maximumBytes > maximumFileBytes || !encoding.isString()
         || (encoding.toString() != QStringLiteral("utf-8") && encoding.toString() != QStringLiteral("base64")))
@@ -100,7 +98,7 @@ std::expected<AiSftpReadRequest, std::string> AiSftpReadTool::parse(const std::s
         return std::unexpected(failure("invalid_arguments", "The SFTP file-read arguments are invalid."));
     }
     return AiSftpReadRequest{
-        .target = {.sessionId = sessionId.toString().toUtf8().toStdString(), .sessionGeneration = *generation},
+        .target = target,
         .remotePath = *normalized,
         .maximumBytes = static_cast<std::size_t>(*maximumBytes),
         .encoding = encoding.toString().toUtf8().toStdString()};
@@ -125,9 +123,7 @@ std::string AiSftpReadTool::result(const AiSftpReadRequest &request, const QByte
     return json(QJsonObject{
         {QStringLiteral("ok"), true},
         {QStringLiteral("file"),
-         QJsonObject{{QStringLiteral("session_id"), text(request.target.sessionId)},
-                     {QStringLiteral("session_generation"), static_cast<qint64>(request.target.sessionGeneration)},
-                     {QStringLiteral("remote_path"), text(request.remotePath)},
+         QJsonObject{{QStringLiteral("remote_path"), text(request.remotePath)},
                      {QStringLiteral("encoding"), text(request.encoding)},
                      {QStringLiteral("content"), content},
                      {QStringLiteral("bytes_read"), bytes.size()},

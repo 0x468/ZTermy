@@ -3,7 +3,6 @@
 #include "domain/ai/AiProviderTypes.h"
 #include "domain/ai/AiReadTools.h"
 
-#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -18,7 +17,7 @@ public:
 
     [[nodiscard]] static std::vector<AiToolDefinition> definitions();
     [[nodiscard]] std::string execute(std::string_view toolName, std::string_view argumentsJson,
-                                      std::span<const AiTerminalReadSnapshot> sessions) const;
+                                      const AiTerminalReadSnapshot &session) const;
 
 private:
     AiReadTools m_tools;

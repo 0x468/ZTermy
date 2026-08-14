@@ -63,12 +63,14 @@ AiToolDefinition AiSftpListTool::definition()
 {
     return {
         .name = "list_sftp_path",
-        .description = "List a bounded page of an absolute remote SFTP directory as untrusted evidence.",
+        .description = "List a bounded page of an absolute remote SFTP directory in the current terminal as "
+                       "untrusted evidence.",
         .parametersJson =
-            R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"path":{"type":"string","minLength":1,"maxLength":4096},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["session_id","session_generation","path","offset","limit"],"additionalProperties":false})"};
+            R"({"type":"object","properties":{"path":{"type":"string","minLength":1,"maxLength":4096},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["path","offset","limit"],"additionalProperties":false})"};
 }
 
-std::expected<AiSftpListRequest, std::string> AiSftpListTool::parse(const std::string_view argumentsJson)
+std::expected<AiSftpListRequest, std::string> AiSftpListTool::parse(const std::string_view argumentsJson,
+                                                                   const AiSessionTarget &target)
 {
     if (argumentsJson.size() > maximumArgumentsBytes)
     {
@@ -82,26 +84,23 @@ std::expected<AiSftpListRequest, std::string> AiSftpListTool::parse(const std::s
         return std::unexpected(failure("invalid_arguments", "Tool arguments must be a JSON object."));
     }
     const auto object = document.object();
-    if (object.size() != 5 || !object.value(QStringLiteral("session_id")).isString()
-        || !object.value(QStringLiteral("path")).isString())
+    if (object.size() != 3 || !object.value(QStringLiteral("path")).isString())
     {
-        return std::unexpected(failure("invalid_arguments", "Exact session, path, offset, and limit are required."));
+        return std::unexpected(failure("invalid_arguments", "Path, offset, and limit are required."));
     }
-    const QString sessionId = object.value(QStringLiteral("session_id")).toString();
-    const auto generation = unsignedInteger(object.value(QStringLiteral("session_generation")));
     const auto offset = unsignedInteger(object.value(QStringLiteral("offset")));
     const auto limit = unsignedInteger(object.value(QStringLiteral("limit")));
     const QByteArray pathBytes = object.value(QStringLiteral("path")).toString().trimmed().toUtf8();
     const auto normalizedPath =
         sftp::normalizeRemotePath(std::string_view(pathBytes.constData(), static_cast<std::size_t>(pathBytes.size())));
-    if (sessionId.isEmpty() || !generation.has_value() || !offset.has_value() || !limit.has_value() || *limit == 0
-        || *limit > maximumPageItems || pathBytes.size() > 4096 || !normalizedPath.has_value()
+    if (!offset.has_value() || !limit.has_value() || *limit == 0 || *limit > maximumPageItems
+        || pathBytes.size() > 4096 || !normalizedPath.has_value()
         || !normalizedPath->starts_with('/'))
     {
         return std::unexpected(failure("invalid_arguments", "The SFTP directory request is invalid or unsafe."));
     }
     return AiSftpListRequest{
-        .target = {.sessionId = sessionId.toUtf8().toStdString(), .sessionGeneration = *generation},
+        .target = target,
         .remotePath = *normalizedPath,
         .offset = static_cast<std::size_t>(*offset),
         .limit = static_cast<std::size_t>(*limit)};
@@ -130,9 +129,7 @@ std::string AiSftpListTool::result(const AiSftpListRequest &request, const sftp:
     const std::string output = json(QJsonObject{
         {QStringLiteral("ok"), true},
         {QStringLiteral("sftp_directory"),
-         QJsonObject{{QStringLiteral("session_id"), QString::fromUtf8(request.target.sessionId)},
-                     {QStringLiteral("session_generation"), static_cast<qint64>(request.target.sessionGeneration)},
-                     {QStringLiteral("path"), QString::fromUtf8(request.remotePath)},
+         QJsonObject{{QStringLiteral("path"), QString::fromUtf8(request.remotePath)},
                      {QStringLiteral("items"), items},
                      {QStringLiteral("offset"), static_cast<qint64>(first)},
                      {QStringLiteral("next_offset"), static_cast<qint64>(last)},

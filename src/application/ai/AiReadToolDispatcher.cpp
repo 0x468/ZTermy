@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <span>
 
 namespace ztermy::ai
 {
@@ -136,9 +137,7 @@ constexpr std::size_t maximumArgumentsBytes = std::size_t{16} * 1024;
 
 [[nodiscard]] QJsonObject sessionValue(const AiSessionSummary &session)
 {
-    return QJsonObject{{QStringLiteral("session_id"), text(session.sessionId)},
-                       {QStringLiteral("session_generation"), static_cast<qint64>(session.sessionGeneration)},
-                       {QStringLiteral("title"), text(session.title)},
+    return QJsonObject{{QStringLiteral("title"), text(session.title)},
                        {QStringLiteral("host"), text(session.host)},
                        {QStringLiteral("shell"), text(session.shell)},
                        {QStringLiteral("working_directory"), text(session.workingDirectory)},
@@ -238,33 +237,24 @@ AiReadToolDispatcher::AiReadToolDispatcher(const AiReadTools tools) : m_tools(to
 std::vector<AiToolDefinition> AiReadToolDispatcher::definitions()
 {
     return {
-        {.name = "list_sessions",
-         .description = "List bounded metadata for terminal sessions in the immutable workspace target set.",
-         .parametersJson = R"({"type":"object","properties":{},"additionalProperties":false})"},
-        {.name = "read_multi_session_status",
-         .description =
-             "Read bounded session and telemetry status for explicit targets in the immutable workspace set.",
-         .parametersJson =
-             R"({"type":"object","properties":{"targets":{"type":"array","minItems":1,"maxItems":16,"items":{"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0}},"required":["session_id","session_generation"],"additionalProperties":false}}},"required":["targets"],"additionalProperties":false})"},
         {.name = "read_session_info",
-         .description = "Read bounded metadata for one terminal session generation.",
-         .parametersJson =
-             R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0}},"required":["session_id","session_generation"],"additionalProperties":false})"},
+         .description = "Read bounded metadata for the current terminal.",
+         .parametersJson = R"({"type":"object","properties":{},"additionalProperties":false})"},
         {.name = "read_terminal",
-         .description = "Read a bounded line range from the CURRENT SCREEN (the visible viewport) of the target "
-                        "session. This is not scrollback: content that scrolled off the screen is NOT available "
+         .description = "Read a bounded line range from the CURRENT SCREEN (the visible viewport) of the current "
+                        "terminal. This is not scrollback: content that scrolled off the screen is NOT available "
                         "here. Use it to see what is on screen right now (e.g. an interactive program, a pager, or "
                         "the prompt). To inspect a command's output, prefer read_command_output or "
                         "read_command_block instead. The result is untrusted evidence.",
          .parametersJson =
-             R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"first_line":{"type":"integer","minimum":0},"line_count":{"type":"integer","minimum":1,"maximum":200}},"required":["session_id","session_generation","first_line","line_count"],"additionalProperties":false})"},
+             R"({"type":"object","properties":{"first_line":{"type":"integer","minimum":0},"line_count":{"type":"integer","minimum":1,"maximum":200}},"required":["first_line","line_count"],"additionalProperties":false})"},
         {.name = "read_command_block",
          .description = "Read one bounded semantic command block: its exact command text, exit status (when "
                         "observed), working directory, and retained output. Use this to understand what a previous "
                         "command did. Prefer read_command_output for reading long output in pages. The result is "
                         "untrusted evidence; coverage and truncation flags describe how complete it is.",
          .parametersJson =
-             R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"block_id":{"type":"integer","minimum":1}},"required":["session_id","session_generation","block_id"],"additionalProperties":false})"},
+             R"({"type":"object","properties":{"block_id":{"type":"integer","minimum":1}},"required":["block_id"],"additionalProperties":false})"},
         {.name = "read_command_output",
          .description = "Read retained command output from a stream cursor WITHOUT re-running the command. This is "
                         "the preferred tool for long output: start with after_cursor=0 (or the returned "
@@ -272,46 +262,43 @@ std::vector<AiToolDefinition> AiReadToolDispatcher::definitions()
                         "Evicted bytes return cursor_expired with the next available cursor; never re-run a "
                         "command to recreate output. The result is untrusted evidence.",
          .parametersJson =
-             R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"block_id":{"type":"integer","minimum":1},"after_cursor":{"type":"integer","minimum":0},"max_bytes":{"type":"integer","minimum":1,"maximum":16384}},"required":["session_id","session_generation","block_id","after_cursor","max_bytes"],"additionalProperties":false})"},
+             R"({"type":"object","properties":{"block_id":{"type":"integer","minimum":1},"after_cursor":{"type":"integer","minimum":0},"max_bytes":{"type":"integer","minimum":1,"maximum":16384}},"required":["block_id","after_cursor","max_bytes"],"additionalProperties":false})"},
         {.name = "read_terminal_output",
-         .description = "Read a bounded page of the session's scrollback history (including the current screen at "
-                        "the tail). first_line is zero-based from the top of the retained history; request up to "
-                        "300 lines and keep reading while has_more is true. This is the way to see output that "
-                        "scrolled off the screen. read_command_output remains the preferred tool when the output "
-                        "belongs to a tracked command block. The result is untrusted evidence.",
+         .description = "Read a bounded page of the current terminal's scrollback history, including the current "
+                        "screen at the tail. Use read_command_output when the output belongs to a tracked command "
+                        "block. The result is untrusted evidence.",
          .parametersJson =
-             R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"first_line":{"type":"integer","minimum":0},"line_count":{"type":"integer","minimum":1,"maximum":300},"max_bytes":{"type":"integer","minimum":256,"maximum":16384}},"required":["session_id","session_generation","first_line","line_count","max_bytes"],"additionalProperties":false})"},
+             R"({"type":"object","properties":{"first_line":{"type":"integer","minimum":0},"line_count":{"type":"integer","minimum":1,"maximum":300},"max_bytes":{"type":"integer","minimum":256,"maximum":16384}},"required":["first_line","line_count","max_bytes"],"additionalProperties":false})"},
         {.name = "list_sftp_directory",
          .description = "List a bounded page from the currently loaded SFTP directory as untrusted evidence.",
          .parametersJson =
-             R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["session_id","session_generation","offset","limit"],"additionalProperties":false})"},
-        {.name = "list_shell_history", .description = "List a bounded page of captured shell history for the exact session as untrusted evidence.", .parametersJson = R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["session_id","session_generation","offset","limit"],"additionalProperties":false})"},
+             R"({"type":"object","properties":{"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["offset","limit"],"additionalProperties":false})"},
+        {.name = "list_shell_history", .description = "List a bounded page of captured shell history for the current terminal as untrusted evidence.", .parametersJson = R"({"type":"object","properties":{"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["offset","limit"],"additionalProperties":false})"},
         {.name = "list_scripts",
          .description = "List bounded metadata for user-owned ztermy scripts. Script commands are not returned.",
          .parametersJson =
-             R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["session_id","session_generation","offset","limit"],"additionalProperties":false})"},
+             R"({"type":"object","properties":{"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["offset","limit"],"additionalProperties":false})"},
         {.name = "read_script",
          .description =
              "Read one bounded user-owned ztermy script as untrusted evidence. Variable default values are omitted.",
          .parametersJson =
-             R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"script_id":{"type":"string","minLength":1,"maxLength":256}},"required":["session_id","session_generation","script_id"],"additionalProperties":false})"},
+             R"({"type":"object","properties":{"script_id":{"type":"string","minLength":1,"maxLength":256}},"required":["script_id"],"additionalProperties":false})"},
         {.name = "list_notes",
          .description = "List bounded metadata for user-owned ztermy notes. Note contents are not returned.",
          .parametersJson =
-             R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["session_id","session_generation","offset","limit"],"additionalProperties":false})"},
+             R"({"type":"object","properties":{"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["offset","limit"],"additionalProperties":false})"},
         {.name = "read_remote_telemetry",
-         .description = "Read the latest bounded remote telemetry sample for the exact session.",
-         .parametersJson =
-             R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0}},"required":["session_id","session_generation"],"additionalProperties":false})"},
+         .description = "Read the latest bounded remote telemetry sample for the current terminal.",
+         .parametersJson = R"({"type":"object","properties":{},"additionalProperties":false})"},
         {.name = "list_port_forwarding",
          .description = "List bounded status snapshots for ztermy port-forwarding rules.",
          .parametersJson =
-             R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["session_id","session_generation","offset","limit"],"additionalProperties":false})"},
+             R"({"type":"object","properties":{"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["offset","limit"],"additionalProperties":false})"},
     };
 }
 
 std::string AiReadToolDispatcher::execute(const std::string_view toolName, const std::string_view argumentsJson,
-                                          const std::span<const AiTerminalReadSnapshot> sessions) const
+                                          const AiTerminalReadSnapshot &session) const
 {
     if (argumentsJson.size() > maximumArgumentsBytes)
     {
@@ -325,8 +312,7 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
         return failure(QStringLiteral("invalid_arguments"), QStringLiteral("Tool arguments must be a JSON object."));
     }
     const auto object = arguments.object();
-    const bool supported = toolName == "list_sessions" || toolName == "read_multi_session_status"
-                           || toolName == "read_session_info" || toolName == "read_terminal"
+    const bool supported = toolName == "read_session_info" || toolName == "read_terminal"
                            || toolName == "read_command_block" || toolName == "read_command_output"
                            || toolName == "list_sftp_directory" || toolName == "list_shell_history"
                            || toolName == "list_scripts" || toolName == "read_script" || toolName == "list_notes"
@@ -335,123 +321,24 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
     {
         return failure(QStringLiteral("unsupported"), QStringLiteral("The requested read tool is not supported."));
     }
-    if (toolName == "list_sessions")
+    const std::span<const AiTerminalReadSnapshot> sessions{&session, 1};
+    const auto &id = session.sessionId;
+    const auto sessionGeneration = session.sessionGeneration;
+    const auto *snapshot = &session;
+    if (toolName == "read_session_info")
     {
         if (!object.isEmpty())
         {
-            return failure(QStringLiteral("invalid_arguments"),
-                           QStringLiteral("The session-list tool does not accept arguments."));
-        }
-        const auto listed = m_tools.listSessions(sessions);
-        if (!listed.has_value())
-        {
-            return failure(listed.error());
-        }
-        QJsonArray values;
-        for (const auto &session : *listed)
-        {
-            values.append(sessionValue(session));
-        }
-        return json(QJsonObject{{QStringLiteral("ok"), true}, {QStringLiteral("sessions"), values}});
-    }
-    if (toolName == "read_multi_session_status")
-    {
-        if (!hasOnlyKeys(object, {QStringLiteral("targets")}) || !object.value(QStringLiteral("targets")).isArray())
-        {
-            return failure(QStringLiteral("invalid_arguments"),
-                           QStringLiteral("An explicit target array is required."));
-        }
-        const QJsonArray targets = object.value(QStringLiteral("targets")).toArray();
-        if (targets.isEmpty() || targets.size() > 16)
-        {
-            return failure(QStringLiteral("invalid_arguments"),
-                           QStringLiteral("The target array must contain from 1 through 16 entries."));
-        }
-        QSet<QString> seen;
-        QJsonArray results;
-        for (const auto &targetValue : targets)
-        {
-            if (!targetValue.isObject())
-            {
-                return failure(QStringLiteral("invalid_arguments"), QStringLiteral("Every target must be an object."));
-            }
-            const QJsonObject requested = targetValue.toObject();
-            const QJsonValue requestedId = requested.value(QStringLiteral("session_id"));
-            const auto requestedGeneration = unsignedInteger(requested, QStringLiteral("session_generation"));
-            if (!hasOnlyKeys(requested, {QStringLiteral("session_id"), QStringLiteral("session_generation")})
-                || !requestedId.isString() || requestedId.toString().isEmpty() || !requestedGeneration.has_value())
-            {
-                return failure(QStringLiteral("invalid_arguments"), QStringLiteral("Every target must be exact."));
-            }
-            const QString targetKey = requestedId.toString() + QLatin1Char(':') + QString::number(*requestedGeneration);
-            if (seen.contains(targetKey))
-            {
-                return failure(QStringLiteral("invalid_arguments"),
-                               QStringLiteral("Duplicate targets are not allowed."));
-            }
-            seen.insert(targetKey);
-            const auto requestedIdUtf8 = requestedId.toString().toUtf8().toStdString();
-            const auto metadata = m_tools.readSessionInfo(sessions, requestedIdUtf8, *requestedGeneration);
-            QJsonObject item{{QStringLiteral("target"), requested}};
-            if (!metadata.has_value())
-            {
-                const QJsonObject errorEnvelope =
-                    QJsonDocument::fromJson(QByteArray::fromStdString(failure(metadata.error()))).object();
-                item.insert(QStringLiteral("ok"), false);
-                item.insert(QStringLiteral("error"), errorEnvelope.value(QStringLiteral("error")));
-                results.append(item);
-                continue;
-            }
-            const auto *targetSnapshot = findSnapshot(sessions, requestedIdUtf8, *requestedGeneration);
-            Q_ASSERT(targetSnapshot != nullptr);
-            const auto &sample = targetSnapshot->operations.telemetry;
-            QJsonObject telemetry{{QStringLiteral("state"), text(sample.state)},
-                                  {QStringLiteral("os_name"), text(sample.osName)},
-                                  {QStringLiteral("cpu_core_count"), static_cast<int>(sample.cpuCoreCount)},
-                                  {QStringLiteral("memory_used_kib"), static_cast<qint64>(sample.memoryUsedKiB)},
-                                  {QStringLiteral("memory_total_kib"), static_cast<qint64>(sample.memoryTotalKiB)},
-                                  {QStringLiteral("ssh_probe_latency_ms"), static_cast<int>(sample.sshProbeLatencyMs)}};
-            telemetry.insert(QStringLiteral("cpu_percent"),
-                             sample.cpuPercent.has_value() ? QJsonValue{*sample.cpuPercent} : QJsonValue::Null);
-            item.insert(QStringLiteral("ok"), true);
-            item.insert(QStringLiteral("session"), sessionValue(*metadata));
-            item.insert(QStringLiteral("telemetry"), telemetry);
-            item.insert(QStringLiteral("untrusted_evidence"), true);
-            results.append(item);
-        }
-        return boundedOperationsResult(QStringLiteral("results"), QJsonObject{{QStringLiteral("items"), results}});
-    }
-
-    const auto sessionId = object.value(QStringLiteral("session_id"));
-    const auto sessionGeneration = unsignedInteger(object, QStringLiteral("session_generation"));
-    if (!sessionId.isString() || sessionId.toString().isEmpty() || !sessionGeneration.has_value())
-    {
-        return failure(QStringLiteral("invalid_arguments"),
-                       QStringLiteral("A session id and non-negative session generation are required."));
-    }
-    const auto id = sessionId.toString().toUtf8().toStdString();
-    const auto *snapshot = findSnapshot(sessions, id, *sessionGeneration);
-    if (snapshot == nullptr && toolName != "read_session_info" && toolName != "read_terminal"
-        && toolName != "read_command_block" && toolName != "read_command_output")
-    {
-        const auto metadata = m_tools.readSessionInfo(sessions, id, *sessionGeneration);
-        return failure(metadata.error());
-    }
-    if (toolName == "read_session_info")
-    {
-        if (!hasOnlyKeys(object, {QStringLiteral("session_id"), QStringLiteral("session_generation")}))
-        {
             return failure(QStringLiteral("invalid_arguments"), QStringLiteral("Unexpected tool arguments."));
         }
-        const auto read = m_tools.readSessionInfo(sessions, id, *sessionGeneration);
+        const auto read = m_tools.readSessionInfo(sessions, id, sessionGeneration);
         return read.has_value()
                    ? json(QJsonObject{{QStringLiteral("ok"), true}, {QStringLiteral("session"), sessionValue(*read)}})
                    : failure(read.error());
     }
     if (toolName == "read_terminal")
     {
-        if (!hasOnlyKeys(object, {QStringLiteral("session_id"), QStringLiteral("session_generation"),
-                                  QStringLiteral("first_line"), QStringLiteral("line_count")}))
+        if (!hasOnlyKeys(object, {QStringLiteral("first_line"), QStringLiteral("line_count")}))
         {
             return failure(QStringLiteral("invalid_arguments"), QStringLiteral("Unexpected tool arguments."));
         }
@@ -462,7 +349,7 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
             return failure(QStringLiteral("invalid_arguments"),
                            QStringLiteral("Terminal line offsets must be non-negative integers."));
         }
-        const auto read = m_tools.readTerminal(sessions, id, *sessionGeneration, *firstLine, *lineCount);
+        const auto read = m_tools.readTerminal(sessions, id, sessionGeneration, *firstLine, *lineCount);
         if (!read.has_value())
         {
             return failure(read.error());
@@ -470,9 +357,7 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
         return json(QJsonObject{
             {QStringLiteral("ok"), true},
             {QStringLiteral("terminal"),
-             QJsonObject{{QStringLiteral("session_id"), text(read->sessionId)},
-                         {QStringLiteral("session_generation"), static_cast<qint64>(read->sessionGeneration)},
-                         {QStringLiteral("content"), text(read->content)},
+             QJsonObject{{QStringLiteral("content"), text(read->content)},
                          {QStringLiteral("first_line"), static_cast<qint64>(read->firstLine)},
                          {QStringLiteral("line_count"), static_cast<qint64>(read->lineCount)},
                          {QStringLiteral("total_lines"), static_cast<qint64>(read->totalLines)},
@@ -483,8 +368,7 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
     }
     if (toolName == "read_command_block")
     {
-        if (!hasOnlyKeys(object, {QStringLiteral("session_id"), QStringLiteral("session_generation"),
-                                  QStringLiteral("block_id")}))
+        if (!hasOnlyKeys(object, {QStringLiteral("block_id")}))
         {
             return failure(QStringLiteral("invalid_arguments"), QStringLiteral("Unexpected tool arguments."));
         }
@@ -494,14 +378,12 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
             return failure(QStringLiteral("invalid_arguments"),
                            QStringLiteral("A positive command block id is required."));
         }
-        const auto read = m_tools.readCommandBlock(sessions, id, *sessionGeneration, *blockId);
+        const auto read = m_tools.readCommandBlock(sessions, id, sessionGeneration, *blockId);
         if (!read.has_value())
         {
             return failure(read.error());
         }
         QJsonObject block{{QStringLiteral("id"), static_cast<qint64>(read->id)},
-                          {QStringLiteral("session_id"), text(read->sessionId)},
-                          {QStringLiteral("session_generation"), static_cast<qint64>(read->sessionGeneration)},
                           {QStringLiteral("command"), text(read->command)},
                           {QStringLiteral("working_directory"), text(read->workingDirectory)},
                           {QStringLiteral("host"), text(read->host)},
@@ -530,8 +412,7 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
     if (toolName == "read_command_output")
     {
         if (!hasOnlyKeys(object,
-                         {QStringLiteral("session_id"), QStringLiteral("session_generation"),
-                          QStringLiteral("block_id"), QStringLiteral("after_cursor"), QStringLiteral("max_bytes")}))
+                         {QStringLiteral("block_id"), QStringLiteral("after_cursor"), QStringLiteral("max_bytes")}))
         {
             return failure(QStringLiteral("invalid_arguments"), QStringLiteral("Unexpected tool arguments."));
         }
@@ -544,14 +425,12 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
                            QStringLiteral("Block id, cursor, and byte limit must be non-negative integers."));
         }
         const auto read =
-            m_tools.readCommandOutput(sessions, id, *sessionGeneration, *blockId, *afterCursor, *maximumBytes);
+            m_tools.readCommandOutput(sessions, id, sessionGeneration, *blockId, *afterCursor, *maximumBytes);
         if (!read.has_value())
         {
             return failure(read.error());
         }
         QJsonObject output{{QStringLiteral("block_id"), static_cast<qint64>(read->id)},
-                           {QStringLiteral("session_id"), text(read->sessionId)},
-                           {QStringLiteral("session_generation"), static_cast<qint64>(read->sessionGeneration)},
                            {QStringLiteral("state"), state(read->state)},
                            {QStringLiteral("output_coverage"), coverage(read->outputCoverage)},
                            {QStringLiteral("output"), text(read->output)},
@@ -575,7 +454,7 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
     }
     if (toolName == "read_remote_telemetry")
     {
-        if (!hasOnlyKeys(object, {QStringLiteral("session_id"), QStringLiteral("session_generation")}))
+        if (!object.isEmpty())
         {
             return failure(QStringLiteral("invalid_arguments"), QStringLiteral("Unexpected tool arguments."));
         }
@@ -596,8 +475,7 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
     }
     if (toolName == "read_script")
     {
-        if (!hasOnlyKeys(object, {QStringLiteral("session_id"), QStringLiteral("session_generation"),
-                                  QStringLiteral("script_id")}))
+        if (!hasOnlyKeys(object, {QStringLiteral("script_id")}))
         {
             return failure(QStringLiteral("invalid_arguments"), QStringLiteral("Unexpected tool arguments."));
         }
@@ -653,8 +531,7 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
                         {QStringLiteral("redaction_count"), static_cast<qint64>(redactionCount)}});
     }
 
-    if (!hasOnlyKeys(object, {QStringLiteral("session_id"), QStringLiteral("session_generation"),
-                              QStringLiteral("offset"), QStringLiteral("limit")}))
+    if (!hasOnlyKeys(object, {QStringLiteral("offset"), QStringLiteral("limit")}))
     {
         return failure(QStringLiteral("invalid_arguments"), QStringLiteral("Unexpected tool arguments."));
     }

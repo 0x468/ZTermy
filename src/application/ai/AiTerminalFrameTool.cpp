@@ -61,7 +61,8 @@ struct Common final
     std::uint64_t revision = 0;
 };
 
-[[nodiscard]] std::expected<Common, std::string> parseCommon(const std::string_view argumentsJson)
+[[nodiscard]] std::expected<Common, std::string> parseCommon(const std::string_view argumentsJson,
+                                                             const AiSessionTarget &target)
 {
     if (argumentsJson.size() > maximumArgumentsBytes)
     {
@@ -72,18 +73,15 @@ struct Common final
     const QJsonDocument document =
         QJsonDocument::fromJson(QByteArray(argumentsJson.data(), static_cast<qsizetype>(argumentsJson.size())), &error);
     const QJsonObject object = document.object();
-    const QJsonValue sessionId = object.value(QStringLiteral("session_id"));
-    const auto generation = unsignedInteger(object.value(QStringLiteral("session_generation")));
     const auto revision = unsignedInteger(object.value(QStringLiteral("after_revision")));
-    if (!document.isObject() || error.error != QJsonParseError::NoError || !sessionId.isString()
-        || sessionId.toString().isEmpty() || !generation.has_value() || !revision.has_value())
+    if (!document.isObject() || error.error != QJsonParseError::NoError || !revision.has_value())
     {
         return std::unexpected(
             AiTerminalFrameTool::failure("invalid_arguments", "The terminal-frame arguments are invalid."));
     }
     return Common{
         .object = object,
-        .target = {.sessionId = sessionId.toString().toUtf8().toStdString(), .sessionGeneration = *generation},
+        .target = target,
         .revision = *revision};
 }
 
@@ -129,7 +127,7 @@ AiToolDefinition AiTerminalFrameTool::readDefinition()
         .name = "read_terminal_frame",
         .description = "Read a bounded current terminal frame or one-revision delta as untrusted evidence.",
         .parametersJson =
-            R"({"type":"object","properties":{"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"after_revision":{"type":"integer","minimum":0}},"required":["session_id","session_generation","after_revision"],"additionalProperties":false})"};
+            R"({"type":"object","properties":{"after_revision":{"type":"integer","minimum":0}},"required":["after_revision"],"additionalProperties":false})"};
 }
 
 AiToolDefinition AiTerminalFrameTool::waitDefinition()
@@ -140,16 +138,14 @@ AiToolDefinition AiTerminalFrameTool::waitDefinition()
             "Wait for a terminal frame change (the default), or for frame idleness. Set condition to idle only "
             "when an idle threshold is needed; idle_ms then defaults to 750. timeout_ms defaults to 30000.",
         .parametersJson =
-            R"({"type":"object","properties":{"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"after_revision":{"type":"integer","minimum":0},"condition":{"type":"string","enum":["changed","idle"],"default":"changed"},"idle_ms":{"type":"integer","minimum":0,"maximum":30000,"default":750},"timeout_ms":{"type":"integer","minimum":1,"maximum":120000,"default":30000}},"required":["session_id","session_generation","after_revision"],"additionalProperties":false})"};
+            R"({"type":"object","properties":{"after_revision":{"type":"integer","minimum":0},"condition":{"type":"string","enum":["changed","idle"],"default":"changed"},"idle_ms":{"type":"integer","minimum":0,"maximum":30000,"default":750},"timeout_ms":{"type":"integer","minimum":1,"maximum":120000,"default":30000}},"required":["after_revision"],"additionalProperties":false})"};
 }
 
 std::expected<AiTerminalFrameReadRequest, std::string>
-AiTerminalFrameTool::parseRead(const std::string_view argumentsJson)
+AiTerminalFrameTool::parseRead(const std::string_view argumentsJson, const AiSessionTarget &target)
 {
-    auto common = parseCommon(argumentsJson);
-    if (!common.has_value()
-        || !hasOnlyKeys(common->object, {QStringLiteral("session_id"), QStringLiteral("session_generation"),
-                                         QStringLiteral("after_revision")}))
+    auto common = parseCommon(argumentsJson, target);
+    if (!common.has_value() || !hasOnlyKeys(common->object, {QStringLiteral("after_revision")}))
     {
         return std::unexpected(common.has_value()
                                    ? failure("invalid_arguments", "The frame-read arguments are invalid.")
@@ -159,9 +155,9 @@ AiTerminalFrameTool::parseRead(const std::string_view argumentsJson)
 }
 
 std::expected<AiTerminalFrameWaitRequest, std::string>
-AiTerminalFrameTool::parseWait(const std::string_view argumentsJson)
+AiTerminalFrameTool::parseWait(const std::string_view argumentsJson, const AiSessionTarget &target)
 {
-    auto common = parseCommon(argumentsJson);
+    auto common = parseCommon(argumentsJson, target);
     if (!common.has_value())
     {
         return std::unexpected(std::move(common.error()));
@@ -174,8 +170,7 @@ AiTerminalFrameTool::parseWait(const std::string_view argumentsJson)
         idleValue.isUndefined() ? std::optional<std::uint64_t>{defaultIdleMilliseconds} : unsignedInteger(idleValue);
     const auto timeout = timeoutValue.isUndefined() ? std::optional<std::uint64_t>{defaultTimeoutMilliseconds}
                                                     : unsignedInteger(timeoutValue);
-    if (!hasOnlyKeys(common->object, {QStringLiteral("session_id"), QStringLiteral("session_generation"),
-                                      QStringLiteral("after_revision"), QStringLiteral("condition"),
+    if (!hasOnlyKeys(common->object, {QStringLiteral("after_revision"), QStringLiteral("condition"),
                                       QStringLiteral("idle_ms"), QStringLiteral("timeout_ms")})
         || (!conditionValue.isUndefined() && !conditionValue.isString()) || !idle.has_value()
         || *idle > maximumIdleMilliseconds || (condition == QStringLiteral("idle") && *idle == 0)

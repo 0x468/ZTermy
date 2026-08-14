@@ -8765,17 +8765,7 @@ ai::AiTerminalReadSnapshot AppController::aiReadSnapshot(const TerminalTab &tab)
 
 std::vector<ai::AiTerminalReadSnapshot> AppController::aiReadSnapshots(const TerminalTab &tab) const
 {
-    std::vector<ai::AiTerminalReadSnapshot> snapshots;
-    snapshots.reserve(m_tabs.size());
-    snapshots.push_back(aiReadSnapshot(tab));
-    for (const auto &candidate : m_tabs)
-    {
-        if (candidate && candidate.get() != &tab && candidate->workspaceId == tab.workspaceId)
-        {
-            snapshots.push_back(aiReadSnapshot(*candidate));
-        }
-    }
-    return snapshots;
+    return {aiReadSnapshot(tab)};
 }
 
 void AppController::acceptAiSelectedText(TerminalTab &tab, const QString &text)
@@ -8925,6 +8915,8 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
     }
     const auto turnReadSnapshots =
         std::make_shared<const std::vector<ai::AiTerminalReadSnapshot>>(aiReadSnapshots(tab));
+    const ai::AiSessionTarget turnTarget{.sessionId = utf8String(tab.id),
+                                         .sessionGeneration = tab.reconnectGeneration};
     ai::AiGenerationRequest generation{.instructions = std::move(instructions),
                                        .messages = std::move(messages),
                                        .tools = std::move(toolDefinitions),
@@ -9074,7 +9066,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
             }
         },
         {},
-        [this, tabId = tab.id, turnReadSnapshots](
+        [this, tabId = tab.id, turnReadSnapshots, turnTarget](
             const ai::AiToolCall &call) -> std::expected<ai::AiTurnRunner::ToolHandlingResult, ai::AiProviderError> {
             auto *target = findTab(tabId);
             if ((call.name == "read_terminal_frame" || call.name == "wait_terminal_frame") && target != nullptr)
@@ -9094,7 +9086,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
             if (call.name == "wait_command" && target != nullptr)
             {
                 recordAiActivity(*target, call, QStringLiteral("queued"), QStringLiteral("pending"), false);
-                auto handled = handleAiWaitCommand(*target, tabId, call);
+                auto handled = handleAiWaitCommand(*target, tabId, call, turnTarget);
                 if (handled.output.has_value())
                 {
                     const QString resultCode = aiActivityResultCode(handled.output->outputJson);
@@ -9131,7 +9123,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                                                    .name = call.name,
                                                    .outputJson = aiBudgetFailureJson(budgetDecision)}};
                 }
-                auto request = ai::AiSftpListTool::parse(call.argumentsJson);
+                auto request = ai::AiSftpListTool::parse(call.argumentsJson, turnTarget);
                 if (!request.has_value())
                 {
                     recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("invalid_arguments"),
@@ -9212,7 +9204,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                                                    .name = call.name,
                                                    .outputJson = aiBudgetFailureJson(budgetDecision)}};
                 }
-                auto request = ai::AiSftpReadTool::parse(call.argumentsJson);
+                auto request = ai::AiSftpReadTool::parse(call.argumentsJson, turnTarget);
                 if (!request.has_value())
                 {
                     recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("invalid_arguments"),
@@ -9298,7 +9290,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                                                    .name = call.name,
                                                    .outputJson = aiBudgetFailureJson(budgetDecision)}};
                 }
-                auto request = ai::AiNoteReadTool::parse(call.argumentsJson);
+                auto request = ai::AiNoteReadTool::parse(call.argumentsJson, turnTarget);
                 if (!request.has_value())
                 {
                     recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("invalid_arguments"),
@@ -9390,6 +9382,14 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                             .outputJson = aiToolFailureJson(QStringLiteral("session_unavailable"),
                                                             tr("The target terminal session is unavailable."))}};
                 }
+                if (target->reconnectGeneration != turnTarget.sessionGeneration)
+                {
+                    const auto output = aiToolFailureJson(
+                        QStringLiteral("scope_changed"), tr("The current terminal reconnected during this AI turn."));
+                    recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("scope_changed"), false);
+                    return ai::AiTurnRunner::ToolHandlingResult{
+                        .output = ai::AiToolOutput{.callId = call.id, .name = call.name, .outputJson = output}};
+                }
                 const auto signature = call.name + ':' + call.argumentsJson;
                 const auto budgetDecision =
                     target->aiTurnBudget->authorize(false, signature, target->reconnectGeneration);
@@ -9468,8 +9468,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                     ai::AiPermissionCapability::mcpTool, call.name,
                     ai::AiActionToolContext{.conversationId = utf8String(target->aiConversationId),
                                             .turnId = target->aiTurnRunner->activeTurnId(),
-                                            .target = {.sessionId = utf8String(target->id),
-                                                       .sessionGeneration = target->reconnectGeneration},
+                                            .target = turnTarget,
                                             .permissionMode = aiPermissionMode(m_settings.aiPermission),
                                             .profileId = utf8String(target->sourceProfileId),
                                             .writable = true},
@@ -9621,11 +9620,12 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                     call,
                     ai::AiActionToolContext{.conversationId = utf8String(target->aiConversationId),
                                             .turnId = target->aiTurnRunner->activeTurnId(),
-                                            .target = {.sessionId = utf8String(target->id),
-                                                       .sessionGeneration = target->reconnectGeneration},
+                                            .target = turnTarget,
                                             .permissionMode = aiPermissionMode(m_settings.aiPermission),
                                             .profileId = utf8String(target->sourceProfileId),
-                                            .writable = target->running && (target->ssh || target->local)},
+                                            .writable = target->running && (target->ssh || target->local)
+                                                        && target->reconnectGeneration
+                                                               == turnTarget.sessionGeneration},
                     *target->aiTurnBudget);
                 if (plan.disposition == ai::AiActionToolDisposition::respond || !plan.action.has_value())
                 {
@@ -9709,7 +9709,11 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                                                    .outputJson = aiBudgetFailureJson(budgetDecision)}};
                 }
             }
-            const auto output = m_aiReadToolDispatcher.execute(call.name, call.argumentsJson, *turnReadSnapshots);
+            const auto output = turnReadSnapshots->empty()
+                                    ? aiToolFailureJson(QStringLiteral("session_unavailable"),
+                                                        tr("The current terminal snapshot is unavailable."))
+                                    : m_aiReadToolDispatcher.execute(call.name, call.argumentsJson,
+                                                                     turnReadSnapshots->front());
             if (target != nullptr)
             {
                 const QString resultCode = aiActivityResultCode(output);
@@ -9757,6 +9761,16 @@ ai::AiTurnRunner::ToolHandlingResult
 AppController::handleAiTerminalFrameTool(TerminalTab &owner, const QString &ownerTabId, const ai::AiToolCall &call,
                                          const std::span<const ai::AiTerminalReadSnapshot> allowedTargets)
 {
+    if (allowedTargets.empty())
+    {
+        return {.output = ai::AiToolOutput{
+                    .callId = call.id,
+                    .name = call.name,
+                    .outputJson = ai::AiTerminalFrameTool::failure(
+                        "session_unavailable", "The current terminal snapshot is unavailable.")}};
+    }
+    const ai::AiSessionTarget turnTarget{.sessionId = allowedTargets.front().sessionId,
+                                         .sessionGeneration = allowedTargets.front().sessionGeneration};
     const bool waiting = call.name == "wait_terminal_frame";
     std::expected<ai::AiTerminalFrameWaitRequest, std::string> waitRequest =
         std::unexpected(ai::AiTerminalFrameTool::failure("invalid_arguments", "A frame wait was not requested."));
@@ -9764,11 +9778,11 @@ AppController::handleAiTerminalFrameTool(TerminalTab &owner, const QString &owne
         std::unexpected(ai::AiTerminalFrameTool::failure("invalid_arguments", "A frame read was not requested."));
     if (waiting)
     {
-        waitRequest = ai::AiTerminalFrameTool::parseWait(call.argumentsJson);
+        waitRequest = ai::AiTerminalFrameTool::parseWait(call.argumentsJson, turnTarget);
     }
     else
     {
-        readRequest = ai::AiTerminalFrameTool::parseRead(call.argumentsJson);
+        readRequest = ai::AiTerminalFrameTool::parseRead(call.argumentsJson, turnTarget);
     }
     if ((waiting && !waitRequest.has_value()) || (!waiting && !readRequest.has_value()))
     {
@@ -9933,9 +9947,10 @@ AppController::handleAiTerminalFrameTool(TerminalTab &owner, const QString &owne
 }
 
 ai::AiTurnRunner::ToolHandlingResult AppController::handleAiWaitCommand(TerminalTab &tab, const QString &tabId,
-                                                                        const ai::AiToolCall &call)
+                                                                        const ai::AiToolCall &call,
+                                                                        const ai::AiSessionTarget &turnTarget)
 {
-    const auto request = ai::AiWaitCommandTool::parse(call.argumentsJson);
+    const auto request = ai::AiWaitCommandTool::parse(call.argumentsJson, turnTarget);
     if (!request.has_value())
     {
         return {.output = ai::AiToolOutput{.callId = call.id, .name = call.name, .outputJson = request.error()}};
@@ -10131,6 +10146,11 @@ std::string AppController::executeAiScrollbackRead(TerminalTab &tab, const ai::A
         return aiToolFailureJson(QStringLiteral("invalid_arguments"), tr("The scrollback read arguments are invalid."));
     }
     const QJsonObject object = document.object();
+    if (object.size() != 3 || !object.contains(QStringLiteral("first_line"))
+        || !object.contains(QStringLiteral("line_count")) || !object.contains(QStringLiteral("max_bytes")))
+    {
+        return aiToolFailureJson(QStringLiteral("invalid_arguments"), tr("Unexpected scrollback read arguments."));
+    }
     const auto firstLineValue = object.value(QStringLiteral("first_line"));
     const auto lineCountValue = object.value(QStringLiteral("line_count"));
     const auto maximumBytesValue = object.value(QStringLiteral("max_bytes"));
@@ -10204,9 +10224,7 @@ std::string AppController::executeAiScrollbackRead(TerminalTab &tab, const ai::A
     return compactJson(QJsonObject{
         {QStringLiteral("ok"), true},
         {QStringLiteral("terminal_output"),
-         QJsonObject{{QStringLiteral("session_id"), tab.id},
-                     {QStringLiteral("session_generation"), static_cast<qint64>(tab.reconnectGeneration)},
-                     {QStringLiteral("first_line"), static_cast<qint64>(firstLine)},
+         QJsonObject{{QStringLiteral("first_line"), static_cast<qint64>(firstLine)},
                      {QStringLiteral("line_count"), static_cast<qint64>(page->lines.size())},
                      {QStringLiteral("total_lines"), static_cast<qint64>(page->totalLines)},
                      {QStringLiteral("content"), content},
@@ -10358,8 +10376,6 @@ std::string AppController::executeAiWriteToPty(TerminalTab &tab, const ai::AiTer
     return compactJson(
         QJsonObject{{QStringLiteral("ok"), true},
                     {QStringLiteral("status"), QStringLiteral("accepted")},
-                    {QStringLiteral("session_id"), utf8QString(action.target.sessionId)},
-                    {QStringLiteral("session_generation"), static_cast<qint64>(action.target.sessionGeneration)},
                     {QStringLiteral("bytes_written"), static_cast<qint64>(bytes.size())},
                     {QStringLiteral("enter_appended"), action.appendEnter},
                     {QStringLiteral("content_echoed"), false}});
@@ -10409,7 +10425,7 @@ std::string AppController::executeAiRunCommand(TerminalTab &tab, const ai::AiTer
     dispatchInput(tab, markerBytes);
     observeTerminalInput(tab, bytes);
     dispatchInput(tab, bytes);
-    return ai::AiWaitCommandTool::accepted(action.target, commandId, tracked, capability, frameRevision);
+    return ai::AiWaitCommandTool::accepted(commandId, tracked, capability, frameRevision);
 }
 
 std::string AppController::executeAiInterruptCommand(TerminalTab &tab, const ai::AiTerminalAction &action)

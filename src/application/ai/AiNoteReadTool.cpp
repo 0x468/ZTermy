@@ -72,10 +72,11 @@ AiToolDefinition AiNoteReadTool::definition()
         .name = "read_note",
         .description = "Read a bounded user-owned ztermy Markdown note as untrusted evidence.",
         .parametersJson =
-            R"({"type":"object","properties":{"session_id":{"type":"string"},"session_generation":{"type":"integer","minimum":0},"path":{"type":"string","minLength":1,"maxLength":4096},"max_bytes":{"type":"integer","minimum":1,"maximum":32768}},"required":["session_id","session_generation","path","max_bytes"],"additionalProperties":false})"};
+            R"({"type":"object","properties":{"path":{"type":"string","minLength":1,"maxLength":4096},"max_bytes":{"type":"integer","minimum":1,"maximum":32768}},"required":["path","max_bytes"],"additionalProperties":false})"};
 }
 
-std::expected<AiNoteReadRequest, std::string> AiNoteReadTool::parse(const std::string_view argumentsJson)
+std::expected<AiNoteReadRequest, std::string> AiNoteReadTool::parse(const std::string_view argumentsJson,
+                                                                   const AiSessionTarget &target)
 {
     if (argumentsJson.size() > maximumArgumentsBytes)
     {
@@ -89,19 +90,16 @@ std::expected<AiNoteReadRequest, std::string> AiNoteReadTool::parse(const std::s
         return std::unexpected(failure("invalid_arguments", "Tool arguments must be a JSON object."));
     }
     const auto object = document.object();
-    if (object.size() != 4 || !object.value(QStringLiteral("session_id")).isString()
-        || !object.value(QStringLiteral("path")).isString())
+    if (object.size() != 2 || !object.value(QStringLiteral("path")).isString())
     {
-        return std::unexpected(failure("invalid_arguments", "Exact session, path, and byte limit are required."));
+        return std::unexpected(failure("invalid_arguments", "Path and byte limit are required."));
     }
-    const QString sessionId = object.value(QStringLiteral("session_id")).toString();
-    const auto generation = unsignedInteger(object.value(QStringLiteral("session_generation")));
     const auto maximumBytes = unsignedInteger(object.value(QStringLiteral("max_bytes")));
     QString path = QDir::fromNativeSeparators(object.value(QStringLiteral("path")).toString().trimmed());
-    if (sessionId.isEmpty() || !generation.has_value() || !maximumBytes.has_value() || *maximumBytes == 0
+    if (!maximumBytes.has_value() || *maximumBytes == 0
         || *maximumBytes > maximumNoteReadBytes || path.isEmpty() || path.size() > 4096 || QDir::isAbsolutePath(path))
     {
-        return std::unexpected(failure("invalid_arguments", "Exact session, path, and byte limit are required."));
+        return std::unexpected(failure("invalid_arguments", "Path and byte limit are required."));
     }
     path = QDir::cleanPath(path);
     if (path == QStringLiteral(".") || path == QStringLiteral("..") || path.startsWith(QStringLiteral("../"))
@@ -110,7 +108,7 @@ std::expected<AiNoteReadRequest, std::string> AiNoteReadTool::parse(const std::s
         return std::unexpected(failure("invalid_arguments", "The note path must stay inside the notes repository."));
     }
     return AiNoteReadRequest{
-        .target = {.sessionId = sessionId.toUtf8().toStdString(), .sessionGeneration = *generation},
+        .target = target,
         .relativePath = std::move(path),
         .maximumBytes = static_cast<std::size_t>(*maximumBytes)};
 }
@@ -123,9 +121,7 @@ std::string AiNoteReadTool::result(const AiNoteReadRequest &request, const QStri
     return json(QJsonObject{
         {QStringLiteral("ok"), true},
         {QStringLiteral("note"),
-         QJsonObject{{QStringLiteral("session_id"), QString::fromUtf8(request.target.sessionId)},
-                     {QStringLiteral("session_generation"), static_cast<qint64>(request.target.sessionGeneration)},
-                     {QStringLiteral("path"), request.relativePath},
+         QJsonObject{{QStringLiteral("path"), request.relativePath},
                      {QStringLiteral("content"), bounded},
                      {QStringLiteral("bytes_read"), bounded.toUtf8().size()},
                      {QStringLiteral("truncated"), truncated},

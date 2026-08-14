@@ -98,7 +98,6 @@ void insertIfPresent(QJsonObject &object, const QString &name, const std::string
                        {QStringLiteral("capability"), capabilityName(item.capability)},
                        {QStringLiteral("boundary_confidence"), confidenceName(item.boundaryConfidence)},
                        {QStringLiteral("output_coverage"), coverageName(item.outputCoverage)},
-                       {QStringLiteral("session_generation"), static_cast<qint64>(item.sessionGeneration)},
                        {QStringLiteral("pinned"), item.pinned},
                        {QStringLiteral("automatic"), item.automatic},
                        {QStringLiteral("truncated"), item.truncated},
@@ -108,7 +107,6 @@ void insertIfPresent(QJsonObject &object, const QString &name, const std::string
     insertIfPresent(object, QStringLiteral("title"), item.title);
     insertIfPresent(object, QStringLiteral("command"), item.command);
     insertIfPresent(object, QStringLiteral("working_directory"), item.workingDirectory);
-    insertIfPresent(object, QStringLiteral("session_id"), item.sessionId);
     insertIfPresent(object, QStringLiteral("host"), item.host);
     insertIfPresent(object, QStringLiteral("shell"), item.shell);
     if (item.exitStatus.has_value())

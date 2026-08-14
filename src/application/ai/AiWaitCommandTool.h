@@ -23,10 +23,11 @@ class AiWaitCommandTool final
 public:
     [[nodiscard]] static AiToolDefinition definition();
     [[nodiscard]] static bool supportsLifecycleWait(terminal::TerminalSemanticCapability capability) noexcept;
-    [[nodiscard]] static std::string accepted(const AiSessionTarget &target, std::string_view commandId,
-                                              bool trackingRegistered, terminal::TerminalSemanticCapability capability,
+    [[nodiscard]] static std::string accepted(std::string_view commandId, bool trackingRegistered,
+                                              terminal::TerminalSemanticCapability capability,
                                               std::uint64_t frameRevision);
-    [[nodiscard]] static std::expected<AiWaitCommandRequest, std::string> parse(std::string_view argumentsJson);
+    [[nodiscard]] static std::expected<AiWaitCommandRequest, std::string> parse(std::string_view argumentsJson,
+                                                                               const AiSessionTarget &target);
     [[nodiscard]] static std::string result(const AiTrackedCommand &command);
     [[nodiscard]] static std::string timeout(const AiTrackedCommand &command);
     [[nodiscard]] static std::string failure(std::string_view code, std::string_view message);

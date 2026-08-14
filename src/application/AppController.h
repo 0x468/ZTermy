@@ -777,7 +777,8 @@ private:
     [[nodiscard]] bool sendAiMessage(TerminalTab &tab, const QString &prompt, bool preferLastFailure,
                                      bool appendPrompt = true, bool commandRequest = false);
     [[nodiscard]] ai::AiTurnRunner::ToolHandlingResult handleAiWaitCommand(TerminalTab &tab, const QString &tabId,
-                                                                           const ai::AiToolCall &call);
+                                                                           const ai::AiToolCall &call,
+                                                                           const ai::AiSessionTarget &turnTarget);
     [[nodiscard]] ai::AiTurnRunner::ToolHandlingResult
     handleAiTerminalFrameTool(TerminalTab &owner, const QString &ownerTabId, const ai::AiToolCall &call,
                               std::span<const ai::AiTerminalReadSnapshot> allowedTargets);
