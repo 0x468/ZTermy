@@ -39,6 +39,7 @@ struct AiExplicitContext final
     std::string title;
     std::string content;
     std::string source;
+    bool truncated = false;
 };
 
 struct AiTerminalFrameContext final

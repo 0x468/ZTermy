@@ -114,11 +114,14 @@ void AiContextBrokerTests::appliesExclusionAndPinPriority()
     AiContextBroker broker;
     const auto bundle =
         broker.build(store, AiContextRequest{.primaryBlockId = second,
-                                             .explicitItems = {AiExplicitContext{.id = "note", .content = "note"}},
+                                             .explicitItems = {AiExplicitContext{.id = "note",
+                                                                                .content = "note",
+                                                                                .truncated = true}},
                                              .excludedItemIds = {secondId},
                                              .pinnedItemIds = {firstId}});
     QCOMPARE(bundle.items.size(), std::size_t{2});
     QCOMPARE(bundle.items.front().kind, AiContextItemKind::explicitAttachment);
+    QVERIFY(bundle.items.front().truncated);
     QCOMPARE(bundle.items.at(1).command, std::string("first"));
     QVERIFY(bundle.items.at(1).pinned);
 }

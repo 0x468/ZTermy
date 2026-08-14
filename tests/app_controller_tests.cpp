@@ -1089,6 +1089,20 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
         return item.toMap().value(QStringLiteral("kind")).toString() == QStringLiteral("attachment");
     }));
     QVERIFY(controller.activeAiContextPreview().contains(QStringLiteral("selected terminal evidence")));
+
+    const QString attachmentPath = directory.filePath(QStringLiteral("agent-context.md"));
+    QFile attachmentFile(attachmentPath);
+    QVERIFY(attachmentFile.open(QIODevice::WriteOnly));
+    QCOMPARE(attachmentFile.write("# Deployment note\nUse the staging cluster.\n"), qint64{43});
+    attachmentFile.close();
+    QVERIFY(controller.attachAiTextFiles(QVariantList{QUrl::fromLocalFile(attachmentPath)}));
+    QTRY_VERIFY_WITH_TIMEOUT(controller.activeAiContextPreview().contains(QStringLiteral("Deployment note")), 2'000);
+    QVERIFY(std::ranges::any_of(controller.activeAiContextItems(), [](const QVariant &item) {
+        const QVariantMap value = item.toMap();
+        return value.value(QStringLiteral("kind")).toString() == QStringLiteral("attachment")
+               && value.value(QStringLiteral("title")).toString() == QStringLiteral("agent-context.md");
+    }));
+
     sessionState->selectedText.clear();
     QVERIFY(controller.attachAiSelection());
     QVERIFY(!controller.activeAiError().isEmpty());

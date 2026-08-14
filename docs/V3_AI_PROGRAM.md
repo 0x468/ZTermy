@@ -262,6 +262,8 @@ becomes conversation retention.
 
 - add explicit local text/file and provider-capable image attachments with
   previews, removal, bounded ingestion, and no ambient filesystem scraping;
+  the local UTF-8 text-file slice is implemented asynchronously with four-file
+  and 256 KiB-per-source limits (ADR 0087), while image input remains pending;
 - add reusable user-authored skills, surfaced through the same slash-command
   picker without coupling them to one provider;
 - add optional web search as a typed Agent tool with visible provenance and

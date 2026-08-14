@@ -332,7 +332,8 @@ AiContextBundle AiContextBroker::build(const std::span<const terminal::CommandBl
                            .title = explicitItem.title,
                            .content = explicitItem.content,
                            .host = explicitItem.source,
-                           .pinned = request.pinnedItemIds.contains(id)};
+                           .pinned = request.pinnedItemIds.contains(id),
+                           .truncated = explicitItem.truncated};
         finalizeItem(item, m_limits, redactor, request.redactionRules, invalidRuleIds);
         candidates.emplace_back(0, std::move(item));
     }

@@ -5,6 +5,19 @@
 > Netcatty 对照：`docs/reviews/netcatty-ai-comparison-2026-08.md`；
 > Codex 专项：`docs/research/CODEX_CLI_ARCHITECTURE.md`。
 
+## 节点 N11 — 显式本地文本上下文（2026-08-15）
+
+**范围**：
+
+1. AI 附加菜单支持一次选择最多四个本地 UTF-8 文本文件；每个源文件最大 256 KiB；
+2. 文件读取、UTF-8/二进制验证在工作线程完成，不阻塞 Qt Quick；
+3. 结果绑定发起请求的终端 tab，切换焦点不会串入其它终端，关闭 tab 后结果安全丢弃；
+4. 同一路径再次附加会刷新已有上下文；现有移除、固定、预览、脱敏和上下文预算继续生效；
+5. ADR 0087 固化显式、无环境扫描、异步且有界的文件上下文合同。
+
+**验证**：Debug 增量构建通过；translation-catalog、ai-context-broker、app-controller、
+qml-native-window-smoke 4/4 通过；翻译门禁确认 1651 条全部完成。
+
 ## 节点 N10 — 原生 AI 工具绑定当前终端（2026-08-15）
 
 **commits**: `12db6c2` + pending follow-up

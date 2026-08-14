@@ -18,9 +18,11 @@
 #include <QClipboard>
 #include <QColor>
 #include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QHash>
@@ -32,6 +34,7 @@
 #include <QSaveFile>
 #include <QSet>
 #include <QStandardPaths>
+#include <QStringDecoder>
 #include <QThreadPool>
 #include <QTimer>
 #include <QUrl>
@@ -57,6 +60,14 @@ namespace
 
 constexpr std::size_t maximumRecentHostProfiles = 6;
 constexpr quint64 aiSftpListRequestFlag = quint64{1} << 63U;
+constexpr qsizetype maximumAiTextAttachmentBytes = qsizetype{256} * 1024;
+constexpr qsizetype maximumAiTextAttachmentFiles = 4;
+
+struct AiTextAttachmentLoadResult final
+{
+    std::vector<ztermy::ai::AiExplicitContext> attachments;
+    QStringList rejectedFiles;
+};
 
 class TerminalOutputFanout final : public ztermy::terminal::TerminalOutputSink
 {
@@ -8506,6 +8517,124 @@ bool AppController::attachAiRecentCommands(const int count)
     }
     tab->aiError.clear();
     static_cast<void>(buildAiContext(*tab, false));
+    emit aiConversationChanged();
+    return true;
+}
+
+bool AppController::attachAiTextFiles(const QVariantList &localFileUrls)
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || localFileUrls.isEmpty()
+        || localFileUrls.size() > static_cast<qsizetype>(maximumAiTextAttachmentFiles))
+    {
+        return false;
+    }
+
+    QStringList paths;
+    paths.reserve(localFileUrls.size());
+    for (const QVariant &value : localFileUrls)
+    {
+        const QUrl url = value.toUrl();
+        const QString path = url.isLocalFile() ? url.toLocalFile() : value.toString();
+        if (path.trimmed().isEmpty())
+        {
+            return false;
+        }
+        paths.push_back(path);
+    }
+
+    tab->aiError.clear();
+    const QString tabId = tab->id;
+    const QPointer<AppController> self(this);
+    QThreadPool::globalInstance()->start([self, tabId, paths = std::move(paths)] {
+        AiTextAttachmentLoadResult result;
+        result.attachments.reserve(static_cast<std::size_t>(paths.size()));
+        for (const QString &path : paths)
+        {
+            const QFileInfo info(path);
+            const QString canonicalPath = info.canonicalFilePath();
+            if (canonicalPath.isEmpty() || !info.isFile() || info.size() < 0
+                || info.size() > maximumAiTextAttachmentBytes)
+            {
+                result.rejectedFiles.push_back(info.fileName().isEmpty() ? path : info.fileName());
+                continue;
+            }
+
+            QFile file(canonicalPath);
+            if (!file.open(QIODevice::ReadOnly))
+            {
+                result.rejectedFiles.push_back(info.fileName());
+                continue;
+            }
+            const QByteArray bytes = file.readAll();
+            if (bytes.size() != info.size() || bytes.contains('\0'))
+            {
+                result.rejectedFiles.push_back(info.fileName());
+                continue;
+            }
+            QStringDecoder decoder(QStringDecoder::Utf8);
+            const QString text = decoder(bytes);
+            if (decoder.hasError())
+            {
+                result.rejectedFiles.push_back(info.fileName());
+                continue;
+            }
+
+            const QByteArray digest = QCryptographicHash::hash(canonicalPath.toUtf8(), QCryptographicHash::Sha256).toHex();
+            const QString title = info.fileName();
+            const QString content = title + QStringLiteral("\n\n") + text;
+            result.attachments.push_back(
+                ai::AiExplicitContext{.id = "local-file:" + digest.toStdString(),
+                                      .title = utf8String(title),
+                                      .content = utf8String(content),
+                                      .source = "local_file"});
+        }
+
+        if (!self)
+        {
+            return;
+        }
+        QMetaObject::invokeMethod(
+            self,
+            [self, tabId, result = std::move(result)]() mutable {
+                if (!self)
+                {
+                    return;
+                }
+                TerminalTab *target = self->findTab(tabId);
+                if (target == nullptr)
+                {
+                    return;
+                }
+                for (auto &attachment : result.attachments)
+                {
+                    const auto existing = std::ranges::find(target->aiExplicitContextItems, attachment.id,
+                                                            &ai::AiExplicitContext::id);
+                    target->aiExcludedContextIds.erase("attachment:" + attachment.id);
+                    if (existing == target->aiExplicitContextItems.end())
+                    {
+                        target->aiExplicitContextItems.push_back(std::move(attachment));
+                    }
+                    else
+                    {
+                        *existing = std::move(attachment);
+                    }
+                }
+                if (result.rejectedFiles.isEmpty())
+                {
+                    target->aiError.clear();
+                }
+                else
+                {
+                    target->aiError =
+                        QCoreApplication::translate("ztermy::AppController", "Could not attach these text files: %1")
+                            .arg(result.rejectedFiles.join(QStringLiteral(", ")));
+                }
+                static_cast<void>(self->buildAiContext(*target, false));
+                emit self->aiConversationChanged();
+            },
+            Qt::QueuedConnection);
+    });
     emit aiConversationChanged();
     return true;
 }

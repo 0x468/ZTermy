@@ -1724,6 +1724,15 @@ Rectangle {
     }
 
     FileDialog {
+        id: textAttachmentDialog
+
+        title: qsTr("Attach text files")
+        fileMode: FileDialog.OpenFiles
+        nameFilters: [qsTr("Text files (*.txt *.md *.json *.yaml *.yml *.toml *.ini *.cfg *.conf *.log *.csv *.xml *.html *.css *.js *.ts *.py *.sh *.ps1)"), qsTr("All files (*)")]
+        onAccepted: pane.controller.attachAiTextFiles(selectedFiles)
+    }
+
+    FileDialog {
         id: conversationExportDialog
 
         title: qsTr("Export AI conversation")
@@ -1749,6 +1758,10 @@ Rectangle {
         AppMenuItem {
             text: qsTr("Selected terminal text")
             onTriggered: pane.controller.attachAiSelection()
+        }
+        AppMenuItem {
+            text: qsTr("Local text files…")
+            onTriggered: textAttachmentDialog.open()
         }
         AppMenuSeparator {}
         AppMenuItem {

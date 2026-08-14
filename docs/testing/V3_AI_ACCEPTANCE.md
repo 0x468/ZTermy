@@ -111,6 +111,10 @@ evaluations serve different purposes and are reported separately.
       succeeds with an explicitly labelled approximate recent-activity attachment.
 - [ ] Owner check: typing `/` opens the built-in command picker; Up/Down, Tab, Enter, and click
       invoke the selected local action without sending the literal slash command to the provider.
+- [ ] Owner check: Attach > Local text files accepts one or more UTF-8 text files, shows removable
+      and pinnable context chips, includes their bounded contents in the next request, and keeps the
+      UI responsive while loading. Binary, invalid UTF-8, inaccessible, oversized, or more than four
+      files in one selection are rejected with a visible sidebar error.
 - [ ] Owner check: restored SSH tabs expose Reconnect in both the disconnected terminal card
       and tab context menu without reconnecting implicitly.
 
