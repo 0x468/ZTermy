@@ -79,7 +79,7 @@ foreach ($qmlFile in Get-ChildItem -LiteralPath (Join-Path $sourceDirectory 'src
     }
 }
 
-$allowedCppLiterals = [System.Collections.Generic.HashSet[string]]::new([string[]] @('Cascadia Mono', 'Consolas'))
+$allowedCppLiterals = [System.Collections.Generic.HashSet[string]]::new([string[]] @('Cascadia Mono', 'Consolas', 'Skills'))
 $cppPattern = 'QStringLiteral\("([A-Z][^"]*)"\)'
 $criticalCppFiles = @(
     'src/application/AppController.cpp',

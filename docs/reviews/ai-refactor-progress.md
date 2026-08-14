@@ -5,6 +5,36 @@
 > Netcatty 对照：`docs/reviews/netcatty-ai-comparison-2026-08.md`；
 > Codex 专项：`docs/research/CODEX_CLI_ARCHITECTURE.md`。
 
+## 节点 N13 — NetCatty 级会话主界面（2026-08-15）
+
+**commit**: pending
+
+**范围**：
+
+1. 将固定 212px 的历史卡片改为占满对话区域的会话视图；打开历史时隐藏消息与输入框，关闭后原位恢复；
+2. 历史行改为整行鼠标/键盘可恢复，删除按钮保持独立命中区域，列表继续有界滚动；
+3. 空会话展示最近三条对话和“查看全部”，对齐 NetCatty 的 recent/history/new 信息架构；
+4. 移除“Encrypted history”这类内部实现术语，界面只表达“全部对话”；
+5. 根据 NetCatty 本地实现、Warp Conversations 与 VS Code Chat Sessions 复核：会话是 Agent 交互的一级对象，New/History 位于侧栏头部，模型与执行模式位于输入区。
+
+**验证**：QML 格式与 qmllint 通过；动态 Debug 构建和 `qml-native-window-smoke` 通过；真实 Windows 窗口验证空态最近对话、完整历史视图、关闭恢复与 320px 窄侧栏无越界。
+
+## 节点 N12 — 快捷消息与便携 Agent Skills（2026-08-15）
+
+**commits**:
+- `8fca992`（feat(ai): add reusable quick messages）
+- `15f68d8`（feat(ai): add portable user skills）
+
+**范围**：
+
+1. 快捷消息作为可编辑提示词模板，通过 `/slug` 插入输入框，不自动发送；
+2. 用户技能遵循 Agent Skills 的目录 + `SKILL.md` 合同，后台扫描并逐项报告警告；
+3. 模型默认只看有界元数据，通过 `list_skills` / `load_skill` 按需读取正文；用户显式技能以最多四个可移除 chip 固定到当前回合；
+4. Skills 与快捷消息共享键盘优先的斜杠选择器，但存储、语义和请求构造保持独立；
+5. 设置页提供路径、重新加载、打开目录、就绪/警告状态；ADR 0088 固化渐进披露与当前终端作用域。
+
+**验证**：catalog/tool/AppController/QML 聚焦测试通过；翻译与真实窗口验收并入 N13 收口。
+
 ## 节点 N11 — 显式本地文本上下文（2026-08-15）
 
 **范围**：

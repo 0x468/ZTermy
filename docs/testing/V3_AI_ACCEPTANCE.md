@@ -338,6 +338,19 @@ only when it passes the same evidence and action contract.
 
 ## Manual real-window matrix
 
+- [ ] Conversation surface: with retained history available, New starts an empty
+      current-terminal conversation; the empty view shows no more than three
+      recent rows; History replaces the message/composer region with a full-height
+      scrollable list; close restores the empty/current conversation in place;
+      row activation works with mouse, Enter, and Space; delete never also restores
+      the row; narrow left/right workbenches remain clipped.
+- [ ] User Skills: open the displayed Skills directory, add one valid and one
+      invalid `SKILL.md`, reload, and verify independent Ready/Warning rows. Type
+      `/`, select the valid Skill by mouse and keyboard, remove its chip, select up
+      to four, send, retry, and switch terminal tabs. The invalid Skill is never
+      advertised, retry preserves the sent selection, and transient chips never
+      leak to another terminal.
+
 - [ ] Settings AI category: choose each provider preset, verify the default API
       address and resolved request preview, enter/replace the masked API key,
       fetch models into the editable selector, manually enter a model when list

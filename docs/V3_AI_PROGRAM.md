@@ -265,7 +265,10 @@ becomes conversation retention.
   the local UTF-8 text-file slice is implemented asynchronously with four-file
   and 256 KiB-per-source limits (ADR 0087), while image input remains pending;
 - add reusable user-authored skills, surfaced through the same slash-command
-  picker without coupling them to one provider;
+  picker without coupling them to one provider; portable `SKILL.md` discovery,
+  validation, explicit chips, and provider-neutral progressive loading are
+  implemented (`ADR 0088`), while separately bounded supporting resources remain
+  a follow-up;
 - add optional web search as a typed Agent tool with visible provenance and
   citations;
 - cover attachment, skill, and search persistence/compaction boundaries in the

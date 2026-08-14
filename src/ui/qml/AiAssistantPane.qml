@@ -429,7 +429,7 @@ Rectangle {
 
             Text {
                 Layout.fillWidth: true
-                text: pane.conversation && pane.conversation.count > 0 ? qsTr("Conversation") : qsTr("New conversation")
+                text: pane.historyExpanded ? qsTr("All conversations") : pane.conversation && pane.conversation.count > 0 ? qsTr("Conversation") : qsTr("New conversation")
                 color: Theme.textMuted
                 font.family: Theme.uiFont
                 font.pixelSize: Theme.textCompact
@@ -503,7 +503,7 @@ Rectangle {
             Layout.leftMargin: 10
             Layout.rightMargin: 10
             Layout.preferredHeight: 32
-            visible: pane.controller.activeAiContextItems.length > 0
+            visible: !pane.historyExpanded && pane.controller.activeAiContextItems.length > 0
             hoverEnabled: true
             focusPolicy: Qt.StrongFocus
             text: qsTr("Request context · %n item(s)", "", pane.controller.activeAiContextItems.length)
@@ -542,7 +542,7 @@ Rectangle {
             Layout.leftMargin: 10
             Layout.rightMargin: 10
             Layout.preferredHeight: pane.contextExpanded ? Math.min(170, contextColumn.implicitHeight + 16) : 0
-            visible: pane.contextExpanded && pane.controller.activeAiContextItems.length > 0
+            visible: !pane.historyExpanded && pane.contextExpanded && pane.controller.activeAiContextItems.length > 0
             clip: true
             radius: Theme.radiusControl
             color: Theme.raisedBackground
@@ -869,21 +869,16 @@ Rectangle {
             Layout.leftMargin: 10
             Layout.rightMargin: 10
             Layout.topMargin: pane.historyExpanded ? 6 : 0
-            Layout.preferredHeight: pane.historyExpanded ? 212 : 0
+            Layout.bottomMargin: pane.historyExpanded ? 8 : 0
+            Layout.fillHeight: pane.historyExpanded
+            Layout.preferredHeight: 0
             visible: pane.historyExpanded
             clip: true
             radius: Theme.radiusPanel
             color: Theme.raisedBackground
             border.color: Theme.border
             Accessible.role: Accessible.Pane
-            Accessible.name: qsTr("Encrypted AI conversation history")
-
-            Behavior on Layout.preferredHeight {
-                NumberAnimation {
-                    duration: Theme.motionFast
-                    easing.type: Easing.OutCubic
-                }
-            }
+            Accessible.name: qsTr("AI conversation history")
 
             ColumnLayout {
                 anchors.fill: parent
@@ -895,7 +890,7 @@ Rectangle {
 
                     Text {
                         Layout.fillWidth: true
-                        text: qsTr("Encrypted history · %n conversation(s)", "", pane.controller.aiConversationHistory.count)
+                        text: qsTr("All conversations · %n conversation(s)", "", pane.controller.aiConversationHistory.count)
                         color: Theme.text
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.textBody
@@ -916,6 +911,19 @@ Rectangle {
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.textCompact
                     }
+
+                    ContextToolButton {
+                        Accessible.name: qsTr("Close conversation history")
+                        onClicked: pane.historyExpanded = false
+                        contentItem: AppIcon {
+                            name: "close"
+                            color: Theme.textMuted
+                        }
+
+                        AppToolTip {
+                            text: qsTr("Close")
+                        }
+                    }
                 }
 
                 ListView {
@@ -935,10 +943,22 @@ Rectangle {
                         required property int messageCount
                         required property string preview
                         width: ListView.view.width
-                        height: 56
+                        height: 52
                         radius: Theme.radiusSmall
-                        color: historyHover.hovered ? Theme.controlHover : Theme.controlBackground
-                        border.color: Theme.border
+                        color: historyContentHover.hovered ? Theme.controlHover : Theme.controlBackground
+                        border.color: historyItem.activeFocus ? Theme.focus : Theme.border
+                        border.width: historyItem.activeFocus ? 2 : 1
+                        focusPolicy: Qt.StrongFocus
+                        activeFocusOnTab: true
+                        Accessible.role: Accessible.Button
+                        Accessible.name: qsTr("Restore conversation %1").arg(historyItem.title)
+                        Keys.onPressed: event => {
+                            if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+                                if (pane.controller.restoreAiConversationHistory(historyItem.conversationId))
+                                    pane.historyExpanded = false;
+                                event.accepted = true;
+                            }
+                        }
 
                         RowLayout {
                             anchors.fill: parent
@@ -968,14 +988,18 @@ Rectangle {
                                     font.family: Theme.uiFont
                                     font.pixelSize: Theme.textCompact
                                 }
-                            }
 
-                            ActionButton {
-                                text: qsTr("Restore")
-                                accessibleName: qsTr("Restore saved conversation")
-                                onClicked: {
-                                    if (pane.controller.restoreAiConversationHistory(historyItem.conversationId)) {
-                                        pane.historyExpanded = false;
+                                HoverHandler {
+                                    id: historyContentHover
+
+                                    cursorShape: Qt.PointingHandCursor
+                                }
+
+                                TapHandler {
+                                    onTapped: {
+                                        historyItem.forceActiveFocus();
+                                        if (pane.controller.restoreAiConversationHistory(historyItem.conversationId))
+                                            pane.historyExpanded = false;
                                     }
                                 }
                             }
@@ -988,10 +1012,6 @@ Rectangle {
                                     color: Theme.textMuted
                                 }
                             }
-                        }
-
-                        HoverHandler {
-                            id: historyHover
                         }
                     }
 
@@ -1177,6 +1197,7 @@ Rectangle {
             Layout.leftMargin: 8
             Layout.rightMargin: 8
             Layout.topMargin: 6
+            visible: !pane.historyExpanded
 
             ListView {
                 id: conversationList
@@ -1534,22 +1555,143 @@ Rectangle {
                 }
             }
 
-            Text {
+            ColumnLayout {
                 anchors.centerIn: parent
-                width: Math.min(280, parent.width - 32)
+                width: Math.min(300, parent.width - 32)
                 visible: pane.conversation === null || pane.conversation.count === 0
-                text: qsTr("Ask about the active terminal, diagnose failures, or request a command.")
-                color: Theme.textMuted
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.WordWrap
-                font.family: Theme.uiFont
-                font.pixelSize: Theme.textBody
+                spacing: 10
+
+                Text {
+                    Layout.fillWidth: true
+                    text: qsTr("Ask about the active terminal, diagnose failures, or request a command.")
+                    color: Theme.textMuted
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.textBody
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    visible: pane.controller.aiConversationHistoryEnabled && pane.controller.aiConversationHistory.count > 0
+                    spacing: 3
+
+                    RowLayout {
+                        Layout.fillWidth: true
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: qsTr("Recent conversations")
+                            color: Theme.textSubtle
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.textCompact
+                            font.weight: Font.Medium
+                        }
+
+                        ToolButton {
+                            id: viewAllHistoryButton
+
+                            implicitHeight: 26
+                            text: qsTr("View all")
+                            hoverEnabled: true
+                            focusPolicy: Qt.StrongFocus
+                            Accessible.name: qsTr("View all AI conversations")
+                            onClicked: {
+                                pane.historyExpanded = true;
+                                pane.activityExpanded = false;
+                                pane.controller.aiConversationHistory.reload();
+                            }
+                            contentItem: Text {
+                                text: viewAllHistoryButton.text
+                                color: viewAllHistoryButton.hovered || viewAllHistoryButton.activeFocus ? Theme.accent : Theme.textMuted
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.textCompact
+                            }
+                            background: Rectangle {
+                                radius: Theme.radiusSmall
+                                color: viewAllHistoryButton.down ? Theme.controlPressed : viewAllHistoryButton.hovered ? Theme.controlHover : "transparent"
+                                border.color: viewAllHistoryButton.activeFocus ? Theme.focus : "transparent"
+                                border.width: viewAllHistoryButton.activeFocus ? 2 : 0
+                            }
+
+                            HoverHandler {
+                                cursorShape: Qt.PointingHandCursor
+                            }
+                        }
+                    }
+
+                    Repeater {
+                        model: pane.controller.aiConversationHistory
+
+                        delegate: Rectangle {
+                            id: recentConversation
+
+                            required property int index
+                            required property string conversationId
+                            required property string title
+                            required property date updatedAt
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: visible ? 34 : 0
+                            visible: index < 3
+                            radius: Theme.radiusSmall
+                            color: recentHover.hovered ? Theme.controlHover : "transparent"
+                            border.color: recentConversation.activeFocus ? Theme.focus : "transparent"
+                            border.width: recentConversation.activeFocus ? 2 : 0
+                            focusPolicy: visible ? Qt.StrongFocus : Qt.NoFocus
+                            activeFocusOnTab: visible
+                            Accessible.role: Accessible.Button
+                            Accessible.name: qsTr("Restore conversation %1").arg(recentConversation.title)
+                            Keys.onPressed: event => {
+                                if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+                                    pane.controller.restoreAiConversationHistory(recentConversation.conversationId);
+                                    event.accepted = true;
+                                }
+                            }
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 7
+                                anchors.rightMargin: 7
+                                spacing: 8
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: recentConversation.title
+                                    color: Theme.textSoft
+                                    elide: Text.ElideRight
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.textLabel
+                                }
+
+                                Text {
+                                    text: recentConversation.updatedAt.toLocaleString(Qt.locale(), Locale.ShortFormat)
+                                    color: Theme.textSubtle
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.textCompact
+                                }
+                            }
+
+                            HoverHandler {
+                                id: recentHover
+
+                                cursorShape: Qt.PointingHandCursor
+                            }
+
+                            TapHandler {
+                                onTapped: pane.controller.restoreAiConversationHistory(recentConversation.conversationId)
+                            }
+                        }
+                    }
+                }
             }
         }
 
         Rectangle {
+            id: composerPanel
+
             Layout.fillWidth: true
-            Layout.preferredHeight: Math.max(132, Math.min(386, promptEditor.contentHeight + 92 + slashCommandList.implicitHeight + (selectedSkillFlow.visible ? 34 : 0)))
+            Layout.preferredHeight: visible ? Math.max(132, Math.min(386, promptEditor.contentHeight + 92 + slashCommandList.implicitHeight + (selectedSkillFlow.visible ? 34 : 0))) : 0
+            visible: !pane.historyExpanded
             color: Theme.elevatedBackground
             border.color: Theme.border
 
@@ -1596,6 +1738,8 @@ Rectangle {
                                 }
 
                                 ToolButton {
+                                    id: removeSkillButton
+
                                     implicitWidth: 20
                                     implicitHeight: 20
                                     hoverEnabled: true
@@ -1613,9 +1757,9 @@ Rectangle {
 
                                     background: Rectangle {
                                         radius: width / 2
-                                        color: parent.down ? Theme.controlPressed : parent.hovered ? Theme.controlHover : "transparent"
-                                        border.color: parent.activeFocus ? Theme.focus : "transparent"
-                                        border.width: parent.activeFocus ? 2 : 0
+                                        color: removeSkillButton.down ? Theme.controlPressed : removeSkillButton.hovered ? Theme.controlHover : "transparent"
+                                        border.color: removeSkillButton.activeFocus ? Theme.focus : "transparent"
+                                        border.width: removeSkillButton.activeFocus ? 2 : 0
                                     }
 
                                     HoverHandler {
