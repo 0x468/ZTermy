@@ -122,7 +122,7 @@ evaluations serve different purposes and are reported separately.
 - [ ] Owner/provider check: a vision-capable model receives the image through its provider-native
       payload and answers from its contents. Follow-up turns retain a visible historical-image marker
       without silently resending binary data; restoring history clears unrelated draft attachments.
-- [ ] Developer check: enabling AI debug trace preserves request/response structure and image metadata
+- [x] Developer check: enabling AI debug trace preserves request/response structure and image metadata
       but writes no raw image Base64 or data-URL payload into the JSONL trace.
 - [ ] Owner check: restored SSH tabs expose Reconnect in both the disconnected terminal card
       and tab context menu without reconnecting implicitly.

@@ -359,7 +359,7 @@
     <message>
         <location filename="../src/ui/qml/AiAssistantPane.qml" line="112"/>
         <location filename="../src/ui/qml/AiAssistantPane.qml" line="128"/>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1499"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1530"/>
         <source>Cancelled</source>
         <translation>已取消</translation>
     </message>
@@ -439,50 +439,50 @@
         <translation>终端 AI 助手</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="902"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="933"/>
         <source>AI conversation history</source>
         <translation>AI 对话历史</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="914"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="945"/>
         <source>All conversations · %n conversation(s)</source>
         <translation>
             <numerusform>全部对话 · %n 个对话</numerusform>
         </translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="937"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="968"/>
         <source>Close conversation history</source>
         <translation>关闭对话历史</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="945"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="976"/>
         <source>Close</source>
         <translation>关闭</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="975"/>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1719"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1006"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1750"/>
         <source>Restore conversation %1</source>
         <translation>恢复对话 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2046"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2077"/>
         <source>Read-only</source>
         <translation>只读</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2046"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2077"/>
         <source>Auto</source>
         <translation>自动</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2046"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2077"/>
         <source>YOLO</source>
         <translation>YOLO</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2048"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2079"/>
         <source>Agent execution mode</source>
         <translation>Agent 执行模式</translation>
     </message>
@@ -629,553 +629,573 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="630"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="612"/>
+        <source>Collapse %1 preview</source>
+        <translation>收起 %1 预览</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="612"/>
+        <source>Expand %1 preview</source>
+        <translation>展开 %1 预览</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="620"/>
+        <source>Collapse preview</source>
+        <translation>收起预览</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="620"/>
+        <source>Preview context</source>
+        <translation>预览上下文</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="653"/>
         <source>redacted</source>
         <translation>已脱敏</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="630"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="653"/>
         <source>truncated</source>
         <translation>已截断</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="642"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="665"/>
         <source>Unpin %1</source>
         <translation>取消固定 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="642"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="665"/>
         <source>Pin %1</source>
         <translation>固定 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="650"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="673"/>
         <source>Unpin context</source>
         <translation>取消固定上下文</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="650"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="673"/>
         <source>Pin context</source>
         <translation>固定上下文</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="655"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="678"/>
         <source>Remove %1 from context</source>
         <translation>从上下文中移除 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="663"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="686"/>
         <source>Remove from this request</source>
         <translation>从本次请求中移除</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="682"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="713"/>
         <source>Reset context</source>
         <translation>重置上下文</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="684"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="715"/>
         <source>Restore automatic context items</source>
         <translation>恢复自动选择的上下文项</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="708"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="739"/>
         <source>AI command approval</source>
         <translation>AI 命令审批</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="708"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="739"/>
         <source>AI interrupt approval</source>
         <translation>AI 中断操作批准</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="708"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="739"/>
         <source>AI terminal input approval</source>
         <translation>AI 终端输入批准</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="708"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="739"/>
         <source>AI runbook approval</source>
         <translation>AI 运行手册审批</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="708"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="739"/>
         <source>AI SFTP transfer approval</source>
         <translation>AI SFTP 传输审批</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="744"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="775"/>
         <source>High-risk command requires approval</source>
         <translation>高风险命令需要审批</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="744"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="775"/>
         <source>Command requires approval</source>
         <translation>命令需要审批</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="744"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="775"/>
         <source>Terminal interrupt requires approval</source>
         <translation>终端中断操作需要批准</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="744"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="775"/>
         <source>Terminal input requires approval</source>
         <translation>终端输入需要批准</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="744"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="775"/>
         <source>Runbook save requires approval</source>
         <translation>保存运行手册需要审批</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="744"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="775"/>
         <source>SFTP transfer requires approval</source>
         <translation>SFTP 传输需要审批</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="763"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="794"/>
         <source>Command awaiting approval</source>
         <translation>等待审批的命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="763"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="794"/>
         <source>Interrupt awaiting approval</source>
         <translation>等待批准的中断操作</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="763"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="794"/>
         <source>Terminal input awaiting approval</source>
         <translation>等待批准的终端输入</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="763"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="794"/>
         <source>Runbook awaiting approval</source>
         <translation>运行手册正在等待审批</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="820"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="851"/>
         <source>Permission rule duration</source>
         <translation>权限规则有效范围</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="829"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="860"/>
         <source>Exact action</source>
         <translation>精确匹配</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="829"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="860"/>
         <source>Starts with</source>
         <translation>前缀匹配</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="829"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="860"/>
         <source>Wildcard</source>
         <translation>通配符</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="829"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="860"/>
         <source>Regular expression</source>
         <translation>正则表达式</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="829"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="860"/>
         <source>Any action of this type</source>
         <translation>此类型的任意操作</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="830"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="861"/>
         <source>Permission rule matcher</source>
         <translation>权限规则匹配方式</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="840"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="871"/>
         <source>Command or action pattern</source>
         <translation>命令或操作匹配模式</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="861"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="892"/>
         <source>Enter approve · Esc deny</source>
         <translation>Enter 批准 · Esc 拒绝</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="868"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="899"/>
         <source>Deny</source>
         <translation>拒绝</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="868"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="899"/>
         <source>Deny &amp; remember</source>
         <translation>拒绝并记住</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="870"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="901"/>
         <source>Deny the pending AI terminal action</source>
         <translation>拒绝待处理的 AI 终端操作</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="875"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="906"/>
         <source>Run command</source>
         <translation>运行命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="875"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="906"/>
         <source>Send Ctrl+C</source>
         <translation>发送 Ctrl+C</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="875"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="906"/>
         <source>Send input</source>
         <translation>发送输入</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="875"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="906"/>
         <source>Save runbook</source>
         <translation>保存运行手册</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="875"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="906"/>
         <source>Queue transfer</source>
         <translation>加入传输队列</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="875"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="906"/>
         <source>Allow &amp; remember</source>
         <translation>允许并记住</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="878"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="909"/>
         <source>Approve and run the pending AI command</source>
         <translation>批准并运行待处理的 AI 命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="878"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="909"/>
         <source>Approve the pending soft interrupt</source>
         <translation>批准待处理的软中断</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="878"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="909"/>
         <source>Approve the pending terminal input</source>
         <translation>批准待处理的终端输入</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="878"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="909"/>
         <source>Approve and save the pending AI runbook</source>
         <translation>批准并保存待处理的 AI 运行手册</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="878"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="909"/>
         <source>Approve and queue the pending AI SFTP transfer</source>
         <translation>批准并将待处理的 AI SFTP 传输加入队列</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1006"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1037"/>
         <source>%n message(s)</source>
         <translation>
             <numerusform>%n 条消息</numerusform>
         </translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1029"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1060"/>
         <source>Delete saved conversation</source>
         <translation>删除已保存的对话</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1042"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1073"/>
         <source>No saved conversations</source>
         <translation>没有已保存的对话</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1066"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1097"/>
         <source>AI activity audit</source>
         <translation>AI 活动审计</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1086"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1117"/>
         <source>AI activity · %n item(s)</source>
         <translation>
             <numerusform>AI 活动 · %n 项</numerusform>
         </translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1094"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1125"/>
         <source>Metadata only</source>
         <translation>仅元数据</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1101"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1132"/>
         <source>Export AI activity</source>
         <translation>导出 AI 活动</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1108"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1139"/>
         <source>Export audit metadata</source>
         <translation>导出审计元数据</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1114"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1145"/>
         <source>Clear AI activity</source>
         <translation>清空 AI 活动</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1121"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1152"/>
         <source>Delete audit metadata</source>
         <translation>删除审计元数据</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1204"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1235"/>
         <source>No AI tool activity yet.</source>
         <translation>暂无 AI 工具活动。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1311"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1342"/>
         <source>Hide model reasoning</source>
         <translation>隐藏模型推理</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1311"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1342"/>
         <source>Show model reasoning</source>
         <translation>显示模型推理</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1311"/>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1489"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1342"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1520"/>
         <source>Thinking…</source>
         <translation>思考中…</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1451"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1482"/>
         <source>Attached image %1</source>
         <translation>附加的图片 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1499"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1530"/>
         <source>Message was truncated locally.</source>
         <translation>消息已在本地截断。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1511"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1542"/>
         <source>%1 in</source>
         <translation>%1 输入</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1511"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1542"/>
         <source>%1 out</source>
         <translation>%1 输出</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1513"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1544"/>
         <source>%1 cached</source>
         <translation>%1 缓存输入</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1515"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1546"/>
         <source>%1 reasoning</source>
         <translation>%1 推理</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1529"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1560"/>
         <source>%1 ms first · %2 ms total · %3 retries</source>
         <translation>首字 %1 ms · 总计 %2 ms · 重试 %3 次</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1529"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1560"/>
         <source>%1 ms total · %2 retries</source>
         <translation>总计 %1 ms · 重试 %2 次</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1541"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1572"/>
         <source>Est. $%1 · long-context rates · catalog %2</source>
         <translation>预估 $%1 · 长上下文费率 · 价目表 %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1541"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1572"/>
         <source>Est. $%1 · catalog %2</source>
         <translation>预估 $%1 · 价目表 %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1556"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1587"/>
         <source>Insert</source>
         <translation>插入</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1558"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1589"/>
         <source>Insert the suggested command without running it</source>
         <translation>插入建议的命令但不运行</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1564"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1595"/>
         <source>Run</source>
         <translation>运行</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1567"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1598"/>
         <source>Run the suggested command in the active terminal</source>
         <translation>在活动终端中运行建议的命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1573"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1604"/>
         <source>Retry</source>
         <translation>重试</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1575"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1606"/>
         <source>Retry the failed assistant response</source>
         <translation>重试失败的助手回复</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1581"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1612"/>
         <source>Copy</source>
         <translation>复制</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1583"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1614"/>
         <source>Copy assistant response</source>
         <translation>复制助手回复</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1604"/>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1626"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1635"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1657"/>
         <source>Return to latest response</source>
         <translation>返回最新回复</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1642"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1673"/>
         <source>Ask about the active terminal, diagnose failures, or request a command.</source>
         <translation>询问当前终端、诊断故障或请求命令。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1660"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1691"/>
         <source>Recent conversations</source>
         <translation>最近对话</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1671"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1702"/>
         <source>View all</source>
         <translation>查看全部</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1674"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1705"/>
         <source>View all AI conversations</source>
         <translation>查看全部 AI 对话</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1823"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1854"/>
         <source>Remove skill %1</source>
         <translation>移除技能 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1998"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2029"/>
         <source>Attach images, text files, selected text, or recent commands</source>
         <translation>附加图片、文本文件、选中文本或最近命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2053"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2084"/>
         <source>Read tools only; action and MCP tools are hidden</source>
         <translation>仅使用读取工具；隐藏操作工具和 MCP 工具</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2053"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2084"/>
         <source>Ask in the approval card before every side effect</source>
         <translation>每次产生副作用前都在批准卡片中询问</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2053"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2084"/>
         <source>Run ordinary actions automatically; ask for high-risk commands and MCP tools</source>
         <translation>自动运行常规操作；高风险命令和 MCP 工具需要询问</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2053"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2084"/>
         <source>Run without approval prompts; explicit deny rules and safety boundaries still apply</source>
         <translation>不显示批准提示直接运行；显式拒绝规则和安全边界仍然生效</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2064"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2095"/>
         <source>Send</source>
         <translation>发送</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2081"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2112"/>
         <source>Attach text files</source>
         <translation>附加文本文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2083"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2114"/>
         <source>Text files (*.txt *.md *.json *.yaml *.yml *.toml *.ini *.cfg *.conf *.log *.csv *.xml *.html *.css *.js *.ts *.py *.sh *.ps1)</source>
         <translation>文本文件 (*.txt *.md *.json *.yaml *.yml *.toml *.ini *.cfg *.conf *.log *.csv *.xml *.html *.css *.js *.ts *.py *.sh *.ps1)</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2090"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2127"/>
         <source>Attach images</source>
         <translation>附加图片</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2092"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2129"/>
         <source>Images (*.png *.jpg *.jpeg *.webp *.gif)</source>
         <translation>图片 (*.png *.jpg *.jpeg *.webp *.gif)</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2099"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2142"/>
         <source>Export AI conversation</source>
         <translation>导出 AI 对话</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2102"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2145"/>
         <source>Markdown files (*.md)</source>
         <translation>Markdown 文件 (*.md)</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2120"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2163"/>
         <source>Selected terminal text</source>
         <translation>已选择的终端文本</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2124"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2167"/>
         <source>Local text files…</source>
         <translation>本地文本文件…</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2128"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2171"/>
         <source>Images…</source>
         <translation>图片…</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2133"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2176"/>
         <source>Last command</source>
         <translation>上一条命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2137"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2180"/>
         <source>Last 3 commands</source>
         <translation>最近 3 条命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2141"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2184"/>
         <source>Last 5 commands</source>
         <translation>最近 5 条命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2150"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2193"/>
         <source>Export conversation</source>
         <translation>导出对话</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2158"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2201"/>
         <source>Hide activity details</source>
         <translation>隐藏活动详情</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2158"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2201"/>
         <source>Show activity details</source>
         <translation>显示活动详情</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2167"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2210"/>
         <source>Explain last failed command</source>
         <translation>解释上一条失败命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2046"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2077"/>
         <source>Ask</source>
         <translation>提问</translation>
     </message>
@@ -1213,71 +1233,71 @@
         <translation>更多</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1861"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1892"/>
         <source>Describe the command you need · Enter sends · Shift+Enter adds a new line</source>
         <translation>描述所需命令 · Enter 发送 · Shift+Enter 换行</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1861"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1892"/>
         <source>Message ztermy Agent · Enter sends · Shift+Enter adds a new line</source>
         <translation>向 ztermy Agent 发送消息 · Enter 发送 · Shift+Enter 换行</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2008"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2039"/>
         <source>Toggle command generation mode</source>
         <translation>切换命令生成模式</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1991"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2022"/>
         <source>Attach terminal context</source>
         <translation>附加终端上下文</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1869"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1900"/>
         <source>AI message</source>
         <translation>AI 消息</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2015"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2046"/>
         <source>Command generation enabled</source>
         <translation>已启用命令生成</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2015"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2046"/>
         <source>Generate a shell command</source>
         <translation>生成 Shell 命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2031"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2062"/>
         <source>AI model</source>
         <translation>AI 模型</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2036"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2067"/>
         <source>Model · %1</source>
         <translation>模型 · %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2060"/>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2064"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2091"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2095"/>
         <source>Cancel</source>
         <translation>取消</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2109"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2152"/>
         <source>Export AI activity metadata</source>
         <translation>导出 AI 活动元数据</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2112"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2155"/>
         <source>JSON files (*.json)</source>
         <translation>JSON 文件 (*.json)</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2083"/>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2092"/>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2102"/>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2112"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2114"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2129"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2145"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2155"/>
         <source>All files (*)</source>
         <translation>所有文件 (*)</translation>
     </message>
@@ -7517,7 +7537,7 @@
     <message>
         <location filename="../src/application/AppController.cpp" line="3724"/>
         <location filename="../src/application/AppController.cpp" line="3954"/>
-        <location filename="../src/application/AppController.cpp" line="13474"/>
+        <location filename="../src/application/AppController.cpp" line="13488"/>
         <source>PowerShell %1</source>
         <translation>PowerShell %1</translation>
     </message>
@@ -8096,82 +8116,82 @@ Arguments (untrusted):
         <translation>无法附加这些图片：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13664"/>
+        <location filename="../src/application/AppController.cpp" line="13678"/>
         <source>Skill directories and SKILL.md must be regular local entries.</source>
         <translation>技能目录和 SKILL.md 必须是普通本地条目。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13666"/>
+        <location filename="../src/application/AppController.cpp" line="13680"/>
         <source>SKILL.md is missing.</source>
         <translation>缺少 SKILL.md。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13668"/>
+        <location filename="../src/application/AppController.cpp" line="13682"/>
         <source>SKILL.md could not be read.</source>
         <translation>无法读取 SKILL.md。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13670"/>
+        <location filename="../src/application/AppController.cpp" line="13684"/>
         <source>SKILL.md exceeds the 128 KiB limit.</source>
         <translation>SKILL.md 超过 128 KiB 限制。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13672"/>
+        <location filename="../src/application/AppController.cpp" line="13686"/>
         <source>SKILL.md must be valid UTF-8 text.</source>
         <translation>SKILL.md 必须是有效的 UTF-8 文本。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13674"/>
+        <location filename="../src/application/AppController.cpp" line="13688"/>
         <source>SKILL.md needs YAML frontmatter enclosed by --- lines.</source>
         <translation>SKILL.md 需要由 --- 行包围的 YAML 前置元数据。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13676"/>
+        <location filename="../src/application/AppController.cpp" line="13690"/>
         <source>The frontmatter name is missing.</source>
         <translation>前置元数据缺少 name。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13678"/>
+        <location filename="../src/application/AppController.cpp" line="13692"/>
         <source>The skill name must use lowercase letters, numbers, and single hyphens.</source>
         <translation>技能名称只能使用小写字母、数字和单个连字符。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13680"/>
+        <location filename="../src/application/AppController.cpp" line="13694"/>
         <source>The frontmatter name must match the skill directory name.</source>
         <translation>前置元数据中的名称必须与技能目录名一致。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13682"/>
+        <location filename="../src/application/AppController.cpp" line="13696"/>
         <source>The frontmatter description is missing.</source>
         <translation>前置元数据缺少 description。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13684"/>
+        <location filename="../src/application/AppController.cpp" line="13698"/>
         <source>The skill description exceeds 1024 characters.</source>
         <translation>技能描述超过 1024 个字符。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13686"/>
+        <location filename="../src/application/AppController.cpp" line="13700"/>
         <source>The compatibility field exceeds 500 characters.</source>
         <translation>compatibility 字段超过 500 个字符。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13688"/>
+        <location filename="../src/application/AppController.cpp" line="13702"/>
         <source>The skill has no Markdown instructions after its frontmatter.</source>
         <translation>技能在前置元数据之后没有 Markdown 指令。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13690"/>
+        <location filename="../src/application/AppController.cpp" line="13704"/>
         <source>The skill contains unsupported control characters.</source>
         <translation>技能包含不支持的控制字符。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13692"/>
+        <location filename="../src/application/AppController.cpp" line="13706"/>
         <source>Only the first 200 skill directories are loaded.</source>
         <translation>仅加载前 200 个技能目录。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13694"/>
+        <location filename="../src/application/AppController.cpp" line="13708"/>
         <source>The skill could not be loaded.</source>
         <translation>无法加载该技能。</translation>
     </message>
@@ -8289,53 +8309,53 @@ Output:
     </message>
     <message>
         <location filename="../src/application/AppController.cpp" line="9177"/>
-        <location filename="../src/application/AppController.cpp" line="9404"/>
+        <location filename="../src/application/AppController.cpp" line="9418"/>
         <source>Terminal selection</source>
         <translation>终端选区</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9396"/>
+        <location filename="../src/application/AppController.cpp" line="9410"/>
         <source>Select terminal text before attaching it.</source>
         <translation>请先选择终端文本再附加。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9465"/>
+        <location filename="../src/application/AppController.cpp" line="9479"/>
         <source>Configure an AI provider URL and model before starting a conversation.</source>
         <translation>开始对话前，请先配置 AI 提供商 URL 和模型。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10060"/>
+        <location filename="../src/application/AppController.cpp" line="10074"/>
         <source>The current terminal reconnected during this AI turn.</source>
         <translation>当前终端在此次 AI 对话轮次中已重新连接。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10102"/>
+        <location filename="../src/application/AppController.cpp" line="10116"/>
         <source>The MCP tool cannot be queued for this session.</source>
         <translation>无法为此会话排队执行 MCP 工具。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10135"/>
+        <location filename="../src/application/AppController.cpp" line="10149"/>
         <source>The MCP tool call was duplicated, changed, or exceeded dispatch bounds.</source>
         <translation>MCP 工具调用重复、已更改或超出调度限制。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10152"/>
+        <location filename="../src/application/AppController.cpp" line="10166"/>
         <source>The active mode or permission rule denied the MCP tool call.</source>
         <translation>当前模式或权限规则拒绝了此 MCP 工具调用。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10178"/>
+        <location filename="../src/application/AppController.cpp" line="10192"/>
         <source>The MCP tool dispatch state changed before it could be started.</source>
         <translation>MCP 工具的派发状态在启动前发生了变化。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10254"/>
+        <location filename="../src/application/AppController.cpp" line="10268"/>
         <source>The MCP tool call was cancelled.</source>
         <translation>MCP 工具调用已取消。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10055"/>
-        <location filename="../src/application/AppController.cpp" line="10288"/>
+        <location filename="../src/application/AppController.cpp" line="10069"/>
+        <location filename="../src/application/AppController.cpp" line="10302"/>
         <source>The target terminal session is unavailable.</source>
         <translation>目标终端会话不可用。</translation>
     </message>
@@ -8351,343 +8371,343 @@ Output:
         <translation>无法打开用户技能文件夹。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9482"/>
+        <location filename="../src/application/AppController.cpp" line="9496"/>
         <source>Select no more than four skills for one request.</source>
         <translation>每次请求最多选择四个技能。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="9493"/>
+        <location filename="../src/application/AppController.cpp" line="9507"/>
         <source>One selected skill is no longer available. Reload User skills and try again.</source>
         <translation>一个已选技能不再可用。请重新加载用户技能后重试。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10351"/>
+        <location filename="../src/application/AppController.cpp" line="10365"/>
         <source>The pending command was cancelled.</source>
         <translation>待处理的命令已取消。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10388"/>
+        <location filename="../src/application/AppController.cpp" line="10402"/>
         <source>The current terminal changed during the AI turn.</source>
         <translation>当前终端在此次 AI 对话轮次中发生了变化。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10392"/>
+        <location filename="../src/application/AppController.cpp" line="10406"/>
         <source>The current terminal snapshot is unavailable.</source>
         <translation>当前终端快照不可用。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10598"/>
+        <location filename="../src/application/AppController.cpp" line="10612"/>
         <source>The terminal-frame wait result could not resume the AI turn.</source>
         <translation>终端帧等待结果无法恢复 AI 对话轮次。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10722"/>
+        <location filename="../src/application/AppController.cpp" line="10736"/>
         <source>The command-wait result could not resume the AI turn.</source>
         <translation>命令等待结果无法恢复 AI 对话轮次。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10822"/>
+        <location filename="../src/application/AppController.cpp" line="10836"/>
         <source>The scrollback read arguments are invalid.</source>
         <translation>终端回滚缓冲区读取参数无效。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10828"/>
+        <location filename="../src/application/AppController.cpp" line="10842"/>
         <source>Unexpected scrollback read arguments.</source>
         <translation>终端回滚缓冲区读取参数异常。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10839"/>
+        <location filename="../src/application/AppController.cpp" line="10853"/>
         <source>The scrollback read bounds are invalid.</source>
         <translation>终端回滚缓冲区读取范围无效。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10858"/>
+        <location filename="../src/application/AppController.cpp" line="10872"/>
         <source>The terminal scrollback is unavailable for this session: %1.</source>
         <translation>此会话无法使用终端回滚缓冲区：%1。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10926"/>
+        <location filename="../src/application/AppController.cpp" line="10940"/>
         <source>The terminal action is unsupported.</source>
         <translation>不支持此终端操作。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10935"/>
+        <location filename="../src/application/AppController.cpp" line="10949"/>
         <source>The proposed runbook is invalid.</source>
         <translation>建议的运行手册无效。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10961"/>
-        <location filename="../src/application/AppController.cpp" line="10967"/>
+        <location filename="../src/application/AppController.cpp" line="10975"/>
+        <location filename="../src/application/AppController.cpp" line="10981"/>
         <source>The runbook could not be saved.</source>
         <translation>无法保存运行手册。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10981"/>
+        <location filename="../src/application/AppController.cpp" line="10995"/>
         <source>SFTP transfer is unavailable.</source>
         <translation>SFTP 传输不可用。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="10987"/>
-        <location filename="../src/application/AppController.cpp" line="10995"/>
+        <location filename="../src/application/AppController.cpp" line="11001"/>
+        <location filename="../src/application/AppController.cpp" line="11009"/>
         <source>The SFTP transfer paths are invalid.</source>
         <translation>SFTP 传输路径无效。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11003"/>
+        <location filename="../src/application/AppController.cpp" line="11017"/>
         <source>The local upload source must be a regular non-symlink file.</source>
         <translation>本地上传源必须是常规的非符号链接文件。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11010"/>
+        <location filename="../src/application/AppController.cpp" line="11024"/>
         <source>The local download destination must be a non-symlink file path in an existing directory.</source>
         <translation>本地下载目标必须是现有目录中的非符号链接文件路径。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11028"/>
+        <location filename="../src/application/AppController.cpp" line="11042"/>
         <source>The SFTP transfer could not be queued.</source>
         <translation>无法将 SFTP 传输加入队列。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11042"/>
-        <location filename="../src/application/AppController.cpp" line="11062"/>
+        <location filename="../src/application/AppController.cpp" line="11056"/>
+        <location filename="../src/application/AppController.cpp" line="11076"/>
         <source>The user is typing a command line; wait for it to finish.</source>
         <translation>用户正在输入命令；请等待输入完成。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11109"/>
         <location filename="../src/application/AppController.cpp" line="11123"/>
+        <location filename="../src/application/AppController.cpp" line="11137"/>
         <source>The tracked command no longer exists.</source>
         <translation>跟踪的命令已不存在。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11113"/>
+        <location filename="../src/application/AppController.cpp" line="11127"/>
         <source>The tracked command scope changed.</source>
         <translation>跟踪命令的作用域已发生变化。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11130"/>
+        <location filename="../src/application/AppController.cpp" line="11144"/>
         <source>The tracked command is no longer running.</source>
         <translation>跟踪的命令已不再运行。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11135"/>
+        <location filename="../src/application/AppController.cpp" line="11149"/>
         <source>The tracked command could not be interrupted.</source>
         <translation>无法中断跟踪的命令。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11251"/>
-        <location filename="../src/application/AppController.cpp" line="11383"/>
+        <location filename="../src/application/AppController.cpp" line="11265"/>
+        <location filename="../src/application/AppController.cpp" line="11397"/>
         <source>Choose system, portable, or session credential storage.</source>
         <translation>请选择系统、便携或仅会话凭据存储。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11263"/>
+        <location filename="../src/application/AppController.cpp" line="11277"/>
         <source>Delete encrypted AI history or keep the previous credential store before moving credentials to session storage.</source>
         <translation>将凭据迁移到会话存储前，请删除加密 AI 历史，或保留先前的凭据存储。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11291"/>
+        <location filename="../src/application/AppController.cpp" line="11305"/>
         <source>Credentials were copied, but the storage preference could not be saved. The old store remains active.</source>
         <translation>凭据已复制，但无法保存存储偏好。原存储仍处于活动状态。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11310"/>
+        <location filename="../src/application/AppController.cpp" line="11324"/>
         <source>Migration succeeded, but credentials remain in the previous store.</source>
         <translation>迁移成功，但凭据仍保留在原存储中。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11368"/>
+        <location filename="../src/application/AppController.cpp" line="11382"/>
         <source>Credentials were restored because host profiles could not be updated.</source>
         <translation>由于无法更新主机配置，凭据已恢复。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11412"/>
+        <location filename="../src/application/AppController.cpp" line="11426"/>
         <source>Choose a valid host profile, forwarding type, and bind port.</source>
         <translation>请选择有效的主机配置、转发类型和监听端口。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11419"/>
+        <location filename="../src/application/AppController.cpp" line="11433"/>
         <source>Enter a destination host and port for this forwarding rule.</source>
         <translation>请输入此转发规则的目标主机和端口。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11439"/>
+        <location filename="../src/application/AppController.cpp" line="11453"/>
         <source>Complete the forwarding rule with valid names and endpoints.</source>
         <translation>请使用有效的名称和端点补全转发规则。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11471"/>
-        <location filename="../src/application/AppController.cpp" line="11536"/>
+        <location filename="../src/application/AppController.cpp" line="11485"/>
+        <location filename="../src/application/AppController.cpp" line="11550"/>
         <source>The forwarding rule no longer exists.</source>
         <translation>此转发规则已不存在。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11478"/>
+        <location filename="../src/application/AppController.cpp" line="11492"/>
         <source>%1 copy</source>
         <translation>%1 副本</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11553"/>
+        <location filename="../src/application/AppController.cpp" line="11567"/>
         <source>Stop another forwarding rule before starting this one.</source>
         <translation>请先停止另一条转发规则，再启动此规则。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11561"/>
+        <location filename="../src/application/AppController.cpp" line="11575"/>
         <source>The host profile used by this forwarding rule no longer exists.</source>
         <translation>此转发规则使用的主机配置已不存在。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11584"/>
+        <location filename="../src/application/AppController.cpp" line="11598"/>
         <source>Unable to allocate the forwarding worker.</source>
         <translation>无法分配转发工作线程。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11650"/>
+        <location filename="../src/application/AppController.cpp" line="11664"/>
         <source>Unable to start the forwarding worker.</source>
         <translation>无法启动转发工作线程。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11759"/>
+        <location filename="../src/application/AppController.cpp" line="11773"/>
         <source>Session log failed: %1</source>
         <translation>会话日志失败：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="11885"/>
+        <location filename="../src/application/AppController.cpp" line="11899"/>
         <source>AI conversation</source>
         <translation>AI 对话</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="12178"/>
+        <location filename="../src/application/AppController.cpp" line="12192"/>
         <source>Remote shell history exceeded the safety limit.</source>
         <translation>远程 Shell 历史记录超过安全限制。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="12207"/>
+        <location filename="../src/application/AppController.cpp" line="12221"/>
         <source>This remote shell is not supported yet.</source>
         <translation>暂不支持此远程 Shell。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="12212"/>
+        <location filename="../src/application/AppController.cpp" line="12226"/>
         <source>Remote shell history could not be parsed.</source>
         <translation>无法解析远程 Shell 历史记录。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="12266"/>
+        <location filename="../src/application/AppController.cpp" line="12280"/>
         <source>SSH host key changed; connection blocked</source>
         <translation>SSH 主机密钥已更改；连接已阻止</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="12401"/>
+        <location filename="../src/application/AppController.cpp" line="12415"/>
         <source>This folder could not be expanded.</source>
         <translation>无法展开此文件夹。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="12485"/>
+        <location filename="../src/application/AppController.cpp" line="12499"/>
         <source>The remote directory could not be loaded.</source>
         <translation>无法加载远程目录。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="12489"/>
+        <location filename="../src/application/AppController.cpp" line="12503"/>
         <source>The remote file operation failed.</source>
         <translation>远程文件操作失败。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="12504"/>
+        <location filename="../src/application/AppController.cpp" line="12518"/>
         <source>The SFTP connection failed.</source>
         <translation>SFTP 连接失败。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="12983"/>
+        <location filename="../src/application/AppController.cpp" line="12997"/>
         <source>No terminal session</source>
         <translation>没有终端会话</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13143"/>
+        <location filename="../src/application/AppController.cpp" line="13157"/>
         <source>Unable to load the saved port forwarding rules.</source>
         <translation>无法加载已保存的端口转发规则。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13177"/>
+        <location filename="../src/application/AppController.cpp" line="13191"/>
         <source>Unable to save the port forwarding rules.</source>
         <translation>无法保存端口转发规则。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13197"/>
+        <location filename="../src/application/AppController.cpp" line="13211"/>
         <source>The SSH connection for the forwarding rule failed.</source>
         <translation>转发规则的 SSH 连接失败。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13200"/>
+        <location filename="../src/application/AppController.cpp" line="13214"/>
         <source>The local bind address or port is unavailable.</source>
         <translation>本地监听地址或端口不可用。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13203"/>
+        <location filename="../src/application/AppController.cpp" line="13217"/>
         <source>The SSH server rejected the remote listener.</source>
         <translation>SSH 服务器拒绝了远程监听。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13206"/>
+        <location filename="../src/application/AppController.cpp" line="13220"/>
         <source>The forwarding transport was disconnected.</source>
         <translation>转发传输连接已断开。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13209"/>
+        <location filename="../src/application/AppController.cpp" line="13223"/>
         <source>The forwarding worker exhausted an internal resource.</source>
         <translation>转发工作线程耗尽了内部资源。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13310"/>
+        <location filename="../src/application/AppController.cpp" line="13324"/>
         <source>Agent permission rules could not be loaded.</source>
         <translation>无法加载 Agent 权限规则。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13316"/>
+        <location filename="../src/application/AppController.cpp" line="13330"/>
         <source>Agent permission rules are invalid.</source>
         <translation>Agent 权限规则无效。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13333"/>
+        <location filename="../src/application/AppController.cpp" line="13347"/>
         <source>Quick messages could not be loaded.</source>
         <translation>无法加载快捷消息。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13346"/>
+        <location filename="../src/application/AppController.cpp" line="13360"/>
         <source>The Agent permission rule is invalid.</source>
         <translation>此 Agent 权限规则无效。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13364"/>
+        <location filename="../src/application/AppController.cpp" line="13378"/>
         <source>Agent permission rules could not be saved.</source>
         <translation>无法保存 Agent 权限规则。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13412"/>
+        <location filename="../src/application/AppController.cpp" line="13426"/>
         <source>Saved scripts could not be loaded.</source>
         <translation>无法加载已保存的脚本。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13447"/>
+        <location filename="../src/application/AppController.cpp" line="13461"/>
         <source>Some local settings were recovered from a last-known-good backup. Review them before continuing.</source>
         <translation>部分本地设置已从最后一次有效备份中恢复。请在继续前检查这些设置。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13476"/>
+        <location filename="../src/application/AppController.cpp" line="13490"/>
         <source>Restoring local terminal...</source>
         <translation>正在恢复本地终端...</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13494"/>
+        <location filename="../src/application/AppController.cpp" line="13508"/>
         <source>Unable to restore local terminal: %1</source>
         <translation>无法恢复本地终端：%1</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13512"/>
+        <location filename="../src/application/AppController.cpp" line="13526"/>
         <source>SSH workspace restored; reconnect when ready.</source>
         <translation>SSH 工作区已恢复；准备好后可重新连接。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13516"/>
+        <location filename="../src/application/AppController.cpp" line="13530"/>
         <source>The saved SSH host for this workspace no longer exists.</source>
         <translation>此工作区保存的 SSH 主机已不存在。</translation>
     </message>
