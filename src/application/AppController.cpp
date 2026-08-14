@@ -8827,7 +8827,7 @@ bool AppController::attachAiRecentCommands(const int count)
     return true;
 }
 
-bool AppController::attachAiTextFiles(const QVariantList &localFileUrls)
+bool AppController::attachAiTextFiles(const QStringList &localFileUrls)
 {
     TerminalTab *tab = activeTab();
     if (tab == nullptr || localFileUrls.isEmpty()
@@ -8838,10 +8838,10 @@ bool AppController::attachAiTextFiles(const QVariantList &localFileUrls)
 
     QStringList paths;
     paths.reserve(localFileUrls.size());
-    for (const QVariant &value : localFileUrls)
+    for (const QString &value : localFileUrls)
     {
-        const QUrl url = value.toUrl();
-        const QString path = url.isLocalFile() ? url.toLocalFile() : value.toString();
+        const QUrl url(value);
+        const QString path = url.isLocalFile() ? url.toLocalFile() : value;
         if (path.trimmed().isEmpty())
         {
             return false;
@@ -8945,7 +8945,7 @@ bool AppController::attachAiTextFiles(const QVariantList &localFileUrls)
     return true;
 }
 
-bool AppController::attachAiImageFiles(const QVariantList &localFileUrls)
+bool AppController::attachAiImageFiles(const QStringList &localFileUrls)
 {
     TerminalTab *tab = activeTab();
     if (tab == nullptr || localFileUrls.isEmpty()
@@ -8963,10 +8963,10 @@ bool AppController::attachAiImageFiles(const QVariantList &localFileUrls)
 
     QStringList paths;
     paths.reserve(localFileUrls.size());
-    for (const QVariant &value : localFileUrls)
+    for (const QString &value : localFileUrls)
     {
-        const QUrl url = value.toUrl();
-        const QString path = url.isLocalFile() ? url.toLocalFile() : value.toString();
+        const QUrl url(value);
+        const QString path = url.isLocalFile() ? url.toLocalFile() : value;
         if (path.trimmed().isEmpty())
         {
             return false;
@@ -9208,9 +9208,23 @@ ai::AiContextBundle AppController::buildAiContext(TerminalTab &tab, const bool p
         {
             kind = QStringLiteral("frame");
         }
+        QString preview;
+        if (!item.command.empty())
+        {
+            preview = QStringLiteral("$ ") + utf8QString(item.command);
+        }
+        if (!item.content.empty())
+        {
+            if (!preview.isEmpty())
+            {
+                preview += QLatin1Char('\n');
+            }
+            preview += utf8QString(item.content);
+        }
         tab.aiContextItems.push_back(QVariantMap{{QStringLiteral("id"), utf8QString(item.id)},
                                                  {QStringLiteral("title"), utf8QString(item.title)},
                                                  {QStringLiteral("kind"), kind},
+                                                 {QStringLiteral("preview"), preview},
                                                  {QStringLiteral("quality"), semanticCapabilityToken(item.capability)},
                                                  {QStringLiteral("redacted"), item.redacted},
                                                  {QStringLiteral("truncated"), item.truncated},

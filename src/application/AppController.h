@@ -557,8 +557,8 @@ public:
     Q_INVOKABLE bool copyAiText(const QString &text);
     Q_INVOKABLE bool attachAiSelection();
     Q_INVOKABLE bool attachAiRecentCommands(int count);
-    Q_INVOKABLE bool attachAiTextFiles(const QVariantList &localFileUrls);
-    Q_INVOKABLE bool attachAiImageFiles(const QVariantList &localFileUrls);
+    Q_INVOKABLE bool attachAiTextFiles(const QStringList &localFileUrls);
+    Q_INVOKABLE bool attachAiImageFiles(const QStringList &localFileUrls);
     Q_INVOKABLE bool removeAiContextItem(const QString &itemId);
     Q_INVOKABLE bool setAiContextItemPinned(const QString &itemId, bool pinned);
     Q_INVOKABLE void resetAiContextItems();

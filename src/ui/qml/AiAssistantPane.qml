@@ -587,94 +587,125 @@ Rectangle {
                             id: contextItem
 
                             required property var modelData
+                            property bool expanded: false
+                            readonly property bool expandable: modelData.kind !== "image" && modelData.preview && modelData.preview.length > 0
+                            readonly property real summaryHeight: modelData.kind === "image" ? 44 : 30
+
                             Layout.fillWidth: true
-                            Layout.preferredHeight: contextItem.modelData.kind === "image" ? 44 : 30
+                            Layout.preferredHeight: contextItem.summaryHeight + (contextItem.expanded ? Math.min(88, contextPreviewText.implicitHeight + 8) : 0)
                             radius: Theme.radiusSmall
                             color: Theme.controlBackground
 
-                            RowLayout {
+                            ColumnLayout {
                                 anchors.fill: parent
                                 anchors.leftMargin: 8
                                 anchors.rightMargin: 8
-                                spacing: 6
+                                spacing: 0
 
-                                Image {
-                                    Layout.preferredWidth: 32
-                                    Layout.preferredHeight: 32
-                                    visible: contextItem.modelData.kind === "image"
-                                    source: visible ? contextItem.modelData.previewUrl : ""
-                                    fillMode: Image.PreserveAspectCrop
-                                    asynchronous: true
-                                    cache: true
-                                }
-
-                                Text {
+                                RowLayout {
                                     Layout.fillWidth: true
-                                    Layout.minimumWidth: 0
-                                    text: contextItem.modelData.title
-                                    color: Theme.textSoft
-                                    elide: Text.ElideMiddle
-                                    font.family: Theme.uiFont
-                                    font.pixelSize: Theme.textCompact
+                                    Layout.preferredHeight: contextItem.summaryHeight
+                                    spacing: 6
+
+                                    ContextToolButton {
+                                        visible: contextItem.expandable
+                                        Accessible.name: contextItem.expanded ? qsTr("Collapse %1 preview").arg(contextItem.modelData.title) : qsTr("Expand %1 preview").arg(contextItem.modelData.title)
+                                        onClicked: contextItem.expanded = !contextItem.expanded
+                                        contentItem: AppIcon {
+                                            name: contextItem.expanded ? "chevron-down" : "chevron-right"
+                                            color: Theme.textMuted
+                                        }
+
+                                        AppToolTip {
+                                            text: contextItem.expanded ? qsTr("Collapse preview") : qsTr("Preview context")
+                                        }
+                                    }
+
+                                    Image {
+                                        Layout.preferredWidth: 32
+                                        Layout.preferredHeight: 32
+                                        visible: contextItem.modelData.kind === "image"
+                                        source: visible ? contextItem.modelData.previewUrl : ""
+                                        fillMode: Image.PreserveAspectCrop
+                                        asynchronous: true
+                                        cache: true
+                                    }
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        Layout.minimumWidth: 0
+                                        text: contextItem.modelData.title
+                                        color: Theme.textSoft
+                                        elide: Text.ElideMiddle
+                                        font.family: Theme.uiFont
+                                        font.pixelSize: Theme.textCompact
+                                    }
+
+                                    Text {
+                                        text: contextItem.modelData.quality
+                                        color: contextItem.modelData.quality === "rich" ? Theme.successText : contextItem.modelData.quality === "image" ? Theme.accent : Theme.warning
+                                        font.family: Theme.terminalFont
+                                        font.pixelSize: Theme.textCompact
+                                    }
+
+                                    Text {
+                                        visible: contextItem.modelData.redacted || contextItem.modelData.truncated
+                                        text: contextItem.modelData.redacted ? qsTr("redacted") : qsTr("truncated")
+                                        color: Theme.warning
+                                        font.family: Theme.uiFont
+                                        font.pixelSize: Theme.textCompact
+                                    }
+
+                                    ContextToolButton {
+                                        id: pinButton
+
+                                        visible: contextItem.modelData.kind !== "image"
+                                        checked: contextItem.modelData.pinned
+                                        checkable: true
+                                        Accessible.name: checked ? qsTr("Unpin %1").arg(contextItem.modelData.title) : qsTr("Pin %1").arg(contextItem.modelData.title)
+                                        onClicked: pane.controller.setAiContextItemPinned(contextItem.modelData.id, checked)
+                                        contentItem: AppIcon {
+                                            name: "bookmark"
+                                            color: pinButton.checked ? Theme.accent : Theme.textMuted
+                                        }
+
+                                        AppToolTip {
+                                            text: pinButton.checked ? qsTr("Unpin context") : qsTr("Pin context")
+                                        }
+                                    }
+
+                                    ContextToolButton {
+                                        Accessible.name: qsTr("Remove %1 from context").arg(contextItem.modelData.title)
+                                        onClicked: pane.controller.removeAiContextItem(contextItem.modelData.id)
+                                        contentItem: AppIcon {
+                                            name: "close"
+                                            color: Theme.textMuted
+                                        }
+
+                                        AppToolTip {
+                                            text: qsTr("Remove from this request")
+                                        }
+                                    }
                                 }
 
                                 Text {
-                                    text: contextItem.modelData.quality
-                                    color: contextItem.modelData.quality === "rich" ? Theme.successText : contextItem.modelData.quality === "image" ? Theme.accent : Theme.warning
+                                    id: contextPreviewText
+
+                                    Layout.fillWidth: true
+                                    Layout.leftMargin: 24
+                                    Layout.rightMargin: 4
+                                    Layout.bottomMargin: 6
+                                    visible: contextItem.expanded
+                                    text: contextItem.modelData.preview || ""
+                                    color: Theme.textMuted
+                                    wrapMode: Text.WrapAnywhere
+                                    maximumLineCount: 5
+                                    elide: Text.ElideRight
                                     font.family: Theme.terminalFont
                                     font.pixelSize: Theme.textCompact
                                 }
-
-                                Text {
-                                    visible: contextItem.modelData.redacted || contextItem.modelData.truncated
-                                    text: contextItem.modelData.redacted ? qsTr("redacted") : qsTr("truncated")
-                                    color: Theme.warning
-                                    font.family: Theme.uiFont
-                                    font.pixelSize: Theme.textCompact
-                                }
-
-                                ContextToolButton {
-                                    id: pinButton
-
-                                    visible: contextItem.modelData.kind !== "image"
-                                    checked: contextItem.modelData.pinned
-                                    checkable: true
-                                    Accessible.name: checked ? qsTr("Unpin %1").arg(contextItem.modelData.title) : qsTr("Pin %1").arg(contextItem.modelData.title)
-                                    onClicked: pane.controller.setAiContextItemPinned(contextItem.modelData.id, checked)
-                                    contentItem: AppIcon {
-                                        name: "bookmark"
-                                        color: pinButton.checked ? Theme.accent : Theme.textMuted
-                                    }
-
-                                    AppToolTip {
-                                        text: pinButton.checked ? qsTr("Unpin context") : qsTr("Pin context")
-                                    }
-                                }
-
-                                ContextToolButton {
-                                    Accessible.name: qsTr("Remove %1 from context").arg(contextItem.modelData.title)
-                                    onClicked: pane.controller.removeAiContextItem(contextItem.modelData.id)
-                                    contentItem: AppIcon {
-                                        name: "close"
-                                        color: Theme.textMuted
-                                    }
-
-                                    AppToolTip {
-                                        text: qsTr("Remove from this request")
-                                    }
-                                }
                             }
                         }
-                    }
-
-                    Text {
-                        Layout.fillWidth: true
-                        visible: pane.controller.activeAiContextPreview.length > 0
-                        text: pane.controller.activeAiContextPreview
-                        color: Theme.textMuted
-                        wrapMode: Text.WrapAnywhere
-                        font.family: Theme.terminalFont
-                        font.pixelSize: Theme.textCompact
                     }
 
                     ActionButton {
@@ -2081,7 +2112,13 @@ Rectangle {
         title: qsTr("Attach text files")
         fileMode: FileDialog.OpenFiles
         nameFilters: [qsTr("Text files (*.txt *.md *.json *.yaml *.yml *.toml *.ini *.cfg *.conf *.log *.csv *.xml *.html *.css *.js *.ts *.py *.sh *.ps1)"), qsTr("All files (*)")]
-        onAccepted: pane.controller.attachAiTextFiles(selectedFiles)
+        onAccepted: {
+            const urls = [];
+            for (const file of selectedFiles) {
+                urls.push(file.toString());
+            }
+            pane.controller.attachAiTextFiles(urls);
+        }
     }
 
     FileDialog {
@@ -2090,7 +2127,13 @@ Rectangle {
         title: qsTr("Attach images")
         fileMode: FileDialog.OpenFiles
         nameFilters: [qsTr("Images (*.png *.jpg *.jpeg *.webp *.gif)"), qsTr("All files (*)")]
-        onAccepted: pane.controller.attachAiImageFiles(selectedFiles)
+        onAccepted: {
+            const urls = [];
+            for (const file of selectedFiles) {
+                urls.push(file.toString());
+            }
+            pane.controller.attachAiImageFiles(urls);
+        }
     }
 
     FileDialog {
