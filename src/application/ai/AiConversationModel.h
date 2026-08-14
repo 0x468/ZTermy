@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace ztermy::ai
@@ -19,6 +20,22 @@ struct AiConversationLimits final
     std::size_t maxMessages = 64;
     std::size_t maxMessageBytes = std::size_t{256} * 1024;
     std::size_t maxConversationBytes = std::size_t{1024} * 1024;
+};
+
+enum class AiConversationTranscriptRole : std::uint8_t
+{
+    user,
+    assistant,
+    evidence,
+};
+
+struct AiConversationTranscriptEntry final
+{
+    AiConversationTranscriptRole role = AiConversationTranscriptRole::user;
+    std::string content;
+
+    [[nodiscard]] friend bool operator==(const AiConversationTranscriptEntry &,
+                                         const AiConversationTranscriptEntry &) = default;
 };
 
 class AiConversationModel final : public QAbstractListModel
@@ -63,9 +80,9 @@ public:
     [[nodiscard]] bool streaming() const noexcept;
     [[nodiscard]] const AiConversationLimits &limits() const noexcept;
     [[nodiscard]] std::vector<AiChatMessage> providerMessages() const;
-    [[nodiscard]] std::vector<AiChatMessage> evidenceMessages() const;
-    [[nodiscard]] bool restoreProviderMessages(const std::vector<AiChatMessage> &messages);
-    [[nodiscard]] bool restoreEvidenceMessages(const std::vector<AiChatMessage> &messages);
+    [[nodiscard]] std::vector<AiChatMessage> providerMessagesWithEvidence() const;
+    [[nodiscard]] std::vector<AiConversationTranscriptEntry> transcript() const;
+    [[nodiscard]] bool restoreTranscript(const std::vector<AiConversationTranscriptEntry> &entries);
     [[nodiscard]] bool appendEvidenceMessage(QString text);
     [[nodiscard]] std::uint64_t appendUserMessage(QString text);
     [[nodiscard]] std::uint64_t beginAssistantMessage();
@@ -118,6 +135,13 @@ private:
         QVariantList toolActivities;
     };
 
+    struct EvidenceMessage final
+    {
+        std::uint64_t afterMessageId = 0;
+        QString text;
+        std::size_t bytes = 0;
+    };
+
     [[nodiscard]] static QString roleToken(AiMessageRole role);
     [[nodiscard]] static QString stateToken(MessageState state);
     [[nodiscard]] static QString boundedUtf8(QString text, std::size_t maximumBytes, bool &truncated);
@@ -129,7 +153,7 @@ private:
 
     AiConversationLimits m_limits;
     std::vector<Message> m_messages;
-    std::vector<QString> m_evidenceMessages;
+    std::vector<EvidenceMessage> m_evidenceMessages;
     std::size_t m_totalBytes = 0;
     std::size_t m_evidenceBytes = 0;
     std::uint64_t m_nextMessageId = 1;

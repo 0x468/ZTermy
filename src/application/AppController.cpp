@@ -7895,23 +7895,30 @@ bool AppController::restoreAiConversationHistory(const QString &conversationId)
     {
         return false;
     }
-    std::vector<ai::AiChatMessage> messages;
-    std::vector<ai::AiChatMessage> evidence;
-    messages.reserve(stored->messages.size());
-    evidence.reserve(stored->messages.size());
+    std::vector<ai::AiConversationTranscriptEntry> transcript;
+    transcript.reserve(stored->messages.size());
     for (const auto &message : stored->messages)
     {
-        if (message.role == QStringLiteral("evidence"))
+        ai::AiConversationTranscriptRole role;
+        if (message.role == QStringLiteral("user"))
         {
-            evidence.push_back({.role = ai::AiMessageRole::user, .content = utf8String(message.text)});
-            continue;
+            role = ai::AiConversationTranscriptRole::user;
         }
-        messages.push_back(
-            {.role = message.role == QStringLiteral("user") ? ai::AiMessageRole::user : ai::AiMessageRole::assistant,
-             .content = utf8String(message.text)});
+        else if (message.role == QStringLiteral("assistant"))
+        {
+            role = ai::AiConversationTranscriptRole::assistant;
+        }
+        else if (message.role == QStringLiteral("evidence"))
+        {
+            role = ai::AiConversationTranscriptRole::evidence;
+        }
+        else
+        {
+            return false;
+        }
+        transcript.push_back({.role = role, .content = utf8String(message.text)});
     }
-    if (!tab->aiConversation->restoreProviderMessages(messages)
-        || !tab->aiConversation->restoreEvidenceMessages(evidence))
+    if (!tab->aiConversation->restoreTranscript(transcript))
     {
         return false;
     }
@@ -8853,14 +8860,12 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
         tab.aiLastPreferFailure = preferLastFailure;
         tab.aiLastCommandRequest = commandRequest;
     }
-    auto messages = tab.aiConversation->providerMessages();
+    auto messages = tab.aiConversation->providerMessagesWithEvidence();
     if (messages.empty())
     {
         static_cast<void>(tab.aiConversation->appendUserMessage(normalizedPrompt));
-        messages = tab.aiConversation->providerMessages();
+        messages = tab.aiConversation->providerMessagesWithEvidence();
     }
-    const auto priorEvidence = tab.aiConversation->evidenceMessages();
-    messages.insert(messages.end() - 1, priorEvidence.begin(), priorEvidence.end());
     if (!context.items.empty())
     {
         messages.insert(messages.end() - 1, ai::AiContextSerializer::asUntrustedEvidenceMessage(context));
@@ -11182,32 +11187,34 @@ void AppController::persistAiConversation(const TerminalTab &tab)
     {
         return;
     }
-    const auto providerMessages = tab.aiConversation->providerMessages();
-    const auto evidenceMessages = tab.aiConversation->evidenceMessages();
-    if (providerMessages.empty())
+    const auto transcript = tab.aiConversation->transcript();
+    if (transcript.empty())
     {
         return;
     }
     ai::AiStoredConversation stored{.id = tab.aiConversationId, .updatedAtUtc = QDateTime::currentDateTimeUtc()};
-    stored.messages.reserve(providerMessages.size() + evidenceMessages.size());
-    for (const auto &message : providerMessages)
+    stored.messages.reserve(transcript.size());
+    for (const auto &entry : transcript)
     {
-        if (message.role != ai::AiMessageRole::user && message.role != ai::AiMessageRole::assistant)
+        QString role;
+        switch (entry.role)
         {
-            continue;
+            case ai::AiConversationTranscriptRole::user:
+                role = QStringLiteral("user");
+                break;
+            case ai::AiConversationTranscriptRole::assistant:
+                role = QStringLiteral("assistant");
+                break;
+            case ai::AiConversationTranscriptRole::evidence:
+                role = QStringLiteral("evidence");
+                break;
         }
-        const QString text = utf8QString(message.content);
-        if (stored.title.isEmpty() && message.role == ai::AiMessageRole::user)
+        const QString text = utf8QString(entry.content);
+        if (stored.title.isEmpty() && entry.role == ai::AiConversationTranscriptRole::user)
         {
             stored.title = text.simplified().left(80);
         }
-        stored.messages.push_back(
-            {.role = message.role == ai::AiMessageRole::user ? QStringLiteral("user") : QStringLiteral("assistant"),
-             .text = text});
-    }
-    for (const auto &message : evidenceMessages)
-    {
-        stored.messages.push_back({.role = QStringLiteral("evidence"), .text = utf8QString(message.content)});
+        stored.messages.push_back({.role = std::move(role), .text = text});
     }
     if (stored.title.isEmpty())
     {

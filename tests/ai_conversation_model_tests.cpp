@@ -8,7 +8,10 @@ namespace
 
 using ztermy::ai::AiConversationLimits;
 using ztermy::ai::AiConversationModel;
+using ztermy::ai::AiConversationTranscriptEntry;
+using ztermy::ai::AiConversationTranscriptRole;
 using ztermy::ai::AiCostEstimate;
+using ztermy::ai::AiMessageRole;
 using ztermy::ai::AiTokenUsage;
 using ztermy::ai::AiTurnMetrics;
 
@@ -23,8 +26,9 @@ private slots:
     void exposesCancellationAsRetryableNeutralState();
     void exposesBoundedNativeToolActivities();
     void exposesOnlyOneBoundedShellCommandSuggestion();
-    void restoresOnlyBoundedUserAndAssistantMessages();
+    void restoresOnlyBoundedTranscriptEntries();
     void preservesHiddenAgentEvidenceWithoutAddingVisibleRows();
+    void preservesAgentEvidenceChronology();
 };
 
 void AiConversationModelTests::streamsAssistantMessageAndUsage()
@@ -134,21 +138,22 @@ void AiConversationModelTests::exposesOnlyOneBoundedShellCommandSuggestion()
     QVERIFY(!model.data(model.index(2), AiConversationModel::HasCommandSuggestionRole).toBool());
 }
 
-void AiConversationModelTests::restoresOnlyBoundedUserAndAssistantMessages()
+void AiConversationModelTests::restoresOnlyBoundedTranscriptEntries()
 {
     AiConversationModel model;
-    const std::vector<ztermy::ai::AiChatMessage> transcript{
-        {.role = ztermy::ai::AiMessageRole::user, .content = "question"},
-        {.role = ztermy::ai::AiMessageRole::assistant, .content = "answer"}};
-    QVERIFY(model.restoreProviderMessages(transcript));
+    const std::vector<AiConversationTranscriptEntry> transcript{
+        {.role = AiConversationTranscriptRole::user, .content = "question"},
+        {.role = AiConversationTranscriptRole::assistant, .content = "answer"}};
+    QVERIFY(model.restoreTranscript(transcript));
     QCOMPARE(model.rowCount(), 2);
     QCOMPARE(model.data(model.index(0), AiConversationModel::TextRole).toString(), QStringLiteral("question"));
     QCOMPARE(model.data(model.index(1), AiConversationModel::TextRole).toString(), QStringLiteral("answer"));
     QVERIFY(!model.streaming());
 
     auto invalid = transcript;
-    invalid.push_back({.role = ztermy::ai::AiMessageRole::tool, .content = "untrusted tool replay"});
-    QVERIFY(!model.restoreProviderMessages(invalid));
+    invalid.insert(invalid.begin(),
+                   {.role = AiConversationTranscriptRole::evidence, .content = "unanchored tool result"});
+    QVERIFY(!model.restoreTranscript(invalid));
     QCOMPARE(model.rowCount(), 2);
 }
 
@@ -158,19 +163,55 @@ void AiConversationModelTests::preservesHiddenAgentEvidenceWithoutAddingVisibleR
     static_cast<void>(model.appendUserMessage(QStringLiteral("check disks")));
     QVERIFY(model.appendEvidenceMessage(QStringLiteral("[Agent tool evidence]\nTool: run_command\nResult: df output")));
     QCOMPARE(model.rowCount(), 1);
-    const auto evidence = model.evidenceMessages();
-    QCOMPARE(evidence.size(), std::size_t{1});
-    QVERIFY(QString::fromUtf8(evidence.front().content).contains(QStringLiteral("df output")));
+    const auto transcript = model.transcript();
+    QCOMPARE(transcript.size(), std::size_t{2});
+    QCOMPARE(transcript.back().role, AiConversationTranscriptRole::evidence);
+    QVERIFY(QString::fromUtf8(transcript.back().content).contains(QStringLiteral("df output")));
 
     AiConversationModel restored;
-    QVERIFY(restored.restoreEvidenceMessages(evidence));
-    QCOMPARE(restored.rowCount(), 0);
-    const auto restoredEvidence = restored.evidenceMessages();
-    QCOMPARE(restoredEvidence.size(), evidence.size());
-    QCOMPARE(restoredEvidence.front().role, evidence.front().role);
-    QCOMPARE(restoredEvidence.front().content, evidence.front().content);
+    QVERIFY(restored.restoreTranscript(transcript));
+    QCOMPARE(restored.rowCount(), 1);
+    QCOMPARE(restored.transcript(), transcript);
     restored.clear();
-    QVERIFY(restored.evidenceMessages().empty());
+    QVERIFY(restored.transcript().empty());
+}
+
+void AiConversationModelTests::preservesAgentEvidenceChronology()
+{
+    AiConversationModel model;
+    static_cast<void>(model.appendUserMessage(QStringLiteral("check disks")));
+    auto assistantId = model.beginAssistantMessage();
+    QVERIFY(model.appendAssistantDelta(assistantId, QStringLiteral("I will inspect disk usage.")));
+    QVERIFY(model.completeAssistantMessage(assistantId));
+    QVERIFY(model.appendEvidenceMessage(QStringLiteral("df output")));
+    static_cast<void>(model.appendUserMessage(QStringLiteral("and memory?")));
+    assistantId = model.beginAssistantMessage();
+    QVERIFY(model.appendAssistantDelta(assistantId, QStringLiteral("I will inspect memory.")));
+    QVERIFY(model.completeAssistantMessage(assistantId));
+    QVERIFY(model.appendEvidenceMessage(QStringLiteral("free output")));
+    static_cast<void>(model.appendUserMessage(QStringLiteral("summarize both")));
+
+    const std::vector<AiConversationTranscriptEntry> expected{
+        {.role = AiConversationTranscriptRole::user, .content = "check disks"},
+        {.role = AiConversationTranscriptRole::assistant, .content = "I will inspect disk usage."},
+        {.role = AiConversationTranscriptRole::evidence, .content = "df output"},
+        {.role = AiConversationTranscriptRole::user, .content = "and memory?"},
+        {.role = AiConversationTranscriptRole::assistant, .content = "I will inspect memory."},
+        {.role = AiConversationTranscriptRole::evidence, .content = "free output"},
+        {.role = AiConversationTranscriptRole::user, .content = "summarize both"}};
+    QCOMPARE(model.transcript(), expected);
+
+    const auto providerMessages = model.providerMessagesWithEvidence();
+    QCOMPARE(providerMessages.size(), expected.size());
+    QCOMPARE(providerMessages.at(1).role, AiMessageRole::assistant);
+    QCOMPARE(providerMessages.at(2).role, AiMessageRole::user);
+    QCOMPARE(providerMessages.at(2).content, std::string("df output"));
+    QCOMPARE(providerMessages.at(5).content, std::string("free output"));
+    QCOMPARE(model.providerMessages().size(), std::size_t{5});
+
+    AiConversationModel restored;
+    QVERIFY(restored.restoreTranscript(expected));
+    QCOMPARE(restored.transcript(), expected);
 }
 
 } // namespace

@@ -139,80 +139,106 @@ std::vector<AiChatMessage> AiConversationModel::providerMessages() const
     return messages;
 }
 
-std::vector<AiChatMessage> AiConversationModel::evidenceMessages() const
+std::vector<AiConversationTranscriptEntry> AiConversationModel::transcript() const
+{
+    std::vector<AiConversationTranscriptEntry> entries;
+    entries.reserve(m_messages.size() + m_evidenceMessages.size());
+    for (const auto &message : m_messages)
+    {
+        if (message.state != MessageState::streaming && message.state != MessageState::failed
+            && message.state != MessageState::cancelled)
+        {
+            entries.push_back({.role = message.role == AiMessageRole::user ? AiConversationTranscriptRole::user
+                                                                           : AiConversationTranscriptRole::assistant,
+                               .content = message.text.toUtf8().toStdString()});
+        }
+        for (const auto &evidence : m_evidenceMessages)
+        {
+            if (evidence.afterMessageId == message.id)
+            {
+                entries.push_back(
+                    {.role = AiConversationTranscriptRole::evidence, .content = evidence.text.toUtf8().toStdString()});
+            }
+        }
+    }
+    return entries;
+}
+
+std::vector<AiChatMessage> AiConversationModel::providerMessagesWithEvidence() const
 {
     std::vector<AiChatMessage> messages;
-    messages.reserve(m_evidenceMessages.size());
-    for (const auto &evidence : m_evidenceMessages)
+    const auto entries = transcript();
+    messages.reserve(entries.size());
+    for (const auto &entry : entries)
     {
-        messages.push_back(AiChatMessage{.role = AiMessageRole::user, .content = evidence.toUtf8().toStdString()});
+        messages.push_back({.role = entry.role == AiConversationTranscriptRole::assistant ? AiMessageRole::assistant
+                                                                                          : AiMessageRole::user,
+                            .content = entry.content});
     }
     return messages;
 }
 
-bool AiConversationModel::restoreProviderMessages(const std::vector<AiChatMessage> &messages)
+bool AiConversationModel::restoreTranscript(const std::vector<AiConversationTranscriptEntry> &entries)
 {
-    std::size_t totalBytes = 0;
-    if (messages.size() > m_limits.maxMessages
-        || !std::ranges::all_of(messages, [this, &totalBytes](const AiChatMessage &message) {
-               if ((message.role != AiMessageRole::user && message.role != AiMessageRole::assistant)
-                   || !message.toolCallId.empty() || message.content.size() > m_limits.maxMessageBytes)
-               {
-                   return false;
-               }
-               totalBytes += message.content.size();
-               return totalBytes <= m_limits.maxConversationBytes;
-           }))
+    std::size_t messageCount = 0;
+    std::size_t evidenceCount = 0;
+    std::size_t messageBytes = 0;
+    std::size_t evidenceBytes = 0;
+    bool hasEvidenceAnchor = false;
+    for (const auto &entry : entries)
     {
-        return false;
-    }
-    clear();
-    for (const auto &message : messages)
-    {
-        if (message.role == AiMessageRole::user)
+        if ((entry.content.empty() && entry.role != AiConversationTranscriptRole::assistant)
+            || entry.content.size() > m_limits.maxMessageBytes)
         {
-            static_cast<void>(appendUserMessage(QString::fromUtf8(message.content)));
+            return false;
+        }
+        if (entry.role == AiConversationTranscriptRole::evidence)
+        {
+            if (!hasEvidenceAnchor)
+            {
+                return false;
+            }
+            ++evidenceCount;
+            evidenceBytes += entry.content.size();
+            if (evidenceCount > m_limits.maxMessages || evidenceBytes > m_limits.maxConversationBytes)
+            {
+                return false;
+            }
+        }
+        else
+        {
+            hasEvidenceAnchor = true;
+            ++messageCount;
+            messageBytes += entry.content.size();
+            if (messageCount > m_limits.maxMessages || messageBytes > m_limits.maxConversationBytes)
+            {
+                return false;
+            }
+        }
+    }
+
+    clear();
+    for (const auto &entry : entries)
+    {
+        if (entry.role == AiConversationTranscriptRole::user)
+        {
+            static_cast<void>(appendUserMessage(QString::fromUtf8(entry.content)));
+            continue;
+        }
+        if (entry.role == AiConversationTranscriptRole::evidence)
+        {
+            if (!appendEvidenceMessage(QString::fromUtf8(entry.content)))
+            {
+                clear();
+                return false;
+            }
             continue;
         }
         const std::uint64_t messageId = beginAssistantMessage();
-        if (!message.content.empty() && !appendAssistantDelta(messageId, QString::fromUtf8(message.content)))
+        if ((!entry.content.empty() && !appendAssistantDelta(messageId, QString::fromUtf8(entry.content)))
+            || !completeAssistantMessage(messageId))
         {
             clear();
-            return false;
-        }
-        if (!completeAssistantMessage(messageId))
-        {
-            clear();
-            return false;
-        }
-    }
-    return true;
-}
-
-bool AiConversationModel::restoreEvidenceMessages(const std::vector<AiChatMessage> &messages)
-{
-    std::size_t totalBytes = 0;
-    if (messages.size() > m_limits.maxMessages
-        || !std::ranges::all_of(messages, [this, &totalBytes](const AiChatMessage &message) {
-               if (message.role != AiMessageRole::user || !message.toolCallId.empty()
-                   || message.content.size() > m_limits.maxMessageBytes)
-               {
-                   return false;
-               }
-               totalBytes += message.content.size();
-               return totalBytes <= m_limits.maxConversationBytes;
-           }))
-    {
-        return false;
-    }
-    m_evidenceMessages.clear();
-    m_evidenceBytes = 0;
-    for (const auto &message : messages)
-    {
-        if (!appendEvidenceMessage(QString::fromUtf8(message.content)))
-        {
-            m_evidenceMessages.clear();
-            m_evidenceBytes = 0;
             return false;
         }
     }
@@ -223,7 +249,7 @@ bool AiConversationModel::appendEvidenceMessage(QString text)
 {
     bool truncated = false;
     text = boundedUtf8(std::move(text), m_limits.maxMessageBytes, truncated);
-    if (text.trimmed().isEmpty())
+    if (text.trimmed().isEmpty() || m_messages.empty())
     {
         return false;
     }
@@ -232,7 +258,7 @@ bool AiConversationModel::appendEvidenceMessage(QString text)
            && (m_evidenceMessages.size() >= m_limits.maxMessages
                || m_evidenceBytes + bytes > m_limits.maxConversationBytes))
     {
-        m_evidenceBytes -= static_cast<std::size_t>(m_evidenceMessages.front().toUtf8().size());
+        m_evidenceBytes -= m_evidenceMessages.front().bytes;
         m_evidenceMessages.erase(m_evidenceMessages.begin());
     }
     if (bytes > m_limits.maxConversationBytes)
@@ -240,7 +266,8 @@ bool AiConversationModel::appendEvidenceMessage(QString text)
         return false;
     }
     m_evidenceBytes += bytes;
-    m_evidenceMessages.push_back(std::move(text));
+    m_evidenceMessages.push_back(
+        {.afterMessageId = m_messages.back().id, .text = std::move(text), .bytes = bytes});
     return true;
 }
 
@@ -591,6 +618,15 @@ void AiConversationModel::evictFor(const std::size_t incomingBytes)
         !m_messages.empty()
         && (m_messages.size() >= m_limits.maxMessages || m_totalBytes + incomingBytes > m_limits.maxConversationBytes))
     {
+        const std::uint64_t evictedMessageId = m_messages.front().id;
+        std::erase_if(m_evidenceMessages, [this, evictedMessageId](const EvidenceMessage &evidence) {
+            if (evidence.afterMessageId != evictedMessageId)
+            {
+                return false;
+            }
+            m_evidenceBytes -= std::min(m_evidenceBytes, evidence.bytes);
+            return true;
+        });
         beginRemoveRows({}, 0, 0);
         m_totalBytes -= std::min(m_totalBytes, m_messages.front().bytes);
         m_messages.erase(m_messages.begin());
