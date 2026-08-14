@@ -37,6 +37,7 @@ private slots:
     void preparesCompatibleRequest();
     void preparesAnthropicRequest();
     void preparesProviderNativeMultimodalRequests();
+    void preparesProviderNativeWebSearchRequests();
     void appliesProviderSpecificReasoningControls();
     void preservesAnthropicThinkingSignatureAcrossTools();
     void resolvesFriendlyApiAddressesAndModels();
@@ -207,6 +208,38 @@ void ProviderRequestFactoryTests::preparesProviderNativeMultimodalRequests()
     const auto ollamaMessage = body.value("messages").toArray().first().toObject();
     QCOMPARE(ollamaMessage.value("content").toString(), QStringLiteral("Inspect this"));
     QCOMPARE(ollamaMessage.value("images").toArray().first().toString(), QStringLiteral("aW1hZ2U="));
+}
+
+void ProviderRequestFactoryTests::preparesProviderNativeWebSearchRequests()
+{
+    const AiGenerationRequest generation{.messages = {AiChatMessage{.content = "Find current documentation."}},
+                                         .webSearchEnabled = true};
+
+    auto prepared = ProviderRequestFactory::prepare(AiProviderConfiguration{.kind = AiProviderKind::openAiResponses,
+                                                                            .baseUrl = "https://api.openai.com/v1",
+                                                                            .model = "gpt-5.6"},
+                                                    generation, "key");
+    QVERIFY(prepared.has_value());
+    auto tools = QJsonDocument::fromJson(prepared->body).object().value("tools").toArray();
+    QCOMPARE(tools.size(), 1);
+    QCOMPARE(tools.first().toObject().value("type").toString(), QStringLiteral("web_search"));
+
+    prepared = ProviderRequestFactory::prepare(AiProviderConfiguration{.kind = AiProviderKind::anthropicMessages,
+                                                                       .baseUrl = "https://api.anthropic.com",
+                                                                       .model = "claude-sonnet-4-6"},
+                                               generation, "key");
+    QVERIFY(prepared.has_value());
+    tools = QJsonDocument::fromJson(prepared->body).object().value("tools").toArray();
+    QCOMPARE(tools.size(), 1);
+    QCOMPARE(tools.first().toObject().value("type").toString(), QStringLiteral("web_search_20250305"));
+    QCOMPARE(tools.first().toObject().value("name").toString(), QStringLiteral("web_search"));
+    QCOMPARE(tools.first().toObject().value("max_uses").toInt(), 5);
+
+    const auto unsupported = ProviderRequestFactory::prepare(
+        AiProviderConfiguration{.kind = AiProviderKind::ollama, .baseUrl = "http://127.0.0.1:11434", .model = "qwen3"},
+        generation, {});
+    QVERIFY(!unsupported.has_value());
+    QCOMPARE(unsupported.error().code, AiProviderErrorCode::invalidRequest);
 }
 
 void ProviderRequestFactoryTests::appliesProviderSpecificReasoningControls()

@@ -30,6 +30,10 @@ constexpr int keySize = 32;
 constexpr int nonceSize = 12;
 constexpr int tagSize = 16;
 constexpr qsizetype maximumEnvelopeBytes = qsizetype{8} * 1024 * 1024;
+constexpr std::size_t maximumSourcesPerMessage = 24;
+constexpr std::size_t maximumSourceUrlBytes = 8 * 1024;
+constexpr std::size_t maximumSourceTitleBytes = 1024;
+constexpr std::size_t maximumSourceCitationBytes = 4 * 1024;
 constexpr std::string_view keyReference = "ai-conversation-history";
 
 using CipherContext = std::unique_ptr<EVP_CIPHER_CTX, decltype(&EVP_CIPHER_CTX_free)>;
@@ -259,7 +263,14 @@ decrypt(const QByteArray &ciphertext, const QByteArray &tag, const std::string_v
     return std::ranges::all_of(conversation.messages, [&limits](const AiStoredMessage &message) {
         return (message.role == QStringLiteral("user") || message.role == QStringLiteral("assistant")
                 || message.role == QStringLiteral("evidence"))
-               && std::cmp_less_equal(message.text.toUtf8().size(), limits.maximumMessageBytes);
+               && std::cmp_less_equal(message.text.toUtf8().size(), limits.maximumMessageBytes)
+               && (message.role == QStringLiteral("assistant") || message.sources.empty())
+               && message.sources.size() <= maximumSourcesPerMessage
+               && std::ranges::all_of(message.sources, [](const AiWebSource &source) {
+                      return !source.url.empty() && source.url.size() <= maximumSourceUrlBytes
+                             && source.title.size() <= maximumSourceTitleBytes
+                             && source.citedText.size() <= maximumSourceCitationBytes;
+                  });
     });
 }
 
@@ -271,8 +282,19 @@ decrypt(const QByteArray &ciphertext, const QByteArray &tag, const std::string_v
         QJsonArray messages;
         for (const auto &message : conversation.messages)
         {
-            messages.push_back(
-                QJsonObject{{QStringLiteral("role"), message.role}, {QStringLiteral("text"), message.text}});
+            QJsonArray sources;
+            for (const auto &source : message.sources)
+            {
+                sources.push_back(QJsonObject{{QStringLiteral("url"), QString::fromUtf8(source.url)},
+                                              {QStringLiteral("title"), QString::fromUtf8(source.title)},
+                                              {QStringLiteral("citedText"), QString::fromUtf8(source.citedText)}});
+            }
+            QJsonObject value{{QStringLiteral("role"), message.role}, {QStringLiteral("text"), message.text}};
+            if (!sources.isEmpty())
+            {
+                value.insert(QStringLiteral("sources"), sources);
+            }
+            messages.push_back(value);
         }
         values.push_back(
             QJsonObject{{QStringLiteral("id"), conversation.id},
@@ -323,8 +345,19 @@ parsePlaintext(const QByteArray &plaintext, const AiConversationStoreLimits &lim
         for (const auto &messageValue : messages)
         {
             const auto message = messageValue.toObject();
-            conversation.messages.push_back({.role = message.value(QStringLiteral("role")).toString(),
-                                             .text = message.value(QStringLiteral("text")).toString()});
+            AiStoredMessage stored{.role = message.value(QStringLiteral("role")).toString(),
+                                   .text = message.value(QStringLiteral("text")).toString()};
+            const auto sources = message.value(QStringLiteral("sources")).toArray();
+            stored.sources.reserve(static_cast<std::size_t>(sources.size()));
+            for (const auto &sourceValue : sources)
+            {
+                const auto source = sourceValue.toObject();
+                stored.sources.push_back(AiWebSource{
+                    .url = source.value(QStringLiteral("url")).toString().toUtf8().toStdString(),
+                    .title = source.value(QStringLiteral("title")).toString().toUtf8().toStdString(),
+                    .citedText = source.value(QStringLiteral("citedText")).toString().toUtf8().toStdString()});
+            }
+            conversation.messages.push_back(std::move(stored));
         }
         if (!validConversation(conversation, limits))
         {

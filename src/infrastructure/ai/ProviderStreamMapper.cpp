@@ -107,6 +107,48 @@ void appendUsageAndCompletion(const QJsonObject &response, std::vector<AiStreamE
     return "ollama-tool-" + std::to_string(sequence);
 }
 
+[[nodiscard]] std::optional<AiWebSource> webSourceFromObject(QJsonObject object)
+{
+    if (object.value(QStringLiteral("url_citation")).isObject())
+    {
+        object = object.value(QStringLiteral("url_citation")).toObject();
+    }
+    const auto url = utf8(object.value(QStringLiteral("url")).toString());
+    if (url.empty())
+    {
+        return std::nullopt;
+    }
+    return AiWebSource{.url = url,
+                       .title = utf8(object.value(QStringLiteral("title")).toString()),
+                       .citedText = utf8(object.value(QStringLiteral("cited_text")).toString())};
+}
+
+void appendWebSources(const QJsonArray &values, std::vector<AiStreamEvent> &events, const std::string &responseId)
+{
+    for (const auto &value : values)
+    {
+        auto source = webSourceFromObject(value.toObject());
+        if (source.has_value())
+        {
+            events.push_back(AiStreamEvent{.type = AiStreamEventType::webSourceAdded,
+                                           .responseId = responseId,
+                                           .webSource = std::move(source)});
+        }
+    }
+}
+
+[[nodiscard]] std::string webSearchQuery(const QJsonObject &item)
+{
+    const auto action = item.value(QStringLiteral("action")).toObject();
+    auto query = utf8(action.value(QStringLiteral("query")).toString());
+    if (!query.empty())
+    {
+        return query;
+    }
+    const auto queries = action.value(QStringLiteral("queries")).toArray();
+    return queries.isEmpty() ? std::string{} : utf8(queries.first().toString());
+}
+
 } // namespace
 
 std::expected<std::vector<AiStreamEvent>, AiProviderError>
@@ -152,6 +194,74 @@ OpenAiResponsesStreamMapper::map(const ServerSentEvent &event)
                                            .toolCallId = state.callId,
                                            .toolName = state.name});
         }
+        else if (item.value("type").toString() == "web_search_call")
+        {
+            const auto itemId = utf8(item.value("id").toString());
+            events.push_back(AiStreamEvent{.type = AiStreamEventType::webSearchStarted,
+                                           .responseId = utf8(object.value("response_id").toString()),
+                                           .itemId = itemId,
+                                           .toolCallId = itemId,
+                                           .toolName = "web_search"});
+            const auto query = webSearchQuery(item);
+            if (!query.empty())
+            {
+                m_webQueriesByItemId.insert_or_assign(itemId, query);
+                events.push_back(AiStreamEvent{.type = AiStreamEventType::webSearchQuery,
+                                               .itemId = itemId,
+                                               .toolCallId = itemId,
+                                               .toolName = "web_search",
+                                               .delta = query});
+            }
+        }
+    }
+    else if (type == "response.output_item.done")
+    {
+        const auto item = object.value("item").toObject();
+        if (item.value("type").toString() == "web_search_call")
+        {
+            const auto itemId = utf8(item.value("id").toString());
+            const auto query = webSearchQuery(item);
+            if (!query.empty() && m_webQueriesByItemId[itemId] != query)
+            {
+                m_webQueriesByItemId.insert_or_assign(itemId, query);
+                events.push_back(AiStreamEvent{.type = AiStreamEventType::webSearchQuery,
+                                               .itemId = itemId,
+                                               .toolCallId = itemId,
+                                               .toolName = "web_search",
+                                               .delta = query});
+            }
+            appendWebSources(item.value("action").toObject().value("sources").toArray(), events, {});
+        }
+    }
+    else if (type == "response.web_search_call.in_progress" || type == "response.web_search_call.searching")
+    {
+        const auto itemId = utf8(object.value("item_id").toString());
+        events.push_back(AiStreamEvent{.type = AiStreamEventType::webSearchStarted,
+                                       .itemId = itemId,
+                                       .toolCallId = itemId,
+                                       .toolName = "web_search"});
+    }
+    else if (type == "response.web_search_call.completed")
+    {
+        const auto itemId = utf8(object.value("item_id").toString());
+        events.push_back(AiStreamEvent{.type = AiStreamEventType::webSearchCompleted,
+                                       .itemId = itemId,
+                                       .toolCallId = itemId,
+                                       .toolName = "web_search"});
+    }
+    else if (type == "response.output_text.annotation.added")
+    {
+        auto source = webSourceFromObject(object.value("annotation").toObject());
+        if (source.has_value())
+        {
+            events.push_back(AiStreamEvent{.type = AiStreamEventType::webSourceAdded,
+                                           .itemId = utf8(object.value("item_id").toString()),
+                                           .webSource = std::move(source)});
+        }
+    }
+    else if (type == "response.content_part.done")
+    {
+        appendWebSources(object.value("part").toObject().value("annotations").toArray(), events, {});
     }
     else if (type == "response.function_call_arguments.delta" || type == "response.function_call_arguments.done")
     {
@@ -188,6 +298,7 @@ OpenAiResponsesStreamMapper::map(const ServerSentEvent &event)
 void OpenAiResponsesStreamMapper::reset() noexcept
 {
     m_toolsByItemId.clear();
+    m_webQueriesByItemId.clear();
 }
 
 std::expected<std::vector<AiStreamEvent>, AiProviderError>
@@ -369,6 +480,30 @@ std::expected<std::vector<AiStreamEvent>, AiProviderError> AnthropicStreamMapper
                                            .toolCallId = state.callId,
                                            .toolName = state.name});
         }
+        else if (block.value("type").toString() == QStringLiteral("server_tool_use")
+                 && block.value("name").toString() == QStringLiteral("web_search"))
+        {
+            ToolState state{.callId = utf8(block.value("id").toString()), .name = "web_search"};
+            m_webSearchByIndex.insert_or_assign(index, state);
+            events.push_back(AiStreamEvent{.type = AiStreamEventType::webSearchStarted,
+                                           .responseId = m_responseId,
+                                           .toolCallId = state.callId,
+                                           .toolName = state.name});
+        }
+        else if (block.value("type").toString() == QStringLiteral("web_search_tool_result"))
+        {
+            const auto content = block.value("content");
+            if (content.isArray())
+            {
+                appendWebSources(content.toArray(), events, m_responseId);
+            }
+            const auto errorCode = content.toObject().value("error_code").toString();
+            events.push_back(AiStreamEvent{.type = AiStreamEventType::webSearchCompleted,
+                                           .responseId = m_responseId,
+                                           .toolCallId = utf8(block.value("tool_use_id").toString()),
+                                           .toolName = "web_search",
+                                           .delta = utf8(errorCode)});
+        }
     }
     else if (type == QStringLiteral("content_block_delta"))
     {
@@ -395,6 +530,12 @@ std::expected<std::vector<AiStreamEvent>, AiProviderError> AnthropicStreamMapper
         }
         else if (deltaType == QStringLiteral("input_json_delta"))
         {
+            const auto webSearch = m_webSearchByIndex.find(index);
+            if (webSearch != m_webSearchByIndex.end())
+            {
+                m_webQueriesByIndex[index] += utf8(delta.value("partial_json").toString());
+                return events;
+            }
             const auto tool = m_toolsByIndex.find(index);
             events.push_back(
                 AiStreamEvent{.type = AiStreamEventType::toolArgumentsDelta,
@@ -402,6 +543,16 @@ std::expected<std::vector<AiStreamEvent>, AiProviderError> AnthropicStreamMapper
                               .toolCallId = tool == m_toolsByIndex.end() ? std::string{} : tool->second.callId,
                               .toolName = tool == m_toolsByIndex.end() ? std::string{} : tool->second.name,
                               .delta = utf8(delta.value("partial_json").toString())});
+        }
+        else if (deltaType == QStringLiteral("citations_delta"))
+        {
+            auto source = webSourceFromObject(delta.value("citation").toObject());
+            if (source.has_value())
+            {
+                events.push_back(AiStreamEvent{.type = AiStreamEventType::webSourceAdded,
+                                               .responseId = m_responseId,
+                                               .webSource = std::move(source)});
+            }
         }
     }
     else if (type == QStringLiteral("content_block_stop"))
@@ -414,6 +565,20 @@ std::expected<std::vector<AiStreamEvent>, AiProviderError> AnthropicStreamMapper
                                            .responseId = m_responseId,
                                            .toolCallId = tool->second.callId,
                                            .toolName = tool->second.name});
+        }
+        const auto webSearch = m_webSearchByIndex.find(index);
+        if (webSearch != m_webSearchByIndex.end())
+        {
+            const auto queryJson = parseObject(m_webQueriesByIndex[index]);
+            const auto query = queryJson.has_value() ? utf8(queryJson->value("query").toString()) : std::string{};
+            if (!query.empty())
+            {
+                events.push_back(AiStreamEvent{.type = AiStreamEventType::webSearchQuery,
+                                               .responseId = m_responseId,
+                                               .toolCallId = webSearch->second.callId,
+                                               .toolName = webSearch->second.name,
+                                               .delta = query});
+            }
         }
     }
     else if (type == QStringLiteral("message_delta"))
@@ -438,6 +603,8 @@ std::expected<std::vector<AiStreamEvent>, AiProviderError> AnthropicStreamMapper
 void AnthropicStreamMapper::reset() noexcept
 {
     m_toolsByIndex.clear();
+    m_webSearchByIndex.clear();
+    m_webQueriesByIndex.clear();
     m_responseId.clear();
     m_started = false;
     m_completed = false;

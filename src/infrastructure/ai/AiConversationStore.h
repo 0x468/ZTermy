@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/security/CredentialVault.h"
+#include "domain/ai/AiProviderTypes.h"
 
 #include <QDateTime>
 #include <QString>
@@ -17,6 +18,7 @@ struct AiStoredMessage final
 {
     QString role;
     QString text;
+    std::vector<AiWebSource> sources;
 
     [[nodiscard]] friend bool operator==(const AiStoredMessage &, const AiStoredMessage &) = default;
 };

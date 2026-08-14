@@ -33,6 +33,7 @@ Rectangle {
     property bool activityExpanded: false
     property bool historyExpanded: false
     property bool commandRequest: false
+    property bool webSearchEnabled: false
     property var selectedSkillSlugs: []
     readonly property var slashCommands: [
         {
@@ -140,7 +141,7 @@ Rectangle {
             promptEditor.clear();
             return;
         }
-        const accepted = selectedSkillSlugs.length > 0 ? commandRequest ? controller.sendAiCommandRequestWithSkills(prompt, selectedSkillSlugs) : controller.sendAiMessageWithSkills(prompt, selectedSkillSlugs) : commandRequest ? controller.sendAiCommandRequest(prompt) : controller.sendAiMessage(prompt);
+        const accepted = controller.sendAiPrompt(prompt, commandRequest, selectedSkillSlugs, webSearchEnabled && controller.aiWebSearchAvailable);
         if (accepted) {
             promptEditor.clear();
             selectedSkillSlugs = [];
@@ -1306,6 +1307,7 @@ Rectangle {
                     required property bool hasCommandSuggestion
                     required property var toolActivities
                     required property var imageAttachments
+                    required property var sources
                     readonly property bool reasoningActive: state === "streaming" && reasoning.length > 0 && text.length === 0
                     width: ListView.view.width
                     height: messageBubble.implicitHeight
@@ -1378,6 +1380,101 @@ Rectangle {
                                 color: Theme.textMuted
                                 font.pixelSize: Theme.textCompact
                                 onCopyRequested: text => pane.controller.copyAiText(text)
+                            }
+
+                            Button {
+                                id: sourcesToggle
+
+                                property bool expanded: false
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: visible ? 30 : 0
+                                visible: messageItem.messageRole === "assistant" && messageItem.sources.length > 0
+                                text: expanded ? qsTr("Hide sources · %1").arg(messageItem.sources.length) : qsTr("Sources · %1").arg(messageItem.sources.length)
+                                Accessible.name: text
+                                onClicked: expanded = !expanded
+
+                                contentItem: RowLayout {
+                                    spacing: 6
+
+                                    AppIcon {
+                                        Layout.preferredWidth: 14
+                                        Layout.preferredHeight: 14
+                                        name: sourcesToggle.expanded ? "chevron-down" : "chevron-right"
+                                        color: Theme.textMuted
+                                    }
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: sourcesToggle.text
+                                        color: Theme.textSoft
+                                        font.family: Theme.uiFont
+                                        font.pixelSize: Theme.textCompact
+                                    }
+                                }
+                                background: Rectangle {
+                                    radius: Theme.radiusSmall
+                                    color: sourcesToggle.down ? Theme.controlPressed : sourcesToggle.hovered ? Theme.controlHover : "transparent"
+                                }
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: visible ? implicitHeight : 0
+                                visible: sourcesToggle.visible && sourcesToggle.expanded
+                                spacing: 3
+
+                                Repeater {
+                                    model: messageItem.sources
+
+                                    delegate: Button {
+                                        id: sourceButton
+
+                                        required property var modelData
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 38
+                                        hoverEnabled: true
+                                        focusPolicy: Qt.StrongFocus
+                                        Accessible.name: qsTr("Open source %1").arg(modelData.title || modelData.url)
+                                        onClicked: Qt.openUrlExternally(modelData.url)
+
+                                        contentItem: ColumnLayout {
+                                            spacing: 0
+
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: sourceButton.modelData.title || sourceButton.modelData.url
+                                                color: sourceButton.hovered || sourceButton.activeFocus ? Theme.accent : Theme.text
+                                                elide: Text.ElideRight
+                                                font.family: Theme.uiFont
+                                                font.pixelSize: Theme.textCompact
+                                                font.weight: Font.Medium
+                                            }
+
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: sourceButton.modelData.url
+                                                color: Theme.textSubtle
+                                                elide: Text.ElideMiddle
+                                                font.family: Theme.terminalFont
+                                                font.pixelSize: Theme.textCompact
+                                            }
+                                        }
+                                        background: Rectangle {
+                                            radius: Theme.radiusSmall
+                                            color: sourceButton.down ? Theme.controlPressed : sourceButton.hovered ? Theme.controlHover : Theme.controlBackground
+                                            border.color: sourceButton.activeFocus ? Theme.focus : Theme.border
+                                            border.width: sourceButton.activeFocus ? 2 : 1
+                                        }
+
+                                        HoverHandler {
+                                            cursorShape: Qt.PointingHandCursor
+                                        }
+
+                                        AppToolTip {
+                                            text: sourceButton.modelData.citedText || sourceButton.modelData.url
+                                        }
+                                    }
+                                }
                             }
 
                             Repeater {
@@ -2044,6 +2141,23 @@ Rectangle {
                         }
                         AppToolTip {
                             text: pane.commandRequest ? qsTr("Command generation enabled") : qsTr("Generate a shell command")
+                        }
+                    }
+
+                    ContextToolButton {
+                        id: webSearchButton
+
+                        checkable: true
+                        checked: pane.webSearchEnabled && pane.controller.aiWebSearchAvailable
+                        enabled: !pane.busy && pane.controller.aiWebSearchAvailable
+                        Accessible.name: qsTr("Use web search")
+                        onClicked: pane.webSearchEnabled = !pane.webSearchEnabled
+                        contentItem: AppIcon {
+                            name: "search"
+                            color: webSearchButton.checked ? Theme.accent : Theme.textMuted
+                        }
+                        AppToolTip {
+                            text: pane.controller.aiWebSearchAvailable ? webSearchButton.checked ? qsTr("Web search enabled for this conversation") : qsTr("Let the model search the web when useful") : qsTr("Native web search is unavailable for this provider")
                         }
                     }
 

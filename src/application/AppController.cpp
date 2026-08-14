@@ -3155,6 +3155,12 @@ QString AppController::aiModelsError() const
     return m_aiModelsError;
 }
 
+bool AppController::aiWebSearchAvailable() const noexcept
+{
+    return m_settings.aiProvider == config::AiProviderPreference::openAiResponses
+           || m_settings.aiProvider == config::AiProviderPreference::anthropic;
+}
+
 bool AppController::aiAutomaticContext() const noexcept
 {
     return m_settings.aiAutomaticContext;
@@ -8045,7 +8051,7 @@ bool AppController::restoreAiConversationHistory(const QString &conversationId)
         {
             return false;
         }
-        transcript.push_back({.role = role, .content = utf8String(message.text)});
+        transcript.push_back({.role = role, .content = utf8String(message.text), .sources = message.sources});
     }
     if (!tab->aiConversation->restoreTranscript(transcript))
     {
@@ -8090,6 +8096,13 @@ bool AppController::sendAiCommandRequestWithSkills(const QString &prompt, const 
 {
     TerminalTab *tab = activeTab();
     return tab != nullptr && sendAiMessage(*tab, prompt, false, true, true, skillIds);
+}
+
+bool AppController::sendAiPrompt(const QString &prompt, const bool commandRequest, const QStringList &skillIds,
+                                 const bool webSearchEnabled)
+{
+    TerminalTab *tab = activeTab();
+    return tab != nullptr && sendAiMessage(*tab, prompt, false, true, commandRequest, skillIds, webSearchEnabled);
 }
 
 bool AppController::setAiPermissionMode(const QString &mode)
@@ -8609,7 +8622,7 @@ bool AppController::retryAiMessage()
         return false;
     }
     return sendAiMessage(*tab, tab->aiLastPrompt, tab->aiLastPreferFailure, false, tab->aiLastCommandRequest,
-                         tab->aiLastSelectedSkillIds);
+                         tab->aiLastSelectedSkillIds, tab->aiLastWebSearchEnabled);
 }
 
 void AppController::clearAiConversation()
@@ -8626,6 +8639,8 @@ void AppController::clearAiConversation()
     tab->aiLastPrompt.clear();
     tab->aiLastPreferFailure = false;
     tab->aiLastCommandRequest = false;
+    tab->aiLastWebSearchEnabled = false;
+    tab->aiWebSearchQueries.clear();
     tab->aiContextPreview.clear();
     tab->aiContextItems.clear();
     tab->aiExplicitContextItems.clear();
@@ -9466,7 +9481,7 @@ void AppController::recordAiActivity(const TerminalTab &tab, const ai::AiToolCal
 
 bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const bool preferLastFailure,
                                   const bool appendPrompt, const bool commandRequest,
-                                  const QStringList &selectedSkillIds)
+                                  const QStringList &selectedSkillIds, const bool webSearchEnabled)
 {
     const QString normalizedPrompt = prompt.trimmed();
     if ((normalizedPrompt.isEmpty() && tab.aiImageAttachments.empty()) || !tab.aiConversation || !tab.aiTurnRunner
@@ -9477,6 +9492,12 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
     if (m_settings.aiModel.trimmed().isEmpty() || m_settings.aiBaseUrl.trimmed().isEmpty())
     {
         tab.aiError = tr("Configure an AI provider URL and model before starting a conversation.");
+        emit aiConversationChanged();
+        return false;
+    }
+    if (webSearchEnabled && !aiWebSearchAvailable())
+    {
+        tab.aiError = tr("The selected provider protocol does not support native web search.");
         emit aiConversationChanged();
         return false;
     }
@@ -9523,6 +9544,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
         tab.aiLastPreferFailure = preferLastFailure;
         tab.aiLastCommandRequest = commandRequest;
         tab.aiLastSelectedSkillIds = resolvedSkillIds;
+        tab.aiLastWebSearchEnabled = webSearchEnabled;
     }
     auto messages = tab.aiConversation->providerMessagesWithEvidence();
     if (messages.empty())
@@ -9538,6 +9560,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
     tab.aiUsage.reset();
     tab.aiError.clear();
     tab.aiState = QStringLiteral("starting");
+    tab.aiWebSearchQueries.clear();
     const QString tabId = tab.id;
     const auto assistantMessageId = tab.aiAssistantMessageId;
     const auto provider = m_settings.aiProvider;
@@ -9606,7 +9629,8 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
     ai::AiGenerationRequest generation{.instructions = std::move(instructions),
                                        .messages = std::move(messages),
                                        .tools = std::move(toolDefinitions),
-                                       .reasoningEffort = aiReasoningEffort(m_settings.aiReasoning)};
+                                       .reasoningEffort = aiReasoningEffort(m_settings.aiReasoning),
+                                       .webSearchEnabled = webSearchEnabled};
     // Bound the request to the model context window before dispatch: a long
     // conversation is typed-compacted (old messages head/tail truncated,
     // recent turns preserved verbatim) instead of failing at the provider.
@@ -9706,9 +9730,58 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                     static_cast<void>(target->aiConversation->appendAssistantReasoningDelta(assistantMessageId,
                                                                                             utf8QString(event.delta)));
                     break;
+                case ai::AiStreamEventType::webSearchStarted:
+                {
+                    const QString callId = !event.toolCallId.empty() ? utf8QString(event.toolCallId)
+                                                                    : utf8QString(event.itemId);
+                    if (!callId.isEmpty())
+                    {
+                        static_cast<void>(target->aiConversation->upsertAssistantToolActivity(
+                            assistantMessageId, callId, QStringLiteral("web_search"), tr("Searching the web"),
+                            QStringLiteral("running"), {}, false, false));
+                    }
+                    break;
+                }
+                case ai::AiStreamEventType::webSearchQuery:
+                {
+                    const QString callId = !event.toolCallId.empty() ? utf8QString(event.toolCallId)
+                                                                    : utf8QString(event.itemId);
+                    const QString query = utf8QString(event.delta);
+                    if (!callId.isEmpty())
+                    {
+                        target->aiWebSearchQueries.insert(callId, query);
+                        static_cast<void>(target->aiConversation->upsertAssistantToolActivity(
+                            assistantMessageId, callId, QStringLiteral("web_search"), query,
+                            QStringLiteral("running"), {}, false, false));
+                    }
+                    break;
+                }
+                case ai::AiStreamEventType::webSearchCompleted:
+                {
+                    const QString callId = !event.toolCallId.empty() ? utf8QString(event.toolCallId)
+                                                                    : utf8QString(event.itemId);
+                    if (!callId.isEmpty())
+                    {
+                        const QString resultCode = utf8QString(event.delta);
+                        const QString summary = target->aiWebSearchQueries.value(callId, tr("Web search"));
+                        static_cast<void>(target->aiConversation->upsertAssistantToolActivity(
+                            assistantMessageId, callId, QStringLiteral("web_search"), summary,
+                            resultCode.isEmpty() ? QStringLiteral("succeeded") : QStringLiteral("failed"), resultCode,
+                            false, false));
+                    }
+                    break;
+                }
+                case ai::AiStreamEventType::webSourceAdded:
+                    if (event.webSource.has_value())
+                    {
+                        static_cast<void>(
+                            target->aiConversation->appendAssistantSource(assistantMessageId, *event.webSource));
+                    }
+                    break;
                 case ai::AiStreamEventType::toolCallStarted:
                 case ai::AiStreamEventType::toolArgumentsDelta:
                 case ai::AiStreamEventType::toolCallCompleted:
+                case ai::AiStreamEventType::reasoningSignatureDelta:
                     break;
             }
             if (m_activeTabId == tabId || m_focusedTabId == tabId)
@@ -11892,7 +11965,7 @@ void AppController::persistAiConversation(const TerminalTab &tab)
         {
             stored.title = text.simplified().left(80);
         }
-        stored.messages.push_back({.role = std::move(role), .text = text});
+        stored.messages.push_back({.role = std::move(role), .text = text, .sources = entry.sources});
     }
     if (stored.title.isEmpty())
     {

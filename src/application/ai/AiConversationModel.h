@@ -33,6 +33,7 @@ struct AiConversationTranscriptEntry final
 {
     AiConversationTranscriptRole role = AiConversationTranscriptRole::user;
     std::string content;
+    std::vector<AiWebSource> sources;
 
     [[nodiscard]] friend bool operator==(const AiConversationTranscriptEntry &,
                                          const AiConversationTranscriptEntry &) = default;
@@ -70,6 +71,7 @@ public:
         HasCommandSuggestionRole,
         ToolActivitiesRole,
         ImageAttachmentsRole,
+        SourcesRole,
     };
 
     explicit AiConversationModel(AiConversationLimits limits = {}, QObject *parent = nullptr);
@@ -89,6 +91,7 @@ public:
     [[nodiscard]] std::uint64_t beginAssistantMessage();
     [[nodiscard]] bool appendAssistantDelta(std::uint64_t messageId, QString delta);
     [[nodiscard]] bool appendAssistantReasoningDelta(std::uint64_t messageId, QString delta);
+    [[nodiscard]] bool appendAssistantSource(std::uint64_t messageId, AiWebSource source);
     [[nodiscard]] bool upsertAssistantToolActivity(std::uint64_t messageId, QString toolCallId, QString toolName,
                                                    QString summary, QString state, QString resultCode,
                                                    bool sideEffecting, bool highRisk);
@@ -135,6 +138,7 @@ private:
         QString commandSuggestion;
         QVariantList toolActivities;
         std::vector<AiImageAttachment> images;
+        std::vector<AiWebSource> sources;
     };
 
     struct EvidenceMessage final

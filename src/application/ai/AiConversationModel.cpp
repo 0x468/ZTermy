@@ -2,6 +2,7 @@
 
 #include <QByteArray>
 #include <QStringList>
+#include <QUrl>
 #include <QVariant>
 #include <QVariantMap>
 
@@ -14,6 +15,10 @@ namespace ztermy::ai
 {
 namespace
 {
+constexpr std::size_t maximumWebSourcesPerMessage = 24;
+constexpr std::size_t maximumWebSourceUrlBytes = 8 * 1024;
+constexpr std::size_t maximumWebSourceTitleBytes = 1024;
+constexpr std::size_t maximumWebSourceCitationBytes = 4 * 1024;
 
 [[nodiscard]] std::size_t imageStorageBytes(const std::span<const AiImageAttachment> images) noexcept
 {
@@ -67,6 +72,39 @@ namespace
         });
     }
     return values;
+}
+
+[[nodiscard]] std::size_t sourceStorageBytes(const std::span<const AiWebSource> sources) noexcept
+{
+    std::size_t bytes = 0;
+    for (const auto &source : sources)
+    {
+        bytes += source.url.size() + source.title.size() + source.citedText.size();
+    }
+    return bytes;
+}
+
+[[nodiscard]] QVariantList sourceValues(const std::span<const AiWebSource> sources)
+{
+    QVariantList values;
+    values.reserve(static_cast<qsizetype>(sources.size()));
+    for (const auto &source : sources)
+    {
+        values.push_back(QVariantMap{{QStringLiteral("url"), QString::fromUtf8(source.url)},
+                                     {QStringLiteral("title"), QString::fromUtf8(source.title)},
+                                     {QStringLiteral("citedText"), QString::fromUtf8(source.citedText)}});
+    }
+    return values;
+}
+
+[[nodiscard]] bool validWebSourceUrl(const std::string &url)
+{
+    if (url.empty() || url.size() > maximumWebSourceUrlBytes)
+    {
+        return false;
+    }
+    const QUrl value = QUrl::fromEncoded(QByteArray(url.data(), static_cast<qsizetype>(url.size())));
+    return value.isValid() && (value.scheme() == QStringLiteral("https") || value.scheme() == QStringLiteral("http"));
 }
 
 } // namespace
@@ -145,6 +183,8 @@ QVariant AiConversationModel::data(const QModelIndex &index, const int role) con
             return message.toolActivities;
         case ImageAttachmentsRole:
             return imageValues(message.images);
+        case SourcesRole:
+            return sourceValues(message.sources);
         default:
             return {};
     }
@@ -174,7 +214,8 @@ QHash<int, QByteArray> AiConversationModel::roleNames() const
             {CommandSuggestionRole, "commandSuggestion"},
             {HasCommandSuggestionRole, "hasCommandSuggestion"},
             {ToolActivitiesRole, "toolActivities"},
-            {ImageAttachmentsRole, "imageAttachments"}};
+            {ImageAttachmentsRole, "imageAttachments"},
+            {SourcesRole, "sources"}};
 }
 
 bool AiConversationModel::streaming() const noexcept
@@ -227,7 +268,8 @@ std::vector<AiConversationTranscriptEntry> AiConversationModel::transcript() con
         {
             entries.push_back({.role = message.role == AiMessageRole::user ? AiConversationTranscriptRole::user
                                                                            : AiConversationTranscriptRole::assistant,
-                               .content = replayText(message.text, message.images).toUtf8().toStdString()});
+                               .content = replayText(message.text, message.images).toUtf8().toStdString(),
+                               .sources = message.sources});
         }
         for (const auto &evidence : m_evidenceMessages)
         {
@@ -287,7 +329,12 @@ bool AiConversationModel::restoreTranscript(const std::vector<AiConversationTran
     for (const auto &entry : entries)
     {
         if ((entry.content.empty() && entry.role != AiConversationTranscriptRole::assistant)
-            || entry.content.size() > m_limits.maxMessageBytes)
+            || entry.content.size() + sourceStorageBytes(entry.sources) > m_limits.maxMessageBytes
+            || entry.sources.size() > maximumWebSourcesPerMessage
+            || !std::ranges::all_of(entry.sources, [](const AiWebSource &source) {
+                   return validWebSourceUrl(source.url) && source.title.size() <= maximumWebSourceTitleBytes
+                          && source.citedText.size() <= maximumWebSourceCitationBytes;
+               }))
         {
             return false;
         }
@@ -308,7 +355,7 @@ bool AiConversationModel::restoreTranscript(const std::vector<AiConversationTran
         {
             hasEvidenceAnchor = true;
             ++messageCount;
-            messageBytes += entry.content.size();
+            messageBytes += entry.content.size() + sourceStorageBytes(entry.sources);
             if (messageCount > m_limits.maxMessages || messageBytes > m_limits.maxConversationBytes)
             {
                 return false;
@@ -335,6 +382,9 @@ bool AiConversationModel::restoreTranscript(const std::vector<AiConversationTran
         }
         const std::uint64_t messageId = beginAssistantMessage();
         if ((!entry.content.empty() && !appendAssistantDelta(messageId, QString::fromUtf8(entry.content)))
+            || !std::ranges::all_of(entry.sources, [this, messageId](const AiWebSource &source) {
+                   return appendAssistantSource(messageId, source);
+               })
             || !completeAssistantMessage(messageId))
         {
             clear();
@@ -449,6 +499,81 @@ bool AiConversationModel::appendAssistantReasoningDelta(const std::uint64_t mess
     const auto row = indexOf(messageId);
     emit dataChanged(index(row), index(row), {ReasoningRole, TruncatedRole});
     return addedBytes > 0 || truncated;
+}
+
+bool AiConversationModel::appendAssistantSource(const std::uint64_t messageId, AiWebSource source)
+{
+    auto *message = find(messageId);
+    if (message == nullptr || message->role != AiMessageRole::assistant || !validWebSourceUrl(source.url))
+    {
+        return false;
+    }
+    bool truncated = false;
+    QString title = boundedUtf8(QString::fromUtf8(source.title), maximumWebSourceTitleBytes, truncated);
+    QString citedText = boundedUtf8(QString::fromUtf8(source.citedText), maximumWebSourceCitationBytes, truncated);
+    source.title = title.toUtf8().toStdString();
+    source.citedText = citedText.toUtf8().toStdString();
+
+    const auto existing = std::ranges::find(message->sources, source.url, &AiWebSource::url);
+    if (existing != message->sources.end())
+    {
+        std::size_t addedBytes = 0;
+        if (existing->title.empty() && !source.title.empty())
+        {
+            addedBytes += source.title.size();
+        }
+        if (existing->citedText.empty() && !source.citedText.empty())
+        {
+            addedBytes += source.citedText.size();
+        }
+        const auto availableForMessage = m_limits.maxMessageBytes - std::min(message->bytes, m_limits.maxMessageBytes);
+        const auto availableForConversation =
+            m_limits.maxConversationBytes - std::min(m_totalBytes, m_limits.maxConversationBytes);
+        if (addedBytes > std::min(availableForMessage, availableForConversation))
+        {
+            message->truncated = true;
+            const auto row = indexOf(messageId);
+            emit dataChanged(index(row), index(row), {TruncatedRole});
+            return false;
+        }
+        if (existing->title.empty())
+        {
+            existing->title = std::move(source.title);
+        }
+        if (existing->citedText.empty())
+        {
+            existing->citedText = std::move(source.citedText);
+        }
+        message->bytes += addedBytes;
+        m_totalBytes += addedBytes;
+        const auto row = indexOf(messageId);
+        emit dataChanged(index(row), index(row), {SourcesRole});
+        return true;
+    }
+    if (message->sources.size() >= maximumWebSourcesPerMessage)
+    {
+        message->truncated = true;
+        const auto row = indexOf(messageId);
+        emit dataChanged(index(row), index(row), {TruncatedRole});
+        return false;
+    }
+    const auto addedBytes = source.url.size() + source.title.size() + source.citedText.size();
+    const auto availableForMessage = m_limits.maxMessageBytes - std::min(message->bytes, m_limits.maxMessageBytes);
+    const auto availableForConversation =
+        m_limits.maxConversationBytes - std::min(m_totalBytes, m_limits.maxConversationBytes);
+    if (addedBytes > std::min(availableForMessage, availableForConversation))
+    {
+        message->truncated = true;
+        const auto row = indexOf(messageId);
+        emit dataChanged(index(row), index(row), {TruncatedRole});
+        return false;
+    }
+    message->sources.push_back(std::move(source));
+    message->bytes += addedBytes;
+    m_totalBytes += addedBytes;
+    const auto row = indexOf(messageId);
+    emit dataChanged(index(row), index(row), {SourcesRole});
+    return true;
 }
 
 bool AiConversationModel::upsertAssistantToolActivity(const std::uint64_t messageId, QString toolCallId,

@@ -174,6 +174,7 @@ class AppController final : public QObject
     Q_PROPERTY(QStringList aiAvailableModels READ aiAvailableModels NOTIFY aiModelsChanged)
     Q_PROPERTY(bool aiModelsLoading READ aiModelsLoading NOTIFY aiModelsChanged)
     Q_PROPERTY(QString aiModelsError READ aiModelsError NOTIFY aiModelsChanged)
+    Q_PROPERTY(bool aiWebSearchAvailable READ aiWebSearchAvailable NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool aiAutomaticContext READ aiAutomaticContext NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString aiPermissionPreference READ aiPermissionPreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool aiConversationHistoryEnabled READ aiConversationHistoryEnabled NOTIFY applicationSettingsChanged)
@@ -316,6 +317,7 @@ public:
     [[nodiscard]] QStringList aiAvailableModels() const;
     [[nodiscard]] bool aiModelsLoading() const noexcept;
     [[nodiscard]] QString aiModelsError() const;
+    [[nodiscard]] bool aiWebSearchAvailable() const noexcept;
     [[nodiscard]] bool aiAutomaticContext() const noexcept;
     [[nodiscard]] QString aiPermissionPreference() const;
     [[nodiscard]] bool aiConversationHistoryEnabled() const noexcept;
@@ -533,6 +535,8 @@ public:
     Q_INVOKABLE bool sendAiCommandRequest(const QString &prompt);
     Q_INVOKABLE bool sendAiMessageWithSkills(const QString &prompt, const QStringList &skillIds);
     Q_INVOKABLE bool sendAiCommandRequestWithSkills(const QString &prompt, const QStringList &skillIds);
+    Q_INVOKABLE bool sendAiPrompt(const QString &prompt, bool commandRequest, const QStringList &skillIds,
+                                  bool webSearchEnabled);
     Q_INVOKABLE bool setAiPermissionMode(const QString &mode);
     Q_INVOKABLE bool explainAiLastFailure();
     Q_INVOKABLE bool cancelAiMessage();
@@ -727,6 +731,7 @@ private:
         QString aiError;
         QString aiLastPrompt;
         QStringList aiLastSelectedSkillIds;
+        QHash<QString, QString> aiWebSearchQueries;
         QString aiContextPreview;
         QString aiConversationId;
         QVariantList aiContextItems;
@@ -763,6 +768,7 @@ private:
         bool inputHistoryBufferReliable = true;
         bool aiLastPreferFailure = false;
         bool aiLastCommandRequest = false;
+        bool aiLastWebSearchEnabled = false;
         bool workbenchOpen = false;
         bool composerOpen = false;
         bool running = false;
@@ -804,7 +810,7 @@ private:
     void acceptAiSelectedText(TerminalTab &tab, const QString &text);
     [[nodiscard]] bool sendAiMessage(TerminalTab &tab, const QString &prompt, bool preferLastFailure,
                                      bool appendPrompt = true, bool commandRequest = false,
-                                     const QStringList &selectedSkillIds = {});
+                                     const QStringList &selectedSkillIds = {}, bool webSearchEnabled = false);
     [[nodiscard]] ai::AiTurnRunner::ToolHandlingResult handleAiWaitCommand(TerminalTab &tab, const QString &tabId,
                                                                            const ai::AiToolCall &call,
                                                                            const ai::AiSessionTarget &turnTarget);

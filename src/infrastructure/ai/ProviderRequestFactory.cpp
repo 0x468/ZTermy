@@ -324,6 +324,11 @@ void applyCompatibleReasoning(QJsonObject &body, const AiProviderConfiguration &
 [[nodiscard]] QJsonObject openAiBody(const AiProviderConfiguration &configuration,
                                      const AiGenerationRequest &generation, const QJsonArray &tools)
 {
+    QJsonArray effectiveTools = tools;
+    if (generation.webSearchEnabled)
+    {
+        effectiveTools.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("web_search")}});
+    }
     QJsonObject body{{QStringLiteral("model"), fromUtf8(configuration.model)},
                      {QStringLiteral("input"), responsesInput(generation)},
                      {QStringLiteral("stream"), true},
@@ -332,9 +337,9 @@ void applyCompatibleReasoning(QJsonObject &body, const AiProviderConfiguration &
     {
         body.insert(QStringLiteral("instructions"), fromUtf8(generation.instructions));
     }
-    if (!tools.isEmpty())
+    if (!effectiveTools.isEmpty())
     {
-        body.insert(QStringLiteral("tools"), tools);
+        body.insert(QStringLiteral("tools"), effectiveTools);
     }
     const auto previousResponseId = generation.previousResponseId.value_or(std::string{});
     if (!previousResponseId.empty())
@@ -472,6 +477,12 @@ void applyCompatibleReasoning(QJsonObject &body, const AiProviderConfiguration &
                                  {QStringLiteral("description"), fromUtf8(definition.description)},
                                  {QStringLiteral("input_schema"), parameters.object()}});
     }
+    if (generation.webSearchEnabled)
+    {
+        tools.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("web_search_20250305")},
+                                 {QStringLiteral("name"), QStringLiteral("web_search")},
+                                 {QStringLiteral("max_uses"), 5}});
+    }
     QJsonObject body{{QStringLiteral("model"), fromUtf8(configuration.model)},
                      {QStringLiteral("messages"), anthropicMessages(generation)},
                      {QStringLiteral("max_tokens"), 8192},
@@ -527,6 +538,13 @@ ProviderRequestFactory::prepare(const AiProviderConfiguration &configuration, co
     if (const auto imageError = validateImages(generation); imageError.has_value())
     {
         return std::unexpected(*imageError);
+    }
+    if (generation.webSearchEnabled && configuration.kind != AiProviderKind::openAiResponses
+        && configuration.kind != AiProviderKind::anthropicMessages)
+    {
+        return std::unexpected(AiProviderError{.code = AiProviderErrorCode::invalidRequest,
+                                               .message = "This provider protocol has no native web search tool.",
+                                               .retryable = false});
     }
     const auto url = endpointUrl(configuration);
     if (!url.has_value())

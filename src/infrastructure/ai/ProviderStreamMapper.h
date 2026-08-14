@@ -27,6 +27,7 @@ private:
     };
 
     std::unordered_map<std::string, ToolState> m_toolsByItemId;
+    std::unordered_map<std::string, std::string> m_webQueriesByItemId;
 };
 
 class OpenAiCompatibleStreamMapper final
@@ -61,6 +62,8 @@ private:
     };
 
     std::unordered_map<std::size_t, ToolState> m_toolsByIndex;
+    std::unordered_map<std::size_t, ToolState> m_webSearchByIndex;
+    std::unordered_map<std::size_t, std::string> m_webQueriesByIndex;
     std::string m_responseId;
     bool m_started = false;
     bool m_completed = false;

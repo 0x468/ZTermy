@@ -24,10 +24,12 @@ class ProviderStreamMapperTests final : public QObject
 private slots:
     void mapsOpenAiTextAndUsage();
     void mapsOpenAiToolArguments();
+    void mapsOpenAiWebSearchAndCitations();
     void rejectsMalformedProviderJson();
     void mapsCompatibleTextToolsAndCompletion();
     void mapsAnthropicTextToolsUsageAndCompletion();
     void mapsAnthropicThinkingSignature();
+    void mapsAnthropicWebSearchAndCitations();
     void mapsOllamaThinkingToolsAndUsage();
     void mapsOllamaError();
 };
@@ -78,6 +80,33 @@ void ProviderStreamMapperTests::mapsOpenAiToolArguments()
             R"json({"type":"response.function_call_arguments.done","item_id":"item_1","arguments":"{\"command\":\"pwd\"}"})json"});
     QCOMPARE(events->front().type, AiStreamEventType::toolCallCompleted);
     QCOMPARE(events->front().delta, std::string(R"json({"command":"pwd"})json"));
+}
+
+void ProviderStreamMapperTests::mapsOpenAiWebSearchAndCitations()
+{
+    OpenAiResponsesStreamMapper mapper;
+    auto events = mapper.map(ServerSentEvent{
+        .data =
+            R"json({"type":"response.output_item.added","item":{"type":"web_search_call","id":"ws_1","action":{"query":"Qt 6.8 release notes"}}})json"});
+    QVERIFY(events.has_value());
+    QCOMPARE(events->size(), std::size_t{2});
+    QCOMPARE(events->at(0).type, AiStreamEventType::webSearchStarted);
+    QCOMPARE(events->at(1).type, AiStreamEventType::webSearchQuery);
+    QCOMPARE(events->at(1).delta, std::string("Qt 6.8 release notes"));
+
+    events = mapper.map(ServerSentEvent{
+        .data =
+            R"json({"type":"response.output_text.annotation.added","item_id":"msg_1","annotation":{"type":"url_citation","url":"https://doc.qt.io/qt-6/whatsnew68.html","title":"What's New in Qt 6.8"}})json"});
+    QVERIFY(events.has_value());
+    QCOMPARE(events->front().type, AiStreamEventType::webSourceAdded);
+    QVERIFY(events->front().webSource.has_value());
+    QCOMPARE(events->front().webSource->url, std::string("https://doc.qt.io/qt-6/whatsnew68.html"));
+    QCOMPARE(events->front().webSource->title, std::string("What's New in Qt 6.8"));
+
+    events = mapper.map(
+        ServerSentEvent{.data = R"json({"type":"response.web_search_call.completed","item_id":"ws_1"})json"});
+    QVERIFY(events.has_value());
+    QCOMPARE(events->front().type, AiStreamEventType::webSearchCompleted);
 }
 
 void ProviderStreamMapperTests::rejectsMalformedProviderJson()
@@ -152,6 +181,46 @@ void ProviderStreamMapperTests::mapsAnthropicThinkingSignature()
     QCOMPARE(events->size(), std::size_t{1});
     QCOMPARE(events->front().type, AiStreamEventType::reasoningSignatureDelta);
     QCOMPARE(events->front().delta, std::string("signed"));
+}
+
+void ProviderStreamMapperTests::mapsAnthropicWebSearchAndCitations()
+{
+    AnthropicStreamMapper mapper;
+    auto events = mapper.map(ServerSentEvent{
+        .event = "content_block_start",
+        .data =
+            R"json({"type":"content_block_start","index":1,"content_block":{"type":"server_tool_use","id":"srvtoolu_1","name":"web_search"}})json"});
+    QVERIFY(events.has_value());
+    QCOMPARE(events->front().type, AiStreamEventType::webSearchStarted);
+
+    events = mapper.map(ServerSentEvent{
+        .event = "content_block_delta",
+        .data =
+            R"json({"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"query\":\"Qt 6.8 docs\"}"}})json"});
+    QVERIFY(events.has_value());
+    QVERIFY(events->empty());
+    events = mapper.map(
+        ServerSentEvent{.event = "content_block_stop", .data = R"json({"type":"content_block_stop","index":1})json"});
+    QVERIFY(events.has_value());
+    QCOMPARE(events->front().type, AiStreamEventType::webSearchQuery);
+    QCOMPARE(events->front().delta, std::string("Qt 6.8 docs"));
+
+    events = mapper.map(ServerSentEvent{
+        .event = "content_block_start",
+        .data =
+            R"json({"type":"content_block_start","index":2,"content_block":{"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[{"type":"web_search_result","url":"https://doc.qt.io/qt-6/whatsnew68.html","title":"What's New in Qt 6.8"}]}})json"});
+    QVERIFY(events.has_value());
+    QCOMPARE(events->size(), std::size_t{2});
+    QCOMPARE(events->at(0).type, AiStreamEventType::webSourceAdded);
+    QCOMPARE(events->at(1).type, AiStreamEventType::webSearchCompleted);
+
+    events = mapper.map(ServerSentEvent{
+        .event = "content_block_delta",
+        .data =
+            R"json({"type":"content_block_delta","index":3,"delta":{"type":"citations_delta","citation":{"type":"web_search_result_location","url":"https://doc.qt.io/qt-6/whatsnew68.html","title":"What's New in Qt 6.8","cited_text":"Qt 6.8 introduces updates."}}})json"});
+    QVERIFY(events.has_value());
+    QCOMPARE(events->front().type, AiStreamEventType::webSourceAdded);
+    QCOMPARE(events->front().webSource->citedText, std::string("Qt 6.8 introduces updates."));
 }
 
 void ProviderStreamMapperTests::mapsOllamaThinkingToolsAndUsage()

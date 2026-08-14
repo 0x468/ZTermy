@@ -105,6 +105,15 @@ struct AiToolExchange final
     std::string reasoningSignature;
 };
 
+struct AiWebSource final
+{
+    std::string url;
+    std::string title;
+    std::string citedText;
+
+    [[nodiscard]] friend bool operator==(const AiWebSource &, const AiWebSource &) = default;
+};
+
 struct AiGenerationRequest final
 {
     std::string instructions;
@@ -113,6 +122,7 @@ struct AiGenerationRequest final
     std::vector<AiToolExchange> toolHistory;
     std::optional<std::string> previousResponseId;
     AiReasoningEffort reasoningEffort = AiReasoningEffort::automatic;
+    bool webSearchEnabled = false;
 };
 
 enum class AiStreamEventType : std::uint8_t
@@ -121,6 +131,10 @@ enum class AiStreamEventType : std::uint8_t
     textDelta,
     reasoningDelta,
     reasoningSignatureDelta,
+    webSearchStarted,
+    webSearchQuery,
+    webSearchCompleted,
+    webSourceAdded,
     toolCallStarted,
     toolArgumentsDelta,
     toolCallCompleted,
@@ -166,6 +180,7 @@ struct AiStreamEvent final
     std::string toolCallId;
     std::string toolName;
     std::string delta;
+    std::optional<AiWebSource> webSource;
     std::optional<AiTokenUsage> usage;
     std::optional<AiProviderError> error;
 };
