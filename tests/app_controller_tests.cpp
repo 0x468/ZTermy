@@ -6,6 +6,7 @@
 #include "platform/windows/WindowsCredentialVault.h"
 
 #include <QCoreApplication>
+#include <QDir>
 #include <QFile>
 #include <QSet>
 #include <QSignalSpy>
@@ -141,6 +142,7 @@ private slots:
     void exposesAndDismissesStartupRecoveryNotice();
     void persistsQuickCommandsAndPerTabWorkbenchState();
     void persistsAiQuickMessages();
+    void scansAndExposesAiUserSkills();
     void importsAndExportsScriptLibraryWithoutOverwritingIds();
     void rendersAndRunsScriptAgainstFixedTerminal();
     void managesLocalMarkdownNotesAndLatestSearch();
@@ -1551,6 +1553,34 @@ void AppControllerTests::persistsAiQuickMessages()
              QStringLiteral("service-health"));
     QVERIFY(reloaded.deleteAiQuickMessage(firstId));
     QVERIFY(reloaded.aiQuickMessages().isEmpty());
+}
+
+void AppControllerTests::scansAndExposesAiUserSkills()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString profilesPath = directory.filePath(QStringLiteral("profiles.json"));
+    const QString skillDirectory = directory.filePath(QStringLiteral("Skills/service-diagnostics"));
+    QVERIFY(QDir().mkpath(skillDirectory));
+    QFile skill(QDir(skillDirectory).filePath(QStringLiteral("SKILL.md")));
+    QVERIFY(skill.open(QIODevice::WriteOnly));
+    const QByteArray contents = QByteArrayLiteral(
+        "---\nname: service-diagnostics\ndescription: Diagnose service failures.\n---\nInspect status and logs.\n");
+    QCOMPARE(skill.write(contents), contents.size());
+    skill.close();
+
+    ztermy::AppController controller(profilesPath);
+    QCOMPARE(controller.aiUserSkillsState(), QStringLiteral("idle"));
+    QCOMPARE(controller.aiUserSkillsPath(), QDir::toNativeSeparators(directory.filePath(QStringLiteral("Skills"))));
+    QSignalSpy changes(&controller, &ztermy::AppController::aiUserSkillsChanged);
+    controller.ensureAiUserSkillsLoaded();
+    QTRY_COMPARE_WITH_TIMEOUT(controller.aiUserSkillsState(), QStringLiteral("ready"), 5000);
+    QVERIFY(changes.count() >= 2);
+    QCOMPARE(controller.aiUserSkills().size(), 1);
+    const QVariantMap exposed = controller.aiUserSkills().constFirst().toMap();
+    QCOMPARE(exposed.value(QStringLiteral("id")).toString(), QStringLiteral("service-diagnostics"));
+    QVERIFY(exposed.value(QStringLiteral("ready")).toBool());
+    QVERIFY(exposed.value(QStringLiteral("warnings")).toStringList().isEmpty());
 }
 
 void AppControllerTests::importsAndExportsScriptLibraryWithoutOverwritingIds()

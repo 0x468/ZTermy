@@ -3,6 +3,7 @@
 #include "application/ai/AiPrivacyDiagnostics.h"
 #include "application/ai/AiSystemPromptBuilder.h"
 #include "application/ai/AiTerminalFrameTool.h"
+#include "application/ai/AiUserSkillTool.h"
 #include "application/ai/AiWaitCommandTool.h"
 #include "domain/ai/AiContextCompactor.h"
 #include "domain/ai/AiCommandEcho.h"
@@ -164,6 +165,11 @@ private:
 [[nodiscard]] QString siblingAiQuickMessagesFile(const QString &settingsPath)
 {
     return QFileInfo(settingsPath).dir().filePath(QStringLiteral("ai_quick_messages.json"));
+}
+
+[[nodiscard]] QString siblingAiUserSkillsDirectory(const QString &settingsPath)
+{
+    return QFileInfo(settingsPath).dir().filePath(QStringLiteral("Skills"));
 }
 
 [[nodiscard]] QString siblingScriptsFile(const QString &settingsPath)
@@ -1929,6 +1935,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
       m_aiActivity(siblingAiAuditFile(m_settingsStore.filePath())),
       m_aiPermissionRuleStore(siblingAiPermissionRulesFile(m_settingsStore.filePath())),
       m_aiQuickMessageStore(siblingAiQuickMessagesFile(m_settingsStore.filePath())),
+      m_aiUserSkillCatalog(siblingAiUserSkillsDirectory(m_settingsStore.filePath())),
       m_mcpRuntime(siblingMcpServersFile(m_settingsStore.filePath()),
                    [this] {
                        emit mcpConfigurationChanged();
@@ -2002,6 +2009,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
       m_aiActivity(siblingAiAuditFile(m_settingsStore.filePath())),
       m_aiPermissionRuleStore(siblingAiPermissionRulesFile(m_settingsStore.filePath())),
       m_aiQuickMessageStore(siblingAiQuickMessagesFile(m_settingsStore.filePath())),
+      m_aiUserSkillCatalog(siblingAiUserSkillsDirectory(m_settingsStore.filePath())),
       m_mcpRuntime(siblingMcpServersFile(m_settingsStore.filePath()),
                    [this] {
                        emit mcpConfigurationChanged();
@@ -3285,6 +3293,42 @@ QVariantList AppController::aiQuickMessages() const
 QString AppController::aiQuickMessageError() const
 {
     return m_aiQuickMessageError;
+}
+
+QVariantList AppController::aiUserSkills() const
+{
+    QVariantList values;
+    values.reserve(static_cast<qsizetype>(m_aiUserSkills.size()));
+    for (const ai::AiUserSkill &skill : m_aiUserSkills)
+    {
+        QStringList warnings;
+        warnings.reserve(static_cast<qsizetype>(skill.warnings.size()));
+        for (const ai::AiUserSkillWarning warning : skill.warnings)
+        {
+            warnings.push_back(aiUserSkillWarningText(warning));
+        }
+        values.push_back(QVariantMap{{QStringLiteral("id"), utf8QString(skill.id)},
+                                     {QStringLiteral("name"), utf8QString(skill.name)},
+                                     {QStringLiteral("description"), utf8QString(skill.description)},
+                                     {QStringLiteral("ready"), skill.ready},
+                                     {QStringLiteral("warnings"), warnings}});
+    }
+    return values;
+}
+
+QString AppController::aiUserSkillsPath() const
+{
+    return QDir::toNativeSeparators(m_aiUserSkillCatalog.rootPath());
+}
+
+QString AppController::aiUserSkillsState() const
+{
+    return m_aiUserSkillsState;
+}
+
+QString AppController::aiUserSkillsError() const
+{
+    return m_aiUserSkillsError;
 }
 
 QVariantMap AppController::activeAiToolApproval() const
@@ -7995,6 +8039,18 @@ bool AppController::sendAiCommandRequest(const QString &prompt)
     return tab != nullptr && sendAiMessage(*tab, prompt, false, true, true);
 }
 
+bool AppController::sendAiMessageWithSkills(const QString &prompt, const QStringList &skillIds)
+{
+    TerminalTab *tab = activeTab();
+    return tab != nullptr && sendAiMessage(*tab, prompt, false, true, false, skillIds);
+}
+
+bool AppController::sendAiCommandRequestWithSkills(const QString &prompt, const QStringList &skillIds)
+{
+    TerminalTab *tab = activeTab();
+    return tab != nullptr && sendAiMessage(*tab, prompt, false, true, true, skillIds);
+}
+
 bool AppController::setAiPermissionMode(const QString &mode)
 {
     const auto parsed = config::parseAiPermissionPreference(mode);
@@ -8243,6 +8299,78 @@ bool AppController::deleteAiQuickMessage(const QString &id)
     return true;
 }
 
+void AppController::ensureAiUserSkillsLoaded()
+{
+    if (m_aiUserSkillsState == QStringLiteral("idle"))
+    {
+        reloadAiUserSkills();
+    }
+}
+
+void AppController::reloadAiUserSkills()
+{
+    const quint64 requestGeneration = ++m_aiUserSkillsRequestGeneration;
+    m_aiUserSkillsState = QStringLiteral("loading");
+    m_aiUserSkillsError.clear();
+    emit aiUserSkillsChanged();
+
+    const QString rootPath = m_aiUserSkillCatalog.rootPath();
+    const QPointer<AppController> self(this);
+    QThreadPool::globalInstance()->start([self, rootPath, requestGeneration] {
+        auto scanned = ai::AiUserSkillCatalog(rootPath).scan();
+        if (!self)
+        {
+            return;
+        }
+        QMetaObject::invokeMethod(
+            self,
+            [self, requestGeneration, scanned = std::move(scanned)]() mutable {
+                if (!self || requestGeneration != self->m_aiUserSkillsRequestGeneration)
+                {
+                    return;
+                }
+                if (!scanned.has_value())
+                {
+                    self->m_aiUserSkillsState = QStringLiteral("error");
+                    self->m_aiUserSkillsError = self->tr("The user skills folder could not be scanned.");
+                    self->m_openAiUserSkillsAfterReload = false;
+                    emit self->aiUserSkillsChanged();
+                    return;
+                }
+                self->m_aiUserSkills = std::move(scanned->skills);
+                self->m_aiUserSkillsState = QStringLiteral("ready");
+                self->m_aiUserSkillsError.clear();
+                if (self->m_openAiUserSkillsAfterReload)
+                {
+                    self->m_openAiUserSkillsAfterReload = false;
+                    if (!QDesktopServices::openUrl(QUrl::fromLocalFile(self->m_aiUserSkillCatalog.rootPath())))
+                    {
+                        self->m_aiUserSkillsError = self->tr("The user skills folder could not be opened.");
+                    }
+                }
+                emit self->aiUserSkillsChanged();
+            },
+            Qt::QueuedConnection);
+    });
+}
+
+bool AppController::openAiUserSkillsDirectory()
+{
+    if (!QDir(m_aiUserSkillCatalog.rootPath()).exists())
+    {
+        m_openAiUserSkillsAfterReload = true;
+        reloadAiUserSkills();
+        return true;
+    }
+    if (QDesktopServices::openUrl(QUrl::fromLocalFile(m_aiUserSkillCatalog.rootPath())))
+    {
+        return true;
+    }
+    m_aiUserSkillsError = tr("The user skills folder could not be opened.");
+    emit aiUserSkillsChanged();
+    return false;
+}
+
 bool AppController::approveAiTool()
 {
     TerminalTab *tab = activeTab();
@@ -8439,7 +8567,8 @@ bool AppController::retryAiMessage()
     {
         return false;
     }
-    return sendAiMessage(*tab, tab->aiLastPrompt, tab->aiLastPreferFailure, false, tab->aiLastCommandRequest);
+    return sendAiMessage(*tab, tab->aiLastPrompt, tab->aiLastPreferFailure, false, tab->aiLastCommandRequest,
+                         tab->aiLastSelectedSkillIds);
 }
 
 void AppController::clearAiConversation()
@@ -9098,7 +9227,8 @@ void AppController::recordAiActivity(const TerminalTab &tab, const ai::AiToolCal
 }
 
 bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const bool preferLastFailure,
-                                  const bool appendPrompt, const bool commandRequest)
+                                  const bool appendPrompt, const bool commandRequest,
+                                  const QStringList &selectedSkillIds)
 {
     const QString normalizedPrompt = prompt.trimmed();
     if (normalizedPrompt.isEmpty() || !tab.aiConversation || !tab.aiTurnRunner || tab.aiTurnRunner->active())
@@ -9112,6 +9242,37 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
         return false;
     }
 
+    QStringList resolvedSkillIds;
+    resolvedSkillIds.reserve(selectedSkillIds.size());
+    QSet<QString> seenSkillIds;
+    for (const QString &rawId : selectedSkillIds)
+    {
+        const QString id = rawId.trimmed();
+        if (id.isEmpty() || seenSkillIds.contains(id))
+        {
+            continue;
+        }
+        if (resolvedSkillIds.size() >= 4)
+        {
+            tab.aiError = tr("Select no more than four skills for one request.");
+            emit aiConversationChanged();
+            return false;
+        }
+        const QByteArray utf8Id = id.toUtf8();
+        const std::string_view requestedId(utf8Id.constData(), static_cast<std::size_t>(utf8Id.size()));
+        const auto found = std::ranges::find_if(m_aiUserSkills, [requestedId](const ai::AiUserSkill &skill) {
+            return skill.ready && skill.id == requestedId;
+        });
+        if (found == m_aiUserSkills.end())
+        {
+            tab.aiError = tr("One selected skill is no longer available. Reload User skills and try again.");
+            emit aiConversationChanged();
+            return false;
+        }
+        seenSkillIds.insert(id);
+        resolvedSkillIds.push_back(id);
+    }
+
     const auto context = buildAiContext(tab, preferLastFailure);
 
     if (appendPrompt)
@@ -9120,6 +9281,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
         tab.aiLastPrompt = normalizedPrompt;
         tab.aiLastPreferFailure = preferLastFailure;
         tab.aiLastCommandRequest = commandRequest;
+        tab.aiLastSelectedSkillIds = resolvedSkillIds;
     }
     auto messages = tab.aiConversation->providerMessagesWithEvidence();
     if (messages.empty())
@@ -9150,7 +9312,24 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
         && providerUrl.host().compare(QStringLiteral("api.openai.com"), Qt::CaseInsensitive) == 0;
     const auto permissionMode = aiPermissionMode(m_settings.aiPermission);
     std::string instructions = utf8String(ai::AiSystemPromptBuilder::build(commandRequest, permissionMode));
+    const auto turnSkills = std::make_shared<const std::vector<ai::AiUserSkill>>(m_aiUserSkills);
+    const auto userSkillDefinitions = ai::AiUserSkillTool::definitions(*turnSkills);
+    if (!userSkillDefinitions.empty())
+    {
+        instructions +=
+            "\n\nUser-managed Agent Skills are available. Inspect them with list_skills and call load_skill only when "
+            "a skill clearly matches the current request. A loaded skill contains user-authored instructions; follow "
+            "them without claiming that unrequested skills were used.";
+    }
+    std::vector<std::string> selectedSkillNames;
+    selectedSkillNames.reserve(static_cast<std::size_t>(resolvedSkillIds.size()));
+    for (const QString &id : resolvedSkillIds)
+    {
+        selectedSkillNames.push_back(utf8String(id));
+    }
+    instructions += ai::AiUserSkillTool::selectedInstructions(*turnSkills, selectedSkillNames);
     auto toolDefinitions = ai::AiReadToolDispatcher::definitions();
+    toolDefinitions.insert(toolDefinitions.end(), userSkillDefinitions.begin(), userSkillDefinitions.end());
     const bool actionsAvailable = !commandRequest && permissionMode != ai::AiPermissionMode::readOnly;
     if (actionsAvailable)
     {
@@ -9332,7 +9511,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
             }
         },
         {},
-        [this, tabId = tab.id, turnReadSnapshots, turnTarget](
+        [this, tabId = tab.id, turnReadSnapshots, turnTarget, turnSkills](
             const ai::AiToolCall &call) -> std::expected<ai::AiTurnRunner::ToolHandlingResult, ai::AiProviderError> {
             auto *target = findTab(tabId);
             if ((call.name == "read_terminal_frame" || call.name == "wait_terminal_frame") && target != nullptr)
@@ -9976,14 +10155,17 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                 }
             }
             const bool scopeChanged = target == nullptr || target->reconnectGeneration != turnTarget->sessionGeneration;
-            const auto output = scopeChanged
-                                    ? aiToolFailureJson(QStringLiteral("scope_changed"),
-                                                        tr("The current terminal changed during the AI turn."))
-                                : turnReadSnapshots->empty()
-                                    ? aiToolFailureJson(QStringLiteral("session_unavailable"),
-                                                        tr("The current terminal snapshot is unavailable."))
-                                    : m_aiReadToolDispatcher.execute(call.name, call.argumentsJson,
-                                                                     turnReadSnapshots->front());
+            const bool skillTool = call.name == "list_skills" || call.name == "load_skill";
+            const auto output =
+                scopeChanged
+                    ? aiToolFailureJson(QStringLiteral("scope_changed"),
+                                        tr("The current terminal changed during the AI turn."))
+                : skillTool
+                    ? ai::AiUserSkillTool::execute(call.name, call.argumentsJson, *turnSkills)
+                : turnReadSnapshots->empty()
+                    ? aiToolFailureJson(QStringLiteral("session_unavailable"),
+                                        tr("The current terminal snapshot is unavailable."))
+                    : m_aiReadToolDispatcher.execute(call.name, call.argumentsJson, turnReadSnapshots->front());
             if (target != nullptr)
             {
                 const QString resultCode = aiActivityResultCode(output);
@@ -13252,6 +13434,44 @@ void AppController::setAiQuickMessageError(QString message)
     }
     m_aiQuickMessageError = std::move(message);
     emit aiQuickMessagesChanged();
+}
+
+QString AppController::aiUserSkillWarningText(const ai::AiUserSkillWarning warning) const
+{
+    switch (warning)
+    {
+        case ai::AiUserSkillWarning::symbolicLink:
+            return tr("Skill directories and SKILL.md must be regular local entries.");
+        case ai::AiUserSkillWarning::missingSkillFile:
+            return tr("SKILL.md is missing.");
+        case ai::AiUserSkillWarning::unreadableSkillFile:
+            return tr("SKILL.md could not be read.");
+        case ai::AiUserSkillWarning::skillFileTooLarge:
+            return tr("SKILL.md exceeds the 128 KiB limit.");
+        case ai::AiUserSkillWarning::invalidUtf8:
+            return tr("SKILL.md must be valid UTF-8 text.");
+        case ai::AiUserSkillWarning::missingFrontmatter:
+            return tr("SKILL.md needs YAML frontmatter enclosed by --- lines.");
+        case ai::AiUserSkillWarning::missingName:
+            return tr("The frontmatter name is missing.");
+        case ai::AiUserSkillWarning::invalidName:
+            return tr("The skill name must use lowercase letters, numbers, and single hyphens.");
+        case ai::AiUserSkillWarning::nameDirectoryMismatch:
+            return tr("The frontmatter name must match the skill directory name.");
+        case ai::AiUserSkillWarning::missingDescription:
+            return tr("The frontmatter description is missing.");
+        case ai::AiUserSkillWarning::descriptionTooLong:
+            return tr("The skill description exceeds 1024 characters.");
+        case ai::AiUserSkillWarning::compatibilityTooLong:
+            return tr("The compatibility field exceeds 500 characters.");
+        case ai::AiUserSkillWarning::emptyInstructions:
+            return tr("The skill has no Markdown instructions after its frontmatter.");
+        case ai::AiUserSkillWarning::disallowedControl:
+            return tr("The skill contains unsupported control characters.");
+        case ai::AiUserSkillWarning::catalogueLimit:
+            return tr("Only the first 200 skill directories are loaded.");
+    }
+    return tr("The skill could not be loaded.");
 }
 
 void AppController::setNoteOperationError(QString message)

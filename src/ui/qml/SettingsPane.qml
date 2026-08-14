@@ -246,6 +246,16 @@ Rectangle {
         return value.trim().toLocaleLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48);
     }
 
+    function aiUserSkillCount(ready) {
+        const skills = pane.controller.aiUserSkills || [];
+        let count = 0;
+        for (let index = 0; index < skills.length; ++index) {
+            if (skills[index].ready === ready)
+                ++count;
+        }
+        return count;
+    }
+
     function resetAiQuickMessageDraft() {
         aiQuickMessageEditingId = "";
         aiQuickMessageNameDraft = "";
@@ -501,7 +511,16 @@ Rectangle {
             appearancePreviewEnded();
         }
     }
-    Component.onCompleted: loadDraft()
+    onCurrentCategoryChanged: {
+        if (currentCategory === "ai")
+            controller.ensureAiUserSkillsLoaded();
+    }
+
+    Component.onCompleted: {
+        loadDraft();
+        if (currentCategory === "ai")
+            controller.ensureAiUserSkillsLoaded();
+    }
 
     NumberAnimation {
         id: categoryRevealAnimation
@@ -1297,6 +1316,159 @@ Rectangle {
                         wrapMode: Text.WordWrap
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.textLabel
+                    }
+                }
+            }
+
+            SectionCard {
+                Layout.fillWidth: true
+                visible: pane.currentCategory === "ai"
+                compact: true
+                heading: qsTr("User skills")
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacingControl
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("Add portable Agent Skills as one folder per skill with a SKILL.md file. ztermy advertises only names and descriptions, then loads full instructions when you or the Agent selects a skill.")
+                        color: Theme.textMuted
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        BusyIndicator {
+                            Layout.preferredWidth: 18
+                            Layout.preferredHeight: 18
+                            visible: pane.controller.aiUserSkillsState === "loading"
+                            running: visible
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: pane.controller.aiUserSkillsState === "loading" ? qsTr("Scanning user skills…") : pane.controller.aiUserSkillsState === "error" ? qsTr("User skills need attention") : qsTr("%1 ready · %2 warnings").arg(pane.aiUserSkillCount(true)).arg(pane.aiUserSkillCount(false))
+                            color: pane.controller.aiUserSkillsState === "error" ? Theme.danger : Theme.text
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.textLabel
+                            font.weight: Font.DemiBold
+                        }
+
+                        ActionButton {
+                            text: qsTr("Reload")
+                            iconName: "refresh"
+                            accessibleName: qsTr("Reload user skills")
+                            enabled: pane.controller.aiUserSkillsState !== "loading"
+                            onClicked: pane.controller.reloadAiUserSkills()
+                        }
+
+                        ActionButton {
+                            text: qsTr("Open folder")
+                            iconName: "folder"
+                            accessibleName: qsTr("Open user skills folder")
+                            onClicked: pane.controller.openAiUserSkillsDirectory()
+                        }
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("Location: %1").arg(pane.controller.aiUserSkillsPath)
+                        color: Theme.textSubtle
+                        wrapMode: Text.WrapAnywhere
+                        font.family: Theme.terminalFont
+                        font.pixelSize: Theme.textCompact
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        visible: pane.controller.aiUserSkillsError.length > 0
+                        text: pane.controller.aiUserSkillsError
+                        color: Theme.danger
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textCompact
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        visible: pane.controller.aiUserSkillsState === "ready" && pane.controller.aiUserSkills.length === 0
+                        text: qsTr("No skills found yet. Open the folder to add a skill directory.")
+                        color: Theme.textSubtle
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
+                    }
+
+                    Repeater {
+                        model: pane.controller.aiUserSkills
+
+                        delegate: Rectangle {
+                            id: userSkillRow
+
+                            required property var modelData
+                            Layout.fillWidth: true
+                            implicitHeight: userSkillContent.implicitHeight + 18
+                            radius: Theme.radiusControl
+                            color: Theme.controlBackground
+                            border.color: modelData.ready ? Theme.border : Theme.danger
+
+                            RowLayout {
+                                id: userSkillContent
+
+                                anchors.fill: parent
+                                anchors.margins: 9
+                                spacing: 10
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    Layout.minimumWidth: 0
+                                    spacing: 2
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: "/" + userSkillRow.modelData.id
+                                        color: Theme.text
+                                        elide: Text.ElideRight
+                                        font.family: Theme.terminalFont
+                                        font.pixelSize: Theme.textLabel
+                                        font.weight: Font.DemiBold
+                                    }
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        visible: userSkillRow.modelData.description.length > 0
+                                        text: userSkillRow.modelData.description
+                                        color: Theme.textMuted
+                                        wrapMode: Text.WordWrap
+                                        font.family: Theme.uiFont
+                                        font.pixelSize: Theme.textCompact
+                                    }
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        visible: !userSkillRow.modelData.ready && userSkillRow.modelData.warnings.length > 0
+                                        text: userSkillRow.modelData.warnings.join(" · ")
+                                        color: Theme.danger
+                                        wrapMode: Text.WordWrap
+                                        font.family: Theme.uiFont
+                                        font.pixelSize: Theme.textCompact
+                                    }
+                                }
+
+                                Text {
+                                    text: userSkillRow.modelData.ready ? qsTr("Ready") : qsTr("Warning")
+                                    color: userSkillRow.modelData.ready ? Theme.success : Theme.danger
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.textCompact
+                                    font.weight: Font.DemiBold
+                                }
+                            }
+                        }
                     }
                 }
             }

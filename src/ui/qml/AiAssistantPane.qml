@@ -33,6 +33,7 @@ Rectangle {
     property bool activityExpanded: false
     property bool historyExpanded: false
     property bool commandRequest: false
+    property var selectedSkillSlugs: []
     readonly property var slashCommands: [
         {
             "command": "/new",
@@ -139,10 +140,26 @@ Rectangle {
             promptEditor.clear();
             return;
         }
-        const accepted = commandRequest ? controller.sendAiCommandRequest(prompt) : controller.sendAiMessage(prompt);
+        const accepted = selectedSkillSlugs.length > 0 ? commandRequest ? controller.sendAiCommandRequestWithSkills(prompt, selectedSkillSlugs) : controller.sendAiMessageWithSkills(prompt, selectedSkillSlugs) : commandRequest ? controller.sendAiCommandRequest(prompt) : controller.sendAiMessage(prompt);
         if (accepted) {
             promptEditor.clear();
+            selectedSkillSlugs = [];
         }
+    }
+
+    function addSelectedSkill(slug) {
+        if (!slug || selectedSkillSlugs.indexOf(slug) >= 0 || selectedSkillSlugs.length >= 4)
+            return;
+        selectedSkillSlugs = selectedSkillSlugs.concat([slug]);
+    }
+
+    function removeSelectedSkill(slug) {
+        const next = [];
+        for (let index = 0; index < selectedSkillSlugs.length; ++index) {
+            if (selectedSkillSlugs[index] !== slug)
+                next.push(selectedSkillSlugs[index]);
+        }
+        selectedSkillSlugs = next;
     }
 
     function focusEditor() {
@@ -178,14 +195,29 @@ Rectangle {
             return [];
         const commands = slashCommands.slice();
         const quickMessages = pane.controller.aiQuickMessages || [];
+        const quickMessageSlugs = [];
         for (let index = 0; index < quickMessages.length; ++index) {
             const message = quickMessages[index];
+            quickMessageSlugs.push(message.slug);
             commands.push({
                 "command": "/" + message.slug,
                 "title": message.name,
-                "description": message.description || qsTr("Quick message"),
+                "description": qsTr("Quick message · %1").arg(message.description || qsTr("Reusable prompt")),
                 "content": message.content,
                 "quickMessage": true
+            });
+        }
+        const skills = pane.controller.aiUserSkills || [];
+        for (let skillIndex = 0; skillIndex < skills.length; ++skillIndex) {
+            const skill = skills[skillIndex];
+            if (skill.ready !== true || quickMessageSlugs.indexOf(skill.id) >= 0 || selectedSkillSlugs.indexOf(skill.id) >= 0)
+                continue;
+            commands.push({
+                "command": "/" + skill.id,
+                "title": skill.name,
+                "description": qsTr("Skill · %1").arg(skill.description),
+                "skill": true,
+                "skillId": skill.id
             });
         }
         const query = text.slice(1);
@@ -195,6 +227,12 @@ Rectangle {
     function applySlashSuggestion(item) {
         if (!item)
             return;
+        if (item.skill === true) {
+            pane.addSelectedSkill(item.skillId);
+            promptEditor.clear();
+            promptEditor.forceActiveFocus();
+            return;
+        }
         promptEditor.text = item.quickMessage === true ? item.content : item.command + (item.command === "/command" ? " " : "");
         promptEditor.cursorPosition = promptEditor.text.length;
         promptEditor.forceActiveFocus();
@@ -203,6 +241,10 @@ Rectangle {
     function activateSlashSuggestion(item) {
         if (!item)
             return;
+        if (item.skill === true) {
+            applySlashSuggestion(item);
+            return;
+        }
         if (item.quickMessage === true) {
             applySlashSuggestion(item);
             return;
@@ -214,6 +256,10 @@ Rectangle {
         if (executeSlashCommand(item.command))
             promptEditor.clear();
     }
+
+    onActiveTabChanged: selectedSkillSlugs = []
+
+    Component.onCompleted: controller.ensureAiUserSkillsLoaded()
 
     function executeSlashCommand(prompt) {
         const separator = prompt.indexOf(" ");
@@ -1503,7 +1549,7 @@ Rectangle {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: Math.max(132, Math.min(352, promptEditor.contentHeight + 92 + slashCommandList.implicitHeight))
+            Layout.preferredHeight: Math.max(132, Math.min(386, promptEditor.contentHeight + 92 + slashCommandList.implicitHeight + (selectedSkillFlow.visible ? 34 : 0)))
             color: Theme.elevatedBackground
             border.color: Theme.border
 
@@ -1511,6 +1557,75 @@ Rectangle {
                 anchors.fill: parent
                 anchors.margins: 8
                 spacing: 6
+
+                Flow {
+                    id: selectedSkillFlow
+
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: visible ? childrenRect.height : 0
+                    visible: pane.selectedSkillSlugs.length > 0
+                    spacing: 5
+
+                    Repeater {
+                        model: pane.selectedSkillSlugs
+
+                        delegate: Rectangle {
+                            id: selectedSkillChip
+
+                            required property string modelData
+                            width: selectedSkillContent.implicitWidth + 14
+                            height: 26
+                            radius: height / 2
+                            color: Theme.selectedBackground
+                            border.color: Theme.accent
+
+                            RowLayout {
+                                id: selectedSkillContent
+
+                                anchors.fill: parent
+                                anchors.leftMargin: 8
+                                anchors.rightMargin: 3
+                                spacing: 3
+
+                                Text {
+                                    text: "/" + selectedSkillChip.modelData
+                                    color: Theme.accent
+                                    font.family: Theme.terminalFont
+                                    font.pixelSize: Theme.textCompact
+                                    font.weight: Font.DemiBold
+                                }
+
+                                ToolButton {
+                                    implicitWidth: 20
+                                    implicitHeight: 20
+                                    hoverEnabled: true
+                                    focusPolicy: Qt.StrongFocus
+                                    Accessible.name: qsTr("Remove skill %1").arg(selectedSkillChip.modelData)
+                                    onClicked: pane.removeSelectedSkill(selectedSkillChip.modelData)
+
+                                    contentItem: AppIcon {
+                                        anchors.centerIn: parent
+                                        width: 11
+                                        height: 11
+                                        name: "close"
+                                        color: Theme.textMuted
+                                    }
+
+                                    background: Rectangle {
+                                        radius: width / 2
+                                        color: parent.down ? Theme.controlPressed : parent.hovered ? Theme.controlHover : "transparent"
+                                        border.color: parent.activeFocus ? Theme.focus : "transparent"
+                                        border.width: parent.activeFocus ? 2 : 0
+                                    }
+
+                                    HoverHandler {
+                                        cursorShape: Qt.PointingHandCursor
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
 
                 ScrollView {
                     Layout.fillWidth: true

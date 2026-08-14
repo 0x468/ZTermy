@@ -30,6 +30,7 @@
 #include "domain/workbench/ScriptRecorder.h"
 #include "infrastructure/ai/AiPermissionRuleStore.h"
 #include "infrastructure/ai/AiQuickMessageStore.h"
+#include "infrastructure/ai/AiUserSkillCatalog.h"
 #include "infrastructure/ai/ProviderModelCatalog.h"
 #include "infrastructure/forwarding/PortForwardingRuleStore.h"
 #include "infrastructure/logging/SessionLogWriter.h"
@@ -191,6 +192,10 @@ class AppController final : public QObject
     Q_PROPERTY(QString aiPermissionRuleError READ aiPermissionRuleError NOTIFY aiPermissionRulesChanged)
     Q_PROPERTY(QVariantList aiQuickMessages READ aiQuickMessages NOTIFY aiQuickMessagesChanged)
     Q_PROPERTY(QString aiQuickMessageError READ aiQuickMessageError NOTIFY aiQuickMessagesChanged)
+    Q_PROPERTY(QVariantList aiUserSkills READ aiUserSkills NOTIFY aiUserSkillsChanged)
+    Q_PROPERTY(QString aiUserSkillsPath READ aiUserSkillsPath CONSTANT)
+    Q_PROPERTY(QString aiUserSkillsState READ aiUserSkillsState NOTIFY aiUserSkillsChanged)
+    Q_PROPERTY(QString aiUserSkillsError READ aiUserSkillsError NOTIFY aiUserSkillsChanged)
     Q_PROPERTY(QVariantMap aiPrivacyDiagnostics READ aiPrivacyDiagnostics NOTIFY aiPrivacyDiagnosticsChanged)
     Q_PROPERTY(QVariantList mcpServers READ mcpServers NOTIFY mcpConfigurationChanged)
     Q_PROPERTY(QVariantList mcpTools READ mcpTools NOTIFY mcpConfigurationChanged)
@@ -329,6 +334,10 @@ public:
     [[nodiscard]] QString aiPermissionRuleError() const;
     [[nodiscard]] QVariantList aiQuickMessages() const;
     [[nodiscard]] QString aiQuickMessageError() const;
+    [[nodiscard]] QVariantList aiUserSkills() const;
+    [[nodiscard]] QString aiUserSkillsPath() const;
+    [[nodiscard]] QString aiUserSkillsState() const;
+    [[nodiscard]] QString aiUserSkillsError() const;
     [[nodiscard]] QVariantMap aiPrivacyDiagnostics() const;
     [[nodiscard]] QVariantList mcpServers() const;
     [[nodiscard]] QVariantList mcpTools() const;
@@ -522,6 +531,8 @@ public:
     Q_INVOKABLE bool restoreAiConversationHistory(const QString &conversationId);
     Q_INVOKABLE bool sendAiMessage(const QString &prompt);
     Q_INVOKABLE bool sendAiCommandRequest(const QString &prompt);
+    Q_INVOKABLE bool sendAiMessageWithSkills(const QString &prompt, const QStringList &skillIds);
+    Q_INVOKABLE bool sendAiCommandRequestWithSkills(const QString &prompt, const QStringList &skillIds);
     Q_INVOKABLE bool setAiPermissionMode(const QString &mode);
     Q_INVOKABLE bool explainAiLastFailure();
     Q_INVOKABLE bool cancelAiMessage();
@@ -535,6 +546,9 @@ public:
     Q_INVOKABLE bool saveAiQuickMessage(const QString &id, const QString &name, const QString &slug,
                                         const QString &content, const QString &description);
     Q_INVOKABLE bool deleteAiQuickMessage(const QString &id);
+    Q_INVOKABLE void ensureAiUserSkillsLoaded();
+    Q_INVOKABLE void reloadAiUserSkills();
+    Q_INVOKABLE bool openAiUserSkillsDirectory();
     Q_INVOKABLE bool retryAiMessage();
     Q_INVOKABLE void clearAiConversation();
     Q_INVOKABLE void clearAiActivity();
@@ -590,6 +604,7 @@ signals:
     void aiConversationChanged();
     void aiPermissionRulesChanged();
     void aiQuickMessagesChanged();
+    void aiUserSkillsChanged();
     void aiModelsChanged();
     void aiPrivacyDiagnosticsChanged();
     void mcpConfigurationChanged();
@@ -710,6 +725,7 @@ private:
         QString aiState = QStringLiteral("idle");
         QString aiError;
         QString aiLastPrompt;
+        QStringList aiLastSelectedSkillIds;
         QString aiContextPreview;
         QString aiConversationId;
         QVariantList aiContextItems;
@@ -785,7 +801,8 @@ private:
     [[nodiscard]] std::vector<ai::AiTerminalReadSnapshot> aiReadSnapshots(const TerminalTab &tab) const;
     void acceptAiSelectedText(TerminalTab &tab, const QString &text);
     [[nodiscard]] bool sendAiMessage(TerminalTab &tab, const QString &prompt, bool preferLastFailure,
-                                     bool appendPrompt = true, bool commandRequest = false);
+                                     bool appendPrompt = true, bool commandRequest = false,
+                                     const QStringList &selectedSkillIds = {});
     [[nodiscard]] ai::AiTurnRunner::ToolHandlingResult handleAiWaitCommand(TerminalTab &tab, const QString &tabId,
                                                                            const ai::AiToolCall &call,
                                                                            const ai::AiSessionTarget &turnTarget);
@@ -848,6 +865,7 @@ private:
     void setNoteOperationError(QString message);
     void setQuickCommandOperationError(QString message);
     void setAiQuickMessageError(QString message);
+    [[nodiscard]] QString aiUserSkillWarningText(ai::AiUserSkillWarning warning) const;
     [[nodiscard]] bool persistApplicationSettings(const config::ApplicationSettings &settings);
     [[nodiscard]] bool saveHostProfileInternal(const QString &id, const QString &name, const QString &host, int port,
                                                const QString &username, const QString &authentication,
@@ -921,6 +939,7 @@ private:
     ai::AiActivityModel m_aiActivity;
     ai::AiPermissionRuleStore m_aiPermissionRuleStore;
     ai::AiQuickMessageStore m_aiQuickMessageStore;
+    ai::AiUserSkillCatalog m_aiUserSkillCatalog;
     ai::McpRuntimeManager m_mcpRuntime;
     workbench::WorkspaceState m_workspaceState;
     std::vector<workbench::ScriptDefinition> m_scripts;
@@ -956,6 +975,11 @@ private:
     QString m_aiPermissionRuleError;
     std::vector<ai::AiQuickMessage> m_aiQuickMessages;
     QString m_aiQuickMessageError;
+    std::vector<ai::AiUserSkill> m_aiUserSkills;
+    QString m_aiUserSkillsState = QStringLiteral("idle");
+    QString m_aiUserSkillsError;
+    quint64 m_aiUserSkillsRequestGeneration = 0;
+    bool m_openAiUserSkillsAfterReload = false;
     quint64 m_aiModelsRequestGeneration = 0;
     bool m_aiModelsLoading = false;
     ai::AiContextBroker m_aiContextBroker;
