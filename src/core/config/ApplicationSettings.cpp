@@ -33,7 +33,8 @@ constexpr qint64 aiAgentModeSchemaVersion = 15;
 constexpr qint64 aiReasoningSchemaVersion = 16;
 constexpr qint64 aiExplicitContextSchemaVersion = 17;
 constexpr qint64 aiConversationFirstSchemaVersion = 18;
-constexpr qint64 currentSchemaVersion = aiConversationFirstSchemaVersion;
+constexpr qint64 aiPermissionContractSchemaVersion = 19;
+constexpr qint64 currentSchemaVersion = aiPermissionContractSchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::AiPermissionPreference;
@@ -215,10 +216,6 @@ template <>
     {
         return AiPermissionPreference::ask;
     }
-    if (token == QStringLiteral("edit") || token == QStringLiteral("ask-first-write"))
-    {
-        return AiPermissionPreference::edit;
-    }
     if (token == QStringLiteral("auto") || token == QStringLiteral("session-auto"))
     {
         return AiPermissionPreference::automatic;
@@ -303,14 +300,7 @@ template <>
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
     const qint64 version = versionValue.toInteger();
-    if (version != legacySchemaVersion && version != materialSchemaVersion && version != terminalAppearanceSchemaVersion
-        && version != accentSchemaVersion && version != credentialStorageSchemaVersion
-        && version != localizationSchemaVersion && version != fontOptionsSchemaVersion
-        && version != workbenchSchemaVersion && version != shortcutSchemaVersion && version != sftpSchemaVersion
-        && version != aiProviderSchemaVersion && version != aiPermissionSchemaVersion
-        && version != aiConversationHistorySchemaVersion && version != aiDebugTraceSchemaVersion
-        && version != aiAgentModeSchemaVersion && version != aiReasoningSchemaVersion
-        && version != currentSchemaVersion)
+    if (version < legacySchemaVersion || version > currentSchemaVersion)
     {
         return std::unexpected(ApplicationSettingsStoreError::unsupportedVersion);
     }
@@ -418,9 +408,12 @@ template <>
     const auto aiProvider = version >= aiProviderSchemaVersion
                                 ? parsePreference<AiProviderPreference>(aiProviderValue.toString())
                                 : std::optional{AiProviderPreference::openAiResponses};
-    const auto aiPermission = version >= aiPermissionSchemaVersion
-                                  ? parsePreference<AiPermissionPreference>(aiPermissionValue.toString())
-                                  : std::optional{AiPermissionPreference::ask};
+    const auto aiPermission =
+        version >= aiPermissionSchemaVersion
+            ? (version < aiPermissionContractSchemaVersion && aiPermissionValue.toString() == QStringLiteral("edit")
+                   ? std::optional{AiPermissionPreference::ask}
+                   : parsePreference<AiPermissionPreference>(aiPermissionValue.toString()))
+            : std::optional{AiPermissionPreference::ask};
     const auto aiReasoning = version >= aiReasoningSchemaVersion
                                  ? parsePreference<AiReasoningPreference>(aiReasoningValue.toString())
                                  : std::optional{AiReasoningPreference::automatic};
@@ -753,8 +746,6 @@ QString aiPermissionPreferenceToken(const AiPermissionPreference preference)
     {
         case AiPermissionPreference::readOnly:
             return QStringLiteral("read-only");
-        case AiPermissionPreference::edit:
-            return QStringLiteral("edit");
         case AiPermissionPreference::automatic:
             return QStringLiteral("auto");
         case AiPermissionPreference::yolo:

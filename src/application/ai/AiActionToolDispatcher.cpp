@@ -120,9 +120,6 @@ constexpr std::size_t maximumArgumentsBytes = std::size_t{20} * 1024;
         case AiPermissionMode::readOnly:
             return AiPermissionDisposition::deny;
         case AiPermissionMode::ask:
-        case AiPermissionMode::edit:
-            // Edit mode asks before every mutation, exactly like run_command:
-            // a mutation is a side effect regardless of which tool performs it.
             return AiPermissionDisposition::ask;
         case AiPermissionMode::automatic:
         case AiPermissionMode::yolo:
@@ -150,7 +147,7 @@ std::vector<AiToolDefinition> AiActionToolDispatcher::definitions()
          .description = "Write bounded UTF-8 text to the exact target PTY, optionally followed by Enter. The input "
                         "is not treated as a semantic command and is never echoed in the tool result.",
          .parametersJson =
-             R"({"type":"object","properties":{"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"data":{"type":"string","minLength":1,"maxLength":4096},"append_enter":{"type":"boolean"}},"required":["session_id","session_generation","data","append_enter"],"additionalProperties":false})"},
+             R"({"type":"object","properties":{"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"data":{"type":"string","minLength":1,"maxLength":4096},"append_enter":{"type":"boolean","default":false}},"required":["session_id","session_generation","data"],"additionalProperties":false})"},
         {.name = "save_runbook",
          .description = "Save a reusable ztermy script according to the active agent mode and rules.",
          .parametersJson =
@@ -191,6 +188,7 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
     const auto requestedMode = object.value(QStringLiteral("mode"));
     const auto requestedPtyData = object.value(QStringLiteral("data"));
     const auto requestedAppendEnter = object.value(QStringLiteral("append_enter"));
+    const bool appendEnter = requestedAppendEnter.isUndefined() ? false : requestedAppendEnter.toBool();
     const auto requestedRunbook = object.value(QStringLiteral("runbook"));
     const auto requestedLocalPath = object.value(QStringLiteral("local_path"));
     const auto requestedRemotePath = object.value(QStringLiteral("remote_path"));
@@ -216,7 +214,8 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
         writeToPty && commonSchemaValid
         && hasOnlyKeys(object, {QStringLiteral("session_id"), QStringLiteral("session_generation"),
                                 QStringLiteral("data"), QStringLiteral("append_enter")})
-        && requestedPtyData.isString() && validPtyInput(requestedPtyData.toString()) && requestedAppendEnter.isBool();
+        && requestedPtyData.isString() && validPtyInput(requestedPtyData.toString())
+        && (requestedAppendEnter.isUndefined() || requestedAppendEnter.isBool());
     bool runbookSchemaValid = saveRunbook && commonSchemaValid
                               && hasOnlyKeys(object, {QStringLiteral("session_id"),
                                                       QStringLiteral("session_generation"), QStringLiteral("runbook")})
@@ -295,7 +294,7 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
     else if (writeToPty)
     {
         canonical.insert(QStringLiteral("data"), requestedPtyData);
-        canonical.insert(QStringLiteral("append_enter"), requestedAppendEnter);
+        canonical.insert(QStringLiteral("append_enter"), appendEnter);
     }
     else if (saveRunbook)
     {
@@ -434,7 +433,8 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
                             .scopeValid = scopeValid,
                             .explicitDeny = rule.has_value() && rule->disposition == AiPermissionDisposition::deny,
                             .explicitAsk = rule.has_value() && rule->disposition == AiPermissionDisposition::ask,
-                            .explicitAllow = rule.has_value() && rule->disposition == AiPermissionDisposition::allow});
+                            .explicitAllow = rule.has_value() && rule->disposition == AiPermissionDisposition::allow,
+                            .highRisk = risk.highRisk()});
     AiTerminalAction action{.dispatchKey = key,
                             .target = context.target,
                             .kind = runCommand   ? AiTerminalActionKind::runCommand
@@ -445,7 +445,7 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
                             .ptyData = ptyData,
                             .permissionSubject = std::string(permissionSubject),
                             .permissionCapability = capability,
-                            .appendEnter = requestedAppendEnter.toBool(),
+                            .appendEnter = appendEnter,
                             .risk = risk};
     if (decision.disposition == AiPermissionDisposition::deny)
     {
@@ -483,7 +483,7 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
 
 AiPermissionDecision AiActionToolDispatcher::permissionDecision(const AiPermissionCapability capability,
                                                                 const std::string_view subject,
-                                                                const AiActionToolContext &context)
+                                                                const AiActionToolContext &context, const bool highRisk)
 {
     const auto rule = m_permissionRules.evaluate({.capability = capability,
                                                   .subject = subject,
@@ -494,7 +494,8 @@ AiPermissionDecision AiActionToolDispatcher::permissionDecision(const AiPermissi
                             .write = true,
                             .explicitDeny = rule.has_value() && rule->disposition == AiPermissionDisposition::deny,
                             .explicitAsk = rule.has_value() && rule->disposition == AiPermissionDisposition::ask,
-                            .explicitAllow = rule.has_value() && rule->disposition == AiPermissionDisposition::allow});
+                            .explicitAllow = rule.has_value() && rule->disposition == AiPermissionDisposition::allow,
+                            .highRisk = highRisk});
 }
 
 bool AiActionToolDispatcher::approve(const AiTerminalAction &action)

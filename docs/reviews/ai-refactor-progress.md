@@ -5,6 +5,21 @@
 > Netcatty 对照：`docs/reviews/netcatty-ai-comparison-2026-08.md`；
 > Codex 专项：`docs/research/CODEX_CLI_ARCHITECTURE.md`。
 
+## 节点 N9 — Agent 模式合同、工具协议与长命令审批修复（2026-08-14）
+
+**commit**: pending
+
+**范围**：
+
+1. `wait_terminal_frame` 改为条件性参数合同：只要求 session identity + revision，changed/idle/timeout 使用明确默认值；`write_to_pty.append_enter` 默认 false；
+2. 删除没有独立语义的 Edit 模式；Read-only/Ask/Auto/YOLO 四档同时约束 tool catalog、system prompt 与客户端执行策略；
+3. Auto 对高风险命令和外部 MCP 强制审批，YOLO 仍保留显式 deny、schema/scope、ownership、budget；
+4. 审批长命令放入有界可滚动 viewport，修复越界绘制重影；
+5. 终端命令 prefix 改为 token 边界匹配，并为一组保守的低风险命令族提供默认前缀建议；复杂/高风险/未知命令仍默认 exact；
+6. 评审记录：`docs/reviews/V3_AI_SYSTEM_REVIEW_2026-08-14.md`；架构决策：ADR 0085。
+
+**验证**：Debug 构建通过；全量 `ctest` 108/108 通过；`ztermy_clang_tidy_check` 237/237 通过；48 个 QML 文件通过格式门禁；真实窗口 `ztermy_ui_layout_runtime_smoke` 通过，并产出常规/紧凑/浅色 AI 面板、长命令审批与无障碍契约工件。改动 C++ hunks 通过 clang-format 检查；仓库全量格式目标仍会报告本节点之外既存文件的历史格式差异，本节点未用全仓机械格式化制造无关 churn。
+
 ## 节点 N1 — 研究基线 + P0 正确性修复（2026-08）
 
 **commit**: `c66a3e1`（fix(ai): close correctness gaps found in product research）

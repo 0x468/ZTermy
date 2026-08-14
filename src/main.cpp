@@ -668,6 +668,7 @@ struct ResizeHitRuntimeCase
 }
 
 [[nodiscard]] QQuickItem *quickItem(QQuickItem *rootObject, const char *objectName);
+[[nodiscard]] QQuickItem *visualQuickItem(QQuickItem *rootObject, const char *objectName);
 [[nodiscard]] bool verifyAccessibleButton(QQuickItem *rootObject, const char *objectName, const char *expectedName);
 [[nodiscard]] bool verifyAccessibleToggle(QQuickItem *rootObject, const char *objectName, const char *expectedName);
 
@@ -832,21 +833,20 @@ struct ResizeHitRuntimeCase
     const bool aiLauncherAccessible =
         verifyAccessibleToggle(rootObject, "terminalAiAssistantButton", "Terminal AI assistant");
     const bool aiToolbarAccessible = verifyAccessibleToggle(rootObject, "terminalAiAction", "AI assistant");
-    const bool aiExplainAccessible =
-        verifyAccessibleButton(rootObject, "aiExplainFailureButton", "Explain the last failed command");
-    const bool aiAttachAccessible =
-        verifyAccessibleButton(rootObject, "aiAttachSelectionButton", "Attach selected terminal text to this request");
-    const bool aiActivityAccessible = verifyAccessibleToggle(rootObject, "aiActivityToggle", "Show AI activity");
-    const bool aiClearAccessible =
-        verifyAccessibleButton(rootObject, "aiClearConversationButton", "Clear this AI conversation");
+    const bool aiHistoryAccessible =
+        verifyAccessibleToggle(rootObject, "aiHistoryToggle", "Show AI conversation history");
+    const bool aiNewConversationAccessible =
+        verifyAccessibleButton(rootObject, "aiNewConversationButton", "Start a new AI conversation");
+    const bool aiMoreAccessible =
+        verifyAccessibleButton(rootObject, "aiConversationMoreButton", "More conversation actions");
     const bool aiSendAccessible = verifyAccessibleButton(rootObject, "aiSendButton", "Send");
     const bool aiContextAccessible =
         aiContextInterface != nullptr && aiContextInterface->role() == QAccessible::Button
         && aiContextInterface->text(QAccessible::Name)
                == QStringLiteral("Request context · %1 item(s)").arg(controller.activeAiContextItems().size());
-    const bool aiAccessibilityPassed = aiLauncherAccessible && aiToolbarAccessible && aiExplainAccessible
-                                       && aiAttachAccessible && aiActivityAccessible && aiClearAccessible
-                                       && aiSendAccessible && aiContextAccessible;
+    const bool aiAccessibilityPassed = aiLauncherAccessible && aiToolbarAccessible && aiHistoryAccessible
+                                       && aiNewConversationAccessible && aiMoreAccessible && aiSendAccessible
+                                       && aiContextAccessible;
     QAccessibleInterface *aiPaneInterface =
         aiAssistantPane == nullptr ? nullptr : QAccessible::queryAccessibleInterface(aiAssistantPane);
     QAccessibleInterface *aiPromptInterface =
@@ -863,10 +863,9 @@ struct ResizeHitRuntimeCase
         artifact << "buttons=" << aiAccessibilityPassed << '\n';
         artifact << "launcher=" << aiLauncherAccessible << '\n';
         artifact << "toolbar=" << aiToolbarAccessible << '\n';
-        artifact << "explain=" << aiExplainAccessible << '\n';
-        artifact << "attach=" << aiAttachAccessible << '\n';
-        artifact << "activity=" << aiActivityAccessible << '\n';
-        artifact << "clear=" << aiClearAccessible << '\n';
+        artifact << "history=" << aiHistoryAccessible << '\n';
+        artifact << "newConversation=" << aiNewConversationAccessible << '\n';
+        artifact << "more=" << aiMoreAccessible << '\n';
         artifact << "send=" << aiSendAccessible << '\n';
         artifact << "context=" << aiContextAccessible << '\n';
         artifact << "semanticRoles=" << aiSemanticRolesPassed << '\n';
@@ -887,23 +886,60 @@ struct ResizeHitRuntimeCase
                                 && aiAssistantPane != nullptr && aiAssistantPane->isVisible()
                                 && aiPromptEditor != nullptr && aiAccessibilityPassed && aiSemanticRolesPassed
                                 && captureLayout(window, outputDirectory, QStringLiteral("dark-regular-ai-assistant"));
+    auto *aiApprovalCard = quickItem(rootObject, "aiToolApprovalCard");
+    auto *aiApprovalCommandViewport = quickItem(rootObject, "aiApprovalCommandViewport");
+    auto *aiApprovalCommandText = quickItem(rootObject, "aiApprovalCommandText");
+    if (aiApprovalCommandText != nullptr)
+    {
+        aiApprovalCommandText->setProperty(
+            "text", QStringLiteral("cat > ~/exercises/README.md << 'ENDOFFILE'\n")
+                        + QStringLiteral("Long approval command content must scroll without painting ").repeated(64)
+                        + QStringLiteral("\nENDOFFILE"));
+    }
+    if (aiApprovalCard != nullptr)
+    {
+        aiApprovalCard->setVisible(true);
+    }
+    processWindowEventsFor(std::chrono::milliseconds{150});
+    const bool longApprovalBounded =
+        aiApprovalCard != nullptr && aiApprovalCard->isVisible() && aiApprovalCommandViewport != nullptr
+        && aiApprovalCommandViewport->clip() && aiApprovalCommandViewport->height() <= 120.5
+        && aiApprovalCommandViewport->property("contentHeight").toReal() > aiApprovalCommandViewport->height()
+        && aiApprovalCommandText != nullptr && aiApprovalCommandText->height() > aiApprovalCommandViewport->height()
+        && captureLayout(window, outputDirectory, QStringLiteral("dark-regular-ai-long-approval"));
+    if (aiApprovalCard != nullptr)
+    {
+        aiApprovalCard->setVisible(false);
+    }
     window.resize(QSize{500, 360});
     processWindowEventsFor(std::chrono::milliseconds{250});
-    constexpr std::array compactAiActionNames{"aiExplainFailureButton", "aiAttachSelectionButton", "aiActivityToggle",
-                                              "aiHistoryToggle", "aiClearConversationButton"};
-    const bool compactAiActionsInsidePanel =
-        aiAssistantPane != nullptr
-        && std::ranges::all_of(compactAiActionNames, [rootObject, aiAssistantPane](const char *objectName) {
-               auto *item = quickItem(rootObject, objectName);
-               if (item == nullptr)
-               {
-                   return false;
-               }
-               const QPointF topLeft = item->mapToItem(aiAssistantPane, QPointF{});
-               const qreal right = topLeft.x() + item->width();
-               constexpr qreal tolerance = 0.5;
-               return topLeft.x() >= -tolerance && right <= aiAssistantPane->width() + tolerance;
-           });
+    constexpr std::array compactAiActionNames{"aiHistoryToggle", "aiNewConversationButton", "aiConversationMoreButton",
+                                              "aiContextToggle", "aiSendButton"};
+    bool compactAiActionsInsidePanel = aiAssistantPane != nullptr;
+    QFile compactAiArtifact{QDir(outputDirectory).filePath(QStringLiteral("compact-ai-layout-contract.txt"))};
+    const bool compactAiArtifactOpened = compactAiArtifact.open(QIODevice::WriteOnly | QIODevice::Text);
+    QTextStream compactAiStream{&compactAiArtifact};
+    for (const char *objectName : compactAiActionNames)
+    {
+        auto *item = visualQuickItem(rootObject, objectName);
+        const QPointF topLeft =
+            item == nullptr || aiAssistantPane == nullptr ? QPointF{} : item->mapToItem(aiAssistantPane, QPointF{});
+        const qreal right = item == nullptr ? 0.0 : topLeft.x() + item->width();
+        constexpr qreal tolerance = 0.5;
+        const bool inside = item != nullptr && aiAssistantPane != nullptr && topLeft.x() >= -tolerance
+                            && right <= aiAssistantPane->width() + tolerance;
+        compactAiActionsInsidePanel = compactAiActionsInsidePanel && inside;
+        if (compactAiArtifactOpened)
+        {
+            compactAiStream << objectName << ": found=" << (item != nullptr) << ", x=" << topLeft.x()
+                            << ", width=" << (item == nullptr ? 0.0 : item->width()) << ", right=" << right
+                            << ", inside=" << inside << '\n';
+        }
+    }
+    if (compactAiArtifactOpened)
+    {
+        compactAiStream << "paneWidth=" << (aiAssistantPane == nullptr ? 0.0 : aiAssistantPane->width()) << '\n';
+    }
     const bool aiCompactCaptured =
         aiAssistantPane != nullptr && aiAssistantPane->isVisible() && aiAssistantPane->width() > 0.0
         && aiAssistantPane->width() <= window.width() && compactAiActionsInsidePanel
@@ -922,7 +958,7 @@ struct ResizeHitRuntimeCase
     }
     return titleBrandPalettePassed && lightCompactPassed && lightRegularPassed && chineseShortcuts && chinesePalette
            && aiWorkbenchOpened && missingProviderShown && aiDarkCaptured && aiCompactCaptured && aiLightCaptured
-           && restoredDark;
+           && longApprovalBounded && restoredDark;
 }
 
 [[nodiscard]] QQuickItem *quickItem(QQuickItem *rootObject, const char *objectName)
@@ -1052,7 +1088,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
 
 [[nodiscard]] bool verifyAccessibleButton(QQuickItem *rootObject, const char *objectName, const char *expectedName)
 {
-    QQuickItem *item = quickItem(rootObject, objectName);
+    QQuickItem *item = visualQuickItem(rootObject, objectName);
     QAccessibleInterface *interface = item == nullptr ? nullptr : QAccessible::queryAccessibleInterface(item);
     const QString expected = QString::fromLatin1(expectedName);
     if (interface == nullptr || interface->role() != QAccessible::Button
@@ -1071,7 +1107,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
 
 [[nodiscard]] bool verifyAccessibleToggle(QQuickItem *rootObject, const char *objectName, const char *expectedName)
 {
-    QQuickItem *item = quickItem(rootObject, objectName);
+    QQuickItem *item = visualQuickItem(rootObject, objectName);
     QAccessibleInterface *interface = item == nullptr ? nullptr : QAccessible::queryAccessibleInterface(item);
     const QString expected = QString::fromLatin1(expectedName);
     const bool toggleRole = interface != nullptr

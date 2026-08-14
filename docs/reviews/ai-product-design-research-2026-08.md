@@ -2,6 +2,9 @@
 
 Status: research baseline for the ztermy V3 AI refactor; versioned with git.
 
+> 本文中的“当前实现”是重构前/中期快照。2026-08-14 的实际实现、模式合同、
+> 审批规则与差距清单以 `V3_AI_SYSTEM_REVIEW_2026-08-14.md` 为准。
+
 > 节点信息：本文档随重构一起纳入版本管理。重构的每个阶段在
 > `docs/reviews/ai-refactor-progress.md` 中追加节点（日期 + git commit + 范围 + 验证结果）。
 

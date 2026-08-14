@@ -34,7 +34,10 @@ design is in `AI_ARCHITECTURE.md`; security boundaries are in
 implementation-to-test traceability is in
 `testing/V3_IMPLEMENTATION_TRACEABILITY.md`; the first formal review response is in
 `reviews/V3_AI_ARCHITECTURE_REVIEW_2026-08-11.md`; the owner-facing final
-candidate checklist is `testing/V3_OWNER_ACCEPTANCE_ZH_CN.md`.
+candidate checklist is `testing/V3_OWNER_ACCEPTANCE_ZH_CN.md`. The current
+end-to-end product and implementation audit is
+`reviews/V3_AI_SYSTEM_REVIEW_2026-08-14.md`; it supersedes earlier mode and
+approval descriptions where they conflict.
 
 ## Product outcomes
 

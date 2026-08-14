@@ -3,7 +3,7 @@
 namespace ztermy::ai
 {
 
-QString AiSystemPromptBuilder::build(const bool commandRequest)
+QString AiSystemPromptBuilder::build(const bool commandRequest, const AiPermissionMode permissionMode)
 {
     // Core identity and behavior contract. Written as plain text so the full
     // prompt is readable in tests and review; keep the sections in this order.
@@ -59,6 +59,34 @@ QString AiSystemPromptBuilder::build(const bool commandRequest)
         "- When you propose a command, put it in exactly one fenced code block tagged for the "
         "active shell. Never place alternative commands in additional code blocks.\n"
         "- Keep explanations short; the user reads them in a terminal side panel.\n");
+
+    prompt += QStringLiteral("\n# Active permission mode\n");
+    switch (permissionMode)
+    {
+        case AiPermissionMode::readOnly:
+            prompt += QStringLiteral(
+                "- Mode: read-only. Mutation and external MCP tools are not available. Inspect evidence and answer, "
+                "but do not claim that you executed or changed anything.\n");
+            break;
+        case AiPermissionMode::ask:
+            prompt += QStringLiteral(
+                "- Mode: ask. Call an appropriate action tool when the user requests an action; the client will "
+                "show the approval UI. Do not ask for a second textual confirmation before the tool call.\n");
+            break;
+        case AiPermissionMode::automatic:
+            prompt += QStringLiteral(
+                "- Mode: auto. Ordinary actions may run without a prompt. High-risk commands and external MCP "
+                "tools still pause for client approval.\n");
+            break;
+        case AiPermissionMode::yolo:
+            prompt += QStringLiteral(
+                "- Mode: YOLO. Actions may run without approval prompts. Explicit deny rules, schema and session "
+                "scope validation, write ownership, and action budgets still apply.\n");
+            break;
+    }
+    prompt += QStringLiteral(
+        "- The client permission policy is authoritative. Never claim a blocked or merely queued action succeeded; "
+        "use tool results as the source of truth.\n");
 
     if (commandRequest)
     {

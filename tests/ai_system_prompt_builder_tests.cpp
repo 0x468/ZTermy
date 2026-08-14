@@ -16,7 +16,7 @@ private slots:
 
 void AiSystemPromptBuilderTests::buildsLayeredPrompt()
 {
-    const QString prompt = ztermy::ai::AiSystemPromptBuilder::build(false);
+    const QString prompt = ztermy::ai::AiSystemPromptBuilder::build(false, ztermy::ai::AiPermissionMode::ask);
 
     // Identity and evidence boundary.
     QVERIFY(prompt.contains(QStringLiteral("terminal assistant")));
@@ -38,16 +38,21 @@ void AiSystemPromptBuilderTests::buildsLayeredPrompt()
 
     // Output format.
     QVERIFY(prompt.contains(QStringLiteral("exactly one fenced code block")));
+    QVERIFY(prompt.contains(QStringLiteral("Mode: ask")));
+    QVERIFY(prompt.contains(QStringLiteral("client will show the approval UI")));
 }
 
 void AiSystemPromptBuilderTests::commandRequestModeAddsSuggestionRules()
 {
-    const QString prompt = ztermy::ai::AiSystemPromptBuilder::build(true);
+    const QString prompt = ztermy::ai::AiSystemPromptBuilder::build(true, ztermy::ai::AiPermissionMode::readOnly);
     QVERIFY(prompt.contains(QStringLiteral("Command suggestion mode")));
     QVERIFY(prompt.contains(QStringLiteral("do not run the command yourself")));
 
-    const QString plain = ztermy::ai::AiSystemPromptBuilder::build(false);
+    QVERIFY(prompt.contains(QStringLiteral("Mutation and external MCP tools are not available")));
+
+    const QString plain = ztermy::ai::AiSystemPromptBuilder::build(false, ztermy::ai::AiPermissionMode::automatic);
     QVERIFY(!plain.contains(QStringLiteral("Command suggestion mode")));
+    QVERIFY(plain.contains(QStringLiteral("High-risk commands and external MCP tools")));
 }
 
 } // namespace

@@ -312,8 +312,6 @@ aiPermissionMode(const ztermy::config::AiPermissionPreference preference) noexce
     {
         case ztermy::config::AiPermissionPreference::readOnly:
             return ztermy::ai::AiPermissionMode::readOnly;
-        case ztermy::config::AiPermissionPreference::edit:
-            return ztermy::ai::AiPermissionMode::edit;
         case ztermy::config::AiPermissionPreference::automatic:
             return ztermy::ai::AiPermissionMode::automatic;
         case ztermy::config::AiPermissionPreference::yolo:
@@ -3263,6 +3261,7 @@ QVariantMap AppController::activeAiToolApproval() const
                 {QStringLiteral("ruleSubject"), utf8QString(pending.call.name)},
                 {QStringLiteral("ruleCapability"), QStringLiteral("mcp-tool")},
                 {QStringLiteral("ruleDefaultMatcher"), QStringLiteral("exact")},
+                {QStringLiteral("ruleDefaultPattern"), utf8QString(pending.call.name)},
                 {QStringLiteral("profileAvailable"), !tab->sourceProfileId.isEmpty()},
                 {QStringLiteral("highRisk"), true},
                 {QStringLiteral("riskReason"),
@@ -3329,6 +3328,19 @@ QVariantMap AppController::activeAiToolApproval() const
             break;
         }
     }
+    QString ruleDefaultMatcher = QStringLiteral("exact");
+    QString ruleDefaultPattern = utf8QString(action.permissionSubject);
+    if (action.kind == ai::AiTerminalActionKind::runCommand)
+    {
+        const auto suggestion = ai::AiPermissionPolicy::suggestCommandRule(action.command);
+        ruleDefaultMatcher = aiPermissionMatcherToken(suggestion.matcher);
+        ruleDefaultPattern = utf8QString(suggestion.pattern);
+    }
+    else if (action.permissionCapability == ai::AiPermissionCapability::ptyInput)
+    {
+        ruleDefaultMatcher = QStringLiteral("all");
+        ruleDefaultPattern.clear();
+    }
     return {{QStringLiteral("visible"), true},
             {QStringLiteral("toolCallId"), utf8QString(action.dispatchKey.toolCallId)},
             {QStringLiteral("command"), actionText},
@@ -3338,9 +3350,8 @@ QVariantMap AppController::activeAiToolApproval() const
             {QStringLiteral("ruleSupported"), true},
             {QStringLiteral("ruleSubject"), utf8QString(action.permissionSubject)},
             {QStringLiteral("ruleCapability"), aiPermissionCapabilityToken(action.permissionCapability)},
-            {QStringLiteral("ruleDefaultMatcher"), action.permissionCapability == ai::AiPermissionCapability::ptyInput
-                                                       ? QStringLiteral("all")
-                                                       : QStringLiteral("exact")},
+            {QStringLiteral("ruleDefaultMatcher"), ruleDefaultMatcher},
+            {QStringLiteral("ruleDefaultPattern"), ruleDefaultPattern},
             {QStringLiteral("profileAvailable"), !tab->sourceProfileId.isEmpty()},
             {QStringLiteral("highRisk"), action.risk.highRisk()},
             {QStringLiteral("riskReason"), utf8QString(action.risk.reason)}};
@@ -8881,11 +8892,16 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
         configuration.kind == ai::AiProviderKind::openAiResponses
         && providerUrl.scheme().compare(QStringLiteral("https"), Qt::CaseInsensitive) == 0
         && providerUrl.host().compare(QStringLiteral("api.openai.com"), Qt::CaseInsensitive) == 0;
-    std::string instructions = utf8String(ai::AiSystemPromptBuilder::build(commandRequest));
+    const auto permissionMode = aiPermissionMode(m_settings.aiPermission);
+    std::string instructions = utf8String(ai::AiSystemPromptBuilder::build(commandRequest, permissionMode));
     auto toolDefinitions = ai::AiReadToolDispatcher::definitions();
-    auto actionDefinitions = ai::AiActionToolDispatcher::definitions();
-    toolDefinitions.insert(toolDefinitions.end(), std::make_move_iterator(actionDefinitions.begin()),
-                           std::make_move_iterator(actionDefinitions.end()));
+    const bool actionsAvailable = !commandRequest && permissionMode != ai::AiPermissionMode::readOnly;
+    if (actionsAvailable)
+    {
+        auto actionDefinitions = ai::AiActionToolDispatcher::definitions();
+        toolDefinitions.insert(toolDefinitions.end(), std::make_move_iterator(actionDefinitions.begin()),
+                               std::make_move_iterator(actionDefinitions.end()));
+    }
     terminal::SemanticTerminalSnapshot semanticSnapshot;
     if (tab.semanticObserver)
     {
@@ -8901,9 +8917,12 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
     toolDefinitions.push_back(ai::AiSftpReadTool::definition());
     toolDefinitions.push_back(ai::AiSftpListTool::definition());
     toolDefinitions.push_back(ai::AiNoteReadTool::definition());
-    auto mcpDefinitions = m_mcpRuntime.definitions();
-    toolDefinitions.insert(toolDefinitions.end(), std::make_move_iterator(mcpDefinitions.begin()),
-                           std::make_move_iterator(mcpDefinitions.end()));
+    if (actionsAvailable)
+    {
+        auto mcpDefinitions = m_mcpRuntime.definitions();
+        toolDefinitions.insert(toolDefinitions.end(), std::make_move_iterator(mcpDefinitions.begin()),
+                               std::make_move_iterator(mcpDefinitions.end()));
+    }
     const auto turnReadSnapshots =
         std::make_shared<const std::vector<ai::AiTerminalReadSnapshot>>(aiReadSnapshots(tab));
     ai::AiGenerationRequest generation{.instructions = std::move(instructions),
@@ -8915,7 +8934,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
     // recent turns preserved verbatim) instead of failing at the provider.
     // The conversation model itself is untouched; only the request view
     // changes, so follow-up turns re-compact deterministically.
-    const auto compacted = ai::AiContextCompactor::compact(std::move(generation));
+    auto compacted = ai::AiContextCompactor::compact(std::move(generation));
     if (compacted.compacted)
     {
         qCInfo(appControllerLog) << "AI context compacted for" << compacted.compactedMessageCount
@@ -9453,7 +9472,8 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                                                        .sessionGeneration = target->reconnectGeneration},
                                             .permissionMode = aiPermissionMode(m_settings.aiPermission),
                                             .profileId = utf8String(target->sourceProfileId),
-                                            .writable = true});
+                                            .writable = true},
+                    true);
                 if (permission.disposition == ai::AiPermissionDisposition::deny)
                 {
                     const auto output =
@@ -10144,7 +10164,7 @@ std::string AppController::executeAiScrollbackRead(TerminalTab &tab, const ai::A
     }
 
     QString content;
-    qsizetype remaining = static_cast<qsizetype>(maximumBytes);
+    auto remaining = static_cast<qsizetype>(maximumBytes);
     bool truncated = false;
     for (std::size_t index = 0; index < page->lines.size() && remaining > 0; ++index)
     {

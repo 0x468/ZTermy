@@ -80,7 +80,7 @@ public:
         page.totalLines = lineCount;
         for (std::size_t index = 0; index < lineCount; ++index)
         {
-            page.lines.push_back("fake scrollback line");
+            page.lines.emplace_back("fake scrollback line");
         }
         return page;
     }
@@ -849,13 +849,13 @@ void AppControllerTests::persistsApplicationSettings()
 
     QVERIFY(controller.saveAiProviderSettings(QStringLiteral("ollama"), QStringLiteral("http://127.0.0.1:11434"),
                                               QStringLiteral("/api/chat"), QStringLiteral("qwen3"), false,
-                                              QStringLiteral("edit")));
+                                              QStringLiteral("auto")));
     QCOMPARE(controller.aiProviderPreference(), QStringLiteral("ollama"));
     QCOMPARE(controller.aiBaseUrl(), QStringLiteral("http://127.0.0.1:11434"));
     QCOMPARE(controller.aiEndpointPath(), QStringLiteral("/api/chat"));
     QCOMPARE(controller.aiModel(), QStringLiteral("qwen3"));
     QVERIFY(!controller.aiAutomaticContext());
-    QCOMPARE(controller.aiPermissionPreference(), QStringLiteral("edit"));
+    QCOMPARE(controller.aiPermissionPreference(), QStringLiteral("auto"));
     QVERIFY(!controller.saveAiProviderSettings(QStringLiteral("unknown"), QStringLiteral("https://example.test"), {},
                                                QStringLiteral("model"), true, QStringLiteral("read-only")));
     QVERIFY(!controller.saveAiProviderSettings(QStringLiteral("ollama"), QStringLiteral("file:///tmp/model"), {},

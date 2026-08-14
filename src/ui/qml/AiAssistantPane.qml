@@ -27,6 +27,7 @@ Rectangle {
     readonly property bool approvalRuleSupported: toolApproval.ruleSupported === true
     readonly property string approvalRuleSubject: typeof toolApproval.ruleSubject === "string" ? toolApproval.ruleSubject : ""
     readonly property string approvalRuleDefaultMatcher: typeof toolApproval.ruleDefaultMatcher === "string" ? toolApproval.ruleDefaultMatcher : "exact"
+    readonly property string approvalRuleDefaultPattern: typeof toolApproval.ruleDefaultPattern === "string" ? toolApproval.ruleDefaultPattern : approvalRuleSubject
     readonly property bool approvalProfileAvailable: toolApproval.profileAvailable === true
     property bool contextExpanded: false
     property bool activityExpanded: false
@@ -149,7 +150,7 @@ Rectangle {
     }
 
     function permissionModeIndex(token) {
-        return token === "read-only" ? 0 : token === "edit" ? 2 : token === "auto" ? 3 : token === "yolo" ? 4 : 1;
+        return token === "read-only" ? 0 : token === "auto" ? 2 : token === "yolo" ? 3 : 1;
     }
 
     function modelOptions() {
@@ -242,6 +243,16 @@ Rectangle {
         return token === "prefix" ? 1 : token === "glob" ? 2 : token === "regex" ? 3 : token === "all" ? 4 : 0;
     }
 
+    function approvalRuleDescription() {
+        const scope = approvalScopeBox.currentValue;
+        const scopeText = scope === "once" ? qsTr("Only this pending action; no rule is saved.") : scope === "session" ? qsTr("Until this terminal session is closed.") : scope === "profile" ? qsTr("Saved for future sessions that use this profile.") : qsTr("Saved for every profile and session.");
+        if (scope === "once")
+            return scopeText;
+        const matcher = approvalMatcherBox.currentValue;
+        const matcherText = matcher === "exact" ? qsTr("Matches the entire action exactly.") : matcher === "prefix" ? qsTr("Matches this command-token prefix and later arguments.") : matcher === "glob" ? qsTr("Matches the entire action with * and ? wildcards.") : matcher === "regex" ? qsTr("Matches the entire action with an expert regular expression.") : qsTr("Matches every action in this capability.");
+        return scopeText + " " + matcherText;
+    }
+
     function approvePendingTool() {
         if (!approvalRuleSupported || approvalScopeBox.currentValue === "once") {
             controller.approveAiTool();
@@ -263,7 +274,7 @@ Rectangle {
             return;
         approvalScopeBox.currentIndex = 0;
         approvalMatcherBox.currentIndex = matcherIndex(approvalRuleDefaultMatcher);
-        approvalPatternField.text = approvalRuleSubject;
+        approvalPatternField.text = approvalRuleDefaultPattern;
     }
 
     color: Theme.panelBackground
@@ -654,26 +665,48 @@ Rectangle {
                     }
                 }
 
-                TextEdit {
+                Flickable {
+                    id: approvalCommandViewport
+
+                    objectName: "aiApprovalCommandViewport"
                     Layout.fillWidth: true
+                    Layout.preferredHeight: Math.min(120, Math.max(42, approvalCommandEdit.contentHeight + 12))
                     Layout.maximumHeight: 120
-                    text: pane.approvalCommand
-                    color: Theme.text
-                    readOnly: true
-                    selectByMouse: true
-                    wrapMode: TextEdit.WrapAnywhere
-                    textFormat: TextEdit.PlainText
-                    font.family: Theme.terminalFont
-                    font.pixelSize: Theme.textBody
+                    contentWidth: width
+                    contentHeight: approvalCommandEdit.contentHeight + 12
+                    boundsBehavior: Flickable.StopAtBounds
+                    clip: true
                     Accessible.name: pane.approvalKind === "interrupt_command" ? qsTr("Interrupt awaiting approval") : pane.approvalKind === "write_to_pty" ? qsTr("Terminal input awaiting approval") : pane.approvalKind === "save_runbook" ? qsTr("Runbook awaiting approval") : qsTr("Command awaiting approval")
 
                     Rectangle {
                         anchors.fill: parent
-                        anchors.margins: -6
-                        z: -1
+                        z: 0
                         radius: Theme.radiusSmall
                         color: Theme.controlBackground
                         border.color: Theme.border
+                    }
+
+                    TextEdit {
+                        id: approvalCommandEdit
+
+                        objectName: "aiApprovalCommandText"
+                        x: 6
+                        y: 6
+                        z: 1
+                        width: Math.max(0, approvalCommandViewport.width - 12)
+                        height: contentHeight
+                        text: pane.approvalCommand
+                        color: Theme.text
+                        readOnly: true
+                        selectByMouse: true
+                        wrapMode: TextEdit.WrapAnywhere
+                        textFormat: TextEdit.PlainText
+                        font.family: Theme.terminalFont
+                        font.pixelSize: Theme.textBody
+                    }
+
+                    ScrollBar.vertical: ScrollBar {
+                        policy: approvalCommandViewport.contentHeight > approvalCommandViewport.height ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff
                     }
                 }
 
@@ -725,6 +758,16 @@ Rectangle {
                     }
                 }
 
+                Text {
+                    Layout.fillWidth: true
+                    visible: pane.approvalRuleSupported
+                    text: pane.approvalRuleDescription()
+                    color: Theme.textSubtle
+                    wrapMode: Text.WordWrap
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.textCompact
+                }
+
                 RowLayout {
                     Layout.alignment: Qt.AlignRight
                     spacing: 7
@@ -746,7 +789,7 @@ Rectangle {
 
                     ActionButton {
                         text: pane.approvalRuleSupported && approvalScopeBox.currentValue !== "once" ? qsTr("Allow & remember") : pane.approvalKind.indexOf("queue_sftp_") === 0 ? qsTr("Queue transfer") : pane.approvalKind === "interrupt_command" ? qsTr("Send Ctrl+C") : pane.approvalKind === "write_to_pty" ? qsTr("Send input") : pane.approvalKind === "save_runbook" ? qsTr("Save runbook") : qsTr("Run command")
-                        iconName: pane.approvalKind.indexOf("queue_sftp_") === 0 ? "transfer" : pane.approvalKind === "interrupt_command" ? "close" : pane.approvalKind === "write_to_pty" ? "composer" : pane.approvalKind === "save_runbook" ? "save" : "play"
+                        iconName: pane.approvalKind.indexOf("queue_sftp_") === 0 ? "transfer" : pane.approvalKind === "interrupt_command" ? "close" : pane.approvalKind === "write_to_pty" ? "compose" : pane.approvalKind === "save_runbook" ? "save" : "play"
                         variant: pane.approvalHighRisk ? "destructive" : "primary"
                         accessibleName: pane.approvalKind.indexOf("queue_sftp_") === 0 ? qsTr("Approve and queue the pending AI SFTP transfer") : pane.approvalKind === "interrupt_command" ? qsTr("Approve the pending soft interrupt") : pane.approvalKind === "write_to_pty" ? qsTr("Approve the pending terminal input") : pane.approvalKind === "save_runbook" ? qsTr("Approve and save the pending AI runbook") : qsTr("Approve and run the pending AI command")
                         onClicked: pane.approvePendingTool()
@@ -1629,6 +1672,7 @@ Rectangle {
                         id: modelBox
 
                         objectName: "aiModelBox"
+                        visible: pane.width >= 320
                         Layout.preferredWidth: pane.width < 380 ? 94 : 124
                         model: pane.modelOptions()
                         currentIndex: Math.max(0, model.indexOf(pane.controller.aiModel))
@@ -1646,12 +1690,16 @@ Rectangle {
 
                         objectName: "aiAgentModeBox"
                         Layout.preferredWidth: pane.width < 380 ? 82 : 96
-                        model: ["read-only", "ask", "edit", "auto", "yolo"]
-                        displayTextModel: [qsTr("Read-only"), qsTr("Ask"), qsTr("Edit"), qsTr("Auto"), qsTr("YOLO")]
+                        model: ["read-only", "ask", "auto", "yolo"]
+                        displayTextModel: [qsTr("Read-only"), qsTr("Ask"), qsTr("Auto"), qsTr("YOLO")]
                         currentIndex: pane.permissionModeIndex(pane.controller.aiPermissionPreference)
                         accessibleName: qsTr("Agent execution mode")
                         enabled: !pane.busy
                         onActivated: index => pane.controller.setAiPermissionMode(model[index])
+
+                        AppToolTip {
+                            text: agentModeBox.currentValue === "read-only" ? qsTr("Read tools only; action and MCP tools are hidden") : agentModeBox.currentValue === "ask" ? qsTr("Ask in the approval card before every side effect") : agentModeBox.currentValue === "auto" ? qsTr("Run ordinary actions automatically; ask for high-risk commands and MCP tools") : qsTr("Run without approval prompts; explicit deny rules and safety boundaries still apply")
+                        }
                     }
 
                     ActionButton {
@@ -1661,7 +1709,7 @@ Rectangle {
                         iconName: pane.busy ? "close" : "play"
                         variant: pane.busy ? "destructive" : "primary"
                         enabled: pane.busy || promptEditor.text.trim().length > 0
-                        accessibleName: text
+                        accessibleName: pane.busy ? qsTr("Cancel") : qsTr("Send")
                         onClicked: {
                             if (pane.busy) {
                                 pane.controller.cancelAiMessage();

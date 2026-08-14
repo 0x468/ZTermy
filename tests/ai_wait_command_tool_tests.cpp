@@ -127,7 +127,7 @@ void AiWaitCommandToolTests::capsOversizedFinishedOutput()
     const QString output = serialized.value(QStringLiteral("output")).toString();
     // The embedded output must stay far below the 64 KiB tool-output bound so
     // JSON escaping can never push the serialized result over it.
-    QVERIFY(output.size() <= 24 * 1024);
+    QVERIFY(output.size() <= qsizetype{24} * 1024);
     QVERIFY(serialized.value(QStringLiteral("output_truncated")).toBool());
     QVERIFY(!serialized.value(QStringLiteral("output_complete")).toBool());
 }

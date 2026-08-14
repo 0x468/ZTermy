@@ -60,7 +60,7 @@ void AiProviderRetryPolicyTests::honorsBoundedRetryAfter()
     // An absurd server value still gets an absolute ceiling so a turn is not
     // pinned for an unreasonable time.
     error.retryAfterMilliseconds = 10 * 60 * 1000;
-    QCOMPARE(policy.decide(error, 0).delayMilliseconds, std::uint64_t{5 * 60 * 1000});
+    QCOMPARE(policy.decide(error, 0).delayMilliseconds, std::uint64_t{5} * 60 * 1000);
 }
 
 void AiProviderRetryPolicyTests::rejectsPermanentAndCancelledFailures()

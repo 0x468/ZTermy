@@ -32,10 +32,23 @@ void AiTerminalFrameToolTests::publishesAndParsesStrictContracts()
         R"({"session_id":"s","session_generation":2,"after_revision":7,"condition":"idle","idle_ms":500,"timeout_ms":3000})");
     QVERIFY(wait.has_value());
     QCOMPARE(wait->idleMilliseconds, std::uint32_t{500});
+    auto defaultWait =
+        AiTerminalFrameTool::parseWait(R"({"session_id":"s","session_generation":2,"after_revision":7})");
+    QVERIFY(defaultWait.has_value());
+    QCOMPARE(defaultWait->condition, ztermy::ai::AiTerminalFrameWaitCondition::changed);
+    QCOMPARE(defaultWait->idleMilliseconds, std::uint32_t{0});
+    QCOMPARE(defaultWait->timeoutMilliseconds, std::uint32_t{30'000});
+    auto defaultIdle = AiTerminalFrameTool::parseWait(
+        R"({"session_id":"s","session_generation":2,"after_revision":7,"condition":"idle"})");
+    QVERIFY(defaultIdle.has_value());
+    QCOMPARE(defaultIdle->idleMilliseconds, std::uint32_t{750});
     QVERIFY(
         !AiTerminalFrameTool::parseWait(
              R"({"session_id":"s","session_generation":2,"after_revision":7,"condition":"idle","idle_ms":0,"timeout_ms":3000})")
              .has_value());
+    QVERIFY(!AiTerminalFrameTool::parseWait(
+                 R"({"session_id":"s","session_generation":2,"after_revision":7,"condition":"changed","timeout_ms":0})")
+                 .has_value());
 }
 
 void AiTerminalFrameToolTests::evaluatesConditionsAndSerializesFrames()

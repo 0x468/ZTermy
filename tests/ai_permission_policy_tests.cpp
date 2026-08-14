@@ -29,6 +29,7 @@ private slots:
     void overlaysHighRiskWithoutDoublePromptingVisibleRun();
     void classifiesRepresentativeHighRiskCommands();
     void leavesOrdinaryDiagnosticsUnclassified();
+    void suggestsConservativeCommandRules();
     void matchesExactPrefixGlobRegexAndAllRules();
     void appliesDenyAskAllowPrecedenceAndScope();
     void consumesOnceAndClearsSessionRules();
@@ -77,9 +78,6 @@ void AiPermissionPolicyTests::evaluatesEveryWriteMode()
     request.mode = AiPermissionMode::ask;
     QCOMPARE(policy.decide(request).disposition, AiPermissionDisposition::ask);
 
-    request.mode = AiPermissionMode::edit;
-    QCOMPARE(policy.decide(request).disposition, AiPermissionDisposition::ask);
-
     request.mode = AiPermissionMode::automatic;
     QCOMPARE(policy.decide(request).disposition, AiPermissionDisposition::allow);
 
@@ -90,13 +88,26 @@ void AiPermissionPolicyTests::evaluatesEveryWriteMode()
 void AiPermissionPolicyTests::overlaysHighRiskWithoutDoublePromptingVisibleRun()
 {
     const AiPermissionPolicy policy;
-    auto request = AiPermissionRequest{.mode = AiPermissionMode::automatic, .write = true};
+    auto request = AiPermissionRequest{.mode = AiPermissionMode::automatic, .write = true, .highRisk = true};
     auto decision = policy.decide(request);
-    QCOMPARE(decision.disposition, AiPermissionDisposition::allow);
+    QCOMPARE(decision.disposition, AiPermissionDisposition::ask);
+    QCOMPARE(decision.reason, AiPermissionReason::highRiskOverlay);
     request.explicitVisibleApproval = true;
     decision = policy.decide(request);
     QCOMPARE(decision.disposition, AiPermissionDisposition::allow);
     QCOMPARE(decision.reason, AiPermissionReason::explicitVisibleApproval);
+
+    request.explicitVisibleApproval = false;
+    request.explicitAllow = true;
+    decision = policy.decide(request);
+    QCOMPARE(decision.disposition, AiPermissionDisposition::allow);
+    QCOMPARE(decision.reason, AiPermissionReason::explicitAllow);
+
+    request.explicitAllow = false;
+    request.mode = AiPermissionMode::yolo;
+    decision = policy.decide(request);
+    QCOMPARE(decision.disposition, AiPermissionDisposition::allow);
+    QCOMPARE(decision.reason, AiPermissionReason::yoloMode);
 }
 
 void AiPermissionPolicyTests::classifiesRepresentativeHighRiskCommands()
@@ -122,6 +133,23 @@ void AiPermissionPolicyTests::leavesOrdinaryDiagnosticsUnclassified()
     QVERIFY(!AiPermissionPolicy::classifyCommand("Get-Process | Sort-Object CPU -Descending").highRisk());
     QVERIFY(!AiPermissionPolicy::classifyCommand("journalctl -u ssh --since today").highRisk());
     QVERIFY(!AiPermissionPolicy::classifyCommand("git status --short").highRisk());
+}
+
+void AiPermissionPolicyTests::suggestsConservativeCommandRules()
+{
+    auto suggestion = AiPermissionPolicy::suggestCommandRule("  git status --short  ");
+    QCOMPARE(suggestion.matcher, AiPermissionRuleMatcher::prefix);
+    QCOMPARE(suggestion.pattern, std::string("git status"));
+
+    suggestion = AiPermissionPolicy::suggestCommandRule("rm -rf /tmp/work");
+    QCOMPARE(suggestion.matcher, AiPermissionRuleMatcher::exact);
+    QCOMPARE(suggestion.pattern, std::string("rm -rf /tmp/work"));
+
+    suggestion = AiPermissionPolicy::suggestCommandRule("cat README.md && echo done");
+    QCOMPARE(suggestion.matcher, AiPermissionRuleMatcher::exact);
+
+    suggestion = AiPermissionPolicy::suggestCommandRule("custom-tool --inspect");
+    QCOMPARE(suggestion.matcher, AiPermissionRuleMatcher::exact);
 }
 
 void AiPermissionPolicyTests::matchesExactPrefixGlobRegexAndAllRules()
@@ -159,6 +187,7 @@ void AiPermissionPolicyTests::matchesExactPrefixGlobRegexAndAllRules()
 
     QVERIFY(rules.evaluate({.subject = "git status"}).has_value());
     QVERIFY(rules.evaluate({.subject = "docker ps --all"}).has_value());
+    QVERIFY(!rules.evaluate({.subject = "docker pssh"}).has_value());
     QVERIFY(rules.evaluate({.capability = AiPermissionCapability::sftpDownload, .subject = "/var/log/auth.log"})
                 .has_value());
     QVERIFY(rules.evaluate({.subject = "systemctl status sshd"}).has_value());

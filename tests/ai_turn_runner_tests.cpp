@@ -552,7 +552,7 @@ void AiTurnRunnerTests::rejectsOversizedCompletedToolArguments()
     // The full-arguments path (response.function_call_arguments.done) must be
     // held to the same 16 KiB limit as incremental deltas; otherwise a
     // provider could smuggle an unbounded argument blob to tool execution.
-    const std::string oversizedArguments(17 * 1024, 'a');
+    const std::string oversizedArguments(std::string::size_type{17} * 1024, 'a');
     std::string payload = "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\"}}\n\n"
                           "data: {\"type\":\"response.output_item.added\",\"item\":{\"type\":\"function_"
                           "call\",\"id\":\"item_1\",\"call_id\":\"call_1\",\"name\":\"run_command\"}}\n\n"
@@ -590,8 +590,9 @@ void AiTurnRunnerTests::rejectsOversizedCompletedToolArguments()
     QCOMPARE(toolCalls, std::size_t{0});
     QCOMPARE(events.back().type, AiStreamEventType::responseFailed);
     QVERIFY(events.back().error.has_value());
-    QCOMPARE(events.back().error->code, AiProviderErrorCode::protocol);
-    QVERIFY(QString::fromStdString(events.back().error->message).contains(QStringLiteral("16 KiB")));
+    const AiProviderError error = events.back().error.value_or(AiProviderError{});
+    QCOMPARE(error.code, AiProviderErrorCode::protocol);
+    QVERIFY(QString::fromStdString(error.message).contains(QStringLiteral("16 KiB")));
 }
 
 void AiTurnRunnerTests::compactsAndRetriesOnContextOverflow()

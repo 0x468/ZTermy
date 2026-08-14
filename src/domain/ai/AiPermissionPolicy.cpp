@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <ranges>
 #include <regex>
 #include <unordered_set>
 #include <utility>
@@ -94,7 +95,20 @@ template <std::size_t Size>
         case AiPermissionRuleMatcher::exact:
             return subject == rule.pattern;
         case AiPermissionRuleMatcher::prefix:
-            return subject.starts_with(rule.pattern);
+            if (!subject.starts_with(rule.pattern))
+            {
+                return false;
+            }
+            if (rule.capability != AiPermissionCapability::terminalCommand)
+            {
+                return true;
+            }
+            if (subject.size() == rule.pattern.size()
+                || std::isspace(static_cast<unsigned char>(rule.pattern.back())) != 0)
+            {
+                return true;
+            }
+            return std::isspace(static_cast<unsigned char>(subject[rule.pattern.size()])) != 0;
         case AiPermissionRuleMatcher::glob:
             return globMatches(rule.pattern, subject);
         case AiPermissionRuleMatcher::regex:
@@ -310,11 +324,11 @@ AiPermissionDecision AiPermissionPolicy::decide(const AiPermissionRequest &reque
             case AiPermissionMode::ask:
                 decision = {.disposition = AiPermissionDisposition::ask, .reason = AiPermissionReason::askMode};
                 break;
-            case AiPermissionMode::edit:
-                decision = {.disposition = AiPermissionDisposition::ask, .reason = AiPermissionReason::editMode};
-                break;
             case AiPermissionMode::automatic:
-                decision = {.disposition = AiPermissionDisposition::allow, .reason = AiPermissionReason::automaticMode};
+                decision = request.highRisk ? AiPermissionDecision{.disposition = AiPermissionDisposition::ask,
+                                                                   .reason = AiPermissionReason::highRiskOverlay}
+                                            : AiPermissionDecision{.disposition = AiPermissionDisposition::allow,
+                                                                   .reason = AiPermissionReason::automaticMode};
                 break;
             case AiPermissionMode::yolo:
                 decision = {.disposition = AiPermissionDisposition::allow, .reason = AiPermissionReason::yoloMode};
@@ -393,6 +407,91 @@ AiCommandRiskReport AiPermissionPolicy::classifyCommand(const std::string_view c
                     "The command downloads and executes content or uses an opaque encoded payload.");
     }
     return {};
+}
+
+AiPermissionRuleSuggestion AiPermissionPolicy::suggestCommandRule(const std::string_view command)
+{
+    const auto first = std::ranges::find_if(command, [](const unsigned char value) {
+        return std::isspace(value) == 0;
+    });
+    const auto last = std::ranges::find_if(command | std::views::reverse, [](const unsigned char value) {
+        return std::isspace(value) == 0;
+    });
+    if (first == command.end() || last == command.rend())
+    {
+        return {};
+    }
+    const auto begin = static_cast<std::size_t>(std::distance(command.begin(), first));
+    const auto end = command.size() - static_cast<std::size_t>(std::distance(command.rbegin(), last));
+    const std::string trimmed(command.substr(begin, end - begin));
+    const auto exact = [&trimmed] {
+        return AiPermissionRuleSuggestion{.matcher = AiPermissionRuleMatcher::exact, .pattern = trimmed};
+    };
+    if (classifyCommand(trimmed).highRisk() || trimmed.find_first_of("\r\n;|&><`$()\"'") != std::string::npos)
+    {
+        return exact();
+    }
+
+    std::array<std::string_view, 2> tokens;
+    std::array<std::size_t, 2> tokenEnds{};
+    std::size_t tokenCount = 0;
+    for (std::size_t index = 0; index < trimmed.size() && tokenCount < tokens.size();)
+    {
+        while (index < trimmed.size() && std::isspace(static_cast<unsigned char>(trimmed[index])) != 0)
+        {
+            ++index;
+        }
+        const std::size_t tokenBegin = index;
+        while (index < trimmed.size() && std::isspace(static_cast<unsigned char>(trimmed[index])) == 0)
+        {
+            ++index;
+        }
+        if (tokenBegin < index)
+        {
+            tokens[tokenCount] = std::string_view(trimmed).substr(tokenBegin, index - tokenBegin);
+            tokenEnds[tokenCount++] = index;
+        }
+    }
+    if (tokenCount == 0)
+    {
+        return exact();
+    }
+    const auto lower = [](const std::string_view value) {
+        std::string result(value);
+        std::ranges::transform(result, result.begin(), [](const unsigned char character) {
+            return static_cast<char>(std::tolower(character));
+        });
+        return result;
+    };
+    static const std::unordered_set<std::string> singleTokenPrefixes{
+        "pwd", "whoami", "hostname", "uname", "get-process", "get-service", "resolve-dnsname"};
+    if (singleTokenPrefixes.contains(lower(tokens[0])))
+    {
+        return {.matcher = AiPermissionRuleMatcher::prefix, .pattern = trimmed.substr(0, tokenEnds[0])};
+    }
+    if (tokenCount < 2)
+    {
+        return exact();
+    }
+    static const std::unordered_set<std::string> twoTokenPrefixes{"git status",       "git diff",
+                                                                  "git log",          "git show",
+                                                                  "git branch",       "git rev-parse",
+                                                                  "git ls-files",     "cargo test",
+                                                                  "cargo check",      "cargo build",
+                                                                  "cargo fmt",        "cargo clippy",
+                                                                  "docker ps",        "docker logs",
+                                                                  "docker inspect",   "docker stats",
+                                                                  "kubectl get",      "kubectl describe",
+                                                                  "kubectl logs",     "kubectl top",
+                                                                  "systemctl status", "systemctl is-active",
+                                                                  "systemctl show",   "systemctl list-units",
+                                                                  "npm test",         "npm view",
+                                                                  "npm list",         "npm explain"};
+    if (twoTokenPrefixes.contains(lower(tokens[0]) + ' ' + lower(tokens[1])))
+    {
+        return {.matcher = AiPermissionRuleMatcher::prefix, .pattern = trimmed.substr(0, tokenEnds[1])};
+    }
+    return exact();
 }
 
 } // namespace ztermy::ai

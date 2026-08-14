@@ -19,6 +19,8 @@ namespace
 constexpr std::size_t maximumArgumentsBytes = std::size_t{16} * 1024;
 constexpr std::uint64_t maximumTimeoutMilliseconds = 120'000;
 constexpr std::uint64_t maximumIdleMilliseconds = 30'000;
+constexpr std::uint64_t defaultTimeoutMilliseconds = 30'000;
+constexpr std::uint64_t defaultIdleMilliseconds = 750;
 
 [[nodiscard]] std::string json(const QJsonObject &value)
 {
@@ -134,9 +136,11 @@ AiToolDefinition AiTerminalFrameTool::waitDefinition()
 {
     return {
         .name = "wait_terminal_frame",
-        .description = "Wait deterministically for a terminal frame revision change or an idle threshold.",
+        .description =
+            "Wait for a terminal frame change (the default), or for frame idleness. Set condition to idle only "
+            "when an idle threshold is needed; idle_ms then defaults to 750. timeout_ms defaults to 30000.",
         .parametersJson =
-            R"({"type":"object","properties":{"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"after_revision":{"type":"integer","minimum":0},"condition":{"type":"string","enum":["changed","idle"]},"idle_ms":{"type":"integer","minimum":0,"maximum":30000},"timeout_ms":{"type":"integer","minimum":0,"maximum":120000}},"required":["session_id","session_generation","after_revision","condition","idle_ms","timeout_ms"],"additionalProperties":false})"};
+            R"({"type":"object","properties":{"session_id":{"type":"string","minLength":1},"session_generation":{"type":"integer","minimum":0},"after_revision":{"type":"integer","minimum":0},"condition":{"type":"string","enum":["changed","idle"],"default":"changed"},"idle_ms":{"type":"integer","minimum":0,"maximum":30000,"default":750},"timeout_ms":{"type":"integer","minimum":1,"maximum":120000,"default":30000}},"required":["session_id","session_generation","after_revision"],"additionalProperties":false})"};
 }
 
 std::expected<AiTerminalFrameReadRequest, std::string>
@@ -162,26 +166,31 @@ AiTerminalFrameTool::parseWait(const std::string_view argumentsJson)
     {
         return std::unexpected(std::move(common.error()));
     }
-    const QJsonValue condition = common->object.value(QStringLiteral("condition"));
-    const auto idle = unsignedInteger(common->object.value(QStringLiteral("idle_ms")));
-    const auto timeout = unsignedInteger(common->object.value(QStringLiteral("timeout_ms")));
+    const QJsonValue conditionValue = common->object.value(QStringLiteral("condition"));
+    const QString condition = conditionValue.isUndefined() ? QStringLiteral("changed") : conditionValue.toString();
+    const QJsonValue idleValue = common->object.value(QStringLiteral("idle_ms"));
+    const QJsonValue timeoutValue = common->object.value(QStringLiteral("timeout_ms"));
+    const auto idle =
+        idleValue.isUndefined() ? std::optional<std::uint64_t>{defaultIdleMilliseconds} : unsignedInteger(idleValue);
+    const auto timeout = timeoutValue.isUndefined() ? std::optional<std::uint64_t>{defaultTimeoutMilliseconds}
+                                                    : unsignedInteger(timeoutValue);
     if (!hasOnlyKeys(common->object, {QStringLiteral("session_id"), QStringLiteral("session_generation"),
                                       QStringLiteral("after_revision"), QStringLiteral("condition"),
                                       QStringLiteral("idle_ms"), QStringLiteral("timeout_ms")})
-        || !condition.isString() || !idle.has_value() || *idle > maximumIdleMilliseconds || !timeout.has_value()
-        || *timeout > maximumTimeoutMilliseconds
-        || (condition.toString() != QStringLiteral("changed") && condition.toString() != QStringLiteral("idle"))
-        || (condition.toString() == QStringLiteral("idle") && *idle == 0))
+        || (!conditionValue.isUndefined() && !conditionValue.isString()) || !idle.has_value()
+        || *idle > maximumIdleMilliseconds || (condition == QStringLiteral("idle") && *idle == 0)
+        || !timeout.has_value() || *timeout == 0 || *timeout > maximumTimeoutMilliseconds
+        || (condition != QStringLiteral("changed") && condition != QStringLiteral("idle")))
     {
         return std::unexpected(failure("invalid_arguments", "The frame-wait arguments are invalid."));
     }
-    return AiTerminalFrameWaitRequest{.target = std::move(common->target),
-                                      .afterRevision = common->revision,
-                                      .condition = condition.toString() == QStringLiteral("idle")
-                                                       ? AiTerminalFrameWaitCondition::idle
-                                                       : AiTerminalFrameWaitCondition::changed,
-                                      .idleMilliseconds = static_cast<std::uint32_t>(*idle),
-                                      .timeoutMilliseconds = static_cast<std::uint32_t>(*timeout)};
+    return AiTerminalFrameWaitRequest{
+        .target = std::move(common->target),
+        .afterRevision = common->revision,
+        .condition = condition == QStringLiteral("idle") ? AiTerminalFrameWaitCondition::idle
+                                                         : AiTerminalFrameWaitCondition::changed,
+        .idleMilliseconds = condition == QStringLiteral("idle") ? static_cast<std::uint32_t>(*idle) : 0,
+        .timeoutMilliseconds = static_cast<std::uint32_t>(*timeout)};
 }
 
 bool AiTerminalFrameTool::satisfied(const AiTerminalFrameWaitRequest &request,

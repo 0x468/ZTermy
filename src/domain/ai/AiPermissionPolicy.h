@@ -14,7 +14,6 @@ enum class AiPermissionMode : std::uint8_t
 {
     readOnly,
     ask,
-    edit,
     automatic,
     yolo,
 };
@@ -112,7 +111,6 @@ enum class AiPermissionReason : std::uint8_t
     explicitAllow,
     readOnlyMode,
     askMode,
-    editMode,
     automaticMode,
     yoloMode,
     highRiskOverlay,
@@ -139,6 +137,12 @@ struct AiCommandRiskReport final
     [[nodiscard]] bool highRisk() const noexcept { return category != AiCommandRiskCategory::none; }
 };
 
+struct AiPermissionRuleSuggestion final
+{
+    AiPermissionRuleMatcher matcher = AiPermissionRuleMatcher::exact;
+    std::string pattern;
+};
+
 struct AiPermissionRequest final
 {
     AiPermissionMode mode = AiPermissionMode::readOnly;
@@ -150,6 +154,7 @@ struct AiPermissionRequest final
     bool explicitAsk = false;
     bool explicitVisibleApproval = false;
     bool explicitAllow = false;
+    bool highRisk = false;
 };
 
 struct AiPermissionDecision final
@@ -163,6 +168,7 @@ class AiPermissionPolicy final
 public:
     [[nodiscard]] AiPermissionDecision decide(const AiPermissionRequest &request) const noexcept;
     [[nodiscard]] static AiCommandRiskReport classifyCommand(std::string_view command);
+    [[nodiscard]] static AiPermissionRuleSuggestion suggestCommandRule(std::string_view command);
 };
 
 } // namespace ztermy::ai

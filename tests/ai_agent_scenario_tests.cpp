@@ -166,9 +166,6 @@ void AiAgentScenarioTests::executesLocalAgentLifecycleAcrossModes()
                  .disposition = AiActionToolDisposition::respond,
                  .label = "READ_ONLY"},
         ModeCase{.mode = AiPermissionMode::ask, .disposition = AiActionToolDisposition::awaitApproval, .label = "ASK"},
-        ModeCase{.mode = AiPermissionMode::edit,
-                 .disposition = AiActionToolDisposition::awaitApproval,
-                 .label = "EDIT"},
         ModeCase{.mode = AiPermissionMode::automatic, .disposition = AiActionToolDisposition::execute, .label = "AUTO"},
         ModeCase{.mode = AiPermissionMode::yolo, .disposition = AiActionToolDisposition::execute, .label = "YOLO"},
     };
@@ -299,8 +296,6 @@ void AiAgentScenarioTests::appliesSshProfileMutationModeMatrix()
     constexpr std::array modes{
         ModeCase{.mode = AiPermissionMode::readOnly, .disposition = AiActionToolDisposition::respond},
         ModeCase{.mode = AiPermissionMode::ask, .disposition = AiActionToolDisposition::awaitApproval},
-        // Edit mode asks before mutations, consistent with run_command.
-        ModeCase{.mode = AiPermissionMode::edit, .disposition = AiActionToolDisposition::awaitApproval},
         ModeCase{.mode = AiPermissionMode::automatic, .disposition = AiActionToolDisposition::execute},
         ModeCase{.mode = AiPermissionMode::yolo, .disposition = AiActionToolDisposition::execute},
     };

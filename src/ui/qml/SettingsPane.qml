@@ -191,11 +191,11 @@ Rectangle {
     }
 
     function aiPermissionIndex(token) {
-        return token === "read-only" ? 0 : token === "edit" ? 2 : token === "auto" ? 3 : token === "yolo" ? 4 : 1;
+        return token === "read-only" ? 0 : token === "auto" ? 2 : token === "yolo" ? 3 : 1;
     }
 
     function aiPermissionToken() {
-        return ["read-only", "ask", "edit", "auto", "yolo"][aiPermissionBox.currentIndex];
+        return ["read-only", "ask", "auto", "yolo"][aiPermissionBox.currentIndex];
     }
 
     function aiReasoningIndex(token) {
@@ -1493,9 +1493,13 @@ Rectangle {
 
                             objectName: "settingsAiPermission"
                             Layout.fillWidth: true
-                            model: ["read-only", "ask", "edit", "auto", "yolo"]
-                            displayTextModel: [qsTr("Read-only"), qsTr("Ask before changes"), qsTr("Edit files automatically"), qsTr("Auto"), qsTr("YOLO")]
+                            model: ["read-only", "ask", "auto", "yolo"]
+                            displayTextModel: [qsTr("Read-only"), qsTr("Ask before changes"), qsTr("Auto except high risk"), qsTr("YOLO")]
                             accessibleName: qsTr("AI terminal action permission mode")
+
+                            AppToolTip {
+                                text: aiPermissionBox.currentValue === "read-only" ? qsTr("Read tools only; action and MCP tools are hidden") : aiPermissionBox.currentValue === "ask" ? qsTr("Ask in the approval card before every side effect") : aiPermissionBox.currentValue === "auto" ? qsTr("Run ordinary actions automatically; ask for high-risk commands and MCP tools") : qsTr("Run without approval prompts; explicit deny rules and safety boundaries still apply")
+                            }
                         }
 
                         Item {

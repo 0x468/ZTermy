@@ -35,6 +35,7 @@ private slots:
     void migratesFontOptionsSchema();
     void migratesEveryIntermediateSchema();
     void migratesAiProviderSchemaWithPermissionDefault();
+    void migratesRecentPermissionSchemasAndAllowsResave();
     void rejectsMalformedUnsupportedAndIncompleteDocuments();
     void rejectsOutOfRangeValues();
     void recoversLastKnownGoodSettings();
@@ -156,7 +157,7 @@ void ApplicationSettingsTests::migratesLegacyWindowOpacityAndNoneBackdrop()
     QFile saved(path);
     QVERIFY(saved.open(QIODevice::ReadOnly));
     const QByteArray persisted = saved.readAll();
-    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 18")));
+    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 19")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdropOpacity\": 0.75")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdrop\": \"transparent\"")));
     QVERIFY(!persisted.contains(QByteArrayLiteral("windowOpacity")));
@@ -406,6 +407,48 @@ void ApplicationSettingsTests::migratesAiProviderSchemaWithPermissionDefault()
     QVERIFY(loaded->aiConversationHistoryEnabled);
 }
 
+void ApplicationSettingsTests::migratesRecentPermissionSchemasAndAllowsResave()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+
+    for (const int version : {17, 18})
+    {
+        const QString path = directory.filePath(QStringLiteral("settings-v%1.json").arg(version));
+        const ztermy::config::ApplicationSettingsStore store(path);
+        auto expected = ztermy::config::ApplicationSettings{};
+        expected.theme = ztermy::config::ThemePreference::light;
+        expected.aiProvider = ztermy::config::AiProviderPreference::openAiCompatible;
+        expected.aiBaseUrl = QStringLiteral("https://gateway.example.test/v1");
+        expected.aiModel = QStringLiteral("saved-model");
+        QVERIFY(store.save(expected));
+
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        auto root = QJsonDocument::fromJson(file.readAll()).object();
+        file.close();
+        root.insert(QStringLiteral("version"), version);
+        root.insert(QStringLiteral("aiPermission"), QStringLiteral("edit"));
+        QVERIFY(writeFile(path, QJsonDocument(root).toJson(QJsonDocument::Compact)));
+
+        const auto loaded = store.load();
+        QVERIFY2(loaded, qPrintable(QStringLiteral("Schema %1 did not load").arg(version)));
+        QCOMPARE(loaded->theme, ztermy::config::ThemePreference::light);
+        QCOMPARE(loaded->aiModel, QStringLiteral("saved-model"));
+        QCOMPARE(loaded->aiPermission, ztermy::config::AiPermissionPreference::ask);
+
+        auto updated = *loaded;
+        updated.terminalFontSize = 16;
+        QVERIFY2(store.save(updated), qPrintable(QStringLiteral("Schema %1 could not be upgraded").arg(version)));
+
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const auto persisted = QJsonDocument::fromJson(file.readAll()).object();
+        QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 19);
+        QCOMPARE(persisted.value(QStringLiteral("aiPermission")).toString(), QStringLiteral("ask"));
+        QCOMPARE(persisted.value(QStringLiteral("terminalFontSize")).toInt(), 16);
+    }
+}
+
 void ApplicationSettingsTests::rejectsMalformedUnsupportedAndIncompleteDocuments()
 {
     QTemporaryDir directory;
@@ -418,7 +461,7 @@ void ApplicationSettingsTests::rejectsMalformedUnsupportedAndIncompleteDocuments
     QVERIFY(!malformed);
     QCOMPARE(malformed.error(), ztermy::config::ApplicationSettingsStoreError::invalidFormat);
 
-    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":19})")));
+    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":20})")));
     const auto unsupported = store.load();
     QVERIFY(!unsupported);
     QCOMPARE(unsupported.error(), ztermy::config::ApplicationSettingsStoreError::unsupportedVersion);

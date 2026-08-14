@@ -1,5 +1,7 @@
 #pragma once
 
+#include "domain/ai/AiPermissionPolicy.h"
+
 #include <QString>
 
 namespace ztermy::ai
@@ -13,7 +15,7 @@ namespace ztermy::ai
 class AiSystemPromptBuilder final
 {
 public:
-    [[nodiscard]] static QString build(bool commandRequest);
+    [[nodiscard]] static QString build(bool commandRequest, AiPermissionMode permissionMode);
 };
 
 } // namespace ztermy::ai

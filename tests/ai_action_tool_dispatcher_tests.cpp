@@ -169,13 +169,12 @@ void AiActionToolDispatcherTests::requiresExplicitApprovalForRunbooks()
         object(denied.outputJson).value(QStringLiteral("error")).toObject().value(QStringLiteral("code")).toString(),
         QStringLiteral("permission_denied"));
 
-    // Edit mode asks before mutations, consistent with run_command.
-    AiAgentTurnBudget editBudget;
-    const auto editPlan = dispatcher.prepare(runbookCall("runbook-edit"),
-                                             context("edit-runbook", AiPermissionMode::edit), editBudget);
-    QCOMPARE(editPlan.disposition, AiActionToolDisposition::awaitApproval);
-    QVERIFY(editPlan.action.has_value());
-    QCOMPARE(editBudget.writeActions(), std::uint32_t{1});
+    AiAgentTurnBudget askMutationBudget;
+    const auto askMutationPlan = dispatcher.prepare(runbookCall("runbook-ask"),
+                                                    context("ask-runbook", AiPermissionMode::ask), askMutationBudget);
+    QCOMPARE(askMutationPlan.disposition, AiActionToolDisposition::awaitApproval);
+    QVERIFY(askMutationPlan.action.has_value());
+    QCOMPARE(askMutationBudget.writeActions(), std::uint32_t{1});
 
     auto oversized = runbookCall("oversized-runbook");
     QJsonObject arguments = object(oversized.argumentsJson);
@@ -201,6 +200,15 @@ void AiActionToolDispatcherTests::validatesInteractivePtyInput()
     QCOMPARE(action.kind, AiTerminalActionKind::writeToPty);
     QCOMPARE(action.ptyData, std::string("yes"));
     QVERIFY(action.appendEnter);
+
+    AiAgentTurnBudget defaultEnterBudget;
+    auto defaultEnter = ptyWriteCall("pty-write-default-enter");
+    auto defaultEnterArguments = object(defaultEnter.argumentsJson);
+    defaultEnterArguments.remove(QStringLiteral("append_enter"));
+    defaultEnter.argumentsJson = QJsonDocument(defaultEnterArguments).toJson(QJsonDocument::Compact).toStdString();
+    const auto defaultEnterPlan = dispatcher.prepare(defaultEnter, context(), defaultEnterBudget);
+    QCOMPARE(defaultEnterPlan.disposition, AiActionToolDisposition::awaitApproval);
+    QVERIFY(!defaultEnterPlan.action.value_or(AiTerminalAction{}).appendEnter);
 
     AiAgentTurnBudget invalidBudget;
     auto invalid = ptyWriteCall("pty-write-invalid");
@@ -297,7 +305,7 @@ void AiActionToolDispatcherTests::appliesRiskBudgetAndOwnershipGuards()
     AiAgentTurnBudget riskBudget;
     const auto risky = dispatcher.prepare(commandCall("risk-call", "rm -rf /tmp/example"),
                                           context("risk", AiPermissionMode::automatic), riskBudget);
-    QCOMPARE(risky.disposition, AiActionToolDisposition::execute);
+    QCOMPARE(risky.disposition, AiActionToolDisposition::awaitApproval);
     QVERIFY(risky.action.value_or(AiTerminalAction{}).risk.highRisk());
     dispatcher.clearConversation("risk");
 
@@ -388,15 +396,16 @@ void AiActionToolDispatcherTests::appliesModesAndRulesToMcpTools()
         dispatcher.permissionDecision(AiPermissionCapability::mcpTool, tool, context("mcp-ask", AiPermissionMode::ask))
             .disposition,
         AiPermissionDisposition::ask);
-    QCOMPARE(dispatcher
-                 .permissionDecision(AiPermissionCapability::mcpTool, tool, context("mcp-edit", AiPermissionMode::edit))
-                 .disposition,
-             AiPermissionDisposition::ask);
     QCOMPARE(
         dispatcher
             .permissionDecision(AiPermissionCapability::mcpTool, tool, context("mcp-auto", AiPermissionMode::automatic))
             .disposition,
         AiPermissionDisposition::allow);
+    QCOMPARE(dispatcher
+                 .permissionDecision(AiPermissionCapability::mcpTool, tool,
+                                     context("mcp-auto-risk", AiPermissionMode::automatic), true)
+                 .disposition,
+             AiPermissionDisposition::ask);
     QCOMPARE(dispatcher
                  .permissionDecision(AiPermissionCapability::mcpTool, tool, context("mcp-yolo", AiPermissionMode::yolo))
                  .disposition,

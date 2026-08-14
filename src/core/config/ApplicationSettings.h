@@ -70,7 +70,6 @@ enum class AiPermissionPreference : std::uint8_t
 {
     readOnly,
     ask,
-    edit,
     automatic,
     yolo,
 };
