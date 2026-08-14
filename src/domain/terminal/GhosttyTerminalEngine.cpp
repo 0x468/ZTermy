@@ -1050,8 +1050,8 @@ std::expected<std::string, std::error_code> GhosttyTerminalEngine::plainText() c
     return std::string(reinterpret_cast<const char *>(buffer.data), buffer.length);
 }
 
-std::expected<TerminalScrollbackPage, std::error_code> GhosttyTerminalEngine::scrollbackPage(const std::size_t firstLine,
-                                                                                             const std::size_t lineCount) const
+std::expected<TerminalScrollbackPage, std::error_code>
+GhosttyTerminalEngine::scrollbackPage(const std::size_t firstLine, const std::size_t lineCount) const
 {
     if (lineCount == 0)
     {

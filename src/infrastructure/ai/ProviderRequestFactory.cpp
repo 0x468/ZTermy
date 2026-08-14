@@ -115,8 +115,7 @@ void applyCompatibleReasoning(QJsonObject &body, const AiProviderConfiguration &
 
 [[nodiscard]] QString imageDataUrl(const AiImageAttachment &image)
 {
-    return QStringLiteral("data:%1;base64,%2")
-        .arg(fromUtf8(image.mediaType), fromUtf8(image.base64Data));
+    return QStringLiteral("data:%1;base64,%2").arg(fromUtf8(image.mediaType), fromUtf8(image.base64Data));
 }
 
 [[nodiscard]] QJsonObject compatibleMessage(const AiChatMessage &message, const bool ollamaFormat)
@@ -153,7 +152,7 @@ void applyCompatibleReasoning(QJsonObject &body, const AiProviderConfiguration &
         content.append(QJsonObject{
             {QStringLiteral("type"), QStringLiteral("image_url")},
             {QStringLiteral("image_url"), QJsonObject{{QStringLiteral("url"), imageDataUrl(image)},
-                                                       {QStringLiteral("detail"), QStringLiteral("auto")}}}});
+                                                      {QStringLiteral("detail"), QStringLiteral("auto")}}}});
     }
     object.insert(QStringLiteral("content"), content);
     return object;
@@ -402,15 +401,14 @@ void applyCompatibleReasoning(QJsonObject &body, const AiProviderConfiguration &
             {
                 parts.append(QJsonObject{
                     {QStringLiteral("type"), QStringLiteral("image")},
-                    {QStringLiteral("source"),
-                     QJsonObject{{QStringLiteral("type"), QStringLiteral("base64")},
-                                 {QStringLiteral("media_type"), fromUtf8(image.mediaType)},
-                                 {QStringLiteral("data"), fromUtf8(image.base64Data)}}}});
+                    {QStringLiteral("source"), QJsonObject{{QStringLiteral("type"), QStringLiteral("base64")},
+                                                           {QStringLiteral("media_type"), fromUtf8(image.mediaType)},
+                                                           {QStringLiteral("data"), fromUtf8(image.base64Data)}}}});
             }
             content = parts;
         }
-        result.append(QJsonObject{{QStringLiteral("role"), roleName(message.role)},
-                                  {QStringLiteral("content"), content}});
+        result.append(
+            QJsonObject{{QStringLiteral("role"), roleName(message.role)}, {QStringLiteral("content"), content}});
     }
     for (const auto &exchange : generation.toolHistory)
     {

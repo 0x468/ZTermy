@@ -35,7 +35,9 @@ void AiUserSkillCatalogTests::validatesPortableSkillDirectories()
     QVERIFY(directory.isValid());
     const QString skills = directory.filePath(QStringLiteral("Skills"));
     writeSkill(skills, QStringLiteral("service-diagnostics"),
-               QByteArrayLiteral("---\nname: service-diagnostics\ndescription: >\n  Diagnose failed services and\n  summarize actionable recovery steps.\ncompatibility: ztermy\n---\n\n# Workflow\n\nInspect the service status before proposing a fix.\n"));
+               QByteArrayLiteral("---\nname: service-diagnostics\ndescription: >\n  Diagnose failed services and\n  "
+                                 "summarize actionable recovery steps.\ncompatibility: ztermy\n---\n\n# "
+                                 "Workflow\n\nInspect the service status before proposing a fix.\n"));
 
     const auto scanned = AiUserSkillCatalog(skills).scan();
     QVERIFY(scanned.has_value());
@@ -54,8 +56,9 @@ void AiUserSkillCatalogTests::reportsMalformedSkillsWithoutDiscardingReadySkills
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
     const QString skills = directory.filePath(QStringLiteral("Skills"));
-    writeSkill(skills, QStringLiteral("ready-skill"),
-               QByteArrayLiteral("---\nname: ready-skill\ndescription: A valid skill.\n---\nUse the valid workflow.\n"));
+    writeSkill(
+        skills, QStringLiteral("ready-skill"),
+        QByteArrayLiteral("---\nname: ready-skill\ndescription: A valid skill.\n---\nUse the valid workflow.\n"));
     writeSkill(skills, QStringLiteral("Wrong Name"),
                QByteArrayLiteral("---\nname: another-name\ndescription: Invalid directory identity.\n---\nDo work.\n"));
     QVERIFY(QDir().mkpath(QDir(skills).filePath(QStringLiteral("missing-file"))));

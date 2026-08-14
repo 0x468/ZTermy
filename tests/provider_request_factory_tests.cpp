@@ -157,37 +157,39 @@ void ProviderRequestFactoryTests::preparesProviderNativeMultimodalRequests()
     const AiGenerationRequest generation{
         .messages = {AiChatMessage{.role = AiMessageRole::user, .content = "Inspect this", .images = {image}}}};
 
-    auto prepared = ProviderRequestFactory::prepare(
-        AiProviderConfiguration{.kind = AiProviderKind::openAiResponses,
-                                .baseUrl = "https://api.openai.com/v1",
-                                .model = "gpt-5.6"},
-        generation, "key");
+    auto prepared = ProviderRequestFactory::prepare(AiProviderConfiguration{.kind = AiProviderKind::openAiResponses,
+                                                                            .baseUrl = "https://api.openai.com/v1",
+                                                                            .model = "gpt-5.6"},
+                                                    generation, "key");
     QVERIFY(prepared.has_value());
     auto body = QJsonDocument::fromJson(prepared->body).object();
     auto content = body.value("input").toArray().first().toObject().value("content").toArray();
     QCOMPARE(content.size(), 2);
     QCOMPARE(content.at(0).toObject().value("type").toString(), QStringLiteral("input_text"));
     QCOMPARE(content.at(1).toObject().value("type").toString(), QStringLiteral("input_image"));
-    QVERIFY(content.at(1).toObject().value("image_url").toString().startsWith(
-        QStringLiteral("data:image/png;base64,")));
+    QVERIFY(
+        content.at(1).toObject().value("image_url").toString().startsWith(QStringLiteral("data:image/png;base64,")));
 
-    prepared = ProviderRequestFactory::prepare(
-        AiProviderConfiguration{.kind = AiProviderKind::openAiCompatible,
-                                .baseUrl = "https://gateway.example.test/v1",
-                                .model = "vision"},
-        generation, "key");
+    prepared = ProviderRequestFactory::prepare(AiProviderConfiguration{.kind = AiProviderKind::openAiCompatible,
+                                                                       .baseUrl = "https://gateway.example.test/v1",
+                                                                       .model = "vision"},
+                                               generation, "key");
     QVERIFY(prepared.has_value());
     body = QJsonDocument::fromJson(prepared->body).object();
     content = body.value("messages").toArray().first().toObject().value("content").toArray();
     QCOMPARE(content.at(1).toObject().value("type").toString(), QStringLiteral("image_url"));
-    QVERIFY(content.at(1).toObject().value("image_url").toObject().value("url").toString().startsWith(
-        QStringLiteral("data:image/png;base64,")));
+    QVERIFY(content.at(1)
+                .toObject()
+                .value("image_url")
+                .toObject()
+                .value("url")
+                .toString()
+                .startsWith(QStringLiteral("data:image/png;base64,")));
 
-    prepared = ProviderRequestFactory::prepare(
-        AiProviderConfiguration{.kind = AiProviderKind::anthropicMessages,
-                                .baseUrl = "https://api.anthropic.com",
-                                .model = "claude-sonnet-4-6"},
-        generation, "key");
+    prepared = ProviderRequestFactory::prepare(AiProviderConfiguration{.kind = AiProviderKind::anthropicMessages,
+                                                                       .baseUrl = "https://api.anthropic.com",
+                                                                       .model = "claude-sonnet-4-6"},
+                                               generation, "key");
     QVERIFY(prepared.has_value());
     body = QJsonDocument::fromJson(prepared->body).object();
     content = body.value("messages").toArray().first().toObject().value("content").toArray();
@@ -198,9 +200,7 @@ void ProviderRequestFactoryTests::preparesProviderNativeMultimodalRequests()
     QCOMPARE(source.value("data").toString(), QStringLiteral("aW1hZ2U="));
 
     prepared = ProviderRequestFactory::prepare(
-        AiProviderConfiguration{.kind = AiProviderKind::ollama,
-                                .baseUrl = "http://127.0.0.1:11434",
-                                .model = "gemma3"},
+        AiProviderConfiguration{.kind = AiProviderKind::ollama, .baseUrl = "http://127.0.0.1:11434", .model = "gemma3"},
         generation, {});
     QVERIFY(prepared.has_value());
     body = QJsonDocument::fromJson(prepared->body).object();

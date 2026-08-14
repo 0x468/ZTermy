@@ -107,8 +107,7 @@ private:
 
 [[nodiscard]] AiToolCall ptyCall(const std::string &id, const std::string &data)
 {
-    QJsonObject arguments{{QStringLiteral("data"), QString::fromUtf8(data)},
-                          {QStringLiteral("append_enter"), true}};
+    QJsonObject arguments{{QStringLiteral("data"), QString::fromUtf8(data)}, {QStringLiteral("append_enter"), true}};
     return {.id = id,
             .name = "write_to_pty",
             .argumentsJson = QJsonDocument(arguments).toJson(QJsonDocument::Compact).toStdString()};
@@ -306,11 +305,10 @@ void AiAgentScenarioTests::appliesSshProfileMutationModeMatrix()
                                              .target = {.sessionId = "ssh-session", .sessionGeneration = 4},
                                              .permissionMode = mode.mode,
                                              .profileId = "saved-ssh-profile"};
-        const AiToolCall upload{
-            .id = "ssh-upload-" + std::to_string(index),
-            .name = "queue_sftp_upload",
-            .argumentsJson =
-                R"({"local_path":"C:/Temp/report.txt","remote_path":"/tmp/report.txt"})"};
+        const AiToolCall upload{.id = "ssh-upload-" + std::to_string(index),
+                                .name = "queue_sftp_upload",
+                                .argumentsJson =
+                                    R"({"local_path":"C:/Temp/report.txt","remote_path":"/tmp/report.txt"})"};
         const auto plan = dispatcher.prepare(upload, sshContext, budget);
         QCOMPARE(plan.disposition, mode.disposition);
         if (mode.mode == AiPermissionMode::readOnly)

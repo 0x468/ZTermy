@@ -192,26 +192,22 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
     const auto requestedRemotePath = object.value(QStringLiteral("remote_path"));
     const bool commonSchemaValid = call.argumentsJson.size() <= maximumArgumentsBytes && document.isObject()
                                    && parseError.error == QJsonParseError::NoError;
-    const bool runSchemaValid =
-        runCommand && commonSchemaValid
-        && hasOnlyKeys(object, {QStringLiteral("command")})
-        && requestedCommand.isString() && !requestedCommand.toString().trimmed().isEmpty()
-        && std::cmp_less_equal(requestedCommand.toString().toUtf8().size(), maximumCommandBytes)
-        && !requestedCommand.toString().contains(QChar::Null);
+    const bool runSchemaValid = runCommand && commonSchemaValid && hasOnlyKeys(object, {QStringLiteral("command")})
+                                && requestedCommand.isString() && !requestedCommand.toString().trimmed().isEmpty()
+                                && std::cmp_less_equal(requestedCommand.toString().toUtf8().size(), maximumCommandBytes)
+                                && !requestedCommand.toString().contains(QChar::Null);
     const bool interruptSchemaValid =
         interruptCommand && commonSchemaValid
-        && hasOnlyKeys(object, {QStringLiteral("command_id"), QStringLiteral("mode")})
-        && requestedCommandId.isString() && !requestedCommandId.toString().isEmpty()
+        && hasOnlyKeys(object, {QStringLiteral("command_id"), QStringLiteral("mode")}) && requestedCommandId.isString()
+        && !requestedCommandId.toString().isEmpty()
         && std::cmp_less_equal(requestedCommandId.toString().toUtf8().size(), maximumCommandIdBytes)
         && !requestedCommandId.toString().contains(QChar::Null) && requestedMode.isString()
         && requestedMode.toString() == QStringLiteral("soft");
-    const bool writeSchemaValid =
-        writeToPty && commonSchemaValid
-        && hasOnlyKeys(object, {QStringLiteral("data"), QStringLiteral("append_enter")})
-        && requestedPtyData.isString() && validPtyInput(requestedPtyData.toString())
-        && (requestedAppendEnter.isUndefined() || requestedAppendEnter.isBool());
-    bool runbookSchemaValid = saveRunbook && commonSchemaValid
-                              && hasOnlyKeys(object, {QStringLiteral("runbook")})
+    const bool writeSchemaValid = writeToPty && commonSchemaValid
+                                  && hasOnlyKeys(object, {QStringLiteral("data"), QStringLiteral("append_enter")})
+                                  && requestedPtyData.isString() && validPtyInput(requestedPtyData.toString())
+                                  && (requestedAppendEnter.isUndefined() || requestedAppendEnter.isBool());
+    bool runbookSchemaValid = saveRunbook && commonSchemaValid && hasOnlyKeys(object, {QStringLiteral("runbook")})
                               && requestedRunbook.isObject();
     if (runbookSchemaValid)
     {

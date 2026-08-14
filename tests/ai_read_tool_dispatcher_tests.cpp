@@ -107,13 +107,12 @@ void AiReadToolDispatcherTests::publishesStrictReadOnlyCatalog()
 {
     const auto definitions = AiReadToolDispatcher::definitions();
     constexpr std::array expected{
-        std::string_view{"read_session_info"},    std::string_view{"read_terminal"},
-        std::string_view{"read_command_block"},   std::string_view{"read_command_output"},
-        std::string_view{"read_terminal_output"}, std::string_view{"list_sftp_directory"},
-        std::string_view{"list_shell_history"},   std::string_view{"list_scripts"},
-        std::string_view{"read_script"},          std::string_view{"list_notes"},
-        std::string_view{"read_remote_telemetry"},
-        std::string_view{"list_port_forwarding"},
+        std::string_view{"read_session_info"},     std::string_view{"read_terminal"},
+        std::string_view{"read_command_block"},    std::string_view{"read_command_output"},
+        std::string_view{"read_terminal_output"},  std::string_view{"list_sftp_directory"},
+        std::string_view{"list_shell_history"},    std::string_view{"list_scripts"},
+        std::string_view{"read_script"},           std::string_view{"list_notes"},
+        std::string_view{"read_remote_telemetry"}, std::string_view{"list_port_forwarding"},
     };
     QCOMPARE(definitions.size(), expected.size());
     for (std::size_t index = 0; index < definitions.size(); ++index)
@@ -150,8 +149,8 @@ void AiReadToolDispatcherTests::executesBoundedReads()
     QCOMPARE(result.value("command_block").toObject().value("exit_status").toInt(), 1);
     QCOMPARE(result.value("command_block").toObject().value("output").toString(), QStringLiteral("no"));
 
-    result = object(
-        dispatcher.execute("read_command_output", R"({"block_id":9,"after_cursor":0,"max_bytes":1})", snapshot));
+    result =
+        object(dispatcher.execute("read_command_output", R"({"block_id":9,"after_cursor":0,"max_bytes":1})", snapshot));
     QVERIFY(result.value("ok").toBool());
     const auto output = result.value("command_output").toObject();
     QCOMPARE(output.value("output").toString(), QStringLiteral("n"));

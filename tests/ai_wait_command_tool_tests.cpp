@@ -7,10 +7,10 @@
 namespace
 {
 
+using ztermy::ai::AiSessionTarget;
 using ztermy::ai::AiTrackedCommand;
 using ztermy::ai::AiTrackedCommandState;
 using ztermy::ai::AiWaitCommandTool;
-using ztermy::ai::AiSessionTarget;
 using ztermy::terminal::TerminalSemanticCapability;
 
 [[nodiscard]] AiSessionTarget target()
@@ -59,10 +59,9 @@ void AiWaitCommandToolTests::publishesAndParsesStrictContract()
     QCOMPARE(parsed->target.sessionGeneration, std::uint64_t{3});
     QCOMPARE(parsed->timeoutMilliseconds, std::uint32_t{2500});
 
-    QVERIFY(!AiWaitCommandTool::parse(R"({"command_id":"9:call-1","timeout_ms":120001})", target())
-                 .has_value());
-    QVERIFY(!AiWaitCommandTool::parse(R"({"command_id":"9:call-1","timeout_ms":1,"extra":true})", target())
-                 .has_value());
+    QVERIFY(!AiWaitCommandTool::parse(R"({"command_id":"9:call-1","timeout_ms":120001})", target()).has_value());
+    QVERIFY(
+        !AiWaitCommandTool::parse(R"({"command_id":"9:call-1","timeout_ms":1,"extra":true})", target()).has_value());
 
     const auto defaults = AiWaitCommandTool::parse(R"({"command_id":"9:call-1"})", target());
     QVERIFY(defaults.has_value());

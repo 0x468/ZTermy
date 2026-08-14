@@ -8,8 +8,8 @@
 namespace
 {
 
-using ztermy::ai::AiSftpListTool;
 using ztermy::ai::AiSessionTarget;
+using ztermy::ai::AiSftpListTool;
 
 [[nodiscard]] AiSessionTarget target()
 {

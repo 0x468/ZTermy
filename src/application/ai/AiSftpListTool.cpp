@@ -70,7 +70,7 @@ AiToolDefinition AiSftpListTool::definition()
 }
 
 std::expected<AiSftpListRequest, std::string> AiSftpListTool::parse(const std::string_view argumentsJson,
-                                                                   const AiSessionTarget &target)
+                                                                    const AiSessionTarget &target)
 {
     if (argumentsJson.size() > maximumArgumentsBytes)
     {
@@ -93,17 +93,15 @@ std::expected<AiSftpListRequest, std::string> AiSftpListTool::parse(const std::s
     const QByteArray pathBytes = object.value(QStringLiteral("path")).toString().trimmed().toUtf8();
     const auto normalizedPath =
         sftp::normalizeRemotePath(std::string_view(pathBytes.constData(), static_cast<std::size_t>(pathBytes.size())));
-    if (!offset.has_value() || !limit.has_value() || *limit == 0 || *limit > maximumPageItems
-        || pathBytes.size() > 4096 || !normalizedPath.has_value()
-        || !normalizedPath->starts_with('/'))
+    if (!offset.has_value() || !limit.has_value() || *limit == 0 || *limit > maximumPageItems || pathBytes.size() > 4096
+        || !normalizedPath.has_value() || !normalizedPath->starts_with('/'))
     {
         return std::unexpected(failure("invalid_arguments", "The SFTP directory request is invalid or unsafe."));
     }
-    return AiSftpListRequest{
-        .target = target,
-        .remotePath = *normalizedPath,
-        .offset = static_cast<std::size_t>(*offset),
-        .limit = static_cast<std::size_t>(*limit)};
+    return AiSftpListRequest{.target = target,
+                             .remotePath = *normalizedPath,
+                             .offset = static_cast<std::size_t>(*offset),
+                             .limit = static_cast<std::size_t>(*limit)};
 }
 
 std::string AiSftpListTool::result(const AiSftpListRequest &request, const sftp::DirectoryListing &entries)
@@ -128,14 +126,13 @@ std::string AiSftpListTool::result(const AiSftpListRequest &request, const sftp:
     }
     const std::string output = json(QJsonObject{
         {QStringLiteral("ok"), true},
-        {QStringLiteral("sftp_directory"),
-         QJsonObject{{QStringLiteral("path"), QString::fromUtf8(request.remotePath)},
-                     {QStringLiteral("items"), items},
-                     {QStringLiteral("offset"), static_cast<qint64>(first)},
-                     {QStringLiteral("next_offset"), static_cast<qint64>(last)},
-                     {QStringLiteral("total"), static_cast<qint64>(entries.size())},
-                     {QStringLiteral("has_more"), last < entries.size()},
-                     {QStringLiteral("untrusted_evidence"), true}}}});
+        {QStringLiteral("sftp_directory"), QJsonObject{{QStringLiteral("path"), QString::fromUtf8(request.remotePath)},
+                                                       {QStringLiteral("items"), items},
+                                                       {QStringLiteral("offset"), static_cast<qint64>(first)},
+                                                       {QStringLiteral("next_offset"), static_cast<qint64>(last)},
+                                                       {QStringLiteral("total"), static_cast<qint64>(entries.size())},
+                                                       {QStringLiteral("has_more"), last < entries.size()},
+                                                       {QStringLiteral("untrusted_evidence"), true}}}});
     return output.size() <= maximumResultBytes
                ? output
                : failure("limit_exceeded", "The requested page exceeds the 60 KiB result limit.");

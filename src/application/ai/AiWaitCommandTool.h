@@ -27,7 +27,7 @@ public:
                                               terminal::TerminalSemanticCapability capability,
                                               std::uint64_t frameRevision);
     [[nodiscard]] static std::expected<AiWaitCommandRequest, std::string> parse(std::string_view argumentsJson,
-                                                                               const AiSessionTarget &target);
+                                                                                const AiSessionTarget &target);
     [[nodiscard]] static std::string result(const AiTrackedCommand &command);
     [[nodiscard]] static std::string timeout(const AiTrackedCommand &command);
     [[nodiscard]] static std::string failure(std::string_view code, std::string_view message);

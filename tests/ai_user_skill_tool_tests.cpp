@@ -57,8 +57,8 @@ void AiUserSkillToolTests::advertisesAndPagesReadySkills()
 void AiUserSkillToolTests::loadsExactSkillInstructions()
 {
     const auto values = skills();
-    const QJsonObject response = parsed(
-        AiUserSkillTool::execute("load_skill", R"({"name":"service-diagnostics"})", values));
+    const QJsonObject response =
+        parsed(AiUserSkillTool::execute("load_skill", R"({"name":"service-diagnostics"})", values));
     QVERIFY(response.value(QStringLiteral("ok")).toBool());
     const QJsonObject skill = response.value(QStringLiteral("skill")).toObject();
     QCOMPARE(skill.value(QStringLiteral("id")).toString(), QStringLiteral("service-diagnostics"));

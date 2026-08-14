@@ -7,8 +7,8 @@
 namespace
 {
 
-using ztermy::ai::AiSftpReadTool;
 using ztermy::ai::AiSessionTarget;
+using ztermy::ai::AiSftpReadTool;
 
 [[nodiscard]] AiSessionTarget target()
 {
@@ -52,15 +52,12 @@ void AiSftpReadToolTests::parsesNormalizedBoundedRequests()
 
 void AiSftpReadToolTests::rejectsUnsafeOrOversizedRequests()
 {
+    QVERIFY(!AiSftpReadTool::parse(R"({"remote_path":"../../secret","max_bytes":1,"encoding":"utf-8"})", target())
+                 .has_value());
+    QVERIFY(!AiSftpReadTool::parse(R"({"remote_path":"/file","max_bytes":32769,"encoding":"utf-8"})", target())
+                 .has_value());
     QVERIFY(
-        !AiSftpReadTool::parse(R"({"remote_path":"../../secret","max_bytes":1,"encoding":"utf-8"})", target())
-             .has_value());
-    QVERIFY(
-        !AiSftpReadTool::parse(R"({"remote_path":"/file","max_bytes":32769,"encoding":"utf-8"})", target())
-             .has_value());
-    QVERIFY(
-        !AiSftpReadTool::parse(R"({"remote_path":"/file","max_bytes":1,"encoding":"gb18030"})", target())
-             .has_value());
+        !AiSftpReadTool::parse(R"({"remote_path":"/file","max_bytes":1,"encoding":"gb18030"})", target()).has_value());
 }
 
 void AiSftpReadToolTests::encodesUntrustedResults()

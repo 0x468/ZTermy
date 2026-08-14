@@ -336,7 +336,8 @@ parsePlaintext(const QByteArray &plaintext, const AiConversationStoreLimits &lim
 }
 
 [[nodiscard]] std::expected<LoadedStore, AiConversationStoreError>
-decryptEnvelope(const QByteArray &envelopeBytes, security::CredentialVault &vault, const AiConversationStoreLimits &limits)
+decryptEnvelope(const QByteArray &envelopeBytes, security::CredentialVault &vault,
+                const AiConversationStoreLimits &limits)
 {
     const auto envelope = QJsonDocument::fromJson(envelopeBytes).object();
     const auto generationValue = envelope.value(QStringLiteral("generation"));
@@ -369,9 +370,10 @@ decryptEnvelope(const QByteArray &envelopeBytes, security::CredentialVault &vaul
                        .generation = static_cast<std::uint64_t>(signedGeneration)};
 }
 
-[[nodiscard]] std::expected<LoadedStore, AiConversationStoreError>
-loadStore(const QString &filePath, security::CredentialVault &vault, const AiConversationStoreLimits &limits,
-          bool *recoveredFromBackup = nullptr)
+[[nodiscard]] std::expected<LoadedStore, AiConversationStoreError> loadStore(const QString &filePath,
+                                                                             security::CredentialVault &vault,
+                                                                             const AiConversationStoreLimits &limits,
+                                                                             bool *recoveredFromBackup = nullptr)
 {
     auto loaded = persistence::loadLastKnownGood(filePath, maximumEnvelopeBytes, validateEnvelope);
     if (!loaded)

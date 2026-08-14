@@ -46,17 +46,14 @@ using ztermy::ai::AiToolDispatchState;
 
 [[nodiscard]] AiToolCall interruptCall(const std::string &id = "interrupt-1")
 {
-    return AiToolCall{
-        .id = id,
-        .name = "interrupt_command",
-        .argumentsJson = R"({"command_id":"command-1","mode":"soft"})"};
+    return AiToolCall{.id = id,
+                      .name = "interrupt_command",
+                      .argumentsJson = R"({"command_id":"command-1","mode":"soft"})"};
 }
 
 [[nodiscard]] AiToolCall ptyWriteCall(const std::string &id = "pty-write-1")
 {
-    return AiToolCall{.id = id,
-                      .name = "write_to_pty",
-                      .argumentsJson = R"({"data":"yes","append_enter":true})"};
+    return AiToolCall{.id = id, .name = "write_to_pty", .argumentsJson = R"({"data":"yes","append_enter":true})"};
 }
 
 [[nodiscard]] AiToolCall runbookCall(const std::string &id = "runbook-1")
@@ -70,11 +67,9 @@ using ztermy::ai::AiToolDispatchState;
 
 [[nodiscard]] AiToolCall transferCall(const bool upload, const std::string &id = "sftp-transfer-1")
 {
-    return AiToolCall{
-        .id = id,
-        .name = upload ? "queue_sftp_upload" : "queue_sftp_download",
-        .argumentsJson =
-            R"({"local_path":"C:/Temp/report.txt","remote_path":"/tmp/report.txt"})"};
+    return AiToolCall{.id = id,
+                      .name = upload ? "queue_sftp_upload" : "queue_sftp_download",
+                      .argumentsJson = R"({"local_path":"C:/Temp/report.txt","remote_path":"/tmp/report.txt"})"};
 }
 
 [[nodiscard]] QJsonObject object(const std::string &value)
@@ -275,8 +270,8 @@ void AiActionToolDispatcherTests::rejectsScopeReplayAndObserverWrites()
              QStringLiteral("invalid_arguments"));
 
     AiAgentTurnBudget boundBudget;
-    const auto bound = dispatcher.prepare(commandCall("bound-call"), context("bound", AiPermissionMode::automatic),
-                                          boundBudget);
+    const auto bound =
+        dispatcher.prepare(commandCall("bound-call"), context("bound", AiPermissionMode::automatic), boundBudget);
     QVERIFY(bound.action.has_value());
     const auto boundAction = bound.action.value_or(AiTerminalAction{});
     QCOMPARE(boundAction.target.sessionId, std::string("session-1"));

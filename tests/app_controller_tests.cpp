@@ -5,8 +5,8 @@
 #include "infrastructure/workbench/WorkspaceStateStore.h"
 #include "platform/windows/WindowsCredentialVault.h"
 
-#include <QCoreApplication>
 #include <QColor>
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QImage>
@@ -1113,15 +1113,18 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
     image.fill(QColor(QStringLiteral("#2457d6")));
     QVERIFY(image.save(imagePath, "PNG"));
     QVERIFY(controller.attachAiImageFiles(QVariantList{QUrl::fromLocalFile(imagePath)}));
-    QTRY_VERIFY_WITH_TIMEOUT(std::ranges::any_of(controller.activeAiContextItems(), [](const QVariant &item) {
-                                 const QVariantMap value = item.toMap();
-                                 return value.value(QStringLiteral("kind")).toString() == QStringLiteral("image")
-                                        && value.value(QStringLiteral("title")).toString()
-                                               == QStringLiteral("terminal-screenshot.png")
-                                        && value.value(QStringLiteral("previewUrl")).toString().startsWith(
-                                            QStringLiteral("data:image/png;base64,"));
-                             }),
-                             2'000);
+    QTRY_VERIFY_WITH_TIMEOUT(
+        std::ranges::any_of(controller.activeAiContextItems(),
+                            [](const QVariant &item) {
+                                const QVariantMap value = item.toMap();
+                                return value.value(QStringLiteral("kind")).toString() == QStringLiteral("image")
+                                       && value.value(QStringLiteral("title")).toString()
+                                              == QStringLiteral("terminal-screenshot.png")
+                                       && value.value(QStringLiteral("previewUrl"))
+                                              .toString()
+                                              .startsWith(QStringLiteral("data:image/png;base64,"));
+                            }),
+        2'000);
 
     sessionState->selectedText.clear();
     QVERIFY(controller.attachAiSelection());
@@ -1542,8 +1545,7 @@ void AppControllerTests::persistsAiQuickMessages()
         ztermy::AppController controller(profilesPath);
         QSignalSpy changes(&controller, &ztermy::AppController::aiQuickMessagesChanged);
         QVERIFY(controller.aiQuickMessages().isEmpty());
-        QVERIFY(controller.saveAiQuickMessage({}, QStringLiteral("Service status"),
-                                              QStringLiteral(" Service Status "),
+        QVERIFY(controller.saveAiQuickMessage({}, QStringLiteral("Service status"), QStringLiteral(" Service Status "),
                                               QStringLiteral("Inspect failed services and summarize causes."),
                                               QStringLiteral("Diagnose service failures")));
         QCOMPARE(controller.aiQuickMessages().size(), 1);

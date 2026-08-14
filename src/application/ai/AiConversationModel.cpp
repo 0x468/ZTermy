@@ -225,10 +225,9 @@ std::vector<AiConversationTranscriptEntry> AiConversationModel::transcript() con
         if (message.state != MessageState::streaming && message.state != MessageState::failed
             && message.state != MessageState::cancelled)
         {
-            entries.push_back(
-                {.role = message.role == AiMessageRole::user ? AiConversationTranscriptRole::user
-                                                              : AiConversationTranscriptRole::assistant,
-                 .content = replayText(message.text, message.images).toUtf8().toStdString()});
+            entries.push_back({.role = message.role == AiMessageRole::user ? AiConversationTranscriptRole::user
+                                                                           : AiConversationTranscriptRole::assistant,
+                               .content = replayText(message.text, message.images).toUtf8().toStdString()});
         }
         for (const auto &evidence : m_evidenceMessages)
         {
@@ -366,8 +365,7 @@ bool AiConversationModel::appendEvidenceMessage(QString text)
         return false;
     }
     m_evidenceBytes += bytes;
-    m_evidenceMessages.push_back(
-        {.afterMessageId = m_messages.back().id, .text = std::move(text), .bytes = bytes});
+    m_evidenceMessages.push_back({.afterMessageId = m_messages.back().id, .text = std::move(text), .bytes = bytes});
     return true;
 }
 
@@ -526,9 +524,9 @@ bool AiConversationModel::updateAssistantUsage(const std::uint64_t messageId, co
     }
     message->usage = usage;
     const auto row = indexOf(messageId);
-    emit dataChanged(index(row), index(row),
-                     {InputTokensRole, OutputTokensRole, CachedInputTokensRole, ReasoningTokensRole,
-                      UsageAvailableRole});
+    emit dataChanged(
+        index(row), index(row),
+        {InputTokensRole, OutputTokensRole, CachedInputTokensRole, ReasoningTokensRole, UsageAvailableRole});
     return true;
 }
 

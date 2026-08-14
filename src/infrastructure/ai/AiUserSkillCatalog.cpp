@@ -128,7 +128,8 @@ struct Frontmatter final
 
 [[nodiscard]] std::optional<Frontmatter> parseFrontmatter(const QString &contents)
 {
-    const QString normalized = QString(contents).replace(QStringLiteral("\r\n"), QStringLiteral("\n"))
+    const QString normalized = QString(contents)
+                                   .replace(QStringLiteral("\r\n"), QStringLiteral("\n"))
                                    .replace(QLatin1Char('\r'), QLatin1Char('\n'));
     const QStringList lines = normalized.split(QLatin1Char('\n'));
     if (lines.empty() || lines.front().trimmed() != QStringLiteral("---"))
@@ -234,8 +235,8 @@ std::expected<AiUserSkillScanResult, AiUserSkillCatalogError> AiUserSkillCatalog
     }
 
     QDir root(m_rootPath);
-    const QFileInfoList entries = root.entryInfoList(
-        QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System, QDir::Name | QDir::IgnoreCase);
+    const QFileInfoList entries = root.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System,
+                                                     QDir::Name | QDir::IgnoreCase);
     AiUserSkillScanResult result;
     result.skills.reserve(std::min(static_cast<std::size_t>(entries.size()), m_limits.maximumSkills));
 
@@ -243,7 +244,8 @@ std::expected<AiUserSkillScanResult, AiUserSkillCatalogError> AiUserSkillCatalog
     {
         if (result.skills.size() >= m_limits.maximumSkills)
         {
-            result.skills.push_back(warningSkill(QStringLiteral("catalogue-limit"), AiUserSkillWarning::catalogueLimit));
+            result.skills.push_back(
+                warningSkill(QStringLiteral("catalogue-limit"), AiUserSkillWarning::catalogueLimit));
             break;
         }
         const QString directoryName = directory.fileName();

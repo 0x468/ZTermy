@@ -81,10 +81,12 @@ void AiConversationModelTests::preservesOnlyCurrentTurnImagePayloads()
     QCOMPARE(providerMessages.front().images.size(), std::size_t{1});
     const QVariantList values = model.data(model.index(0), AiConversationModel::ImageAttachmentsRole).toList();
     QCOMPARE(values.size(), 1);
-    QCOMPARE(values.constFirst().toMap().value(QStringLiteral("fileName")).toString(),
-             QStringLiteral("terminal.png"));
-    QVERIFY(values.constFirst().toMap().value(QStringLiteral("previewUrl")).toString().startsWith(
-        QStringLiteral("data:image/png;base64,")));
+    QCOMPARE(values.constFirst().toMap().value(QStringLiteral("fileName")).toString(), QStringLiteral("terminal.png"));
+    QVERIFY(values.constFirst()
+                .toMap()
+                .value(QStringLiteral("previewUrl"))
+                .toString()
+                .startsWith(QStringLiteral("data:image/png;base64,")));
 
     const auto assistant = model.beginAssistantMessage();
     QVERIFY(model.appendAssistantDelta(assistant, QStringLiteral("It is a terminal screenshot.")));
@@ -94,8 +96,8 @@ void AiConversationModelTests::preservesOnlyCurrentTurnImagePayloads()
     providerMessages = model.providerMessagesWithEvidence();
     QCOMPARE(providerMessages.size(), std::size_t{3});
     QVERIFY(providerMessages.front().images.empty());
-    QVERIFY(QString::fromUtf8(providerMessages.front().content).contains(
-        QStringLiteral("Historical image attachment omitted from replay")));
+    QVERIFY(QString::fromUtf8(providerMessages.front().content)
+                .contains(QStringLiteral("Historical image attachment omitted from replay")));
     QVERIFY(model.transcript().front().content.contains("Historical image attachment omitted from replay"));
 }
 

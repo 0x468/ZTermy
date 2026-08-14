@@ -79,10 +79,7 @@ struct Common final
         return std::unexpected(
             AiTerminalFrameTool::failure("invalid_arguments", "The terminal-frame arguments are invalid."));
     }
-    return Common{
-        .object = object,
-        .target = target,
-        .revision = *revision};
+    return Common{.object = object, .target = target, .revision = *revision};
 }
 
 [[nodiscard]] QJsonObject frameValue(const AiTerminalFrameDelta &frame, const std::string_view controlOwner,

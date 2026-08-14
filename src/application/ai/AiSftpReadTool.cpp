@@ -71,7 +71,7 @@ AiToolDefinition AiSftpReadTool::definition()
 }
 
 std::expected<AiSftpReadRequest, std::string> AiSftpReadTool::parse(const std::string_view argumentsJson,
-                                                                   const AiSessionTarget &target)
+                                                                    const AiSessionTarget &target)
 {
     if (argumentsJson.size() > maximumArgumentsBytes)
     {
@@ -90,18 +90,17 @@ std::expected<AiSftpReadRequest, std::string> AiSftpReadTool::parse(const std::s
     if (!document.isObject() || parseError.error != QJsonParseError::NoError
         || !hasOnlyKeys(object,
                         {QStringLiteral("remote_path"), QStringLiteral("max_bytes"), QStringLiteral("encoding")})
-        || !remotePath.isString()
-        || remotePath.toString().size() > 4096 || !normalized.has_value() || *normalized == "/"
-        || !maximumBytes.has_value() || *maximumBytes == 0 || *maximumBytes > maximumFileBytes || !encoding.isString()
+        || !remotePath.isString() || remotePath.toString().size() > 4096 || !normalized.has_value()
+        || *normalized == "/" || !maximumBytes.has_value() || *maximumBytes == 0 || *maximumBytes > maximumFileBytes
+        || !encoding.isString()
         || (encoding.toString() != QStringLiteral("utf-8") && encoding.toString() != QStringLiteral("base64")))
     {
         return std::unexpected(failure("invalid_arguments", "The SFTP file-read arguments are invalid."));
     }
-    return AiSftpReadRequest{
-        .target = target,
-        .remotePath = *normalized,
-        .maximumBytes = static_cast<std::size_t>(*maximumBytes),
-        .encoding = encoding.toString().toUtf8().toStdString()};
+    return AiSftpReadRequest{.target = target,
+                             .remotePath = *normalized,
+                             .maximumBytes = static_cast<std::size_t>(*maximumBytes),
+                             .encoding = encoding.toString().toUtf8().toStdString()};
 }
 
 std::string AiSftpReadTool::result(const AiSftpReadRequest &request, const QByteArray &bytes, const bool truncated)
@@ -120,15 +119,14 @@ std::string AiSftpReadTool::result(const AiSftpReadRequest &request, const QByte
             return failure("invalid_encoding", "The remote file is not valid UTF-8; request base64 instead.");
         }
     }
-    return json(QJsonObject{
-        {QStringLiteral("ok"), true},
-        {QStringLiteral("file"),
-         QJsonObject{{QStringLiteral("remote_path"), text(request.remotePath)},
-                     {QStringLiteral("encoding"), text(request.encoding)},
-                     {QStringLiteral("content"), content},
-                     {QStringLiteral("bytes_read"), bytes.size()},
-                     {QStringLiteral("truncated"), truncated},
-                     {QStringLiteral("untrusted_evidence"), true}}}});
+    return json(
+        QJsonObject{{QStringLiteral("ok"), true},
+                    {QStringLiteral("file"), QJsonObject{{QStringLiteral("remote_path"), text(request.remotePath)},
+                                                         {QStringLiteral("encoding"), text(request.encoding)},
+                                                         {QStringLiteral("content"), content},
+                                                         {QStringLiteral("bytes_read"), bytes.size()},
+                                                         {QStringLiteral("truncated"), truncated},
+                                                         {QStringLiteral("untrusted_evidence"), true}}}});
 }
 
 std::string AiSftpReadTool::failure(const std::string_view code, const std::string_view message)

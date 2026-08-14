@@ -558,8 +558,9 @@ void AiTurnRunnerTests::rejectsOversizedCompletedToolArguments()
                           "call\",\"id\":\"item_1\",\"call_id\":\"call_1\",\"name\":\"run_command\"}}\n\n"
                           "data: {\"type\":\"response.function_call_arguments.done\",\"item_id\":\"item_1\","
                           "\"arguments\":\""
-        + oversizedArguments + "\"}\n\n"
-                          "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\"}}\n\n";
+                          + oversizedArguments
+                          + "\"}\n\n"
+                            "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\"}}\n\n";
     FakeNetworkAccessManager network;
     network.enqueue(FakeResponse{.payload = QByteArray::fromStdString(payload)});
     ProviderHttpClient client(&network);
@@ -615,8 +616,8 @@ void AiTurnRunnerTests::compactsAndRetriesOnContextOverflow()
     const std::string longMessage(80'000, 'x');
     for (int index = 0; index < 8; ++index)
     {
-        generation.messages.push_back(ztermy::ai::AiChatMessage{
-            .role = ztermy::ai::AiMessageRole::user, .content = longMessage});
+        generation.messages.push_back(
+            ztermy::ai::AiChatMessage{.role = ztermy::ai::AiMessageRole::user, .content = longMessage});
     }
 
     QVERIFY(runner

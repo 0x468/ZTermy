@@ -518,6 +518,8 @@ target_link_libraries(ztermy_ai_context
 )
 
 add_library(ztermy_ai_provider STATIC
+    src/infrastructure/ai/AiTraceSanitizer.cpp
+    src/infrastructure/ai/AiTraceSanitizer.h
     src/infrastructure/ai/ProviderEndpointResolver.cpp
     src/infrastructure/ai/ProviderEndpointResolver.h
     src/infrastructure/ai/ProviderHttpClient.cpp
@@ -2919,6 +2921,27 @@ if(BUILD_TESTING)
 
     add_test(NAME provider-request-factory COMMAND ztermy_provider_request_factory_tests)
 
+    qt_add_executable(ztermy_ai_trace_sanitizer_tests
+        tests/ai_trace_sanitizer_tests.cpp
+    )
+
+    target_compile_features(ztermy_ai_trace_sanitizer_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ai_trace_sanitizer_tests PRIVATE
+        ztermy_ai_provider
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ai_trace_sanitizer_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ai-trace-sanitizer COMMAND ztermy_ai_trace_sanitizer_tests)
+
     qt_add_executable(ztermy_ai_evaluation_harness_tests
         tests/ai_evaluation_harness_tests.cpp
     )
@@ -4017,6 +4040,7 @@ if(BUILD_TESTING)
             ztermy_ai_stream_parser_tests
             ztermy_provider_stream_mapper_tests
             ztermy_provider_request_factory_tests
+            ztermy_ai_trace_sanitizer_tests
             ztermy_provider_http_client_tests
             ztermy_ai_provider_retry_policy_tests
             ztermy_ai_permission_policy_tests

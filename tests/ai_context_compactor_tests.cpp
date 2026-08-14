@@ -70,13 +70,13 @@ void AiContextCompactorTests::capsToolOutputsInHistory()
     AiGenerationRequest request;
     for (int index = 0; index < 10; ++index)
     {
-        request.toolHistory.push_back(ztermy::ai::AiToolExchange{
-            .calls = {ztermy::ai::AiToolCall{.id = "call_" + std::to_string(index),
-                                             .name = "run_command",
-                                             .argumentsJson = "{}"}},
-            .outputs = {ztermy::ai::AiToolOutput{.callId = "call_" + std::to_string(index),
-                                                 .name = "run_command",
-                                                 .outputJson = std::string(50'000, 'b')}}});
+        request.toolHistory.push_back(
+            ztermy::ai::AiToolExchange{.calls = {ztermy::ai::AiToolCall{.id = "call_" + std::to_string(index),
+                                                                        .name = "run_command",
+                                                                        .argumentsJson = "{}"}},
+                                       .outputs = {ztermy::ai::AiToolOutput{.callId = "call_" + std::to_string(index),
+                                                                            .name = "run_command",
+                                                                            .outputJson = std::string(50'000, 'b')}}});
     }
 
     const AiCompactionLimits limits{.contextWindowTokens = 128'000,
@@ -124,12 +124,11 @@ void AiContextCompactorTests::utf8TruncationNeverSplitsCodePoints()
 void AiContextCompactorTests::accountsForImageTilesWithoutCountingBase64AsText()
 {
     const AiGenerationRequest request{
-        .messages = {AiChatMessage{
-            .content = "inspect",
-            .images = {AiImageAttachment{.mediaType = "image/png",
-                                         .base64Data = std::string(2'000'000, 'A'),
-                                         .pixelWidth = 1024,
-                                         .pixelHeight = 1024}}}}};
+        .messages = {AiChatMessage{.content = "inspect",
+                                   .images = {AiImageAttachment{.mediaType = "image/png",
+                                                                .base64Data = std::string(2'000'000, 'A'),
+                                                                .pixelWidth = 1024,
+                                                                .pixelHeight = 1024}}}}};
     const auto estimate = AiContextCompactor::estimateRequestTokens(request);
     QVERIFY(estimate >= std::size_t{765});
     QVERIFY(estimate < std::size_t{2'000});

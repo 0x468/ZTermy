@@ -173,7 +173,7 @@ std::string AiWaitCommandTool::accepted(const std::string_view commandId, const 
 }
 
 std::expected<AiWaitCommandRequest, std::string> AiWaitCommandTool::parse(const std::string_view argumentsJson,
-                                                                         const AiSessionTarget &target)
+                                                                          const AiSessionTarget &target)
 {
     if (argumentsJson.size() > maximumArgumentsBytes)
     {
@@ -185,19 +185,18 @@ std::expected<AiWaitCommandRequest, std::string> AiWaitCommandTool::parse(const 
     const auto object = document.object();
     const auto commandId = object.value(QStringLiteral("command_id"));
     const QJsonValue timeoutValue = object.value(QStringLiteral("timeout_ms"));
-    const auto timeout = timeoutValue.isUndefined() ? std::optional<std::uint64_t>{30'000}
-                                                    : unsignedInteger(timeoutValue);
+    const auto timeout =
+        timeoutValue.isUndefined() ? std::optional<std::uint64_t>{30'000} : unsignedInteger(timeoutValue);
     if (!document.isObject() || parseError.error != QJsonParseError::NoError
-        || !hasOnlyKeys(object, {QStringLiteral("command_id"), QStringLiteral("timeout_ms")})
-        || !commandId.isString() || commandId.toString().isEmpty() || !timeout.has_value() || *timeout == 0
+        || !hasOnlyKeys(object, {QStringLiteral("command_id"), QStringLiteral("timeout_ms")}) || !commandId.isString()
+        || commandId.toString().isEmpty() || !timeout.has_value() || *timeout == 0
         || *timeout > maximumTimeoutMilliseconds)
     {
         return std::unexpected(failure("invalid_arguments", "The wait-command arguments are invalid."));
     }
-    return AiWaitCommandRequest{
-        .commandId = commandId.toString().toUtf8().toStdString(),
-        .target = target,
-        .timeoutMilliseconds = static_cast<std::uint32_t>(*timeout)};
+    return AiWaitCommandRequest{.commandId = commandId.toString().toUtf8().toStdString(),
+                                .target = target,
+                                .timeoutMilliseconds = static_cast<std::uint32_t>(*timeout)};
 }
 
 std::string AiWaitCommandTool::result(const AiTrackedCommand &command)

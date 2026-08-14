@@ -263,7 +263,10 @@ becomes conversation retention.
 - add explicit local text/file and provider-capable image attachments with
   previews, removal, bounded ingestion, and no ambient filesystem scraping;
   the local UTF-8 text-file slice is implemented asynchronously with four-file
-  and 256 KiB-per-source limits (ADR 0087), while image input remains pending;
+  and 256 KiB-per-source limits (ADR 0087); provider-native PNG/JPEG/WebP/GIF
+  images are implemented asynchronously with draft thumbnails, four-image,
+  per-image/aggregate byte, decoded-pixel, replay, trace, and provider payload
+  boundaries (ADR 0089);
 - add reusable user-authored skills, surfaced through the same slash-command
   picker without coupling them to one provider; portable `SKILL.md` discovery,
   validation, explicit chips, and provider-neutral progressive loading are

@@ -8,10 +8,10 @@
 
 namespace
 {
+using ztermy::ai::AiSessionTarget;
 using ztermy::ai::AiTerminalFrameDelta;
 using ztermy::ai::AiTerminalFrameLine;
 using ztermy::ai::AiTerminalFrameTool;
-using ztermy::ai::AiSessionTarget;
 
 [[nodiscard]] AiSessionTarget target()
 {
@@ -50,12 +50,10 @@ void AiTerminalFrameToolTests::publishesAndParsesStrictContracts()
     auto defaultIdle = AiTerminalFrameTool::parseWait(R"({"after_revision":7,"condition":"idle"})", target());
     QVERIFY(defaultIdle.has_value());
     QCOMPARE(defaultIdle->idleMilliseconds, std::uint32_t{750});
-    QVERIFY(
-        !AiTerminalFrameTool::parseWait(
-             R"({"after_revision":7,"condition":"idle","idle_ms":0,"timeout_ms":3000})", target())
-             .has_value());
-    QVERIFY(!AiTerminalFrameTool::parseWait(R"({"after_revision":7,"condition":"changed","timeout_ms":0})",
-                                           target())
+    QVERIFY(!AiTerminalFrameTool::parseWait(R"({"after_revision":7,"condition":"idle","idle_ms":0,"timeout_ms":3000})",
+                                            target())
+                 .has_value());
+    QVERIFY(!AiTerminalFrameTool::parseWait(R"({"after_revision":7,"condition":"changed","timeout_ms":0})", target())
                  .has_value());
 }
 

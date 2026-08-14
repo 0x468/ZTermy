@@ -115,6 +115,15 @@ evaluations serve different purposes and are reported separately.
       and pinnable context chips, includes their bounded contents in the next request, and keeps the
       UI responsive while loading. Binary, invalid UTF-8, inaccessible, oversized, or more than four
       files in one selection are rejected with a visible sidebar error.
+- [ ] Owner check: Attach > Images accepts PNG/JPEG/WebP/GIF, shows removable thumbnails without
+      widening the sidebar, supports image-only and text-plus-image sends, and keeps each draft bound
+      to its terminal. Invalid, inaccessible, oversized, over-40-megapixel, or more than four images
+      are rejected without freezing the UI.
+- [ ] Owner/provider check: a vision-capable model receives the image through its provider-native
+      payload and answers from its contents. Follow-up turns retain a visible historical-image marker
+      without silently resending binary data; restoring history clears unrelated draft attachments.
+- [ ] Developer check: enabling AI debug trace preserves request/response structure and image metadata
+      but writes no raw image Base64 or data-URL payload into the JSONL trace.
 - [ ] Owner check: restored SSH tabs expose Reconnect in both the disconnected terminal card
       and tab context menu without reconnecting implicitly.
 

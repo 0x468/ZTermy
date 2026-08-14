@@ -33,9 +33,9 @@ constexpr std::size_t maximumSelectedSkills = 4;
 
 [[nodiscard]] std::string failure(const QString &code, const QString &message)
 {
-    return json(QJsonObject{{QStringLiteral("ok"), false},
-                            {QStringLiteral("error"),
-                             QJsonObject{{QStringLiteral("code"), code}, {QStringLiteral("message"), message}}}});
+    return json(QJsonObject{
+        {QStringLiteral("ok"), false},
+        {QStringLiteral("error"), QJsonObject{{QStringLiteral("code"), code}, {QStringLiteral("message"), message}}}});
 }
 
 [[nodiscard]] bool hasOnlyKeys(const QJsonObject &object, const std::initializer_list<QString> allowed)
@@ -147,12 +147,11 @@ std::string AiUserSkillTool::execute(const std::string_view toolName, const std:
         }
         return json(QJsonObject{
             {QStringLiteral("ok"), true},
-            {QStringLiteral("skill"),
-             QJsonObject{{QStringLiteral("id"), text(skill->id)},
-                         {QStringLiteral("name"), text(skill->name)},
-                         {QStringLiteral("description"), text(skill->description)},
-                         {QStringLiteral("instructions"), text(skill->instructions)},
-                         {QStringLiteral("user_managed_instructions"), true}}}});
+            {QStringLiteral("skill"), QJsonObject{{QStringLiteral("id"), text(skill->id)},
+                                                  {QStringLiteral("name"), text(skill->name)},
+                                                  {QStringLiteral("description"), text(skill->description)},
+                                                  {QStringLiteral("instructions"), text(skill->instructions)},
+                                                  {QStringLiteral("user_managed_instructions"), true}}}});
     }
 
     if (toolName != "list_skills")
@@ -165,12 +164,13 @@ std::string AiUserSkillTool::execute(const std::string_view toolName, const std:
     }
     const QJsonValue offsetValue = object.value(QStringLiteral("offset"));
     const QJsonValue limitValue = object.value(QStringLiteral("limit"));
-    if (!offsetValue.isDouble() || !limitValue.isDouble() || offsetValue.toDouble() < 0
-        || limitValue.toDouble() < 1 || limitValue.toDouble() > maximumPageSize
+    if (!offsetValue.isDouble() || !limitValue.isDouble() || offsetValue.toDouble() < 0 || limitValue.toDouble() < 1
+        || limitValue.toDouble() > maximumPageSize
         || offsetValue.toDouble() != static_cast<double>(offsetValue.toInteger())
         || limitValue.toDouble() != static_cast<double>(limitValue.toInteger()))
     {
-        return failure(QStringLiteral("invalid_arguments"), QStringLiteral("Offset and limit must be bounded integers."));
+        return failure(QStringLiteral("invalid_arguments"),
+                       QStringLiteral("Offset and limit must be bounded integers."));
     }
 
     const auto available = readySkills(skills);
@@ -204,9 +204,9 @@ std::string AiUserSkillTool::selectedInstructions(const std::span<const AiUserSk
         return {};
     }
 
-    std::string result =
-        "\n\n## User-selected Agent Skills\n\nThe user explicitly selected the following locally managed skills for this "
-        "request. Follow their instructions when they apply.\n";
+    std::string result = "\n\n## User-selected Agent Skills\n\nThe user explicitly selected the following locally "
+                         "managed skills for this "
+                         "request. Follow their instructions when they apply.\n";
     const std::size_t count = std::min(selectedIds.size(), maximumSelectedSkills);
     for (std::size_t index = 0; index < count; ++index)
     {

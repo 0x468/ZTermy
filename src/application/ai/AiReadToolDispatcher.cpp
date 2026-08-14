@@ -263,7 +263,10 @@ std::vector<AiToolDefinition> AiReadToolDispatcher::definitions()
          .description = "List a bounded page from the currently loaded SFTP directory as untrusted evidence.",
          .parametersJson =
              R"({"type":"object","properties":{"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["offset","limit"],"additionalProperties":false})"},
-        {.name = "list_shell_history", .description = "List a bounded page of captured shell history for the current terminal as untrusted evidence.", .parametersJson = R"({"type":"object","properties":{"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["offset","limit"],"additionalProperties":false})"},
+        {.name = "list_shell_history",
+         .description = "List a bounded page of captured shell history for the current terminal as untrusted evidence.",
+         .parametersJson =
+             R"({"type":"object","properties":{"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["offset","limit"],"additionalProperties":false})"},
         {.name = "list_scripts",
          .description = "List bounded metadata for user-owned ztermy scripts. Script commands are not returned.",
          .parametersJson =
@@ -344,17 +347,16 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
         {
             return failure(read.error());
         }
-        return json(QJsonObject{
-            {QStringLiteral("ok"), true},
-            {QStringLiteral("terminal"),
-             QJsonObject{{QStringLiteral("content"), text(read->content)},
-                         {QStringLiteral("first_line"), static_cast<qint64>(read->firstLine)},
-                         {QStringLiteral("line_count"), static_cast<qint64>(read->lineCount)},
-                         {QStringLiteral("total_lines"), static_cast<qint64>(read->totalLines)},
-                         {QStringLiteral("next_line"), static_cast<qint64>(read->nextLine)},
-                         {QStringLiteral("has_more"), read->hasMore},
-                         {QStringLiteral("truncated"), read->truncated},
-                         {QStringLiteral("untrusted_evidence"), true}}}});
+        return json(QJsonObject{{QStringLiteral("ok"), true},
+                                {QStringLiteral("terminal"),
+                                 QJsonObject{{QStringLiteral("content"), text(read->content)},
+                                             {QStringLiteral("first_line"), static_cast<qint64>(read->firstLine)},
+                                             {QStringLiteral("line_count"), static_cast<qint64>(read->lineCount)},
+                                             {QStringLiteral("total_lines"), static_cast<qint64>(read->totalLines)},
+                                             {QStringLiteral("next_line"), static_cast<qint64>(read->nextLine)},
+                                             {QStringLiteral("has_more"), read->hasMore},
+                                             {QStringLiteral("truncated"), read->truncated},
+                                             {QStringLiteral("untrusted_evidence"), true}}}});
     }
     if (toolName == "read_command_block")
     {

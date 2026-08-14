@@ -29,8 +29,7 @@ bool containsDisallowedAiUserSkillControl(const std::string_view text) noexcept
 {
     for (const unsigned char character : text)
     {
-        if ((character < 0x20U && character != '\n' && character != '\r' && character != '\t')
-            || character == 0x7FU)
+        if ((character < 0x20U && character != '\n' && character != '\r' && character != '\t') || character == 0x7FU)
         {
             return true;
         }

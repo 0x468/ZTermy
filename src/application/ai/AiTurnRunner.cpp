@@ -282,9 +282,10 @@ void AiTurnRunner::handleEvent(const ProviderHttpClient::RequestId requestId, co
         // size-limit violation) must not clobber the original error.
         if (!m_pendingError.has_value())
         {
-            m_pendingError = event.error.value_or(AiProviderError{.code = AiProviderErrorCode::protocol,
-                                                                  .message = "Provider failed without an error payload.",
-                                                                  .retryable = false});
+            m_pendingError =
+                event.error.value_or(AiProviderError{.code = AiProviderErrorCode::protocol,
+                                                     .message = "Provider failed without an error payload.",
+                                                     .retryable = false});
         }
         return;
     }

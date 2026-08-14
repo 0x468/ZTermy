@@ -44,8 +44,7 @@ public:
 
     [[nodiscard]] static std::size_t estimateRequestTokens(const AiGenerationRequest &request);
 
-    [[nodiscard]] static AiCompactionResult
-    compact(AiGenerationRequest request, const AiCompactionLimits &limits = {});
+    [[nodiscard]] static AiCompactionResult compact(AiGenerationRequest request, const AiCompactionLimits &limits = {});
 };
 
 } // namespace ztermy::ai

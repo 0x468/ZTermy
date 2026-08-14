@@ -76,7 +76,7 @@ AiToolDefinition AiNoteReadTool::definition()
 }
 
 std::expected<AiNoteReadRequest, std::string> AiNoteReadTool::parse(const std::string_view argumentsJson,
-                                                                   const AiSessionTarget &target)
+                                                                    const AiSessionTarget &target)
 {
     if (argumentsJson.size() > maximumArgumentsBytes)
     {
@@ -96,8 +96,8 @@ std::expected<AiNoteReadRequest, std::string> AiNoteReadTool::parse(const std::s
     }
     const auto maximumBytes = unsignedInteger(object.value(QStringLiteral("max_bytes")));
     QString path = QDir::fromNativeSeparators(object.value(QStringLiteral("path")).toString().trimmed());
-    if (!maximumBytes.has_value() || *maximumBytes == 0
-        || *maximumBytes > maximumNoteReadBytes || path.isEmpty() || path.size() > 4096 || QDir::isAbsolutePath(path))
+    if (!maximumBytes.has_value() || *maximumBytes == 0 || *maximumBytes > maximumNoteReadBytes || path.isEmpty()
+        || path.size() > 4096 || QDir::isAbsolutePath(path))
     {
         return std::unexpected(failure("invalid_arguments", "Path and byte limit are required."));
     }
@@ -107,10 +107,9 @@ std::expected<AiNoteReadRequest, std::string> AiNoteReadTool::parse(const std::s
     {
         return std::unexpected(failure("invalid_arguments", "The note path must stay inside the notes repository."));
     }
-    return AiNoteReadRequest{
-        .target = target,
-        .relativePath = std::move(path),
-        .maximumBytes = static_cast<std::size_t>(*maximumBytes)};
+    return AiNoteReadRequest{.target = target,
+                             .relativePath = std::move(path),
+                             .maximumBytes = static_cast<std::size_t>(*maximumBytes)};
 }
 
 std::string AiNoteReadTool::result(const AiNoteReadRequest &request, const QString &content)
@@ -118,16 +117,16 @@ std::string AiNoteReadTool::result(const AiNoteReadRequest &request, const QStri
     const AiRedactionResult redacted = AiContextRedactor{}.redact(content.toUtf8().toStdString());
     bool truncated = false;
     const QString bounded = boundedUtf8(QString::fromUtf8(redacted.text), request.maximumBytes, truncated);
-    return json(QJsonObject{
-        {QStringLiteral("ok"), true},
-        {QStringLiteral("note"),
-         QJsonObject{{QStringLiteral("path"), request.relativePath},
-                     {QStringLiteral("content"), bounded},
-                     {QStringLiteral("bytes_read"), bounded.toUtf8().size()},
-                     {QStringLiteral("truncated"), truncated},
-                     {QStringLiteral("redacted"), redacted.totalRedactions() != 0},
-                     {QStringLiteral("redaction_count"), static_cast<qint64>(redacted.totalRedactions())},
-                     {QStringLiteral("untrusted_evidence"), true}}}});
+    return json(
+        QJsonObject{{QStringLiteral("ok"), true},
+                    {QStringLiteral("note"),
+                     QJsonObject{{QStringLiteral("path"), request.relativePath},
+                                 {QStringLiteral("content"), bounded},
+                                 {QStringLiteral("bytes_read"), bounded.toUtf8().size()},
+                                 {QStringLiteral("truncated"), truncated},
+                                 {QStringLiteral("redacted"), redacted.totalRedactions() != 0},
+                                 {QStringLiteral("redaction_count"), static_cast<qint64>(redacted.totalRedactions())},
+                                 {QStringLiteral("untrusted_evidence"), true}}}});
 }
 
 std::string AiNoteReadTool::failure(const workbench::NoteStoreError error)

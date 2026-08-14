@@ -26,8 +26,7 @@ void AiCommandEchoTests::producesShellCommentMarkers()
     QCOMPARE(QString::fromStdString(AiCommandEcho::markerLine("dir", "cmd")),
              QStringLiteral("rem [ztermy agent] $ dir"));
     // Unknown shells default to the POSIX-compatible comment form.
-    QCOMPARE(QString::fromStdString(AiCommandEcho::markerLine("pwd", "")),
-             QStringLiteral("# [ztermy agent] $ pwd"));
+    QCOMPARE(QString::fromStdString(AiCommandEcho::markerLine("pwd", "")), QStringLiteral("# [ztermy agent] $ pwd"));
 }
 
 void AiCommandEchoTests::collapsesMultilineCommandsToSingleLine()
@@ -35,8 +34,7 @@ void AiCommandEchoTests::collapsesMultilineCommandsToSingleLine()
     const std::string marker = AiCommandEcho::markerLine("Get-ChildItem\n    -Path C:\\temp", "pwsh");
     QVERIFY(marker.find('\n') == std::string::npos);
     QVERIFY(marker.find('\r') == std::string::npos);
-    QCOMPARE(QString::fromStdString(marker),
-             QStringLiteral("# [ztermy agent] $ Get-ChildItem -Path C:\\temp"));
+    QCOMPARE(QString::fromStdString(marker), QStringLiteral("# [ztermy agent] $ Get-ChildItem -Path C:\\temp"));
 }
 
 void AiCommandEchoTests::neverBreaksOutOfTheComment()
@@ -45,8 +43,7 @@ void AiCommandEchoTests::neverBreaksOutOfTheComment()
     // the marker line into an executable statement.
     const std::string marker = AiCommandEcho::markerLine("echo hi\nrm -rf /", "bash");
     QVERIFY(marker.find('\n') == std::string::npos);
-    QCOMPARE(QString::fromStdString(marker),
-             QStringLiteral("# [ztermy agent] $ echo hi rm -rf /"));
+    QCOMPARE(QString::fromStdString(marker), QStringLiteral("# [ztermy agent] $ echo hi rm -rf /"));
 }
 
 } // namespace

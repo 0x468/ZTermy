@@ -55,7 +55,7 @@ void McpJsonRpcProtocolTests::rejectsDiscoveryErrorsAndResetsBuffer()
     // free of raw-string delimiter traps.
     const auto errorReply = protocol.append(
         QByteArrayLiteral("{\"jsonrpc\":\"2.0\",\"id\":2,\"error\":{\"code\":-32000,\"message\":\"permission "
-                           "denied\"}}\n"));
+                          "denied\"}}\n"));
     QVERIFY(errorReply.has_value());
     QCOMPARE(errorReply->size(), std::size_t{1});
     QVERIFY(!ztermy::ai::McpJsonRpcProtocol::discoveredTools(errorReply->front()).has_value());

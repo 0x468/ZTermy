@@ -27,7 +27,7 @@ class AiSftpReadTool final
 public:
     [[nodiscard]] static AiToolDefinition definition();
     [[nodiscard]] static std::expected<AiSftpReadRequest, std::string> parse(std::string_view argumentsJson,
-                                                                            const AiSessionTarget &target);
+                                                                             const AiSessionTarget &target);
     [[nodiscard]] static std::string result(const AiSftpReadRequest &request, const QByteArray &bytes, bool truncated);
     [[nodiscard]] static std::string failure(std::string_view code, std::string_view message);
     [[nodiscard]] static std::string failure(ssh::SshTransportErrorKind error);

@@ -117,6 +117,7 @@ covered by `application-settings`, `ai-permission-policy`,
 | One sidebar exposes only its owning terminal; no session discovery or provider-selected routing | `src/application/AppController.*`, `src/application/ai/AiReadToolDispatcher.*`, `AiActionToolDispatcher.*` | `ai-read-tool-dispatcher`, `ai-action-tool-dispatcher`, `app-controller` | ADR 0086 |
 | Native schemas/results/context omit internal tab identity and reconnect generation | `src/application/ai/Ai*Sftp*Tool.*`, `AiNoteReadTool.*`, `AiTerminalFrameTool.*`, `AiWaitCommandTool.*`; `src/domain/ai/AiContextSerializer.*` | `ai-sftp-list-tool`, `ai-sftp-read-tool`, `ai-note-read-tool`, `ai-terminal-frame-tool`, `ai-wait-command-tool`, `ai-context-serializer` | ADR 0086 |
 | Tab focus changes cannot retarget a turn; reconnect/closure invalidates live work | `src/application/AppController.*` and host-injected `AiSessionTarget` values | `app-controller`, Agent scenario tests, owner concurrency acceptance | ADR 0086 |
+| Explicit images remain in the owning draft and use native multimodal provider payloads | `src/application/AppController.*`, `AiConversationModel.*`, `ProviderRequestFactory.*`, `AiAssistantPane.qml` | `provider-request-factory`, `ai-conversation-model`, `ai-context-compactor`, `ai-trace-sanitizer`, `app-controller`, owner multimodal acceptance | ADR 0089 |
 
 ## Evidence classification
 

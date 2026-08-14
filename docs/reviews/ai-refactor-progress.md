@@ -66,6 +66,21 @@ qml-native-window-smoke 4/4 通过；翻译门禁确认 1651 条全部完成。
 **验证**：动态 Debug 构建通过；12 个关联 AI 聚焦测试与 `app-controller` 通过。全量门禁
 在本节点后续提交前继续执行。
 
+## 节点 N11 — Provider 原生图片附件（2026-08-15）
+
+**commits**: `b6a1a60` + pending follow-up
+
+**范围**：
+
+1. 当前终端草稿支持显式 PNG/JPEG/WebP/GIF，多图缩略图、移除和纯图片消息；
+2. OpenAI Responses、OpenAI-compatible、Anthropic、Ollama 分别使用原生多模态负载；
+3. 图片加载、解码和缩略图生成移出 GUI 线程，并限制数量、单图/总字节和解码像素；
+4. 后续轮次和历史只保留图片省略标记，不隐式重发二进制；恢复历史清空当前草稿附件；
+5. 调试追踪保留结构和长度但省略 Base64，ADR 0089 固化该合同。
+
+**验证**：首个实现提交的 Debug 构建及 6 个聚焦测试通过；翻译、追踪净化测试、全量
+Debug/Release 门禁和实际视觉模型验收在本节点 follow-up 中完成。
+
 ## 节点 N9 — Agent 模式合同、工具协议与长命令审批修复（2026-08-14）
 
 **commit**: pending

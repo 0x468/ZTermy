@@ -9,6 +9,7 @@
 #include "domain/ai/AiContextCompactor.h"
 #include "domain/ai/AiContextSerializer.h"
 #include "domain/ssh/SshTarget.h"
+#include "infrastructure/ai/AiTraceSanitizer.h"
 #include "infrastructure/ai/ProviderEndpointResolver.h"
 #include "infrastructure/security/InMemoryCredentialVault.h"
 #include "infrastructure/workbench/QuickCommandStore.h"
@@ -977,10 +978,10 @@ semanticCapability(const ztermy::terminal::SemanticTerminalSnapshot &snapshot) n
 
 [[nodiscard]] bool reservedAiQuickMessageSlug(const std::string_view slug) noexcept
 {
-    constexpr std::array reserved{std::string_view{"new"},       std::string_view{"history"},
-                                  std::string_view{"explain"},   std::string_view{"selection"},
-                                  std::string_view{"last"},      std::string_view{"last3"},
-                                  std::string_view{"last5"},     std::string_view{"command"}};
+    constexpr std::array reserved{std::string_view{"new"},     std::string_view{"history"},
+                                  std::string_view{"explain"}, std::string_view{"selection"},
+                                  std::string_view{"last"},    std::string_view{"last3"},
+                                  std::string_view{"last5"},   std::string_view{"command"}};
     return std::ranges::find(reserved, slug) != reserved.end();
 }
 
@@ -3548,23 +3549,23 @@ void AppController::initializeAiPrivacySignals()
 
 void AppController::initializeAiDebugTrace()
 {
-    m_aiProviderClient.setTraceHandler(
-        [this](const ai::ProviderHttpClient::RequestId requestId, const QString &event, const QByteArray &bytes) {
-            QJsonObject payload{{QStringLiteral("request_id"), static_cast<qint64>(requestId)}};
-            QJsonParseError parseError;
-            const QJsonDocument document = QJsonDocument::fromJson(bytes, &parseError);
-            if (parseError.error == QJsonParseError::NoError && (document.isObject() || document.isArray()))
-            {
-                payload.insert(QStringLiteral("data"),
-                               document.isObject() ? QJsonValue{document.object()} : QJsonValue{document.array()});
-            }
-            else
-            {
-                payload.insert(QStringLiteral("text"), QString::fromUtf8(bytes));
-                payload.insert(QStringLiteral("base64"), QString::fromLatin1(bytes.toBase64()));
-            }
-            appendAiDebugTrace(event, payload);
-        });
+    m_aiProviderClient.setTraceHandler([this](const ai::ProviderHttpClient::RequestId requestId, const QString &event,
+                                              const QByteArray &bytes) {
+        QJsonObject payload{{QStringLiteral("request_id"), static_cast<qint64>(requestId)}};
+        QJsonParseError parseError;
+        const QJsonDocument document = QJsonDocument::fromJson(bytes, &parseError);
+        if (parseError.error == QJsonParseError::NoError && (document.isObject() || document.isArray()))
+        {
+            const QJsonValue data = document.isObject() ? QJsonValue{document.object()} : QJsonValue{document.array()};
+            payload.insert(QStringLiteral("data"), ai::sanitizeAiTraceValue(data));
+        }
+        else
+        {
+            payload.insert(QStringLiteral("text"), QString::fromUtf8(bytes));
+            payload.insert(QStringLiteral("base64"), QString::fromLatin1(bytes.toBase64()));
+        }
+        appendAiDebugTrace(event, payload);
+    });
     configureAiDebugTrace();
 }
 
@@ -8050,6 +8051,12 @@ bool AppController::restoreAiConversationHistory(const QString &conversationId)
     {
         return false;
     }
+    tab->aiExplicitContextItems.clear();
+    tab->aiImageAttachments.clear();
+    tab->aiExcludedContextIds.clear();
+    tab->aiPinnedContextIds.clear();
+    tab->aiContextItems.clear();
+    tab->aiContextPreview.clear();
     m_aiActionToolDispatcher.clearConversation(utf8String(tab->aiConversationId));
     m_aiCommandTracker.clearConversation(utf8String(tab->aiConversationId));
     tab->aiConversationId = stored->id;
@@ -8879,14 +8886,14 @@ bool AppController::attachAiTextFiles(const QVariantList &localFileUrls)
                 continue;
             }
 
-            const QByteArray digest = QCryptographicHash::hash(canonicalPath.toUtf8(), QCryptographicHash::Sha256).toHex();
+            const QByteArray digest =
+                QCryptographicHash::hash(canonicalPath.toUtf8(), QCryptographicHash::Sha256).toHex();
             const QString title = info.fileName();
             const QString content = title + QStringLiteral("\n\n") + text;
-            result.attachments.push_back(
-                ai::AiExplicitContext{.id = "local-file:" + digest.toStdString(),
-                                      .title = utf8String(title),
-                                      .content = utf8String(content),
-                                      .source = "local_file"});
+            result.attachments.push_back(ai::AiExplicitContext{.id = "local-file:" + digest.toStdString(),
+                                                               .title = utf8String(title),
+                                                               .content = utf8String(content),
+                                                               .source = "local_file"});
         }
 
         if (!self)
@@ -8907,8 +8914,8 @@ bool AppController::attachAiTextFiles(const QVariantList &localFileUrls)
                 }
                 for (auto &attachment : result.attachments)
                 {
-                    const auto existing = std::ranges::find(target->aiExplicitContextItems, attachment.id,
-                                                            &ai::AiExplicitContext::id);
+                    const auto existing =
+                        std::ranges::find(target->aiExplicitContextItems, attachment.id, &ai::AiExplicitContext::id);
                     target->aiExcludedContextIds.erase("attachment:" + attachment.id);
                     if (existing == target->aiExplicitContextItems.end())
                     {
@@ -8967,11 +8974,11 @@ bool AppController::attachAiImageFiles(const QVariantList &localFileUrls)
         paths.push_back(path);
     }
 
-    const auto existingBytes = std::accumulate(
-        tab->aiImageAttachments.begin(), tab->aiImageAttachments.end(), qsizetype{0},
-        [](const qsizetype total, const ai::AiImageAttachment &image) {
-            return total + static_cast<qsizetype>(image.byteSize);
-        });
+    const auto existingBytes =
+        std::accumulate(tab->aiImageAttachments.begin(), tab->aiImageAttachments.end(), qsizetype{0},
+                        [](const qsizetype total, const ai::AiImageAttachment &image) {
+                            return total + static_cast<qsizetype>(image.byteSize);
+                        });
     tab->aiError.clear();
     const QString tabId = tab->id;
     const QPointer<AppController> self(this);
@@ -9026,8 +9033,7 @@ bool AppController::attachAiImageFiles(const QVariantList &localFileUrls)
             const QImage preview = reader.read();
             QByteArray previewBytes;
             QBuffer previewBuffer(&previewBytes);
-            if (preview.isNull() || !previewBuffer.open(QIODevice::WriteOnly)
-                || !preview.save(&previewBuffer, "PNG"))
+            if (preview.isNull() || !previewBuffer.open(QIODevice::WriteOnly) || !preview.save(&previewBuffer, "PNG"))
             {
                 result.rejectedFiles.push_back(info.fileName());
                 continue;
@@ -9065,8 +9071,8 @@ bool AppController::attachAiImageFiles(const QVariantList &localFileUrls)
                 }
                 for (auto &attachment : result.attachments)
                 {
-                    const auto existing = std::ranges::find(target->aiImageAttachments, attachment.id,
-                                                            &ai::AiImageAttachment::id);
+                    const auto existing =
+                        std::ranges::find(target->aiImageAttachments, attachment.id, &ai::AiImageAttachment::id);
                     if (existing == target->aiImageAttachments.end())
                     {
                         target->aiImageAttachments.push_back(std::move(attachment));
@@ -9076,11 +9082,11 @@ bool AppController::attachAiImageFiles(const QVariantList &localFileUrls)
                         *existing = std::move(attachment);
                     }
                 }
-                target->aiError = result.rejectedFiles.isEmpty()
-                                      ? QString{}
-                                      : QCoreApplication::translate("ztermy::AppController",
-                                                                    "Could not attach these images: %1")
-                                            .arg(result.rejectedFiles.join(QStringLiteral(", ")));
+                target->aiError =
+                    result.rejectedFiles.isEmpty()
+                        ? QString{}
+                        : QCoreApplication::translate("ztermy::AppController", "Could not attach these images: %1")
+                              .arg(result.rejectedFiles.join(QStringLiteral(", ")));
                 static_cast<void>(self->buildAiContext(*target, false));
                 emit self->aiConversationChanged();
             },
@@ -9213,8 +9219,8 @@ ai::AiContextBundle AppController::buildAiContext(TerminalTab &tab, const bool p
     }
     for (const auto &image : tab.aiImageAttachments)
     {
-        const QString previewBase64 = QString::fromLatin1(
-            image.previewBase64Data.data(), static_cast<qsizetype>(image.previewBase64Data.size()));
+        const QString previewBase64 =
+            QString::fromLatin1(image.previewBase64Data.data(), static_cast<qsizetype>(image.previewBase64Data.size()));
         tab.aiContextItems.push_back(
             QVariantMap{{QStringLiteral("id"), utf8QString(image.id)},
                         {QStringLiteral("title"), utf8QString(image.fileName)},
@@ -9496,8 +9502,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
 
     if (appendPrompt)
     {
-        static_cast<void>(
-            tab.aiConversation->appendUserMessage(normalizedPrompt, std::move(tab.aiImageAttachments)));
+        static_cast<void>(tab.aiConversation->appendUserMessage(normalizedPrompt, std::move(tab.aiImageAttachments)));
         tab.aiImageAttachments.clear();
         static_cast<void>(buildAiContext(tab, preferLastFailure));
         tab.aiLastPrompt = normalizedPrompt;
@@ -10051,8 +10056,8 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                 }
                 if (target->reconnectGeneration != turnTarget->sessionGeneration)
                 {
-                    const auto output = aiToolFailureJson(
-                        QStringLiteral("scope_changed"), tr("The current terminal reconnected during this AI turn."));
+                    const auto output = aiToolFailureJson(QStringLiteral("scope_changed"),
+                                                          tr("The current terminal reconnected during this AI turn."));
                     recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("scope_changed"), false);
                     return ai::AiTurnRunner::ToolHandlingResult{
                         .output = ai::AiToolOutput{.callId = call.id, .name = call.name, .outputJson = output}};
@@ -10290,9 +10295,9 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                                             .target = *turnTarget,
                                             .permissionMode = aiPermissionMode(m_settings.aiPermission),
                                             .profileId = utf8String(target->sourceProfileId),
-                                            .writable = target->running && (target->ssh || target->local)
-                                                        && target->reconnectGeneration
-                                                               == turnTarget->sessionGeneration},
+                                            .writable =
+                                                target->running && (target->ssh || target->local)
+                                                && target->reconnectGeneration == turnTarget->sessionGeneration},
                     *target->aiTurnBudget);
                 if (plan.disposition == ai::AiActionToolDisposition::respond || !plan.action.has_value())
                 {
@@ -10379,11 +10384,9 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
             const bool scopeChanged = target == nullptr || target->reconnectGeneration != turnTarget->sessionGeneration;
             const bool skillTool = call.name == "list_skills" || call.name == "load_skill";
             const auto output =
-                scopeChanged
-                    ? aiToolFailureJson(QStringLiteral("scope_changed"),
-                                        tr("The current terminal changed during the AI turn."))
-                : skillTool
-                    ? ai::AiUserSkillTool::execute(call.name, call.argumentsJson, *turnSkills)
+                scopeChanged ? aiToolFailureJson(QStringLiteral("scope_changed"),
+                                                 tr("The current terminal changed during the AI turn."))
+                : skillTool  ? ai::AiUserSkillTool::execute(call.name, call.argumentsJson, *turnSkills)
                 : turnReadSnapshots->empty()
                     ? aiToolFailureJson(QStringLiteral("session_unavailable"),
                                         tr("The current terminal snapshot is unavailable."))
@@ -10437,11 +10440,11 @@ AppController::handleAiTerminalFrameTool(TerminalTab &owner, const QString &owne
 {
     if (allowedTargets.empty())
     {
-        return {.output = ai::AiToolOutput{
-                    .callId = call.id,
-                    .name = call.name,
-                    .outputJson = ai::AiTerminalFrameTool::failure(
-                        "session_unavailable", "The current terminal snapshot is unavailable.")}};
+        return {.output =
+                    ai::AiToolOutput{.callId = call.id,
+                                     .name = call.name,
+                                     .outputJson = ai::AiTerminalFrameTool::failure(
+                                         "session_unavailable", "The current terminal snapshot is unavailable.")}};
     }
     const ai::AiSessionTarget turnTarget{.sessionId = allowedTargets.front().sessionId,
                                          .sessionGeneration = allowedTargets.front().sessionGeneration};
@@ -10753,9 +10756,8 @@ ai::AiTurnRunner::ToolHandlingResult AppController::handleAiWaitCommand(Terminal
                 timerGuard->stop();
                 timerGuard->deleteLater();
                 recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("command_not_found"), false);
-                resumeWithOutput(
-                    target, call, tabId,
-                    ai::AiWaitCommandTool::failure("command_not_found", "The command id is unknown."));
+                resumeWithOutput(target, call, tabId,
+                                 ai::AiWaitCommandTool::failure("command_not_found", "The command id is unknown."));
                 return;
             }
             const bool completed = currentCommand->state == ai::AiTrackedCommandState::finished
@@ -10862,8 +10864,7 @@ std::string AppController::executeAiScrollbackRead(TerminalTab &tab, const ai::A
     bool truncated = false;
     for (std::size_t index = 0; index < page->lines.size() && remaining > 0; ++index)
     {
-        QString line =
-            QString::fromUtf8(page->lines[index].data(), static_cast<qsizetype>(page->lines[index].size()));
+        QString line = QString::fromUtf8(page->lines[index].data(), static_cast<qsizetype>(page->lines[index].size()));
         while (line.endsWith(QLatin1Char(' ')) || line.endsWith(QLatin1Char('\t')))
         {
             line.chop(1);
@@ -10895,16 +10896,15 @@ std::string AppController::executeAiScrollbackRead(TerminalTab &tab, const ai::A
         remaining -= lineBytes.size();
     }
     const bool hasMore = page->lines.size() == lineCount || truncated;
-    return compactJson(QJsonObject{
-        {QStringLiteral("ok"), true},
-        {QStringLiteral("terminal_output"),
-         QJsonObject{{QStringLiteral("first_line"), static_cast<qint64>(firstLine)},
-                     {QStringLiteral("line_count"), static_cast<qint64>(page->lines.size())},
-                     {QStringLiteral("total_lines"), static_cast<qint64>(page->totalLines)},
-                     {QStringLiteral("content"), content},
-                     {QStringLiteral("has_more"), hasMore},
-                     {QStringLiteral("truncated"), truncated},
-                     {QStringLiteral("untrusted_evidence"), true}}}});
+    return compactJson(QJsonObject{{QStringLiteral("ok"), true},
+                                   {QStringLiteral("terminal_output"),
+                                    QJsonObject{{QStringLiteral("first_line"), static_cast<qint64>(firstLine)},
+                                                {QStringLiteral("line_count"), static_cast<qint64>(page->lines.size())},
+                                                {QStringLiteral("total_lines"), static_cast<qint64>(page->totalLines)},
+                                                {QStringLiteral("content"), content},
+                                                {QStringLiteral("has_more"), hasMore},
+                                                {QStringLiteral("truncated"), truncated},
+                                                {QStringLiteral("untrusted_evidence"), true}}}});
 }
 
 std::string AppController::executeAiTerminalAction(TerminalTab &tab, const ai::AiTerminalAction &action)
@@ -11047,12 +11047,11 @@ std::string AppController::executeAiWriteToPty(TerminalTab &tab, const ai::AiTer
         bytes.append('\r');
     }
     dispatchInput(tab, bytes);
-    return compactJson(
-        QJsonObject{{QStringLiteral("ok"), true},
-                    {QStringLiteral("status"), QStringLiteral("accepted")},
-                    {QStringLiteral("bytes_written"), static_cast<qint64>(bytes.size())},
-                    {QStringLiteral("enter_appended"), action.appendEnter},
-                    {QStringLiteral("content_echoed"), false}});
+    return compactJson(QJsonObject{{QStringLiteral("ok"), true},
+                                   {QStringLiteral("status"), QStringLiteral("accepted")},
+                                   {QStringLiteral("bytes_written"), static_cast<qint64>(bytes.size())},
+                                   {QStringLiteral("enter_appended"), action.appendEnter},
+                                   {QStringLiteral("content_echoed"), false}});
 }
 
 std::string AppController::executeAiRunCommand(TerminalTab &tab, const ai::AiTerminalAction &action)
@@ -12649,8 +12648,7 @@ void AppController::queuePaste(const QByteArray &bytes)
 
 void AppController::observeUserInput(TerminalTab &tab, const QByteArray &bytes)
 {
-    const ai::AiSessionTarget target{.sessionId = utf8String(tab.id),
-                                     .sessionGeneration = tab.reconnectGeneration};
+    const ai::AiSessionTarget target{.sessionId = utf8String(tab.id), .sessionGeneration = tab.reconnectGeneration};
     const std::string conversationId = utf8String(tab.aiConversationId);
     // Live user input preempts an Agent that holds the session write lease:
     // a completed line hands control back, any other keystroke takes control.
