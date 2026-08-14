@@ -107,7 +107,6 @@ void AiReadToolDispatcherTests::publishesStrictReadOnlyCatalog()
 {
     const auto definitions = AiReadToolDispatcher::definitions();
     constexpr std::array expected{
-        std::string_view{"list_sessions"},        std::string_view{"read_multi_session_status"},
         std::string_view{"read_session_info"},    std::string_view{"read_terminal"},
         std::string_view{"read_command_block"},   std::string_view{"read_command_output"},
         std::string_view{"read_terminal_output"}, std::string_view{"list_sftp_directory"},
@@ -124,6 +123,8 @@ void AiReadToolDispatcherTests::publishesStrictReadOnlyCatalog()
         QVERIFY(QJsonDocument::fromJson(QByteArray::fromStdString(definition.parametersJson)).isObject());
         QVERIFY(!definition.name.contains("run"));
         QVERIFY(!definition.name.contains("write"));
+        QVERIFY(!definition.parametersJson.contains("session_id"));
+        QVERIFY(!definition.parametersJson.contains("session_generation"));
     }
 }
 
@@ -131,64 +132,49 @@ void AiReadToolDispatcherTests::executesBoundedReads()
 {
     const AiReadToolDispatcher dispatcher;
     const auto snapshots = sessions();
-    auto result = object(dispatcher.execute("list_sessions", "{}", snapshots));
+    const auto &snapshot = snapshots.front();
+    auto result = object(dispatcher.execute("read_session_info", "{}", snapshot));
     QVERIFY(result.value("ok").toBool());
-    QCOMPARE(result.value("sessions").toArray().size(), 1);
+    const auto sessionInfo = result.value("session").toObject();
+    QCOMPARE(sessionInfo.value("title").toString(), QStringLiteral("Test"));
+    QVERIFY(!sessionInfo.contains("session_id"));
+    QVERIFY(!sessionInfo.contains("session_generation"));
 
-    result = object(dispatcher.execute(
-        "read_multi_session_status",
-        R"({"targets":[{"session_id":"session-1","session_generation":4},{"session_id":"missing","session_generation":1}]})",
-        snapshots));
-    const auto multiSession = result.value("results").toObject().value("items").toArray();
-    QCOMPARE(multiSession.size(), 2);
-    QVERIFY(multiSession.at(0).toObject().value("ok").toBool());
-    QCOMPARE(multiSession.at(0).toObject().value("telemetry").toObject().value("cpu_percent").toDouble(), 12.5);
-    QVERIFY(!multiSession.at(1).toObject().value("ok").toBool());
-
-    result = object(dispatcher.execute(
-        "read_terminal", R"({"session_id":"session-1","session_generation":4,"first_line":1,"line_count":1})",
-        snapshots));
+    result = object(dispatcher.execute("read_terminal", R"({"first_line":1,"line_count":1})", snapshot));
     QVERIFY(result.value("ok").toBool());
     QCOMPARE(result.value("terminal").toObject().value("content").toString(), QStringLiteral("two\n"));
     QVERIFY(result.value("terminal").toObject().value("untrusted_evidence").toBool());
 
-    result = object(dispatcher.execute("read_command_block",
-                                       R"({"session_id":"session-1","session_generation":4,"block_id":9})", snapshots));
+    result = object(dispatcher.execute("read_command_block", R"({"block_id":9})", snapshot));
     QVERIFY(result.value("ok").toBool());
     QCOMPARE(result.value("command_block").toObject().value("exit_status").toInt(), 1);
     QCOMPARE(result.value("command_block").toObject().value("output").toString(), QStringLiteral("no"));
 
-    result = object(dispatcher.execute(
-        "read_command_output",
-        R"({"session_id":"session-1","session_generation":4,"block_id":9,"after_cursor":0,"max_bytes":1})", snapshots));
+    result = object(
+        dispatcher.execute("read_command_output", R"({"block_id":9,"after_cursor":0,"max_bytes":1})", snapshot));
     QVERIFY(result.value("ok").toBool());
     const auto output = result.value("command_output").toObject();
     QCOMPARE(output.value("output").toString(), QStringLiteral("n"));
     QCOMPARE(output.value("next_cursor").toInt(), 1);
     QVERIFY(output.value("has_more").toBool());
 
-    result = object(dispatcher.execute("list_sftp_directory",
-                                       R"({"session_id":"session-1","session_generation":4,"offset":0,"limit":10})",
-                                       snapshots));
+    result = object(dispatcher.execute("list_sftp_directory", R"({"offset":0,"limit":10})", snapshot));
     QVERIFY(result.value("ok").toBool());
     const auto directory = result.value("sftp_directory").toObject();
     QCOMPARE(directory.value("path").toString(), QStringLiteral("/home/test"));
     QCOMPARE(directory.value("items").toArray().at(0).toObject().value("name").toString(), QStringLiteral("file.txt"));
 
-    result = object(dispatcher.execute(
-        "list_shell_history", R"({"session_id":"session-1","session_generation":4,"offset":0,"limit":10})", snapshots));
+    result = object(dispatcher.execute("list_shell_history", R"({"offset":0,"limit":10})", snapshot));
     QCOMPARE(
         result.value("shell_history").toObject().value("items").toArray().at(0).toObject().value("command").toString(),
         QStringLiteral("pwd"));
 
-    result = object(dispatcher.execute(
-        "list_scripts", R"({"session_id":"session-1","session_generation":4,"offset":0,"limit":10})", snapshots));
+    result = object(dispatcher.execute("list_scripts", R"({"offset":0,"limit":10})", snapshot));
     const auto script = result.value("scripts").toObject().value("items").toArray().at(0).toObject();
     QCOMPARE(script.value("name").toString(), QStringLiteral("Inspect"));
     QVERIFY(!script.contains("command"));
 
-    result = object(dispatcher.execute(
-        "read_script", R"({"session_id":"session-1","session_generation":4,"script_id":"script-1"})", snapshots));
+    result = object(dispatcher.execute("read_script", R"({"script_id":"script-1"})", snapshot));
     const auto scriptContent = result.value("script").toObject();
     QVERIFY(result.value("ok").toBool());
     const QString command = scriptContent.value("steps").toArray().at(0).toObject().value("command").toString();
@@ -199,18 +185,14 @@ void AiReadToolDispatcherTests::executesBoundedReads()
     QVERIFY(!variable.contains("default_value"));
     QVERIFY(scriptContent.value("untrusted_evidence").toBool());
 
-    result = object(dispatcher.execute(
-        "list_notes", R"({"session_id":"session-1","session_generation":4,"offset":0,"limit":10})", snapshots));
+    result = object(dispatcher.execute("list_notes", R"({"offset":0,"limit":10})", snapshot));
     QCOMPARE(result.value("notes").toObject().value("items").toArray().at(0).toObject().value("path").toString(),
              QStringLiteral("ops.md"));
 
-    result = object(
-        dispatcher.execute("read_remote_telemetry", R"({"session_id":"session-1","session_generation":4})", snapshots));
+    result = object(dispatcher.execute("read_remote_telemetry", "{}", snapshot));
     QCOMPARE(result.value("telemetry").toObject().value("cpu_percent").toDouble(), 12.5);
 
-    result = object(dispatcher.execute("list_port_forwarding",
-                                       R"({"session_id":"session-1","session_generation":4,"offset":0,"limit":10})",
-                                       snapshots));
+    result = object(dispatcher.execute("list_port_forwarding", R"({"offset":0,"limit":10})", snapshot));
     QCOMPARE(
         result.value("port_forwarding").toObject().value("items").toArray().at(0).toObject().value("state").toString(),
         QStringLiteral("running"));
@@ -220,40 +202,24 @@ void AiReadToolDispatcherTests::rejectsMalformedStaleAndUnknownRequests()
 {
     const AiReadToolDispatcher dispatcher;
     const auto snapshots = sessions();
-    auto result = object(dispatcher.execute("read_terminal", "[]", snapshots));
+    const auto &snapshot = snapshots.front();
+    auto result = object(dispatcher.execute("read_terminal", "[]", snapshot));
     QVERIFY(!result.value("ok").toBool());
     QCOMPARE(result.value("error").toObject().value("code").toString(), QStringLiteral("invalid_arguments"));
 
-    result = object(
-        dispatcher.execute("read_session_info", R"({"session_id":"session-1","session_generation":3})", snapshots));
-    QCOMPARE(result.value("error").toObject().value("code").toString(), QStringLiteral("scope_changed"));
-
-    result = object(dispatcher.execute(
-        "read_session_info", R"({"session_id":"session-1","session_generation":4,"unexpected":true})", snapshots));
+    result = object(dispatcher.execute("read_session_info", R"({"session_id":"session-1"})", snapshot));
     QCOMPARE(result.value("error").toObject().value("code").toString(), QStringLiteral("invalid_arguments"));
 
-    result = object(dispatcher.execute("list_sessions", R"({"unexpected":true})", snapshots));
-    QCOMPARE(result.value("error").toObject().value("code").toString(), QStringLiteral("invalid_arguments"));
-
-    result = object(dispatcher.execute(
-        "read_multi_session_status",
-        R"({"targets":[{"session_id":"session-1","session_generation":4},{"session_id":"session-1","session_generation":4}]})",
-        snapshots));
-    QCOMPARE(result.value("error").toObject().value("code").toString(), QStringLiteral("invalid_arguments"));
-
-    result = object(dispatcher.execute("run_command", "{}", snapshots));
+    result = object(dispatcher.execute("list_sessions", "{}", snapshot));
     QCOMPARE(result.value("error").toObject().value("code").toString(), QStringLiteral("unsupported"));
 
-    result = object(dispatcher.execute(
-        "list_scripts", R"({"session_id":"session-1","session_generation":4,"offset":0,"limit":101})", snapshots));
+    result = object(dispatcher.execute("run_command", "{}", snapshot));
+    QCOMPARE(result.value("error").toObject().value("code").toString(), QStringLiteral("unsupported"));
+
+    result = object(dispatcher.execute("list_scripts", R"({"offset":0,"limit":101})", snapshot));
     QCOMPARE(result.value("error").toObject().value("code").toString(), QStringLiteral("invalid_arguments"));
 
-    result = object(dispatcher.execute(
-        "list_notes", R"({"session_id":"session-1","session_generation":3,"offset":0,"limit":10})", snapshots));
-    QCOMPARE(result.value("error").toObject().value("code").toString(), QStringLiteral("scope_changed"));
-
-    result = object(dispatcher.execute(
-        "read_script", R"({"session_id":"session-1","session_generation":4,"script_id":"missing"})", snapshots));
+    result = object(dispatcher.execute("read_script", R"({"script_id":"missing"})", snapshot));
     QCOMPARE(result.value("error").toObject().value("code").toString(), QStringLiteral("not_found"));
 }
 
@@ -267,9 +233,8 @@ void AiReadToolDispatcherTests::rejectsOversizedOperationsResults()
         snapshots.front().operations.shellHistory.push_back(
             {.command = std::string(1024, 'x'), .shell = "bash", .timestampUtcSeconds = index});
     }
-    const auto result = object(
-        dispatcher.execute("list_shell_history",
-                           R"({"session_id":"session-1","session_generation":4,"offset":0,"limit":100})", snapshots));
+    const auto result =
+        object(dispatcher.execute("list_shell_history", R"({"offset":0,"limit":100})", snapshots.front()));
     QVERIFY(!result.value("ok").toBool());
     QCOMPARE(result.value("error").toObject().value("code").toString(), QStringLiteral("limit_exceeded"));
 }

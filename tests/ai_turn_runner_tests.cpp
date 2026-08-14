@@ -364,7 +364,7 @@ void AiTurnRunnerTests::executesReadToolAndContinuesTheSameTurn()
             "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\"}}\n\n"
             "data: "
             "{\"type\":\"response.output_item.added\",\"item\":{\"type\":\"function_call\",\"id\":\"item_1\",\"call_"
-            "id\":\"call_1\",\"name\":\"list_sessions\"}}\n\n"
+            "id\":\"call_1\",\"name\":\"read_session_info\"}}\n\n"
             "data: {\"type\":\"response.function_call_arguments.done\",\"item_id\":\"item_1\",\"arguments\":\"{}\"}\n\n"
             "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\"}}\n\n"});
     network.enqueue(FakeResponse{.payload =

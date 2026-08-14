@@ -8,6 +8,12 @@ namespace
 {
 
 using ztermy::ai::AiNoteReadTool;
+using ztermy::ai::AiSessionTarget;
+
+[[nodiscard]] AiSessionTarget target()
+{
+    return {.sessionId = "session-1", .sessionGeneration = 7};
+}
 
 [[nodiscard]] QJsonObject object(const std::string &value)
 {
@@ -36,8 +42,7 @@ void AiNoteReadToolTests::publishesStrictSchema()
 
 void AiNoteReadToolTests::parsesNormalizedBoundedRequest()
 {
-    const auto request = AiNoteReadTool::parse(
-        R"({"session_id":"session-1","session_generation":7,"path":"ops/./runbook.md","max_bytes":4096})");
+    const auto request = AiNoteReadTool::parse(R"({"path":"ops/./runbook.md","max_bytes":4096})", target());
     QVERIFY(request.has_value());
     QCOMPARE(request->target.sessionId, std::string("session-1"));
     QCOMPARE(request->target.sessionGeneration, std::uint64_t{7});
@@ -47,25 +52,21 @@ void AiNoteReadToolTests::parsesNormalizedBoundedRequest()
 
 void AiNoteReadToolTests::rejectsUnsafeAndOversizedRequests()
 {
-    auto request = AiNoteReadTool::parse(
-        R"({"session_id":"session-1","session_generation":7,"path":"../secret.md","max_bytes":4096})");
+    auto request = AiNoteReadTool::parse(R"({"path":"../secret.md","max_bytes":4096})", target());
     QVERIFY(!request.has_value());
     QCOMPARE(object(request.error()).value("error").toObject().value("code").toString(),
              QStringLiteral("invalid_arguments"));
 
-    request = AiNoteReadTool::parse(
-        R"({"session_id":"session-1","session_generation":7,"path":"note.txt","max_bytes":4096})");
+    request = AiNoteReadTool::parse(R"({"path":"note.txt","max_bytes":4096})", target());
     QVERIFY(!request.has_value());
 
-    request = AiNoteReadTool::parse(
-        R"({"session_id":"session-1","session_generation":7,"path":"note.md","max_bytes":32769})");
+    request = AiNoteReadTool::parse(R"({"path":"note.md","max_bytes":32769})", target());
     QVERIFY(!request.has_value());
 }
 
 void AiNoteReadToolTests::boundsUtf8ResultAndMarksEvidence()
 {
-    const auto request =
-        AiNoteReadTool::parse(R"({"session_id":"session-1","session_generation":7,"path":"note.md","max_bytes":5})");
+    const auto request = AiNoteReadTool::parse(R"({"path":"note.md","max_bytes":5})", target());
     QVERIFY(request.has_value());
     const auto result = object(AiNoteReadTool::result(*request, QStringLiteral("你a好")));
     QVERIFY(result.value("ok").toBool());
@@ -74,6 +75,8 @@ void AiNoteReadToolTests::boundsUtf8ResultAndMarksEvidence()
     QCOMPARE(note.value("bytes_read").toInt(), 4);
     QVERIFY(note.value("truncated").toBool());
     QVERIFY(note.value("untrusted_evidence").toBool());
+    QVERIFY(!note.contains("session_id"));
+    QVERIFY(!note.contains("session_generation"));
 
     const auto redacted =
         object(AiNoteReadTool::result(*request, QStringLiteral("OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz123456")));

@@ -1,6 +1,11 @@
 # ADR 0065: Immutable AI workspace target sets
 
-Status: accepted
+Status: superseded by ADR 0086
+
+ADR 0086 removes cross-terminal workspace inspection from the product. The
+immutable `(tab id, reconnect generation)` lifetime principle remains, but the
+target set is now exactly the sidebar's owning terminal and is never exposed to
+the model.
 
 ## Context
 

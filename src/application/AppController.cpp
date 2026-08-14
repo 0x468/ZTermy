@@ -8915,8 +8915,8 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
     }
     const auto turnReadSnapshots =
         std::make_shared<const std::vector<ai::AiTerminalReadSnapshot>>(aiReadSnapshots(tab));
-    const ai::AiSessionTarget turnTarget{.sessionId = utf8String(tab.id),
-                                         .sessionGeneration = tab.reconnectGeneration};
+    const auto turnTarget = std::make_shared<const ai::AiSessionTarget>(
+        ai::AiSessionTarget{.sessionId = utf8String(tab.id), .sessionGeneration = tab.reconnectGeneration});
     ai::AiGenerationRequest generation{.instructions = std::move(instructions),
                                        .messages = std::move(messages),
                                        .tools = std::move(toolDefinitions),
@@ -9086,7 +9086,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
             if (call.name == "wait_command" && target != nullptr)
             {
                 recordAiActivity(*target, call, QStringLiteral("queued"), QStringLiteral("pending"), false);
-                auto handled = handleAiWaitCommand(*target, tabId, call, turnTarget);
+                auto handled = handleAiWaitCommand(*target, tabId, call, *turnTarget);
                 if (handled.output.has_value())
                 {
                     const QString resultCode = aiActivityResultCode(handled.output->outputJson);
@@ -9123,7 +9123,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                                                    .name = call.name,
                                                    .outputJson = aiBudgetFailureJson(budgetDecision)}};
                 }
-                auto request = ai::AiSftpListTool::parse(call.argumentsJson, turnTarget);
+                auto request = ai::AiSftpListTool::parse(call.argumentsJson, *turnTarget);
                 if (!request.has_value())
                 {
                     recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("invalid_arguments"),
@@ -9204,7 +9204,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                                                    .name = call.name,
                                                    .outputJson = aiBudgetFailureJson(budgetDecision)}};
                 }
-                auto request = ai::AiSftpReadTool::parse(call.argumentsJson, turnTarget);
+                auto request = ai::AiSftpReadTool::parse(call.argumentsJson, *turnTarget);
                 if (!request.has_value())
                 {
                     recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("invalid_arguments"),
@@ -9290,7 +9290,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                                                    .name = call.name,
                                                    .outputJson = aiBudgetFailureJson(budgetDecision)}};
                 }
-                auto request = ai::AiNoteReadTool::parse(call.argumentsJson, turnTarget);
+                auto request = ai::AiNoteReadTool::parse(call.argumentsJson, *turnTarget);
                 if (!request.has_value())
                 {
                     recordAiActivity(*target, call, QStringLiteral("failed"), QStringLiteral("invalid_arguments"),
@@ -9382,7 +9382,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                             .outputJson = aiToolFailureJson(QStringLiteral("session_unavailable"),
                                                             tr("The target terminal session is unavailable."))}};
                 }
-                if (target->reconnectGeneration != turnTarget.sessionGeneration)
+                if (target->reconnectGeneration != turnTarget->sessionGeneration)
                 {
                     const auto output = aiToolFailureJson(
                         QStringLiteral("scope_changed"), tr("The current terminal reconnected during this AI turn."));
@@ -9468,7 +9468,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                     ai::AiPermissionCapability::mcpTool, call.name,
                     ai::AiActionToolContext{.conversationId = utf8String(target->aiConversationId),
                                             .turnId = target->aiTurnRunner->activeTurnId(),
-                                            .target = turnTarget,
+                                            .target = *turnTarget,
                                             .permissionMode = aiPermissionMode(m_settings.aiPermission),
                                             .profileId = utf8String(target->sourceProfileId),
                                             .writable = true},
@@ -9620,12 +9620,12 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                     call,
                     ai::AiActionToolContext{.conversationId = utf8String(target->aiConversationId),
                                             .turnId = target->aiTurnRunner->activeTurnId(),
-                                            .target = turnTarget,
+                                            .target = *turnTarget,
                                             .permissionMode = aiPermissionMode(m_settings.aiPermission),
                                             .profileId = utf8String(target->sourceProfileId),
                                             .writable = target->running && (target->ssh || target->local)
                                                         && target->reconnectGeneration
-                                                               == turnTarget.sessionGeneration},
+                                                               == turnTarget->sessionGeneration},
                     *target->aiTurnBudget);
                 if (plan.disposition == ai::AiActionToolDisposition::respond || !plan.action.has_value())
                 {
@@ -9709,7 +9709,11 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                                                    .outputJson = aiBudgetFailureJson(budgetDecision)}};
                 }
             }
-            const auto output = turnReadSnapshots->empty()
+            const bool scopeChanged = target == nullptr || target->reconnectGeneration != turnTarget->sessionGeneration;
+            const auto output = scopeChanged
+                                    ? aiToolFailureJson(QStringLiteral("scope_changed"),
+                                                        tr("The current terminal changed during the AI turn."))
+                                : turnReadSnapshots->empty()
                                     ? aiToolFailureJson(QStringLiteral("session_unavailable"),
                                                         tr("The current terminal snapshot is unavailable."))
                                     : m_aiReadToolDispatcher.execute(call.name, call.argumentsJson,

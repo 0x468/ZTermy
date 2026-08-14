@@ -4,6 +4,9 @@
 - Date: 2026-08-12
 - Milestone: 0.3.0
 
+Model-visible session discovery and identity arguments in this record are
+superseded by ADR 0086. The bounded provider-neutral read semantics remain.
+
 ## Context
 
 The semantic assistant needs to inspect terminal state beyond the context attached to the initial user message. The

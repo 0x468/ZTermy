@@ -84,6 +84,8 @@ void AiContextSerializerTests::serializesEvidenceAndQualityMetadata()
     QCOMPARE(item.value(QStringLiteral("exit_status")).toInt(), 1);
     QVERIFY(item.value(QStringLiteral("untrusted_evidence")).toBool());
     QVERIFY(item.value(QStringLiteral("redacted")).toBool());
+    QVERIFY(!item.contains(QStringLiteral("session_id")));
+    QVERIFY(!item.contains(QStringLiteral("session_generation")));
 }
 
 void AiContextSerializerTests::emitsProviderMessageFromExactPreviewPayload()

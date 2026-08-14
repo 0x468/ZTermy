@@ -10,7 +10,13 @@ namespace
 using ztermy::ai::AiTrackedCommand;
 using ztermy::ai::AiTrackedCommandState;
 using ztermy::ai::AiWaitCommandTool;
+using ztermy::ai::AiSessionTarget;
 using ztermy::terminal::TerminalSemanticCapability;
+
+[[nodiscard]] AiSessionTarget target()
+{
+    return {.sessionId = "session-1", .sessionGeneration = 3};
+}
 
 [[nodiscard]] QJsonObject object(const std::string &value)
 {
@@ -47,27 +53,28 @@ void AiWaitCommandToolTests::publishesAndParsesStrictContract()
     QCOMPARE(definition.name, std::string("wait_command"));
     QVERIFY(QJsonDocument::fromJson(QByteArray::fromStdString(definition.parametersJson)).isObject());
 
-    const auto parsed = AiWaitCommandTool::parse(
-        R"({"command_id":"9:call-1","session_id":"session-1","session_generation":3,"timeout_ms":2500})");
+    const auto parsed = AiWaitCommandTool::parse(R"({"command_id":"9:call-1","timeout_ms":2500})", target());
     QVERIFY(parsed.has_value());
     QCOMPARE(parsed->commandId, std::string("9:call-1"));
     QCOMPARE(parsed->target.sessionGeneration, std::uint64_t{3});
     QCOMPARE(parsed->timeoutMilliseconds, std::uint32_t{2500});
 
-    QVERIFY(!AiWaitCommandTool::parse(
-                 R"({"command_id":"9:call-1","session_id":"session-1","session_generation":3,"timeout_ms":120001})")
+    QVERIFY(!AiWaitCommandTool::parse(R"({"command_id":"9:call-1","timeout_ms":120001})", target())
                  .has_value());
-    QVERIFY(
-        !AiWaitCommandTool::parse(
-             R"({"command_id":"9:call-1","session_id":"session-1","session_generation":3,"timeout_ms":1,"extra":true})")
-             .has_value());
+    QVERIFY(!AiWaitCommandTool::parse(R"({"command_id":"9:call-1","timeout_ms":1,"extra":true})", target())
+                 .has_value());
+
+    const auto defaults = AiWaitCommandTool::parse(R"({"command_id":"9:call-1"})", target());
+    QVERIFY(defaults.has_value());
+    QCOMPARE(defaults->timeoutMilliseconds, std::uint32_t{30'000});
+    QVERIFY(definition.parametersJson.find("session_id") == std::string::npos);
+    QVERIFY(definition.parametersJson.find("session_generation") == std::string::npos);
 }
 
 void AiWaitCommandToolTests::guidesUnavailableLifecycleToFrameWait()
 {
-    const ztermy::ai::AiSessionTarget target{.sessionId = "session-1", .sessionGeneration = 3};
-    const auto unavailable = object(
-        AiWaitCommandTool::accepted(target, "command-1", true, TerminalSemanticCapability::none, std::uint64_t{17}));
+    const auto unavailable =
+        object(AiWaitCommandTool::accepted("command-1", true, TerminalSemanticCapability::none, std::uint64_t{17}));
     QVERIFY(unavailable.value(QStringLiteral("tracking_registered")).toBool());
     QVERIFY(!unavailable.value(QStringLiteral("lifecycle_tracked")).toBool(true));
     QCOMPARE(unavailable.value(QStringLiteral("lifecycle_quality")).toString(), QStringLiteral("unavailable"));
@@ -77,8 +84,8 @@ void AiWaitCommandToolTests::guidesUnavailableLifecycleToFrameWait()
     QCOMPARE(unavailable.value(QStringLiteral("recommended_idle_ms")).toInt(), 750);
     QCOMPARE(unavailable.value(QStringLiteral("frame_revision_before_dispatch")).toInteger(), qint64{17});
 
-    const auto rich = object(
-        AiWaitCommandTool::accepted(target, "command-2", true, TerminalSemanticCapability::rich, std::uint64_t{18}));
+    const auto rich =
+        object(AiWaitCommandTool::accepted("command-2", true, TerminalSemanticCapability::rich, std::uint64_t{18}));
     QVERIFY(rich.value(QStringLiteral("lifecycle_tracked")).toBool());
     QCOMPARE(rich.value(QStringLiteral("recommended_wait_tool")).toString(), QStringLiteral("wait_command"));
 }

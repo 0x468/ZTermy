@@ -5,6 +5,24 @@
 > Netcatty 对照：`docs/reviews/netcatty-ai-comparison-2026-08.md`；
 > Codex 专项：`docs/research/CODEX_CLI_ARCHITECTURE.md`。
 
+## 节点 N10 — 原生 AI 工具绑定当前终端（2026-08-15）
+
+**commits**: `12db6c2` + pending follow-up
+
+**范围**：
+
+1. 删除模型可见的 `list_sessions` 与 `read_multi_session_status`；
+2. 所有 ztermy 原生读写、SFTP、笔记、frame、wait 工具移除
+   `session_id`/`session_generation` 参数与结果字段；
+3. AppController 在回合开始冻结所属 tab ID + reconnect generation，通过宿主上下文注入
+   工具；切换焦点不重定向，关闭或重连返回 `scope_changed`；
+4. 序列化上下文与系统提示不再暴露内部路由标识；
+5. ADR 0086 固化“一侧栏、一对话、一终端”，并记录 Warp、VS Code、OpenCode、Claude
+   Code/Codex 的宿主资源绑定共性。
+
+**验证**：动态 Debug 构建通过；12 个关联 AI 聚焦测试与 `app-controller` 通过。全量门禁
+在本节点后续提交前继续执行。
+
 ## 节点 N9 — Agent 模式合同、工具协议与长命令审批修复（2026-08-14）
 
 **commit**: pending

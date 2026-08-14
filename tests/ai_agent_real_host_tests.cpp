@@ -76,9 +76,7 @@ private:
 
 [[nodiscard]] AiToolCall commandCall(const std::string &id, const std::string &command)
 {
-    const QJsonObject arguments{{QStringLiteral("session_id"), QString::fromLatin1(sessionId)},
-                                {QStringLiteral("session_generation"), static_cast<qint64>(sessionGeneration)},
-                                {QStringLiteral("command"), QString::fromUtf8(command)}};
+    const QJsonObject arguments{{QStringLiteral("command"), QString::fromUtf8(command)}};
     return {.id = id,
             .name = "run_command",
             .argumentsJson = QJsonDocument(arguments).toJson(QJsonDocument::Compact).toStdString()};
@@ -86,9 +84,7 @@ private:
 
 [[nodiscard]] AiToolCall ptyCall(const std::string &id, const std::string &data)
 {
-    const QJsonObject arguments{{QStringLiteral("session_id"), QString::fromLatin1(sessionId)},
-                                {QStringLiteral("session_generation"), static_cast<qint64>(sessionGeneration)},
-                                {QStringLiteral("data"), QString::fromUtf8(data)},
+    const QJsonObject arguments{{QStringLiteral("data"), QString::fromUtf8(data)},
                                 {QStringLiteral("append_enter"), true}};
     return {.id = id,
             .name = "write_to_pty",

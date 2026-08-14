@@ -42,7 +42,7 @@ addition.
 | --- | --- | --- | --- |
 | Bounded, cancellable SFTP list/read tools | `src/application/ai/AiSftpListTool.*`, `AiSftpReadTool.*` | `ai-sftp-list-tool`, `ai-sftp-read-tool` | ADR 0063, 0066 |
 | Approved SFTP mutations through the existing transfer graph | `src/application/ai/AiActionToolDispatcher.*`, `src/application/transfer/*` | `ai-action-tool-dispatcher`, `transfer-queue`, `transfer-batch`, `transfer-manager`, `transfer-recovery-store` | ADR 0051, 0068 |
-| Telemetry, scripts, notes, history, immutable target sets, and owned runbooks | `src/domain/ai/AiReadTools.*`; `src/application/ai/AiNoteReadTool.*`; `src/application/AppController.*` | `ai-read-tools`, `ai-note-read-tool`, `remote-telemetry`, `script-store`, `note-store`, `workspace-state-store`, `ai-action-tool-dispatcher` | ADR 0064, 0065, 0067 |
+| Telemetry, scripts, notes, history, current-terminal snapshots, and owned runbooks | `src/domain/ai/AiReadTools.*`; `src/application/ai/AiNoteReadTool.*`; `src/application/AppController.*` | `ai-read-tools`, `ai-note-read-tool`, `remote-telemetry`, `script-store`, `note-store`, `workspace-state-store`, `ai-action-tool-dispatcher` | ADR 0064, 0067, 0086 |
 
 ## 0.3.3 — interactive terminal control
 
@@ -109,6 +109,14 @@ covered by `application-settings`, `ai-permission-policy`,
 | Local table/code overflow and per-code raw copy | `src/ui/qml/MarkdownMessage.qml`, `src/platform/windows/WindowsProtectedClipboard.*` | `windows-protected-clipboard`, owner real-window acceptance | ADR 0078 |
 | Explicit recent commands with honest non-semantic fallback | `src/application/AppController.*`, `src/domain/terminal/SemanticTerminalObserver.*` | `app-controller`, `semantic-terminal-observer` | ADR 0055, product review 2026-08-13 |
 | Keyboard-first built-in slash commands | `src/ui/qml/AiAssistantPane.qml`, existing `AppController` AI actions | QML compilation, translation gate, owner keyboard acceptance | Product review 2026-08-13 |
+
+## 0.3.10 — current-terminal native tool contract
+
+| Approved boundary | Representative implementation | Focused contracts | Decisions |
+| --- | --- | --- | --- |
+| One sidebar exposes only its owning terminal; no session discovery or provider-selected routing | `src/application/AppController.*`, `src/application/ai/AiReadToolDispatcher.*`, `AiActionToolDispatcher.*` | `ai-read-tool-dispatcher`, `ai-action-tool-dispatcher`, `app-controller` | ADR 0086 |
+| Native schemas/results/context omit internal tab identity and reconnect generation | `src/application/ai/Ai*Sftp*Tool.*`, `AiNoteReadTool.*`, `AiTerminalFrameTool.*`, `AiWaitCommandTool.*`; `src/domain/ai/AiContextSerializer.*` | `ai-sftp-list-tool`, `ai-sftp-read-tool`, `ai-note-read-tool`, `ai-terminal-frame-tool`, `ai-wait-command-tool`, `ai-context-serializer` | ADR 0086 |
+| Tab focus changes cannot retarget a turn; reconnect/closure invalidates live work | `src/application/AppController.*` and host-injected `AiSessionTarget` values | `app-controller`, Agent scenario tests, owner concurrency acceptance | ADR 0086 |
 
 ## Evidence classification
 

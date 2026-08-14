@@ -219,3 +219,29 @@ ztermy 现状：23+ 工具（13 read + 6 action + wait/frame + MCP），JSON sch
 ### 8.4 Warp（官方文档）
 
 - block 是上下文基本单位；附加：sparkle 图标 / `CMD-UP` 附上一个 block、`CMD-UP/DOWN` 选择、`CMD-DOWN` 清除；区分 pending 与 attached；Agent 会话内自动附加正在处理的 block。
+
+## 9. 当前终端绑定复核（2026-08-15）
+
+主流终端 Agent 的共同边界不是让模型先枚举 UI 会话再挑选目标，而是由宿主把工具
+绑定到用户当前打开的终端资源：
+
+- Warp 的 Full Terminal Use 让 Agent 附着当前活动 PTY/buffer；Blocks as Context 将用户
+  显式附加的 block 与 Agent 自己执行产生的 block 纳入对话，而不是自动吞入其它终端；
+- VS Code Terminal tool 依赖当前终端的 Shell Integration 获取命令生命周期，资源选择由
+  编辑器/工具宿主完成；
+- OpenCode、Claude Code 与 Codex CLI 的 shell 工具同样由运行时决定 cwd/sandbox/session，
+  模型参数描述任务，不承担应用窗口路由。
+
+参考：
+
+- <https://docs.warp.dev/agent-platform/capabilities/full-terminal-use>
+- <https://docs.warp.dev/agent-platform/local-agents/agent-context/blocks-as-context>
+- <https://code.visualstudio.com/docs/chat/chat-tools>
+- <https://code.visualstudio.com/docs/agents/approvals>
+- <https://opencode.ai/v2/docs/permissions>
+- <https://docs.anthropic.com/en/docs/claude-code/cli-usage>
+
+据此，ztermy 删除 `list_sessions`、`read_multi_session_status` 以及所有原生工具的
+`session_id`/`session_generation` 模型参数。内部仍冻结 tab ID 与 reconnect generation，
+这是宿主生命周期校验，不是模型能力。产品语义定为“一侧栏、一对话、一终端”；若未来
+需要跨主机编排，应作为独立工作区 Agent 产品重新设计，而不是偷偷扩展当前侧栏。

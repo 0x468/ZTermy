@@ -99,9 +99,7 @@ private:
 
 [[nodiscard]] AiToolCall commandCall(const std::string &id, const std::string &command)
 {
-    QJsonObject arguments{{QStringLiteral("session_id"), QString::fromLatin1(sessionId)},
-                          {QStringLiteral("session_generation"), static_cast<qint64>(sessionGeneration)},
-                          {QStringLiteral("command"), QString::fromUtf8(command)}};
+    QJsonObject arguments{{QStringLiteral("command"), QString::fromUtf8(command)}};
     return {.id = id,
             .name = "run_command",
             .argumentsJson = QJsonDocument(arguments).toJson(QJsonDocument::Compact).toStdString()};
@@ -109,9 +107,7 @@ private:
 
 [[nodiscard]] AiToolCall ptyCall(const std::string &id, const std::string &data)
 {
-    QJsonObject arguments{{QStringLiteral("session_id"), QString::fromLatin1(sessionId)},
-                          {QStringLiteral("session_generation"), static_cast<qint64>(sessionGeneration)},
-                          {QStringLiteral("data"), QString::fromUtf8(data)},
+    QJsonObject arguments{{QStringLiteral("data"), QString::fromUtf8(data)},
                           {QStringLiteral("append_enter"), true}};
     return {.id = id,
             .name = "write_to_pty",
@@ -314,7 +310,7 @@ void AiAgentScenarioTests::appliesSshProfileMutationModeMatrix()
             .id = "ssh-upload-" + std::to_string(index),
             .name = "queue_sftp_upload",
             .argumentsJson =
-                R"({"session_id":"ssh-session","session_generation":4,"local_path":"C:/Temp/report.txt","remote_path":"/tmp/report.txt"})"};
+                R"({"local_path":"C:/Temp/report.txt","remote_path":"/tmp/report.txt"})"};
         const auto plan = dispatcher.prepare(upload, sshContext, budget);
         QCOMPARE(plan.disposition, mode.disposition);
         if (mode.mode == AiPermissionMode::readOnly)

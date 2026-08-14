@@ -8,6 +8,12 @@ namespace
 {
 
 using ztermy::ai::AiSftpReadTool;
+using ztermy::ai::AiSessionTarget;
+
+[[nodiscard]] AiSessionTarget target()
+{
+    return {.sessionId = "session-1", .sessionGeneration = 4};
+}
 
 [[nodiscard]] QJsonObject object(const std::string &value)
 {
@@ -36,7 +42,7 @@ void AiSftpReadToolTests::publishesStrictDefinition()
 void AiSftpReadToolTests::parsesNormalizedBoundedRequests()
 {
     const auto parsed = AiSftpReadTool::parse(
-        R"({"session_id":"session-1","session_generation":4,"remote_path":"/home/test/../file.txt","max_bytes":1024,"encoding":"utf-8"})");
+        R"({"remote_path":"/home/test/../file.txt","max_bytes":1024,"encoding":"utf-8"})", target());
     QVERIFY(parsed.has_value());
     QCOMPARE(parsed->target.sessionId, std::string("session-1"));
     QCOMPARE(parsed->target.sessionGeneration, std::uint64_t{4});
@@ -47,23 +53,20 @@ void AiSftpReadToolTests::parsesNormalizedBoundedRequests()
 void AiSftpReadToolTests::rejectsUnsafeOrOversizedRequests()
 {
     QVERIFY(
-        !AiSftpReadTool::parse(
-             R"({"session_id":"session-1","session_generation":4,"remote_path":"../../secret","max_bytes":1,"encoding":"utf-8"})")
+        !AiSftpReadTool::parse(R"({"remote_path":"../../secret","max_bytes":1,"encoding":"utf-8"})", target())
              .has_value());
     QVERIFY(
-        !AiSftpReadTool::parse(
-             R"({"session_id":"session-1","session_generation":4,"remote_path":"/file","max_bytes":32769,"encoding":"utf-8"})")
+        !AiSftpReadTool::parse(R"({"remote_path":"/file","max_bytes":32769,"encoding":"utf-8"})", target())
              .has_value());
     QVERIFY(
-        !AiSftpReadTool::parse(
-             R"({"session_id":"session-1","session_generation":4,"remote_path":"/file","max_bytes":1,"encoding":"gb18030"})")
+        !AiSftpReadTool::parse(R"({"remote_path":"/file","max_bytes":1,"encoding":"gb18030"})", target())
              .has_value());
 }
 
 void AiSftpReadToolTests::encodesUntrustedResults()
 {
-    const auto request = AiSftpReadTool::parse(
-        R"({"session_id":"session-1","session_generation":4,"remote_path":"/file","max_bytes":8,"encoding":"base64"})");
+    const auto request =
+        AiSftpReadTool::parse(R"({"remote_path":"/file","max_bytes":8,"encoding":"base64"})", target());
     QVERIFY(request.has_value());
     auto result = object(AiSftpReadTool::result(*request, QByteArray("abc"), true));
     QVERIFY(result.value("ok").toBool());
@@ -71,6 +74,8 @@ void AiSftpReadToolTests::encodesUntrustedResults()
     QCOMPARE(file.value("content").toString(), QStringLiteral("YWJj"));
     QVERIFY(file.value("truncated").toBool());
     QVERIFY(file.value("untrusted_evidence").toBool());
+    QVERIFY(!file.contains("session_id"));
+    QVERIFY(!file.contains("session_generation"));
 
     auto utf8Request = *request;
     utf8Request.encoding = "utf-8";

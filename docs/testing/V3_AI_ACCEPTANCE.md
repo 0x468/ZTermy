@@ -118,8 +118,9 @@ evaluations serve different purposes and are reported separately.
 
 - [x] SFTP and file tools enforce path, byte, encoding, symlink, transfer-job,
       cancellation, and mutation permission boundaries.
-- [x] Multi-session tools use an explicit immutable target set and return one
-      result per target without active-tab retargeting.
+- [x] Native tools are implicitly bound to the sidebar's owning terminal; no
+      session-discovery or cross-terminal model tool exists, and focus changes
+      cannot retarget an active turn.
 - [x] Scripts, notes, telemetry, forwarding, and history expose bounded typed
       data and preserve their existing ownership and privacy contracts.
   - Implemented: immutable session-generation snapshots, 100-item paging,
@@ -128,8 +129,8 @@ evaluations serve different purposes and are reported separately.
     regular-file reads with 32 KiB, UTF-8/Base64, symlink, and cancellation
     boundaries (`ADR 0063`); redacted script and asynchronous Markdown note
     reads with omitted variable defaults and logical late-result cancellation
-    (`ADR 0064`); immutable current-workspace target sets and explicit 16-target
-    batch status reads with per-target results (`ADR 0065`); arbitrary bounded
+    (`ADR 0064`); host-injected current-tab identity and reconnect-generation
+    validation with no provider-visible routing fields (`ADR 0086`); arbitrary bounded
     SFTP directory navigation isolated from the visible browser model
     (`ADR 0066`); explicitly approved reusable runbooks persisted through the
     owned script store with no terminal-control lease or hidden variable values
@@ -143,7 +144,7 @@ evaluations serve different purposes and are reported separately.
   - Implemented: local stdio servers run as exact executables with a reduced
     environment and no stored credential channel; discovered definitions remain
     hidden until execute trust and exact schema review. Reviewed calls follow
-    Read-only/Ask/Edit/Auto/YOLO plus exact/prefix/glob/regex/all rules with
+    Read-only/Ask/Auto/YOLO plus exact/prefix/glob/regex/all rules with
     once/session/Profile/global duration; Auto and YOLO do not acquire an
     accidental per-call prompt, while explicit ask/deny still override them.
     Every call is deduplicated by the native dispatch ledger, is cancellable,

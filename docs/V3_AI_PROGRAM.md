@@ -168,7 +168,8 @@ becomes conversation retention.
 - read-only SFTP navigation and file-reading tools with byte and path bounds;
 - opt-in SFTP mutation tools using the existing transfer job graph;
 - telemetry, forwarding status, scripts, notes, and shell-history tools;
-- workspace-scoped tasks with an explicit target set and per-target results;
+- current-terminal operations implicitly bound to the owning AI sidebar, with
+  host-side reconnect-generation validation and no model-visible session routing;
 - reusable runbooks generated from successful conversations, stored as owned
   ztermy scripts rather than opaque model memory.
 
@@ -342,8 +343,7 @@ Delivery status:
   keystrokes, or arbitrary local files to a provider;
 - treating a visual terminal snapshot as proof of command success;
 - a full code editor, repository indexing, cloud agents, collaboration, or sync;
-- autonomous multi-host changes without an explicit target set and permission
-  policy;
+- cross-terminal or multi-host orchestration from a terminal AI sidebar;
 - storing large transcripts in Windows Credential Manager.
 
 ## Release gates

@@ -4,6 +4,10 @@
 
 Accepted
 
+The requirement to expose `session_id` and `session_generation` to the provider
+is superseded by ADR 0086. Operations snapshots remain internally attached to
+the owning tab and reconnect generation.
+
 ## Context
 
 V3.2 lets the terminal assistant inspect SFTP listings, shell history, scripts,

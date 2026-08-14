@@ -9,6 +9,12 @@ namespace
 {
 
 using ztermy::ai::AiSftpListTool;
+using ztermy::ai::AiSessionTarget;
+
+[[nodiscard]] AiSessionTarget target()
+{
+    return {.sessionId = "session-1", .sessionGeneration = 8};
+}
 
 [[nodiscard]] QJsonObject object(const std::string &value)
 {
@@ -27,8 +33,7 @@ private slots:
 
 void AiSftpListToolTests::parsesNormalizedBoundedRequest()
 {
-    const auto request = AiSftpListTool::parse(
-        R"({"session_id":"session-1","session_generation":8,"path":"/var/./log","offset":2,"limit":20})");
+    const auto request = AiSftpListTool::parse(R"({"path":"/var/./log","offset":2,"limit":20})", target());
     QVERIFY(request.has_value());
     QCOMPARE(request->target.sessionId, std::string("session-1"));
     QCOMPARE(request->target.sessionGeneration, std::uint64_t{8});
@@ -39,11 +44,9 @@ void AiSftpListToolTests::parsesNormalizedBoundedRequest()
 
 void AiSftpListToolTests::rejectsUnsafeAndOversizedRequests()
 {
-    auto request = AiSftpListTool::parse(
-        R"({"session_id":"session-1","session_generation":8,"path":"../../etc","offset":0,"limit":20})");
+    auto request = AiSftpListTool::parse(R"({"path":"../../etc","offset":0,"limit":20})", target());
     QVERIFY(!request.has_value());
-    request = AiSftpListTool::parse(
-        R"({"session_id":"session-1","session_generation":8,"path":"/etc","offset":0,"limit":101})");
+    request = AiSftpListTool::parse(R"({"path":"/etc","offset":0,"limit":101})", target());
     QVERIFY(!request.has_value());
 }
 
@@ -52,8 +55,7 @@ void AiSftpListToolTests::pagesTypedUntrustedEntries()
     ztermy::sftp::DirectoryListing entries{
         {.name = ".hidden", .remotePath = "/tmp/.hidden", .type = ztermy::sftp::EntryType::RegularFile, .size = 4},
         {.name = "folder", .remotePath = "/tmp/folder", .type = ztermy::sftp::EntryType::Directory}};
-    const auto request = AiSftpListTool::parse(
-        R"({"session_id":"session-1","session_generation":8,"path":"/tmp","offset":0,"limit":1})");
+    const auto request = AiSftpListTool::parse(R"({"path":"/tmp","offset":0,"limit":1})", target());
     QVERIFY(request.has_value());
     const auto result = object(AiSftpListTool::result(*request, entries));
     QVERIFY(result.value("ok").toBool());
@@ -62,6 +64,8 @@ void AiSftpListToolTests::pagesTypedUntrustedEntries()
     QVERIFY(listing.value("items").toArray().at(0).toObject().value("hidden").toBool());
     QVERIFY(listing.value("has_more").toBool());
     QVERIFY(listing.value("untrusted_evidence").toBool());
+    QVERIFY(!listing.contains("session_id"));
+    QVERIFY(!listing.contains("session_generation"));
 }
 
 } // namespace

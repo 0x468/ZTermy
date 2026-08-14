@@ -246,7 +246,6 @@ the domain or QML layers.
 
 | Tool | Mode | Milestone | Backing service |
 | --- | --- | --- | --- |
-| `list_sessions` | Read | 0.3.0 | workspace/session model |
 | `read_session_info` | Read | 0.3.0 | active tab/session state |
 | `read_terminal` | Read | 0.3.0 | command store/frame source |
 | `read_command_block` | Read | 0.3.0 | command store |
@@ -264,6 +263,14 @@ Tool results use domain error codes (`not_connected`, `scope_changed`,
 `outcome_unknown`, `duplicate_mismatch`, `unsupported`) plus a localized UI
 message. The model receives stable machine-readable codes and a short provider-
 language description.
+
+All ztermy-native tools above are implicitly bound to the sidebar's owning
+terminal. Provider-visible schemas, results, context, and prompts contain no
+tab ID or reconnect generation, and no session-discovery tool is advertised.
+The application captures the owning tab ID and generation at turn start and
+uses them only as an internal lifetime guard. A focus change cannot redirect a
+turn; tab closure or reconnect invalidates outstanding live work with
+`scope_changed`. ADR 0086 owns this contract.
 
 ### Tool execution contract
 

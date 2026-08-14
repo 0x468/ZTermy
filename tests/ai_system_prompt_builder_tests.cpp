@@ -40,6 +40,10 @@ void AiSystemPromptBuilderTests::buildsLayeredPrompt()
     QVERIFY(prompt.contains(QStringLiteral("exactly one fenced code block")));
     QVERIFY(prompt.contains(QStringLiteral("Mode: ask")));
     QVERIFY(prompt.contains(QStringLiteral("client will show the approval UI")));
+    QVERIFY(prompt.contains(QStringLiteral("already bound by ztermy to this sidebar's current terminal")));
+    QVERIFY(prompt.contains(QStringLiteral("Never ask for, invent, discover, or select another terminal")));
+    QVERIFY(!prompt.contains(QStringLiteral("session_id")));
+    QVERIFY(!prompt.contains(QStringLiteral("session_generation")));
 }
 
 void AiSystemPromptBuilderTests::commandRequestModeAddsSuggestionRules()

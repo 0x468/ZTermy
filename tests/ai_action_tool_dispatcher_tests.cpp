@@ -41,8 +41,7 @@ using ztermy::ai::AiToolDispatchState;
 {
     return AiToolCall{.id = id,
                       .name = "run_command",
-                      .argumentsJson = std::string(R"({"session_id":"session-1","session_generation":3,"command":")")
-                                       + command + R"("})"};
+                      .argumentsJson = std::string(R"({"command":")") + command + R"("})"};
 }
 
 [[nodiscard]] AiToolCall interruptCall(const std::string &id = "interrupt-1")
@@ -50,15 +49,14 @@ using ztermy::ai::AiToolDispatchState;
     return AiToolCall{
         .id = id,
         .name = "interrupt_command",
-        .argumentsJson = R"({"command_id":"command-1","session_id":"session-1","session_generation":3,"mode":"soft"})"};
+        .argumentsJson = R"({"command_id":"command-1","mode":"soft"})"};
 }
 
 [[nodiscard]] AiToolCall ptyWriteCall(const std::string &id = "pty-write-1")
 {
     return AiToolCall{.id = id,
                       .name = "write_to_pty",
-                      .argumentsJson =
-                          R"({"session_id":"session-1","session_generation":3,"data":"yes","append_enter":true})"};
+                      .argumentsJson = R"({"data":"yes","append_enter":true})"};
 }
 
 [[nodiscard]] AiToolCall runbookCall(const std::string &id = "runbook-1")
@@ -67,7 +65,7 @@ using ztermy::ai::AiToolDispatchState;
         .id = id,
         .name = "save_runbook",
         .argumentsJson =
-            R"({"session_id":"session-1","session_generation":3,"runbook":{"name":"Inspect host","description":"Inspect disk usage","shell":"bash","steps":[{"command":"df -h","continuation":"immediate","output_marker":"","timeout_ms":30000}]}})"};
+            R"({"runbook":{"name":"Inspect host","description":"Inspect disk usage","shell":"bash","steps":[{"command":"df -h","continuation":"immediate","output_marker":"","timeout_ms":30000}]}})"};
 }
 
 [[nodiscard]] AiToolCall transferCall(const bool upload, const std::string &id = "sftp-transfer-1")
@@ -76,7 +74,7 @@ using ztermy::ai::AiToolDispatchState;
         .id = id,
         .name = upload ? "queue_sftp_upload" : "queue_sftp_download",
         .argumentsJson =
-            R"({"session_id":"session-1","session_generation":3,"local_path":"C:/Temp/report.txt","remote_path":"/tmp/report.txt"})"};
+            R"({"local_path":"C:/Temp/report.txt","remote_path":"/tmp/report.txt"})"};
 }
 
 [[nodiscard]] QJsonObject object(const std::string &value)
@@ -116,6 +114,8 @@ void AiActionToolDispatcherTests::publishesStrictRunCommandDefinition()
         const auto schema = QJsonDocument::fromJson(QByteArray::fromStdString(definitions[index].parametersJson));
         QVERIFY(schema.isObject());
         QVERIFY(!schema.object().value(QStringLiteral("additionalProperties")).toBool(true));
+        QVERIFY(!definitions[index].parametersJson.contains("session_id"));
+        QVERIFY(!definitions[index].parametersJson.contains("session_generation"));
     }
 }
 
@@ -212,8 +212,7 @@ void AiActionToolDispatcherTests::validatesInteractivePtyInput()
 
     AiAgentTurnBudget invalidBudget;
     auto invalid = ptyWriteCall("pty-write-invalid");
-    invalid.argumentsJson =
-        R"({"session_id":"session-1","session_generation":3,"data":"yes\nwhoami","append_enter":true})";
+    invalid.argumentsJson = R"({"data":"yes\nwhoami","append_enter":true})";
     const auto rejected = dispatcher.prepare(invalid, context(), invalidBudget);
     QCOMPARE(
         object(rejected.outputJson).value(QStringLiteral("error")).toObject().value(QStringLiteral("code")).toString(),
@@ -235,8 +234,7 @@ void AiActionToolDispatcherTests::preparesSoftInterruptAsWriteAction()
 
     AiAgentTurnBudget invalidBudget;
     auto invalid = interruptCall("interrupt-invalid");
-    invalid.argumentsJson =
-        R"({"command_id":"command-1","session_id":"session-1","session_generation":3,"mode":"kill"})";
+    invalid.argumentsJson = R"({"command_id":"command-1","mode":"kill"})";
     const auto rejected = dispatcher.prepare(invalid, context(), invalidBudget);
     QCOMPARE(
         object(rejected.outputJson).value(QStringLiteral("error")).toObject().value(QStringLiteral("code")).toString(),
@@ -270,11 +268,19 @@ void AiActionToolDispatcherTests::rejectsScopeReplayAndObserverWrites()
 {
     AiActionToolDispatcher dispatcher;
     AiAgentTurnBudget budget;
-    auto wrongScope = commandCall("scope-call");
-    wrongScope.argumentsJson = R"({"session_id":"other","session_generation":3,"command":"pwd"})";
-    auto plan = dispatcher.prepare(wrongScope, context(), budget);
+    auto injectedScope = commandCall("scope-call");
+    injectedScope.argumentsJson = R"({"session_id":"other","command":"pwd"})";
+    auto plan = dispatcher.prepare(injectedScope, context(), budget);
     QCOMPARE(object(plan.outputJson).value(QStringLiteral("error")).toObject().value(QStringLiteral("code")).toString(),
-             QStringLiteral("scope_changed"));
+             QStringLiteral("invalid_arguments"));
+
+    AiAgentTurnBudget boundBudget;
+    const auto bound = dispatcher.prepare(commandCall("bound-call"), context("bound", AiPermissionMode::automatic),
+                                          boundBudget);
+    QVERIFY(bound.action.has_value());
+    const auto boundAction = bound.action.value_or(AiTerminalAction{});
+    QCOMPARE(boundAction.target.sessionId, std::string("session-1"));
+    QCOMPARE(boundAction.target.sessionGeneration, std::uint64_t{3});
 
     AiAgentTurnBudget observerBudget;
     plan = dispatcher.prepare(commandCall("observer-call"), context("observer", AiPermissionMode::readOnly),

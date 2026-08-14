@@ -185,16 +185,6 @@ constexpr std::size_t maximumArgumentsBytes = std::size_t{16} * 1024;
     return static_cast<std::size_t>(*integer);
 }
 
-[[nodiscard]] const AiTerminalReadSnapshot *findSnapshot(const std::span<const AiTerminalReadSnapshot> sessions,
-                                                         const std::string_view sessionId,
-                                                         const std::uint64_t sessionGeneration)
-{
-    const auto found = std::ranges::find_if(sessions, [sessionId](const AiTerminalReadSnapshot &session) {
-        return session.sessionId == sessionId;
-    });
-    return found != sessions.end() && found->sessionGeneration == sessionGeneration ? &*found : nullptr;
-}
-
 struct Page final
 {
     std::size_t offset = 0;
