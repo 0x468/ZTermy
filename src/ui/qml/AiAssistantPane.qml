@@ -1456,10 +1456,12 @@ Rectangle {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     clip: true
+                    contentWidth: availableWidth
 
                     TextArea {
                         id: promptEditor
 
+                        width: parent.width
                         objectName: "aiPromptEditor"
                         placeholderText: pane.commandRequest ? qsTr("Describe the command you need · Enter sends · Shift+Enter adds a new line") : qsTr("Message ztermy Agent · Enter sends · Shift+Enter adds a new line")
                         color: Theme.text

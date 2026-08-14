@@ -91,13 +91,18 @@ Item {
         };
 
         for (let index = 0; index < lines.length; ) {
-            const fence = lines[index].match(/^\s*```\s*([^\s`]*)\s*$/);
+            // Fenced blocks with 3+ backticks (or tildes) and an optional
+            // language tag; the closing fence must match the opener's length
+            // but we stay lenient for unclosed fences at the end of input.
+            const fence = lines[index].match(/^\s*(```+|~~~+)\s*([^\s`]*)\s*$/);
             if (fence) {
                 flushProse();
-                const language = fence[1] || "";
+                const fenceLength = fence[1].length;
+                const language = fence[2] || "";
+                const closing = new RegExp("^\\s*" + (fence[1][0] === "`" ? "`" : "~") + "{" + fenceLength + "}\\s*$");
                 let body = [];
                 ++index;
-                while (index < lines.length && !/^\s*```\s*$/.test(lines[index])) {
+                while (index < lines.length && !closing.test(lines[index])) {
                     body.push(lines[index]);
                     ++index;
                 }
@@ -213,13 +218,22 @@ Item {
                     Layout.bottomMargin: 3
                     spacing: 6
 
-                    Text {
-                        Layout.fillWidth: true
-                        text: codeCard.blockData.language
-                        color: Theme.textMuted
-                        elide: Text.ElideRight
-                        font.family: Theme.terminalFont
-                        font.pixelSize: Theme.textCompact
+                    Rectangle {
+                        Layout.preferredHeight: 18
+                        Layout.preferredWidth: languagePill.implicitWidth + 14
+                        radius: 4
+                        color: Theme.controlPressed
+
+                        Text {
+                            id: languagePill
+
+                            anchors.centerIn: parent
+                            text: codeCard.blockData.language.length > 0 ? codeCard.blockData.language.toUpperCase() : qsTr("CODE")
+                            color: Theme.textSoft
+                            font.family: Theme.terminalFont
+                            font.pixelSize: Theme.textCompact
+                            font.weight: Font.DemiBold
+                        }
                     }
 
                     Button {

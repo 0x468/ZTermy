@@ -76,6 +76,10 @@ public:
                                                    bool sideEffecting, bool highRisk);
     [[nodiscard]] bool completeAssistantMessage(std::uint64_t messageId,
                                                 std::optional<AiTokenUsage> usage = std::nullopt);
+    // Late usage updates (some providers emit usage after the completion
+    // event) still land on the finished message so the token display and the
+    // cost estimate are never zero.
+    [[nodiscard]] bool updateAssistantUsage(std::uint64_t messageId, const AiTokenUsage &usage);
     [[nodiscard]] bool setAssistantMetrics(std::uint64_t messageId, const AiTurnMetrics &metrics,
                                            const AiCostEstimate &costEstimate = {});
     [[nodiscard]] bool failAssistantMessage(std::uint64_t messageId, QString error);

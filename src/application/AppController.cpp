@@ -8529,8 +8529,12 @@ void AppController::resetAiContextItems()
     {
         return;
     }
+    // Restore the automatic context set: drop removals and pins AND clear any
+    // explicit attachments, so the panel visibly returns to the default
+    // automatic items (or to an empty set when automatic context is off).
     tab->aiExcludedContextIds.clear();
     tab->aiPinnedContextIds.clear();
+    tab->aiExplicitContextItems.clear();
     static_cast<void>(buildAiContext(*tab, false));
     emit aiConversationChanged();
 }
@@ -8970,6 +8974,11 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                             target->aiUsage->reasoningTokens += event.usage->reasoningTokens;
                             target->aiUsage->cachedInputTokens += event.usage->cachedInputTokens;
                         }
+                        // Some providers emit usage after the completion event;
+                        // push it onto the finished message so the token
+                        // display and the cost estimate are never zero.
+                        static_cast<void>(
+                            target->aiConversation->updateAssistantUsage(assistantMessageId, *target->aiUsage));
                     }
                     break;
                 case ai::AiStreamEventType::responseCompleted:

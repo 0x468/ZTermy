@@ -287,6 +287,15 @@ OpenAiCompatibleStreamMapper::map(const ServerSentEvent &event)
                                                .delta = arguments});
             }
         }
+        // Usage must be emitted before responseCompleted: the conversation
+        // model snapshots usage exactly when the completion event arrives, and
+        // emitting it afterwards would surface a zero token count on every
+        // reply from OpenAI-compatible endpoints.
+        if (const auto usage = openAiUsage(object.value("usage").toObject()); usage.has_value())
+        {
+            events.push_back(
+                AiStreamEvent{.type = AiStreamEventType::usageUpdated, .responseId = responseId, .usage = usage});
+        }
         if (!choice.value("finish_reason").isNull() && !m_completed)
         {
             m_completed = true;
@@ -300,11 +309,6 @@ OpenAiCompatibleStreamMapper::map(const ServerSentEvent &event)
             }
             events.push_back(AiStreamEvent{.type = AiStreamEventType::responseCompleted, .responseId = responseId});
         }
-    }
-    if (const auto usage = openAiUsage(object.value("usage").toObject()); usage.has_value())
-    {
-        events.push_back(
-            AiStreamEvent{.type = AiStreamEventType::usageUpdated, .responseId = responseId, .usage = usage});
     }
     return events;
 }

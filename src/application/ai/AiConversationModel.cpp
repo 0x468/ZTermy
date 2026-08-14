@@ -389,6 +389,21 @@ bool AiConversationModel::completeAssistantMessage(const std::uint64_t messageId
     return true;
 }
 
+bool AiConversationModel::updateAssistantUsage(const std::uint64_t messageId, const AiTokenUsage &usage)
+{
+    auto *message = find(messageId);
+    if (message == nullptr || message->role != AiMessageRole::assistant)
+    {
+        return false;
+    }
+    message->usage = usage;
+    const auto row = indexOf(messageId);
+    emit dataChanged(index(row), index(row),
+                     {InputTokensRole, OutputTokensRole, CachedInputTokensRole, ReasoningTokensRole,
+                      UsageAvailableRole});
+    return true;
+}
+
 bool AiConversationModel::setAssistantMetrics(const std::uint64_t messageId, const AiTurnMetrics &metrics,
                                               const AiCostEstimate &costEstimate)
 {

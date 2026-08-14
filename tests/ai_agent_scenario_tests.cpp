@@ -299,7 +299,8 @@ void AiAgentScenarioTests::appliesSshProfileMutationModeMatrix()
     constexpr std::array modes{
         ModeCase{.mode = AiPermissionMode::readOnly, .disposition = AiActionToolDisposition::respond},
         ModeCase{.mode = AiPermissionMode::ask, .disposition = AiActionToolDisposition::awaitApproval},
-        ModeCase{.mode = AiPermissionMode::edit, .disposition = AiActionToolDisposition::execute},
+        // Edit mode asks before mutations, consistent with run_command.
+        ModeCase{.mode = AiPermissionMode::edit, .disposition = AiActionToolDisposition::awaitApproval},
         ModeCase{.mode = AiPermissionMode::automatic, .disposition = AiActionToolDisposition::execute},
         ModeCase{.mode = AiPermissionMode::yolo, .disposition = AiActionToolDisposition::execute},
     };
