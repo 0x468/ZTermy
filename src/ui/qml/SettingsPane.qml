@@ -24,6 +24,12 @@ Rectangle {
     property string aiModelDraft: ""
     property string aiSelectedProviderToken: "openai-responses"
     property string aiReasoningDraft: "auto"
+    property string aiQuickMessageEditingId: ""
+    property string aiQuickMessageNameDraft: ""
+    property string aiQuickMessageSlugDraft: ""
+    property string aiQuickMessageDescriptionDraft: ""
+    property string aiQuickMessageContentDraft: ""
+    property bool aiQuickMessageSlugManual: false
     readonly property var aiProviderTokens: ["openai-responses", "anthropic", "deepseek", "kimi", "zai", "ollama", "openai-compatible"]
     readonly property var aiReasoningOptions: controller.aiReasoningCapabilities(aiProviderToken(), aiModelDraft)
     property string mcpOriginalId: ""
@@ -234,6 +240,35 @@ Rectangle {
         if (rule.duration === "global")
             return qsTr("All Profiles");
         return qsTr("This session");
+    }
+
+    function normalizeAiQuickMessageSlug(value) {
+        return value.trim().toLocaleLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48);
+    }
+
+    function resetAiQuickMessageDraft() {
+        aiQuickMessageEditingId = "";
+        aiQuickMessageNameDraft = "";
+        aiQuickMessageSlugDraft = "";
+        aiQuickMessageDescriptionDraft = "";
+        aiQuickMessageContentDraft = "";
+        aiQuickMessageSlugManual = false;
+    }
+
+    function editAiQuickMessage(message) {
+        aiQuickMessageEditingId = message.id;
+        aiQuickMessageNameDraft = message.name;
+        aiQuickMessageSlugDraft = message.slug;
+        aiQuickMessageDescriptionDraft = message.description || "";
+        aiQuickMessageContentDraft = message.content;
+        aiQuickMessageSlugManual = true;
+    }
+
+    function saveAiQuickMessageDraft() {
+        const saved = controller.saveAiQuickMessage(aiQuickMessageEditingId, aiQuickMessageNameDraft, aiQuickMessageSlugDraft, aiQuickMessageContentDraft, aiQuickMessageDescriptionDraft);
+        presentStatus(saved ? qsTr("Quick message saved.") : (controller.aiQuickMessageError.length > 0 ? controller.aiQuickMessageError : qsTr("The quick message is invalid.")), !saved, saved);
+        if (saved)
+            resetAiQuickMessageDraft();
     }
 
     function aiEndpointScopeLabel(token) {
@@ -1595,6 +1630,227 @@ Rectangle {
                                 pane.presentStatus(saved ? qsTr("AI provider saved.") : qsTr("The provider settings or API key could not be saved."), !saved, saved);
                                 if (saved)
                                     aiApiKeyField.text = "";
+                            }
+                        }
+                    }
+                }
+            }
+
+            SectionCard {
+                Layout.fillWidth: true
+                visible: pane.currentCategory === "ai"
+                compact: true
+                heading: qsTr("Quick messages")
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacingControl
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("Create reusable prompts. Type / in the Agent composer to search one, then edit or send the inserted text.")
+                        color: Theme.textMuted
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        visible: pane.controller.aiQuickMessageError.length > 0
+                        text: pane.controller.aiQuickMessageError
+                        color: Theme.danger
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textCompact
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        visible: pane.controller.aiQuickMessages.length === 0
+                        text: qsTr("No quick messages yet.")
+                        color: Theme.textSubtle
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
+                    }
+
+                    Repeater {
+                        model: pane.controller.aiQuickMessages
+
+                        delegate: Rectangle {
+                            id: aiQuickMessageRow
+
+                            required property var modelData
+                            Layout.fillWidth: true
+                            implicitHeight: aiQuickMessageRowContent.implicitHeight + 18
+                            radius: Theme.radiusControl
+                            color: Theme.controlBackground
+                            border.color: pane.aiQuickMessageEditingId === modelData.id ? Theme.focus : Theme.border
+
+                            RowLayout {
+                                id: aiQuickMessageRowContent
+
+                                anchors.fill: parent
+                                anchors.margins: 9
+                                spacing: 9
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    Layout.minimumWidth: 0
+                                    spacing: 2
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: "/" + aiQuickMessageRow.modelData.slug + " · " + aiQuickMessageRow.modelData.name
+                                        color: Theme.text
+                                        elide: Text.ElideRight
+                                        font.family: Theme.uiFont
+                                        font.pixelSize: Theme.textLabel
+                                        font.weight: Font.DemiBold
+                                    }
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: aiQuickMessageRow.modelData.description || aiQuickMessageRow.modelData.content
+                                        color: Theme.textMuted
+                                        elide: Text.ElideRight
+                                        font.family: Theme.uiFont
+                                        font.pixelSize: Theme.textCompact
+                                    }
+                                }
+
+                                ActionButton {
+                                    text: qsTr("Edit")
+                                    iconName: "edit"
+                                    accessibleName: qsTr("Edit quick message %1").arg(aiQuickMessageRow.modelData.name)
+                                    onClicked: pane.editAiQuickMessage(aiQuickMessageRow.modelData)
+                                }
+
+                                ActionButton {
+                                    text: qsTr("Remove")
+                                    iconName: "trash"
+                                    accessibleName: qsTr("Remove quick message %1").arg(aiQuickMessageRow.modelData.name)
+                                    onClicked: {
+                                        const removed = pane.controller.deleteAiQuickMessage(aiQuickMessageRow.modelData.id);
+                                        pane.presentStatus(removed ? qsTr("Quick message removed.") : pane.controller.aiQuickMessageError, !removed, removed);
+                                        if (removed && pane.aiQuickMessageEditingId === aiQuickMessageRow.modelData.id)
+                                            pane.resetAiQuickMessageDraft();
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: aiQuickMessageEditor.implicitHeight + 22
+                        radius: Theme.radiusControl
+                        color: Theme.raisedBackground
+                        border.color: Theme.border
+
+                        ColumnLayout {
+                            id: aiQuickMessageEditor
+
+                            anchors.fill: parent
+                            anchors.margins: 11
+                            spacing: 8
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: pane.aiQuickMessageEditingId.length > 0 ? qsTr("Edit quick message") : qsTr("New quick message")
+                                color: Theme.text
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.textBody
+                                font.weight: Font.DemiBold
+                            }
+
+                            GridLayout {
+                                Layout.fillWidth: true
+                                columns: pane.compactLayout ? 1 : 2
+                                columnSpacing: 8
+                                rowSpacing: 8
+
+                                AppTextField {
+                                    Layout.fillWidth: true
+                                    text: pane.aiQuickMessageNameDraft
+                                    placeholderText: qsTr("Name")
+                                    accessibleName: qsTr("Quick message name")
+                                    onTextEdited: {
+                                        pane.aiQuickMessageNameDraft = text;
+                                        if (!pane.aiQuickMessageSlugManual)
+                                            pane.aiQuickMessageSlugDraft = pane.normalizeAiQuickMessageSlug(text);
+                                    }
+                                }
+
+                                AppTextField {
+                                    Layout.fillWidth: true
+                                    text: pane.aiQuickMessageSlugDraft
+                                    placeholderText: qsTr("Slash command, for example service-status")
+                                    accessibleName: qsTr("Quick message slash command")
+                                    onTextEdited: {
+                                        pane.aiQuickMessageSlugManual = true;
+                                        pane.aiQuickMessageSlugDraft = pane.normalizeAiQuickMessageSlug(text.replace(/^\/+/, ""));
+                                    }
+                                }
+                            }
+
+                            AppTextField {
+                                Layout.fillWidth: true
+                                text: pane.aiQuickMessageDescriptionDraft
+                                placeholderText: qsTr("Short description (optional)")
+                                accessibleName: qsTr("Quick message description")
+                                onTextEdited: pane.aiQuickMessageDescriptionDraft = text
+                            }
+
+                            ScrollView {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 132
+                                clip: true
+
+                                TextArea {
+                                    text: pane.aiQuickMessageContentDraft
+                                    placeholderText: qsTr("Prompt text inserted into the Agent composer")
+                                    color: Theme.text
+                                    placeholderTextColor: Theme.textMuted
+                                    selectionColor: Theme.accent
+                                    selectedTextColor: Theme.accentText
+                                    wrapMode: TextEdit.Wrap
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.textLabel
+                                    Accessible.name: qsTr("Quick message prompt")
+                                    onTextChanged: pane.aiQuickMessageContentDraft = text
+                                    background: Rectangle {
+                                        color: Theme.controlBackground
+                                        radius: Theme.radiusControl
+                                        border.color: parent.activeFocus ? Theme.focus : Theme.border
+                                    }
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: pane.aiQuickMessageSlugDraft.length > 0 ? "/" + pane.aiQuickMessageSlugDraft : qsTr("Use lowercase letters, numbers, and hyphens.")
+                                    color: Theme.textSubtle
+                                    elide: Text.ElideRight
+                                    font.family: Theme.terminalFont
+                                    font.pixelSize: Theme.textCompact
+                                }
+
+                                ActionButton {
+                                    text: qsTr("New")
+                                    enabled: pane.aiQuickMessageEditingId.length > 0 || pane.aiQuickMessageNameDraft.length > 0 || pane.aiQuickMessageContentDraft.length > 0
+                                    onClicked: pane.resetAiQuickMessageDraft()
+                                }
+
+                                ActionButton {
+                                    text: pane.aiQuickMessageEditingId.length > 0 ? qsTr("Save changes") : qsTr("Add quick message")
+                                    variant: "primary"
+                                    enabled: pane.aiQuickMessageNameDraft.trim().length > 0 && pane.aiQuickMessageSlugDraft.length > 0 && pane.aiQuickMessageContentDraft.trim().length > 0
+                                    onClicked: pane.saveAiQuickMessageDraft()
+                                }
                             }
                         }
                     }

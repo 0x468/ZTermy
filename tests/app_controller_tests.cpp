@@ -140,6 +140,7 @@ private slots:
     void orderlyShutdownStopsAllLocalTabsOnce();
     void exposesAndDismissesStartupRecoveryNotice();
     void persistsQuickCommandsAndPerTabWorkbenchState();
+    void persistsAiQuickMessages();
     void importsAndExportsScriptLibraryWithoutOverwritingIds();
     void rendersAndRunsScriptAgainstFixedTerminal();
     void managesLocalMarkdownNotesAndLatestSearch();
@@ -1509,6 +1510,47 @@ void AppControllerTests::persistsQuickCommandsAndPerTabWorkbenchState()
     QCOMPARE(reloaded.quickCommands().constLast().toMap().value(QStringLiteral("id")).toString(), firstId);
     QVERIFY(reloaded.deleteQuickCommand(firstId));
     QCOMPARE(reloaded.quickCommands().size(), 1);
+}
+
+void AppControllerTests::persistsAiQuickMessages()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString profilesPath = directory.filePath(QStringLiteral("profiles.json"));
+
+    QString firstId;
+    {
+        ztermy::AppController controller(profilesPath);
+        QSignalSpy changes(&controller, &ztermy::AppController::aiQuickMessagesChanged);
+        QVERIFY(controller.aiQuickMessages().isEmpty());
+        QVERIFY(controller.saveAiQuickMessage({}, QStringLiteral("Service status"),
+                                              QStringLiteral(" Service Status "),
+                                              QStringLiteral("Inspect failed services and summarize causes."),
+                                              QStringLiteral("Diagnose service failures")));
+        QCOMPARE(controller.aiQuickMessages().size(), 1);
+        const QVariantMap first = controller.aiQuickMessages().constFirst().toMap();
+        QCOMPARE(first.value(QStringLiteral("slug")).toString(), QStringLiteral("service-status"));
+        firstId = first.value(QStringLiteral("id")).toString();
+        QVERIFY(!firstId.isEmpty());
+        QVERIFY(!controller.saveAiQuickMessage({}, QStringLiteral("Reserved"), QStringLiteral("new"),
+                                               QStringLiteral("Reserved prompt"), {}));
+        QVERIFY(!controller.aiQuickMessageError().isEmpty());
+        QVERIFY(!controller.saveAiQuickMessage({}, QStringLiteral("Duplicate"), QStringLiteral("service-status"),
+                                               QStringLiteral("Duplicate prompt"), {}));
+        QVERIFY(controller.saveAiQuickMessage(firstId, QStringLiteral("Service health"),
+                                              QStringLiteral("service-health"),
+                                              QStringLiteral("Inspect service health.\r\nExplain failures."), {}));
+        QCOMPARE(controller.aiQuickMessages().constFirst().toMap().value(QStringLiteral("content")).toString(),
+                 QStringLiteral("Inspect service health.\nExplain failures."));
+        QVERIFY(changes.count() >= 3);
+    }
+
+    ztermy::AppController reloaded(profilesPath);
+    QCOMPARE(reloaded.aiQuickMessages().size(), 1);
+    QCOMPARE(reloaded.aiQuickMessages().constFirst().toMap().value(QStringLiteral("slug")).toString(),
+             QStringLiteral("service-health"));
+    QVERIFY(reloaded.deleteAiQuickMessage(firstId));
+    QVERIFY(reloaded.aiQuickMessages().isEmpty());
 }
 
 void AppControllerTests::importsAndExportsScriptLibraryWithoutOverwritingIds()

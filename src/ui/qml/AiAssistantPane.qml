@@ -176,13 +176,26 @@ Rectangle {
         const text = promptEditor ? promptEditor.text.trim().toLocaleLowerCase() : "";
         if (!text.startsWith("/") || text.indexOf(" ") >= 0)
             return [];
-        return slashCommands.filter(item => item.command.startsWith(text));
+        const commands = slashCommands.slice();
+        const quickMessages = pane.controller.aiQuickMessages || [];
+        for (let index = 0; index < quickMessages.length; ++index) {
+            const message = quickMessages[index];
+            commands.push({
+                "command": "/" + message.slug,
+                "title": message.name,
+                "description": message.description || qsTr("Quick message"),
+                "content": message.content,
+                "quickMessage": true
+            });
+        }
+        const query = text.slice(1);
+        return commands.filter(item => item.command.startsWith(text) || item.title.toLocaleLowerCase().indexOf(query) >= 0);
     }
 
     function applySlashSuggestion(item) {
         if (!item)
             return;
-        promptEditor.text = item.command + (item.command === "/command" ? " " : "");
+        promptEditor.text = item.quickMessage === true ? item.content : item.command + (item.command === "/command" ? " " : "");
         promptEditor.cursorPosition = promptEditor.text.length;
         promptEditor.forceActiveFocus();
     }
@@ -190,6 +203,10 @@ Rectangle {
     function activateSlashSuggestion(item) {
         if (!item)
             return;
+        if (item.quickMessage === true) {
+            applySlashSuggestion(item);
+            return;
+        }
         if (item.command === "/command") {
             applySlashSuggestion(item);
             return;

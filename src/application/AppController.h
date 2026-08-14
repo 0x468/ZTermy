@@ -29,6 +29,7 @@
 #include "domain/workbench/ScriptExecution.h"
 #include "domain/workbench/ScriptRecorder.h"
 #include "infrastructure/ai/AiPermissionRuleStore.h"
+#include "infrastructure/ai/AiQuickMessageStore.h"
 #include "infrastructure/ai/ProviderModelCatalog.h"
 #include "infrastructure/forwarding/PortForwardingRuleStore.h"
 #include "infrastructure/logging/SessionLogWriter.h"
@@ -188,6 +189,8 @@ class AppController final : public QObject
     Q_PROPERTY(QVariantMap activeAiToolApproval READ activeAiToolApproval NOTIFY aiConversationChanged)
     Q_PROPERTY(QVariantList aiPermissionRules READ aiPermissionRules NOTIFY aiPermissionRulesChanged)
     Q_PROPERTY(QString aiPermissionRuleError READ aiPermissionRuleError NOTIFY aiPermissionRulesChanged)
+    Q_PROPERTY(QVariantList aiQuickMessages READ aiQuickMessages NOTIFY aiQuickMessagesChanged)
+    Q_PROPERTY(QString aiQuickMessageError READ aiQuickMessageError NOTIFY aiQuickMessagesChanged)
     Q_PROPERTY(QVariantMap aiPrivacyDiagnostics READ aiPrivacyDiagnostics NOTIFY aiPrivacyDiagnosticsChanged)
     Q_PROPERTY(QVariantList mcpServers READ mcpServers NOTIFY mcpConfigurationChanged)
     Q_PROPERTY(QVariantList mcpTools READ mcpTools NOTIFY mcpConfigurationChanged)
@@ -324,6 +327,8 @@ public:
     [[nodiscard]] QVariantMap activeAiToolApproval() const;
     [[nodiscard]] QVariantList aiPermissionRules() const;
     [[nodiscard]] QString aiPermissionRuleError() const;
+    [[nodiscard]] QVariantList aiQuickMessages() const;
+    [[nodiscard]] QString aiQuickMessageError() const;
     [[nodiscard]] QVariantMap aiPrivacyDiagnostics() const;
     [[nodiscard]] QVariantList mcpServers() const;
     [[nodiscard]] QVariantList mcpTools() const;
@@ -527,6 +532,9 @@ public:
     Q_INVOKABLE bool updateAiPermissionRule(const QString &id, const QString &matcher, const QString &pattern,
                                             bool enabled);
     Q_INVOKABLE bool deleteAiPermissionRule(const QString &id);
+    Q_INVOKABLE bool saveAiQuickMessage(const QString &id, const QString &name, const QString &slug,
+                                        const QString &content, const QString &description);
+    Q_INVOKABLE bool deleteAiQuickMessage(const QString &id);
     Q_INVOKABLE bool retryAiMessage();
     Q_INVOKABLE void clearAiConversation();
     Q_INVOKABLE void clearAiActivity();
@@ -581,6 +589,7 @@ signals:
     void credentialVaultChanged();
     void aiConversationChanged();
     void aiPermissionRulesChanged();
+    void aiQuickMessagesChanged();
     void aiModelsChanged();
     void aiPrivacyDiagnosticsChanged();
     void mcpConfigurationChanged();
@@ -825,6 +834,7 @@ private:
     void resolvePortForwardingHostKey(PortForwardingRuntime &runtime, ssh::UnknownHostKeyDecision decision) noexcept;
     void stopAllPortForwardingRules() noexcept;
     void loadApplicationSettings();
+    void loadAiQuickMessages();
     void loadQuickCommands();
     void loadWorkspaceState();
     void restoreTerminalWorkspaces();
@@ -837,6 +847,7 @@ private:
                                    const QString &relativePath, const QByteArray &outputJson);
     void setNoteOperationError(QString message);
     void setQuickCommandOperationError(QString message);
+    void setAiQuickMessageError(QString message);
     [[nodiscard]] bool persistApplicationSettings(const config::ApplicationSettings &settings);
     [[nodiscard]] bool saveHostProfileInternal(const QString &id, const QString &name, const QString &host, int port,
                                                const QString &username, const QString &authentication,
@@ -909,6 +920,7 @@ private:
     workbench::WorkspaceStateStore m_workspaceStateStore;
     ai::AiActivityModel m_aiActivity;
     ai::AiPermissionRuleStore m_aiPermissionRuleStore;
+    ai::AiQuickMessageStore m_aiQuickMessageStore;
     ai::McpRuntimeManager m_mcpRuntime;
     workbench::WorkspaceState m_workspaceState;
     std::vector<workbench::ScriptDefinition> m_scripts;
@@ -942,6 +954,8 @@ private:
     QStringList m_aiAvailableModels;
     QString m_aiModelsError;
     QString m_aiPermissionRuleError;
+    std::vector<ai::AiQuickMessage> m_aiQuickMessages;
+    QString m_aiQuickMessageError;
     quint64 m_aiModelsRequestGeneration = 0;
     bool m_aiModelsLoading = false;
     ai::AiContextBroker m_aiContextBroker;

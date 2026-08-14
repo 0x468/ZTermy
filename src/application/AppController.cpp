@@ -42,6 +42,7 @@
 #include <QVariantMap>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <functional>
 #include <iterator>
@@ -158,6 +159,11 @@ private:
 [[nodiscard]] QString siblingQuickCommandsFile(const QString &settingsPath)
 {
     return QFileInfo(settingsPath).dir().filePath(QStringLiteral("quick_commands.json"));
+}
+
+[[nodiscard]] QString siblingAiQuickMessagesFile(const QString &settingsPath)
+{
+    return QFileInfo(settingsPath).dir().filePath(QStringLiteral("ai_quick_messages.json"));
 }
 
 [[nodiscard]] QString siblingScriptsFile(const QString &settingsPath)
@@ -927,6 +933,15 @@ semanticCapability(const ztermy::terminal::SemanticTerminalSnapshot &snapshot) n
         const ushort value = character.unicode();
         return (value < 0x20U && value != '\t' && value != '\n' && value != '\r') || value == 0x7FU;
     });
+}
+
+[[nodiscard]] bool reservedAiQuickMessageSlug(const std::string_view slug) noexcept
+{
+    constexpr std::array reserved{std::string_view{"new"},       std::string_view{"history"},
+                                  std::string_view{"explain"},   std::string_view{"selection"},
+                                  std::string_view{"last"},      std::string_view{"last3"},
+                                  std::string_view{"last5"},     std::string_view{"command"}};
+    return std::ranges::find(reserved, slug) != reserved.end();
 }
 
 constexpr std::size_t maximumHistoryEntries = 1000;
@@ -1913,6 +1928,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
       m_workspaceStateStore(siblingWorkspaceStateFile(m_settingsStore.filePath())),
       m_aiActivity(siblingAiAuditFile(m_settingsStore.filePath())),
       m_aiPermissionRuleStore(siblingAiPermissionRulesFile(m_settingsStore.filePath())),
+      m_aiQuickMessageStore(siblingAiQuickMessagesFile(m_settingsStore.filePath())),
       m_mcpRuntime(siblingMcpServersFile(m_settingsStore.filePath()),
                    [this] {
                        emit mcpConfigurationChanged();
@@ -1945,6 +1961,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     loadPortForwardingRules();
     loadApplicationSettings();
     loadAiPermissionRules();
+    loadAiQuickMessages();
     initializeAiDebugTrace();
     m_mcpRuntime.initialize();
     initializeAiConversationHistory();
@@ -1984,6 +2001,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
       m_workspaceStateStore(siblingWorkspaceStateFile(m_settingsStore.filePath())),
       m_aiActivity(siblingAiAuditFile(m_settingsStore.filePath())),
       m_aiPermissionRuleStore(siblingAiPermissionRulesFile(m_settingsStore.filePath())),
+      m_aiQuickMessageStore(siblingAiQuickMessagesFile(m_settingsStore.filePath())),
       m_mcpRuntime(siblingMcpServersFile(m_settingsStore.filePath()),
                    [this] {
                        emit mcpConfigurationChanged();
@@ -2019,6 +2037,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     loadPortForwardingRules();
     loadApplicationSettings();
     loadAiPermissionRules();
+    loadAiQuickMessages();
     initializeAiDebugTrace();
     m_mcpRuntime.initialize();
     initializeAiConversationHistory();
@@ -3246,6 +3265,26 @@ QVariantList AppController::aiPermissionRules() const
 QString AppController::aiPermissionRuleError() const
 {
     return m_aiPermissionRuleError;
+}
+
+QVariantList AppController::aiQuickMessages() const
+{
+    QVariantList values;
+    values.reserve(static_cast<qsizetype>(m_aiQuickMessages.size()));
+    for (const ai::AiQuickMessage &message : m_aiQuickMessages)
+    {
+        values.push_back(QVariantMap{{QStringLiteral("id"), utf8QString(message.id)},
+                                     {QStringLiteral("name"), utf8QString(message.name)},
+                                     {QStringLiteral("slug"), utf8QString(message.slug)},
+                                     {QStringLiteral("content"), utf8QString(message.content)},
+                                     {QStringLiteral("description"), utf8QString(message.description)}});
+    }
+    return values;
+}
+
+QString AppController::aiQuickMessageError() const
+{
+    return m_aiQuickMessageError;
 }
 
 QVariantMap AppController::activeAiToolApproval() const
@@ -8111,6 +8150,99 @@ bool AppController::deleteAiPermissionRule(const QString &id)
     return rules.size() != previousSize && replaceAndPersistAiPermissionRules(std::move(rules));
 }
 
+bool AppController::saveAiQuickMessage(const QString &id, const QString &name, const QString &slug,
+                                       const QString &content, const QString &description)
+{
+    const QString normalizedName = name.trimmed();
+    const QString normalizedContent = normalizedQuickCommandText(content).trimmed();
+    const QString normalizedDescription = description.trimmed();
+    const std::string normalizedSlug = ai::normalizeAiQuickMessageSlug(utf8String(slug));
+    if (normalizedName.isEmpty() || normalizedContent.isEmpty() || !ai::validAiQuickMessageSlug(normalizedSlug)
+        || reservedAiQuickMessageSlug(normalizedSlug))
+    {
+        setAiQuickMessageError(tr("Enter a name, a unique slash command, and prompt text."));
+        return false;
+    }
+
+    std::vector<ai::AiQuickMessage> candidate = m_aiQuickMessages;
+    const std::int64_t now = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
+    ai::AiQuickMessage message{
+        .id = id.isEmpty() ? utf8String(QUuid::createUuid().toString(QUuid::WithoutBraces)) : utf8String(id),
+        .name = utf8String(normalizedName),
+        .slug = normalizedSlug,
+        .content = utf8String(normalizedContent),
+        .description = utf8String(normalizedDescription),
+        .createdUtcMs = now,
+        .modifiedUtcMs = now,
+    };
+    const auto duplicate = std::ranges::find_if(candidate, [&message](const ai::AiQuickMessage &existing) {
+        return existing.id != message.id && existing.slug == message.slug;
+    });
+    if (duplicate != candidate.end())
+    {
+        setAiQuickMessageError(tr("This slash command is already used."));
+        return false;
+    }
+    if (!ai::validAiQuickMessage(message))
+    {
+        setAiQuickMessageError(tr("The quick message is too long or contains unsupported characters."));
+        return false;
+    }
+    if (id.isEmpty())
+    {
+        if (candidate.size() >= static_cast<std::size_t>(ai::maximumAiQuickMessageCount))
+        {
+            setAiQuickMessageError(tr("The quick message limit has been reached."));
+            return false;
+        }
+        candidate.push_back(std::move(message));
+    }
+    else
+    {
+        const auto existing = std::ranges::find(candidate, message.id, &ai::AiQuickMessage::id);
+        if (existing == candidate.end())
+        {
+            setAiQuickMessageError(tr("The quick message no longer exists."));
+            return false;
+        }
+        message.createdUtcMs = existing->createdUtcMs;
+        *existing = std::move(message);
+    }
+    if (!m_aiQuickMessageStore.save(candidate))
+    {
+        setAiQuickMessageError(tr("The quick message could not be saved."));
+        return false;
+    }
+    m_aiQuickMessages = std::move(candidate);
+    m_aiQuickMessageError.clear();
+    emit aiQuickMessagesChanged();
+    return true;
+}
+
+bool AppController::deleteAiQuickMessage(const QString &id)
+{
+    std::vector<ai::AiQuickMessage> candidate = m_aiQuickMessages;
+    const std::string messageId = utf8String(id);
+    const auto previousSize = candidate.size();
+    std::erase_if(candidate, [&messageId](const ai::AiQuickMessage &message) {
+        return message.id == messageId;
+    });
+    if (candidate.size() == previousSize)
+    {
+        setAiQuickMessageError(tr("The quick message no longer exists."));
+        return false;
+    }
+    if (!m_aiQuickMessageStore.save(candidate))
+    {
+        setAiQuickMessageError(tr("The quick message could not be deleted."));
+        return false;
+    }
+    m_aiQuickMessages = std::move(candidate);
+    m_aiQuickMessageError.clear();
+    emit aiQuickMessagesChanged();
+    return true;
+}
+
 bool AppController::approveAiTool()
 {
     TerminalTab *tab = activeTab();
@@ -12791,6 +12923,19 @@ void AppController::loadAiPermissionRules()
     m_aiPermissionRuleError.clear();
 }
 
+void AppController::loadAiQuickMessages()
+{
+    auto messages = m_aiQuickMessageStore.load();
+    if (!messages)
+    {
+        m_aiQuickMessageError = tr("Quick messages could not be loaded.");
+        qCWarning(appControllerLog) << "Unable to load AI quick messages";
+        return;
+    }
+    m_aiQuickMessages = std::move(*messages);
+    m_aiQuickMessageError.clear();
+}
+
 bool AppController::replaceAndPersistAiPermissionRules(std::vector<ai::AiPermissionRule> rules)
 {
     const std::vector<ai::AiPermissionRule> previous = m_aiActionToolDispatcher.permissionRules();
@@ -13097,6 +13242,16 @@ void AppController::setQuickCommandOperationError(QString message)
     }
     m_quickCommandOperationError = std::move(message);
     emit quickCommandsChanged();
+}
+
+void AppController::setAiQuickMessageError(QString message)
+{
+    if (m_aiQuickMessageError == message)
+    {
+        return;
+    }
+    m_aiQuickMessageError = std::move(message);
+    emit aiQuickMessagesChanged();
 }
 
 void AppController::setNoteOperationError(QString message)
