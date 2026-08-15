@@ -8201,8 +8201,12 @@ bool AppController::restoreAiConversationHistory(const QString &conversationId)
     {
         tab->codexTurnRunner->stop();
     }
-    tab->codexThreadId.clear();
-    tab->activeAiAgent = config::AiAgentPreference::ztermy;
+    const auto storedAgent = config::parseAiAgentPreference(stored->agent);
+    tab->activeAiAgent = storedAgent.value_or(config::AiAgentPreference::ztermy);
+    tab->codexThreadId =
+        storedAgent == config::AiAgentPreference::codex && m_settings.aiAgent == config::AiAgentPreference::codex
+            ? stored->externalThreadId
+            : QString{};
     emit aiConversationChanged();
     return true;
 }
@@ -9899,6 +9903,7 @@ std::expected<ai::AiTurnRunner::TurnId, ai::AiProviderError> AppController::star
             if (TerminalTab *target = findTab(tabId); target != nullptr && target->codexTurnRunner)
             {
                 target->codexThreadId = target->codexTurnRunner->threadId();
+                persistAiConversation(*target);
             }
             if (finished)
             {
@@ -12262,7 +12267,11 @@ void AppController::persistAiConversation(const TerminalTab &tab)
     {
         return;
     }
-    ai::AiStoredConversation stored{.id = tab.aiConversationId, .updatedAtUtc = QDateTime::currentDateTimeUtc()};
+    ai::AiStoredConversation stored{
+        .id = tab.aiConversationId,
+        .agent = config::aiAgentPreferenceToken(tab.activeAiAgent),
+        .externalThreadId = tab.activeAiAgent == config::AiAgentPreference::codex ? tab.codexThreadId : QString{},
+        .updatedAtUtc = QDateTime::currentDateTimeUtc()};
     stored.messages.reserve(transcript.size());
     for (const auto &entry : transcript)
     {

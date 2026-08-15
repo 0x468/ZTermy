@@ -151,6 +151,23 @@ void AiConversationStoreTests::roundTripsWithoutPlaintextAndRotatesNonce()
     QCOMPARE(loaded->size(), 1ULL);
     QCOMPARE(loaded->front().messages.front().text, QStringLiteral("updated-secret"));
     QCOMPARE(loaded->front().messages.back().role, QStringLiteral("evidence"));
+
+    auto codex = conversation(QStringLiteral("codex"), QStringLiteral("resume-agent"));
+    codex.agent = QStringLiteral("codex");
+    codex.externalThreadId = QStringLiteral("thread-codex-1");
+    QVERIFY(store.upsert(codex).has_value());
+    const auto withAgent = store.load();
+    QVERIFY(withAgent.has_value());
+    const auto restoredCodex =
+        std::ranges::find(withAgent.value(), QStringLiteral("codex"), &ai::AiStoredConversation::id);
+    QVERIFY(restoredCodex != withAgent->end());
+    QCOMPARE(restoredCodex->agent, QStringLiteral("codex"));
+    QCOMPARE(restoredCodex->externalThreadId, QStringLiteral("thread-codex-1"));
+
+    codex.agent = QStringLiteral("unknown-agent");
+    QVERIFY(!store.upsert(codex).has_value());
+    codex.agent = QStringLiteral("ztermy");
+    QVERIFY(!store.upsert(codex).has_value());
 }
 
 void AiConversationStoreTests::rejectsTamperingAndMissingKeys()

@@ -26,6 +26,7 @@ public:
         UpdatedAtRole,
         MessageCountRole,
         PreviewRole,
+        AgentRole,
     };
 
     AiConversationHistoryModel(QString filePath, security::CredentialVault &vault, QObject *parent = nullptr);

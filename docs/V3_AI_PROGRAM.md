@@ -320,10 +320,14 @@ Implementation status:
   turn, and verifies Agent switching. An opt-in installed-CLI gate separately
   verifies the exact generated schema, process handshake, thread, stream, and
   completion status without adding network traffic to ordinary `ctest` runs;
-- durable Codex thread recovery across application restart, installed/portable
-  packaging evidence, and owner real-window acceptance remain open. Switching
-  Agent while idle deliberately starts a clean external resume point so one
-  conversation is never silently continued by a different runtime.
+- encrypted conversation history now records the owning Agent and bounded Codex
+  thread id. Explicitly restoring that history while Codex remains selected
+  resumes the same external thread with the current terminal's refreshed tool
+  catalog; restoring it under another Agent deliberately drops the external
+  resume id so one runtime never impersonates another;
+- installed/portable packaging evidence and owner real-window acceptance remain
+  open. Switching Agent while idle deliberately starts a clean external resume
+  point so one conversation is never silently continued by a different runtime.
 
 Current closure work:
 

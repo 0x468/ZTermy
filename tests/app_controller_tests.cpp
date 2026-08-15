@@ -1119,6 +1119,13 @@ void AppControllerTests::runsDiscoveredCodexAgentAgainstCurrentTerminal()
     QCOMPARE(tools.constFirst().toMap().value(QStringLiteral("name")).toString(), QStringLiteral("read_session_info"));
     QCOMPARE(tools.constFirst().toMap().value(QStringLiteral("state")).toString(), QStringLiteral("succeeded"));
 
+    QVERIFY(controller.sendAiMessage(QStringLiteral("Continue inspecting this terminal session.")));
+    QTRY_COMPARE_WITH_TIMEOUT(conversation->rowCount(), 4, 10'000);
+    QTRY_COMPARE_WITH_TIMEOUT(controller.activeAiState(), QStringLiteral("complete"), 10'000);
+    QVERIFY(conversation->data(conversation->index(3), ztermy::ai::AiConversationModel::TextRole)
+                .toString()
+                .contains(QStringLiteral("Resumed the terminal inspection")));
+
     QVERIFY(controller.setAiAgentPreference(QStringLiteral("ztermy")));
     QCOMPARE(controller.aiAgentPreference(), QStringLiteral("ztermy"));
 }

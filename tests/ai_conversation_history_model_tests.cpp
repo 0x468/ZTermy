@@ -86,6 +86,8 @@ private:
 {
     return {.id = QStringLiteral("conversation-1"),
             .title = QStringLiteral("Explain the failure"),
+            .agent = QStringLiteral("codex"),
+            .externalThreadId = QStringLiteral("thread-history-1"),
             .updatedAtUtc = QDateTime::currentDateTimeUtc(),
             .messages = {{.role = QStringLiteral("user"), .text = QStringLiteral("question")},
                          {.role = QStringLiteral("assistant"), .text = QStringLiteral("answer")},
@@ -121,6 +123,7 @@ void AiConversationHistoryModelTests::persistsLoadsExportsAndRemovesOffTheCaller
     QCOMPARE(model.data(model.index(0), ai::AiConversationHistoryModel::MessageCountRole).toULongLong(), 2ULL);
     QCOMPARE(model.data(model.index(0), ai::AiConversationHistoryModel::PreviewRole).toString(),
              QStringLiteral("answer"));
+    QCOMPARE(model.data(model.index(0), ai::AiConversationHistoryModel::AgentRole).toString(), QStringLiteral("codex"));
 
     const QString exported = directory.filePath(QStringLiteral("history.json"));
     model.exportDecrypted(exported);

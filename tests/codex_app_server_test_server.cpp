@@ -76,6 +76,7 @@ int run(int argc, char **argv)
     const QString toolName = qEnvironmentVariableIsSet("ZTERMY_TEST_CODEX_SESSION_INFO")
                                  ? QStringLiteral("read_session_info")
                                  : QStringLiteral("read_terminal_frame");
+    bool resumedThread = false;
     std::string line;
     while (std::getline(std::cin, line))
     {
@@ -96,6 +97,7 @@ int run(int argc, char **argv)
         }
         else if (method == QStringLiteral("thread/start") || method == QStringLiteral("thread/resume"))
         {
+            resumedThread = method == QStringLiteral("thread/resume");
             const QJsonObject params = request.value(QStringLiteral("params")).toObject();
             if (params.value(QStringLiteral("sandbox")).toString() != QStringLiteral("read-only")
                 || params.value(QStringLiteral("approvalPolicy")).toString() != QStringLiteral("never")
@@ -123,12 +125,14 @@ int run(int argc, char **argv)
                               QJsonObject{{QStringLiteral("threadId"), threadId},
                                           {QStringLiteral("turn"),
                                            QJsonObject{{QStringLiteral("id"), QStringLiteral("turn-ztermy")}}}}}});
-            send(QJsonObject{{QStringLiteral("method"), QStringLiteral("item/agentMessage/delta")},
-                             {QStringLiteral("params"),
-                              QJsonObject{{QStringLiteral("threadId"), threadId},
-                                          {QStringLiteral("turnId"), QStringLiteral("turn-ztermy")},
-                                          {QStringLiteral("itemId"), QStringLiteral("message-ztermy")},
-                                          {QStringLiteral("delta"), QStringLiteral("Inspecting the terminal")}}}});
+            send(QJsonObject{
+                {QStringLiteral("method"), QStringLiteral("item/agentMessage/delta")},
+                {QStringLiteral("params"),
+                 QJsonObject{{QStringLiteral("threadId"), threadId},
+                             {QStringLiteral("turnId"), QStringLiteral("turn-ztermy")},
+                             {QStringLiteral("itemId"), QStringLiteral("message-ztermy")},
+                             {QStringLiteral("delta"), resumedThread ? QStringLiteral("Resumed the terminal inspection")
+                                                                     : QStringLiteral("Inspecting the terminal")}}}});
             if (noTool)
             {
                 continue;

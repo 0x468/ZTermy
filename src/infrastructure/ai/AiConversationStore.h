@@ -27,6 +27,8 @@ struct AiStoredConversation final
 {
     QString id;
     QString title;
+    QString agent = QStringLiteral("ztermy");
+    QString externalThreadId;
     QDateTime updatedAtUtc;
     std::vector<AiStoredMessage> messages;
 

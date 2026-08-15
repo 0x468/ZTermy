@@ -1064,6 +1064,7 @@ Rectangle {
                         required property date updatedAt
                         required property int messageCount
                         required property string preview
+                        required property string agent
                         width: ListView.view.width
                         height: 52
                         radius: Theme.radiusSmall
@@ -1104,7 +1105,7 @@ Rectangle {
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: qsTr("%n message(s)", "", historyItem.messageCount) + " · " + historyItem.updatedAt.toLocaleString(Qt.locale(), Locale.ShortFormat) + " · " + historyItem.preview
+                                    text: pane.agentOption(historyItem.agent).name + " · " + qsTr("%n message(s)", "", historyItem.messageCount) + " · " + historyItem.updatedAt.toLocaleString(Qt.locale(), Locale.ShortFormat) + " · " + historyItem.preview
                                     color: Theme.textMuted
                                     elide: Text.ElideRight
                                     font.family: Theme.uiFont
@@ -1906,6 +1907,7 @@ Rectangle {
                             required property string conversationId
                             required property string title
                             required property date updatedAt
+                            required property string agent
                             Layout.fillWidth: true
                             Layout.preferredHeight: visible ? 34 : 0
                             visible: index < 3
@@ -1937,6 +1939,13 @@ Rectangle {
                                     elide: Text.ElideRight
                                     font.family: Theme.uiFont
                                     font.pixelSize: Theme.textLabel
+                                }
+
+                                Text {
+                                    text: pane.agentOption(recentConversation.agent).name
+                                    color: Theme.textSubtle
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: Theme.textCompact
                                 }
 
                                 Text {

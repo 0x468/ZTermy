@@ -331,7 +331,11 @@ the unified release-candidate verifier.
 - App Server shutdown now closes stdin and waits for normal exit before
   terminate/kill escalation. The same real failure scenario restores its
   temporary Windows sandbox directory cleanly instead of leaving inaccessible
-  ACL state.
+  ACL state;
+- encrypted history round trips the owning Agent and bounded external thread id;
+  history rows expose the Agent, a restored Codex conversation resumes only when
+  Codex is currently selected, and the deterministic application scenario proves
+  a second turn uses `thread/resume` rather than silently opening another thread.
 
 ## Evaluation corpus
 
