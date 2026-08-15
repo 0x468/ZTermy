@@ -5,6 +5,20 @@
 > Netcatty 对照：`docs/reviews/netcatty-ai-comparison-2026-08.md`；
 > Codex 专项：`docs/research/CODEX_CLI_ARCHITECTURE.md`。
 
+## 节点 N26 — ACP 异步进程与 Session 事件（2026-08-15）
+
+**commit**: 本节点提交（见 git 历史）
+
+**范围**：
+
+1. 新增原生 `AcpClient`，以 `QProcess` 覆盖 v1 初始化、Session 新建/恢复、Prompt、流式更新、异步 Client 请求、协作取消、关闭和异常退出；
+2. 每个进程只持有当前终端的一个 Session id，外来 Session 更新直接失败；不新增 `session/list`、跨 Tab 发现或路由；
+3. Agent→Client 请求在单轮内按 JSON-RPC id 去重并限制并发/总量，重复请求只返回错误而不会再次派发；取消 5 秒仍不收尾则终止 Agent，避免界面永久卡住；
+4. 新增 `AcpSessionUpdateMapper`，映射正文、公开思考和工具生命周期；ACP `used/size` 与成本保持独立上下文用量，不伪装成 Provider 输入/输出 Token；
+5. 确定性假 Agent 覆盖正常流式、当前 Session 工具回调、恢复、取消、越权更新和重复请求，无需账号或网络。
+
+**验证**：聚焦 `acp-protocol`、`acp-client`、`acp-session-update-mapper` 3/3 通过；MSVC 动态 Debug 非真实主机全量 118/118 通过，完整编译数据库 clang-tidy 264 个翻译单元与 C++ 格式门禁通过。ADR 0094 固化进程、取消、去重和事件语义。
+
 ## 节点 N25 — ACP / OpenCode 原生协议边界（2026-08-15）
 
 **commit**: 本节点提交（见 git 历史）

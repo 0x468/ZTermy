@@ -582,6 +582,10 @@ target_link_libraries(ztermy_external_agent_protocol
 )
 
 add_library(ztermy_external_agent_runtime STATIC
+    src/infrastructure/ai/AcpClient.cpp
+    src/infrastructure/ai/AcpClient.h
+    src/infrastructure/ai/AcpSessionUpdateMapper.cpp
+    src/infrastructure/ai/AcpSessionUpdateMapper.h
     src/infrastructure/ai/CodexAppServerClient.cpp
     src/infrastructure/ai/CodexAppServerClient.h
     src/infrastructure/ai/CodexAppServerDiscovery.cpp
@@ -2853,6 +2857,53 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME acp-protocol COMMAND ztermy_acp_protocol_tests)
+
+    add_executable(ztermy_acp_test_agent
+        tests/acp_test_agent.cpp
+    )
+    target_compile_features(ztermy_acp_test_agent PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_acp_test_agent PRIVATE Qt6::Core)
+
+    qt_add_executable(ztermy_acp_client_tests
+        tests/acp_client_tests.cpp
+    )
+    target_compile_features(ztermy_acp_client_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_acp_client_tests PRIVATE
+        ztermy_external_agent_runtime
+        Qt6::Test
+    )
+    add_dependencies(ztermy_acp_client_tests ztermy_acp_test_agent)
+
+    if(MSVC)
+        target_compile_options(ztermy_acp_client_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME acp-client COMMAND ztermy_acp_client_tests)
+
+    qt_add_executable(ztermy_acp_session_update_mapper_tests
+        tests/acp_session_update_mapper_tests.cpp
+    )
+    target_compile_features(ztermy_acp_session_update_mapper_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_acp_session_update_mapper_tests PRIVATE
+        ztermy_external_agent_runtime
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_acp_session_update_mapper_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME acp-session-update-mapper COMMAND ztermy_acp_session_update_mapper_tests)
 
     add_executable(ztermy_codex_app_server_test_server
         tests/codex_app_server_test_server.cpp

@@ -116,6 +116,8 @@ covered by `application-settings`, `ai-permission-policy`,
 | Paste clipboard images and Explorer-copied image/text files while preserving ordinary text paste | `src/ui/qml/AiAssistantPane.qml`, `src/application/AppController.*`, `src/main.cpp` runtime fixture | `ui-layout-runtime-smoke`, `app-controller` | ADR 0087, 0089 |
 | Derive final-answer evidence integrity from persisted tool states and surface failed/pending work without rewriting the answer | `src/domain/ai/AiToolEvidence.*`, `src/application/ai/AiConversationModel.*`, `AiSystemPromptBuilder.*`, `src/ui/qml/AiAssistantPane.qml` | `ai-conversation-model`, `ai-system-prompt-builder`, `ui-layout-runtime-smoke` | ADR 0092 |
 | Negotiate a bounded ACP v1 external-Agent connection without exposing local files or cross-terminal Sessions | `src/infrastructure/ai/AcpProtocol.*` | `acp-protocol` | ADR 0093, ACP v1 official protocol, OpenCode 1.18.5 local handshake |
+| Run one bounded ACP process/Session per owning terminal with streaming, resume, cancellation, failure propagation, and at-most-once Client requests | `src/infrastructure/ai/AcpClient.*` | `acp-client` | ADR 0094 |
+| Preserve ACP assistant text, public thought, tool lifecycle, context-window usage, and cost as typed events | `src/infrastructure/ai/AcpSessionUpdateMapper.*` | `acp-session-update-mapper` | ADR 0094 |
 
 ## 0.3.10 — current-terminal native tool contract
 

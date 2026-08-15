@@ -360,6 +360,17 @@ Current closure work:
   fragmented NDJSON. OpenCode 1.18.5 is the first exercised target; the Client
   advertises terminal but not local-file capabilities, and every future
   callback remains owned by one terminal tab (`ADR 0093`).
+- an asynchronous ACP process Client now enforces a one-process/one-Session
+  state machine, exact Session updates, bounded per-Prompt Client requests,
+  at-most-once request dispatch, cooperative cancellation with a finite
+  deadline, and visible process failure. A typed mapper preserves assistant
+  text, public thought, tool lifecycle, context-window usage, and optional cost
+  without mislabelling ACP context usage as Provider tokens (`ADR 0094`).
+- a deterministic fake ACP Agent proves new/resumed Sessions, streaming,
+  current-Session terminal requests, cancellation, foreign-Session rejection,
+  and duplicate-request suppression without a model account or network. The
+  remaining ACP application node is terminal/permission callback dispatch and
+  the visible OpenCode Agent option.
 
 Delivery status:
 

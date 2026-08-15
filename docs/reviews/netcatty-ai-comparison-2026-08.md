@@ -211,6 +211,13 @@ token 估算 → 预压缩（LLM 摘要 temp=0，保护最近 N 条，保留最�
   当前侧栏所属的唯一 PTY；不能把本机仓库当作远端文件系统，也不能创建跨 Tab 目标。
 - `AcpProtocol` 已落地稳定 v1 的有界 wire contract；进程生命周期、Session update 映射、
   terminal/permission callback 和 OpenCode Agent 选项按独立节点接入。对应 ADR 0093。
+- 原生异步 ACP Client 已覆盖进程启动、Session 新建/恢复、Prompt 流、取消和异常退出，
+  并严格拒绝其它 Session 的更新；Agent→Client 请求按单轮 ID 去重，避免网络/进程重放
+  导致同一终端动作执行两次。正文、公开思考、工具进度和上下文用量已有类型化映射，
+  确定性假 Agent 无需账号即可回归。对应 ADR 0094。
+- 与 NetCatty 多私有 SDK 驱动相比，这条边界优先复用 ACP 标准协议并保持“一个侧栏只对应
+  当前终端”。尚未宣称完成的是 `terminal/*` / 权限请求到现有动作链的应用接线，以及
+  OpenCode 在 Agent 选择器中的可见入口；不会为追求功能数量加入跨终端 Session 工具。
 
 参考：
 
