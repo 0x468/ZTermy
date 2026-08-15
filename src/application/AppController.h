@@ -821,6 +821,7 @@ private:
     [[nodiscard]] bool sendAiMessage(TerminalTab &tab, const QString &prompt, bool preferLastFailure,
                                      bool appendPrompt = true, bool commandRequest = false,
                                      const QStringList &selectedSkillIds = {}, bool webSearchEnabled = false);
+    void handleAiStreamEvent(const QString &tabId, std::uint64_t assistantMessageId, const ai::AiStreamEvent &event);
     [[nodiscard]] ai::AiTurnRunner::ToolHandlingResult handleAiWaitCommand(TerminalTab &tab, const QString &tabId,
                                                                            const ai::AiToolCall &call,
                                                                            const ai::AiSessionTarget &turnTarget);

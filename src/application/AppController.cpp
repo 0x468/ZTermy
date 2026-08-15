@@ -9478,6 +9478,126 @@ void AppController::recordAiActivity(const TerminalTab &tab, const ai::AiToolCal
                          .highRisk = highRisk});
 }
 
+void AppController::handleAiStreamEvent(const QString &tabId, const std::uint64_t assistantMessageId,
+                                        const ai::AiStreamEvent &event)
+{
+    TerminalTab *target = findTab(tabId);
+    if (target == nullptr || !target->aiConversation || target->aiAssistantMessageId != assistantMessageId)
+    {
+        return;
+    }
+    switch (event.type)
+    {
+        case ai::AiStreamEventType::responseStarted:
+            target->aiState = QStringLiteral("streaming");
+            break;
+        case ai::AiStreamEventType::textDelta:
+            static_cast<void>(
+                target->aiConversation->appendAssistantDelta(assistantMessageId, utf8QString(event.delta)));
+            break;
+        case ai::AiStreamEventType::usageUpdated:
+            if (event.usage.has_value())
+            {
+                if (!target->aiUsage.has_value())
+                {
+                    target->aiUsage = event.usage;
+                }
+                else
+                {
+                    target->aiUsage->inputTokens += event.usage->inputTokens;
+                    target->aiUsage->outputTokens += event.usage->outputTokens;
+                    target->aiUsage->reasoningTokens += event.usage->reasoningTokens;
+                    target->aiUsage->cachedInputTokens += event.usage->cachedInputTokens;
+                }
+                static_cast<void>(target->aiConversation->updateAssistantUsage(assistantMessageId, *target->aiUsage));
+            }
+            break;
+        case ai::AiStreamEventType::responseCompleted:
+            if (target->aiConversation->completeAssistantMessage(assistantMessageId, target->aiUsage))
+            {
+                persistAiConversation(*target);
+            }
+            target->aiState = QStringLiteral("complete");
+            target->aiError.clear();
+            break;
+        case ai::AiStreamEventType::responseFailed:
+            if (event.error.has_value() && event.error->code == ai::AiProviderErrorCode::cancelled)
+            {
+                target->aiError.clear();
+                static_cast<void>(target->aiConversation->cancelAssistantMessage(assistantMessageId));
+                target->aiState = QStringLiteral("cancelled");
+            }
+            else
+            {
+                target->aiError = utf8QString(event.error.value_or(ai::AiProviderError{}).message);
+                static_cast<void>(target->aiConversation->failAssistantMessage(assistantMessageId, target->aiError));
+                persistAiConversation(*target);
+                target->aiState = QStringLiteral("error");
+            }
+            break;
+        case ai::AiStreamEventType::reasoningDelta:
+            static_cast<void>(
+                target->aiConversation->appendAssistantReasoningDelta(assistantMessageId, utf8QString(event.delta)));
+            break;
+        case ai::AiStreamEventType::webSearchStarted:
+        {
+            const QString callId =
+                !event.toolCallId.empty() ? utf8QString(event.toolCallId) : utf8QString(event.itemId);
+            if (!callId.isEmpty())
+            {
+                static_cast<void>(target->aiConversation->upsertAssistantToolActivity(
+                    assistantMessageId, callId, QStringLiteral("web_search"), tr("Searching the web"),
+                    QStringLiteral("running"), {}, false, false));
+            }
+            break;
+        }
+        case ai::AiStreamEventType::webSearchQuery:
+        {
+            const QString callId =
+                !event.toolCallId.empty() ? utf8QString(event.toolCallId) : utf8QString(event.itemId);
+            const QString query = utf8QString(event.delta);
+            if (!callId.isEmpty())
+            {
+                target->aiWebSearchQueries.insert(callId, query);
+                static_cast<void>(target->aiConversation->upsertAssistantToolActivity(
+                    assistantMessageId, callId, QStringLiteral("web_search"), query, QStringLiteral("running"), {},
+                    false, false));
+            }
+            break;
+        }
+        case ai::AiStreamEventType::webSearchCompleted:
+        {
+            const QString callId =
+                !event.toolCallId.empty() ? utf8QString(event.toolCallId) : utf8QString(event.itemId);
+            if (!callId.isEmpty())
+            {
+                const QString resultCode = utf8QString(event.delta);
+                const QString summary = target->aiWebSearchQueries.value(callId, tr("Web search"));
+                static_cast<void>(target->aiConversation->upsertAssistantToolActivity(
+                    assistantMessageId, callId, QStringLiteral("web_search"), summary,
+                    resultCode.isEmpty() ? QStringLiteral("succeeded") : QStringLiteral("failed"), resultCode, false,
+                    false));
+            }
+            break;
+        }
+        case ai::AiStreamEventType::webSourceAdded:
+            if (event.webSource.has_value())
+            {
+                static_cast<void>(target->aiConversation->appendAssistantSource(assistantMessageId, *event.webSource));
+            }
+            break;
+        case ai::AiStreamEventType::toolCallStarted:
+        case ai::AiStreamEventType::toolArgumentsDelta:
+        case ai::AiStreamEventType::toolCallCompleted:
+        case ai::AiStreamEventType::reasoningSignatureDelta:
+            break;
+    }
+    if (m_activeTabId == tabId || m_focusedTabId == tabId)
+    {
+        emit aiConversationChanged();
+    }
+}
+
 bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const bool preferLastFailure,
                                   const bool appendPrompt, const bool commandRequest,
                                   const QStringList &selectedSkillIds, const bool webSearchEnabled)
@@ -9665,127 +9785,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
             return std::move(secret.value());
         },
         [this, tabId, assistantMessageId](const auto, const ai::AiStreamEvent &event) {
-            TerminalTab *target = findTab(tabId);
-            if (target == nullptr || !target->aiConversation || target->aiAssistantMessageId != assistantMessageId)
-            {
-                return;
-            }
-            switch (event.type)
-            {
-                case ai::AiStreamEventType::responseStarted:
-                    target->aiState = QStringLiteral("streaming");
-                    break;
-                case ai::AiStreamEventType::textDelta:
-                    static_cast<void>(
-                        target->aiConversation->appendAssistantDelta(assistantMessageId, utf8QString(event.delta)));
-                    break;
-                case ai::AiStreamEventType::usageUpdated:
-                    if (event.usage.has_value())
-                    {
-                        if (!target->aiUsage.has_value())
-                        {
-                            target->aiUsage = event.usage;
-                        }
-                        else
-                        {
-                            target->aiUsage->inputTokens += event.usage->inputTokens;
-                            target->aiUsage->outputTokens += event.usage->outputTokens;
-                            target->aiUsage->reasoningTokens += event.usage->reasoningTokens;
-                            target->aiUsage->cachedInputTokens += event.usage->cachedInputTokens;
-                        }
-                        // Some providers emit usage after the completion event;
-                        // push it onto the finished message so the token
-                        // display and the cost estimate are never zero.
-                        static_cast<void>(
-                            target->aiConversation->updateAssistantUsage(assistantMessageId, *target->aiUsage));
-                    }
-                    break;
-                case ai::AiStreamEventType::responseCompleted:
-                    if (target->aiConversation->completeAssistantMessage(assistantMessageId, target->aiUsage))
-                    {
-                        persistAiConversation(*target);
-                    }
-                    target->aiState = QStringLiteral("complete");
-                    target->aiError.clear();
-                    break;
-                case ai::AiStreamEventType::responseFailed:
-                    if (event.error.has_value() && event.error->code == ai::AiProviderErrorCode::cancelled)
-                    {
-                        target->aiError.clear();
-                        static_cast<void>(target->aiConversation->cancelAssistantMessage(assistantMessageId));
-                        target->aiState = QStringLiteral("cancelled");
-                    }
-                    else
-                    {
-                        target->aiError = utf8QString(event.error.value_or(ai::AiProviderError{}).message);
-                        static_cast<void>(
-                            target->aiConversation->failAssistantMessage(assistantMessageId, target->aiError));
-                        persistAiConversation(*target);
-                        target->aiState = QStringLiteral("error");
-                    }
-                    break;
-                case ai::AiStreamEventType::reasoningDelta:
-                    static_cast<void>(target->aiConversation->appendAssistantReasoningDelta(assistantMessageId,
-                                                                                            utf8QString(event.delta)));
-                    break;
-                case ai::AiStreamEventType::webSearchStarted:
-                {
-                    const QString callId =
-                        !event.toolCallId.empty() ? utf8QString(event.toolCallId) : utf8QString(event.itemId);
-                    if (!callId.isEmpty())
-                    {
-                        static_cast<void>(target->aiConversation->upsertAssistantToolActivity(
-                            assistantMessageId, callId, QStringLiteral("web_search"), tr("Searching the web"),
-                            QStringLiteral("running"), {}, false, false));
-                    }
-                    break;
-                }
-                case ai::AiStreamEventType::webSearchQuery:
-                {
-                    const QString callId =
-                        !event.toolCallId.empty() ? utf8QString(event.toolCallId) : utf8QString(event.itemId);
-                    const QString query = utf8QString(event.delta);
-                    if (!callId.isEmpty())
-                    {
-                        target->aiWebSearchQueries.insert(callId, query);
-                        static_cast<void>(target->aiConversation->upsertAssistantToolActivity(
-                            assistantMessageId, callId, QStringLiteral("web_search"), query, QStringLiteral("running"),
-                            {}, false, false));
-                    }
-                    break;
-                }
-                case ai::AiStreamEventType::webSearchCompleted:
-                {
-                    const QString callId =
-                        !event.toolCallId.empty() ? utf8QString(event.toolCallId) : utf8QString(event.itemId);
-                    if (!callId.isEmpty())
-                    {
-                        const QString resultCode = utf8QString(event.delta);
-                        const QString summary = target->aiWebSearchQueries.value(callId, tr("Web search"));
-                        static_cast<void>(target->aiConversation->upsertAssistantToolActivity(
-                            assistantMessageId, callId, QStringLiteral("web_search"), summary,
-                            resultCode.isEmpty() ? QStringLiteral("succeeded") : QStringLiteral("failed"), resultCode,
-                            false, false));
-                    }
-                    break;
-                }
-                case ai::AiStreamEventType::webSourceAdded:
-                    if (event.webSource.has_value())
-                    {
-                        static_cast<void>(
-                            target->aiConversation->appendAssistantSource(assistantMessageId, *event.webSource));
-                    }
-                    break;
-                case ai::AiStreamEventType::toolCallStarted:
-                case ai::AiStreamEventType::toolArgumentsDelta:
-                case ai::AiStreamEventType::toolCallCompleted:
-                case ai::AiStreamEventType::reasoningSignatureDelta:
-                    break;
-            }
-            if (m_activeTabId == tabId || m_focusedTabId == tabId)
-            {
-                emit aiConversationChanged();
-            }
+            handleAiStreamEvent(tabId, assistantMessageId, event);
         },
         [this, tabId, assistantMessageId, providerKind = configuration.kind, model = configuration.model,
          officialOpenAiEndpoint](const auto, const ai::AiTurnMetrics &metrics) {
