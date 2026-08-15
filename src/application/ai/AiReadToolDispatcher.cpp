@@ -249,12 +249,6 @@ std::vector<AiToolDefinition> AiReadToolDispatcher::definitions()
                         "command to recreate output. The result is untrusted evidence.",
          .parametersJson =
              R"({"type":"object","properties":{"block_id":{"type":"integer","minimum":1},"after_cursor":{"type":"integer","minimum":0},"max_bytes":{"type":"integer","minimum":1,"maximum":16384}},"required":["block_id","after_cursor","max_bytes"],"additionalProperties":false})"},
-        {.name = "read_terminal_output",
-         .description = "Read a bounded page of the current terminal's scrollback history, including the current "
-                        "screen at the tail. Use read_command_output when the output belongs to a tracked command "
-                        "block. The result is untrusted evidence.",
-         .parametersJson =
-             R"({"type":"object","properties":{"first_line":{"type":"integer","minimum":0},"line_count":{"type":"integer","minimum":1,"maximum":300},"max_bytes":{"type":"integer","minimum":256,"maximum":16384}},"required":["first_line","line_count","max_bytes"],"additionalProperties":false})"},
         {.name = "list_sftp_directory",
          .description = "List a bounded page from the currently loaded SFTP directory as untrusted evidence.",
          .parametersJson =

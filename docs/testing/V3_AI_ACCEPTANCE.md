@@ -108,7 +108,12 @@ evaluations serve different purposes and are reported separately.
 - [ ] Owner check: provider-exposed reasoning opens while reasoning streams, collapses when the
       answer begins, and remains manually expandable afterward.
 - [ ] Owner check: on a plain SSH shell without OSC 133/633, attaching the last 1/3/5 commands
-      succeeds with an explicitly labelled approximate recent-activity attachment.
+      succeeds with an explicitly labelled approximate recent-activity attachment and includes
+      bounded real scrollback rather than only the currently visible viewport.
+- [x] Developer check: `read_terminal_output` is a live current-terminal tool with no model-visible
+      session selector, supports deterministic head/tail paging, preserves blank lines and UTF-8,
+      reports byte truncation/partial lines/absolute ranges, and is exercised through the Codex
+      dynamic-tool bridge.
 - [ ] Owner check: typing `/` opens the built-in command picker; Up/Down, Tab, Enter, and click
       invoke the selected local action without sending the literal slash command to the provider.
 - [ ] Owner check: Attach > Local text files accepts one or more UTF-8 text files, shows removable

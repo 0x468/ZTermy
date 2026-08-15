@@ -8929,8 +8929,36 @@ bool AppController::attachAiRecentCommands(const int count)
             appendRecent(tab->history);
         }
 
-        const QString terminalFrame = terminalFrameText(tab->snapshot).trimmed();
-        if (commands.empty() && terminalFrame.isEmpty())
+        const std::size_t recentLineCount = maximum * std::size_t{40};
+        std::expected<terminal::TerminalScrollbackPage, std::error_code> recentPage =
+            std::unexpected(std::make_error_code(std::errc::not_connected));
+        const terminal::TerminalScrollbackRequest scrollbackRequest{.anchor = terminal::TerminalScrollbackAnchor::tail,
+                                                                    .offset = 0,
+                                                                    .lineCount = recentLineCount};
+        if (tab->ssh)
+        {
+            recentPage = tab->ssh->scrollbackPage(scrollbackRequest);
+        }
+        else if (tab->local)
+        {
+            recentPage = tab->local->scrollbackPage(scrollbackRequest);
+        }
+        QString recentOutput;
+        if (recentPage.has_value())
+        {
+            const ai::AiTerminalOutputRequest outputRequest{
+                .target = {.sessionId = utf8String(tab->id), .sessionGeneration = tab->reconnectGeneration},
+                .anchor = terminal::TerminalScrollbackAnchor::tail,
+                .offset = 0,
+                .lineCount = recentLineCount,
+                .maximumBytes = std::size_t{16} * 1024};
+            recentOutput = utf8QString(ai::AiTerminalOutputTool::read(outputRequest, *recentPage).content).trimmed();
+        }
+        if (recentOutput.isEmpty())
+        {
+            recentOutput = terminalFrameText(tab->snapshot).trimmed();
+        }
+        if (commands.empty() && recentOutput.isEmpty())
         {
             tab->aiError = tr("No recent terminal activity is available to attach.");
             emit aiConversationChanged();
@@ -8947,9 +8975,9 @@ bool AppController::attachAiRecentCommands(const int count)
                 content += QStringLiteral("\n$ ") + command;
             }
         }
-        if (!terminalFrame.isEmpty())
+        if (!recentOutput.isEmpty())
         {
-            content += tr("\nCurrent terminal frame:\n%1").arg(terminalFrame);
+            content += tr("\nRecent terminal output:\n%1").arg(recentOutput);
         }
         tab->aiExplicitContextItems.push_back(
             ai::AiExplicitContext{.id = "terminal-command:approximate",
@@ -10051,6 +10079,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
     }
     instructions += ai::AiUserSkillTool::selectedInstructions(*turnSkills, selectedSkillNames);
     auto toolDefinitions = ai::AiReadToolDispatcher::definitions();
+    toolDefinitions.push_back(ai::AiTerminalOutputTool::definition());
     toolDefinitions.insert(toolDefinitions.end(), userSkillDefinitions.begin(), userSkillDefinitions.end());
     const bool actionsAvailable = !commandRequest && permissionMode != ai::AiPermissionMode::readOnly;
     if (actionsAvailable)
@@ -11222,96 +11251,32 @@ ai::AiTurnRunner::ToolHandlingResult AppController::handleAiWaitCommand(Terminal
 
 std::string AppController::executeAiScrollbackRead(TerminalTab &tab, const ai::AiToolCall &call)
 {
-    QJsonParseError parseError;
-    const auto document = QJsonDocument::fromJson(QByteArray::fromStdString(call.argumentsJson), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !document.isObject())
+    const ai::AiSessionTarget target{.sessionId = utf8String(tab.id), .sessionGeneration = tab.reconnectGeneration};
+    const auto request = ai::AiTerminalOutputTool::parse(call.argumentsJson, target);
+    if (!request.has_value())
     {
-        return aiToolFailureJson(QStringLiteral("invalid_arguments"), tr("The scrollback read arguments are invalid."));
+        return request.error();
     }
-    const QJsonObject object = document.object();
-    if (object.size() != 3 || !object.contains(QStringLiteral("first_line"))
-        || !object.contains(QStringLiteral("line_count")) || !object.contains(QStringLiteral("max_bytes")))
-    {
-        return aiToolFailureJson(QStringLiteral("invalid_arguments"), tr("Unexpected scrollback read arguments."));
-    }
-    const auto firstLineValue = object.value(QStringLiteral("first_line"));
-    const auto lineCountValue = object.value(QStringLiteral("line_count"));
-    const auto maximumBytesValue = object.value(QStringLiteral("max_bytes"));
-    const bool numbersValid = firstLineValue.isDouble() && lineCountValue.isDouble() && maximumBytesValue.isDouble()
-                              && firstLineValue.toDouble() >= 0.0 && lineCountValue.toDouble() >= 1.0
-                              && lineCountValue.toDouble() <= 300.0 && maximumBytesValue.toDouble() >= 256.0
-                              && maximumBytesValue.toDouble() <= 16384.0;
-    if (!numbersValid)
-    {
-        return aiToolFailureJson(QStringLiteral("invalid_arguments"), tr("The scrollback read bounds are invalid."));
-    }
-    const auto firstLine = static_cast<std::size_t>(firstLineValue.toDouble());
-    const auto lineCount = static_cast<std::size_t>(lineCountValue.toDouble());
-    const auto maximumBytes = static_cast<std::size_t>(maximumBytesValue.toDouble());
 
     std::expected<terminal::TerminalScrollbackPage, std::error_code> page =
         std::unexpected(std::make_error_code(std::errc::not_connected));
     if (tab.ssh != nullptr)
     {
-        page = tab.ssh->scrollbackPage(firstLine, lineCount);
+        page = tab.ssh->scrollbackPage(
+            {.anchor = request->anchor, .offset = request->offset, .lineCount = request->lineCount});
     }
     else if (tab.local != nullptr)
     {
-        page = tab.local->scrollbackPage(firstLine, lineCount);
+        page = tab.local->scrollbackPage(
+            {.anchor = request->anchor, .offset = request->offset, .lineCount = request->lineCount});
     }
     if (!page)
     {
-        return aiToolFailureJson(QStringLiteral("session_unavailable"),
-                                 tr("The terminal scrollback is unavailable for this session: %1.")
-                                     .arg(QString::fromStdString(page.error().message())));
+        return ai::AiTerminalOutputTool::failure(
+            "session_unavailable", utf8String(tr("The terminal scrollback is unavailable for this session: %1.")
+                                                  .arg(QString::fromStdString(page.error().message()))));
     }
-
-    QString content;
-    auto remaining = static_cast<qsizetype>(maximumBytes);
-    bool truncated = false;
-    for (std::size_t index = 0; index < page->lines.size() && remaining > 0; ++index)
-    {
-        QString line = QString::fromUtf8(page->lines[index].data(), static_cast<qsizetype>(page->lines[index].size()));
-        while (line.endsWith(QLatin1Char(' ')) || line.endsWith(QLatin1Char('\t')))
-        {
-            line.chop(1);
-        }
-        const QByteArray lineBytes = line.toUtf8();
-        if (lineBytes.size() > remaining)
-        {
-            auto count = remaining;
-            while (count > 0 && count < lineBytes.size()
-                   && (static_cast<unsigned char>(lineBytes.at(count)) & 0xC0U) == 0x80U)
-            {
-                --count;
-            }
-            content += QString::fromUtf8(lineBytes.constData(), count);
-            truncated = true;
-            break;
-        }
-        if (!content.isEmpty())
-        {
-            content += QLatin1Char('\n');
-            --remaining;
-            if (remaining <= 0)
-            {
-                truncated = true;
-                break;
-            }
-        }
-        content += line;
-        remaining -= lineBytes.size();
-    }
-    const bool hasMore = page->lines.size() == lineCount || truncated;
-    return compactJson(QJsonObject{{QStringLiteral("ok"), true},
-                                   {QStringLiteral("terminal_output"),
-                                    QJsonObject{{QStringLiteral("first_line"), static_cast<qint64>(firstLine)},
-                                                {QStringLiteral("line_count"), static_cast<qint64>(page->lines.size())},
-                                                {QStringLiteral("total_lines"), static_cast<qint64>(page->totalLines)},
-                                                {QStringLiteral("content"), content},
-                                                {QStringLiteral("has_more"), hasMore},
-                                                {QStringLiteral("truncated"), truncated},
-                                                {QStringLiteral("untrusted_evidence"), true}}}});
+    return ai::AiTerminalOutputTool::result(*request, *page);
 }
 
 std::string AppController::executeAiTerminalAction(TerminalTab &tab, const ai::AiTerminalAction &action)

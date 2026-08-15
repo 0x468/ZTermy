@@ -34,6 +34,8 @@ struct FakeLocalSessionState final
     QList<QByteArray> inputs;
     QList<QByteArray> pastes;
     QString selectedText;
+    std::vector<std::string> scrollbackLines{"fake scrollback line"};
+    std::size_t scrollbackLineCount = 0;
     std::shared_ptr<ztermy::terminal::TerminalOutputSink> outputSink;
 };
 
@@ -77,14 +79,27 @@ public:
     void search(const QString &, bool, bool) override {}
     void clearSearch() override {}
     [[nodiscard]] std::expected<ztermy::terminal::TerminalScrollbackPage, std::error_code>
-    scrollbackPage(const std::size_t firstLine, const std::size_t lineCount) const override
+    scrollbackPage(const ztermy::terminal::TerminalScrollbackRequest request) const override
     {
         ztermy::terminal::TerminalScrollbackPage page;
-        page.firstLine = firstLine;
-        page.totalLines = lineCount;
-        for (std::size_t index = 0; index < lineCount; ++index)
+        page.totalLines = m_state->scrollbackLines.size();
+        page.scrollbackLines = std::min(m_state->scrollbackLineCount, page.totalLines);
+        std::size_t end;
+        if (request.anchor == ztermy::terminal::TerminalScrollbackAnchor::head)
         {
-            page.lines.emplace_back("fake scrollback line");
+            page.firstLine = request.offset;
+            end = page.firstLine < page.totalLines
+                      ? page.firstLine + std::min(request.lineCount, page.totalLines - page.firstLine)
+                      : page.firstLine;
+        }
+        else
+        {
+            end = request.offset < page.totalLines ? page.totalLines - request.offset : 0;
+            page.firstLine = end > request.lineCount ? end - request.lineCount : 0;
+        }
+        for (std::size_t index = page.firstLine; index < end && index < page.totalLines; ++index)
+        {
+            page.lines.push_back(m_state->scrollbackLines[index]);
         }
         return page;
     }
@@ -1072,10 +1087,12 @@ void AppControllerTests::runsDiscoveredCodexAgentAgainstCurrentTerminal()
 
     EnvironmentVariableGuard pathGuard(QByteArrayLiteral("PATH"));
     EnvironmentVariableGuard scenarioGuard(QByteArrayLiteral("ZTERMY_TEST_CODEX_SESSION_INFO"));
+    EnvironmentVariableGuard scrollbackGuard(QByteArrayLiteral("ZTERMY_TEST_CODEX_SCROLLBACK"));
     const QByteArray augmentedPath =
         QDir::toNativeSeparators(executableDirectory).toLocal8Bit() + QByteArrayLiteral(";") + qgetenv("PATH");
     QVERIFY(pathGuard.set(augmentedPath));
     QVERIFY(scenarioGuard.set(QByteArrayLiteral("1")));
+    QVERIFY(scrollbackGuard.set(QByteArrayLiteral("1")));
 
     const QString settingsPath = directory.filePath(QStringLiteral("settings.json"));
     ztermy::config::ApplicationSettings settings;
@@ -1085,6 +1102,8 @@ void AppControllerTests::runsDiscoveredCodexAgentAgainstCurrentTerminal()
     QVERIFY(settingsStore.save(settings).has_value());
 
     const auto state = std::make_shared<FakeLocalSessionState>();
+    state->scrollbackLines = {"older output", "latest output"};
+    state->scrollbackLineCount = 1;
     ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
                                      directory.filePath(QStringLiteral("known_hosts.json")), settingsPath, [state] {
                                          return std::make_unique<FakeLocalTerminalSession>(state);
@@ -1125,6 +1144,12 @@ void AppControllerTests::runsDiscoveredCodexAgentAgainstCurrentTerminal()
     QVERIFY(conversation->data(conversation->index(3), ztermy::ai::AiConversationModel::TextRole)
                 .toString()
                 .contains(QStringLiteral("Resumed the terminal inspection")));
+    const QVariantList resumedTools =
+        conversation->data(conversation->index(3), ztermy::ai::AiConversationModel::ToolActivitiesRole).toList();
+    QCOMPARE(resumedTools.size(), 1);
+    QCOMPARE(resumedTools.constFirst().toMap().value(QStringLiteral("name")).toString(),
+             QStringLiteral("read_terminal_output"));
+    QCOMPARE(resumedTools.constFirst().toMap().value(QStringLiteral("state")).toString(), QStringLiteral("succeeded"));
 
     QVERIFY(controller.setAiAgentPreference(QStringLiteral("ztermy")));
     QCOMPARE(controller.aiAgentPreference(), QStringLiteral("ztermy"));
@@ -1297,6 +1322,7 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
     QVERIFY(controller.attachAiRecentCommands(1));
     QVERIFY(controller.activeAiContextPreview().contains(QStringLiteral("Get-Date")));
     QVERIFY(controller.activeAiContextPreview().contains(QStringLiteral("Approximate terminal context")));
+    QVERIFY(controller.activeAiContextPreview().contains(QStringLiteral("fake scrollback line")));
     QVERIFY(controller.runTerminalCommand(QStringLiteral("Write-Output one\r\nWrite-Output two")));
     QCOMPARE(sessionState->inputs.constLast(), QByteArray("Write-Output one\rWrite-Output two\r"));
     QVERIFY(!controller.runTerminalCommand(QStringLiteral("  \n  ")));

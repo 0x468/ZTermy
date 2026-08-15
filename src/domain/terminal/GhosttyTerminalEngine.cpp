@@ -1051,9 +1051,9 @@ std::expected<std::string, std::error_code> GhosttyTerminalEngine::plainText() c
 }
 
 std::expected<TerminalScrollbackPage, std::error_code>
-GhosttyTerminalEngine::scrollbackPage(const std::size_t firstLine, const std::size_t lineCount) const
+GhosttyTerminalEngine::scrollbackPage(const TerminalScrollbackRequest request) const
 {
-    if (lineCount == 0)
+    if (request.lineCount == 0)
     {
         return std::unexpected(invalidArgument());
     }
@@ -1073,6 +1073,21 @@ GhosttyTerminalEngine::scrollbackPage(const std::size_t firstLine, const std::si
         return std::unexpected(ghosttyError(scrollbackResult));
     }
 
+    std::size_t firstLine = request.offset;
+    std::size_t endLine = totalRows;
+    if (request.anchor == TerminalScrollbackAnchor::head)
+    {
+        if (firstLine < totalRows)
+        {
+            endLine = firstLine + std::min(request.lineCount, totalRows - firstLine);
+        }
+    }
+    else
+    {
+        endLine = request.offset < totalRows ? totalRows - request.offset : 0;
+        firstLine = endLine > request.lineCount ? endLine - request.lineCount : 0;
+    }
+
     TerminalScrollbackPage result;
     result.firstLine = firstLine;
     result.totalLines = totalRows;
@@ -1081,7 +1096,10 @@ GhosttyTerminalEngine::scrollbackPage(const std::size_t firstLine, const std::si
     {
         return result;
     }
-    const auto endLine = std::min(totalRows, firstLine + lineCount);
+    if (endLine <= firstLine)
+    {
+        return result;
+    }
 
     // Format the full terminal content (history plus active screen) once and
     // slice the requested row range. The formatter API cannot represent a
@@ -1120,7 +1138,7 @@ GhosttyTerminalEngine::scrollbackPage(const std::size_t firstLine, const std::si
         if (currentLine >= firstLine && currentLine < endLine)
         {
             result.lines.emplace_back(text.substr(start, lineEnd - start));
-            if (result.lines.size() >= lineCount)
+            if (result.lines.size() >= endLine - firstLine)
             {
                 break;
             }

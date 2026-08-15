@@ -29,7 +29,7 @@ public:
     encodePaste(std::span<const std::byte> bytes) const override;
     [[nodiscard]] std::expected<std::string, std::error_code> plainText() const override;
     [[nodiscard]] std::expected<TerminalScrollbackPage, std::error_code>
-    scrollbackPage(std::size_t firstLine, std::size_t lineCount) const override;
+    scrollbackPage(TerminalScrollbackRequest request) const override;
 
 private:
     struct Impl;

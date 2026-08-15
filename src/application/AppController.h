@@ -10,6 +10,7 @@
 #include "application/ai/AiSecretStore.h"
 #include "application/ai/AiSftpListTool.h"
 #include "application/ai/AiSftpReadTool.h"
+#include "application/ai/AiTerminalOutputTool.h"
 #include "application/ai/AiTurnRunner.h"
 #include "application/ai/CodexAgentTurnRunner.h"
 #include "application/ai/McpRuntimeManager.h"

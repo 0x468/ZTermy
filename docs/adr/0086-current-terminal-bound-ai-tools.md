@@ -32,6 +32,11 @@ terminal generation.
 - Read tools receive one immutable current-terminal snapshot directly. The
   domain and application layers do not wrap that snapshot in a collection or
   search an allowed-target set.
+- Live scrollback is the deliberate exception to immutable render snapshots:
+  `read_terminal_output` queries the owning terminal engine at call time, still
+  re-checks the captured reconnect generation, and supports explicit head/tail
+  anchors. `tail + offset=0` reads recent output without scanning from the
+  oldest retained line; `next_offset` pages toward older output.
 - Live reads, waits, writes, SFTP operations, and completion callbacks re-check
   the captured generation. A tab closure or reconnect returns `scope_changed`;
   it never retargets to the currently focused tab.
@@ -52,6 +57,9 @@ terminal generation.
   are no longer prompt surface or model output.
 - The native read path has no multi-session abstraction to accidentally expose
   in a later schema change.
+- The visible-frame reader and live scrollback reader have separate typed
+  contracts, so a pure snapshot dispatcher never advertises a tool it cannot
+  execute.
 - Switching tabs while a turn runs does not redirect the turn. Reconnecting the
   owning tab invalidates outstanding live work.
 - Existing tests and evaluation fixtures must use targetless native schemas and

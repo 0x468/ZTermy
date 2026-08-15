@@ -73,10 +73,11 @@ int run(int argc, char **argv)
         return generateSchema(arguments);
     }
     const bool noTool = arguments.contains(QStringLiteral("--no-tool"));
-    const QString toolName = qEnvironmentVariableIsSet("ZTERMY_TEST_CODEX_SESSION_INFO")
-                                 ? QStringLiteral("read_session_info")
-                                 : QStringLiteral("read_terminal_frame");
+    const QString defaultToolName = qEnvironmentVariableIsSet("ZTERMY_TEST_CODEX_SESSION_INFO")
+                                        ? QStringLiteral("read_session_info")
+                                        : QStringLiteral("read_terminal_frame");
     bool resumedThread = false;
+    QString pendingToolName;
     std::string line;
     while (std::getline(std::cin, line))
     {
@@ -137,14 +138,23 @@ int run(int argc, char **argv)
             {
                 continue;
             }
+            pendingToolName = resumedThread && qEnvironmentVariableIsSet("ZTERMY_TEST_CODEX_SCROLLBACK")
+                                  ? QStringLiteral("read_terminal_output")
+                                  : defaultToolName;
+            const QJsonObject toolArguments = pendingToolName == QStringLiteral("read_terminal_output")
+                                                  ? QJsonObject{{QStringLiteral("anchor"), QStringLiteral("tail")},
+                                                                {QStringLiteral("offset"), 0},
+                                                                {QStringLiteral("line_count"), 2},
+                                                                {QStringLiteral("max_bytes"), 4096}}
+                                                  : QJsonObject{};
             send(QJsonObject{
                 {QStringLiteral("method"), QStringLiteral("item/tool/call")},
                 {QStringLiteral("id"), 700},
                 {QStringLiteral("params"), QJsonObject{{QStringLiteral("threadId"), threadId},
                                                        {QStringLiteral("turnId"), QStringLiteral("turn-ztermy")},
                                                        {QStringLiteral("callId"), QStringLiteral("call-ztermy")},
-                                                       {QStringLiteral("tool"), toolName},
-                                                       {QStringLiteral("arguments"), QJsonObject{}}}}});
+                                                       {QStringLiteral("tool"), pendingToolName},
+                                                       {QStringLiteral("arguments"), toolArguments}}}});
         }
         else if (method == QStringLiteral("turn/interrupt"))
         {
@@ -164,6 +174,25 @@ int run(int argc, char **argv)
             if (!result.value(QStringLiteral("success")).toBool())
             {
                 return 3;
+            }
+            if (pendingToolName == QStringLiteral("read_terminal_output"))
+            {
+                const QJsonArray contentItems = result.value(QStringLiteral("contentItems")).toArray();
+                const QJsonObject output =
+                    contentItems.isEmpty()
+                        ? QJsonObject{}
+                        : QJsonDocument::fromJson(
+                              contentItems.at(0).toObject().value(QStringLiteral("text")).toString().toUtf8())
+                              .object();
+                const QJsonObject terminalOutput = output.value(QStringLiteral("terminal_output")).toObject();
+                if (!output.value(QStringLiteral("ok")).toBool()
+                    || terminalOutput.value(QStringLiteral("content")).toString()
+                           != QStringLiteral("older output\nlatest output")
+                    || terminalOutput.value(QStringLiteral("anchor")).toString() != QStringLiteral("tail")
+                    || terminalOutput.value(QStringLiteral("next_offset")).toInt() != 2)
+                {
+                    return 7;
+                }
             }
             send(QJsonObject{{QStringLiteral("method"), QStringLiteral("turn/completed")},
                              {QStringLiteral("params"),

@@ -343,7 +343,7 @@ void LocalTerminalSession::search(const QString &query, const bool backwards, co
 }
 
 std::expected<ztermy::terminal::TerminalScrollbackPage, std::error_code>
-LocalTerminalSession::scrollbackPage(const std::size_t firstLine, const std::size_t lineCount) const
+LocalTerminalSession::scrollbackPage(const ztermy::terminal::TerminalScrollbackRequest request) const
 {
     if (!m_running.load() || m_engine == nullptr)
     {
@@ -351,7 +351,7 @@ LocalTerminalSession::scrollbackPage(const std::size_t firstLine, const std::siz
     }
     // The ghostty terminal synchronizes internally; a query from the caller's
     // thread is safe against the worker-thread feed path.
-    return m_engine->scrollbackPage(firstLine, lineCount);
+    return m_engine->scrollbackPage(request);
 }
 
 void LocalTerminalSession::clearSearch()

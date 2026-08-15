@@ -129,8 +129,8 @@ Deliver the smallest complete vertical slice:
 - Explain selection, Explain last failure, Generate command, Insert, and explicit
   Run; Explain last failure is capability-gated and never invents a failure when
   exit status is unavailable;
-- read-only tools for active session metadata, terminal range/frame, and command
-  blocks;
+- read-only tools for active session metadata, visible terminal range/frame,
+  head/tail-paged live scrollback, and semantic command blocks;
 - local redaction, concrete bounded context defaults, usage/latency/token and
   estimated-cost reporting, bounded provider backoff, remembered last model,
   session-only conversation retention by default, and visible New conversation

@@ -150,6 +150,23 @@ struct TerminalScrollbackPage final
     friend bool operator==(const TerminalScrollbackPage &, const TerminalScrollbackPage &) = default;
 };
 
+enum class TerminalScrollbackAnchor : std::uint8_t
+{
+    head,
+    tail,
+};
+
+// `offset` is measured from the selected anchor. For head reads it is the
+// zero-based absolute line index. For tail reads it is the number of newest
+// lines to skip, which makes paging recent output deterministic while the
+// terminal keeps growing.
+struct TerminalScrollbackRequest final
+{
+    TerminalScrollbackAnchor anchor = TerminalScrollbackAnchor::head;
+    std::size_t offset = 0;
+    std::size_t lineCount = 1;
+};
+
 using TerminalSnapshotPtr = std::shared_ptr<const TerminalSnapshot>;
 
 class TerminalEngine
@@ -177,11 +194,12 @@ public:
 
     // Read a bounded page of scrollback text (including the active screen at
     // the tail). firstLine is zero-based from the top of the retained
-    // history. This API is not intended for the render path; it is used by
-    // the AI terminal tools to page through output that scrolled off the
-    // screen.
+    // history. Head offsets address absolute retained lines; tail offsets skip
+    // newest lines before selecting a page. This API is not intended for the
+    // render path; it is used by AI/context tools to page through output that
+    // scrolled off the screen.
     [[nodiscard]] virtual std::expected<TerminalScrollbackPage, std::error_code>
-    scrollbackPage(std::size_t firstLine, std::size_t lineCount) const = 0;
+    scrollbackPage(TerminalScrollbackRequest request) const = 0;
 
     // Diagnostic representation of the active screen.
     [[nodiscard]] virtual std::expected<std::string, std::error_code> plainText() const = 0;

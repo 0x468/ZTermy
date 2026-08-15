@@ -623,6 +623,8 @@ add_library(ztermy_ai_application STATIC
     src/application/ai/AiSftpReadTool.h
     src/application/ai/AiSftpListTool.cpp
     src/application/ai/AiSftpListTool.h
+    src/application/ai/AiTerminalOutputTool.cpp
+    src/application/ai/AiTerminalOutputTool.h
     src/application/ai/AiSystemPromptBuilder.cpp
     src/application/ai/AiSystemPromptBuilder.h
     src/application/ai/AiTurnRunner.cpp
@@ -3580,6 +3582,18 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME ai-note-read-tool COMMAND ztermy_ai_note_read_tool_tests)
 
+    qt_add_executable(ztermy_ai_terminal_output_tool_tests
+        tests/ai_terminal_output_tool_tests.cpp
+    )
+    target_compile_features(ztermy_ai_terminal_output_tool_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ai_terminal_output_tool_tests PRIVATE ztermy_ai_application Qt6::Test)
+    if(MSVC)
+        target_compile_options(ztermy_ai_terminal_output_tool_tests PRIVATE
+            /W4 /WX /permissive- /utf-8 /Zc:__cplusplus
+        )
+    endif()
+    add_test(NAME ai-terminal-output-tool COMMAND ztermy_ai_terminal_output_tool_tests)
+
     qt_add_executable(ztermy_ai_activity_model_tests
         tests/ai_activity_model_tests.cpp
     )
@@ -4184,6 +4198,7 @@ if(BUILD_TESTING)
             ztermy_ai_sftp_read_tool_tests
             ztermy_ai_sftp_list_tool_tests
             ztermy_ai_note_read_tool_tests
+            ztermy_ai_terminal_output_tool_tests
             ztermy_ai_turn_runner_tests
             ztermy_ai_conversation_store_tests
             ztermy_ai_conversation_history_model_tests

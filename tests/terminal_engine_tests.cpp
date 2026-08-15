@@ -489,7 +489,8 @@ void TerminalEngineTests::pagesThroughScrollback()
     constexpr std::string_view content = "line-00\r\nline-11\r\nline-22\r\nline-33\r\nline-44\r\nline-55";
     QVERIFY(!engine.feed(std::as_bytes(std::span(content))));
 
-    auto page = engine.scrollbackPage(0, 10);
+    auto page = engine.scrollbackPage(
+        {.anchor = ztermy::terminal::TerminalScrollbackAnchor::head, .offset = 0, .lineCount = 10});
     if (!page)
     {
         QFAIL(page.error().message().c_str());
@@ -501,7 +502,8 @@ void TerminalEngineTests::pagesThroughScrollback()
     QCOMPARE(page->lines.at(5), std::string("line-55"));
 
     // A bounded page from the middle.
-    auto middle = engine.scrollbackPage(2, 2);
+    auto middle = engine.scrollbackPage(
+        {.anchor = ztermy::terminal::TerminalScrollbackAnchor::head, .offset = 2, .lineCount = 2});
     if (!middle)
     {
         QFAIL(middle.error().message().c_str());
@@ -512,7 +514,8 @@ void TerminalEngineTests::pagesThroughScrollback()
     QCOMPARE(middle->lines.at(1), std::string("line-33"));
 
     // Out-of-range requests return an empty page instead of failing.
-    auto beyond = engine.scrollbackPage(100, 4);
+    auto beyond = engine.scrollbackPage(
+        {.anchor = ztermy::terminal::TerminalScrollbackAnchor::head, .offset = 100, .lineCount = 4});
     if (!beyond)
     {
         QFAIL(beyond.error().message().c_str());
@@ -521,7 +524,26 @@ void TerminalEngineTests::pagesThroughScrollback()
     QCOMPARE(beyond->firstLine, std::size_t{100});
 
     // Invalid arguments are rejected.
-    QVERIFY(!engine.scrollbackPage(0, 0));
+    QVERIFY(!engine.scrollbackPage(
+        {.anchor = ztermy::terminal::TerminalScrollbackAnchor::head, .offset = 0, .lineCount = 0}));
+
+    auto tail = engine.scrollbackPage(
+        {.anchor = ztermy::terminal::TerminalScrollbackAnchor::tail, .offset = 0, .lineCount = 2});
+    if (!tail)
+    {
+        QFAIL(tail.error().message().c_str());
+    }
+    QCOMPARE(tail->firstLine, std::size_t{4});
+    QCOMPARE(tail->lines, std::vector<std::string>({"line-44", "line-55"}));
+
+    auto olderTail = engine.scrollbackPage(
+        {.anchor = ztermy::terminal::TerminalScrollbackAnchor::tail, .offset = 2, .lineCount = 2});
+    if (!olderTail)
+    {
+        QFAIL(olderTail.error().message().c_str());
+    }
+    QCOMPARE(olderTail->firstLine, std::size_t{2});
+    QCOMPARE(olderTail->lines, std::vector<std::string>({"line-22", "line-33"}));
 }
 
 } // namespace
