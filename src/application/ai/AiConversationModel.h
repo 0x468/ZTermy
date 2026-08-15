@@ -35,8 +35,16 @@ struct AiConversationTranscriptEntry final
 {
     AiConversationTranscriptRole role = AiConversationTranscriptRole::user;
     std::string content;
+    std::string reasoning;
+    std::vector<AiToolActivity> toolActivities;
     std::vector<AiWebSource> sources;
     std::string providerReplayJson;
+    std::optional<AiTokenUsage> usage;
+    std::optional<AiTurnMetrics> metrics;
+    std::optional<double> estimatedCostUsd;
+    std::string costCatalogDate;
+    bool longContextRates = false;
+    bool truncated = false;
 
     [[nodiscard]] friend bool operator==(const AiConversationTranscriptEntry &,
                                          const AiConversationTranscriptEntry &) = default;
@@ -141,7 +149,7 @@ private:
         bool truncated = false;
         bool longContextRates = false;
         QString commandSuggestion;
-        QVariantList toolActivities;
+        std::vector<AiToolActivity> toolActivities;
         std::vector<AiImageAttachment> images;
         std::vector<AiWebSource> sources;
         std::string providerReplayJson;

@@ -1,4 +1,5 @@
 #include "application/AppController.h"
+#include "application/ai/AiConversationHistoryModel.h"
 #include "application/ai/AiConversationModel.h"
 #include "core/config/ApplicationSettings.h"
 #include "infrastructure/security/PortableCredentialVault.h"
@@ -8,6 +9,7 @@
 
 #include <QColor>
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QImage>
@@ -186,6 +188,7 @@ private slots:
     void runsDiscoveredCodexAgentAgainstCurrentTerminal();
     void managesMcpServerConfiguration();
     void managesActionShortcutsAndDispatchContext();
+    void restoresCompleteAgentPresentationFromHistory();
     void managesMultipleLocalTerminalTabs();
     void managesPersistentTerminalWorkspaceSplits();
     void restoresSavedSshWorkspaceWithoutConnecting();
@@ -1187,6 +1190,68 @@ void AppControllerTests::managesMcpServerConfiguration()
     QCOMPARE(reloaded.mcpServers().size(), 1);
     QVERIFY(reloaded.removeMcpServer(QStringLiteral("local-test")));
     QVERIFY(reloaded.mcpServers().isEmpty());
+}
+
+void AppControllerTests::restoresCompleteAgentPresentationFromHistory()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const auto sessionState = std::make_shared<FakeLocalSessionState>();
+    ztermy::AppController controller(
+        directory.filePath(QStringLiteral("profiles.json")), directory.filePath(QStringLiteral("known_hosts.json")),
+        directory.filePath(QStringLiteral("settings.json")), directory.filePath(QStringLiteral("credentials.zvlt")),
+        ztermy::config::StorageMode::portable, [sessionState] {
+            return std::make_unique<FakeLocalTerminalSession>(sessionState);
+        });
+    QVERIFY(controller.initializePortableCredentialVault(QStringLiteral("agent history password")));
+    QVERIFY(controller.setAiConversationHistoryEnabled(true));
+    QVERIFY(!controller.startLocalTerminal().isEmpty());
+
+    auto *history = qobject_cast<ztermy::ai::AiConversationHistoryModel *>(controller.aiConversationHistory());
+    QVERIFY(history != nullptr);
+    const QString conversationId = QStringLiteral("agent-presentation-history");
+    ztermy::ai::AiStoredConversation stored{
+        .id = conversationId,
+        .title = QStringLiteral("Inspect disks"),
+        .updatedAtUtc = QDateTime::currentDateTimeUtc(),
+        .messages = {
+            {.role = QStringLiteral("user"), .text = QStringLiteral("Inspect disk usage")},
+            {.role = QStringLiteral("assistant"),
+             .text = QStringLiteral("Disk usage is healthy."),
+             .reasoning = QStringLiteral("Inspect the filesystem table first."),
+             .toolActivities = {{.id = "tool-1",
+                                 .name = "run_command",
+                                 .summary = "df -h",
+                                 .state = "succeeded",
+                                 .resultCode = "ok",
+                                 .sideEffecting = true}},
+             .usage = ztermy::ai::AiTokenUsage{.inputTokens = 30, .outputTokens = 9, .reasoningTokens = 4},
+             .metrics =
+                 ztermy::ai::AiTurnMetrics{.wallTimeMilliseconds = 680, .firstTokenMilliseconds = 125, .retryCount = 1},
+             .estimatedCostUsd = 0.00051,
+             .costCatalogDate = QStringLiteral("2026-08-15"),
+             .longContextRates = true}}};
+    history->persist(stored);
+    QTRY_COMPARE(history->rowCount(), 1);
+    QTRY_VERIFY(!history->busy());
+
+    QVERIFY(controller.restoreAiConversationHistory(conversationId));
+    auto *conversation = qobject_cast<ztermy::ai::AiConversationModel *>(controller.activeAiConversation());
+    QVERIFY(conversation != nullptr);
+    QCOMPARE(conversation->rowCount(), 2);
+    QCOMPARE(conversation->data(conversation->index(1), ztermy::ai::AiConversationModel::ReasoningRole).toString(),
+             QStringLiteral("Inspect the filesystem table first."));
+    const QVariantList activities =
+        conversation->data(conversation->index(1), ztermy::ai::AiConversationModel::ToolActivitiesRole).toList();
+    QCOMPARE(activities.size(), 1);
+    QCOMPARE(activities.constFirst().toMap().value(QStringLiteral("summary")).toString(), QStringLiteral("df -h"));
+    QCOMPARE(conversation->data(conversation->index(1), ztermy::ai::AiConversationModel::InputTokensRole).toULongLong(),
+             qulonglong{30});
+    QCOMPARE(conversation->data(conversation->index(1), ztermy::ai::AiConversationModel::WallTimeMillisecondsRole)
+                 .toULongLong(),
+             qulonglong{680});
+    QVERIFY(
+        conversation->data(conversation->index(1), ztermy::ai::AiConversationModel::EstimatedCostKnownRole).toBool());
 }
 
 void AppControllerTests::managesMultipleLocalTerminalTabs()

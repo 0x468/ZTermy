@@ -8180,8 +8180,16 @@ bool AppController::restoreAiConversationHistory(const QString &conversationId)
         }
         transcript.push_back({.role = role,
                               .content = utf8String(message.text),
+                              .reasoning = utf8String(message.reasoning),
+                              .toolActivities = message.toolActivities,
                               .sources = message.sources,
-                              .providerReplayJson = message.providerReplayJson});
+                              .providerReplayJson = message.providerReplayJson,
+                              .usage = message.usage,
+                              .metrics = message.metrics,
+                              .estimatedCostUsd = message.estimatedCostUsd,
+                              .costCatalogDate = utf8String(message.costCatalogDate),
+                              .longContextRates = message.longContextRates,
+                              .truncated = message.truncated});
     }
     if (!tab->aiConversation->restoreTranscript(transcript))
     {
@@ -10176,6 +10184,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                 if (target->aiConversation && target->aiAssistantMessageId == assistantMessageId)
                 {
                     static_cast<void>(target->aiConversation->setAssistantMetrics(assistantMessageId, metrics, cost));
+                    persistAiConversation(*target);
                 }
                 if (target->aiState == QStringLiteral("starting") || target->aiState == QStringLiteral("retrying")
                     || target->aiState == QStringLiteral("streaming"))
@@ -12269,8 +12278,16 @@ void AppController::persistAiConversation(const TerminalTab &tab)
         }
         stored.messages.push_back({.role = std::move(role),
                                    .text = text,
+                                   .reasoning = utf8QString(entry.reasoning),
+                                   .toolActivities = entry.toolActivities,
                                    .sources = entry.sources,
-                                   .providerReplayJson = entry.providerReplayJson});
+                                   .providerReplayJson = entry.providerReplayJson,
+                                   .usage = entry.usage,
+                                   .metrics = entry.metrics,
+                                   .estimatedCostUsd = entry.estimatedCostUsd,
+                                   .costCatalogDate = utf8QString(entry.costCatalogDate),
+                                   .longContextRates = entry.longContextRates,
+                                   .truncated = entry.truncated});
     }
     if (stored.title.isEmpty())
     {

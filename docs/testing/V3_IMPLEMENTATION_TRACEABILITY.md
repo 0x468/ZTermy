@@ -35,7 +35,7 @@ addition.
 | --- | --- | --- | --- |
 | Typed terminal write/read/wait/interrupt/control tools | `src/application/ai/AiActionToolDispatcher.*`, `AiWaitCommandTool.*`; `src/domain/ai/AiCommandTracker.*` | `ai-action-tool-dispatcher`, `ai-wait-command-tool`, `ai-command-tracker` | ADR 0056, 0062 |
 | At-most-once dispatch, permission precedence, risk overlay, budgets, one writer | `src/domain/ai/AiToolDispatchLedger.*`, `AiPermissionPolicy.*`, `AiAgentGuard.*` | `ai-tool-dispatch-ledger`, `ai-permission-policy`, `ai-agent-guard` | ADR 0056 |
-| Metadata-only audit and encrypted opt-in conversation history | `src/application/ai/AiActivityModel.*`, `AiConversationHistoryModel.*`; `src/infrastructure/ai/AiConversationStore.*` | `ai-activity-model`, `ai-conversation-store`, `ai-conversation-history-model` | ADR 0060, 0061 |
+| Metadata-only audit and encrypted opt-in conversation history, including complete bounded Agent presentation snapshots | `src/application/ai/AiActivityModel.*`, `AiConversationHistoryModel.*`, `AiConversationModel.*`; `src/infrastructure/ai/AiConversationStore.*` | `ai-activity-model`, `ai-conversation-store`, `ai-conversation-history-model`, `ai-conversation-model`, `app-controller` | ADR 0060, 0061 |
 
 ## 0.3.2 — SSH operations intelligence
 
@@ -89,7 +89,7 @@ covered by `application-settings`, `ai-permission-policy`,
 
 | Approved boundary | Representative implementation | Focused CTest contracts | Decisions |
 | --- | --- | --- | --- |
-| Provider-exposed reasoning controls and retained summaries without claiming hidden chain-of-thought | `src/infrastructure/ai/ProviderRequestFactory.*`, `ProviderStreamMapper.*`; `src/application/ai/AiConversationModel.*` | `provider-request-factory`, `provider-stream-mapper`, `ai-conversation-model` | ADR 0081 |
+| Provider-exposed reasoning controls and retained summaries without claiming hidden chain-of-thought; encrypted restore preserves the same reasoning/tool/usage presentation | `src/infrastructure/ai/ProviderRequestFactory.*`, `ProviderStreamMapper.*`; `src/application/ai/AiConversationModel.*`; `src/infrastructure/ai/AiConversationStore.*` | `provider-request-factory`, `provider-stream-mapper`, `ai-conversation-model`, `ai-conversation-store`, `app-controller` | ADR 0061, 0081 |
 | Rich Markdown rendering, raw source copy, native tool cards, responsive cancel/retry | `src/ui/qml/AiAssistantPane.qml`, `src/application/AppController.*` | `qml-native-window-smoke`, `app-controller`, `ai-turn-runner` | ADR 0078, 0081 |
 
 ## 0.3.8 — autonomous Agent closure

@@ -9,6 +9,7 @@
 #include <QVariantMap>
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <span>
 #include <utility>
@@ -21,6 +22,13 @@ constexpr std::size_t maximumWebSourcesPerMessage = 24;
 constexpr std::size_t maximumWebSourceUrlBytes = std::size_t{8} * 1024;
 constexpr std::size_t maximumWebSourceTitleBytes = 1024;
 constexpr std::size_t maximumWebSourceCitationBytes = std::size_t{4} * 1024;
+constexpr std::size_t maximumToolActivitiesPerMessage = 32;
+constexpr std::size_t maximumToolActivityIdBytes = 256;
+constexpr std::size_t maximumToolActivityNameBytes = 128;
+constexpr std::size_t maximumToolActivitySummaryBytes = 4096;
+constexpr std::size_t maximumToolActivityStateBytes = 64;
+constexpr std::size_t maximumToolActivityResultCodeBytes = 128;
+constexpr std::size_t maximumCostCatalogDateBytes = 64;
 
 [[nodiscard]] std::size_t imageStorageBytes(const std::span<const AiImageAttachment> images) noexcept
 {
@@ -97,6 +105,43 @@ constexpr std::size_t maximumWebSourceCitationBytes = std::size_t{4} * 1024;
                                      {QStringLiteral("citedText"), QString::fromUtf8(source.citedText)}});
     }
     return values;
+}
+
+[[nodiscard]] std::size_t toolActivityStorageBytes(const std::span<const AiToolActivity> activities) noexcept
+{
+    std::size_t bytes = 0;
+    for (const auto &activity : activities)
+    {
+        bytes += activity.id.size() + activity.name.size() + activity.summary.size() + activity.state.size()
+                 + activity.resultCode.size();
+    }
+    return bytes;
+}
+
+[[nodiscard]] QVariantList toolActivityValues(const std::span<const AiToolActivity> activities)
+{
+    QVariantList values;
+    values.reserve(static_cast<qsizetype>(activities.size()));
+    for (const auto &activity : activities)
+    {
+        values.push_back(QVariantMap{{QStringLiteral("id"), QString::fromUtf8(activity.id)},
+                                     {QStringLiteral("name"), QString::fromUtf8(activity.name)},
+                                     {QStringLiteral("summary"), QString::fromUtf8(activity.summary)},
+                                     {QStringLiteral("state"), QString::fromUtf8(activity.state)},
+                                     {QStringLiteral("resultCode"), QString::fromUtf8(activity.resultCode)},
+                                     {QStringLiteral("sideEffecting"), activity.sideEffecting},
+                                     {QStringLiteral("highRisk"), activity.highRisk}});
+    }
+    return values;
+}
+
+[[nodiscard]] bool validToolActivity(const AiToolActivity &activity) noexcept
+{
+    return !activity.id.empty() && activity.id.size() <= maximumToolActivityIdBytes && !activity.name.empty()
+           && activity.name.size() <= maximumToolActivityNameBytes
+           && activity.summary.size() <= maximumToolActivitySummaryBytes
+           && activity.state.size() <= maximumToolActivityStateBytes
+           && activity.resultCode.size() <= maximumToolActivityResultCodeBytes;
 }
 
 [[nodiscard]] bool validWebSourceUrl(const std::string &url)
@@ -182,7 +227,7 @@ QVariant AiConversationModel::data(const QModelIndex &index, const int role) con
         case HasCommandSuggestionRole:
             return !message.commandSuggestion.isEmpty();
         case ToolActivitiesRole:
-            return message.toolActivities;
+            return toolActivityValues(message.toolActivities);
         case ImageAttachmentsRole:
             return imageValues(message.images);
         case SourcesRole:
@@ -272,8 +317,16 @@ std::vector<AiConversationTranscriptEntry> AiConversationModel::transcript() con
             entries.push_back({.role = message.role == AiMessageRole::user ? AiConversationTranscriptRole::user
                                                                            : AiConversationTranscriptRole::assistant,
                                .content = replayText(message.text, message.images).toUtf8().toStdString(),
+                               .reasoning = message.reasoning.toUtf8().toStdString(),
+                               .toolActivities = message.toolActivities,
                                .sources = message.sources,
-                               .providerReplayJson = message.providerReplayJson});
+                               .providerReplayJson = message.providerReplayJson,
+                               .usage = message.usage,
+                               .metrics = message.metrics,
+                               .estimatedCostUsd = message.estimatedCostUsd,
+                               .costCatalogDate = message.costCatalogDate.toUtf8().toStdString(),
+                               .longContextRates = message.longContextRates,
+                               .truncated = message.truncated});
         }
         for (const auto &evidence : m_evidenceMessages)
         {
@@ -334,11 +387,23 @@ bool AiConversationModel::restoreTranscript(const std::vector<AiConversationTran
     for (const auto &entry : entries)
     {
         const auto replay = AiProviderReplayCodec::decode(entry.providerReplayJson);
-        if ((entry.content.empty() && entry.role != AiConversationTranscriptRole::assistant)
+        const std::size_t storedBytes =
+            entry.content.size() + entry.reasoning.size() + toolActivityStorageBytes(entry.toolActivities)
+            + sourceStorageBytes(entry.sources) + entry.providerReplayJson.size() + entry.costCatalogDate.size();
+        const bool assistant = entry.role == AiConversationTranscriptRole::assistant;
+        if ((entry.content.empty() && !assistant) || storedBytes > m_limits.maxMessageBytes
+            || (!assistant
+                && (!entry.reasoning.empty() || !entry.toolActivities.empty() || !entry.sources.empty()
+                    || !entry.providerReplayJson.empty() || entry.usage.has_value() || entry.metrics.has_value()
+                    || entry.estimatedCostUsd.has_value() || !entry.costCatalogDate.empty() || entry.longContextRates
+                    || entry.truncated))
+            || entry.toolActivities.size() > maximumToolActivitiesPerMessage
+            || !std::ranges::all_of(entry.toolActivities, validToolActivity)
+            || entry.costCatalogDate.size() > maximumCostCatalogDateBytes
+            || (entry.estimatedCostUsd.has_value()
+                && (!std::isfinite(*entry.estimatedCostUsd) || *entry.estimatedCostUsd < 0.0))
             || entry.content.size() + sourceStorageBytes(entry.sources) + entry.providerReplayJson.size()
                    > m_limits.maxMessageBytes
-            || (entry.role != AiConversationTranscriptRole::assistant && !entry.sources.empty())
-            || (entry.role != AiConversationTranscriptRole::assistant && !entry.providerReplayJson.empty())
             || (!entry.providerReplayJson.empty() && !replay.has_value())
             || entry.sources.size() > maximumWebSourcesPerMessage
             || !std::ranges::all_of(entry.sources, [](const AiWebSource &source) {
@@ -365,7 +430,7 @@ bool AiConversationModel::restoreTranscript(const std::vector<AiConversationTran
         {
             hasEvidenceAnchor = true;
             ++messageCount;
-            messageBytes += entry.content.size() + sourceStorageBytes(entry.sources) + entry.providerReplayJson.size();
+            messageBytes += storedBytes;
             if (messageCount > m_limits.maxMessages || messageBytes > m_limits.maxConversationBytes)
             {
                 return false;
@@ -393,16 +458,39 @@ bool AiConversationModel::restoreTranscript(const std::vector<AiConversationTran
         const std::uint64_t messageId = beginAssistantMessage();
         const auto replay = AiProviderReplayCodec::decode(entry.providerReplayJson);
         if ((!entry.content.empty() && !appendAssistantDelta(messageId, QString::fromUtf8(entry.content)))
+            || (!entry.reasoning.empty()
+                && !appendAssistantReasoningDelta(messageId, QString::fromUtf8(entry.reasoning)))
+            || !std::ranges::all_of(entry.toolActivities,
+                                    [this, messageId](const AiToolActivity &activity) {
+                                        return upsertAssistantToolActivity(
+                                            messageId, QString::fromUtf8(activity.id), QString::fromUtf8(activity.name),
+                                            QString::fromUtf8(activity.summary), QString::fromUtf8(activity.state),
+                                            QString::fromUtf8(activity.resultCode), activity.sideEffecting,
+                                            activity.highRisk);
+                                    })
             || !std::ranges::all_of(entry.sources,
                                     [this, messageId](const AiWebSource &source) {
                                         return appendAssistantSource(messageId, source);
                                     })
             || (!entry.providerReplayJson.empty()
                 && !setAssistantProviderReplay(messageId, replay->toolHistory, replay->finalAssistantContentJson))
-            || !completeAssistantMessage(messageId))
+            || !completeAssistantMessage(messageId, entry.usage)
+            || ((entry.metrics.has_value() || entry.estimatedCostUsd.has_value())
+                && !setAssistantMetrics(messageId, entry.metrics.value_or(AiTurnMetrics{}),
+                                        AiCostEstimate{.usd = entry.estimatedCostUsd,
+                                                       .catalogDate = entry.costCatalogDate,
+                                                       .longContextRatesApplied = entry.longContextRates})))
         {
             clear();
             return false;
+        }
+        if (entry.truncated)
+        {
+            Message *message = find(messageId);
+            Q_ASSERT(message != nullptr);
+            message->truncated = true;
+            const auto row = indexOf(messageId);
+            emit dataChanged(index(row), index(row), {TruncatedRole});
         }
     }
     return true;
@@ -605,32 +693,50 @@ bool AiConversationModel::upsertAssistantToolActivity(const std::uint64_t messag
     summary = boundedUtf8(std::move(summary), 4096, truncated);
     state = boundedUtf8(std::move(state), 64, truncated);
     resultCode = boundedUtf8(std::move(resultCode), 128, truncated);
-    QVariantMap activity{{QStringLiteral("id"), toolCallId},         {QStringLiteral("name"), toolName},
-                         {QStringLiteral("summary"), summary},       {QStringLiteral("state"), state},
-                         {QStringLiteral("resultCode"), resultCode}, {QStringLiteral("sideEffecting"), sideEffecting},
-                         {QStringLiteral("highRisk"), highRisk}};
-    qsizetype existingIndex = -1;
-    for (qsizetype index = 0; index < message->toolActivities.size(); ++index)
+    AiToolActivity activity{.id = toolCallId.toUtf8().toStdString(),
+                            .name = toolName.toUtf8().toStdString(),
+                            .summary = summary.toUtf8().toStdString(),
+                            .state = state.toUtf8().toStdString(),
+                            .resultCode = resultCode.toUtf8().toStdString(),
+                            .sideEffecting = sideEffecting,
+                            .highRisk = highRisk};
+    const auto existing = std::ranges::find(message->toolActivities, activity.id, &AiToolActivity::id);
+    const std::size_t previousBytes =
+        existing == message->toolActivities.end() ? 0 : toolActivityStorageBytes(std::span(&*existing, 1));
+    const std::size_t activityBytes = toolActivityStorageBytes(std::span(&activity, 1));
+    const std::size_t evictedBytes =
+        existing == message->toolActivities.end() && message->toolActivities.size() >= maximumToolActivitiesPerMessage
+            ? toolActivityStorageBytes(std::span(message->toolActivities.data(), 1))
+            : 0;
+    const auto availableForMessage =
+        m_limits.maxMessageBytes
+        - std::min(message->bytes - std::min(message->bytes, previousBytes + evictedBytes), m_limits.maxMessageBytes);
+    const auto availableForConversation =
+        m_limits.maxConversationBytes
+        - std::min(m_totalBytes - std::min(m_totalBytes, previousBytes + evictedBytes), m_limits.maxConversationBytes);
+    if (activityBytes > std::min(availableForMessage, availableForConversation))
     {
-        if (message->toolActivities.at(index).toMap().value(QStringLiteral("id")).toString() == toolCallId)
-        {
-            existingIndex = index;
-            break;
-        }
+        message->truncated = true;
+        const auto row = indexOf(messageId);
+        emit dataChanged(index(row), index(row), {TruncatedRole});
+        return false;
     }
-    if (existingIndex >= 0)
+    if (existing != message->toolActivities.end())
     {
-        message->toolActivities[existingIndex] = activity;
+        *existing = std::move(activity);
     }
     else
     {
-        constexpr qsizetype maximumToolActivities = 32;
-        if (message->toolActivities.size() >= maximumToolActivities)
+        if (message->toolActivities.size() >= maximumToolActivitiesPerMessage)
         {
-            message->toolActivities.removeFirst();
+            message->toolActivities.erase(message->toolActivities.begin());
+            message->bytes -= std::min(message->bytes, evictedBytes);
+            m_totalBytes -= std::min(m_totalBytes, evictedBytes);
         }
-        message->toolActivities.push_back(activity);
+        message->toolActivities.push_back(std::move(activity));
     }
+    message->bytes = message->bytes - std::min(message->bytes, previousBytes) + activityBytes;
+    m_totalBytes = m_totalBytes - std::min(m_totalBytes, previousBytes) + activityBytes;
     const auto row = indexOf(messageId);
     emit dataChanged(index(row), index(row), {ToolActivitiesRole});
     return true;

@@ -2,6 +2,7 @@
 
 #include "core/security/CredentialVault.h"
 #include "domain/ai/AiProviderTypes.h"
+#include "domain/ai/AiUsageReporting.h"
 
 #include <QDateTime>
 #include <QString>
@@ -19,8 +20,16 @@ struct AiStoredMessage final
 {
     QString role;
     QString text;
+    QString reasoning;
+    std::vector<AiToolActivity> toolActivities;
     std::vector<AiWebSource> sources;
     std::string providerReplayJson;
+    std::optional<AiTokenUsage> usage;
+    std::optional<AiTurnMetrics> metrics;
+    std::optional<double> estimatedCostUsd;
+    QString costCatalogDate;
+    bool longContextRates = false;
+    bool truncated = false;
 
     [[nodiscard]] friend bool operator==(const AiStoredMessage &, const AiStoredMessage &) = default;
 };

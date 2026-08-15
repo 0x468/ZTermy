@@ -95,6 +95,19 @@ struct AiToolCall final
     [[nodiscard]] friend bool operator==(const AiToolCall &, const AiToolCall &) = default;
 };
 
+struct AiToolActivity final
+{
+    std::string id;
+    std::string name;
+    std::string summary;
+    std::string state;
+    std::string resultCode;
+    bool sideEffecting = false;
+    bool highRisk = false;
+
+    [[nodiscard]] friend bool operator==(const AiToolActivity &, const AiToolActivity &) = default;
+};
+
 struct AiToolOutput final
 {
     std::string callId;
@@ -186,6 +199,8 @@ struct AiTokenUsage final
     std::uint64_t outputTokens = 0;
     std::uint64_t reasoningTokens = 0;
     std::uint64_t cachedInputTokens = 0;
+
+    [[nodiscard]] friend bool operator==(const AiTokenUsage &, const AiTokenUsage &) = default;
 };
 
 struct AiProviderError final

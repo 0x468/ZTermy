@@ -18,6 +18,7 @@
 #include <openssl/rand.h>
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <memory>
 #include <ranges>
@@ -37,6 +38,13 @@ constexpr std::size_t maximumSourcesPerMessage = 24;
 constexpr std::size_t maximumSourceUrlBytes = std::size_t{8} * 1024;
 constexpr std::size_t maximumSourceTitleBytes = 1024;
 constexpr std::size_t maximumSourceCitationBytes = std::size_t{4} * 1024;
+constexpr std::size_t maximumToolActivitiesPerMessage = 32;
+constexpr std::size_t maximumToolActivityIdBytes = 256;
+constexpr std::size_t maximumToolActivityNameBytes = 128;
+constexpr std::size_t maximumToolActivitySummaryBytes = 4096;
+constexpr std::size_t maximumToolActivityStateBytes = 64;
+constexpr std::size_t maximumToolActivityResultCodeBytes = 128;
+constexpr std::size_t maximumCostCatalogDateBytes = 64;
 constexpr std::string_view keyReference = "ai-conversation-history";
 
 using CipherContext = std::unique_ptr<EVP_CIPHER_CTX, decltype(&EVP_CIPHER_CTX_free)>;
@@ -71,6 +79,26 @@ struct LoadedStore final
         bytes += source.url.size() + source.title.size() + source.citedText.size();
     }
     return bytes;
+}
+
+[[nodiscard]] std::size_t toolActivityStorageBytes(const std::span<const AiToolActivity> activities) noexcept
+{
+    std::size_t bytes = 0;
+    for (const auto &activity : activities)
+    {
+        bytes += activity.id.size() + activity.name.size() + activity.summary.size() + activity.state.size()
+                 + activity.resultCode.size();
+    }
+    return bytes;
+}
+
+[[nodiscard]] bool validToolActivity(const AiToolActivity &activity) noexcept
+{
+    return !activity.id.empty() && activity.id.size() <= maximumToolActivityIdBytes && !activity.name.empty()
+           && activity.name.size() <= maximumToolActivityNameBytes
+           && activity.summary.size() <= maximumToolActivitySummaryBytes
+           && activity.state.size() <= maximumToolActivityStateBytes
+           && activity.resultCode.size() <= maximumToolActivityResultCodeBytes;
 }
 
 void clearBytes(QByteArray &bytes) noexcept
@@ -289,13 +317,24 @@ decrypt(const QByteArray &ciphertext, const QByteArray &tag, const std::string_v
         return false;
     }
     return std::ranges::all_of(conversation.messages, [&limits](const AiStoredMessage &message) {
-        return (message.role == QStringLiteral("user") || message.role == QStringLiteral("assistant")
-                || message.role == QStringLiteral("evidence"))
-               && std::cmp_less_equal(message.text.toUtf8().size(), limits.maximumMessageBytes)
-               && (message.role == QStringLiteral("assistant") || message.sources.empty())
-               && (message.role == QStringLiteral("assistant") || message.providerReplayJson.empty())
+        const bool assistant = message.role == QStringLiteral("assistant");
+        const bool validRole =
+            message.role == QStringLiteral("user") || assistant || message.role == QStringLiteral("evidence");
+        const std::size_t storedBytes = static_cast<std::size_t>(message.text.toUtf8().size())
+                                        + static_cast<std::size_t>(message.reasoning.toUtf8().size())
+                                        + toolActivityStorageBytes(message.toolActivities)
+                                        + sourceStorageBytes(message.sources) + message.providerReplayJson.size()
+                                        + static_cast<std::size_t>(message.costCatalogDate.toUtf8().size());
+        return validRole && std::cmp_less_equal(message.text.toUtf8().size(), limits.maximumMessageBytes)
+               && (assistant
+                   || (message.reasoning.isEmpty() && message.toolActivities.empty() && message.sources.empty()
+                       && message.providerReplayJson.empty() && !message.usage.has_value()
+                       && !message.metrics.has_value() && !message.estimatedCostUsd.has_value()
+                       && message.costCatalogDate.isEmpty() && !message.longContextRates && !message.truncated))
                && (message.providerReplayJson.empty()
                    || AiProviderReplayCodec::decode(message.providerReplayJson).has_value())
+               && message.toolActivities.size() <= maximumToolActivitiesPerMessage
+               && std::ranges::all_of(message.toolActivities, validToolActivity)
                && message.sources.size() <= maximumSourcesPerMessage
                && std::ranges::all_of(message.sources,
                                       [](const AiWebSource &source) {
@@ -303,9 +342,23 @@ decrypt(const QByteArray &ciphertext, const QByteArray &tag, const std::string_v
                                                  && source.title.size() <= maximumSourceTitleBytes
                                                  && source.citedText.size() <= maximumSourceCitationBytes;
                                       })
-               && static_cast<std::size_t>(message.text.toUtf8().size()) + sourceStorageBytes(message.sources)
-                          + message.providerReplayJson.size()
-                      <= limits.maximumMessageBytes;
+               && std::cmp_less_equal(message.costCatalogDate.toUtf8().size(), maximumCostCatalogDateBytes)
+               && (!message.estimatedCostUsd.has_value()
+                   || (std::isfinite(*message.estimatedCostUsd) && *message.estimatedCostUsd >= 0.0))
+               && (!message.usage.has_value()
+                   || (message.usage->inputTokens <= static_cast<std::uint64_t>(std::numeric_limits<qint64>::max())
+                       && message.usage->outputTokens <= static_cast<std::uint64_t>(std::numeric_limits<qint64>::max())
+                       && message.usage->cachedInputTokens
+                              <= static_cast<std::uint64_t>(std::numeric_limits<qint64>::max())
+                       && message.usage->reasoningTokens
+                              <= static_cast<std::uint64_t>(std::numeric_limits<qint64>::max())))
+               && (!message.metrics.has_value()
+                   || (message.metrics->wallTimeMilliseconds
+                           <= static_cast<std::uint64_t>(std::numeric_limits<qint64>::max())
+                       && (!message.metrics->firstTokenMilliseconds.has_value()
+                           || *message.metrics->firstTokenMilliseconds
+                                  <= static_cast<std::uint64_t>(std::numeric_limits<qint64>::max()))))
+               && storedBytes <= limits.maximumMessageBytes;
     });
 }
 
@@ -325,6 +378,26 @@ decrypt(const QByteArray &ciphertext, const QByteArray &tag, const std::string_v
                                               {QStringLiteral("citedText"), QString::fromUtf8(source.citedText)}});
             }
             QJsonObject value{{QStringLiteral("role"), message.role}, {QStringLiteral("text"), message.text}};
+            if (!message.reasoning.isEmpty())
+            {
+                value.insert(QStringLiteral("reasoning"), message.reasoning);
+            }
+            if (!message.toolActivities.empty())
+            {
+                QJsonArray activities;
+                for (const auto &activity : message.toolActivities)
+                {
+                    activities.push_back(
+                        QJsonObject{{QStringLiteral("id"), QString::fromUtf8(activity.id)},
+                                    {QStringLiteral("name"), QString::fromUtf8(activity.name)},
+                                    {QStringLiteral("summary"), QString::fromUtf8(activity.summary)},
+                                    {QStringLiteral("state"), QString::fromUtf8(activity.state)},
+                                    {QStringLiteral("resultCode"), QString::fromUtf8(activity.resultCode)},
+                                    {QStringLiteral("sideEffecting"), activity.sideEffecting},
+                                    {QStringLiteral("highRisk"), activity.highRisk}});
+                }
+                value.insert(QStringLiteral("toolActivities"), activities);
+            }
             if (!sources.isEmpty())
             {
                 value.insert(QStringLiteral("sources"), sources);
@@ -336,6 +409,45 @@ decrypt(const QByteArray &ciphertext, const QByteArray &tag, const std::string_v
                     QJsonDocument::fromJson(QByteArray(message.providerReplayJson.data(),
                                                        static_cast<qsizetype>(message.providerReplayJson.size())))
                         .object());
+            }
+            if (message.usage.has_value())
+            {
+                const AiTokenUsage usage = message.usage.value_or(AiTokenUsage{});
+                value.insert(
+                    QStringLiteral("usage"),
+                    QJsonObject{{QStringLiteral("inputTokens"), static_cast<qint64>(usage.inputTokens)},
+                                {QStringLiteral("outputTokens"), static_cast<qint64>(usage.outputTokens)},
+                                {QStringLiteral("cachedInputTokens"), static_cast<qint64>(usage.cachedInputTokens)},
+                                {QStringLiteral("reasoningTokens"), static_cast<qint64>(usage.reasoningTokens)}});
+            }
+            if (message.metrics.has_value())
+            {
+                const AiTurnMetrics turnMetrics = message.metrics.value_or(AiTurnMetrics{});
+                QJsonObject metrics{
+                    {QStringLiteral("wallTimeMilliseconds"), static_cast<qint64>(turnMetrics.wallTimeMilliseconds)},
+                    {QStringLiteral("retryCount"), static_cast<qint64>(turnMetrics.retryCount)}};
+                if (turnMetrics.firstTokenMilliseconds.has_value())
+                {
+                    metrics.insert(QStringLiteral("firstTokenMilliseconds"),
+                                   static_cast<qint64>(turnMetrics.firstTokenMilliseconds.value_or(0)));
+                }
+                value.insert(QStringLiteral("metrics"), metrics);
+            }
+            if (message.estimatedCostUsd.has_value())
+            {
+                value.insert(QStringLiteral("estimatedCostUsd"), *message.estimatedCostUsd);
+            }
+            if (!message.costCatalogDate.isEmpty())
+            {
+                value.insert(QStringLiteral("costCatalogDate"), message.costCatalogDate);
+            }
+            if (message.longContextRates)
+            {
+                value.insert(QStringLiteral("longContextRates"), true);
+            }
+            if (message.truncated)
+            {
+                value.insert(QStringLiteral("truncated"), true);
             }
             messages.push_back(value);
         }
@@ -393,7 +505,29 @@ parsePlaintext(const QByteArray &plaintext, const AiConversationStoreLimits &lim
         {
             const auto message = messageValue.toObject();
             AiStoredMessage stored{.role = message.value(QStringLiteral("role")).toString(),
-                                   .text = message.value(QStringLiteral("text")).toString()};
+                                   .text = message.value(QStringLiteral("text")).toString(),
+                                   .reasoning = message.value(QStringLiteral("reasoning")).toString(),
+                                   .costCatalogDate = message.value(QStringLiteral("costCatalogDate")).toString(),
+                                   .longContextRates = message.value(QStringLiteral("longContextRates")).toBool(),
+                                   .truncated = message.value(QStringLiteral("truncated")).toBool()};
+            const auto activities = message.value(QStringLiteral("toolActivities")).toArray();
+            stored.toolActivities.reserve(static_cast<std::size_t>(activities.size()));
+            for (const auto &activityValue : activities)
+            {
+                if (!activityValue.isObject())
+                {
+                    return std::unexpected(AiConversationStoreError::invalidData);
+                }
+                const auto activity = activityValue.toObject();
+                stored.toolActivities.push_back(
+                    {.id = activity.value(QStringLiteral("id")).toString().toUtf8().toStdString(),
+                     .name = activity.value(QStringLiteral("name")).toString().toUtf8().toStdString(),
+                     .summary = activity.value(QStringLiteral("summary")).toString().toUtf8().toStdString(),
+                     .state = activity.value(QStringLiteral("state")).toString().toUtf8().toStdString(),
+                     .resultCode = activity.value(QStringLiteral("resultCode")).toString().toUtf8().toStdString(),
+                     .sideEffecting = activity.value(QStringLiteral("sideEffecting")).toBool(),
+                     .highRisk = activity.value(QStringLiteral("highRisk")).toBool()});
+            }
             const QJsonValue replay = message.value(QStringLiteral("providerReplay"));
             if (!replay.isUndefined())
             {
@@ -403,6 +537,61 @@ parsePlaintext(const QByteArray &plaintext, const AiConversationStoreLimits &lim
                 }
                 const QByteArray encoded = QJsonDocument(replay.toObject()).toJson(QJsonDocument::Compact);
                 stored.providerReplayJson = {encoded.constData(), static_cast<std::size_t>(encoded.size())};
+            }
+            const auto usageValue = message.value(QStringLiteral("usage"));
+            if (!usageValue.isUndefined())
+            {
+                if (!usageValue.isObject())
+                {
+                    return std::unexpected(AiConversationStoreError::invalidData);
+                }
+                const auto usage = usageValue.toObject();
+                const qint64 input = usage.value(QStringLiteral("inputTokens")).toInteger(-1);
+                const qint64 output = usage.value(QStringLiteral("outputTokens")).toInteger(-1);
+                const qint64 cached = usage.value(QStringLiteral("cachedInputTokens")).toInteger(-1);
+                const qint64 reasoning = usage.value(QStringLiteral("reasoningTokens")).toInteger(-1);
+                if (input < 0 || output < 0 || cached < 0 || reasoning < 0)
+                {
+                    return std::unexpected(AiConversationStoreError::invalidData);
+                }
+                stored.usage = AiTokenUsage{.inputTokens = static_cast<std::uint64_t>(input),
+                                            .outputTokens = static_cast<std::uint64_t>(output),
+                                            .reasoningTokens = static_cast<std::uint64_t>(reasoning),
+                                            .cachedInputTokens = static_cast<std::uint64_t>(cached)};
+            }
+            const auto metricsValue = message.value(QStringLiteral("metrics"));
+            if (!metricsValue.isUndefined())
+            {
+                if (!metricsValue.isObject())
+                {
+                    return std::unexpected(AiConversationStoreError::invalidData);
+                }
+                const auto metrics = metricsValue.toObject();
+                const qint64 wallTime = metrics.value(QStringLiteral("wallTimeMilliseconds")).toInteger(-1);
+                const qint64 retryCount = metrics.value(QStringLiteral("retryCount")).toInteger(-1);
+                const auto firstTokenValue = metrics.value(QStringLiteral("firstTokenMilliseconds"));
+                const qint64 firstToken = firstTokenValue.isUndefined() ? -1 : firstTokenValue.toInteger(-2);
+                if (wallTime < 0 || retryCount < 0
+                    || std::cmp_greater(retryCount, std::numeric_limits<std::uint32_t>::max()) || firstToken < -1)
+                {
+                    return std::unexpected(AiConversationStoreError::invalidData);
+                }
+                stored.metrics =
+                    AiTurnMetrics{.wallTimeMilliseconds = static_cast<std::uint64_t>(wallTime),
+                                  .firstTokenMilliseconds =
+                                      firstTokenValue.isUndefined()
+                                          ? std::nullopt
+                                          : std::optional<std::uint64_t>{static_cast<std::uint64_t>(firstToken)},
+                                  .retryCount = static_cast<std::uint32_t>(retryCount)};
+            }
+            const auto costValue = message.value(QStringLiteral("estimatedCostUsd"));
+            if (!costValue.isUndefined())
+            {
+                if (!costValue.isDouble() || !std::isfinite(costValue.toDouble()) || costValue.toDouble() < 0.0)
+                {
+                    return std::unexpected(AiConversationStoreError::invalidData);
+                }
+                stored.estimatedCostUsd = costValue.toDouble();
             }
             const auto sources = message.value(QStringLiteral("sources")).toArray();
             stored.sources.reserve(static_cast<std::size_t>(sources.size()));

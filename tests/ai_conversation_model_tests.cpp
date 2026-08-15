@@ -40,6 +40,7 @@ private slots:
     void preservesAgentEvidenceChronology();
     void exposesDeduplicatesAndRestoresWebSources();
     void preservesBoundedProviderReplayAcrossRestore();
+    void preservesAgentTurnPresentationAcrossRestore();
 };
 
 void AiConversationModelTests::streamsAssistantMessageAndUsage()
@@ -359,6 +360,47 @@ void AiConversationModelTests::preservesBoundedProviderReplayAcrossRestore()
     QVERIFY(prioritizedMessages.front().providerReplayJson.empty());
     QVERIFY(!prioritizedMessages.back().providerReplayJson.empty());
     QVERIFY(prioritized.data(prioritized.index(0), AiConversationModel::TruncatedRole).toBool());
+}
+
+void AiConversationModelTests::preservesAgentTurnPresentationAcrossRestore()
+{
+    AiConversationModel model;
+    static_cast<void>(model.appendUserMessage(QStringLiteral("Inspect disk usage")));
+    const auto assistantId = model.beginAssistantMessage();
+    QVERIFY(model.appendAssistantReasoningDelta(assistantId, QStringLiteral("I should inspect the mounted volumes.")));
+    QVERIFY(model.upsertAssistantToolActivity(assistantId, QStringLiteral("tool-1"), QStringLiteral("run_command"),
+                                              QStringLiteral("df -h"), QStringLiteral("succeeded"),
+                                              QStringLiteral("ok"), true, false));
+    QVERIFY(model.appendAssistantDelta(assistantId, QStringLiteral("Disk usage is healthy.")));
+    QVERIFY(model.completeAssistantMessage(
+        assistantId, AiTokenUsage{.inputTokens = 24, .outputTokens = 8, .reasoningTokens = 5, .cachedInputTokens = 3}));
+    QVERIFY(model.setAssistantMetrics(
+        assistantId, AiTurnMetrics{.wallTimeMilliseconds = 740, .firstTokenMilliseconds = 130, .retryCount = 1},
+        AiCostEstimate{.usd = 0.00042, .catalogDate = "2026-08-15", .longContextRatesApplied = true}));
+
+    auto transcript = model.transcript();
+    QCOMPARE(transcript.size(), std::size_t{2});
+    transcript.back().truncated = true;
+    QCOMPARE(transcript.back().reasoning, std::string("I should inspect the mounted volumes."));
+    QCOMPARE(transcript.back().toolActivities.size(), std::size_t{1});
+    QVERIFY(transcript.back().usage.has_value());
+    QVERIFY(transcript.back().metrics.has_value());
+    QVERIFY(transcript.back().estimatedCostUsd.has_value());
+
+    AiConversationModel restored;
+    QVERIFY(restored.restoreTranscript(transcript));
+    QCOMPARE(restored.transcript(), transcript);
+    QCOMPARE(restored.data(restored.index(1), AiConversationModel::ReasoningRole).toString(),
+             QStringLiteral("I should inspect the mounted volumes."));
+    const QVariantList activities = restored.data(restored.index(1), AiConversationModel::ToolActivitiesRole).toList();
+    QCOMPARE(activities.size(), 1);
+    QCOMPARE(activities.constFirst().toMap().value(QStringLiteral("summary")).toString(), QStringLiteral("df -h"));
+    QCOMPARE(restored.data(restored.index(1), AiConversationModel::InputTokensRole).toULongLong(), qulonglong{24});
+    QCOMPARE(restored.data(restored.index(1), AiConversationModel::WallTimeMillisecondsRole).toULongLong(),
+             qulonglong{740});
+    QCOMPARE(restored.data(restored.index(1), AiConversationModel::EstimatedCostUsdRole).toDouble(), 0.00042);
+    QVERIFY(restored.data(restored.index(1), AiConversationModel::LongContextRatesRole).toBool());
+    QVERIFY(restored.data(restored.index(1), AiConversationModel::TruncatedRole).toBool());
 }
 
 } // namespace

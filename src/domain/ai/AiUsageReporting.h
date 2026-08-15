@@ -14,6 +14,8 @@ struct AiTurnMetrics final
     std::uint64_t wallTimeMilliseconds = 0;
     std::optional<std::uint64_t> firstTokenMilliseconds;
     std::uint32_t retryCount = 0;
+
+    [[nodiscard]] friend bool operator==(const AiTurnMetrics &, const AiTurnMetrics &) = default;
 };
 
 struct AiCostEstimate final

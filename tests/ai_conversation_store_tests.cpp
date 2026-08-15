@@ -127,6 +127,7 @@ private slots:
     void preservesUpdatesAcrossStoreInstances();
     void roundTripsAndValidatesWebSources();
     void roundTripsAndValidatesProviderReplay();
+    void roundTripsAgentTurnPresentation();
 };
 
 void AiConversationStoreTests::roundTripsWithoutPlaintextAndRotatesNonce()
@@ -362,6 +363,45 @@ void AiConversationStoreTests::roundTripsAndValidatesProviderReplay()
     const auto malformed = store.upsert(value);
     QVERIFY(!malformed.has_value());
     QCOMPARE(malformed.error(), ai::AiConversationStoreError::invalidData);
+}
+
+void AiConversationStoreTests::roundTripsAgentTurnPresentation()
+{
+    QTemporaryDir directory;
+    TestVault vault;
+    ai::AiConversationStore store(directory.filePath(QStringLiteral("history.enc")), vault);
+    auto value = conversation(QStringLiteral("presentation"), QStringLiteral("inspect disks"));
+    auto &assistant = value.messages.at(1);
+    assistant.reasoning = QStringLiteral("Inspect the filesystem table first.");
+    assistant.toolActivities = {{.id = "tool-1",
+                                 .name = "run_command",
+                                 .summary = "df -h",
+                                 .state = "succeeded",
+                                 .resultCode = "ok",
+                                 .sideEffecting = true}};
+    assistant.usage =
+        ai::AiTokenUsage{.inputTokens = 50, .outputTokens = 12, .reasoningTokens = 7, .cachedInputTokens = 4};
+    assistant.metrics = ai::AiTurnMetrics{.wallTimeMilliseconds = 820, .firstTokenMilliseconds = 145, .retryCount = 1};
+    assistant.estimatedCostUsd = 0.00073;
+    assistant.costCatalogDate = QStringLiteral("2026-08-15");
+    assistant.longContextRates = true;
+    assistant.truncated = true;
+
+    QVERIFY(store.upsert(value).has_value());
+    const auto loaded = store.load();
+    QVERIFY(loaded.has_value());
+    QVERIFY(loaded->front().messages.at(1) == assistant);
+
+    value.messages.front().toolActivities = assistant.toolActivities;
+    const auto metadataOnUser = store.upsert(value);
+    QVERIFY(!metadataOnUser.has_value());
+    QCOMPARE(metadataOnUser.error(), ai::AiConversationStoreError::invalidData);
+
+    value.messages.front().toolActivities.clear();
+    value.messages.at(1).toolActivities.front().name.clear();
+    const auto invalidActivity = store.upsert(value);
+    QVERIFY(!invalidActivity.has_value());
+    QCOMPARE(invalidActivity.error(), ai::AiConversationStoreError::invalidData);
 }
 
 QTEST_GUILESS_MAIN(AiConversationStoreTests)

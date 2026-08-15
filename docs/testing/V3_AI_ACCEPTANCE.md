@@ -89,9 +89,11 @@ evaluations serve different purposes and are reported separately.
 - [x] Migrating to session storage disables retention, and source cleanup is
       refused while an encrypted envelope exists so its durable key cannot be
       discarded outside the explicit history-delete action.
-- [x] Restart reload and transcript restore preserve visible user/assistant text
-      plus bounded hidden evidence from explicit attachments and completed Agent
-      tools. History counts and previews ignore evidence. Restore never revives
+- [x] Restart reload and transcript restore preserve visible user/assistant text,
+      provider-exposed reasoning, native tool cards, usage/latency/cost metadata,
+      citations, truncation state, and bounded hidden evidence from explicit
+      attachments and completed Agent tools. History counts and previews ignore
+      evidence. Restored tool cards are inert records; restore never revives
       permissions, executable tool calls, pending actions, budgets, or write
       ownership, and one stored conversation cannot own two live tabs.
 - [ ] Owner check: prose wraps inside the assistant pane; fenced code and Markdown tables use
