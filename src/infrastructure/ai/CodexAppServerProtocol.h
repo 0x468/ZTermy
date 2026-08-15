@@ -42,8 +42,11 @@ public:
                                                                         std::string_view localWorkingDirectory,
                                                                         std::string_view developerInstructions,
                                                                         std::span<const AiToolDefinition> tools) const;
-    [[nodiscard]] std::expected<QByteArray, QString> resumeThreadRequest(std::uint64_t id,
-                                                                         std::string_view threadId) const;
+    [[nodiscard]] std::expected<QByteArray, QString> resumeThreadRequest(std::uint64_t id, std::string_view threadId,
+                                                                         std::string_view model,
+                                                                         std::string_view localWorkingDirectory,
+                                                                         std::string_view developerInstructions,
+                                                                         std::span<const AiToolDefinition> tools) const;
     [[nodiscard]] std::expected<QByteArray, QString> startTurnRequest(std::uint64_t id, std::string_view threadId,
                                                                       std::string_view prompt) const;
     [[nodiscard]] std::expected<QByteArray, QString> interruptTurnRequest(std::uint64_t id, std::string_view threadId,

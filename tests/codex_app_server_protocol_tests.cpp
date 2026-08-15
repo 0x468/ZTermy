@@ -63,6 +63,12 @@ void CodexAppServerProtocolTests::buildsHandshakeThreadTurnAndInterruptRequests(
     const auto interrupt = protocol.interruptTurnRequest(4, "thread-1", "turn-1");
     QVERIFY(interrupt.has_value());
     QCOMPARE(object(*interrupt).value(QStringLiteral("method")).toString(), QStringLiteral("turn/interrupt"));
+    const auto resume = protocol.resumeThreadRequest(5, "thread-1", "gpt-5.6-terra", workingDirectory,
+                                                     "Use only the owning ztermy terminal tools.", tools);
+    QVERIFY(resume.has_value());
+    const QJsonObject resumeParams = object(*resume).value(QStringLiteral("params")).toObject();
+    QCOMPARE(resumeParams.value(QStringLiteral("threadId")).toString(), QStringLiteral("thread-1"));
+    QCOMPARE(resumeParams.value(QStringLiteral("dynamicTools")).toArray().size(), 1);
 }
 
 void CodexAppServerProtocolTests::buildsDynamicToolResponsesAndRejectsInvalidDefinitions()

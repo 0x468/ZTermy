@@ -73,7 +73,7 @@ constexpr std::uint64_t maximumJsonInteger = 9'007'199'254'740'991ULL;
 
 [[nodiscard]] bool validToolName(const std::string_view value)
 {
-    static const QRegularExpression pattern(QStringLiteral("^[A-Za-z0-9_-]{1,64}$"));
+    static const QRegularExpression pattern(QStringLiteral("^[A-Za-z0-9_-]{1,128}$"));
     return pattern.match(text(value)).hasMatch();
 }
 
@@ -108,6 +108,45 @@ constexpr std::uint64_t maximumJsonInteger = 9'007'199'254'740'991ULL;
     return static_cast<std::uint64_t>(number);
 }
 
+[[nodiscard]] std::expected<QJsonObject, QString> threadConfiguration(const std::string_view model,
+                                                                      const std::string_view localWorkingDirectory,
+                                                                      const std::string_view developerInstructions,
+                                                                      const std::span<const AiToolDefinition> tools)
+{
+    if (!validIdentifier(model) || !validIdentifier(localWorkingDirectory, 4096)
+        || !QDir::isAbsolutePath(text(localWorkingDirectory))
+        || !validUtf8(developerInstructions, maximumPromptBytes, true) || tools.empty() || tools.size() > maximumTools)
+    {
+        return std::unexpected(QStringLiteral("The Codex thread configuration exceeds its bounds."));
+    }
+
+    QJsonArray dynamicTools;
+    for (const AiToolDefinition &tool : tools)
+    {
+        if (!validToolName(tool.name) || !validUtf8(tool.description, maximumToolDescriptionBytes, true))
+        {
+            return std::unexpected(QStringLiteral("A dynamic tool definition is invalid."));
+        }
+        const auto schema = objectFromJson(tool.parametersJson);
+        if (!schema.has_value())
+        {
+            return std::unexpected(schema.error());
+        }
+        dynamicTools.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("function")},
+                                        {QStringLiteral("name"), text(tool.name)},
+                                        {QStringLiteral("description"), text(tool.description)},
+                                        {QStringLiteral("inputSchema"), *schema}});
+    }
+
+    return QJsonObject{{QStringLiteral("model"), text(model)},
+                       {QStringLiteral("cwd"), text(localWorkingDirectory)},
+                       {QStringLiteral("approvalPolicy"), QStringLiteral("never")},
+                       {QStringLiteral("sandbox"), QStringLiteral("read-only")},
+                       {QStringLiteral("serviceName"), QStringLiteral("ztermy")},
+                       {QStringLiteral("developerInstructions"), text(developerInstructions)},
+                       {QStringLiteral("dynamicTools"), dynamicTools}};
+}
+
 } // namespace
 
 QByteArray CodexAppServerProtocol::initializeRequest(const std::uint64_t id, const std::string_view clientVersion) const
@@ -135,53 +174,39 @@ std::expected<QByteArray, QString> CodexAppServerProtocol::startThreadRequest(
     const std::uint64_t id, const std::string_view model, const std::string_view localWorkingDirectory,
     const std::string_view developerInstructions, const std::span<const AiToolDefinition> tools) const
 {
-    if (!validRequestId(id) || !validIdentifier(model) || !validIdentifier(localWorkingDirectory, 4096)
-        || !QDir::isAbsolutePath(text(localWorkingDirectory))
-        || !validUtf8(developerInstructions, maximumPromptBytes, true) || tools.size() > maximumTools)
+    if (!validRequestId(id))
     {
         return std::unexpected(QStringLiteral("The Codex thread configuration exceeds its bounds."));
     }
-
-    QJsonArray dynamicTools;
-    for (const AiToolDefinition &tool : tools)
+    const auto params = threadConfiguration(model, localWorkingDirectory, developerInstructions, tools);
+    if (!params.has_value())
     {
-        if (!validToolName(tool.name) || !validUtf8(tool.description, maximumToolDescriptionBytes, true))
-        {
-            return std::unexpected(QStringLiteral("A dynamic tool definition is invalid."));
-        }
-        const auto schema = objectFromJson(tool.parametersJson);
-        if (!schema.has_value())
-        {
-            return std::unexpected(schema.error());
-        }
-        dynamicTools.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("function")},
-                                        {QStringLiteral("name"), text(tool.name)},
-                                        {QStringLiteral("description"), text(tool.description)},
-                                        {QStringLiteral("inputSchema"), *schema}});
+        return std::unexpected(params.error());
     }
-
-    const QJsonObject params{{QStringLiteral("model"), text(model)},
-                             {QStringLiteral("cwd"), text(localWorkingDirectory)},
-                             {QStringLiteral("approvalPolicy"), QStringLiteral("never")},
-                             {QStringLiteral("sandbox"), QStringLiteral("read-only")},
-                             {QStringLiteral("serviceName"), QStringLiteral("ztermy")},
-                             {QStringLiteral("developerInstructions"), text(developerInstructions)},
-                             {QStringLiteral("dynamicTools"), dynamicTools}};
     return framed(QJsonObject{{QStringLiteral("method"), QStringLiteral("thread/start")},
                               {QStringLiteral("id"), static_cast<qint64>(id)},
-                              {QStringLiteral("params"), params}});
+                              {QStringLiteral("params"), *params}});
 }
 
-std::expected<QByteArray, QString> CodexAppServerProtocol::resumeThreadRequest(const std::uint64_t id,
-                                                                               const std::string_view threadId) const
+std::expected<QByteArray, QString>
+CodexAppServerProtocol::resumeThreadRequest(const std::uint64_t id, const std::string_view threadId,
+                                            const std::string_view model, const std::string_view localWorkingDirectory,
+                                            const std::string_view developerInstructions,
+                                            const std::span<const AiToolDefinition> tools) const
 {
     if (!validRequestId(id) || !validIdentifier(threadId))
     {
         return std::unexpected(QStringLiteral("A valid Codex thread id is required."));
     }
+    auto params = threadConfiguration(model, localWorkingDirectory, developerInstructions, tools);
+    if (!params.has_value())
+    {
+        return std::unexpected(params.error());
+    }
+    params->insert(QStringLiteral("threadId"), text(threadId));
     return framed(QJsonObject{{QStringLiteral("method"), QStringLiteral("thread/resume")},
                               {QStringLiteral("id"), static_cast<qint64>(id)},
-                              {QStringLiteral("params"), QJsonObject{{QStringLiteral("threadId"), text(threadId)}}}});
+                              {QStringLiteral("params"), *params}});
 }
 
 std::expected<QByteArray, QString> CodexAppServerProtocol::startTurnRequest(const std::uint64_t id,

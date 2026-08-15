@@ -296,10 +296,14 @@ Implementation status:
   JSONL protocol layer now covers initialization, thread start/resume, turn
   start/interrupt, dynamic-tool results, typed responses/notifications/requests,
   malformed input, fragmentation, and buffer limits;
-- process lifecycle, capability/version negotiation, typed stream mapping,
-  current-terminal dynamic-tool dispatch, resume/recovery, discovery UI, and
-  packaging remain open. The Agent selector stays hidden until those paths work
-  end to end.
+- the non-blocking native process client now covers initialization, thread
+  start/resume with refreshed tools, turn start, immediate/queued interrupt,
+  bounded host-tool round trips, terminal-thread scope checks, and failure
+  propagation. Discovery verifies the exact installed experimental schema
+  rather than guessing support from a version string;
+- typed stream-to-conversation mapping, current-terminal application dispatch,
+  durable resume ownership, discovery UI, and packaging remain open. The Agent
+  selector stays hidden until those paths work end to end.
 
 Current closure work:
 

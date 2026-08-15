@@ -5,9 +5,22 @@
 > Netcatty 对照：`docs/reviews/netcatty-ai-comparison-2026-08.md`；
 > Codex 专项：`docs/research/CODEX_CLI_ARCHITECTURE.md`。
 
-## 节点 N17 — 原生外部 Agent 协议地基（2026-08-15）
+## 节点 N18 — Codex 原生进程生命周期与能力探测（2026-08-15）
 
 **commit**: 本节点提交（见 git 历史）
+
+**范围**：
+
+1. 新增全异步 `QProcess` App Server 客户端，覆盖握手、线程新建/恢复、轮次启动、立即或延后中断、失败传播和有界工具往返；
+2. 恢复线程时重新发送当前模型、工作目录、开发指令与动态工具目录，拒绝跨线程事件、未知工具、重复/超量请求和失效工具结果；
+3. 新增安装探测：读取实际 CLI 版本，调用 `generate-json-schema --experimental`，验证 `dynamicTools` 及请求/响应必需字段，避免按版本号猜测；
+4. 本机 Codex CLI 0.146.0 的实验 schema 已确认包含动态工具合同；稳定 schema 不含实验字段属于预期行为。
+
+**验证**：MSVC 动态 Debug 下 `codex-app-server-protocol` 与 `codex-app-server-client` 2/2；假 App Server 覆盖工具执行、排队取消、恢复与 schema 探测；六个新增/修改 C++ 文件通过 clang-tidy warnings-as-errors。
+
+## 节点 N17 — 原生外部 Agent 协议地基（2026-08-15）
+
+**commit**: `3265290`
 
 **范围**：
 

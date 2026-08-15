@@ -20,10 +20,12 @@ can request client-executed dynamic tools. The separately documented SDKs are
 TypeScript and Python wrappers and would add a runtime not otherwise needed by
 the native Qt application.
 
-The installed Codex CLI can generate its versioned App Server schema. Protocol
-features can nevertheless differ between installed releases; in particular,
-dynamic tools are experimental and must never be assumed solely because the
-process starts.
+The installed Codex CLI can generate its versioned App Server schema. Stable
+schema generation intentionally filters experimental fields, so discovery must
+use `generate-json-schema --experimental`. Protocol features can nevertheless
+differ between installed releases; dynamic tools must never be assumed solely
+because the process starts. The locally installed Codex CLI 0.146.0 exposes the
+required dynamic-tool contracts in its experimental schema.
 
 References:
 
@@ -46,10 +48,12 @@ References:
   ztermy dynamic tools, so the existing mode, reusable-rule, deduplication,
   budget, audit, cancellation, command-gate, and reconnect-generation checks
   remain authoritative.
-- Negotiate and verify required experimental capabilities before exposing an
-  Agent as available. An unsupported or mismatched Codex version is displayed
-  as unavailable with a reason; it must not silently fall back to built-in
-  shell access or to the built-in ztermy Agent.
+- Probe the exact installed executable asynchronously: read its version, generate
+  its bounded experimental schema, and require `thread/start.dynamicTools`, the
+  dynamic-call request fields, and the dynamic-result response fields before
+  exposing the Agent as available. An unsupported or mismatched Codex version
+  is displayed as unavailable with a reason; it must not silently fall back to
+  built-in shell access or to the built-in ztermy Agent.
 - Keep the wire protocol bounded: 4 MiB aggregate receive buffer, 2 MiB per
   message, 1 MiB prompts, 256 KiB dynamic-tool results, 128 tools, strict JSON
   envelopes, absolute working directories, bounded UTF-8 identifiers and
@@ -67,8 +71,9 @@ References:
   single-terminal product model and existing UI/event vocabulary.
 - Codex owns planning, reasoning, and resumable thread state; ztermy owns the
   terminal, credentials, permissions, evidence, and tool execution.
-- The first landed slice is deliberately protocol-only. A tested process client
-  and capability handshake are required before UI availability can be claimed.
-- Current local Codex versions that lack dynamic-tool negotiation remain
-  unavailable rather than receiving broader local-machine access.
-
+- The protocol, asynchronous installation probe, and process lifecycle are now
+  independently testable. Typed event-to-conversation mapping and current-
+  terminal tool dispatch are still required before UI availability can be
+  claimed.
+- Codex versions that lack dynamic-tool negotiation remain unavailable rather
+  than receiving broader local-machine access.
