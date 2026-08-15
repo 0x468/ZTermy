@@ -66,6 +66,12 @@ enum class AiProviderPreference : std::uint8_t
     openAiCompatible,
 };
 
+enum class AiAgentPreference : std::uint8_t
+{
+    ztermy,
+    codex,
+};
+
 enum class AiPermissionPreference : std::uint8_t
 {
     readOnly,
@@ -106,6 +112,7 @@ struct ApplicationSettings final
     CredentialStoragePreference credentialStorage = CredentialStoragePreference::automatic;
     LanguagePreference language = LanguagePreference::system;
     QMap<QString, QString> shortcutOverrides;
+    AiAgentPreference aiAgent = AiAgentPreference::ztermy;
     AiProviderPreference aiProvider = AiProviderPreference::openAiResponses;
     QString aiBaseUrl = QStringLiteral("https://api.openai.com/v1");
     QString aiEndpointPath;
@@ -149,6 +156,7 @@ private:
 [[nodiscard]] QString cursorPreferenceToken(CursorPreference preference);
 [[nodiscard]] QString credentialStoragePreferenceToken(CredentialStoragePreference preference);
 [[nodiscard]] QString languagePreferenceToken(LanguagePreference preference);
+[[nodiscard]] QString aiAgentPreferenceToken(AiAgentPreference preference);
 [[nodiscard]] QString aiProviderPreferenceToken(AiProviderPreference preference);
 [[nodiscard]] QString aiPermissionPreferenceToken(AiPermissionPreference preference);
 [[nodiscard]] QString aiReasoningPreferenceToken(AiReasoningPreference preference);
@@ -158,6 +166,7 @@ private:
 [[nodiscard]] std::optional<CursorPreference> parseCursorPreference(const QString &token);
 [[nodiscard]] std::optional<CredentialStoragePreference> parseCredentialStoragePreference(const QString &token);
 [[nodiscard]] std::optional<LanguagePreference> parseLanguagePreference(const QString &token);
+[[nodiscard]] std::optional<AiAgentPreference> parseAiAgentPreference(const QString &token);
 [[nodiscard]] std::optional<AiProviderPreference> parseAiProviderPreference(const QString &token);
 [[nodiscard]] std::optional<AiPermissionPreference> parseAiPermissionPreference(const QString &token);
 [[nodiscard]] std::optional<AiReasoningPreference> parseAiReasoningPreference(const QString &token);
