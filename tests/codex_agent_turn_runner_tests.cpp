@@ -1,3 +1,4 @@
+#include "application/ai/CodexAgentPromptBuilder.h"
 #include "application/ai/CodexAgentTurnRunner.h"
 
 #include <QCoreApplication>
@@ -58,6 +59,7 @@ private slots:
     void streamsAndCompletesImmediateTool();
     void resumesAnAsynchronousToolResult();
     void cancelsActiveTurn();
+    void buildsOnlyTheCurrentTurnForAResumedThread();
 };
 
 void CodexAgentTurnRunnerTests::streamsAndCompletesImmediateTool()
@@ -173,6 +175,30 @@ void CodexAgentTurnRunnerTests::cancelsActiveTurn()
     turnLoop.exec();
     QVERIFY(cancelled);
     QVERIFY(!runner.active());
+}
+
+void CodexAgentTurnRunnerTests::buildsOnlyTheCurrentTurnForAResumedThread()
+{
+    ztermy::ai::AiGenerationRequest request{
+        .messages =
+            {
+                {.role = ztermy::ai::AiMessageRole::user, .content = "old request"},
+                {.role = ztermy::ai::AiMessageRole::assistant, .content = "old answer"},
+                {.role = ztermy::ai::AiMessageRole::user, .content = "bounded terminal evidence"},
+                {.role = ztermy::ai::AiMessageRole::user, .content = "current request"},
+            },
+    };
+    const auto prompt = ztermy::ai::CodexAgentPromptBuilder::build(request, true);
+    QVERIFY(prompt.has_value());
+    QVERIFY(prompt->contains("bounded terminal evidence"));
+    QVERIFY(prompt->contains("current request"));
+    QVERIFY(!prompt->contains("old request"));
+    QVERIFY(!prompt->contains("old answer"));
+
+    request.messages.back().images.push_back({.mediaType = "image/png", .base64Data = "cG5n"});
+    const auto imagePrompt = ztermy::ai::CodexAgentPromptBuilder::build(request, true);
+    QVERIFY(!imagePrompt.has_value());
+    QCOMPARE(imagePrompt.error(), ztermy::ai::CodexAgentPromptError::imageUnsupported);
 }
 
 } // namespace

@@ -643,6 +643,8 @@ target_link_libraries(ztermy_ai_application
 )
 
 add_library(ztermy_external_agent_application STATIC
+    src/application/ai/CodexAgentPromptBuilder.cpp
+    src/application/ai/CodexAgentPromptBuilder.h
     src/application/ai/CodexAgentTurnRunner.cpp
     src/application/ai/CodexAgentTurnRunner.h
 )
