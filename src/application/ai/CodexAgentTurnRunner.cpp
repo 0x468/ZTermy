@@ -19,6 +19,13 @@ namespace
             .retryable = false};
 }
 
+[[nodiscard]] AiProviderError cancellationError()
+{
+    return {.code = AiProviderErrorCode::cancelled,
+            .message = "The Codex Agent turn was cancelled.",
+            .retryable = false};
+}
+
 [[nodiscard]] std::uint64_t elapsedMilliseconds(const std::chrono::steady_clock::time_point start,
                                                 const std::chrono::steady_clock::time_point end)
 {
@@ -79,6 +86,63 @@ std::expected<void, AiProviderError> CodexAgentTurnRunner::initialize(CodexAppSe
 }
 
 std::expected<CodexAgentTurnRunner::TurnId, AiProviderError>
+CodexAgentTurnRunner::startConfigured(CodexAppServerConfiguration configuration, std::string prompt,
+                                      EventHandler eventHandler, FinishedHandler finishedHandler,
+                                      ToolHandler toolHandler, ToolOutputHandler toolOutputHandler)
+{
+    if (active() || prompt.empty())
+    {
+        return std::unexpected(protocolError(QStringLiteral("The Codex Agent cannot start this turn.")));
+    }
+    stop();
+    m_mapper.reset();
+    m_eventHandler = std::move(eventHandler);
+    m_finishedHandler = std::move(finishedHandler);
+    m_toolHandler = std::move(toolHandler);
+    m_toolOutputHandler = std::move(toolOutputHandler);
+    m_pendingPrompt = std::move(prompt);
+    m_startedAt = std::chrono::steady_clock::now();
+    m_firstTokenAt.reset();
+    m_turnId = m_nextTurnId++;
+    m_startingConfiguredTurn = true;
+
+    auto started = m_client.start(
+        std::move(configuration),
+        [this](auto result) {
+            if (!active())
+            {
+                return;
+            }
+            if (!result.has_value())
+            {
+                finishWithError(protocolError(result.error()));
+                return;
+            }
+            m_initialized = true;
+            m_startingConfiguredTurn = false;
+            const auto turn = m_client.startTurn(m_pendingPrompt);
+            m_pendingPrompt.clear();
+            if (!turn.has_value())
+            {
+                finishWithError(protocolError(turn.error()));
+            }
+        },
+        [this](auto message) {
+            handleClientEvent(std::move(message));
+        },
+        [this](const CodexDynamicToolCall &call) {
+            handleToolCall(call);
+        });
+    if (!started.has_value())
+    {
+        const auto error = protocolError(started.error());
+        clearTurn();
+        return std::unexpected(error);
+    }
+    return m_turnId;
+}
+
+std::expected<CodexAgentTurnRunner::TurnId, AiProviderError>
 CodexAgentTurnRunner::start(const std::string_view prompt, EventHandler eventHandler, FinishedHandler finishedHandler,
                             ToolHandler toolHandler, ToolOutputHandler toolOutputHandler)
 {
@@ -110,6 +174,12 @@ bool CodexAgentTurnRunner::cancel()
     if (!active())
     {
         return false;
+    }
+    if (m_startingConfiguredTurn)
+    {
+        m_client.stop();
+        finishWithError(cancellationError());
+        return true;
     }
     if (m_pendingTool.has_value())
     {
@@ -328,8 +398,10 @@ void CodexAgentTurnRunner::clearTurn()
     m_toolHandler = {};
     m_toolOutputHandler = {};
     m_pendingTool.reset();
+    m_pendingPrompt.clear();
     m_firstTokenAt.reset();
     m_turnId = 0;
+    m_startingConfiguredTurn = false;
 }
 
 AiTurnMetrics CodexAgentTurnRunner::metrics() const

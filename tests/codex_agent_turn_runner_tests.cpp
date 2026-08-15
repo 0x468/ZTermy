@@ -63,15 +63,13 @@ private slots:
 void CodexAgentTurnRunnerTests::streamsAndCompletesImmediateTool()
 {
     ztermy::ai::CodexAgentTurnRunner runner;
-    QString failure;
-    QVERIFY2(initialize(runner, failure), qPrintable(failure));
     QEventLoop loop;
     bool sawText = false;
     bool sawCompletion = false;
     bool sawToolOutput = false;
     std::optional<ztermy::ai::AiTurnMetrics> metrics;
-    auto started = runner.start(
-        "Inspect the terminal",
+    auto started = runner.startConfigured(
+        configuration(), "Inspect the terminal",
         [&sawText, &sawCompletion](const auto, const ztermy::ai::AiStreamEvent &event) {
             sawText = sawText || event.type == ztermy::ai::AiStreamEventType::textDelta;
             sawCompletion = sawCompletion || event.type == ztermy::ai::AiStreamEventType::responseCompleted;

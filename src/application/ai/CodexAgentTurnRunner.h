@@ -11,6 +11,7 @@
 #include <expected>
 #include <functional>
 #include <optional>
+#include <string>
 #include <string_view>
 
 namespace ztermy::ai
@@ -34,6 +35,11 @@ public:
 
     [[nodiscard]] std::expected<void, AiProviderError> initialize(CodexAppServerConfiguration configuration,
                                                                   ReadyHandler readyHandler);
+    [[nodiscard]] std::expected<TurnId, AiProviderError> startConfigured(CodexAppServerConfiguration configuration,
+                                                                         std::string prompt, EventHandler eventHandler,
+                                                                         FinishedHandler finishedHandler,
+                                                                         ToolHandler toolHandler = {},
+                                                                         ToolOutputHandler toolOutputHandler = {});
     [[nodiscard]] std::expected<TurnId, AiProviderError> start(std::string_view prompt, EventHandler eventHandler,
                                                                FinishedHandler finishedHandler,
                                                                ToolHandler toolHandler = {},
@@ -70,11 +76,13 @@ private:
     ToolHandler m_toolHandler;
     ToolOutputHandler m_toolOutputHandler;
     std::optional<PendingTool> m_pendingTool;
+    std::string m_pendingPrompt;
     std::chrono::steady_clock::time_point m_startedAt;
     std::optional<std::chrono::steady_clock::time_point> m_firstTokenAt;
     TurnId m_turnId = 0;
     TurnId m_nextTurnId = 1;
     bool m_initialized = false;
+    bool m_startingConfiguredTurn = false;
 };
 
 } // namespace ztermy::ai
