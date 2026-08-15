@@ -1140,6 +1140,8 @@ void AppControllerTests::runsDiscoveredCodexAgentAgainstCurrentTerminal()
     QCOMPARE(tools.size(), 1);
     QCOMPARE(tools.constFirst().toMap().value(QStringLiteral("name")).toString(), QStringLiteral("read_session_info"));
     QCOMPARE(tools.constFirst().toMap().value(QStringLiteral("state")).toString(), QStringLiteral("succeeded"));
+    QVERIFY(!tools.constFirst().toMap().value(QStringLiteral("argumentsJson")).toString().isEmpty());
+    QVERIFY(!tools.constFirst().toMap().value(QStringLiteral("resultJson")).toString().isEmpty());
 
     QVERIFY(controller.sendAiMessage(QStringLiteral("Continue inspecting this terminal session.")));
     QTRY_COMPARE_WITH_TIMEOUT(conversation->rowCount(), 4, 10'000);
@@ -1153,6 +1155,7 @@ void AppControllerTests::runsDiscoveredCodexAgentAgainstCurrentTerminal()
     QCOMPARE(resumedTools.constFirst().toMap().value(QStringLiteral("name")).toString(),
              QStringLiteral("read_terminal_output"));
     QCOMPARE(resumedTools.constFirst().toMap().value(QStringLiteral("state")).toString(), QStringLiteral("succeeded"));
+    QVERIFY(!resumedTools.constFirst().toMap().value(QStringLiteral("resultJson")).toString().isEmpty());
 
     QVERIFY(controller.setAiAgentPreference(QStringLiteral("ztermy")));
     QCOMPARE(controller.aiAgentPreference(), QStringLiteral("ztermy"));
@@ -1222,6 +1225,8 @@ void AppControllerTests::restoresCompleteAgentPresentationFromHistory()
              .toolActivities = {{.id = "tool-1",
                                  .name = "run_command",
                                  .summary = "df -h",
+                                 .argumentsJson = R"({"command":"df -h"})",
+                                 .resultJson = R"({"ok":true,"output":"disk table"})",
                                  .state = "succeeded",
                                  .resultCode = "ok",
                                  .sideEffecting = true}},
@@ -1245,6 +1250,10 @@ void AppControllerTests::restoresCompleteAgentPresentationFromHistory()
         conversation->data(conversation->index(1), ztermy::ai::AiConversationModel::ToolActivitiesRole).toList();
     QCOMPARE(activities.size(), 1);
     QCOMPARE(activities.constFirst().toMap().value(QStringLiteral("summary")).toString(), QStringLiteral("df -h"));
+    QCOMPARE(activities.constFirst().toMap().value(QStringLiteral("argumentsJson")).toString(),
+             QStringLiteral(R"({"command":"df -h"})"));
+    QCOMPARE(activities.constFirst().toMap().value(QStringLiteral("resultJson")).toString(),
+             QStringLiteral(R"({"ok":true,"output":"disk table"})"));
     QCOMPARE(conversation->data(conversation->index(1), ztermy::ai::AiConversationModel::InputTokensRole).toULongLong(),
              qulonglong{30});
     QCOMPARE(conversation->data(conversation->index(1), ztermy::ai::AiConversationModel::WallTimeMillisecondsRole)

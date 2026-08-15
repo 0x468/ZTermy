@@ -100,6 +100,8 @@ struct AiToolActivity final
     std::string id;
     std::string name;
     std::string summary;
+    std::string argumentsJson;
+    std::string resultJson;
     std::string state;
     std::string resultCode;
     bool sideEffecting = false;

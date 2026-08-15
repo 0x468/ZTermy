@@ -159,11 +159,17 @@ void AiConversationModelTests::exposesBoundedNativeToolActivities()
     QVERIFY(model.upsertAssistantToolActivity(assistantId, QStringLiteral("call-1"), QStringLiteral("run_command"),
                                               QStringLiteral("df -h"), QStringLiteral("succeeded"),
                                               QStringLiteral("ok"), true, false));
+    QVERIFY(model.setAssistantToolDetails(assistantId, QStringLiteral("call-1"),
+                                          QStringLiteral("{\n  \"command\": \"df -h\"\n}"),
+                                          QStringLiteral("{\n  \"ok\": true\n}")));
     const QVariantList activities = model.data(model.index(0), AiConversationModel::ToolActivitiesRole).toList();
     QCOMPARE(activities.size(), 1);
     const QVariantMap activity = activities.constFirst().toMap();
     QCOMPARE(activity.value(QStringLiteral("name")).toString(), QStringLiteral("run_command"));
     QCOMPARE(activity.value(QStringLiteral("summary")).toString(), QStringLiteral("df -h"));
+    QCOMPARE(activity.value(QStringLiteral("argumentsJson")).toString(),
+             QStringLiteral("{\n  \"command\": \"df -h\"\n}"));
+    QCOMPARE(activity.value(QStringLiteral("resultJson")).toString(), QStringLiteral("{\n  \"ok\": true\n}"));
     QCOMPARE(activity.value(QStringLiteral("state")).toString(), QStringLiteral("succeeded"));
 }
 
@@ -371,6 +377,9 @@ void AiConversationModelTests::preservesAgentTurnPresentationAcrossRestore()
     QVERIFY(model.upsertAssistantToolActivity(assistantId, QStringLiteral("tool-1"), QStringLiteral("run_command"),
                                               QStringLiteral("df -h"), QStringLiteral("succeeded"),
                                               QStringLiteral("ok"), true, false));
+    QVERIFY(model.setAssistantToolDetails(assistantId, QStringLiteral("tool-1"),
+                                          QStringLiteral("{\"command\":\"df -h\"}"),
+                                          QStringLiteral("{\"ok\":true,\"output\":\"disk table\"}")));
     QVERIFY(model.appendAssistantDelta(assistantId, QStringLiteral("Disk usage is healthy.")));
     QVERIFY(model.completeAssistantMessage(
         assistantId, AiTokenUsage{.inputTokens = 24, .outputTokens = 8, .reasoningTokens = 5, .cachedInputTokens = 3}));
@@ -395,6 +404,10 @@ void AiConversationModelTests::preservesAgentTurnPresentationAcrossRestore()
     const QVariantList activities = restored.data(restored.index(1), AiConversationModel::ToolActivitiesRole).toList();
     QCOMPARE(activities.size(), 1);
     QCOMPARE(activities.constFirst().toMap().value(QStringLiteral("summary")).toString(), QStringLiteral("df -h"));
+    QCOMPARE(activities.constFirst().toMap().value(QStringLiteral("argumentsJson")).toString(),
+             QStringLiteral("{\"command\":\"df -h\"}"));
+    QCOMPARE(activities.constFirst().toMap().value(QStringLiteral("resultJson")).toString(),
+             QStringLiteral("{\"ok\":true,\"output\":\"disk table\"}"));
     QCOMPARE(restored.data(restored.index(1), AiConversationModel::InputTokensRole).toULongLong(), qulonglong{24});
     QCOMPARE(restored.data(restored.index(1), AiConversationModel::WallTimeMillisecondsRole).toULongLong(),
              qulonglong{740});

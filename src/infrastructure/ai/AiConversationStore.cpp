@@ -42,6 +42,8 @@ constexpr std::size_t maximumToolActivitiesPerMessage = 32;
 constexpr std::size_t maximumToolActivityIdBytes = 256;
 constexpr std::size_t maximumToolActivityNameBytes = 128;
 constexpr std::size_t maximumToolActivitySummaryBytes = 4096;
+constexpr std::size_t maximumToolActivityArgumentsBytes = std::size_t{16} * 1024;
+constexpr std::size_t maximumToolActivityResultBytes = std::size_t{24} * 1024;
 constexpr std::size_t maximumToolActivityStateBytes = 64;
 constexpr std::size_t maximumToolActivityResultCodeBytes = 128;
 constexpr std::size_t maximumCostCatalogDateBytes = 64;
@@ -86,8 +88,8 @@ struct LoadedStore final
     std::size_t bytes = 0;
     for (const auto &activity : activities)
     {
-        bytes += activity.id.size() + activity.name.size() + activity.summary.size() + activity.state.size()
-                 + activity.resultCode.size();
+        bytes += activity.id.size() + activity.name.size() + activity.summary.size() + activity.argumentsJson.size()
+                 + activity.resultJson.size() + activity.state.size() + activity.resultCode.size();
     }
     return bytes;
 }
@@ -97,6 +99,8 @@ struct LoadedStore final
     return !activity.id.empty() && activity.id.size() <= maximumToolActivityIdBytes && !activity.name.empty()
            && activity.name.size() <= maximumToolActivityNameBytes
            && activity.summary.size() <= maximumToolActivitySummaryBytes
+           && activity.argumentsJson.size() <= maximumToolActivityArgumentsBytes
+           && activity.resultJson.size() <= maximumToolActivityResultBytes
            && activity.state.size() <= maximumToolActivityStateBytes
            && activity.resultCode.size() <= maximumToolActivityResultCodeBytes;
 }
@@ -391,6 +395,8 @@ decrypt(const QByteArray &ciphertext, const QByteArray &tag, const std::string_v
                         QJsonObject{{QStringLiteral("id"), QString::fromUtf8(activity.id)},
                                     {QStringLiteral("name"), QString::fromUtf8(activity.name)},
                                     {QStringLiteral("summary"), QString::fromUtf8(activity.summary)},
+                                    {QStringLiteral("argumentsJson"), QString::fromUtf8(activity.argumentsJson)},
+                                    {QStringLiteral("resultJson"), QString::fromUtf8(activity.resultJson)},
                                     {QStringLiteral("state"), QString::fromUtf8(activity.state)},
                                     {QStringLiteral("resultCode"), QString::fromUtf8(activity.resultCode)},
                                     {QStringLiteral("sideEffecting"), activity.sideEffecting},
@@ -519,10 +525,26 @@ parsePlaintext(const QByteArray &plaintext, const AiConversationStoreLimits &lim
                     return std::unexpected(AiConversationStoreError::invalidData);
                 }
                 const auto activity = activityValue.toObject();
+                const QJsonValue argumentsJson = activity.value(QStringLiteral("argumentsJson"));
+                const QJsonValue resultJson = activity.value(QStringLiteral("resultJson"));
+                if (!activity.value(QStringLiteral("id")).isString()
+                    || !activity.value(QStringLiteral("name")).isString()
+                    || !activity.value(QStringLiteral("summary")).isString()
+                    || (!argumentsJson.isUndefined() && !argumentsJson.isString())
+                    || (!resultJson.isUndefined() && !resultJson.isString())
+                    || !activity.value(QStringLiteral("state")).isString()
+                    || !activity.value(QStringLiteral("resultCode")).isString()
+                    || !activity.value(QStringLiteral("sideEffecting")).isBool()
+                    || !activity.value(QStringLiteral("highRisk")).isBool())
+                {
+                    return std::unexpected(AiConversationStoreError::invalidData);
+                }
                 stored.toolActivities.push_back(
                     {.id = activity.value(QStringLiteral("id")).toString().toUtf8().toStdString(),
                      .name = activity.value(QStringLiteral("name")).toString().toUtf8().toStdString(),
                      .summary = activity.value(QStringLiteral("summary")).toString().toUtf8().toStdString(),
+                     .argumentsJson = argumentsJson.toString().toUtf8().toStdString(),
+                     .resultJson = resultJson.toString().toUtf8().toStdString(),
                      .state = activity.value(QStringLiteral("state")).toString().toUtf8().toStdString(),
                      .resultCode = activity.value(QStringLiteral("resultCode")).toString().toUtf8().toStdString(),
                      .sideEffecting = activity.value(QStringLiteral("sideEffecting")).toBool(),

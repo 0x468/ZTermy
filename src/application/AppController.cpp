@@ -753,6 +753,22 @@ semanticCapability(const ztermy::terminal::SemanticTerminalSnapshot &snapshot) n
     return QStringLiteral("failed");
 }
 
+[[nodiscard]] QString aiToolDetailText(const std::string &json)
+{
+    if (json.empty())
+    {
+        return {};
+    }
+    QJsonParseError error;
+    const QByteArray bytes(json.data(), static_cast<qsizetype>(json.size()));
+    const QJsonDocument document = QJsonDocument::fromJson(bytes, &error);
+    if (error.error == QJsonParseError::NoError && (document.isObject() || document.isArray()))
+    {
+        return QString::fromUtf8(document.toJson(QJsonDocument::Indented)).trimmed();
+    }
+    return QString::fromUtf8(bytes);
+}
+
 [[nodiscard]] std::string aiBudgetFailureJson(const ztermy::ai::AiAgentBudgetDecision decision)
 {
     QString code = QStringLiteral("tool_call_limit");
@@ -9627,9 +9643,14 @@ void AppController::recordAiActivity(const TerminalTab &tab, const ai::AiToolCal
     }
     if (tab.aiConversation && tab.aiAssistantMessageId != 0)
     {
-        static_cast<void>(tab.aiConversation->upsertAssistantToolActivity(
+        const bool activityUpdated = tab.aiConversation->upsertAssistantToolActivity(
             tab.aiAssistantMessageId, utf8QString(call.id), utf8QString(call.name), summary, state, resultCode,
-            sideEffecting, highRisk));
+            sideEffecting, highRisk);
+        if (activityUpdated)
+        {
+            static_cast<void>(tab.aiConversation->setAssistantToolDetails(
+                tab.aiAssistantMessageId, utf8QString(call.id), aiToolDetailText(call.argumentsJson), {}));
+        }
     }
     m_aiActivity.record({.conversationId = tab.aiConversationId,
                          .toolCallId = utf8QString(call.id),
@@ -9838,11 +9859,16 @@ std::optional<ai::AiToolCall> AppController::pendingAiToolCall(const TerminalTab
 
 bool AppController::completePendingAiTool(TerminalTab &tab, const ai::AiToolOutput &output)
 {
-    if (tab.activeAiAgent == config::AiAgentPreference::codex)
+    const auto pending = pendingAiToolCall(tab);
+    if (pending.has_value() && pending->id == output.callId && tab.aiConversation && tab.aiAssistantMessageId != 0)
     {
-        return tab.codexTurnRunner && tab.codexTurnRunner->completePendingTool(output);
+        static_cast<void>(tab.aiConversation->setAssistantToolDetails(
+            tab.aiAssistantMessageId, utf8QString(output.callId), aiToolDetailText(pending->argumentsJson),
+            aiToolDetailText(output.outputJson)));
     }
-    return tab.aiTurnRunner && tab.aiTurnRunner->completePendingTool(output);
+    return tab.activeAiAgent == config::AiAgentPreference::codex
+               ? tab.codexTurnRunner && tab.codexTurnRunner->completePendingTool(output)
+               : tab.aiTurnRunner && tab.aiTurnRunner->completePendingTool(output);
 }
 
 bool AppController::cancelAiTurn(TerminalTab &tab)
@@ -10875,6 +10901,12 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
             if (target == nullptr || !target->aiConversation)
             {
                 return;
+            }
+            if (target->aiAssistantMessageId != 0)
+            {
+                static_cast<void>(target->aiConversation->setAssistantToolDetails(
+                    target->aiAssistantMessageId, utf8QString(call.id), aiToolDetailText(call.argumentsJson),
+                    aiToolDetailText(output.outputJson)));
             }
             const QString evidence =
                 QStringLiteral("[Agent tool evidence]\nTool: %1\nArguments: %2\nResult: %3")

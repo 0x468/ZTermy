@@ -376,6 +376,8 @@ void AiConversationStoreTests::roundTripsAgentTurnPresentation()
     assistant.toolActivities = {{.id = "tool-1",
                                  .name = "run_command",
                                  .summary = "df -h",
+                                 .argumentsJson = R"({"command":"df -h"})",
+                                 .resultJson = R"({"ok":true,"output":"disk table"})",
                                  .state = "succeeded",
                                  .resultCode = "ok",
                                  .sideEffecting = true}};
@@ -402,6 +404,12 @@ void AiConversationStoreTests::roundTripsAgentTurnPresentation()
     const auto invalidActivity = store.upsert(value);
     QVERIFY(!invalidActivity.has_value());
     QCOMPARE(invalidActivity.error(), ai::AiConversationStoreError::invalidData);
+
+    value.messages.at(1).toolActivities.front().name = "run_command";
+    value.messages.at(1).toolActivities.front().resultJson.assign(std::size_t{24} * 1024 + 1, 'x');
+    const auto oversizedResult = store.upsert(value);
+    QVERIFY(!oversizedResult.has_value());
+    QCOMPARE(oversizedResult.error(), ai::AiConversationStoreError::invalidData);
 }
 
 QTEST_GUILESS_MAIN(AiConversationStoreTests)

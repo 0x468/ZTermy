@@ -26,6 +26,8 @@ constexpr std::size_t maximumToolActivitiesPerMessage = 32;
 constexpr std::size_t maximumToolActivityIdBytes = 256;
 constexpr std::size_t maximumToolActivityNameBytes = 128;
 constexpr std::size_t maximumToolActivitySummaryBytes = 4096;
+constexpr std::size_t maximumToolActivityArgumentsBytes = std::size_t{16} * 1024;
+constexpr std::size_t maximumToolActivityResultBytes = std::size_t{24} * 1024;
 constexpr std::size_t maximumToolActivityStateBytes = 64;
 constexpr std::size_t maximumToolActivityResultCodeBytes = 128;
 constexpr std::size_t maximumCostCatalogDateBytes = 64;
@@ -112,8 +114,8 @@ constexpr std::size_t maximumCostCatalogDateBytes = 64;
     std::size_t bytes = 0;
     for (const auto &activity : activities)
     {
-        bytes += activity.id.size() + activity.name.size() + activity.summary.size() + activity.state.size()
-                 + activity.resultCode.size();
+        bytes += activity.id.size() + activity.name.size() + activity.summary.size() + activity.argumentsJson.size()
+                 + activity.resultJson.size() + activity.state.size() + activity.resultCode.size();
     }
     return bytes;
 }
@@ -127,6 +129,8 @@ constexpr std::size_t maximumCostCatalogDateBytes = 64;
         values.push_back(QVariantMap{{QStringLiteral("id"), QString::fromUtf8(activity.id)},
                                      {QStringLiteral("name"), QString::fromUtf8(activity.name)},
                                      {QStringLiteral("summary"), QString::fromUtf8(activity.summary)},
+                                     {QStringLiteral("argumentsJson"), QString::fromUtf8(activity.argumentsJson)},
+                                     {QStringLiteral("resultJson"), QString::fromUtf8(activity.resultJson)},
                                      {QStringLiteral("state"), QString::fromUtf8(activity.state)},
                                      {QStringLiteral("resultCode"), QString::fromUtf8(activity.resultCode)},
                                      {QStringLiteral("sideEffecting"), activity.sideEffecting},
@@ -140,6 +144,8 @@ constexpr std::size_t maximumCostCatalogDateBytes = 64;
     return !activity.id.empty() && activity.id.size() <= maximumToolActivityIdBytes && !activity.name.empty()
            && activity.name.size() <= maximumToolActivityNameBytes
            && activity.summary.size() <= maximumToolActivitySummaryBytes
+           && activity.argumentsJson.size() <= maximumToolActivityArgumentsBytes
+           && activity.resultJson.size() <= maximumToolActivityResultBytes
            && activity.state.size() <= maximumToolActivityStateBytes
            && activity.resultCode.size() <= maximumToolActivityResultCodeBytes;
 }
@@ -462,11 +468,16 @@ bool AiConversationModel::restoreTranscript(const std::vector<AiConversationTran
                 && !appendAssistantReasoningDelta(messageId, QString::fromUtf8(entry.reasoning)))
             || !std::ranges::all_of(entry.toolActivities,
                                     [this, messageId](const AiToolActivity &activity) {
-                                        return upsertAssistantToolActivity(
-                                            messageId, QString::fromUtf8(activity.id), QString::fromUtf8(activity.name),
-                                            QString::fromUtf8(activity.summary), QString::fromUtf8(activity.state),
-                                            QString::fromUtf8(activity.resultCode), activity.sideEffecting,
-                                            activity.highRisk);
+                                        const QString callId = QString::fromUtf8(activity.id);
+                                        return upsertAssistantToolActivity(messageId, callId,
+                                                                           QString::fromUtf8(activity.name),
+                                                                           QString::fromUtf8(activity.summary),
+                                                                           QString::fromUtf8(activity.state),
+                                                                           QString::fromUtf8(activity.resultCode),
+                                                                           activity.sideEffecting, activity.highRisk)
+                                               && setAssistantToolDetails(messageId, callId,
+                                                                          QString::fromUtf8(activity.argumentsJson),
+                                                                          QString::fromUtf8(activity.resultJson));
                                     })
             || !std::ranges::all_of(entry.sources,
                                     [this, messageId](const AiWebSource &source) {
@@ -693,14 +704,18 @@ bool AiConversationModel::upsertAssistantToolActivity(const std::uint64_t messag
     summary = boundedUtf8(std::move(summary), 4096, truncated);
     state = boundedUtf8(std::move(state), 64, truncated);
     resultCode = boundedUtf8(std::move(resultCode), 128, truncated);
-    AiToolActivity activity{.id = toolCallId.toUtf8().toStdString(),
-                            .name = toolName.toUtf8().toStdString(),
-                            .summary = summary.toUtf8().toStdString(),
-                            .state = state.toUtf8().toStdString(),
-                            .resultCode = resultCode.toUtf8().toStdString(),
-                            .sideEffecting = sideEffecting,
-                            .highRisk = highRisk};
-    const auto existing = std::ranges::find(message->toolActivities, activity.id, &AiToolActivity::id);
+    const std::string activityId = toolCallId.toUtf8().toStdString();
+    const auto existing = std::ranges::find(message->toolActivities, activityId, &AiToolActivity::id);
+    AiToolActivity activity{
+        .id = activityId,
+        .name = toolName.toUtf8().toStdString(),
+        .summary = summary.toUtf8().toStdString(),
+        .argumentsJson = existing == message->toolActivities.end() ? std::string{} : existing->argumentsJson,
+        .resultJson = existing == message->toolActivities.end() ? std::string{} : existing->resultJson,
+        .state = state.toUtf8().toStdString(),
+        .resultCode = resultCode.toUtf8().toStdString(),
+        .sideEffecting = sideEffecting,
+        .highRisk = highRisk};
     const std::size_t previousBytes =
         existing == message->toolActivities.end() ? 0 : toolActivityStorageBytes(std::span(&*existing, 1));
     const std::size_t activityBytes = toolActivityStorageBytes(std::span(&activity, 1));
@@ -739,6 +754,54 @@ bool AiConversationModel::upsertAssistantToolActivity(const std::uint64_t messag
     m_totalBytes = m_totalBytes - std::min(m_totalBytes, previousBytes) + activityBytes;
     const auto row = indexOf(messageId);
     emit dataChanged(index(row), index(row), {ToolActivitiesRole});
+    return true;
+}
+
+bool AiConversationModel::setAssistantToolDetails(const std::uint64_t messageId, const QString &toolCallId,
+                                                  QString argumentsJson, QString resultJson)
+{
+    auto *message = find(messageId);
+    if (message == nullptr || message->role != AiMessageRole::assistant || toolCallId.isEmpty())
+    {
+        return false;
+    }
+    const QByteArray id = toolCallId.toUtf8();
+    const auto existing = std::ranges::find(message->toolActivities, id.toStdString(), &AiToolActivity::id);
+    if (existing == message->toolActivities.end())
+    {
+        return false;
+    }
+    AiToolActivity updated = *existing;
+    bool argumentsTruncated = false;
+    bool resultTruncated = false;
+    if (!argumentsJson.isNull())
+    {
+        argumentsJson = boundedUtf8(std::move(argumentsJson), maximumToolActivityArgumentsBytes, argumentsTruncated);
+        updated.argumentsJson = argumentsJson.toUtf8().toStdString();
+    }
+    if (!resultJson.isNull())
+    {
+        resultJson = boundedUtf8(std::move(resultJson), maximumToolActivityResultBytes, resultTruncated);
+        updated.resultJson = resultJson.toUtf8().toStdString();
+    }
+    const std::size_t previousBytes = toolActivityStorageBytes(std::span(&*existing, 1));
+    const std::size_t updatedBytes = toolActivityStorageBytes(std::span(&updated, 1));
+    const std::size_t messageWithoutActivity = message->bytes - std::min(message->bytes, previousBytes);
+    const std::size_t conversationWithoutActivity = m_totalBytes - std::min(m_totalBytes, previousBytes);
+    if (messageWithoutActivity + updatedBytes > m_limits.maxMessageBytes
+        || conversationWithoutActivity + updatedBytes > m_limits.maxConversationBytes)
+    {
+        message->truncated = true;
+        const auto row = indexOf(messageId);
+        emit dataChanged(index(row), index(row), {TruncatedRole});
+        return false;
+    }
+    *existing = std::move(updated);
+    message->bytes = messageWithoutActivity + updatedBytes;
+    m_totalBytes = conversationWithoutActivity + updatedBytes;
+    message->truncated = message->truncated || argumentsTruncated || resultTruncated;
+    const auto row = indexOf(messageId);
+    emit dataChanged(index(row), index(row), {ToolActivitiesRole, TruncatedRole});
     return true;
 }
 

@@ -106,6 +106,9 @@ public:
     [[nodiscard]] bool upsertAssistantToolActivity(std::uint64_t messageId, QString toolCallId, QString toolName,
                                                    QString summary, QString state, QString resultCode,
                                                    bool sideEffecting, bool highRisk);
+    // A null detail preserves the existing value; a non-null empty string clears it.
+    [[nodiscard]] bool setAssistantToolDetails(std::uint64_t messageId, const QString &toolCallId,
+                                               QString argumentsJson, QString resultJson);
     [[nodiscard]] bool setAssistantProviderReplay(std::uint64_t messageId, std::span<const AiToolExchange> toolHistory,
                                                   std::string_view finalAssistantContentJson);
     [[nodiscard]] bool completeAssistantMessage(std::uint64_t messageId,
