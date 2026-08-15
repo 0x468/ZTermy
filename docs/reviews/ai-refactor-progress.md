@@ -7,7 +7,7 @@
 
 ## 节点 N15 — Provider 原生联网检索与引用（2026-08-15）
 
-**commits**: `98fe65f` + pending follow-up
+**commits**: `98fe65f`, `69ffab4` + pending follow-up
 
 **范围**：
 
@@ -17,7 +17,12 @@
 4. 来源随助手消息进入加密会话历史，恢复后仍可点击；用户消息和 Agent evidence 不得携带来源；
 5. 320px 窄侧栏隐藏模型下拉框为上下文、命令、联网、Agent 模式和发送控件让位；ADR 0090 记录 Provider 原生策略与精确原生结果回放的后续边界。
 
-**验证**：Provider request/stream 聚焦测试通过；conversation model/store 来源去重、校验与往返测试通过；翻译、AppController、QML、全量 Debug/静态 Release 与真实窗口验收待本节点收口。
+**验证**：Provider request/stream、conversation model/store、AppController 聚焦测试通过；
+clang-tidy（warnings-as-errors）、C++/QML 格式、qmllint 与 1743/1743 翻译门禁通过；
+动态 Debug 和静态 Release 均为 112/112。直接启动当前静态 Release 后，真实 Windows
+窗口确认 320px 窄侧栏隐藏模型选择器、联网检索在兼容协议下明确禁用且底栏无越界，
+扩宽至约 510px 后模型选择器恢复。OpenAI/Anthropic 实际联网、来源打开和原始
+Markdown 复制仍保留为 owner/provider 验收项。
 
 ## 节点 N14 — Provider 原生图像附件收口（2026-08-15）
 

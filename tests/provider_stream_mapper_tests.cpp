@@ -11,6 +11,7 @@ using ztermy::ai::AiProviderError;
 using ztermy::ai::AiProviderErrorCode;
 using ztermy::ai::AiStreamEventType;
 using ztermy::ai::AiTokenUsage;
+using ztermy::ai::AiWebSource;
 using ztermy::ai::AnthropicStreamMapper;
 using ztermy::ai::OllamaStreamMapper;
 using ztermy::ai::OpenAiCompatibleStreamMapper;
@@ -100,8 +101,9 @@ void ProviderStreamMapperTests::mapsOpenAiWebSearchAndCitations()
     QVERIFY(events.has_value());
     QCOMPARE(events->front().type, AiStreamEventType::webSourceAdded);
     QVERIFY(events->front().webSource.has_value());
-    QCOMPARE(events->front().webSource->url, std::string("https://doc.qt.io/qt-6/whatsnew68.html"));
-    QCOMPARE(events->front().webSource->title, std::string("What's New in Qt 6.8"));
+    const AiWebSource openAiSource = events->front().webSource.value_or(AiWebSource{});
+    QCOMPARE(openAiSource.url, std::string("https://doc.qt.io/qt-6/whatsnew68.html"));
+    QCOMPARE(openAiSource.title, std::string("What's New in Qt 6.8"));
 
     events = mapper.map(
         ServerSentEvent{.data = R"json({"type":"response.web_search_call.completed","item_id":"ws_1"})json"});
@@ -220,7 +222,9 @@ void ProviderStreamMapperTests::mapsAnthropicWebSearchAndCitations()
             R"json({"type":"content_block_delta","index":3,"delta":{"type":"citations_delta","citation":{"type":"web_search_result_location","url":"https://doc.qt.io/qt-6/whatsnew68.html","title":"What's New in Qt 6.8","cited_text":"Qt 6.8 introduces updates."}}})json"});
     QVERIFY(events.has_value());
     QCOMPARE(events->front().type, AiStreamEventType::webSourceAdded);
-    QCOMPARE(events->front().webSource->citedText, std::string("Qt 6.8 introduces updates."));
+    QVERIFY(events->front().webSource.has_value());
+    const AiWebSource anthropicSource = events->front().webSource.value_or(AiWebSource{});
+    QCOMPARE(anthropicSource.citedText, std::string("Qt 6.8 introduces updates."));
 }
 
 void ProviderStreamMapperTests::mapsOllamaThinkingToolsAndUsage()

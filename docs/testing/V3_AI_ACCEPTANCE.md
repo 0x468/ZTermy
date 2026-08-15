@@ -131,6 +131,10 @@ evaluations serve different purposes and are reported separately.
       budget, rejected on user/evidence messages, and survive encrypted conversation-history reload.
 - [ ] Owner/provider check: the composer search control is available for OpenAI Responses and Anthropic,
       disabled with a clear explanation for unsupported protocols, and never overflows the 320 px sidebar.
+- [x] Developer Windows UI check: the current static Release executable was launched by absolute build path;
+      at approximately 320 px the model selector is hidden, the compatible-protocol search control is visibly
+      disabled, and all composer controls remain inside the workbench. At approximately 510 px the model
+      selector returns without displacing search, mode, or send controls.
 - [ ] Owner/provider check: a live search shows one updating activity card and a collapsed, keyboard-
       reachable Sources section; opening a source launches its original URL and copying the answer copies
       only the provider's original Markdown.

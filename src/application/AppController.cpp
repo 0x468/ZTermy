@@ -84,16 +84,6 @@ struct AiImageAttachmentLoadResult final
     QStringList rejectedFiles;
 };
 
-template <typename Callable>
-void postToGuiThread(QObject *receiver, Callable &&callable)
-{
-    // Qt takes ownership of the copied functor until queued delivery. The
-    // analyzer cannot model that ownership transfer through invokeMethodImpl.
-    // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
-    const bool queued = QMetaObject::invokeMethod(receiver, std::forward<Callable>(callable), Qt::QueuedConnection);
-    Q_ASSERT(queued);
-}
-
 class TerminalOutputFanout final : public ztermy::terminal::TerminalOutputSink
 {
 public:
@@ -1998,7 +1988,9 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     Q_ASSERT(m_localSessionFactory);
     qRegisterMetaType<ShellHistoryEntries>();
     qRegisterMetaType<NoteSearchResults>();
+    qRegisterMetaType<AiTextAttachments>();
     qRegisterMetaType<AiImageAttachments>();
+    qRegisterMetaType<AiUserSkills>();
     QObject::connect(this, &AppController::terminalTabsChanged, this, &AppController::terminalWorkspaceChanged);
     QObject::connect(this, &AppController::terminalHistoryTaskCompleted, this,
                      &AppController::applyTerminalHistoryTaskResult, Qt::QueuedConnection);
@@ -2006,8 +1998,12 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
                      Qt::QueuedConnection);
     QObject::connect(this, &AppController::aiNoteReadTaskCompleted, this, &AppController::applyAiNoteReadTaskResult,
                      Qt::QueuedConnection);
+    QObject::connect(this, &AppController::aiTextAttachmentTaskCompleted, this,
+                     &AppController::applyAiTextAttachmentTaskResult, Qt::QueuedConnection);
     QObject::connect(this, &AppController::aiImageAttachmentTaskCompleted, this,
                      &AppController::applyAiImageAttachmentTaskResult, Qt::QueuedConnection);
+    QObject::connect(this, &AppController::aiUserSkillTaskCompleted, this, &AppController::applyAiUserSkillTaskResult,
+                     Qt::QueuedConnection);
     QObject::connect(this, &AppController::scriptOutputObserved, this, &AppController::observeScriptOutput,
                      Qt::QueuedConnection);
     initializeAiPrivacySignals();
@@ -2078,7 +2074,9 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     Q_ASSERT(m_credentialVaults);
     qRegisterMetaType<ShellHistoryEntries>();
     qRegisterMetaType<NoteSearchResults>();
+    qRegisterMetaType<AiTextAttachments>();
     qRegisterMetaType<AiImageAttachments>();
+    qRegisterMetaType<AiUserSkills>();
     QObject::connect(this, &AppController::terminalTabsChanged, this, &AppController::terminalWorkspaceChanged);
     QObject::connect(this, &AppController::terminalHistoryTaskCompleted, this,
                      &AppController::applyTerminalHistoryTaskResult, Qt::QueuedConnection);
@@ -2086,8 +2084,12 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
                      Qt::QueuedConnection);
     QObject::connect(this, &AppController::aiNoteReadTaskCompleted, this, &AppController::applyAiNoteReadTaskResult,
                      Qt::QueuedConnection);
+    QObject::connect(this, &AppController::aiTextAttachmentTaskCompleted, this,
+                     &AppController::applyAiTextAttachmentTaskResult, Qt::QueuedConnection);
     QObject::connect(this, &AppController::aiImageAttachmentTaskCompleted, this,
                      &AppController::applyAiImageAttachmentTaskResult, Qt::QueuedConnection);
+    QObject::connect(this, &AppController::aiUserSkillTaskCompleted, this, &AppController::applyAiUserSkillTaskResult,
+                     Qt::QueuedConnection);
     QObject::connect(this, &AppController::scriptOutputObserved, this, &AppController::observeScriptOutput,
                      Qt::QueuedConnection);
     initializeAiPrivacySignals();
@@ -8392,33 +8394,38 @@ void AppController::reloadAiUserSkills()
         {
             return;
         }
-        postToGuiThread(self, [self, requestGeneration, scanned = std::move(scanned)]() mutable {
-            if (!self || requestGeneration != self->m_aiUserSkillsRequestGeneration)
-            {
-                return;
-            }
-            if (!scanned.has_value())
-            {
-                self->m_aiUserSkillsState = QStringLiteral("error");
-                self->m_aiUserSkillsError = self->tr("The user skills folder could not be scanned.");
-                self->m_openAiUserSkillsAfterReload = false;
-                emit self->aiUserSkillsChanged();
-                return;
-            }
-            self->m_aiUserSkills = std::move(scanned->skills);
-            self->m_aiUserSkillsState = QStringLiteral("ready");
-            self->m_aiUserSkillsError.clear();
-            if (self->m_openAiUserSkillsAfterReload)
-            {
-                self->m_openAiUserSkillsAfterReload = false;
-                if (!QDesktopServices::openUrl(QUrl::fromLocalFile(self->m_aiUserSkillCatalog.rootPath())))
-                {
-                    self->m_aiUserSkillsError = self->tr("The user skills folder could not be opened.");
-                }
-            }
-            emit self->aiUserSkillsChanged();
-        });
+        emit self->aiUserSkillTaskCompleted(
+            requestGeneration, scanned.has_value() ? std::move(scanned->skills) : AiUserSkills{}, scanned.has_value());
     });
+}
+
+void AppController::applyAiUserSkillTaskResult(const quint64 requestGeneration, AiUserSkills skills,
+                                               const bool succeeded)
+{
+    if (requestGeneration != m_aiUserSkillsRequestGeneration)
+    {
+        return;
+    }
+    if (!succeeded)
+    {
+        m_aiUserSkillsState = QStringLiteral("error");
+        m_aiUserSkillsError = tr("The user skills folder could not be scanned.");
+        m_openAiUserSkillsAfterReload = false;
+        emit aiUserSkillsChanged();
+        return;
+    }
+    m_aiUserSkills = std::move(skills);
+    m_aiUserSkillsState = QStringLiteral("ready");
+    m_aiUserSkillsError.clear();
+    if (m_openAiUserSkillsAfterReload)
+    {
+        m_openAiUserSkillsAfterReload = false;
+        if (!QDesktopServices::openUrl(QUrl::fromLocalFile(m_aiUserSkillCatalog.rootPath())))
+        {
+            m_aiUserSkillsError = tr("The user skills folder could not be opened.");
+        }
+    }
+    emit aiUserSkillsChanged();
 }
 
 bool AppController::openAiUserSkillsDirectory()
@@ -8928,46 +8935,39 @@ bool AppController::attachAiTextFiles(const QStringList &localFileUrls)
         {
             return;
         }
-        postToGuiThread(self, [self, tabId, result = std::move(result)]() mutable {
-            if (!self)
-            {
-                return;
-            }
-            TerminalTab *target = self->findTab(tabId);
-            if (target == nullptr)
-            {
-                return;
-            }
-            for (auto &attachment : result.attachments)
-            {
-                const auto existing =
-                    std::ranges::find(target->aiExplicitContextItems, attachment.id, &ai::AiExplicitContext::id);
-                target->aiExcludedContextIds.erase("attachment:" + attachment.id);
-                if (existing == target->aiExplicitContextItems.end())
-                {
-                    target->aiExplicitContextItems.push_back(std::move(attachment));
-                }
-                else
-                {
-                    *existing = std::move(attachment);
-                }
-            }
-            if (result.rejectedFiles.isEmpty())
-            {
-                target->aiError.clear();
-            }
-            else
-            {
-                target->aiError =
-                    QCoreApplication::translate("ztermy::AppController", "Could not attach these text files: %1")
-                        .arg(result.rejectedFiles.join(QStringLiteral(", ")));
-            }
-            static_cast<void>(self->buildAiContext(*target, false));
-            emit self->aiConversationChanged();
-        });
+        emit self->aiTextAttachmentTaskCompleted(tabId, std::move(result.attachments), result.rejectedFiles);
     });
     emit aiConversationChanged();
     return true;
+}
+
+void AppController::applyAiTextAttachmentTaskResult(const QString &tabId, AiTextAttachments attachments,
+                                                    const QStringList &rejectedFiles)
+{
+    TerminalTab *target = findTab(tabId);
+    if (target == nullptr)
+    {
+        return;
+    }
+    for (auto &attachment : attachments)
+    {
+        const auto existing =
+            std::ranges::find(target->aiExplicitContextItems, attachment.id, &ai::AiExplicitContext::id);
+        target->aiExcludedContextIds.erase("attachment:" + attachment.id);
+        if (existing == target->aiExplicitContextItems.end())
+        {
+            target->aiExplicitContextItems.push_back(std::move(attachment));
+        }
+        else
+        {
+            *existing = std::move(attachment);
+        }
+    }
+    target->aiError = rejectedFiles.isEmpty()
+                          ? QString{}
+                          : tr("Could not attach these text files: %1").arg(rejectedFiles.join(QStringLiteral(", ")));
+    static_cast<void>(buildAiContext(*target, false));
+    emit aiConversationChanged();
 }
 
 bool AppController::attachAiImageFiles(const QStringList &localFileUrls)
