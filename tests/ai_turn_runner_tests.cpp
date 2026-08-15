@@ -1,6 +1,9 @@
 #include "application/ai/AiTurnRunner.h"
 
 #include <QByteArray>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
@@ -127,6 +130,7 @@ public:
     void enqueue(FakeResponse response) { m_responses.push_back(std::move(response)); }
     [[nodiscard]] std::size_t requestCount() const noexcept { return m_requestCount; }
     [[nodiscard]] const std::vector<qint64> &requestBodySizes() const noexcept { return m_requestBodySizes; }
+    [[nodiscard]] const std::vector<QByteArray> &requestBodies() const noexcept { return m_requestBodies; }
 
 protected:
     QNetworkReply *createRequest(const Operation operation, const QNetworkRequest &request,
@@ -135,6 +139,7 @@ protected:
         static_cast<void>(operation);
         ++m_requestCount;
         m_requestBodySizes.push_back(outgoingData != nullptr ? outgoingData->size() : 0);
+        m_requestBodies.push_back(outgoingData != nullptr ? outgoingData->peek(outgoingData->size()) : QByteArray{});
         if (m_responses.empty())
         {
             return new FakeReply(request, FakeResponse{.status = 500}, this);
@@ -148,6 +153,7 @@ private:
     std::vector<FakeResponse> m_responses;
     std::size_t m_requestCount = 0;
     std::vector<qint64> m_requestBodySizes;
+    std::vector<QByteArray> m_requestBodies;
 };
 
 [[nodiscard]] AiProviderConfiguration openAiConfiguration()
@@ -155,6 +161,13 @@ private:
     return AiProviderConfiguration{.kind = AiProviderKind::openAiResponses,
                                    .baseUrl = "https://api.openai.test/v1",
                                    .model = "model"};
+}
+
+[[nodiscard]] AiProviderConfiguration anthropicConfiguration()
+{
+    return AiProviderConfiguration{.kind = AiProviderKind::anthropicMessages,
+                                   .baseUrl = "https://api.anthropic.test/v1",
+                                   .model = "claude-sonnet-4-6"};
 }
 
 [[nodiscard]] auto emptySecretLoader()
@@ -188,6 +201,8 @@ private slots:
     void doesNotRetryAfterSideEffectingTool();
     void rejectsOversizedCompletedToolArguments();
     void compactsAndRetriesOnContextOverflow();
+    void continuesAnthropicPausedTurnWithOpaqueContent();
+    void boundsAnthropicPauseContinuations();
 };
 
 void AiTurnRunnerTests::retriesBeforeVisibleOutput()
@@ -638,6 +653,142 @@ void AiTurnRunnerTests::compactsAndRetriesOnContextOverflow()
     // compaction of the request view.
     QVERIFY(network.requestBodySizes().at(1) < network.requestBodySizes().at(0));
     QCOMPARE(events.back().type, AiStreamEventType::responseCompleted);
+}
+
+void AiTurnRunnerTests::continuesAnthropicPausedTurnWithOpaqueContent()
+{
+    FakeNetworkAccessManager network;
+    network.enqueue(FakeResponse{
+        .payload =
+            "event: message_start\n"
+            "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_pause\",\"usage\":{\"input_tokens\":4}}}\n\n"
+            "event: content_block_start\n"
+            "data: "
+            "{\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"server_tool_use\",\"id\":"
+            "\"srvtoolu_1\",\"name\":\"web_search\",\"input\":{}}}\n\n"
+            "event: content_block_delta\n"
+            "data: "
+            "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":"
+            "\"{\\\"query\\\":\\\"Qt 6.8\\\"}\"}}\n\n"
+            "event: content_block_stop\n"
+            "data: {\"type\":\"content_block_stop\",\"index\":0}\n\n"
+            "event: content_block_start\n"
+            "data: "
+            "{\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"web_search_tool_result\","
+            "\"tool_use_id\":\"srvtoolu_1\",\"content\":[{\"type\":\"web_search_result\",\"url\":\"https://"
+            "example.test\",\"encrypted_content\":\"opaque-result\"}]}}\n\n"
+            "event: message_delta\n"
+            "data: "
+            "{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"pause_turn\"},\"usage\":{\"output_tokens\":8}}"
+            "\n\n"
+            "event: message_stop\n"
+            "data: {\"type\":\"message_stop\"}\n\n"});
+    network.enqueue(FakeResponse{
+        .payload =
+            "event: message_start\n"
+            "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_final\",\"usage\":{\"input_tokens\":6}}}\n\n"
+            "event: content_block_start\n"
+            "data: "
+            "{\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n"
+            "event: content_block_delta\n"
+            "data: "
+            "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"finished\"}}"
+            "\n\n"
+            "event: content_block_stop\n"
+            "data: {\"type\":\"content_block_stop\",\"index\":0}\n\n"
+            "event: message_delta\n"
+            "data: "
+            "{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":3}}\n\n"
+            "event: message_stop\n"
+            "data: {\"type\":\"message_stop\"}\n\n"});
+    ProviderHttpClient client(&network);
+    AiTurnRunner runner(client, fastRetryPolicy());
+    std::vector<AiStreamEvent> events;
+    bool finished = false;
+    const AiGenerationRequest generation{.messages = {{.content = "Search current Qt documentation."}},
+                                         .webSearchEnabled = true};
+
+    QVERIFY(runner
+                .start(
+                    anthropicConfiguration(), generation, emptySecretLoader(),
+                    [&events](const auto, const AiStreamEvent &event) {
+                        events.push_back(event);
+                    },
+                    [&finished](const auto, const AiTurnMetrics &) {
+                        finished = true;
+                    })
+                .has_value());
+
+    QTRY_VERIFY_WITH_TIMEOUT(finished, 1000);
+    QCOMPARE(network.requestCount(), std::size_t{2});
+    QCOMPARE(std::ranges::count(events, AiStreamEventType::responseCompleted, &AiStreamEvent::type), std::ptrdiff_t{1});
+    QCOMPARE(events.back().type, AiStreamEventType::responseCompleted);
+    QCOMPARE(events.back().stopReason, ztermy::ai::AiResponseStopReason::endTurn);
+    QVERIFY(network.requestBodies().size() >= 2);
+    const auto continuation = QJsonDocument::fromJson(network.requestBodies().at(1)).object();
+    const auto messages = continuation.value("messages").toArray();
+    QCOMPARE(messages.size(), 2);
+    const auto pausedContent = messages.at(1).toObject().value("content").toArray();
+    QCOMPARE(pausedContent.size(), 2);
+    QCOMPARE(pausedContent.at(0).toObject().value("input").toObject().value("query").toString(),
+             QStringLiteral("Qt 6.8"));
+    QCOMPARE(pausedContent.at(1)
+                 .toObject()
+                 .value("content")
+                 .toArray()
+                 .at(0)
+                 .toObject()
+                 .value("encrypted_content")
+                 .toString(),
+             QStringLiteral("opaque-result"));
+}
+
+void AiTurnRunnerTests::boundsAnthropicPauseContinuations()
+{
+    FakeNetworkAccessManager network;
+    const QByteArray paused =
+        "event: message_start\n"
+        "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_pause\",\"usage\":{\"input_tokens\":1}}}\n\n"
+        "event: content_block_start\n"
+        "data: "
+        "{\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"server_tool_use\",\"id\":"
+        "\"srvtoolu_pause\",\"name\":\"web_search\",\"input\":{\"query\":\"status\"}}}\n\n"
+        "event: content_block_stop\n"
+        "data: {\"type\":\"content_block_stop\",\"index\":0}\n\n"
+        "event: message_delta\n"
+        "data: "
+        "{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"pause_turn\"},\"usage\":{\"output_tokens\":1}}\n\n"
+        "event: message_stop\n"
+        "data: {\"type\":\"message_stop\"}\n\n";
+    for (int index = 0; index < 5; ++index)
+    {
+        network.enqueue(FakeResponse{.payload = paused});
+    }
+
+    ProviderHttpClient client(&network);
+    AiTurnRunner runner(client, fastRetryPolicy());
+    std::vector<AiStreamEvent> events;
+    bool finished = false;
+    QVERIFY(runner
+                .start(
+                    anthropicConfiguration(),
+                    AiGenerationRequest{.messages = {{.content = "Search extensively."}}, .webSearchEnabled = true},
+                    emptySecretLoader(),
+                    [&events](const auto, const AiStreamEvent &event) {
+                        events.push_back(event);
+                    },
+                    [&finished](const auto, const AiTurnMetrics &) {
+                        finished = true;
+                    })
+                .has_value());
+
+    QTRY_VERIFY_WITH_TIMEOUT(finished, 1000);
+    QCOMPARE(network.requestCount(), std::size_t{5});
+    QVERIFY(!events.empty());
+    QCOMPARE(events.back().type, AiStreamEventType::responseFailed);
+    QCOMPARE(events.back().error.value_or(AiProviderError{}).code, AiProviderErrorCode::protocol);
+    QVERIFY(QString::fromStdString(events.back().error.value_or(AiProviderError{}).message)
+                .contains(QStringLiteral("continuation limit")));
 }
 
 } // namespace

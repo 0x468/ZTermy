@@ -7,6 +7,7 @@
 #include <QJsonParseError>
 #include <QString>
 
+#include <algorithm>
 #include <optional>
 #include <utility>
 
@@ -147,6 +148,35 @@ void appendWebSources(const QJsonArray &values, std::vector<AiStreamEvent> &even
     }
     const auto queries = action.value(QStringLiteral("queries")).toArray();
     return queries.isEmpty() ? std::string{} : utf8(queries.first().toString());
+}
+
+[[nodiscard]] AiResponseStopReason anthropicStopReason(const QString &value)
+{
+    if (value == QStringLiteral("end_turn"))
+    {
+        return AiResponseStopReason::endTurn;
+    }
+    if (value == QStringLiteral("max_tokens"))
+    {
+        return AiResponseStopReason::maximumTokens;
+    }
+    if (value == QStringLiteral("stop_sequence"))
+    {
+        return AiResponseStopReason::stopSequence;
+    }
+    if (value == QStringLiteral("tool_use"))
+    {
+        return AiResponseStopReason::toolUse;
+    }
+    if (value == QStringLiteral("pause_turn"))
+    {
+        return AiResponseStopReason::pauseTurn;
+    }
+    if (value == QStringLiteral("refusal"))
+    {
+        return AiResponseStopReason::refusal;
+    }
+    return AiResponseStopReason::unspecified;
 }
 
 } // namespace
@@ -433,6 +463,7 @@ void OpenAiCompatibleStreamMapper::reset() noexcept
 
 std::expected<std::vector<AiStreamEvent>, AiProviderError> AnthropicStreamMapper::map(const ServerSentEvent &event)
 {
+    constexpr std::size_t maximumProviderContentBytes = std::size_t{1024} * 1024;
     const auto parsed = parseObject(event.data);
     if (!parsed.has_value())
     {
@@ -442,6 +473,15 @@ std::expected<std::vector<AiStreamEvent>, AiProviderError> AnthropicStreamMapper
     const auto type =
         object.value("type").toString(event.event.empty() ? QString{} : QString::fromStdString(event.event));
     std::vector<AiStreamEvent> events;
+    const auto accountContent = [this](const std::size_t bytes) {
+        constexpr std::size_t maximumProviderContentBytes = std::size_t{1024} * 1024;
+        if (bytes > maximumProviderContentBytes - std::min(maximumProviderContentBytes, m_contentBytes))
+        {
+            return false;
+        }
+        m_contentBytes += bytes;
+        return true;
+    };
     if (type == QStringLiteral("error"))
     {
         auto error = providerError(object.value("error"));
@@ -471,6 +511,14 @@ std::expected<std::vector<AiStreamEvent>, AiProviderError> AnthropicStreamMapper
     {
         const auto index = static_cast<std::size_t>(object.value("index").toInt());
         const auto block = object.value("content_block").toObject();
+        const auto serializedBlock = QJsonDocument(block).toJson(QJsonDocument::Compact);
+        if (block.isEmpty() || !accountContent(static_cast<std::size_t>(serializedBlock.size())))
+        {
+            return std::unexpected(AiProviderError{.code = AiProviderErrorCode::protocol,
+                                                   .message = "Anthropic content blocks exceed the 1 MiB limit.",
+                                                   .retryable = false});
+        }
+        m_contentBlocksByIndex.insert_or_assign(index, ContentBlockState{.block = block});
         if (block.value("type").toString() == QStringLiteral("tool_use"))
         {
             ToolState state{.callId = utf8(block.value("id").toString()), .name = utf8(block.value("name").toString())};
@@ -510,30 +558,68 @@ std::expected<std::vector<AiStreamEvent>, AiProviderError> AnthropicStreamMapper
         const auto index = static_cast<std::size_t>(object.value("index").toInt());
         const auto delta = object.value("delta").toObject();
         const auto deltaType = delta.value("type").toString();
+        auto contentBlock = m_contentBlocksByIndex.find(index);
         if (deltaType == QStringLiteral("text_delta"))
         {
-            events.push_back(AiStreamEvent{.type = AiStreamEventType::textDelta,
-                                           .responseId = m_responseId,
-                                           .delta = utf8(delta.value("text").toString())});
+            const QString text = delta.value("text").toString();
+            if (contentBlock == m_contentBlocksByIndex.end()
+                || !accountContent(static_cast<std::size_t>(text.toUtf8().size())))
+            {
+                return std::unexpected(AiProviderError{.code = AiProviderErrorCode::protocol,
+                                                       .message = "Anthropic content blocks exceed the 1 MiB limit.",
+                                                       .retryable = false});
+            }
+            contentBlock->second.block.insert(QStringLiteral("text"),
+                                              contentBlock->second.block.value("text").toString() + text);
+            events.push_back(
+                AiStreamEvent{.type = AiStreamEventType::textDelta, .responseId = m_responseId, .delta = utf8(text)});
         }
         else if (deltaType == QStringLiteral("thinking_delta"))
         {
+            const QString thinking = delta.value("thinking").toString();
+            if (contentBlock == m_contentBlocksByIndex.end()
+                || !accountContent(static_cast<std::size_t>(thinking.toUtf8().size())))
+            {
+                return std::unexpected(AiProviderError{.code = AiProviderErrorCode::protocol,
+                                                       .message = "Anthropic content blocks exceed the 1 MiB limit.",
+                                                       .retryable = false});
+            }
+            contentBlock->second.block.insert(QStringLiteral("thinking"),
+                                              contentBlock->second.block.value("thinking").toString() + thinking);
             events.push_back(AiStreamEvent{.type = AiStreamEventType::reasoningDelta,
                                            .responseId = m_responseId,
-                                           .delta = utf8(delta.value("thinking").toString())});
+                                           .delta = utf8(thinking)});
         }
         else if (deltaType == QStringLiteral("signature_delta"))
         {
+            const QString signature = delta.value("signature").toString();
+            if (contentBlock == m_contentBlocksByIndex.end()
+                || !accountContent(static_cast<std::size_t>(signature.toUtf8().size())))
+            {
+                return std::unexpected(AiProviderError{.code = AiProviderErrorCode::protocol,
+                                                       .message = "Anthropic content blocks exceed the 1 MiB limit.",
+                                                       .retryable = false});
+            }
+            contentBlock->second.block.insert(QStringLiteral("signature"),
+                                              contentBlock->second.block.value("signature").toString() + signature);
             events.push_back(AiStreamEvent{.type = AiStreamEventType::reasoningSignatureDelta,
                                            .responseId = m_responseId,
-                                           .delta = utf8(delta.value("signature").toString())});
+                                           .delta = utf8(signature)});
         }
         else if (deltaType == QStringLiteral("input_json_delta"))
         {
+            const auto partialJson = utf8(delta.value("partial_json").toString());
+            if (contentBlock == m_contentBlocksByIndex.end() || !accountContent(partialJson.size()))
+            {
+                return std::unexpected(AiProviderError{.code = AiProviderErrorCode::protocol,
+                                                       .message = "Anthropic content blocks exceed the 1 MiB limit.",
+                                                       .retryable = false});
+            }
+            contentBlock->second.partialInputJson += partialJson;
             const auto webSearch = m_webSearchByIndex.find(index);
             if (webSearch != m_webSearchByIndex.end())
             {
-                m_webQueriesByIndex[index] += utf8(delta.value("partial_json").toString());
+                m_webQueriesByIndex[index] += partialJson;
                 return events;
             }
             const auto tool = m_toolsByIndex.find(index);
@@ -542,11 +628,23 @@ std::expected<std::vector<AiStreamEvent>, AiProviderError> AnthropicStreamMapper
                               .responseId = m_responseId,
                               .toolCallId = tool == m_toolsByIndex.end() ? std::string{} : tool->second.callId,
                               .toolName = tool == m_toolsByIndex.end() ? std::string{} : tool->second.name,
-                              .delta = utf8(delta.value("partial_json").toString())});
+                              .delta = partialJson});
         }
         else if (deltaType == QStringLiteral("citations_delta"))
         {
-            auto source = webSourceFromObject(delta.value("citation").toObject());
+            const auto citation = delta.value("citation").toObject();
+            const auto serializedCitation = QJsonDocument(citation).toJson(QJsonDocument::Compact);
+            if (contentBlock == m_contentBlocksByIndex.end()
+                || !accountContent(static_cast<std::size_t>(serializedCitation.size())))
+            {
+                return std::unexpected(AiProviderError{.code = AiProviderErrorCode::protocol,
+                                                       .message = "Anthropic content blocks exceed the 1 MiB limit.",
+                                                       .retryable = false});
+            }
+            auto citations = contentBlock->second.block.value(QStringLiteral("citations")).toArray();
+            citations.append(citation);
+            contentBlock->second.block.insert(QStringLiteral("citations"), citations);
+            auto source = webSourceFromObject(citation);
             if (source.has_value())
             {
                 events.push_back(AiStreamEvent{.type = AiStreamEventType::webSourceAdded,
@@ -558,6 +656,18 @@ std::expected<std::vector<AiStreamEvent>, AiProviderError> AnthropicStreamMapper
     else if (type == QStringLiteral("content_block_stop"))
     {
         const auto index = static_cast<std::size_t>(object.value("index").toInt());
+        const auto contentBlock = m_contentBlocksByIndex.find(index);
+        if (contentBlock != m_contentBlocksByIndex.end() && !contentBlock->second.partialInputJson.empty())
+        {
+            const auto input = parseObject(contentBlock->second.partialInputJson);
+            if (!input.has_value())
+            {
+                return std::unexpected(AiProviderError{.code = AiProviderErrorCode::protocol,
+                                                       .message = "Anthropic emitted malformed tool input JSON.",
+                                                       .retryable = false});
+            }
+            contentBlock->second.block.insert(QStringLiteral("input"), *input);
+        }
         const auto tool = m_toolsByIndex.find(index);
         if (tool != m_toolsByIndex.end())
         {
@@ -583,6 +693,11 @@ std::expected<std::vector<AiStreamEvent>, AiProviderError> AnthropicStreamMapper
     }
     else if (type == QStringLiteral("message_delta"))
     {
+        const auto delta = object.value("delta").toObject();
+        if (delta.contains(QStringLiteral("stop_reason")))
+        {
+            m_stopReason = anthropicStopReason(delta.value(QStringLiteral("stop_reason")).toString());
+        }
         const auto usage = object.value("usage").toObject();
         if (!usage.isEmpty())
         {
@@ -594,8 +709,26 @@ std::expected<std::vector<AiStreamEvent>, AiProviderError> AnthropicStreamMapper
     }
     else if (type == QStringLiteral("message_stop") && !m_completed)
     {
+        QJsonArray content;
+        for (const auto &[index, state] : m_contentBlocksByIndex)
+        {
+            static_cast<void>(index);
+            content.append(state.block);
+        }
+        const auto serializedContent = QJsonDocument(content).toJson(QJsonDocument::Compact);
+        if (serializedContent.size() > static_cast<qsizetype>(maximumProviderContentBytes))
+        {
+            return std::unexpected(AiProviderError{.code = AiProviderErrorCode::protocol,
+                                                   .message = "Anthropic content blocks exceed the 1 MiB limit.",
+                                                   .retryable = false});
+        }
         m_completed = true;
-        events.push_back(AiStreamEvent{.type = AiStreamEventType::responseCompleted, .responseId = m_responseId});
+        events.push_back(
+            AiStreamEvent{.type = AiStreamEventType::responseCompleted,
+                          .responseId = m_responseId,
+                          .stopReason = m_stopReason,
+                          .providerAssistantContentJson = {serializedContent.constData(),
+                                                           static_cast<std::size_t>(serializedContent.size())}});
     }
     return events;
 }
@@ -605,7 +738,10 @@ void AnthropicStreamMapper::reset() noexcept
     m_toolsByIndex.clear();
     m_webSearchByIndex.clear();
     m_webQueriesByIndex.clear();
+    m_contentBlocksByIndex.clear();
     m_responseId.clear();
+    m_stopReason = AiResponseStopReason::unspecified;
+    m_contentBytes = 0;
     m_started = false;
     m_completed = false;
 }

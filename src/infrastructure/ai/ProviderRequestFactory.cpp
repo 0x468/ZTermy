@@ -418,22 +418,38 @@ void applyCompatibleReasoning(QJsonObject &body, const AiProviderConfiguration &
     for (const auto &exchange : generation.toolHistory)
     {
         QJsonArray uses;
-        if (!exchange.reasoning.empty() && !exchange.reasoningSignature.empty())
+        if (!exchange.providerAssistantContentJson.empty())
+        {
+            QJsonParseError parseError;
+            const auto content = QJsonDocument::fromJson(
+                QByteArray(exchange.providerAssistantContentJson.data(),
+                           static_cast<qsizetype>(exchange.providerAssistantContentJson.size())),
+                &parseError);
+            if (parseError.error == QJsonParseError::NoError && content.isArray())
+            {
+                uses = content.array();
+            }
+        }
+        else if (!exchange.reasoning.empty() && !exchange.reasoningSignature.empty())
         {
             uses.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("thinking")},
                                     {QStringLiteral("thinking"), fromUtf8(exchange.reasoning)},
                                     {QStringLiteral("signature"), fromUtf8(exchange.reasoningSignature)}});
         }
-        for (const auto &call : exchange.calls)
+        if (exchange.providerAssistantContentJson.empty())
         {
-            QJsonParseError parseError;
-            const auto arguments = QJsonDocument::fromJson(
-                QByteArray(call.argumentsJson.data(), static_cast<qsizetype>(call.argumentsJson.size())), &parseError);
-            uses.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("tool_use")},
-                                    {QStringLiteral("id"), fromUtf8(call.id)},
-                                    {QStringLiteral("name"), fromUtf8(call.name)},
-                                    {QStringLiteral("input"), arguments.isObject() ? QJsonValue(arguments.object())
-                                                                                   : QJsonValue(QJsonObject{})}});
+            for (const auto &call : exchange.calls)
+            {
+                QJsonParseError parseError;
+                const auto arguments = QJsonDocument::fromJson(
+                    QByteArray(call.argumentsJson.data(), static_cast<qsizetype>(call.argumentsJson.size())),
+                    &parseError);
+                uses.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("tool_use")},
+                                        {QStringLiteral("id"), fromUtf8(call.id)},
+                                        {QStringLiteral("name"), fromUtf8(call.name)},
+                                        {QStringLiteral("input"), arguments.isObject() ? QJsonValue(arguments.object())
+                                                                                       : QJsonValue(QJsonObject{})}});
+            }
         }
         if (!uses.isEmpty())
         {

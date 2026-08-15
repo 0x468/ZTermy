@@ -188,7 +188,9 @@ std::expected<void, AiProviderError> AiTurnRunner::startAttempt()
     m_pendingToolCalls.clear();
     m_currentReasoning.clear();
     m_currentReasoningSignature.clear();
+    m_providerAssistantContentJson.clear();
     m_toolContinuationPending = false;
+    m_pauseContinuationPending = false;
 
     auto secret = m_secretLoader();
     if (!secret.has_value())
@@ -266,14 +268,33 @@ void AiTurnRunner::handleEvent(const ProviderHttpClient::RequestId requestId, co
         }
         m_currentReasoningSignature += event.delta;
     }
-    if (event.type == AiStreamEventType::responseCompleted && !m_pendingToolCalls.empty())
+    if (event.type == AiStreamEventType::responseCompleted)
     {
         if (!event.responseId.empty())
         {
             m_responseId = event.responseId;
         }
-        m_toolContinuationPending = true;
-        return;
+        m_providerAssistantContentJson = event.providerAssistantContentJson;
+        if (event.stopReason == AiResponseStopReason::pauseTurn)
+        {
+            if (m_configuration.kind != AiProviderKind::anthropicMessages || !m_pendingToolCalls.empty()
+                || m_providerAssistantContentJson.empty())
+            {
+                m_pendingError = AiProviderError{.code = AiProviderErrorCode::protocol,
+                                                 .message = "The provider emitted an invalid paused turn.",
+                                                 .retryable = false};
+            }
+            else
+            {
+                m_pauseContinuationPending = true;
+            }
+            return;
+        }
+        if (!m_pendingToolCalls.empty())
+        {
+            m_toolContinuationPending = true;
+            return;
+        }
     }
     if (event.type == AiStreamEventType::responseFailed)
     {
@@ -310,6 +331,15 @@ void AiTurnRunner::handleFinished(const ProviderHttpClient::RequestId requestId)
     if (!m_pendingError.has_value())
     {
         emitBufferedStart();
+        if (m_pauseContinuationPending)
+        {
+            const auto continued = continuePausedProviderTurn();
+            if (!continued.has_value())
+            {
+                finishWithError(continued.error());
+            }
+            return;
+        }
         if (m_toolContinuationPending)
         {
             const auto continued = continueWithTools();
@@ -373,6 +403,28 @@ void AiTurnRunner::handleFinished(const ProviderHttpClient::RequestId requestId)
     finishWithError(error);
 }
 
+std::expected<void, AiProviderError> AiTurnRunner::continuePausedProviderTurn()
+{
+    constexpr std::uint32_t maximumPauseContinuations = 4;
+    if (m_configuration.kind != AiProviderKind::anthropicMessages || m_providerAssistantContentJson.empty())
+    {
+        return std::unexpected(AiProviderError{.code = AiProviderErrorCode::protocol,
+                                               .message = "The paused provider turn has no replayable content.",
+                                               .retryable = false});
+    }
+    if (m_completedPauseContinuations >= maximumPauseContinuations)
+    {
+        return std::unexpected(AiProviderError{.code = AiProviderErrorCode::protocol,
+                                               .message = "The provider exceeded the paused-turn continuation limit.",
+                                               .retryable = false});
+    }
+
+    m_generation.toolHistory.push_back(
+        AiToolExchange{.providerAssistantContentJson = std::move(m_providerAssistantContentJson)});
+    ++m_completedPauseContinuations;
+    return startAttempt();
+}
+
 std::expected<void, AiProviderError> AiTurnRunner::continueWithTools()
 {
     constexpr std::uint32_t maximumToolCalls = 24;
@@ -409,11 +461,13 @@ std::expected<void, AiProviderError> AiTurnRunner::continueWithTools()
 
     m_activeToolExchange = AiToolExchange{.calls = std::move(m_pendingToolCalls),
                                           .reasoning = std::move(m_currentReasoning),
-                                          .reasoningSignature = std::move(m_currentReasoningSignature)};
+                                          .reasoningSignature = std::move(m_currentReasoningSignature),
+                                          .providerAssistantContentJson = std::move(m_providerAssistantContentJson)};
     m_activeToolExchange->outputs.reserve(m_activeToolExchange->calls.size());
     m_pendingToolCalls.clear();
     m_currentReasoning.clear();
     m_currentReasoningSignature.clear();
+    m_providerAssistantContentJson.clear();
     m_nextToolIndex = 0;
     return executeNextTool();
 }
@@ -575,17 +629,21 @@ void AiTurnRunner::clearTurn()
     m_pendingError.reset();
     m_pendingToolCalls.clear();
     m_currentReasoning.clear();
+    m_currentReasoningSignature.clear();
+    m_providerAssistantContentJson.clear();
     m_activeToolExchange.reset();
     m_pendingToolCancellation = {};
     m_responseId.clear();
     m_turnId = 0;
     m_completedRetries = 0;
     m_completedToolCalls = 0;
+    m_completedPauseContinuations = 0;
     m_nextToolIndex = 0;
     m_startedAt = {};
     m_firstTokenAt.reset();
     m_visibleOutputObserved = false;
     m_toolContinuationPending = false;
+    m_pauseContinuationPending = false;
     m_waitingForTool = false;
     m_irreversibleToolObserved = false;
     m_cancelled = false;

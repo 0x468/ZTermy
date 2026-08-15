@@ -1,5 +1,8 @@
 #include "infrastructure/ai/ProviderStreamMapper.h"
 
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTest>
 
 #include <string>
@@ -9,6 +12,7 @@ namespace
 
 using ztermy::ai::AiProviderError;
 using ztermy::ai::AiProviderErrorCode;
+using ztermy::ai::AiResponseStopReason;
 using ztermy::ai::AiStreamEventType;
 using ztermy::ai::AiTokenUsage;
 using ztermy::ai::AiWebSource;
@@ -31,6 +35,7 @@ private slots:
     void mapsAnthropicTextToolsUsageAndCompletion();
     void mapsAnthropicThinkingSignature();
     void mapsAnthropicWebSearchAndCitations();
+    void reconstructsAnthropicPausedContent();
     void mapsOllamaThinkingToolsAndUsage();
     void mapsOllamaError();
 };
@@ -150,13 +155,18 @@ void ProviderStreamMapperTests::mapsAnthropicTextToolsUsageAndCompletion()
 
     events = mapper.map(ServerSentEvent{
         .event = "content_block_start",
+        .data = R"json({"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}})json"});
+    QVERIFY(events.has_value());
+    QVERIFY(events->empty());
+    events = mapper.map(ServerSentEvent{
+        .event = "content_block_start",
         .data =
-            R"json({"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"tool_1","name":"run_command"}})json"});
+            R"json({"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"tool_1","name":"run_command","input":{}}})json"});
     QCOMPARE(events->front().type, AiStreamEventType::toolCallStarted);
     events = mapper.map(ServerSentEvent{
         .event = "content_block_delta",
         .data =
-            R"json({"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"command\":"}})json"});
+            R"json({"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"command\":\"pwd\"}"}})json"});
     QCOMPARE(events->front().type, AiStreamEventType::toolArgumentsDelta);
     events = mapper.map(ServerSentEvent{
         .event = "content_block_delta",
@@ -165,17 +175,30 @@ void ProviderStreamMapperTests::mapsAnthropicTextToolsUsageAndCompletion()
     events = mapper.map(
         ServerSentEvent{.event = "content_block_stop", .data = R"json({"type":"content_block_stop","index":1})json"});
     QCOMPARE(events->front().type, AiStreamEventType::toolCallCompleted);
-    events = mapper.map(ServerSentEvent{.event = "message_delta",
-                                        .data = R"json({"type":"message_delta","usage":{"output_tokens":4}})json"});
+    events = mapper.map(ServerSentEvent{
+        .event = "message_delta",
+        .data = R"json({"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":4}})json"});
     QCOMPARE(events->front().usage.value_or(AiTokenUsage{}).outputTokens, std::uint64_t{4});
     events = mapper.map(ServerSentEvent{.event = "message_stop", .data = R"json({"type":"message_stop"})json"});
     QCOMPARE(events->front().type, AiStreamEventType::responseCompleted);
+    QCOMPARE(events->front().stopReason, AiResponseStopReason::toolUse);
+    const auto replay =
+        QJsonDocument::fromJson(QByteArray::fromStdString(events->front().providerAssistantContentJson));
+    QVERIFY(replay.isArray());
+    QCOMPARE(replay.array().at(0).toObject().value("text").toString(), QStringLiteral("hello"));
+    QCOMPARE(replay.array().at(1).toObject().value("input").toObject().value("command").toString(),
+             QStringLiteral("pwd"));
 }
 
 void ProviderStreamMapperTests::mapsAnthropicThinkingSignature()
 {
     AnthropicStreamMapper mapper;
-    const auto events = mapper.map(ServerSentEvent{
+    auto events = mapper.map(ServerSentEvent{
+        .event = "content_block_start",
+        .data =
+            R"json({"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}})json"});
+    QVERIFY(events.has_value());
+    events = mapper.map(ServerSentEvent{
         .event = "content_block_delta",
         .data =
             R"json({"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"signed"}})json"});
@@ -217,6 +240,10 @@ void ProviderStreamMapperTests::mapsAnthropicWebSearchAndCitations()
     QCOMPARE(events->at(1).type, AiStreamEventType::webSearchCompleted);
 
     events = mapper.map(ServerSentEvent{
+        .event = "content_block_start",
+        .data = R"json({"type":"content_block_start","index":3,"content_block":{"type":"text","text":""}})json"});
+    QVERIFY(events.has_value());
+    events = mapper.map(ServerSentEvent{
         .event = "content_block_delta",
         .data =
             R"json({"type":"content_block_delta","index":3,"delta":{"type":"citations_delta","citation":{"type":"web_search_result_location","url":"https://doc.qt.io/qt-6/whatsnew68.html","title":"What's New in Qt 6.8","cited_text":"Qt 6.8 introduces updates."}}})json"});
@@ -225,6 +252,61 @@ void ProviderStreamMapperTests::mapsAnthropicWebSearchAndCitations()
     QVERIFY(events->front().webSource.has_value());
     const AiWebSource anthropicSource = events->front().webSource.value_or(AiWebSource{});
     QCOMPARE(anthropicSource.citedText, std::string("Qt 6.8 introduces updates."));
+}
+
+void ProviderStreamMapperTests::reconstructsAnthropicPausedContent()
+{
+    AnthropicStreamMapper mapper;
+    auto events = mapper.map(ServerSentEvent{
+        .event = "message_start",
+        .data = R"json({"type":"message_start","message":{"id":"msg_pause","usage":{"input_tokens":4}}})json"});
+    QVERIFY(events.has_value());
+
+    events = mapper.map(ServerSentEvent{
+        .event = "content_block_start",
+        .data =
+            R"json({"type":"content_block_start","index":0,"content_block":{"type":"server_tool_use","id":"srvtoolu_pause","name":"web_search","input":{}}})json"});
+    QVERIFY(events.has_value());
+    events = mapper.map(ServerSentEvent{
+        .event = "content_block_delta",
+        .data =
+            R"json({"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\"query\":\"Qt 6.8\"}"}})json"});
+    QVERIFY(events.has_value());
+    events = mapper.map(
+        ServerSentEvent{.event = "content_block_stop", .data = R"json({"type":"content_block_stop","index":0})json"});
+    QVERIFY(events.has_value());
+
+    events = mapper.map(ServerSentEvent{
+        .event = "content_block_start",
+        .data =
+            R"json({"type":"content_block_start","index":1,"content_block":{"type":"web_search_tool_result","tool_use_id":"srvtoolu_pause","content":[{"type":"web_search_result","url":"https://example.test","encrypted_content":"opaque-result"}]}})json"});
+    QVERIFY(events.has_value());
+    events = mapper.map(ServerSentEvent{
+        .event = "message_delta",
+        .data =
+            R"json({"type":"message_delta","delta":{"stop_reason":"pause_turn"},"usage":{"output_tokens":8}})json"});
+    QVERIFY(events.has_value());
+    events = mapper.map(ServerSentEvent{.event = "message_stop", .data = R"json({"type":"message_stop"})json"});
+    QVERIFY(events.has_value());
+    QCOMPARE(events->size(), std::size_t{1});
+    QCOMPARE(events->front().stopReason, AiResponseStopReason::pauseTurn);
+
+    const auto replay =
+        QJsonDocument::fromJson(QByteArray::fromStdString(events->front().providerAssistantContentJson));
+    QVERIFY(replay.isArray());
+    QCOMPARE(replay.array().size(), 2);
+    QCOMPARE(replay.array().at(0).toObject().value("input").toObject().value("query").toString(),
+             QStringLiteral("Qt 6.8"));
+    QCOMPARE(replay.array()
+                 .at(1)
+                 .toObject()
+                 .value("content")
+                 .toArray()
+                 .at(0)
+                 .toObject()
+                 .value("encrypted_content")
+                 .toString(),
+             QStringLiteral("opaque-result"));
 }
 
 void ProviderStreamMapperTests::mapsOllamaThinkingToolsAndUsage()

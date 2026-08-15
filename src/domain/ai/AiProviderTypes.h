@@ -103,6 +103,10 @@ struct AiToolExchange final
     std::vector<AiToolOutput> outputs;
     std::string reasoning;
     std::string reasoningSignature;
+    // Provider-owned assistant content used only for exact continuation of
+    // protocols whose tool state lives inside typed content blocks. The JSON
+    // is a validated, bounded array and is never shown to the model as text.
+    std::string providerAssistantContentJson;
 };
 
 struct AiWebSource final
@@ -143,6 +147,17 @@ enum class AiStreamEventType : std::uint8_t
     responseFailed,
 };
 
+enum class AiResponseStopReason : std::uint8_t
+{
+    unspecified,
+    endTurn,
+    maximumTokens,
+    stopSequence,
+    toolUse,
+    pauseTurn,
+    refusal,
+};
+
 enum class AiProviderErrorCode : std::uint8_t
 {
     network,
@@ -180,6 +195,8 @@ struct AiStreamEvent final
     std::string toolCallId;
     std::string toolName;
     std::string delta;
+    AiResponseStopReason stopReason = AiResponseStopReason::unspecified;
+    std::string providerAssistantContentJson;
     std::optional<AiWebSource> webSource;
     std::optional<AiTokenUsage> usage;
     std::optional<AiProviderError> error;

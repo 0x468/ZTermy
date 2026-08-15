@@ -57,6 +57,7 @@ private:
     [[nodiscard]] std::expected<void, AiProviderError> startAttempt();
     void handleEvent(ProviderHttpClient::RequestId requestId, const AiStreamEvent &event);
     void handleFinished(ProviderHttpClient::RequestId requestId);
+    [[nodiscard]] std::expected<void, AiProviderError> continuePausedProviderTurn();
     [[nodiscard]] std::expected<void, AiProviderError> continueWithTools();
     [[nodiscard]] std::expected<void, AiProviderError> executeNextTool();
     void observeToolEvent(const AiStreamEvent &event);
@@ -84,6 +85,7 @@ private:
     std::vector<AiToolCall> m_pendingToolCalls;
     std::string m_currentReasoning;
     std::string m_currentReasoningSignature;
+    std::string m_providerAssistantContentJson;
     std::optional<AiToolExchange> m_activeToolExchange;
     std::function<void()> m_pendingToolCancellation;
     std::string m_responseId;
@@ -91,11 +93,13 @@ private:
     TurnId m_nextTurnId = 1;
     std::uint32_t m_completedRetries = 0;
     std::uint32_t m_completedToolCalls = 0;
+    std::uint32_t m_completedPauseContinuations = 0;
     std::size_t m_nextToolIndex = 0;
     std::chrono::steady_clock::time_point m_startedAt;
     std::optional<std::chrono::steady_clock::time_point> m_firstTokenAt;
     bool m_visibleOutputObserved = false;
     bool m_toolContinuationPending = false;
+    bool m_pauseContinuationPending = false;
     bool m_waitingForTool = false;
     bool m_irreversibleToolObserved = false;
     bool m_cancelled = false;

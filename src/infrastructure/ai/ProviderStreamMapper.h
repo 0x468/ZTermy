@@ -3,8 +3,11 @@
 #include "domain/ai/AiProviderTypes.h"
 #include "domain/ai/ServerSentEventParser.h"
 
+#include <QJsonObject>
+
 #include <cstddef>
 #include <expected>
+#include <map>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -61,10 +64,19 @@ private:
         std::string name;
     };
 
+    struct ContentBlockState final
+    {
+        QJsonObject block;
+        std::string partialInputJson;
+    };
+
     std::unordered_map<std::size_t, ToolState> m_toolsByIndex;
     std::unordered_map<std::size_t, ToolState> m_webSearchByIndex;
     std::unordered_map<std::size_t, std::string> m_webQueriesByIndex;
+    std::map<std::size_t, ContentBlockState> m_contentBlocksByIndex;
     std::string m_responseId;
+    AiResponseStopReason m_stopReason = AiResponseStopReason::unspecified;
+    std::size_t m_contentBytes = 0;
     bool m_started = false;
     bool m_completed = false;
 };

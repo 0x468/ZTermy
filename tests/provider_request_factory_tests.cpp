@@ -40,6 +40,7 @@ private slots:
     void preparesProviderNativeWebSearchRequests();
     void appliesProviderSpecificReasoningControls();
     void preservesAnthropicThinkingSignatureAcrossTools();
+    void replaysOpaqueAnthropicAssistantContent();
     void resolvesFriendlyApiAddressesAndModels();
     void rejectsUnsafeOrIncompleteConfiguration();
 };
@@ -303,6 +304,30 @@ void ProviderRequestFactoryTests::preservesAnthropicThinkingSignatureAcrossTools
     const auto assistantContent = body.value("messages").toArray().first().toObject().value("content").toArray();
     QCOMPARE(assistantContent.first().toObject().value("type").toString(), QStringLiteral("thinking"));
     QCOMPARE(assistantContent.first().toObject().value("signature").toString(), QStringLiteral("signed-block"));
+}
+
+void ProviderRequestFactoryTests::replaysOpaqueAnthropicAssistantContent()
+{
+    const AiProviderConfiguration configuration{.kind = AiProviderKind::anthropicMessages,
+                                                .flavor = AiProviderFlavor::anthropic,
+                                                .baseUrl = "https://api.anthropic.com",
+                                                .model = "claude-sonnet-4-6"};
+    const AiGenerationRequest generation{
+        .messages = {AiChatMessage{.role = AiMessageRole::user, .content = "Search current Qt documentation."}},
+        .toolHistory = {AiToolExchange{
+            .providerAssistantContentJson =
+                R"json([{"type":"server_tool_use","id":"srvtoolu_1","name":"web_search","input":{"query":"Qt 6.8"}},{"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[{"type":"web_search_result","url":"https://example.test","encrypted_content":"opaque"}]}])json"}},
+        .webSearchEnabled = true};
+
+    const auto prepared = ProviderRequestFactory::prepare(configuration, generation, "key");
+    QVERIFY(prepared.has_value());
+    const auto messages = QJsonDocument::fromJson(prepared->body).object().value("messages").toArray();
+    QCOMPARE(messages.size(), 2);
+    const auto replay = messages.at(1).toObject().value("content").toArray();
+    QCOMPARE(replay.size(), 2);
+    QCOMPARE(replay.at(0).toObject().value("type").toString(), QStringLiteral("server_tool_use"));
+    QCOMPARE(replay.at(1).toObject().value("content").toArray().at(0).toObject().value("encrypted_content").toString(),
+             QStringLiteral("opaque"));
 }
 
 void ProviderRequestFactoryTests::resolvesFriendlyApiAddressesAndModels()
