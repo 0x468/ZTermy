@@ -1,7 +1,7 @@
 # Netcatty AI 实现对比研究报告（ztermy V3 参考）
 
 日期：2026-08
-调研对象：`D:\Repo\tmp\Netcatty`（Electron/TypeScript SSH 终端，GPL-3.0，2046 文件）
+调研对象：`D:\tmp\Netcatty`（Electron/TypeScript SSH 终端，GPL-3.0，2046 文件）
 性质：产品行为参考研究。仅提炼交互模式与架构思路，**不复制任何源码/素材/品牌**（遵循 ztermy AGENTS.md 产品边界）。
 对照基准：ztermy V3（见 `docs/V3_AI_PROGRAM.md` 与 `docs/reviews/V3_AI_PRODUCT_REVIEW_2026-08-13.md`）。
 
@@ -126,8 +126,8 @@ token 估算 → 预压缩（LLM 摘要 temp=0，保护最近 N 条，保留最�
 | 外部 Agent | 内置 Catty + Claude/Codex/Cursor/Copilot CLI/Codebuddy/OpenCode SDK 驱动 | 0.3.11 进行中：Codex App Server 有界协议、异步进程、精确 schema 探测、类型化事件、当前终端工具桥、取消、Tab 内 thread 延续、加密历史恢复及 ztermy/Codex 选择器已落地；确定性假服务端覆盖完整应用链，本机 CLI 门禁默认跳过且需显式联网执行。更多 Agent 适配器和最终打包/人工验收仍待完成 |
 | 流式 | streamText + thinking 块 + usage/performance 事件 + 413 压缩重试 | 流式 + 合并后再做 Markdown 布局（Qt Quick 线程不阻塞）；reasoning 跟随流式展开、出正文即折叠 |
 | 记忆 | 每作用域持久会话 + token 预算压缩（LLM 摘要）+ 会话状态再注入 | 默认仅会话保留；持久加密历史 opt-in（0.3.1 ADR 0061）；Agent 工具证据随会话保留（bounded） |
-| 斜杠命令 | Quick Messages（用户自定义 prompt 快捷）+ 技能，光标锚定 listbox | 键盘优先的内置斜杠选择器（0.3.9）；用户技能 0.3.10 复用同一选择器 |
-| 选区附加 | 选中终端文本 → 浮动按钮 → 附加为附件 chip | 附件菜单：当前选区/最近 1/3/5 条命令（语义块），随请求生效并保留为证据 |
+| 斜杠命令 | Quick Messages（用户自定义 prompt 快捷）+ 技能，光标锚定 listbox | 键盘优先的内置斜杠选择器；用户 Quick Messages 与技能复用同一选择器 |
+| 显式上下文 | `@` 提及主机；选中终端文本 → 浮动按钮 → 附加为附件 chip | 输入框内 `@` 选择当前选区、最近 1/3/5 条命令、文本文件或图片；也可使用 `+` 菜单。上下文以可移除 chip 显示，详细证据按需展开；只允许当前终端，不提供跨终端目标 |
 | 网络搜索 | Tavily/Exa/Bocha/Zhipu/SearXNG 工具 | 0.3.10 规划：provider 无关工具 + 可见引用 |
 | 审计/可观测 | traceStore + 每步 usage/performance 事件 + 面板诊断开关 | 活动/审计视图（0.3.1 ADR 0060）+ 本地 JSONL 请求追踪（0.3.5） |
 | 终端语义 | prompt 探测 + shell kind 探测 + marker 包装 + 合成回显 | OSC133/633 + nonce 语义命令块 + 能力质量（none/basic/rich）+ 输出覆盖元数据——ztermy 语义更重 |
@@ -146,3 +146,21 @@ token 估算 → 预压缩（LLM 摘要 temp=0，保护最近 N 条，保留最�
 4. **Quick Messages**（用户自定义 prompt 快捷 + slug 斜杠）是轻量、无 provider 耦合的"伪技能"；ztermy 0.3.10 技能可先以此形态落地再扩展。
 5. **面板性能工程**：rAF 批量 flush、分批渲染、隐藏面板按"有活内容才保活"卸载、lazy 加载——与 ztermy"流式合并后再布局、AI 不阻塞 16ms 输入预算"目标同源，可互相印证验收口径。
 6. **显式附加是共同结论**：Netcatty（选中文本按钮）与 ztermy（语义命令块附件菜单）都不做隐式抓取；ztermy 的语义块 + 近似降级设计在定位上领先，Netcatty 的"选区按钮常驻终端"交互可作为降级路径的补充参考。
+
+---
+
+## 7. 2026-08-15 运行时对齐复核
+
+本轮同时检查了 Netcatty 已安装版本与 ztermy MSVC Debug 构建的实际界面，不以源码结构
+代替可见行为。落地结果如下：
+
+- AI 面板顶部收敛为单层：左侧 Agent 选择，右侧导出、历史、新会话；不再常驻显示状态
+  胶囊，也不再重复显示“Conversation / New conversation”二级标题。
+- 历史保持完整的替代视图；空态只显示用途提示和最近三段对话，避免工具能力在空态抢占
+  视觉层级。
+- 输入框提示直接教学 `@` 上下文与 `/` 命令。`@` 支持键盘筛选与 Enter/Tab 激活，目标
+  限定为当前终端的选区、最近命令块、本地文本文件和图片。
+- 已附加上下文显示在输入框上方的横向 chip 行，可逐项移除；证据等级、固定、截断与预览
+  仍可主动展开查看，但不占据日常对话首屏。
+- ztermy 保留自身更强的单终端语义命令块、四档执行模式、细粒度规则、原生工具卡与
+  Provider/外部 Agent 适配能力；不复制 Netcatty 的 React 组件和跨终端/工作区作用域。

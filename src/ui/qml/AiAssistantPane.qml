@@ -223,6 +223,9 @@ Rectangle {
 
     function slashSuggestions() {
         const text = promptEditor ? promptEditor.text.trim().toLocaleLowerCase() : "";
+        const mention = mentionQuery();
+        if (mention !== null)
+            return mentionSuggestions(mention);
         if (!text.startsWith("/") || text.indexOf(" ") >= 0)
             return [];
         const commands = slashCommands.slice();
@@ -256,9 +259,102 @@ Rectangle {
         return commands.filter(item => item.command.startsWith(text) || item.title.toLocaleLowerCase().indexOf(query) >= 0);
     }
 
+    function mentionQuery() {
+        if (!promptEditor)
+            return null;
+        const match = promptEditor.text.match(/(?:^|\s)@([^\s@]*)$/);
+        return match ? match[1].toLocaleLowerCase() : null;
+    }
+
+    function mentionSuggestions(query) {
+        const suggestions = [
+            {
+                "command": "@selection",
+                "title": qsTr("Selected terminal text"),
+                "description": qsTr("Attach the current terminal selection"),
+                "contextAction": "selection"
+            },
+            {
+                "command": "@last",
+                "title": qsTr("Last command"),
+                "description": qsTr("Attach the most recent command and its output"),
+                "contextAction": "last"
+            },
+            {
+                "command": "@last3",
+                "title": qsTr("Last 3 commands"),
+                "description": qsTr("Attach the three most recent command blocks"),
+                "contextAction": "last3"
+            },
+            {
+                "command": "@last5",
+                "title": qsTr("Last 5 commands"),
+                "description": qsTr("Attach the five most recent command blocks"),
+                "contextAction": "last5"
+            },
+            {
+                "command": "@files",
+                "title": qsTr("Local text files"),
+                "description": qsTr("Choose one or more text files"),
+                "contextAction": "files"
+            },
+            {
+                "command": "@images",
+                "title": qsTr("Images"),
+                "description": qsTr("Choose one or more images"),
+                "contextAction": "images"
+            }
+        ];
+        return suggestions.filter(item => query.length === 0 || item.command.slice(1).startsWith(query) || item.title.toLocaleLowerCase().indexOf(query) >= 0);
+    }
+
+    function removeActiveMention() {
+        const marker = promptEditor.text.lastIndexOf("@");
+        if (marker < 0)
+            return;
+        promptEditor.text = promptEditor.text.slice(0, marker).replace(/\s+$/, "");
+        promptEditor.cursorPosition = promptEditor.text.length;
+    }
+
+    function activateContextSuggestion(item) {
+        if (!item || !item.contextAction)
+            return false;
+        let accepted = true;
+        switch (item.contextAction) {
+        case "selection":
+            accepted = pane.controller.attachAiSelection();
+            break;
+        case "last":
+            accepted = pane.controller.attachAiRecentCommands(1);
+            break;
+        case "last3":
+            accepted = pane.controller.attachAiRecentCommands(3);
+            break;
+        case "last5":
+            accepted = pane.controller.attachAiRecentCommands(5);
+            break;
+        case "files":
+            textAttachmentDialog.open();
+            break;
+        case "images":
+            imageAttachmentDialog.open();
+            break;
+        default:
+            return false;
+        }
+        if (accepted)
+            removeActiveMention();
+        promptEditor.forceActiveFocus();
+        return true;
+    }
+
     function applySlashSuggestion(item) {
         if (!item)
             return;
+        if (item.contextAction) {
+            activateContextSuggestion(item);
+            return;
+        }
         if (item.skill === true) {
             pane.addSelectedSkill(item.skillId);
             promptEditor.clear();
@@ -273,6 +369,10 @@ Rectangle {
     function activateSlashSuggestion(item) {
         if (!item)
             return;
+        if (item.contextAction) {
+            activateContextSuggestion(item);
+            return;
+        }
         if (item.skill === true) {
             applySlashSuggestion(item);
             return;
@@ -389,62 +489,68 @@ Rectangle {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 48
+            Layout.preferredHeight: 44
             color: Theme.elevatedBackground
             border.color: Theme.border
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 12
+                anchors.leftMargin: 8
                 anchors.rightMargin: 8
-                spacing: 8
+                spacing: 4
 
-                AppIcon {
-                    Layout.preferredWidth: 18
-                    Layout.preferredHeight: 18
-                    name: "ai"
-                    color: Theme.accent
-                }
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    Layout.minimumWidth: 0
-                    spacing: 0
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: pane.agentOption(pane.controller.aiAgentPreference).name
-                        elide: Text.ElideRight
-                        color: Theme.text
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.textBody
-                        font.weight: Font.DemiBold
-                    }
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: pane.activeTab ? pane.activeTab.title : ""
-                        color: Theme.textSubtle
-                        elide: Text.ElideRight
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.textCompact
-                    }
-                }
-
-                ContextToolButton {
+                ToolButton {
                     id: agentPickerButton
 
                     objectName: "aiAgentPickerButton"
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                     enabled: !pane.busy && !pane.controller.aiAgentsLoading
+                    hoverEnabled: true
+                    focusPolicy: Qt.StrongFocus
                     Accessible.name: qsTr("Choose terminal AI Agent")
                     onClicked: agentMenu.popup()
-                    contentItem: AppIcon {
-                        name: "chevron-down"
-                        color: Theme.textMuted
+                    contentItem: RowLayout {
+                        spacing: 7
+
+                        AppIcon {
+                            Layout.preferredWidth: 17
+                            Layout.preferredHeight: 17
+                            name: "ai"
+                            color: Theme.accent
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            text: pane.agentOption(pane.controller.aiAgentPreference).name
+                            elide: Text.ElideRight
+                            color: Theme.text
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.textBody
+                            font.weight: Font.DemiBold
+                        }
+
+                        AppIcon {
+                            Layout.preferredWidth: 12
+                            Layout.preferredHeight: 12
+                            name: "chevron-down"
+                            color: Theme.textMuted
+                        }
+                    }
+                    background: Rectangle {
+                        radius: Theme.radiusSmall
+                        color: agentPickerButton.down ? Theme.controlPressed : agentPickerButton.hovered ? Theme.controlHover : "transparent"
+                        border.color: agentPickerButton.activeFocus ? Theme.focus : "transparent"
+                        border.width: agentPickerButton.activeFocus ? 2 : 0
+                    }
+
+                    HoverHandler {
+                        cursorShape: agentPickerButton.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                     }
 
                     AppToolTip {
-                        text: pane.agentOption(pane.controller.aiAgentPreference).description
+                        text: (pane.activeTab ? pane.activeTab.title + " · " : "") + pane.agentOption(pane.controller.aiAgentPreference).description
                     }
 
                     AppMenu {
@@ -478,91 +584,56 @@ Rectangle {
                     }
                 }
 
-                Rectangle {
-                    Layout.preferredHeight: 22
-                    Layout.preferredWidth: statusLabel.implicitWidth + 16
-                    radius: 11
-                    color: pane.controller.activeAiState === "error" ? Theme.dangerSurface : Theme.controlBackground
-                    border.color: pane.busy ? Theme.accent : Theme.border
-
-                    Text {
-                        id: statusLabel
-
-                        anchors.centerIn: parent
-                        text: pane.stateLabel()
-                        color: pane.controller.activeAiState === "error" ? Theme.dangerSurfaceText : Theme.textSoft
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.textCompact
+                ContextToolButton {
+                    objectName: "aiExportConversationButton"
+                    enabled: !pane.busy && pane.conversation !== null && pane.conversation.count > 0
+                    Accessible.name: qsTr("Export AI conversation")
+                    onClicked: conversationExportDialog.open()
+                    contentItem: AppIcon {
+                        name: "save"
+                        color: Theme.textMuted
+                    }
+                    AppToolTip {
+                        text: qsTr("Export conversation")
                     }
                 }
-            }
-        }
 
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.minimumWidth: 0
-            Layout.leftMargin: 10
-            Layout.rightMargin: 10
-            Layout.topMargin: 8
-            Layout.bottomMargin: 4
-            spacing: 6
+                ContextToolButton {
+                    objectName: "aiHistoryToggle"
+                    enabled: pane.controller.aiConversationHistoryEnabled
+                    Accessible.name: pane.historyExpanded ? qsTr("Hide AI conversation history") : qsTr("Show AI conversation history")
+                    onClicked: {
+                        pane.historyExpanded = !pane.historyExpanded;
+                        if (pane.historyExpanded) {
+                            pane.activityExpanded = false;
+                            pane.controller.aiConversationHistory.reload();
+                        }
+                    }
+                    contentItem: AppIcon {
+                        name: "history"
+                        color: pane.historyExpanded ? Theme.accent : Theme.textMuted
+                    }
+                    AppToolTip {
+                        text: qsTr("Conversation history")
+                    }
+                }
 
-            Text {
-                Layout.fillWidth: true
-                text: pane.historyExpanded ? qsTr("All conversations") : pane.conversation && pane.conversation.count > 0 ? qsTr("Conversation") : qsTr("New conversation")
-                color: Theme.textMuted
-                font.family: Theme.uiFont
-                font.pixelSize: Theme.textCompact
-            }
-
-            ContextToolButton {
-                objectName: "aiHistoryToggle"
-                enabled: pane.controller.aiConversationHistoryEnabled
-                Accessible.name: pane.historyExpanded ? qsTr("Hide AI conversation history") : qsTr("Show AI conversation history")
-                onClicked: {
-                    pane.historyExpanded = !pane.historyExpanded;
-                    if (pane.historyExpanded) {
+                ContextToolButton {
+                    objectName: "aiNewConversationButton"
+                    enabled: !pane.busy
+                    Accessible.name: qsTr("Start a new AI conversation")
+                    onClicked: {
+                        pane.historyExpanded = false;
                         pane.activityExpanded = false;
-                        pane.controller.aiConversationHistory.reload();
+                        pane.controller.clearAiConversation();
                     }
-                }
-                contentItem: AppIcon {
-                    name: "history"
-                    color: pane.historyExpanded ? Theme.accent : Theme.textMuted
-                }
-                AppToolTip {
-                    text: qsTr("Conversation history")
-                }
-            }
-
-            ContextToolButton {
-                objectName: "aiNewConversationButton"
-                enabled: !pane.busy
-                Accessible.name: qsTr("Start a new AI conversation")
-                onClicked: {
-                    pane.historyExpanded = false;
-                    pane.activityExpanded = false;
-                    pane.controller.clearAiConversation();
-                }
-                contentItem: AppIcon {
-                    name: "plus"
-                    color: Theme.textMuted
-                }
-                AppToolTip {
-                    text: qsTr("New conversation")
-                }
-            }
-
-            ContextToolButton {
-                objectName: "aiConversationMoreButton"
-                Accessible.name: qsTr("More conversation actions")
-                onClicked: conversationMenu.popup()
-                contentItem: AppIcon {
-                    name: "more"
-                    color: Theme.textMuted
-                }
-                AppToolTip {
-                    text: qsTr("More")
+                    contentItem: AppIcon {
+                        name: "plus"
+                        color: Theme.textMuted
+                    }
+                    AppToolTip {
+                        text: qsTr("New conversation")
+                    }
                 }
             }
         }
@@ -579,11 +650,8 @@ Rectangle {
             id: contextToggle
 
             objectName: "aiContextToggle"
-            Layout.fillWidth: true
-            Layout.leftMargin: 10
-            Layout.rightMargin: 10
-            Layout.preferredHeight: 32
-            visible: !pane.historyExpanded && pane.controller.activeAiContextItems.length > 0
+            Layout.preferredHeight: 0
+            visible: false
             hoverEnabled: true
             focusPolicy: Qt.StrongFocus
             text: qsTr("Request context · %n item(s)", "", pane.controller.activeAiContextItems.length)
@@ -1975,7 +2043,7 @@ Rectangle {
             id: composerPanel
 
             Layout.fillWidth: true
-            Layout.preferredHeight: visible ? Math.max(132, Math.min(386, promptEditor.contentHeight + 92 + slashCommandList.implicitHeight + (selectedSkillFlow.visible ? 34 : 0))) : 0
+            Layout.preferredHeight: visible ? Math.max(132, Math.min(420, promptEditor.contentHeight + 92 + slashCommandList.implicitHeight + (selectedSkillFlow.visible ? 34 : 0) + (composerContextList.visible ? 34 : 0))) : 0
             visible: !pane.historyExpanded
             color: Theme.elevatedBackground
             border.color: Theme.border
@@ -1984,6 +2052,95 @@ Rectangle {
                 anchors.fill: parent
                 anchors.margins: 8
                 spacing: 6
+
+                ListView {
+                    id: composerContextList
+
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: visible ? 28 : 0
+                    visible: pane.controller.activeAiContextItems.length > 0
+                    orientation: ListView.Horizontal
+                    spacing: 5
+                    clip: true
+                    model: pane.controller.activeAiContextItems
+                    boundsBehavior: Flickable.StopAtBounds
+
+                    header: ToolButton {
+                        id: composerContextToggle
+
+                        width: 28
+                        height: 28
+                        hoverEnabled: true
+                        focusPolicy: Qt.StrongFocus
+                        Accessible.name: pane.contextExpanded ? qsTr("Hide request context details") : qsTr("Show request context details")
+                        onClicked: pane.contextExpanded = !pane.contextExpanded
+                        contentItem: AppIcon {
+                            anchors.centerIn: parent
+                            width: 14
+                            height: 14
+                            name: pane.contextExpanded ? "chevron-down" : "chevron-right"
+                            color: Theme.accent
+                        }
+                        background: Rectangle {
+                            radius: height / 2
+                            color: composerContextToggle.down ? Theme.controlPressed : composerContextToggle.hovered ? Theme.controlHover : Theme.controlBackground
+                            border.color: composerContextToggle.activeFocus ? Theme.focus : Theme.border
+                            border.width: composerContextToggle.activeFocus ? 2 : 1
+                        }
+                    }
+
+                    delegate: Rectangle {
+                        id: composerContextChip
+
+                        required property var modelData
+                        width: Math.min(176, Math.max(92, composerContextTitle.implicitWidth + 46))
+                        height: 28
+                        radius: height / 2
+                        color: Theme.controlBackground
+                        border.color: Theme.border
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 9
+                            anchors.rightMargin: 3
+                            spacing: 4
+
+                            AppIcon {
+                                Layout.preferredWidth: 13
+                                Layout.preferredHeight: 13
+                                name: composerContextChip.modelData.kind === "image" ? "file" : composerContextChip.modelData.kind === "selection" ? "copy" : "terminal"
+                                color: Theme.accent
+                            }
+
+                            Text {
+                                id: composerContextTitle
+
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 0
+                                text: composerContextChip.modelData.title
+                                elide: Text.ElideMiddle
+                                color: Theme.textSoft
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.textCompact
+                            }
+
+                            ContextToolButton {
+                                implicitWidth: 22
+                                implicitHeight: 22
+                                Accessible.name: qsTr("Remove %1 from context").arg(composerContextChip.modelData.title)
+                                onClicked: pane.controller.removeAiContextItem(composerContextChip.modelData.id)
+                                contentItem: AppIcon {
+                                    name: "close"
+                                    color: Theme.textMuted
+                                }
+                            }
+                        }
+                    }
+
+                    ScrollBar.horizontal: ScrollBar {
+                        policy: composerContextList.contentWidth > composerContextList.width ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+                    }
+                }
 
                 Flow {
                     id: selectedSkillFlow
@@ -2067,7 +2224,7 @@ Rectangle {
 
                         width: parent.width
                         objectName: "aiPromptEditor"
-                        placeholderText: pane.commandRequest ? qsTr("Describe the command you need · Enter sends · Shift+Enter adds a new line") : qsTr("Message ztermy Agent · Enter sends · Shift+Enter adds a new line")
+                        placeholderText: pane.commandRequest ? qsTr("Describe the command you need · Enter sends · Shift+Enter adds a new line") : qsTr("Message ztermy Agent · @ context · / commands")
                         color: Theme.text
                         placeholderTextColor: Theme.textMuted
                         selectionColor: Theme.accent
