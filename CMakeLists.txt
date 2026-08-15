@@ -1250,6 +1250,7 @@ target_link_libraries(ztermy PRIVATE
     ztermy_ai_permission_store
     ztermy_ai_quick_message_store
     ztermy_ai_user_skill_catalog
+    ztermy_external_agent_application
     ztermy_application_actions
     ztermy_application_diagnostics
     ztermy_credential_vault
@@ -3892,6 +3893,7 @@ if(BUILD_TESTING)
         ztermy_workbench_persistence
         Qt6::Test
     )
+    add_dependencies(ztermy_app_controller_tests ztermy_codex_app_server_test_server)
 
     if(MSVC)
         target_compile_options(ztermy_app_controller_tests PRIVATE

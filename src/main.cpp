@@ -586,6 +586,8 @@ struct ResizeHitRuntimeCase
     bool shortcutsMatch = false;
     bool sftpCaptured = false;
     bool sftpMatches = false;
+    bool aiSettingsCaptured = false;
+    bool aiSettingsMatch = false;
     if (settingsPane != nullptr)
     {
         settingsPane->setProperty("currentCategory", QStringLiteral("application"));
@@ -633,6 +635,15 @@ struct ResizeHitRuntimeCase
         sftpCaptured = captureLayout(window, outputDirectory, capturePrefix + QStringLiteral("-sftp-settings"));
         sftpMatches = sftpGrid != nullptr && sftpGrid->property("visible").toBool() && sftpShowHidden != nullptr
                       && sftpConfirmDelete != nullptr;
+        settingsPane->setProperty("currentCategory", QStringLiteral("ai"));
+        processWindowEventsFor(std::chrono::milliseconds{400});
+        auto *aiAgent = rootObject->findChild<QObject *>(QStringLiteral("settingsAiAgent"));
+        auto *aiRefreshAgents = rootObject->findChild<QObject *>(QStringLiteral("settingsAiRefreshAgents"));
+        auto *aiProvider = rootObject->findChild<QObject *>(QStringLiteral("settingsAiProvider"));
+        aiSettingsCaptured = captureLayout(window, outputDirectory, capturePrefix + QStringLiteral("-ai-settings"));
+        aiSettingsMatch = aiAgent != nullptr && aiAgent->property("visible").toBool()
+                          && aiAgent->property("count").toInt() == 2 && aiRefreshAgents != nullptr
+                          && aiProvider != nullptr && aiProvider->property("visible").toBool();
         settingsPane->setProperty("currentCategory", QStringLiteral("appearance"));
     }
 
@@ -661,10 +672,11 @@ struct ResizeHitRuntimeCase
                            << "hostPaneWidth=" << hostPaneWidth << "hostContentWidth=" << hostContentWidth
                            << "hostMatches=" << hostMatches << "settingsMatch=" << settingsMatch
                            << "applicationMatches=" << applicationMatches << "securityMatches=" << securityMatches
-                           << "shortcutsMatch=" << shortcutsMatch << "sftpMatches=" << sftpMatches;
+                           << "shortcutsMatch=" << shortcutsMatch << "sftpMatches=" << sftpMatches
+                           << "aiSettingsMatch=" << aiSettingsMatch;
     return hostMatches && settingsMatch && applicationMatches && securityMatches && shortcutsMatch && sftpMatches
-           && hostCaptured && settingsCaptured && applicationCaptured && securityCaptured && shortcutsCaptured
-           && sftpCaptured;
+           && aiSettingsMatch && hostCaptured && settingsCaptured && applicationCaptured && securityCaptured
+           && shortcutsCaptured && sftpCaptured && aiSettingsCaptured;
 }
 
 [[nodiscard]] QQuickItem *quickItem(QQuickItem *rootObject, const char *objectName);
@@ -839,6 +851,8 @@ struct ResizeHitRuntimeCase
         verifyAccessibleButton(rootObject, "aiNewConversationButton", "Start a new AI conversation");
     const bool aiMoreAccessible =
         verifyAccessibleButton(rootObject, "aiConversationMoreButton", "More conversation actions");
+    const bool aiAgentPickerAccessible =
+        verifyAccessibleButton(rootObject, "aiAgentPickerButton", "Choose terminal AI Agent");
     const bool aiSendAccessible = verifyAccessibleButton(rootObject, "aiSendButton", "Send");
     const bool aiContextAccessible =
         aiContextInterface != nullptr && aiContextInterface->role() == QAccessible::Button
@@ -846,7 +860,7 @@ struct ResizeHitRuntimeCase
                == QStringLiteral("Request context · %1 item(s)").arg(controller.activeAiContextItems().size());
     const bool aiAccessibilityPassed = aiLauncherAccessible && aiToolbarAccessible && aiHistoryAccessible
                                        && aiNewConversationAccessible && aiMoreAccessible && aiSendAccessible
-                                       && aiContextAccessible;
+                                       && aiAgentPickerAccessible && aiContextAccessible;
     QAccessibleInterface *aiPaneInterface =
         aiAssistantPane == nullptr ? nullptr : QAccessible::queryAccessibleInterface(aiAssistantPane);
     QAccessibleInterface *aiPromptInterface =
@@ -866,6 +880,7 @@ struct ResizeHitRuntimeCase
         artifact << "history=" << aiHistoryAccessible << '\n';
         artifact << "newConversation=" << aiNewConversationAccessible << '\n';
         artifact << "more=" << aiMoreAccessible << '\n';
+        artifact << "agentPicker=" << aiAgentPickerAccessible << '\n';
         artifact << "send=" << aiSendAccessible << '\n';
         artifact << "context=" << aiContextAccessible << '\n';
         artifact << "semanticRoles=" << aiSemanticRolesPassed << '\n';
@@ -913,8 +928,8 @@ struct ResizeHitRuntimeCase
     }
     window.resize(QSize{500, 360});
     processWindowEventsFor(std::chrono::milliseconds{250});
-    constexpr std::array compactAiActionNames{"aiHistoryToggle", "aiNewConversationButton", "aiConversationMoreButton",
-                                              "aiContextToggle", "aiSendButton"};
+    constexpr std::array compactAiActionNames{"aiAgentPickerButton",      "aiHistoryToggle", "aiNewConversationButton",
+                                              "aiConversationMoreButton", "aiContextToggle", "aiSendButton"};
     bool compactAiActionsInsidePanel = aiAssistantPane != nullptr;
     QFile compactAiArtifact{QDir(outputDirectory).filePath(QStringLiteral("compact-ai-layout-contract.txt"))};
     const bool compactAiArtifactOpened = compactAiArtifact.open(QIODevice::WriteOnly | QIODevice::Text);

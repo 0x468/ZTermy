@@ -174,6 +174,10 @@ class AppController final : public QObject
     Q_PROPERTY(bool sftpShowHiddenFiles READ sftpShowHiddenFiles NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool sftpConfirmDelete READ sftpConfirmDelete NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString languagePreference READ languagePreference NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(QString aiAgentPreference READ aiAgentPreference NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(QVariantList aiAgentOptions READ aiAgentOptions NOTIFY aiAgentsChanged)
+    Q_PROPERTY(bool aiAgentsLoading READ aiAgentsLoading NOTIFY aiAgentsChanged)
+    Q_PROPERTY(QString aiAgentsError READ aiAgentsError NOTIFY aiAgentsChanged)
     Q_PROPERTY(QString aiProviderPreference READ aiProviderPreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString aiReasoningPreference READ aiReasoningPreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString aiBaseUrl READ aiBaseUrl NOTIFY applicationSettingsChanged)
@@ -317,6 +321,10 @@ public:
     [[nodiscard]] bool sftpShowHiddenFiles() const noexcept;
     [[nodiscard]] bool sftpConfirmDelete() const noexcept;
     [[nodiscard]] QString languagePreference() const;
+    [[nodiscard]] QString aiAgentPreference() const;
+    [[nodiscard]] QVariantList aiAgentOptions() const;
+    [[nodiscard]] bool aiAgentsLoading() const noexcept;
+    [[nodiscard]] QString aiAgentsError() const;
     [[nodiscard]] QString aiProviderPreference() const;
     [[nodiscard]] QString aiReasoningPreference() const;
     [[nodiscard]] QString aiBaseUrl() const;
@@ -525,6 +533,8 @@ public:
                                                  bool automaticContext, const QString &permissionMode,
                                                  const QString &apiKey, bool debugTraceEnabled,
                                                  const QString &reasoningPreference);
+    Q_INVOKABLE bool setAiAgentPreference(const QString &agent);
+    Q_INVOKABLE void refreshAiAgents();
     [[nodiscard]] Q_INVOKABLE QVariantMap aiReasoningCapabilities(const QString &provider, const QString &model) const;
     Q_INVOKABLE void refreshAiModels(const QString &provider, const QString &baseUrl, const QString &apiKey);
     [[nodiscard]] Q_INVOKABLE QString aiProviderEndpointPreview(const QString &provider, const QString &baseUrl) const;
@@ -618,6 +628,7 @@ signals:
     void aiPermissionRulesChanged();
     void aiQuickMessagesChanged();
     void aiUserSkillsChanged();
+    void aiAgentsChanged();
     void aiModelsChanged();
     void aiPrivacyDiagnosticsChanged();
     void mcpConfigurationChanged();

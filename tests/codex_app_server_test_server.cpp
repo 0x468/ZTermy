@@ -73,6 +73,9 @@ int run(int argc, char **argv)
         return generateSchema(arguments);
     }
     const bool noTool = arguments.contains(QStringLiteral("--no-tool"));
+    const QString toolName = qEnvironmentVariableIsSet("ZTERMY_TEST_CODEX_SESSION_INFO")
+                                 ? QStringLiteral("read_session_info")
+                                 : QStringLiteral("read_terminal_frame");
     std::string line;
     while (std::getline(std::cin, line))
     {
@@ -136,7 +139,7 @@ int run(int argc, char **argv)
                 {QStringLiteral("params"), QJsonObject{{QStringLiteral("threadId"), threadId},
                                                        {QStringLiteral("turnId"), QStringLiteral("turn-ztermy")},
                                                        {QStringLiteral("callId"), QStringLiteral("call-ztermy")},
-                                                       {QStringLiteral("tool"), QStringLiteral("read_terminal_frame")},
+                                                       {QStringLiteral("tool"), toolName},
                                                        {QStringLiteral("arguments"), QJsonObject{}}}}});
         }
         else if (method == QStringLiteral("turn/interrupt"))

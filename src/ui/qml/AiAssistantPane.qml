@@ -194,6 +194,27 @@ Rectangle {
         return models;
     }
 
+    function agentOption(token) {
+        const options = pane.controller.aiAgentOptions || [];
+        for (let index = 0; index < options.length; ++index) {
+            if (options[index].id === token)
+                return options[index];
+        }
+        return {
+            "id": token,
+            "name": token,
+            "description": "",
+            "state": "unavailable",
+            "available": false
+        };
+    }
+
+    function selectAgent(token) {
+        if (token === pane.controller.aiAgentPreference)
+            return;
+        pane.controller.setAiAgentPreference(token);
+    }
+
     function selectModel(model) {
         if (!model || model === pane.controller.aiModel)
             return;
@@ -357,6 +378,7 @@ Rectangle {
     Accessible.name: qsTr("Terminal AI assistant")
     onVisibleChanged: {
         if (visible) {
+            controller.refreshAiAgents();
             focusEditor();
         }
     }
@@ -391,7 +413,7 @@ Rectangle {
 
                     Text {
                         Layout.fillWidth: true
-                        text: qsTr("ztermy Agent")
+                        text: pane.agentOption(pane.controller.aiAgentPreference).name
                         elide: Text.ElideRight
                         color: Theme.text
                         font.family: Theme.uiFont
@@ -406,6 +428,53 @@ Rectangle {
                         elide: Text.ElideRight
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.textCompact
+                    }
+                }
+
+                ContextToolButton {
+                    id: agentPickerButton
+
+                    objectName: "aiAgentPickerButton"
+                    enabled: !pane.busy && !pane.controller.aiAgentsLoading
+                    Accessible.name: qsTr("Choose terminal AI Agent")
+                    onClicked: agentMenu.popup()
+                    contentItem: AppIcon {
+                        name: "chevron-down"
+                        color: Theme.textMuted
+                    }
+
+                    AppToolTip {
+                        text: pane.agentOption(pane.controller.aiAgentPreference).description
+                    }
+
+                    AppMenu {
+                        id: agentMenu
+
+                        y: agentPickerButton.height + 4
+
+                        AppMenuItem {
+                            text: qsTr("ztermy Agent")
+                            checkable: true
+                            checked: pane.controller.aiAgentPreference === "ztermy"
+                            enabled: !pane.busy
+                            onTriggered: pane.selectAgent("ztermy")
+                        }
+
+                        AppMenuItem {
+                            text: pane.agentOption("codex").available ? qsTr("Codex") : pane.controller.aiAgentsLoading ? qsTr("Codex · detecting") : qsTr("Codex · unavailable")
+                            checkable: true
+                            checked: pane.controller.aiAgentPreference === "codex"
+                            enabled: !pane.busy && pane.agentOption("codex").available
+                            onTriggered: pane.selectAgent("codex")
+                        }
+
+                        AppMenuSeparator {}
+
+                        AppMenuItem {
+                            text: pane.controller.aiAgentsLoading ? qsTr("Detecting Agents…") : qsTr("Detect Agents")
+                            enabled: !pane.controller.aiAgentsLoading
+                            onTriggered: pane.controller.refreshAiAgents()
+                        }
                     }
                 }
 
@@ -2173,7 +2242,7 @@ Rectangle {
                         id: modelBox
 
                         objectName: "aiModelBox"
-                        visible: pane.width >= 430
+                        visible: pane.controller.aiAgentPreference === "ztermy" && pane.width >= 430
                         Layout.preferredWidth: pane.width < 500 ? 104 : 124
                         model: pane.modelOptions()
                         currentIndex: Math.max(0, model.indexOf(pane.controller.aiModel))

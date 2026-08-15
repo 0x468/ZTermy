@@ -3146,6 +3146,62 @@ QString AppController::languagePreference() const
     return config::languagePreferenceToken(m_settings.language);
 }
 
+QString AppController::aiAgentPreference() const
+{
+    return config::aiAgentPreferenceToken(m_settings.aiAgent);
+}
+
+QVariantList AppController::aiAgentOptions() const
+{
+    const bool loading = aiAgentsLoading();
+    const bool codexAvailable = m_codexInstallation.has_value() && m_codexInstallation->dynamicToolsVerified;
+    QString codexState = QStringLiteral("not-checked");
+    QString codexDetail = tr("Detect the installed Codex CLI to use its login, model, and configuration.");
+    if (codexAvailable)
+    {
+        codexState = QStringLiteral("ready");
+        codexDetail = tr("Ready · %1").arg(m_codexInstallation->version);
+    }
+    else if (loading)
+    {
+        codexState = QStringLiteral("loading");
+        codexDetail = tr("Detecting the installed Codex CLI…");
+    }
+    else if (!m_codexDiscoveryError.isEmpty())
+    {
+        codexState = QStringLiteral("unavailable");
+        codexDetail = m_codexDiscoveryError;
+    }
+
+    QVariantList options;
+    options.push_back(
+        QVariantMap{{QStringLiteral("id"), QStringLiteral("ztermy")},
+                    {QStringLiteral("name"), tr("ztermy Agent")},
+                    {QStringLiteral("description"), tr("Uses the provider and model configured in ztermy.")},
+                    {QStringLiteral("state"), QStringLiteral("ready")},
+                    {QStringLiteral("available"), true},
+                    {QStringLiteral("version"), QString{}}});
+    options.push_back(QVariantMap{
+        {QStringLiteral("id"), QStringLiteral("codex")},
+        {QStringLiteral("name"), tr("Codex")},
+        {QStringLiteral("description"), codexDetail},
+        {QStringLiteral("state"), codexState},
+        {QStringLiteral("available"), codexAvailable},
+        {QStringLiteral("version"), m_codexInstallation.has_value() ? m_codexInstallation->version : QString{}},
+    });
+    return options;
+}
+
+bool AppController::aiAgentsLoading() const noexcept
+{
+    return m_codexDiscovery && m_codexDiscovery->running();
+}
+
+QString AppController::aiAgentsError() const
+{
+    return m_codexDiscoveryError;
+}
+
 QString AppController::aiProviderPreference() const
 {
     return config::aiProviderPreferenceToken(m_settings.aiProvider);
@@ -7698,38 +7754,26 @@ bool AppController::saveApplicationSettings(const QString &theme, const qreal ba
         return false;
     }
 
-    return persistApplicationSettings({
-        .theme = *parsedTheme,
-        .backdropOpacity = backdropOpacity,
-        .backdrop = *parsedBackdrop,
-        .accent = *parsedAccent,
-        .customAccent = customAccent.trimmed().toUpper(),
-        .uiFontFamily = uiFontFamily,
-        .terminalFontFamily = fontFamily,
-        .terminalFontSize = fontSize,
-        .showAllTerminalFonts = showAllFonts,
-        .terminalLigatures = ligatures,
-        .terminalBackgroundOpacity = terminalBackgroundOpacity,
-        .cursor = *parsedCursor,
-        .cursorBlink = cursorShouldBlink,
-        .copyOnSelect = shouldCopyOnSelect,
-        .confirmMultilinePaste = shouldConfirmMultilinePaste,
-        .sftpShowHiddenFiles = shouldShowHiddenSftpFiles,
-        .sftpConfirmDelete = shouldConfirmSftpDelete,
-        .credentialStorage = m_settings.credentialStorage,
-        .language = *parsedLanguage,
-        .shortcutOverrides = m_settings.shortcutOverrides,
-        .aiProvider = m_settings.aiProvider,
-        .aiBaseUrl = m_settings.aiBaseUrl,
-        .aiEndpointPath = m_settings.aiEndpointPath,
-        .aiModel = m_settings.aiModel,
-        .aiCredentialReference = m_settings.aiCredentialReference,
-        .aiAutomaticContext = m_settings.aiAutomaticContext,
-        .aiPermission = m_settings.aiPermission,
-        .aiConversationHistoryEnabled = m_settings.aiConversationHistoryEnabled,
-        .aiDebugTraceEnabled = m_settings.aiDebugTraceEnabled,
-        .aiReasoning = m_settings.aiReasoning,
-    });
+    auto candidate = m_settings;
+    candidate.theme = *parsedTheme;
+    candidate.backdropOpacity = backdropOpacity;
+    candidate.backdrop = *parsedBackdrop;
+    candidate.accent = *parsedAccent;
+    candidate.customAccent = customAccent.trimmed().toUpper();
+    candidate.uiFontFamily = uiFontFamily;
+    candidate.terminalFontFamily = fontFamily;
+    candidate.terminalFontSize = fontSize;
+    candidate.showAllTerminalFonts = showAllFonts;
+    candidate.terminalLigatures = ligatures;
+    candidate.terminalBackgroundOpacity = terminalBackgroundOpacity;
+    candidate.cursor = *parsedCursor;
+    candidate.cursorBlink = cursorShouldBlink;
+    candidate.copyOnSelect = shouldCopyOnSelect;
+    candidate.confirmMultilinePaste = shouldConfirmMultilinePaste;
+    candidate.sftpShowHiddenFiles = shouldShowHiddenSftpFiles;
+    candidate.sftpConfirmDelete = shouldConfirmSftpDelete;
+    candidate.language = *parsedLanguage;
+    return persistApplicationSettings(candidate);
 }
 
 bool AppController::saveAiProviderSettings(const QString &provider, const QString &baseUrl, const QString &endpointPath,
@@ -7787,6 +7831,54 @@ bool AppController::saveAiProviderConfiguration(const QString &provider, const Q
         return false;
     }
     return apiKey.isEmpty() || saveAiApiKey(apiKey);
+}
+
+bool AppController::setAiAgentPreference(const QString &agent)
+{
+    const auto parsed = config::parseAiAgentPreference(agent);
+    if (!parsed)
+    {
+        return false;
+    }
+    if (*parsed == config::AiAgentPreference::codex && !m_codexInstallation.has_value())
+    {
+        refreshAiAgents();
+        return false;
+    }
+    if (std::ranges::any_of(m_tabs, [this](const auto &tab) {
+            return aiTurnActive(*tab);
+        }))
+    {
+        return false;
+    }
+    if (*parsed == m_settings.aiAgent)
+    {
+        return true;
+    }
+
+    auto candidate = m_settings;
+    candidate.aiAgent = *parsed;
+    if (!persistApplicationSettings(candidate))
+    {
+        return false;
+    }
+    for (const auto &tab : m_tabs)
+    {
+        tab->codexThreadId.clear();
+        tab->activeAiAgent = config::AiAgentPreference::ztermy;
+    }
+    emit aiConversationChanged();
+    return true;
+}
+
+void AppController::refreshAiAgents()
+{
+    if (m_shutdownStarted || m_codexInstallation.has_value() || aiAgentsLoading())
+    {
+        return;
+    }
+    m_codexDiscoveryError.clear();
+    initializeCodexAgentDiscovery();
 }
 
 QVariantMap AppController::aiReasoningCapabilities(const QString &provider, const QString &model) const
@@ -9638,6 +9730,7 @@ void AppController::initializeCodexAgentDiscovery()
     {
         m_codexInstallation.reset();
         m_codexDiscoveryError = tr("Codex CLI was not found on PATH.");
+        emit aiAgentsChanged();
         return;
     }
     if (!m_codexDiscovery)
@@ -9656,16 +9749,19 @@ void AppController::initializeCodexAgentDiscovery()
             m_codexInstallation = std::move(*result);
             m_codexDiscoveryError.clear();
             qCInfo(appControllerLog) << "Codex Agent discovered:" << m_codexInstallation->version;
+            emit aiAgentsChanged();
             return;
         }
         m_codexInstallation.reset();
         m_codexDiscoveryError = result.error();
         qCWarning(appControllerLog) << "Codex Agent discovery failed:" << m_codexDiscoveryError;
+        emit aiAgentsChanged();
     });
     if (!started.has_value())
     {
         m_codexDiscoveryError = started.error();
     }
+    emit aiAgentsChanged();
 }
 
 bool AppController::aiTurnActive(const TerminalTab &tab) const noexcept
@@ -9756,13 +9852,28 @@ std::expected<ai::AiTurnRunner::TurnId, ai::AiProviderError> AppController::star
                                                        .message = message,
                                                        .retryable = false});
         }
-        QString cacheRoot = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
-        if (cacheRoot.isEmpty())
+        QStringList workingDirectoryCandidates;
+        const QString cacheRoot = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+        if (!cacheRoot.isEmpty())
         {
-            cacheRoot = QDir::tempPath();
+            workingDirectoryCandidates.push_back(QDir(cacheRoot).filePath(QStringLiteral("codex-agent")));
         }
-        QDir cacheDirectory(cacheRoot);
-        if (!cacheDirectory.mkpath(QStringLiteral("codex-agent")))
+        const QString settingsDirectory = QFileInfo(m_settingsStore.filePath()).absolutePath();
+        if (!settingsDirectory.isEmpty())
+        {
+            workingDirectoryCandidates.push_back(QDir(settingsDirectory).filePath(QStringLiteral("codex-agent-cache")));
+        }
+        workingDirectoryCandidates.push_back(QDir(QDir::tempPath()).filePath(QStringLiteral("ztermy-codex-agent")));
+        QString codexWorkingDirectory;
+        for (const QString &candidate : std::as_const(workingDirectoryCandidates))
+        {
+            if (QDir().mkpath(candidate))
+            {
+                codexWorkingDirectory = candidate;
+                break;
+            }
+        }
+        if (codexWorkingDirectory.isEmpty())
         {
             return std::unexpected(ai::AiProviderError{.code = ai::AiProviderErrorCode::invalidRequest,
                                                        .message = "The Codex Agent working directory is unavailable.",
@@ -9774,7 +9885,7 @@ std::expected<ai::AiTurnRunner::TurnId, ai::AiProviderError> AppController::star
         ai::CodexAppServerConfiguration codexConfiguration{
             .program = m_codexInstallation->program,
             .arguments = {QStringLiteral("app-server")},
-            .workingDirectory = cacheDirectory.filePath(QStringLiteral("codex-agent")),
+            .workingDirectory = codexWorkingDirectory,
             .model = {},
             .clientVersion = utf8String(clientVersion),
             .developerInstructions = std::move(generation.instructions),
