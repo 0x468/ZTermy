@@ -99,7 +99,7 @@ class AiReadToolDispatcherTests final : public QObject
 private slots:
     void publishesStrictReadOnlyCatalog();
     void executesBoundedReads();
-    void rejectsMalformedStaleAndUnknownRequests();
+    void rejectsMalformedScopedAndUnknownRequests();
     void rejectsOversizedOperationsResults();
 };
 
@@ -197,7 +197,7 @@ void AiReadToolDispatcherTests::executesBoundedReads()
         QStringLiteral("running"));
 }
 
-void AiReadToolDispatcherTests::rejectsMalformedStaleAndUnknownRequests()
+void AiReadToolDispatcherTests::rejectsMalformedScopedAndUnknownRequests()
 {
     const AiReadToolDispatcher dispatcher;
     const auto snapshots = sessions();

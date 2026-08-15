@@ -90,10 +90,6 @@ constexpr std::size_t maximumArgumentsBytes = std::size_t{16} * 1024;
     {
         case AiReadToolErrorCode::invalidArguments:
             return QStringLiteral("invalid_arguments");
-        case AiReadToolErrorCode::sessionNotFound:
-            return QStringLiteral("session_not_found");
-        case AiReadToolErrorCode::staleSessionGeneration:
-            return QStringLiteral("scope_changed");
         case AiReadToolErrorCode::commandBlockNotFound:
             return QStringLiteral("command_block_not_found");
         case AiReadToolErrorCode::rangeOutOfBounds:
@@ -314,9 +310,6 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
     {
         return failure(QStringLiteral("unsupported"), QStringLiteral("The requested read tool is not supported."));
     }
-    const std::span<const AiTerminalReadSnapshot> sessions{&session, 1};
-    const auto &id = session.sessionId;
-    const auto sessionGeneration = session.sessionGeneration;
     const auto *snapshot = &session;
     if (toolName == "read_session_info")
     {
@@ -324,10 +317,8 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
         {
             return failure(QStringLiteral("invalid_arguments"), QStringLiteral("Unexpected tool arguments."));
         }
-        const auto read = m_tools.readSessionInfo(sessions, id, sessionGeneration);
-        return read.has_value()
-                   ? json(QJsonObject{{QStringLiteral("ok"), true}, {QStringLiteral("session"), sessionValue(*read)}})
-                   : failure(read.error());
+        return json(QJsonObject{{QStringLiteral("ok"), true},
+                                {QStringLiteral("session"), sessionValue(m_tools.readSessionInfo(session))}});
     }
     if (toolName == "read_terminal")
     {
@@ -342,7 +333,7 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
             return failure(QStringLiteral("invalid_arguments"),
                            QStringLiteral("Terminal line offsets must be non-negative integers."));
         }
-        const auto read = m_tools.readTerminal(sessions, id, sessionGeneration, *firstLine, *lineCount);
+        const auto read = m_tools.readTerminal(session, *firstLine, *lineCount);
         if (!read.has_value())
         {
             return failure(read.error());
@@ -370,7 +361,7 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
             return failure(QStringLiteral("invalid_arguments"),
                            QStringLiteral("A positive command block id is required."));
         }
-        const auto read = m_tools.readCommandBlock(sessions, id, sessionGeneration, *blockId);
+        const auto read = m_tools.readCommandBlock(session, *blockId);
         if (!read.has_value())
         {
             return failure(read.error());
@@ -416,8 +407,7 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
             return failure(QStringLiteral("invalid_arguments"),
                            QStringLiteral("Block id, cursor, and byte limit must be non-negative integers."));
         }
-        const auto read =
-            m_tools.readCommandOutput(sessions, id, sessionGeneration, *blockId, *afterCursor, *maximumBytes);
+        const auto read = m_tools.readCommandOutput(session, *blockId, *afterCursor, *maximumBytes);
         if (!read.has_value())
         {
             return failure(read.error());

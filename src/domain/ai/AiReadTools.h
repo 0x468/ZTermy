@@ -17,8 +17,6 @@ namespace ztermy::ai
 enum class AiReadToolErrorCode : std::uint8_t
 {
     invalidArguments,
-    sessionNotFound,
-    staleSessionGeneration,
     commandBlockNotFound,
     rangeOutOfBounds,
     cursorExpired,
@@ -159,12 +157,10 @@ struct AiTerminalReadSnapshot final
 
 struct AiSessionSummary final
 {
-    std::string sessionId;
     std::string title;
     std::string host;
     std::string shell;
     std::string workingDirectory;
-    std::uint64_t sessionGeneration = 0;
     terminal::TerminalSemanticCapability capability = terminal::TerminalSemanticCapability::none;
     bool connected = false;
     std::size_t commandBlockCount = 0;
@@ -172,8 +168,6 @@ struct AiSessionSummary final
 
 struct AiTerminalRange final
 {
-    std::string sessionId;
-    std::uint64_t sessionGeneration = 0;
     std::string content;
     std::size_t firstLine = 0;
     std::size_t lineCount = 0;
@@ -187,8 +181,6 @@ struct AiTerminalRange final
 struct AiCommandBlockRead final
 {
     terminal::CommandBlockId id = 0;
-    std::string sessionId;
-    std::uint64_t sessionGeneration = 0;
     std::string command;
     std::string workingDirectory;
     std::string host;
@@ -210,8 +202,6 @@ struct AiCommandBlockRead final
 struct AiCommandOutputRead final
 {
     terminal::CommandBlockId id = 0;
-    std::string sessionId;
-    std::uint64_t sessionGeneration = 0;
     terminal::CommandBlockState state = terminal::CommandBlockState::running;
     terminal::CommandOutputCoverage outputCoverage = terminal::CommandOutputCoverage::unknown;
     std::optional<int> exitStatus;
@@ -232,25 +222,16 @@ public:
     explicit AiReadTools(AiReadToolLimits limits = {});
 
     [[nodiscard]] const AiReadToolLimits &limits() const noexcept;
-    [[nodiscard]] std::expected<AiSessionSummary, AiReadToolError>
-    readSessionInfo(std::span<const AiTerminalReadSnapshot> sessions, std::string_view sessionId,
-                    std::uint64_t sessionGeneration) const;
+    [[nodiscard]] AiSessionSummary readSessionInfo(const AiTerminalReadSnapshot &session) const;
     [[nodiscard]] std::expected<AiTerminalRange, AiReadToolError>
-    readTerminal(std::span<const AiTerminalReadSnapshot> sessions, std::string_view sessionId,
-                 std::uint64_t sessionGeneration, std::size_t firstLine, std::size_t lineCount) const;
+    readTerminal(const AiTerminalReadSnapshot &session, std::size_t firstLine, std::size_t lineCount) const;
     [[nodiscard]] std::expected<AiCommandBlockRead, AiReadToolError>
-    readCommandBlock(std::span<const AiTerminalReadSnapshot> sessions, std::string_view sessionId,
-                     std::uint64_t sessionGeneration, terminal::CommandBlockId blockId) const;
+    readCommandBlock(const AiTerminalReadSnapshot &session, terminal::CommandBlockId blockId) const;
     [[nodiscard]] std::expected<AiCommandOutputRead, AiReadToolError>
-    readCommandOutput(std::span<const AiTerminalReadSnapshot> sessions, std::string_view sessionId,
-                      std::uint64_t sessionGeneration, terminal::CommandBlockId blockId, std::uint64_t afterCursor,
-                      std::size_t maximumBytes) const;
+    readCommandOutput(const AiTerminalReadSnapshot &session, terminal::CommandBlockId blockId,
+                      std::uint64_t afterCursor, std::size_t maximumBytes) const;
 
 private:
-    [[nodiscard]] std::expected<const AiTerminalReadSnapshot *, AiReadToolError>
-    findSession(std::span<const AiTerminalReadSnapshot> sessions, std::string_view sessionId,
-                std::uint64_t sessionGeneration) const;
-
     AiReadToolLimits m_limits;
 };
 

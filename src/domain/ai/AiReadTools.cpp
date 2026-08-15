@@ -9,12 +9,10 @@ namespace
 
 [[nodiscard]] AiSessionSummary summarize(const AiTerminalReadSnapshot &session)
 {
-    return AiSessionSummary{.sessionId = session.sessionId,
-                            .title = session.title,
+    return AiSessionSummary{.title = session.title,
                             .host = session.host,
                             .shell = session.shell,
                             .workingDirectory = session.workingDirectory,
-                            .sessionGeneration = session.sessionGeneration,
                             .capability = session.capability,
                             .connected = session.connected,
                             .commandBlockCount = session.commandBlocks.size()};
@@ -84,22 +82,14 @@ const AiReadToolLimits &AiReadTools::limits() const noexcept
     return m_limits;
 }
 
-std::expected<AiSessionSummary, AiReadToolError>
-AiReadTools::readSessionInfo(const std::span<const AiTerminalReadSnapshot> sessions, const std::string_view sessionId,
-                             const std::uint64_t sessionGeneration) const
+AiSessionSummary AiReadTools::readSessionInfo(const AiTerminalReadSnapshot &session) const
 {
-    const auto session = findSession(sessions, sessionId, sessionGeneration);
-    if (!session.has_value())
-    {
-        return std::unexpected(session.error());
-    }
-    return summarize(**session);
+    return summarize(session);
 }
 
-std::expected<AiTerminalRange, AiReadToolError>
-AiReadTools::readTerminal(const std::span<const AiTerminalReadSnapshot> sessions, const std::string_view sessionId,
-                          const std::uint64_t sessionGeneration, const std::size_t firstLine,
-                          const std::size_t lineCount) const
+std::expected<AiTerminalRange, AiReadToolError> AiReadTools::readTerminal(const AiTerminalReadSnapshot &session,
+                                                                          const std::size_t firstLine,
+                                                                          const std::size_t lineCount) const
 {
     if (lineCount == 0 || lineCount > m_limits.maxTerminalLines)
     {
@@ -107,13 +97,7 @@ AiReadTools::readTerminal(const std::span<const AiTerminalReadSnapshot> sessions
             AiReadToolError{.code = AiReadToolErrorCode::invalidArguments,
                             .message = "The requested terminal line count is outside the configured range."});
     }
-    const auto session = findSession(sessions, sessionId, sessionGeneration);
-    if (!session.has_value())
-    {
-        return std::unexpected(session.error());
-    }
-
-    const auto lines = linesOf((*session)->terminalFrame);
+    const auto lines = linesOf(session.terminalFrame);
     if (firstLine >= lines.size())
     {
         return std::unexpected(AiReadToolError{.code = AiReadToolErrorCode::rangeOutOfBounds,
@@ -122,7 +106,7 @@ AiReadTools::readTerminal(const std::span<const AiTerminalReadSnapshot> sessions
 
     const auto requestedEnd = firstLine + std::min(lineCount, lines.size() - firstLine);
     std::string content;
-    content.reserve(std::min(m_limits.maxTerminalBytes, (*session)->terminalFrame.size()));
+    content.reserve(std::min(m_limits.maxTerminalBytes, session.terminalFrame.size()));
     std::size_t emittedLines = 0;
     bool byteTruncated = false;
     for (auto index = firstLine; index < requestedEnd; ++index)
@@ -144,9 +128,7 @@ AiReadTools::readTerminal(const std::span<const AiTerminalReadSnapshot> sessions
     }
 
     const auto nextLine = firstLine + emittedLines;
-    return AiTerminalRange{.sessionId = (*session)->sessionId,
-                           .sessionGeneration = (*session)->sessionGeneration,
-                           .content = std::move(content),
+    return AiTerminalRange{.content = std::move(content),
                            .firstLine = firstLine,
                            .lineCount = emittedLines,
                            .totalLines = lines.size(),
@@ -156,21 +138,15 @@ AiReadTools::readTerminal(const std::span<const AiTerminalReadSnapshot> sessions
 }
 
 std::expected<AiCommandBlockRead, AiReadToolError>
-AiReadTools::readCommandBlock(const std::span<const AiTerminalReadSnapshot> sessions, const std::string_view sessionId,
-                              const std::uint64_t sessionGeneration, const terminal::CommandBlockId blockId) const
+AiReadTools::readCommandBlock(const AiTerminalReadSnapshot &session, const terminal::CommandBlockId blockId) const
 {
     if (blockId == 0)
     {
         return std::unexpected(AiReadToolError{.code = AiReadToolErrorCode::invalidArguments,
                                                .message = "Command block id must be non-zero."});
     }
-    const auto session = findSession(sessions, sessionId, sessionGeneration);
-    if (!session.has_value())
-    {
-        return std::unexpected(session.error());
-    }
-    const auto block = std::ranges::find((*session)->commandBlocks, blockId, &terminal::CommandBlock::id);
-    if (block == (*session)->commandBlocks.end())
+    const auto block = std::ranges::find(session.commandBlocks, blockId, &terminal::CommandBlock::id);
+    if (block == session.commandBlocks.end())
     {
         return std::unexpected(AiReadToolError{.code = AiReadToolErrorCode::commandBlockNotFound,
                                                .message = "The command block does not exist in the target session."});
@@ -181,8 +157,6 @@ AiReadTools::readCommandBlock(const std::span<const AiTerminalReadSnapshot> sess
     const bool truncated = outputBytes != output.size();
     output.resize(outputBytes);
     return AiCommandBlockRead{.id = block->id,
-                              .sessionId = block->sessionId,
-                              .sessionGeneration = block->sessionGeneration,
                               .command = block->command,
                               .workingDirectory = block->workingDirectory,
                               .host = block->host,
@@ -201,8 +175,7 @@ AiReadTools::readCommandBlock(const std::span<const AiTerminalReadSnapshot> sess
 }
 
 std::expected<AiCommandOutputRead, AiReadToolError>
-AiReadTools::readCommandOutput(const std::span<const AiTerminalReadSnapshot> sessions, const std::string_view sessionId,
-                               const std::uint64_t sessionGeneration, const terminal::CommandBlockId blockId,
+AiReadTools::readCommandOutput(const AiTerminalReadSnapshot &session, const terminal::CommandBlockId blockId,
                                const std::uint64_t afterCursor, const std::size_t maximumBytes) const
 {
     if (blockId == 0 || maximumBytes == 0 || maximumBytes > m_limits.maxCommandOutputBytes)
@@ -211,13 +184,8 @@ AiReadTools::readCommandOutput(const std::span<const AiTerminalReadSnapshot> ses
             AiReadToolError{.code = AiReadToolErrorCode::invalidArguments,
                             .message = "Command output reads require a block id and a bounded positive byte count."});
     }
-    const auto session = findSession(sessions, sessionId, sessionGeneration);
-    if (!session.has_value())
-    {
-        return std::unexpected(session.error());
-    }
-    const auto block = std::ranges::find((*session)->commandBlocks, blockId, &terminal::CommandBlock::id);
-    if (block == (*session)->commandBlocks.end())
+    const auto block = std::ranges::find(session.commandBlocks, blockId, &terminal::CommandBlock::id);
+    if (block == session.commandBlocks.end())
     {
         return std::unexpected(AiReadToolError{.code = AiReadToolErrorCode::commandBlockNotFound,
                                                .message = "The command block does not exist in the target session."});
@@ -281,8 +249,6 @@ AiReadTools::readCommandOutput(const std::span<const AiTerminalReadSnapshot> ses
     const bool retainedGapAhead = cursor < headEnd && nextCursor == headEnd && tailStart > headEnd;
     const bool streamHasMore = nextCursor < streamEnd;
     return AiCommandOutputRead{.id = block->id,
-                               .sessionId = block->sessionId,
-                               .sessionGeneration = block->sessionGeneration,
                                .state = block->state,
                                .outputCoverage = block->outputCoverage,
                                .exitStatus = block->exitStatus,
@@ -294,30 +260,6 @@ AiReadTools::readCommandOutput(const std::span<const AiTerminalReadSnapshot> ses
                                .skippedBytes = skippedBytes,
                                .hasMore = sourceHasMore || retainedGapAhead || streamHasMore,
                                .truncated = sourceHasMore};
-}
-
-std::expected<const AiTerminalReadSnapshot *, AiReadToolError>
-AiReadTools::findSession(const std::span<const AiTerminalReadSnapshot> sessions, const std::string_view sessionId,
-                         const std::uint64_t sessionGeneration) const
-{
-    if (sessionId.empty())
-    {
-        return std::unexpected(
-            AiReadToolError{.code = AiReadToolErrorCode::invalidArguments, .message = "Session id must not be empty."});
-    }
-    const auto session = std::ranges::find(sessions, sessionId, &AiTerminalReadSnapshot::sessionId);
-    if (session == sessions.end())
-    {
-        return std::unexpected(AiReadToolError{.code = AiReadToolErrorCode::sessionNotFound,
-                                               .message = "The target terminal session no longer exists."});
-    }
-    if (session->sessionGeneration != sessionGeneration)
-    {
-        return std::unexpected(
-            AiReadToolError{.code = AiReadToolErrorCode::staleSessionGeneration,
-                            .message = "The terminal session generation changed; refresh the target before reading."});
-    }
-    return &*session;
 }
 
 } // namespace ztermy::ai
