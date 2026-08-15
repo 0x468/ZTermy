@@ -11,6 +11,7 @@
 #include "application/ai/AiSftpListTool.h"
 #include "application/ai/AiSftpReadTool.h"
 #include "application/ai/AiTurnRunner.h"
+#include "application/ai/CodexAgentTurnRunner.h"
 #include "application/ai/McpRuntimeManager.h"
 #include "application/forwarding/PortForwardingJob.h"
 #include "application/security/CredentialVaultCoordinator.h"
@@ -684,6 +685,7 @@ private:
         std::unique_ptr<sftp::SftpDirectoryModel> sftpModel;
         std::unique_ptr<ai::AiConversationModel> aiConversation;
         std::unique_ptr<ai::AiTurnRunner> aiTurnRunner;
+        std::unique_ptr<ai::CodexAgentTurnRunner> codexTurnRunner;
         std::unique_ptr<ai::AiAgentTurnBudget> aiTurnBudget;
         std::optional<ai::AiTerminalAction> pendingAiAction;
         std::optional<PendingAiSftpRead> pendingAiSftpRead;
@@ -780,6 +782,7 @@ private:
         bool aiLastPreferFailure = false;
         bool aiLastCommandRequest = false;
         bool aiLastWebSearchEnabled = false;
+        config::AiAgentPreference activeAiAgent = config::AiAgentPreference::ztermy;
         bool workbenchOpen = false;
         bool composerOpen = false;
         bool running = false;
@@ -827,6 +830,11 @@ private:
                 ai::AiTurnRunner::FinishedHandler finishedHandler, ai::AiTurnRunner::RetryHandler retryHandler,
                 ai::AiTurnRunner::JitterSource jitterSource, ai::AiTurnRunner::ToolHandler toolHandler,
                 ai::AiTurnRunner::ToolOutputHandler toolOutputHandler);
+    [[nodiscard]] bool aiTurnActive(const TerminalTab &tab) const noexcept;
+    [[nodiscard]] ai::AiTurnRunner::TurnId activeAiTurnId(const TerminalTab &tab) const noexcept;
+    [[nodiscard]] std::optional<ai::AiToolCall> pendingAiToolCall(const TerminalTab &tab) const;
+    [[nodiscard]] bool completePendingAiTool(TerminalTab &tab, const ai::AiToolOutput &output);
+    [[nodiscard]] bool cancelAiTurn(TerminalTab &tab);
     void handleAiStreamEvent(const QString &tabId, std::uint64_t assistantMessageId, const ai::AiStreamEvent &event);
     [[nodiscard]] ai::AiTurnRunner::ToolHandlingResult handleAiWaitCommand(TerminalTab &tab, const QString &tabId,
                                                                            const ai::AiToolCall &call,

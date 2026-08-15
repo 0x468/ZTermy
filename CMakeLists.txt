@@ -3877,6 +3877,7 @@ if(BUILD_TESTING)
         ztermy_application_actions
         ztermy_credential_vault
         ztermy_core_config
+        ztermy_external_agent_application
         ztermy_forwarding_persistence
         ztermy_forwarding_session
         ztermy_ssh_persistence
