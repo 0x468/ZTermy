@@ -267,8 +267,13 @@ void CodexAppServerClientTests::connectsToInstalledCodexWhenEnabled()
     QTimer::singleShot(35'000, &discoveryLoop, &QEventLoop::quit);
     discoveryLoop.exec();
     QVERIFY2(failure.isEmpty(), qPrintable(failure));
-    QVERIFY2(installation.has_value(), "Codex discovery timed out");
-    QVERIFY(installation->dynamicToolsVerified);
+    if (!installation.has_value())
+    {
+        QTest::qFail("Codex discovery timed out", __FILE__, __LINE__);
+        return;
+    }
+    const auto &discovered = *installation;
+    QVERIFY(discovered.dynamicToolsVerified);
 
     QTemporaryDir workingDirectory;
     QVERIFY(workingDirectory.isValid());
@@ -281,7 +286,7 @@ void CodexAppServerClientTests::connectsToInstalledCodexWhenEnabled()
     QStringList methods;
     QJsonObject completion;
     auto started = client.start(
-        {.program = installation->program,
+        {.program = discovered.program,
          .arguments = {QStringLiteral("app-server")},
          .workingDirectory = workingDirectory.path(),
          .model = {},

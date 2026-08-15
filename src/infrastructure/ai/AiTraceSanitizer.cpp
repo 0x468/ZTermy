@@ -39,7 +39,7 @@ namespace
     {
         QJsonArray sanitized;
         const QJsonArray array = value.toArray();
-        for (const QJsonValue &entry : array)
+        for (const auto &entry : array)
         {
             sanitized.append(sanitizeValue(entry, parentKey));
         }

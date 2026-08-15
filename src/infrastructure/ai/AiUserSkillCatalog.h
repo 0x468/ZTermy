@@ -27,7 +27,7 @@ struct AiUserSkillScanResult final
 class AiUserSkillCatalog final
 {
 public:
-    explicit AiUserSkillCatalog(QString rootPath, AiUserSkillLimits limits = {});
+    explicit AiUserSkillCatalog(const QString &rootPath, AiUserSkillLimits limits = {});
 
     [[nodiscard]] const QString &rootPath() const noexcept;
     [[nodiscard]] std::expected<AiUserSkillScanResult, AiUserSkillCatalogError> scan() const;

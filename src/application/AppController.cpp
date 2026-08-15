@@ -9931,6 +9931,10 @@ std::expected<ai::AiTurnRunner::TurnId, ai::AiProviderError> AppController::star
             .dynamicToolsVerified = m_codexInstallation->dynamicToolsVerified,
         };
         const QString tabId = tab.id;
+        // startConfigured moves this callback into CodexAgentTurnRunner and owns
+        // it until the turn finishes. The analyzer cannot follow that
+        // std::function ownership transfer through the runner boundary.
+        // NOLINTNEXTLINE(clang-analyzer-cplusplus.NewDeleteLeaks)
         auto externalFinished = [this, tabId, finished = std::move(finishedHandler)](
                                     const auto turnId, const ai::AiTurnMetrics &metrics) mutable {
             if (TerminalTab *target = findTab(tabId); target != nullptr && target->codexTurnRunner)

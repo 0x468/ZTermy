@@ -8,6 +8,7 @@
 #include <QStringList>
 
 #include <algorithm>
+#include <array>
 #include <optional>
 #include <utility>
 
@@ -19,7 +20,7 @@ namespace
 constexpr auto skillFileName = "SKILL.md";
 constexpr auto readmeFileName = "README.txt";
 
-const QByteArray readmeContents = QByteArrayLiteral(
+constexpr auto readmeContents = std::to_array(
     "ztermy user skills\n"
     "\n"
     "Add one directory per skill. Each directory must contain a SKILL.md file that follows the Agent Skills "
@@ -200,7 +201,9 @@ struct Frontmatter final
     }
 
     QSaveFile file(root.filePath(QString::fromLatin1(readmeFileName)));
-    return file.open(QIODevice::WriteOnly) && file.write(readmeContents) == readmeContents.size() && file.commit();
+    constexpr auto readmeSize = static_cast<qint64>(readmeContents.size() - 1);
+    return file.open(QIODevice::WriteOnly) && file.write(readmeContents.data(), readmeSize) == readmeSize
+           && file.commit();
 }
 
 [[nodiscard]] AiUserSkill warningSkill(const QString &directoryName, const AiUserSkillWarning warning)
@@ -213,8 +216,8 @@ struct Frontmatter final
 
 } // namespace
 
-AiUserSkillCatalog::AiUserSkillCatalog(QString rootPath, const AiUserSkillLimits limits)
-    : m_rootPath(QDir::cleanPath(std::move(rootPath))), m_limits(limits)
+AiUserSkillCatalog::AiUserSkillCatalog(const QString &rootPath, const AiUserSkillLimits limits)
+    : m_rootPath(QDir::cleanPath(rootPath)), m_limits(limits)
 {
 }
 
@@ -271,7 +274,7 @@ std::expected<AiUserSkillScanResult, AiUserSkillCatalogError> AiUserSkillCatalog
             result.skills.push_back(warningSkill(directoryName, AiUserSkillWarning::unreadableSkillFile));
             continue;
         }
-        if (skillFile.size() < 0 || static_cast<std::size_t>(skillFile.size()) > m_limits.maximumSkillBytes)
+        if (skillFile.size() < 0 || std::cmp_greater(skillFile.size(), m_limits.maximumSkillBytes))
         {
             result.skills.push_back(warningSkill(directoryName, AiUserSkillWarning::skillFileTooLarge));
             continue;
@@ -319,12 +322,12 @@ std::expected<AiUserSkillScanResult, AiUserSkillCatalogError> AiUserSkillCatalog
         {
             skill.warnings.push_back(AiUserSkillWarning::missingDescription);
         }
-        else if (static_cast<std::size_t>(parsed->description.size()) > m_limits.maximumDescriptionCharacters)
+        else if (std::cmp_greater(parsed->description.size(), m_limits.maximumDescriptionCharacters))
         {
             skill.warnings.push_back(AiUserSkillWarning::descriptionTooLong);
         }
         if (!parsed->compatibility.isEmpty()
-            && static_cast<std::size_t>(parsed->compatibility.size()) > m_limits.maximumCompatibilityCharacters)
+            && std::cmp_greater(parsed->compatibility.size(), m_limits.maximumCompatibilityCharacters))
         {
             skill.warnings.push_back(AiUserSkillWarning::compatibilityTooLong);
         }
