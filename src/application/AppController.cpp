@@ -9598,6 +9598,24 @@ void AppController::handleAiStreamEvent(const QString &tabId, const std::uint64_
     }
 }
 
+std::expected<ai::AiTurnRunner::TurnId, ai::AiProviderError> AppController::startAiTurn(
+    TerminalTab &tab, ai::AiProviderConfiguration configuration, ai::AiGenerationRequest generation,
+    ai::AiTurnRunner::SecretLoader secretLoader, ai::AiTurnRunner::EventHandler eventHandler,
+    ai::AiTurnRunner::FinishedHandler finishedHandler, ai::AiTurnRunner::RetryHandler retryHandler,
+    ai::AiTurnRunner::JitterSource jitterSource, ai::AiTurnRunner::ToolHandler toolHandler,
+    ai::AiTurnRunner::ToolOutputHandler toolOutputHandler)
+{
+    if (!tab.aiTurnRunner)
+    {
+        return std::unexpected(ai::AiProviderError{.code = ai::AiProviderErrorCode::invalidRequest,
+                                                   .message = "The terminal AI runtime is unavailable.",
+                                                   .retryable = false});
+    }
+    return tab.aiTurnRunner->start(std::move(configuration), std::move(generation), std::move(secretLoader),
+                                   std::move(eventHandler), std::move(finishedHandler), std::move(retryHandler),
+                                   std::move(jitterSource), std::move(toolHandler), std::move(toolOutputHandler));
+}
+
 bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const bool preferLastFailure,
                                   const bool appendPrompt, const bool commandRequest,
                                   const QStringList &selectedSkillIds, const bool webSearchEnabled)
@@ -9766,8 +9784,8 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
     tab.pendingAiAction.reset();
     tab.pendingAiMcpCall.reset();
 
-    const auto started = tab.aiTurnRunner->start(
-        configuration, std::move(generation),
+    const auto started = startAiTurn(
+        tab, configuration, std::move(generation),
         [this, provider]() -> std::expected<security::SensitiveByteArray, ai::AiProviderError> {
             if (provider == config::AiProviderPreference::ollama)
             {

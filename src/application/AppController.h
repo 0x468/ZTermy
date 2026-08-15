@@ -821,6 +821,12 @@ private:
     [[nodiscard]] bool sendAiMessage(TerminalTab &tab, const QString &prompt, bool preferLastFailure,
                                      bool appendPrompt = true, bool commandRequest = false,
                                      const QStringList &selectedSkillIds = {}, bool webSearchEnabled = false);
+    [[nodiscard]] std::expected<ai::AiTurnRunner::TurnId, ai::AiProviderError>
+    startAiTurn(TerminalTab &tab, ai::AiProviderConfiguration configuration, ai::AiGenerationRequest generation,
+                ai::AiTurnRunner::SecretLoader secretLoader, ai::AiTurnRunner::EventHandler eventHandler,
+                ai::AiTurnRunner::FinishedHandler finishedHandler, ai::AiTurnRunner::RetryHandler retryHandler,
+                ai::AiTurnRunner::JitterSource jitterSource, ai::AiTurnRunner::ToolHandler toolHandler,
+                ai::AiTurnRunner::ToolOutputHandler toolOutputHandler);
     void handleAiStreamEvent(const QString &tabId, std::uint64_t assistantMessageId, const ai::AiStreamEvent &event);
     [[nodiscard]] ai::AiTurnRunner::ToolHandlingResult handleAiWaitCommand(TerminalTab &tab, const QString &tabId,
                                                                            const ai::AiToolCall &call,
