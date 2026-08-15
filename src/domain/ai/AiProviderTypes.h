@@ -65,6 +65,9 @@ struct AiChatMessage final
     std::string content;
     std::string toolCallId;
     std::vector<AiImageAttachment> images;
+    // Bounded provider-native continuation state owned by this completed
+    // assistant message. It is never rendered as user-visible text.
+    std::string providerReplayJson;
 };
 
 struct AiProviderConfiguration final
@@ -197,6 +200,9 @@ struct AiStreamEvent final
     std::string delta;
     AiResponseStopReason stopReason = AiResponseStopReason::unspecified;
     std::string providerAssistantContentJson;
+    // Populated only on the final completion event for providers that require
+    // exact client-side replay across later conversation turns.
+    std::vector<AiToolExchange> providerToolHistory;
     std::optional<AiWebSource> webSource;
     std::optional<AiTokenUsage> usage;
     std::optional<AiProviderError> error;
