@@ -150,6 +150,65 @@ Item {
                 }
             }
 
+            ToolButton {
+                id: selectionAiButton
+
+                readonly property real preferredY: viewport.y + viewport.selectionActionPosition.y - height - 9
+
+                objectName: "terminalSelectionAiAction"
+                visible: !!leaf.node.active && viewport.selectionActionVisible && root.controller
+                width: 112
+                height: 30
+                x: Math.max(8, Math.min(leaf.width - width - 8, viewport.x + viewport.selectionActionPosition.x - (width / 2)))
+                y: preferredY >= 8 ? preferredY : Math.min(leaf.height - height - 8, viewport.y + viewport.selectionActionPosition.y + 9)
+                z: 12
+                hoverEnabled: true
+                focusPolicy: Qt.StrongFocus
+                Accessible.name: qsTr("Attach terminal selection to AI")
+                onClicked: {
+                    if (!root.controller.activateTerminalPane(leaf.node.id)) {
+                        return;
+                    }
+                    if (!root.controller.attachAiSelection()) {
+                        return;
+                    }
+                    if (!leaf.tab.workbenchOpen || leaf.tab.workbenchPage !== "ai") {
+                        root.controller.toggleTerminalWorkbench("ai");
+                    }
+                    viewport.dismissSelectionAction();
+                }
+
+                contentItem: RowLayout {
+                    spacing: 6
+
+                    AppIcon {
+                        Layout.preferredWidth: 15
+                        Layout.preferredHeight: 15
+                        name: "ai"
+                        color: Theme.accent
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("Add to AI")
+                        color: Theme.text
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textCompact
+                        font.weight: Font.DemiBold
+                    }
+                }
+                background: Rectangle {
+                    radius: height / 2
+                    color: selectionAiButton.down ? Theme.controlPressed : selectionAiButton.hovered ? Theme.controlHover : Theme.floatingBackground
+                    border.color: selectionAiButton.activeFocus ? Theme.focus : Theme.border
+                    border.width: selectionAiButton.activeFocus ? 2 : 1
+                }
+
+                AppToolTip {
+                    text: qsTr("Attach this selection to the current terminal conversation")
+                }
+            }
+
             RowLayout {
                 anchors.top: parent.top
                 anchors.right: parent.right

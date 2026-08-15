@@ -6,6 +6,7 @@
 #include <QByteArray>
 #include <QColor>
 #include <QFont>
+#include <QPointF>
 #include <QQuickItem>
 #include <QString>
 #include <QTimer>
@@ -41,6 +42,8 @@ class TerminalItem : public QQuickItem
     Q_PROPERTY(bool scrollbarVisible READ scrollbarVisible NOTIFY scrollbarChanged)
     Q_PROPERTY(qreal scrollbarPosition READ scrollbarPosition NOTIFY scrollbarChanged)
     Q_PROPERTY(qreal scrollbarPageRatio READ scrollbarPageRatio NOTIFY scrollbarChanged)
+    Q_PROPERTY(bool selectionActionVisible READ selectionActionVisible NOTIFY selectionActionChanged)
+    Q_PROPERTY(QPointF selectionActionPosition READ selectionActionPosition NOTIFY selectionActionChanged)
     Q_PROPERTY(QVariantList keywordHighlightRules READ keywordHighlightRules WRITE setKeywordHighlightRules NOTIFY
                    keywordHighlightRulesChanged)
     Q_PROPERTY(
@@ -63,6 +66,8 @@ public:
     [[nodiscard]] bool scrollbarVisible() const noexcept;
     [[nodiscard]] qreal scrollbarPosition() const noexcept;
     [[nodiscard]] qreal scrollbarPageRatio() const noexcept;
+    [[nodiscard]] bool selectionActionVisible() const noexcept;
+    [[nodiscard]] QPointF selectionActionPosition() const noexcept;
     [[nodiscard]] QVariantList keywordHighlightRules() const;
     [[nodiscard]] QColor foregroundOverride() const;
     [[nodiscard]] QColor backgroundOverride() const;
@@ -85,6 +90,7 @@ public slots:
     void setBackgroundOverride(const QColor &color);
     Q_INVOKABLE void resolveMultilinePaste(bool accepted);
     Q_INVOKABLE void scrollToFraction(qreal fraction);
+    Q_INVOKABLE void dismissSelectionAction();
 
 signals:
     void inputGenerated(const QByteArray &bytes);
@@ -101,6 +107,7 @@ signals:
     void copyOnSelectChanged();
     void confirmMultilinePasteChanged();
     void scrollbarChanged();
+    void selectionActionChanged();
     void keywordHighlightRulesChanged();
     void paletteOverrideChanged();
     void multilinePasteConfirmationRequested(int lineCount);
@@ -139,11 +146,13 @@ private:
     quint16 m_reportedColumns = 0;
     quint16 m_reportedRows = 0;
     ztermy::terminal::TerminalPoint m_selectionAnchor;
+    QPointF m_selectionActionPosition;
     QString m_preeditText;
     qsizetype m_preeditCursorPosition = 0;
     bool m_preeditCursorVisible = true;
     bool m_selecting = false;
     bool m_selectionMoved = false;
+    bool m_selectionActionVisible = false;
     bool m_cursorBlink = true;
     bool m_cursorBlinkPhase = true;
     bool m_ligaturesEnabled = true;

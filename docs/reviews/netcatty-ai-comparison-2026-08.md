@@ -127,7 +127,7 @@ token 估算 → 预压缩（LLM 摘要 temp=0，保护最近 N 条，保留最�
 | 流式 | streamText + thinking 块 + usage/performance 事件 + 413 压缩重试 | 流式 + 合并后再做 Markdown 布局（Qt Quick 线程不阻塞）；reasoning 跟随流式展开、出正文即折叠 |
 | 记忆 | 每作用域持久会话 + token 预算压缩（LLM 摘要）+ 会话状态再注入 | 默认仅会话保留；持久加密历史 opt-in（0.3.1 ADR 0061）；Agent 工具证据随会话保留（bounded） |
 | 斜杠命令 | Quick Messages（用户自定义 prompt 快捷）+ 技能，光标锚定 listbox | 键盘优先的内置斜杠选择器；用户 Quick Messages 与技能复用同一选择器 |
-| 显式上下文 | `@` 提及主机；选中终端文本 → 浮动按钮 → 附加为附件 chip | 输入框内 `@` 选择当前选区、最近 1/3/5 条命令、文本文件或图片；也可使用 `+` 菜单。上下文以可移除 chip 显示，详细证据按需展开；只允许当前终端，不提供跨终端目标 |
+| 显式上下文 | `@` 提及主机；选中终端文本 → 浮动按钮 → 附加为附件 chip | 终端拖选后显示“添加到 AI”浮动按钮；输入框内 `@` 还可选择当前选区、最近 1/3/5 条命令、文本文件或图片，也可使用 `+` 菜单。上下文以可移除 chip 显示，详细证据按需展开；只允许当前终端，不提供跨终端目标 |
 | 网络搜索 | Tavily/Exa/Bocha/Zhipu/SearXNG 工具 | 0.3.10 规划：provider 无关工具 + 可见引用 |
 | 审计/可观测 | traceStore + 每步 usage/performance 事件 + 面板诊断开关 | 活动/审计视图（0.3.1 ADR 0060）+ 本地 JSONL 请求追踪（0.3.5） |
 | 终端语义 | prompt 探测 + shell kind 探测 + marker 包装 + 合成回显 | OSC133/633 + nonce 语义命令块 + 能力质量（none/basic/rich）+ 输出覆盖元数据——ztermy 语义更重 |
@@ -145,7 +145,9 @@ token 估算 → 预压缩（LLM 摘要 temp=0，保护最近 N 条，保留最�
 3. **Provider 协议族归并**（openai/anthropic/google 三种 wire family + 主进程持 key）印证 ztermy"Provider 无关类型 + 适配器"原则；Netcatty 的每模型 context window 覆盖与 413 压缩重试可补进 ztermy 的 context budget 设计评审。
 4. **Quick Messages**（用户自定义 prompt 快捷 + slug 斜杠）是轻量、无 provider 耦合的"伪技能"；ztermy 0.3.10 技能可先以此形态落地再扩展。
 5. **面板性能工程**：rAF 批量 flush、分批渲染、隐藏面板按"有活内容才保活"卸载、lazy 加载——与 ztermy"流式合并后再布局、AI 不阻塞 16ms 输入预算"目标同源，可互相印证验收口径。
-6. **显式附加是共同结论**：Netcatty（选中文本按钮）与 ztermy（语义命令块附件菜单）都不做隐式抓取；ztermy 的语义块 + 近似降级设计在定位上领先，Netcatty 的"选区按钮常驻终端"交互可作为降级路径的补充参考。
+6. **显式附加是共同结论**：Netcatty 与 ztermy 都在终端拖选后提供就地的“添加到 AI”
+   入口，不做隐式抓取；ztermy 另外提供语义命令块、`@` 和附件菜单三条路径，并在无法
+   证明精确边界时显式标记近似降级。
 
 ---
 
@@ -162,5 +164,7 @@ token 估算 → 预压缩（LLM 摘要 temp=0，保护最近 N 条，保留最�
   限定为当前终端的选区、最近命令块、本地文本文件和图片。
 - 已附加上下文显示在输入框上方的横向 chip 行，可逐项移除；证据等级、固定、截断与预览
   仍可主动展开查看，但不占据日常对话首屏。
+- 终端完成非空鼠标拖选后，在释放点附近显示“添加到 AI”浮动入口；点击后只打开该 pane
+  所属终端的 AI 侧栏并附加当前选区。重新选择、单击、键入或会话销毁会撤销入口。
 - ztermy 保留自身更强的单终端语义命令块、四档执行模式、细粒度规则、原生工具卡与
   Provider/外部 Agent 适配能力；不复制 Netcatty 的 React 组件和跨终端/工作区作用域。

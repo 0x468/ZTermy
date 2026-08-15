@@ -296,6 +296,7 @@ void TerminalItemTests::selectsCellsAndCopiesOnMouseRelease()
     QSignalSpy clearSpy(&item, &ztermy::ui::TerminalItem::clearSelectionRequested);
     QSignalSpy selectionSpy(&item, &ztermy::ui::TerminalItem::selectionRequested);
     QSignalSpy copySpy(&item, &ztermy::ui::TerminalItem::copyRequested);
+    QSignalSpy selectionActionSpy(&item, &ztermy::ui::TerminalItem::selectionActionChanged);
 
     const QPointF start = cellCenter(2, 3);
     const QPointF end = cellCenter(7, 5);
@@ -319,11 +320,15 @@ void TerminalItemTests::selectsCellsAndCopiesOnMouseRelease()
     QCOMPARE(selectionSpy.count(), 2);
     QVERIFY(!selectionSpy.at(1).at(4).toBool());
     QCOMPARE(copySpy.count(), 1);
+    QVERIFY(item.selectionActionVisible());
+    QCOMPARE(item.selectionActionPosition(), end);
+    QCOMPARE(selectionActionSpy.count(), 1);
     QVERIFY(release.isAccepted());
 
     QMouseEvent rectangularPress(QEvent::MouseButtonPress, start, start, start, Qt::LeftButton, Qt::LeftButton,
                                  Qt::AltModifier);
     item.mousePressEvent(&rectangularPress);
+    QVERIFY(!item.selectionActionVisible());
     QMouseEvent rectangularMove(QEvent::MouseMove, end, end, end, Qt::NoButton, Qt::LeftButton, Qt::AltModifier);
     item.mouseMoveEvent(&rectangularMove);
     QMouseEvent rectangularRelease(QEvent::MouseButtonRelease, end, end, end, Qt::LeftButton, Qt::NoButton,
@@ -334,6 +339,10 @@ void TerminalItemTests::selectsCellsAndCopiesOnMouseRelease()
     QVERIFY(selectionSpy.at(2).at(4).toBool());
     QVERIFY(selectionSpy.at(3).at(4).toBool());
     QCOMPARE(copySpy.count(), 2);
+    QVERIFY(item.selectionActionVisible());
+
+    item.dismissSelectionAction();
+    QVERIFY(!item.selectionActionVisible());
 
     QMouseEvent clickPress(QEvent::MouseButtonPress, start, start, start, Qt::LeftButton, Qt::LeftButton,
                            Qt::NoModifier);
@@ -344,6 +353,7 @@ void TerminalItemTests::selectsCellsAndCopiesOnMouseRelease()
     QCOMPARE(clearSpy.count(), 3);
     QCOMPARE(selectionSpy.count(), 4);
     QCOMPARE(copySpy.count(), 2);
+    QVERIFY(!item.selectionActionVisible());
 }
 
 void TerminalItemTests::accumulatesWheelDeltasIntoScrollRows()

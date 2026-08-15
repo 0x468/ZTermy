@@ -6842,165 +6842,180 @@
 <context>
     <name>TerminalSplitNode</name>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="176"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="235"/>
         <source>Split pane horizontally</source>
         <translation>左右拆分窗格</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="178"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="237"/>
         <source>Split horizontally</source>
         <translation>左右拆分</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="197"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="256"/>
         <source>Split pane vertically</source>
         <translation>上下拆分窗格</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="199"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="258"/>
         <source>Split vertically</source>
         <translation>上下拆分</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="218"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="277"/>
         <source>Duplicate active pane</source>
         <translation>复制活动窗格</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="220"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="279"/>
         <source>Duplicate pane</source>
         <translation>复制窗格</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="240"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="299"/>
         <source>Close active pane</source>
         <translation>关闭活动窗格</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="242"/>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="299"/>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="324"/>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="355"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="301"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="358"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="383"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="414"/>
         <source>Close pane</source>
         <translation>关闭窗格</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="253"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="312"/>
         <source>Connecting to SSH host</source>
         <translation>正在连接 SSH 主机</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="255"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="314"/>
         <source>Connection setup runs outside the interface thread. You can close this pane to cancel.</source>
         <translation>连接过程在界面线程之外运行。关闭此窗格即可取消。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="258"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="317"/>
         <source>Cancel connection</source>
         <translation>取消连接</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="259"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="318"/>
         <source>Cancel SSH connection and close pane</source>
         <translation>取消 SSH 连接并关闭窗格</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="270"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="329"/>
         <source>Reconnecting to SSH host</source>
         <translation>正在重新连接 SSH 主机</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="272"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="331"/>
         <source>Automatic retries use bounded exponential backoff and never retain credentials in the terminal pane.</source>
         <translation>自动重试采用有界指数退避，并且不会在终端窗格中保留凭据。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="275"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="334"/>
         <source>Cancel reconnect</source>
         <translation>取消重连</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="276"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="335"/>
         <source>Cancel automatic SSH reconnect</source>
         <translation>取消 SSH 自动重连</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="287"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="346"/>
         <source>SSH session is disconnected</source>
         <translation>SSH 会话已断开</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="288"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="347"/>
         <source>Reconnect to continue using this restored terminal tab.</source>
         <translation>重新连接后可继续使用此恢复的终端标签页。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="289"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="348"/>
         <source>The tab layout was restored, but SSH connections are not kept alive after ztermy exits.</source>
         <translation>标签页布局已恢复，但 ztermy 退出后不会保持 SSH 连接。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="293"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="352"/>
         <source>Reconnect restored SSH terminal pane</source>
         <translation>重新连接已恢复的 SSH 终端窗格</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="300"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="359"/>
         <source>Close disconnected SSH terminal pane</source>
         <translation>关闭已断开的 SSH 终端窗格</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="311"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="370"/>
         <source>SSH session ended</source>
         <translation>SSH 会话已结束</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="313"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="372"/>
         <source>The remote host closed the terminal connection. Reconnect is available for saved host profiles.</source>
         <translation>远程主机已关闭终端连接。已保存的主机配置可以重新连接。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="292"/>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="317"/>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="348"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="351"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="376"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="407"/>
         <source>Reconnect</source>
         <translation>重新连接</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="318"/>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="349"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="167"/>
+        <source>Attach terminal selection to AI</source>
+        <translation>将终端选区附加到 AI</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="193"/>
+        <source>Add to AI</source>
+        <translation>添加到 AI</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="208"/>
+        <source>Attach this selection to the current terminal conversation</source>
+        <translation>将此选区附加到当前终端的 AI 对话</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="377"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="408"/>
         <source>Reconnect saved SSH terminal pane</source>
         <translation>重新连接已保存的 SSH 终端窗格</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="325"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="384"/>
         <source>Close ended SSH terminal pane</source>
         <translation>关闭已结束的 SSH 终端窗格</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="330"/>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="361"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="389"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="420"/>
         <source>Review host</source>
         <translation>查看主机</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="331"/>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="362"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="390"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="421"/>
         <source>Return to SSH host profiles</source>
         <translation>返回 SSH 主机配置</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="342"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="401"/>
         <source>SSH session unavailable</source>
         <translation>SSH 会话不可用</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="344"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="403"/>
         <source>Review the saved host and authentication settings, or retry the connection.</source>
         <translation>请检查已保存的主机与身份验证设置，或重试连接。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="356"/>
+        <location filename="../src/ui/qml/TerminalSplitNode.qml" line="415"/>
         <source>Close failed SSH terminal pane</source>
         <translation>关闭连接失败的 SSH 终端窗格</translation>
     </message>

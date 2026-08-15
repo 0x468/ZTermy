@@ -300,6 +300,16 @@ qreal TerminalItem::scrollbarPageRatio() const noexcept
         static_cast<qreal>(m_snapshot->scrollbar.visible) / static_cast<qreal>(m_snapshot->scrollbar.total), 0.0, 1.0);
 }
 
+bool TerminalItem::selectionActionVisible() const noexcept
+{
+    return m_selectionActionVisible;
+}
+
+QPointF TerminalItem::selectionActionPosition() const noexcept
+{
+    return m_selectionActionPosition;
+}
+
 QVariantList TerminalItem::keywordHighlightRules() const
 {
     return m_keywordHighlightRuleValues;
@@ -319,6 +329,7 @@ void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
 {
     if (!snapshot)
     {
+        dismissSelectionAction();
         m_snapshot.reset();
         ++m_revision;
         update();
@@ -567,6 +578,16 @@ void TerminalItem::scrollToFraction(const qreal fraction)
     {
         emit scrollRequested(-static_cast<int>(std::min(currentOffset - targetOffset, maximumStep)));
     }
+}
+
+void TerminalItem::dismissSelectionAction()
+{
+    if (!m_selectionActionVisible)
+    {
+        return;
+    }
+    m_selectionActionVisible = false;
+    emit selectionActionChanged();
 }
 
 QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
@@ -834,6 +855,7 @@ void TerminalItem::geometryChange(const QRectF &newGeometry, const QRectF &oldGe
 
 void TerminalItem::keyPressEvent(QKeyEvent *event)
 {
+    dismissSelectionAction();
     const bool control = event->modifiers().testFlag(Qt::ControlModifier);
     const bool shift = event->modifiers().testFlag(Qt::ShiftModifier);
     if (control && shift && event->key() == Qt::Key_C)
@@ -936,6 +958,7 @@ void TerminalItem::focusOutEvent(QFocusEvent *event)
 void TerminalItem::mousePressEvent(QMouseEvent *event)
 {
     forceActiveFocus(Qt::MouseFocusReason);
+    dismissSelectionAction();
     const auto point = terminalPoint(event->position());
     if (event->button() != Qt::LeftButton || !point)
     {
@@ -979,6 +1002,13 @@ void TerminalItem::mouseReleaseEvent(QMouseEvent *event)
         {
             emit selectionRequested(m_selectionAnchor.column, m_selectionAnchor.row, point->column, point->row,
                                     event->modifiers().testFlag(Qt::AltModifier));
+            const bool nonEmpty = point->column != m_selectionAnchor.column || point->row != m_selectionAnchor.row;
+            if (nonEmpty)
+            {
+                m_selectionActionPosition = event->position();
+                m_selectionActionVisible = true;
+                emit selectionActionChanged();
+            }
         }
         if (m_copyOnSelect)
         {
