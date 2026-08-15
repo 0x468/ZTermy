@@ -177,3 +177,23 @@ token 估算 → 预压缩（LLM 摘要 temp=0，保护最近 N 条，保留最�
   现有异步、有界加载与内容校验，不自动发送，也不会跨终端附加。
 - ztermy 保留自身更强的单终端语义命令块、四档执行模式、细粒度规则、原生工具卡与
   Provider/外部 Agent 适配能力；不复制 Netcatty 的 React 组件和跨终端/工作区作用域。
+
+## 8. 结构化最终回答复核与外部 Agent 协议更新（2026-08-15）
+
+- Netcatty 的工具消息携带明确的错误状态并进入同一轮工具分组；OpenAI App Server 也将
+  工具作为有生命周期的 typed item。共同点是“工具结果是结构化事件”，而不是从最终
+  自然语言倒推成败。
+- ztermy 现在从持久化工具账本派生 `verified / pending / incomplete`。完成回答存在失败、
+  取消或仍等待工具时显示一条可点击提示并展开原有时间线；不重写 Provider 原文，也不
+  增加新的确认步骤。对应 ADR 0092。
+- OpenCode 1.18.5 已提供官方 `opencode acp`，ACP 当前稳定协议版本为 1；Zed 也公开将
+  外部 Agent 作为 ACP 客户端接入。它比解析人类 CLI 输出更适合作为后续原生适配候选。
+- 仍不能直接把 OpenCode 的本地 shell 当作 ztermy 终端：适配器必须让远端 SSH/ConPTY
+  写入继续经过当前侧栏所属终端的工具、权限、预算和代际检查。后续设计应评估 ACP 的
+  Client terminal 能力或 MCP bridge，而不是为追求“已接入”而绕开宿主所有权。
+
+参考：
+
+- <https://github.com/agentclientprotocol/agent-client-protocol>
+- <https://zed.dev/docs/ai/external-agents>
+- <https://dev.opencode.ai/docs/server/>

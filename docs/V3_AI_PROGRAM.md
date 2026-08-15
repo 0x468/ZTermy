@@ -290,6 +290,9 @@ becomes conversation retention.
   embedding a Web or Node runtime in the application;
 - keep terminal target ownership, permission modes, audit, cancellation, and
   tool-result contracts identical across built-in and external Agents;
+- keep final-answer claims aligned with the typed tool ledger: the model reviews
+  every result, while the client derives and displays failed/pending evidence
+  without rewriting the provider response (`ADR 0092`);
 - close provider/Agent switching, resume, failure-recovery, and packaging
   acceptance before declaring the expanded V3 program complete.
 
@@ -347,7 +350,11 @@ Current closure work:
   trust and exact-schema review remain prerequisites (`ADR 0082`);
 - cached MCP replay is resolved before consuming another turn-budget action,
   while automatic calls retain the same cancellation, audit, schema-identity,
-  and untrusted-result contracts as approved calls.
+  and untrusted-result contracts as approved calls;
+- completed messages now derive `verified / pending / incomplete` from their
+  persisted tool activities. Failed, cancelled, timed-out, or unexpectedly
+  unfinished work gets one compact path back to the exact timeline; no-tool and
+  fully successful turns stay visually quiet (`ADR 0092`).
 
 Delivery status:
 

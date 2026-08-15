@@ -9369,13 +9369,13 @@ bool AppController::attachAiClipboardContent()
         constexpr auto clipboardFileName = "clipboard-image.png";
         QByteArray bytes;
         QBuffer output(&bytes);
-        if (!output.open(QIODevice::WriteOnly) || !image.save(&output, "PNG") || bytes.isEmpty()
-            || existingBytes + bytes.size() > maximumAiImageAttachmentTotalBytes)
+        std::optional<ai::AiImageAttachment> attachment;
+        if (output.open(QIODevice::WriteOnly) && image.save(&output, "PNG") && !bytes.isEmpty()
+            && existingBytes + bytes.size() <= maximumAiImageAttachmentTotalBytes)
         {
-            result.rejectedFiles.push_back(QString::fromLatin1(clipboardFileName));
+            attachment = aiImageAttachmentFromBytes(QString::fromLatin1(clipboardFileName), std::move(bytes));
         }
-        else if (auto attachment = aiImageAttachmentFromBytes(QString::fromLatin1(clipboardFileName), std::move(bytes));
-                 attachment.has_value())
+        if (attachment.has_value())
         {
             result.attachments.push_back(std::move(*attachment));
         }

@@ -1,6 +1,7 @@
 #include "application/ai/AiConversationModel.h"
 
 #include "domain/ai/AiProviderReplayCodec.h"
+#include "domain/ai/AiToolEvidence.h"
 
 #include <QSignalSpy>
 #include <QtTest/QTest>
@@ -17,11 +18,14 @@ using ztermy::ai::AiImageAttachment;
 using ztermy::ai::AiMessageRole;
 using ztermy::ai::AiProviderReplayCodec;
 using ztermy::ai::AiTokenUsage;
+using ztermy::ai::AiToolActivity;
 using ztermy::ai::AiToolCall;
+using ztermy::ai::AiToolEvidenceState;
 using ztermy::ai::AiToolExchange;
 using ztermy::ai::AiToolOutput;
 using ztermy::ai::AiTurnMetrics;
 using ztermy::ai::AiWebSource;
+using ztermy::ai::evaluateToolEvidence;
 
 class AiConversationModelTests final : public QObject
 {
@@ -41,6 +45,7 @@ private slots:
     void exposesDeduplicatesAndRestoresWebSources();
     void preservesBoundedProviderReplayAcrossRestore();
     void preservesAgentTurnPresentationAcrossRestore();
+    void classifiesAndRestoresToolEvidence();
 };
 
 void AiConversationModelTests::streamsAssistantMessageAndUsage()
@@ -414,6 +419,50 @@ void AiConversationModelTests::preservesAgentTurnPresentationAcrossRestore()
     QCOMPARE(restored.data(restored.index(1), AiConversationModel::EstimatedCostUsdRole).toDouble(), 0.00042);
     QVERIFY(restored.data(restored.index(1), AiConversationModel::LongContextRatesRole).toBool());
     QVERIFY(restored.data(restored.index(1), AiConversationModel::TruncatedRole).toBool());
+}
+
+void AiConversationModelTests::classifiesAndRestoresToolEvidence()
+{
+    QCOMPARE(evaluateToolEvidence(std::span<const AiToolActivity>{}).state, AiToolEvidenceState::none);
+    const std::vector activities{
+        AiToolActivity{.id = "read-1", .name = "read_terminal_frame", .state = "succeeded", .resultCode = "ok"},
+        AiToolActivity{.id = "run-1",
+                       .name = "run_command",
+                       .state = "cancelled",
+                       .resultCode = "permission_denied",
+                       .sideEffecting = true}};
+    const auto incomplete = evaluateToolEvidence(activities);
+    QCOMPARE(incomplete.state, AiToolEvidenceState::incomplete);
+    QCOMPARE(incomplete.succeededCount, std::uint32_t{1});
+    QCOMPARE(incomplete.failedCount, std::uint32_t{1});
+    QCOMPARE(incomplete.failedSideEffectCount, std::uint32_t{1});
+
+    AiConversationModel model;
+    const auto assistantId = model.beginAssistantMessage();
+    QVERIFY(model.appendAssistantDelta(assistantId, QStringLiteral("The command is ready.")));
+    QVERIFY(model.upsertAssistantToolActivity(assistantId, QStringLiteral("run-1"), QStringLiteral("run_command"),
+                                              QStringLiteral("df -h"), QStringLiteral("awaiting_approval"),
+                                              QStringLiteral("pending"), true, false));
+    QVERIFY(model.completeAssistantMessage(assistantId));
+    QCOMPARE(model.data(model.index(0), AiConversationModel::ToolEvidenceStateRole).toString(),
+             QStringLiteral("pending"));
+    QCOMPARE(model.data(model.index(0), AiConversationModel::ToolEvidencePendingCountRole).toUInt(), std::uint32_t{1});
+
+    QVERIFY(model.upsertAssistantToolActivity(assistantId, QStringLiteral("run-1"), QStringLiteral("run_command"),
+                                              QStringLiteral("df -h"), QStringLiteral("failed"),
+                                              QStringLiteral("timeout"), true, false));
+    QCOMPARE(model.data(model.index(0), AiConversationModel::ToolEvidenceStateRole).toString(),
+             QStringLiteral("incomplete"));
+    QCOMPARE(model.data(model.index(0), AiConversationModel::ToolEvidenceFailedCountRole).toUInt(), std::uint32_t{1});
+    QCOMPARE(model.data(model.index(0), AiConversationModel::ToolEvidenceFailedSideEffectCountRole).toUInt(),
+             std::uint32_t{1});
+
+    AiConversationModel restored;
+    QVERIFY(restored.restoreTranscript(model.transcript()));
+    QCOMPARE(restored.data(restored.index(0), AiConversationModel::ToolEvidenceStateRole).toString(),
+             QStringLiteral("incomplete"));
+    QCOMPARE(restored.data(restored.index(0), AiConversationModel::ToolEvidenceFailedSideEffectCountRole).toUInt(),
+             std::uint32_t{1});
 }
 
 } // namespace

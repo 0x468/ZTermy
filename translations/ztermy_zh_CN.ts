@@ -358,8 +358,8 @@
     </message>
     <message>
         <location filename="../src/ui/qml/AiAssistantPane.qml" line="196"/>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="212"/>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2012"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="214"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2067"/>
         <source>Cancelled</source>
         <translation>已取消</translation>
     </message>
@@ -380,114 +380,115 @@
     </message>
     <message>
         <location filename="../src/ui/qml/AiAssistantPane.qml" line="208"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="210"/>
         <source>Running</source>
         <translation>运行中</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="210"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="212"/>
         <source>Completed</source>
         <translation>已完成</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="214"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="216"/>
         <source>Failed · %1</source>
         <translation>失败 · %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="214"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="216"/>
         <source>Failed</source>
         <translation>失败</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="353"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="355"/>
         <source>Quick message · %1</source>
         <translation>快捷消息 · %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="353"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="355"/>
         <source>Reusable prompt</source>
         <translation>可复用提示词</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="366"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="368"/>
         <source>Skill · %1</source>
         <translation>技能 · %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="547"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="549"/>
         <source>This time</source>
         <translation>仅此一次</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="547"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="549"/>
         <source>This session</source>
         <translation>本次会话</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="547"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="549"/>
         <source>This Profile</source>
         <translation>此 Profile</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="547"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="549"/>
         <source>All Profiles</source>
         <translation>所有 Profile</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="591"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="593"/>
         <source>Terminal AI assistant</source>
         <translation>终端 AI 助手</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1183"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1185"/>
         <source>AI conversation history</source>
         <translation>AI 对话历史</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1195"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1197"/>
         <source>All conversations · %n conversation(s)</source>
         <translation>
             <numerusform>全部对话 · %n 个对话</numerusform>
         </translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1218"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1220"/>
         <source>Close conversation history</source>
         <translation>关闭对话历史</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1226"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1228"/>
         <source>Close</source>
         <translation>关闭</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1257"/>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2233"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1259"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2288"/>
         <source>Restore conversation %1</source>
         <translation>恢复对话 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2733"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2790"/>
         <source>Read-only</source>
         <translation>只读</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2733"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2790"/>
         <source>Auto</source>
         <translation>自动</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2733"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2790"/>
         <source>YOLO</source>
         <translation>YOLO</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2735"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2792"/>
         <source>Agent execution mode</source>
         <translation>Agent 执行模式</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="716"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="718"/>
         <source>Hide AI conversation history</source>
         <translation>隐藏 AI 对话历史</translation>
     </message>
@@ -572,897 +573,912 @@
         <translation>复制原始内容</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="556"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="558"/>
         <source>Only this pending action; no rule is saved.</source>
         <translation>仅批准此次待处理操作；不保存规则。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="556"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="558"/>
         <source>Until this terminal session is closed.</source>
         <translation>直到当前终端会话关闭。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="556"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="558"/>
         <source>Saved for future sessions that use this profile.</source>
         <translation>为以后使用此配置的会话保存。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="556"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="558"/>
         <source>Saved for every profile and session.</source>
         <translation>为所有配置和会话保存。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="560"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="562"/>
         <source>Matches the entire action exactly.</source>
         <translation>精确匹配整个操作。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="560"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="562"/>
         <source>Matches this command-token prefix and later arguments.</source>
         <translation>匹配此命令标记前缀及其后续参数。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="560"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="562"/>
         <source>Matches the entire action with * and ? wildcards.</source>
         <translation>使用 * 和 ? 通配符匹配整个操作。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="560"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="562"/>
         <source>Matches the entire action with an expert regular expression.</source>
         <translation>使用高级正则表达式匹配整个操作。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="560"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="562"/>
         <source>Matches every action in this capability.</source>
         <translation>匹配此能力中的所有操作。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="624"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="626"/>
         <source>Choose terminal AI Agent</source>
         <translation>选择终端 AI Agent</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="675"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="677"/>
         <source>ztermy Agent</source>
         <translation>ztermy Agent</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="683"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="685"/>
         <source>Codex</source>
         <translation>Codex</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="683"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="685"/>
         <source>Codex · detecting</source>
         <translation>Codex · 正在检测</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="683"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="685"/>
         <source>Codex · unavailable</source>
         <translation>Codex · 不可用</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="693"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="695"/>
         <source>Detecting Agents…</source>
         <translation>正在检测 Agent…</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="693"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="695"/>
         <source>Detect Agents</source>
         <translation>检测 Agent</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="702"/>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="709"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="704"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="711"/>
         <source>More conversation actions</source>
         <translation>更多对话操作</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="716"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="718"/>
         <source>Show AI conversation history</source>
         <translation>显示 AI 对话历史</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="769"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="771"/>
         <source>Request context · %n item(s)</source>
         <translation>
             <numerusform>请求上下文 · %n 项</numerusform>
         </translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="862"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="864"/>
         <source>Collapse %1 preview</source>
         <translation>收起 %1 预览</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="862"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="864"/>
         <source>Expand %1 preview</source>
         <translation>展开 %1 预览</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="870"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="872"/>
         <source>Collapse preview</source>
         <translation>收起预览</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="870"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="872"/>
         <source>Preview context</source>
         <translation>预览上下文</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="903"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="905"/>
         <source>redacted</source>
         <translation>已脱敏</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="903"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="905"/>
         <source>truncated</source>
         <translation>已截断</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="915"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="917"/>
         <source>Unpin %1</source>
         <translation>取消固定 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="915"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="917"/>
         <source>Pin %1</source>
         <translation>固定 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="923"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="925"/>
         <source>Unpin context</source>
         <translation>取消固定上下文</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="923"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="925"/>
         <source>Pin context</source>
         <translation>固定上下文</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="928"/>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2429"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="930"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2484"/>
         <source>Remove %1 from context</source>
         <translation>从上下文中移除 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="936"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="938"/>
         <source>Remove from this request</source>
         <translation>从本次请求中移除</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="963"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="965"/>
         <source>Reset context</source>
         <translation>重置上下文</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="965"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="967"/>
         <source>Restore automatic context items</source>
         <translation>恢复自动选择的上下文项</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="989"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="991"/>
         <source>AI command approval</source>
         <translation>AI 命令审批</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="989"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="991"/>
         <source>AI interrupt approval</source>
         <translation>AI 中断操作批准</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="989"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="991"/>
         <source>AI terminal input approval</source>
         <translation>AI 终端输入批准</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="989"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="991"/>
         <source>AI runbook approval</source>
         <translation>AI 运行手册审批</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="989"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="991"/>
         <source>AI SFTP transfer approval</source>
         <translation>AI SFTP 传输审批</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1025"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1027"/>
         <source>High-risk command requires approval</source>
         <translation>高风险命令需要审批</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1025"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1027"/>
         <source>Command requires approval</source>
         <translation>命令需要审批</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1025"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1027"/>
         <source>Terminal interrupt requires approval</source>
         <translation>终端中断操作需要批准</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1025"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1027"/>
         <source>Terminal input requires approval</source>
         <translation>终端输入需要批准</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1025"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1027"/>
         <source>Runbook save requires approval</source>
         <translation>保存运行手册需要审批</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1025"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1027"/>
         <source>SFTP transfer requires approval</source>
         <translation>SFTP 传输需要审批</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1044"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1046"/>
         <source>Command awaiting approval</source>
         <translation>等待审批的命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1044"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1046"/>
         <source>Interrupt awaiting approval</source>
         <translation>等待批准的中断操作</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1044"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1046"/>
         <source>Terminal input awaiting approval</source>
         <translation>等待批准的终端输入</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1044"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1046"/>
         <source>Runbook awaiting approval</source>
         <translation>运行手册正在等待审批</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1101"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1103"/>
         <source>Permission rule duration</source>
         <translation>权限规则有效范围</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1110"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1112"/>
         <source>Exact action</source>
         <translation>精确匹配</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1110"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1112"/>
         <source>Starts with</source>
         <translation>前缀匹配</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1110"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1112"/>
         <source>Wildcard</source>
         <translation>通配符</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1110"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1112"/>
         <source>Regular expression</source>
         <translation>正则表达式</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1110"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1112"/>
         <source>Any action of this type</source>
         <translation>此类型的任意操作</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1111"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1113"/>
         <source>Permission rule matcher</source>
         <translation>权限规则匹配方式</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1121"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1123"/>
         <source>Command or action pattern</source>
         <translation>命令或操作匹配模式</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1142"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1144"/>
         <source>Enter approve · Esc deny</source>
         <translation>Enter 批准 · Esc 拒绝</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1149"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1151"/>
         <source>Deny</source>
         <translation>拒绝</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1149"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1151"/>
         <source>Deny &amp; remember</source>
         <translation>拒绝并记住</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1151"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1153"/>
         <source>Deny the pending AI terminal action</source>
         <translation>拒绝待处理的 AI 终端操作</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1156"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1158"/>
         <source>Run command</source>
         <translation>运行命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1156"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1158"/>
         <source>Send Ctrl+C</source>
         <translation>发送 Ctrl+C</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1156"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1158"/>
         <source>Send input</source>
         <translation>发送输入</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1156"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1158"/>
         <source>Save runbook</source>
         <translation>保存运行手册</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1156"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1158"/>
         <source>Queue transfer</source>
         <translation>加入传输队列</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1156"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1158"/>
         <source>Allow &amp; remember</source>
         <translation>允许并记住</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1159"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1161"/>
         <source>Approve and run the pending AI command</source>
         <translation>批准并运行待处理的 AI 命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1159"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1161"/>
         <source>Approve the pending soft interrupt</source>
         <translation>批准待处理的软中断</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1159"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1161"/>
         <source>Approve the pending terminal input</source>
         <translation>批准待处理的终端输入</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1159"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1161"/>
         <source>Approve and save the pending AI runbook</source>
         <translation>批准并保存待处理的 AI 运行手册</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1159"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1161"/>
         <source>Approve and queue the pending AI SFTP transfer</source>
         <translation>批准并将待处理的 AI SFTP 传输加入队列</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1288"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1290"/>
         <source>%n message(s)</source>
         <translation>
             <numerusform>%n 条消息</numerusform>
         </translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1311"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1313"/>
         <source>Delete saved conversation</source>
         <translation>删除已保存的对话</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1324"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1326"/>
         <source>No saved conversations</source>
         <translation>没有已保存的对话</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1348"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1350"/>
         <source>AI activity audit</source>
         <translation>AI 活动审计</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1368"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1370"/>
         <source>AI activity · %n item(s)</source>
         <translation>
             <numerusform>AI 活动 · %n 项</numerusform>
         </translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1376"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1378"/>
         <source>Metadata only</source>
         <translation>仅元数据</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1383"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1385"/>
         <source>Export AI activity</source>
         <translation>导出 AI 活动</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1390"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1392"/>
         <source>Export audit metadata</source>
         <translation>导出审计元数据</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1396"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1398"/>
         <source>Clear AI activity</source>
         <translation>清空 AI 活动</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1403"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1405"/>
         <source>Delete audit metadata</source>
         <translation>删除审计元数据</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1486"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1488"/>
         <source>No AI tool activity yet.</source>
         <translation>暂无 AI 工具活动。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1595"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1601"/>
         <source>Hide model reasoning</source>
         <translation>隐藏模型推理</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1595"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1601"/>
         <source>Show model reasoning</source>
         <translation>显示模型推理</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1595"/>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1904"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1601"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1910"/>
         <source>Thinking…</source>
         <translation>思考中…</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1657"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1663"/>
         <source>Using %1 tools…</source>
         <translation>正在使用 %1 个工具…</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1657"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1663"/>
         <source>Used %1 tools</source>
         <translation>已使用 %1 个工具</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1658"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1664"/>
         <source>Collapse</source>
         <translation>收起</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1658"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1664"/>
         <source>Expand</source>
         <translation>展开</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1746"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1752"/>
         <source>Collapse tool details</source>
         <translation>收起工具详情</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1746"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1752"/>
         <source>Expand tool details</source>
         <translation>展开工具详情</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1828"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1834"/>
         <source>Arguments</source>
         <translation>参数</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1835"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1841"/>
         <source>Result</source>
         <translation>结果</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1918"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1948"/>
+        <source>Some tool activity was still pending when this answer finished. Select to review the tool results.</source>
+        <translation>回答完成时仍有工具活动尚未结束。点击查看工具结果。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1950"/>
+        <source>Some requested actions did not complete. Select to review the tool results before relying on the answer.</source>
+        <translation>部分请求的操作未完成。点击查看工具结果后再判断回答是否可靠。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1951"/>
+        <source>Some tool results were unavailable. This answer may be based on partial evidence.</source>
+        <translation>部分工具结果不可用，此回答可能仅依据了不完整的信息。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1973"/>
         <source>Hide sources · %1</source>
         <translation>收起来源 · %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1918"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1973"/>
         <source>Sources · %1</source>
         <translation>来源 · %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1964"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2019"/>
         <source>Open source %1</source>
         <translation>打开来源 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1866"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="1872"/>
         <source>Attached image %1</source>
         <translation>附加的图片 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="387"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="389"/>
         <source>Attach the current terminal selection</source>
         <translation>附加当前终端选区</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="393"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="395"/>
         <source>Attach the most recent command and its output</source>
         <translation>附加最近一条命令及其输出</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="399"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="401"/>
         <source>Attach the three most recent command blocks</source>
         <translation>附加最近三个命令块</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="405"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="407"/>
         <source>Attach the five most recent command blocks</source>
         <translation>附加最近五个命令块</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="410"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="412"/>
         <source>Local text files</source>
         <translation>本地文本文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="411"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="413"/>
         <source>Choose one or more text files</source>
         <translation>选择一个或多个文本文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="416"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="418"/>
         <source>Images</source>
         <translation>图片</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="417"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="419"/>
         <source>Choose one or more images</source>
         <translation>选择一张或多张图片</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2012"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2067"/>
         <source>Message was truncated locally.</source>
         <translation>消息已在本地截断。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2024"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2079"/>
         <source>%1 in</source>
         <translation>%1 输入</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2024"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2079"/>
         <source>%1 out</source>
         <translation>%1 输出</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2026"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2081"/>
         <source>%1 cached</source>
         <translation>%1 缓存输入</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2028"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2083"/>
         <source>%1 reasoning</source>
         <translation>%1 推理</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2042"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2097"/>
         <source>%1 ms first · %2 ms total · %3 retries</source>
         <translation>首字 %1 ms · 总计 %2 ms · 重试 %3 次</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2042"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2097"/>
         <source>%1 ms total · %2 retries</source>
         <translation>总计 %1 ms · 重试 %2 次</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2054"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2109"/>
         <source>Est. $%1 · long-context rates · catalog %2</source>
         <translation>预估 $%1 · 长上下文费率 · 价目表 %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2054"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2109"/>
         <source>Est. $%1 · catalog %2</source>
         <translation>预估 $%1 · 价目表 %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2069"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2124"/>
         <source>Insert</source>
         <translation>插入</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2071"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2126"/>
         <source>Insert the suggested command without running it</source>
         <translation>插入建议的命令但不运行</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2077"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2132"/>
         <source>Run</source>
         <translation>运行</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2080"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2135"/>
         <source>Run the suggested command in the active terminal</source>
         <translation>在活动终端中运行建议的命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2086"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2141"/>
         <source>Retry</source>
         <translation>重试</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2088"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2143"/>
         <source>Retry the failed assistant response</source>
         <translation>重试失败的助手回复</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2094"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2149"/>
         <source>Copy</source>
         <translation>复制</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2096"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2151"/>
         <source>Copy assistant response</source>
         <translation>复制助手回复</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2117"/>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2139"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2172"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2194"/>
         <source>Return to latest response</source>
         <translation>返回最新回复</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2155"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2210"/>
         <source>Ask about the active terminal, diagnose failures, or request a command.</source>
         <translation>询问当前终端、诊断故障或请求命令。</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2173"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2228"/>
         <source>Recent conversations</source>
         <translation>最近对话</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2184"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2239"/>
         <source>View all</source>
         <translation>查看全部</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2187"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2242"/>
         <source>View all AI conversations</source>
         <translation>查看全部 AI 对话</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2332"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2387"/>
         <source>Drop files to attach</source>
         <translation>拖放文件以附加</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2341"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2396"/>
         <source>Images or UTF-8 text files</source>
         <translation>图片或 UTF-8 文本文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2374"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2429"/>
         <source>Hide request context details</source>
         <translation>隐藏请求上下文详情</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2374"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2429"/>
         <source>Show request context details</source>
         <translation>显示请求上下文详情</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2488"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2543"/>
         <source>Remove skill %1</source>
         <translation>移除技能 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2526"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2581"/>
         <source>Message ztermy Agent · @ context · / commands</source>
         <translation>向 ztermy Agent 发送消息 · @ 引用上下文 · / 使用命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2667"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2724"/>
         <source>Attach images, text files, selected text, or recent commands</source>
         <translation>附加图片、文本文件、选中文本或最近命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2695"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2752"/>
         <source>Use web search</source>
         <translation>使用联网检索</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2702"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2759"/>
         <source>Web search enabled for new prompts</source>
         <translation>已为新提示启用联网检索</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2702"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2759"/>
         <source>Let the model search the web when useful</source>
         <translation>允许模型在需要时检索网络</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2702"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2759"/>
         <source>Native web search is unavailable for this provider</source>
         <translation>当前供应商不支持原生联网检索</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2740"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2797"/>
         <source>Read tools only; action and MCP tools are hidden</source>
         <translation>仅使用读取工具；隐藏操作工具和 MCP 工具</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2740"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2797"/>
         <source>Ask in the approval card before every side effect</source>
         <translation>每次产生副作用前都在批准卡片中询问</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2740"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2797"/>
         <source>Run ordinary actions automatically; ask for high-risk commands and MCP tools</source>
         <translation>自动运行常规操作；高风险命令和 MCP 工具需要询问</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2740"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2797"/>
         <source>Run without approval prompts; explicit deny rules and safety boundaries still apply</source>
         <translation>不显示批准提示直接运行；显式拒绝规则和安全边界仍然生效</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2751"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2808"/>
         <source>Send</source>
         <translation>发送</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2768"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2825"/>
         <source>Attach text files</source>
         <translation>附加文本文件</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2770"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2827"/>
         <source>Text files (*.txt *.md *.json *.yaml *.yml *.toml *.ini *.cfg *.conf *.log *.csv *.xml *.html *.css *.js *.ts *.py *.sh *.ps1)</source>
         <translation>文本文件 (*.txt *.md *.json *.yaml *.yml *.toml *.ini *.cfg *.conf *.log *.csv *.xml *.html *.css *.js *.ts *.py *.sh *.ps1)</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2783"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2840"/>
         <source>Attach images</source>
         <translation>附加图片</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2785"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2842"/>
         <source>Images (*.png *.jpg *.jpeg *.webp *.gif)</source>
         <translation>图片 (*.png *.jpg *.jpeg *.webp *.gif)</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2798"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2855"/>
         <source>Export AI conversation</source>
         <translation>导出 AI 对话</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2801"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2858"/>
         <source>Markdown files (*.md)</source>
         <translation>Markdown 文件 (*.md)</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="386"/>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2819"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="388"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2876"/>
         <source>Selected terminal text</source>
         <translation>已选择的终端文本</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2823"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2880"/>
         <source>Local text files…</source>
         <translation>本地文本文件…</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2827"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2884"/>
         <source>Images…</source>
         <translation>图片…</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="392"/>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2832"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="394"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2889"/>
         <source>Last command</source>
         <translation>上一条命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="398"/>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2836"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="400"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2893"/>
         <source>Last 3 commands</source>
         <translation>最近 3 条命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="404"/>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2840"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="406"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2897"/>
         <source>Last 5 commands</source>
         <translation>最近 5 条命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2849"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2906"/>
         <source>Export conversation</source>
         <translation>导出对话</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2857"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2914"/>
         <source>Hide activity details</source>
         <translation>隐藏活动详情</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2857"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2914"/>
         <source>Show activity details</source>
         <translation>显示活动详情</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2866"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2923"/>
         <source>Explain last failed command</source>
         <translation>解释上一条失败命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2733"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2790"/>
         <source>Ask</source>
         <translation>提问</translation>
     </message>
     <message>
         <location filename="../src/ui/qml/AiAssistantPane.qml" line="41"/>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="747"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="749"/>
         <source>New conversation</source>
         <translation>新建对话</translation>
     </message>
     <message>
         <location filename="../src/ui/qml/AiAssistantPane.qml" line="46"/>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="729"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="731"/>
         <source>Conversation history</source>
         <translation>对话历史</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="736"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="738"/>
         <source>Start a new AI conversation</source>
         <translation>新建 AI 对话</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2526"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2581"/>
         <source>Describe the command you need · Enter sends · Shift+Enter adds a new line</source>
         <translation>描述所需命令 · Enter 发送 · Shift+Enter 换行</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2677"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2734"/>
         <source>Toggle command generation mode</source>
         <translation>切换命令生成模式</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2660"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2717"/>
         <source>Attach terminal context</source>
         <translation>附加终端上下文</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2534"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2589"/>
         <source>AI message</source>
         <translation>AI 消息</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2684"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2741"/>
         <source>Command generation enabled</source>
         <translation>已启用命令生成</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2684"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2741"/>
         <source>Generate a shell command</source>
         <translation>生成 Shell 命令</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2718"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2775"/>
         <source>AI model</source>
         <translation>AI 模型</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2723"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2780"/>
         <source>Model · %1</source>
         <translation>模型 · %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2747"/>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2751"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2804"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2808"/>
         <source>Cancel</source>
         <translation>取消</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2808"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2865"/>
         <source>Export AI activity metadata</source>
         <translation>导出 AI 活动元数据</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2811"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2868"/>
         <source>JSON files (*.json)</source>
         <translation>JSON 文件 (*.json)</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2770"/>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2785"/>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2801"/>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2811"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2827"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2842"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2858"/>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2868"/>
         <source>All files (*)</source>
         <translation>所有文件 (*)</translation>
     </message>

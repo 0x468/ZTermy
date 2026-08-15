@@ -83,6 +83,10 @@ public:
         ToolActivitiesRole,
         ImageAttachmentsRole,
         SourcesRole,
+        ToolEvidenceStateRole,
+        ToolEvidenceFailedCountRole,
+        ToolEvidencePendingCountRole,
+        ToolEvidenceFailedSideEffectCountRole,
     };
 
     explicit AiConversationModel(AiConversationLimits limits = {}, QObject *parent = nullptr);

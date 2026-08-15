@@ -206,6 +206,8 @@ Rectangle {
             return qsTr("Waiting for approval");
         if (state === "running")
             return qsTr("Running");
+        if (state === "executing")
+            return qsTr("Running");
         if (state === "succeeded")
             return qsTr("Completed");
         if (state === "cancelled")
@@ -218,7 +220,7 @@ Rectangle {
     function toolActivityActive(activities) {
         for (let index = 0; index < activities.length; ++index) {
             const state = activities[index].state;
-            if (state === "queued" || state === "awaiting_approval" || state === "running")
+            if (state === "queued" || state === "awaiting_approval" || state === "running" || state === "executing")
                 return true;
         }
         return false;
@@ -1558,6 +1560,10 @@ Rectangle {
                     required property var toolActivities
                     required property var imageAttachments
                     required property var sources
+                    required property string toolEvidenceState
+                    required property int toolEvidenceFailedCount
+                    required property int toolEvidencePendingCount
+                    required property int toolEvidenceFailedSideEffectCount
                     readonly property bool reasoningActive: state === "streaming" && reasoning.length > 0 && text.length === 0
                     width: ListView.view.width
                     height: messageBubble.implicitHeight
@@ -1754,7 +1760,7 @@ Rectangle {
 
                                                             Layout.preferredWidth: 16
                                                             Layout.preferredHeight: 16
-                                                            running: toolCard.modelData.state === "queued" || toolCard.modelData.state === "running" || toolCard.modelData.state === "awaiting_approval"
+                                                            running: toolCard.modelData.state === "queued" || toolCard.modelData.state === "running" || toolCard.modelData.state === "executing" || toolCard.modelData.state === "awaiting_approval"
                                                             visible: running
                                                         }
 
@@ -1906,6 +1912,51 @@ Rectangle {
                                 textFormat: messageItem.messageRole === "assistant" ? TextEdit.MarkdownText : TextEdit.PlainText
                                 font.pixelSize: Theme.textBody
                                 onCopyRequested: text => pane.controller.copyAiText(text)
+                            }
+
+                            Button {
+                                id: toolEvidenceNotice
+
+                                objectName: "aiToolEvidenceNotice"
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: visible ? Math.max(38, evidenceNoticeText.implicitHeight + 16) : 0
+                                visible: messageItem.messageRole === "assistant" && messageItem.state === "complete" && (messageItem.toolEvidenceState === "incomplete" || messageItem.toolEvidenceState === "pending")
+                                hoverEnabled: true
+                                focusPolicy: Qt.StrongFocus
+                                Accessible.name: evidenceNoticeText.text
+                                onClicked: {
+                                    toolTimeline.manualExpanded = true;
+                                    toolTimeline.autoManaged = false;
+                                }
+
+                                contentItem: RowLayout {
+                                    spacing: 7
+
+                                    AppIcon {
+                                        Layout.preferredWidth: 15
+                                        Layout.preferredHeight: 15
+                                        Layout.alignment: Qt.AlignTop
+                                        name: "warning"
+                                        color: Theme.warning
+                                    }
+
+                                    Text {
+                                        id: evidenceNoticeText
+
+                                        Layout.fillWidth: true
+                                        text: messageItem.toolEvidenceState === "pending" ? qsTr("Some tool activity was still pending when this answer finished. Select to review the tool results.") : Number(messageItem.toolEvidenceFailedSideEffectCount) > 0 ? qsTr("Some requested actions did not complete. Select to review the tool results before relying on the answer.") : qsTr("Some tool results were unavailable. This answer may be based on partial evidence.")
+                                        color: Theme.textSoft
+                                        wrapMode: Text.WordWrap
+                                        font.family: Theme.uiFont
+                                        font.pixelSize: Theme.textCompact
+                                    }
+                                }
+                                background: Rectangle {
+                                    radius: Theme.radiusControl
+                                    color: toolEvidenceNotice.down ? Theme.controlPressed : toolEvidenceNotice.hovered ? Theme.controlHover : Theme.withAlpha(Theme.warning, Theme.dark ? 0.12 : 0.08)
+                                    border.color: toolEvidenceNotice.activeFocus ? Theme.focus : Theme.withAlpha(Theme.warning, 0.42)
+                                    border.width: toolEvidenceNotice.activeFocus ? 2 : 1
+                                }
                             }
 
                             Button {

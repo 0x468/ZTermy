@@ -89,7 +89,10 @@ QString AiSystemPromptBuilder::build(const bool commandRequest, const AiPermissi
     }
     prompt += QStringLiteral(
         "- The client permission policy is authoritative. Never claim a blocked or merely queued action succeeded; "
-        "use tool results as the source of truth.\n");
+        "use tool results as the source of truth.\n"
+        "- Before the final answer, review every tool result from this turn. If an action failed, was cancelled, "
+        "timed out, or remained pending, say so directly. Never describe an intended or attempted action as "
+        "completed.\n");
 
     if (commandRequest)
     {

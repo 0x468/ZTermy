@@ -971,7 +971,7 @@ struct ResizeHitRuntimeCase
             QStringLiteral("{\n  \"ok\": true,\n  \"revision\": 13\n}"));
         const bool secondToolAdded = aiConversation->upsertAssistantToolActivity(
             markdownMessageId, QStringLiteral("layout-fixture-tool-2"), QStringLiteral("read_session_info"),
-            QStringLiteral("Read current shell metadata"), QStringLiteral("succeeded"), QStringLiteral("ok"), false,
+            QStringLiteral("Read current shell metadata"), QStringLiteral("failed"), QStringLiteral("timeout"), false,
             false);
         aiMarkdownFixturePrepared = markdownAdded && toolActivityAdded && toolDetailsAdded && secondToolAdded
                                     && aiConversation->completeAssistantMessage(markdownMessageId);
@@ -993,13 +993,17 @@ struct ResizeHitRuntimeCase
         verifyAccessibleButton(rootObject, "aiAgentPickerButton", "Choose terminal AI Agent");
     const bool aiSendAccessible = verifyAccessibleButton(rootObject, "aiSendButton", "Send");
     const bool aiToolGroupAccessible = verifyAccessibleButton(rootObject, "aiToolGroupToggle", "Expand · Used 2 tools");
+    const bool aiToolEvidenceAccessible =
+        verifyAccessibleButton(rootObject, "aiToolEvidenceNotice",
+                               "Some tool results were unavailable. This answer may be based on partial evidence.");
     const bool aiContextAccessible =
         aiContextInterface != nullptr && aiContextInterface->role() == QAccessible::Button
         && aiContextInterface->text(QAccessible::Name)
                == QStringLiteral("Request context · %1 item(s)").arg(controller.activeAiContextItems().size());
     const bool aiAccessibilityPassed = aiLauncherAccessible && aiToolbarAccessible && aiHistoryAccessible
                                        && aiNewConversationAccessible && aiMoreAccessible && aiSendAccessible
-                                       && aiAgentPickerAccessible && aiContextAccessible && aiToolGroupAccessible;
+                                       && aiAgentPickerAccessible && aiContextAccessible && aiToolGroupAccessible
+                                       && aiToolEvidenceAccessible;
     QAccessibleInterface *aiPaneInterface =
         aiAssistantPane == nullptr ? nullptr : QAccessible::queryAccessibleInterface(aiAssistantPane);
     QAccessibleInterface *aiPromptInterface =
@@ -1022,6 +1026,7 @@ struct ResizeHitRuntimeCase
         artifact << "agentPicker=" << aiAgentPickerAccessible << '\n';
         artifact << "send=" << aiSendAccessible << '\n';
         artifact << "toolGroup=" << aiToolGroupAccessible << '\n';
+        artifact << "toolEvidence=" << aiToolEvidenceAccessible << '\n';
         artifact << "context=" << aiContextAccessible << '\n';
         artifact << "semanticRoles=" << aiSemanticRolesPassed << '\n';
         artifact << "contextRole="

@@ -523,6 +523,13 @@ the final `0.3.8` Agent candidate:
    control may escape the workbench; ordinary terminal typing requires no
    visible takeover ceremony, and the next AI prompt automatically resumes the
    serialized agent lease.
+7. Complete one turn whose read tool returns `timeout`, and one whose approved
+   side-effecting action returns a failure or cancellation. The original model
+   response must remain copyable, but a compact notice must identify partial
+   evidence or an incomplete action. Activating the notice with mouse or
+   keyboard expands the exact tool timeline. A no-tool turn and a turn whose
+   tools all succeeded must show no notice; restoring history must reproduce
+   the same verdict.
 
 The reusable-rule UI and exact/prefix/glob/regex/all lifetime matrix belong to
 the `0.3.6` gate below.

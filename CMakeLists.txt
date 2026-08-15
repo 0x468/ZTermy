@@ -441,6 +441,8 @@ add_library(ztermy_ai_domain STATIC
     src/domain/ai/AiProviderReplayCodec.cpp
     src/domain/ai/AiProviderReplayCodec.h
     src/domain/ai/AiProviderTypes.h
+    src/domain/ai/AiToolEvidence.cpp
+    src/domain/ai/AiToolEvidence.h
     src/domain/ai/AiToolDispatchLedger.cpp
     src/domain/ai/AiToolDispatchLedger.h
     src/domain/ai/AiUsageReporting.cpp

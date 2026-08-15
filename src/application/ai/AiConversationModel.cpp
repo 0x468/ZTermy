@@ -1,6 +1,7 @@
 #include "application/ai/AiConversationModel.h"
 
 #include "domain/ai/AiProviderReplayCodec.h"
+#include "domain/ai/AiToolEvidence.h"
 
 #include <QByteArray>
 #include <QStringList>
@@ -238,6 +239,18 @@ QVariant AiConversationModel::data(const QModelIndex &index, const int role) con
             return imageValues(message.images);
         case SourcesRole:
             return sourceValues(message.sources);
+        case ToolEvidenceStateRole:
+        {
+            const auto verdict = evaluateToolEvidence(message.toolActivities);
+            const std::string_view token = aiToolEvidenceStateToken(verdict.state);
+            return QString::fromLatin1(token.data(), static_cast<qsizetype>(token.size()));
+        }
+        case ToolEvidenceFailedCountRole:
+            return evaluateToolEvidence(message.toolActivities).failedCount;
+        case ToolEvidencePendingCountRole:
+            return evaluateToolEvidence(message.toolActivities).pendingCount;
+        case ToolEvidenceFailedSideEffectCountRole:
+            return evaluateToolEvidence(message.toolActivities).failedSideEffectCount;
         default:
             return {};
     }
@@ -268,7 +281,11 @@ QHash<int, QByteArray> AiConversationModel::roleNames() const
             {HasCommandSuggestionRole, "hasCommandSuggestion"},
             {ToolActivitiesRole, "toolActivities"},
             {ImageAttachmentsRole, "imageAttachments"},
-            {SourcesRole, "sources"}};
+            {SourcesRole, "sources"},
+            {ToolEvidenceStateRole, "toolEvidenceState"},
+            {ToolEvidenceFailedCountRole, "toolEvidenceFailedCount"},
+            {ToolEvidencePendingCountRole, "toolEvidencePendingCount"},
+            {ToolEvidenceFailedSideEffectCountRole, "toolEvidenceFailedSideEffectCount"}};
 }
 
 bool AiConversationModel::streaming() const noexcept
@@ -753,7 +770,9 @@ bool AiConversationModel::upsertAssistantToolActivity(const std::uint64_t messag
     message->bytes = message->bytes - std::min(message->bytes, previousBytes) + activityBytes;
     m_totalBytes = m_totalBytes - std::min(m_totalBytes, previousBytes) + activityBytes;
     const auto row = indexOf(messageId);
-    emit dataChanged(index(row), index(row), {ToolActivitiesRole});
+    emit dataChanged(index(row), index(row),
+                     {ToolActivitiesRole, ToolEvidenceStateRole, ToolEvidenceFailedCountRole,
+                      ToolEvidencePendingCountRole, ToolEvidenceFailedSideEffectCountRole});
     return true;
 }
 
