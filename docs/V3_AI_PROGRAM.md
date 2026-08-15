@@ -290,6 +290,17 @@ becomes conversation retention.
 - close provider/Agent switching, resume, failure-recovery, and packaging
   acceptance before declaring the expanded V3 program complete.
 
+Implementation status:
+
+- `ADR 0091` selects Codex App Server as the first native adapter. The bounded
+  JSONL protocol layer now covers initialization, thread start/resume, turn
+  start/interrupt, dynamic-tool results, typed responses/notifications/requests,
+  malformed input, fragmentation, and buffer limits;
+- process lifecycle, capability/version negotiation, typed stream mapping,
+  current-terminal dynamic-tool dispatch, resume/recovery, discovery UI, and
+  packaging remain open. The Agent selector stays hidden until those paths work
+  end to end.
+
 Current closure work:
 
 - a deterministic provider-independent Agent scenario now crosses mode

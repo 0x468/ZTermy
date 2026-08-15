@@ -5,6 +5,19 @@
 > Netcatty 对照：`docs/reviews/netcatty-ai-comparison-2026-08.md`；
 > Codex 专项：`docs/research/CODEX_CLI_ARCHITECTURE.md`。
 
+## 节点 N17 — 原生外部 Agent 协议地基（2026-08-15）
+
+**commit**: 本节点提交（见 git 历史）
+
+**范围**：
+
+1. 对照 Netcatty 外部 Agent 驱动与 OpenAI 官方 App Server/SDK/非交互协议，选择 Codex App Server 作为首个原生适配器，不引入 Web、Node 或 Python 运行时；
+2. 落地有界 JSONL 协议层，覆盖初始化、线程新建/恢复、轮次启动/中断、动态工具响应及三类入站消息；
+3. 固定单终端所有权：Codex 自身以只读沙箱运行，终端操作仅通过 ztermy 动态工具，继续服从既有权限、规则、去重、预算、审计、取消和重连代际；
+4. 动态工具能力必须运行时协商，当前安装版本不支持时明确不可用，不静默扩大权限或切换 Agent；完整客户端与 UI 尚未宣称完成。
+
+**验证**：MSVC 动态 Debug 构建与 `codex-app-server-protocol` 聚焦测试通过；新增协议源和测试通过 clang-tidy warnings-as-errors。
+
 ## 节点 N16 — Anthropic Server Tool 精确续接（2026-08-15）
 
 **commit**: `ed980d2`

@@ -1,7 +1,8 @@
 # V3 implementation traceability
 
 Status: `0.3.0`-`0.3.9` implementation audit in progress; owner/environment
-release acceptance tracked separately; `0.3.10`-`0.3.11` planned
+release acceptance tracked separately; `0.3.10` implemented and `0.3.11`
+external-Agent integration in progress (`ADR 0091`)
 
 Date: 2026-08-13
 
