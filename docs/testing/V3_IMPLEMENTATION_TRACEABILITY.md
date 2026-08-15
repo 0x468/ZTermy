@@ -115,6 +115,7 @@ covered by `application-settings`, `ai-permission-policy`,
 | Drag local images/text onto the owning terminal composer without auto-send or cross-terminal routing | `src/ui/qml/AiAssistantPane.qml`, existing `AppController` asynchronous attachment loaders | `ui-layout-runtime-smoke` 260 px geometry contract, owner Explorer drag/drop acceptance | ADR 0087, 0089 |
 | Paste clipboard images and Explorer-copied image/text files while preserving ordinary text paste | `src/ui/qml/AiAssistantPane.qml`, `src/application/AppController.*`, `src/main.cpp` runtime fixture | `ui-layout-runtime-smoke`, `app-controller` | ADR 0087, 0089 |
 | Derive final-answer evidence integrity from persisted tool states and surface failed/pending work without rewriting the answer | `src/domain/ai/AiToolEvidence.*`, `src/application/ai/AiConversationModel.*`, `AiSystemPromptBuilder.*`, `src/ui/qml/AiAssistantPane.qml` | `ai-conversation-model`, `ai-system-prompt-builder`, `ui-layout-runtime-smoke` | ADR 0092 |
+| Negotiate a bounded ACP v1 external-Agent connection without exposing local files or cross-terminal Sessions | `src/infrastructure/ai/AcpProtocol.*` | `acp-protocol` | ADR 0093, ACP v1 official protocol, OpenCode 1.18.5 local handshake |
 
 ## 0.3.10 — current-terminal native tool contract
 

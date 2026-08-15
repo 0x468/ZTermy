@@ -569,6 +569,8 @@ target_link_libraries(ztermy_mcp_protocol
 )
 
 add_library(ztermy_external_agent_protocol STATIC
+    src/infrastructure/ai/AcpProtocol.cpp
+    src/infrastructure/ai/AcpProtocol.h
     src/infrastructure/ai/CodexAppServerProtocol.cpp
     src/infrastructure/ai/CodexAppServerProtocol.h
 )
@@ -2830,6 +2832,27 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME codex-app-server-protocol COMMAND ztermy_codex_app_server_protocol_tests)
+
+    qt_add_executable(ztermy_acp_protocol_tests
+        tests/acp_protocol_tests.cpp
+    )
+
+    target_compile_features(ztermy_acp_protocol_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_acp_protocol_tests PRIVATE
+        ztermy_external_agent_protocol
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_acp_protocol_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME acp-protocol COMMAND ztermy_acp_protocol_tests)
 
     add_executable(ztermy_codex_app_server_test_server
         tests/codex_app_server_test_server.cpp

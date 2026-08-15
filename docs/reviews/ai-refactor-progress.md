@@ -5,9 +5,22 @@
 > Netcatty 对照：`docs/reviews/netcatty-ai-comparison-2026-08.md`；
 > Codex 专项：`docs/research/CODEX_CLI_ARCHITECTURE.md`。
 
-## 节点 N24 — 工具证据与最终回答一致性（2026-08-15）
+## 节点 N25 — ACP / OpenCode 原生协议边界（2026-08-15）
 
 **commit**: 本节点提交（见 git 历史）
+
+**范围**：
+
+1. 对照 ACP v1 官方初始化、Session、Prompt、取消、终端与工具合同，并实测本机 OpenCode 1.18.5 的 `opencode acp` 握手和 Session 元数据；
+2. 新增纯原生 C++ `AcpProtocol`，覆盖标准 JSON-RPC 2.0 + NDJSON、有界分片解析、数值/字符串请求 ID、初始化、Session 新建/恢复、Prompt、取消、关闭及 Client 成功/错误响应；
+3. Client 只声明 `terminal: true`，明确不声明本地 `fs`；后续远端命令必须经过当前侧栏所属终端，不允许跨 Tab Session 发现；
+4. ADR 0093 固化外部 Agent 自有认证/模型、内容为空的本地工作目录、当前终端代际与既有权限/预算/审计复用边界。
+
+**验证**：MSVC 动态 Debug 全量 `119/119` 通过；完整编译数据库 clang-tidy（258 个翻译单元）与 C++ 格式门禁通过；`acp-protocol` 覆盖完整生命周期消息、OpenCode 使用的 v1 包络、分片输入、字符串请求 ID、畸形/越界输入恢复。
+
+## 节点 N24 — 工具证据与最终回答一致性（2026-08-15）
+
+**commit**: `39680ef`（feat(ai): surface incomplete tool evidence）
 
 **范围**：
 

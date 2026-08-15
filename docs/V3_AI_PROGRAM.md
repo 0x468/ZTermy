@@ -355,6 +355,11 @@ Current closure work:
   persisted tool activities. Failed, cancelled, timed-out, or unexpectedly
   unfinished work gets one compact path back to the exact timeline; no-tool and
   fully successful turns stay visually quiet (`ADR 0092`).
+- a bounded native ACP v1 wire layer now covers initialization, Session
+  creation/resume, prompting, cancellation, close, Client responses, and
+  fragmented NDJSON. OpenCode 1.18.5 is the first exercised target; the Client
+  advertises terminal but not local-file capabilities, and every future
+  callback remains owned by one terminal tab (`ADR 0093`).
 
 Delivery status:
 

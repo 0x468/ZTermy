@@ -197,3 +197,25 @@ token 估算 → 预压缩（LLM 摘要 temp=0，保护最近 N 条，保留最�
 - <https://github.com/agentclientprotocol/agent-client-protocol>
 - <https://zed.dev/docs/ai/external-agents>
 - <https://dev.opencode.ai/docs/server/>
+
+## 9. ACP / OpenCode 原生接入边界（2026-08-15）
+
+- ACP v1 将初始化、Session、Prompt、取消、工具进度、权限请求和终端回调定义为标准
+  JSON-RPC；Zed 当前将 Claude、Codex、OpenCode、Gemini、Copilot、Cursor 与 Pi 等外部
+  Agent 统一放在这条边界后，而不是给每个 Harness 维护一套聊天 UI。
+- 本机 OpenCode 1.18.5 的 `opencode acp` 已实际完成 v1 握手和 `session/new`，返回自身
+  模型/模式配置及斜杠命令。Provider、认证和模型应继续由 OpenCode 自己管理，ztermy
+  不再复制一套 OpenCode 凭据表单。
+- ztermy 的使用场景与代码编辑器不同：ACP `cwd` 是本机目录，SSH 当前目录是远端目录。
+  因此 Client 不声明 ACP `fs`，只声明 `terminal`，并将在后续把 `terminal/*` 串行映射到
+  当前侧栏所属的唯一 PTY；不能把本机仓库当作远端文件系统，也不能创建跨 Tab 目标。
+- `AcpProtocol` 已落地稳定 v1 的有界 wire contract；进程生命周期、Session update 映射、
+  terminal/permission callback 和 OpenCode Agent 选项按独立节点接入。对应 ADR 0093。
+
+参考：
+
+- <https://agentclientprotocol.com/protocol/v1/initialization>
+- <https://agentclientprotocol.com/protocol/v1/terminals>
+- <https://agentclientprotocol.com/protocol/v1/tool-calls>
+- <https://dev.opencode.ai/docs/acp/>
+- <https://zed.dev/docs/ai/external-agents>
