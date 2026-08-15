@@ -35,6 +35,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
+#include <QMimeData>
 #include <QPointer>
 #include <QSaveFile>
 #include <QSet>
@@ -257,6 +258,62 @@ private:
         return std::string{"image/gif"};
     }
     return std::nullopt;
+}
+
+[[nodiscard]] bool isAiImageFile(const QString &path)
+{
+    const QString suffix = QFileInfo(path).suffix().toLower();
+    return suffix == QStringLiteral("png") || suffix == QStringLiteral("jpg") || suffix == QStringLiteral("jpeg")
+           || suffix == QStringLiteral("webp") || suffix == QStringLiteral("gif");
+}
+
+[[nodiscard]] std::optional<ztermy::ai::AiImageAttachment> aiImageAttachmentFromBytes(const QString &fileName,
+                                                                                      QByteArray bytes)
+{
+    if (bytes.isEmpty() || bytes.size() > maximumAiImageAttachmentBytes)
+    {
+        return std::nullopt;
+    }
+    QBuffer sourceBuffer(&bytes);
+    if (!sourceBuffer.open(QIODevice::ReadOnly))
+    {
+        return std::nullopt;
+    }
+    QImageReader reader(&sourceBuffer);
+    reader.setDecideFormatFromContent(true);
+    if (!reader.canRead())
+    {
+        return std::nullopt;
+    }
+    const auto mediaType = imageMediaType(reader.format());
+    const QSize imageSize = reader.size();
+    if (!mediaType.has_value() || !imageSize.isValid() || imageSize.width() <= 0 || imageSize.height() <= 0
+        || static_cast<quint64>(imageSize.width()) * static_cast<quint64>(imageSize.height()) > maximumAiImagePixels)
+    {
+        return std::nullopt;
+    }
+
+    reader.setAutoTransform(true);
+    reader.setScaledSize(imageSize.scaled(QSize(512, 384), Qt::KeepAspectRatio));
+    const QImage preview = reader.read();
+    QByteArray previewBytes;
+    QBuffer previewBuffer(&previewBytes);
+    if (preview.isNull() || !previewBuffer.open(QIODevice::WriteOnly) || !preview.save(&previewBuffer, "PNG"))
+    {
+        return std::nullopt;
+    }
+
+    const QByteArray digest = QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex();
+    return ztermy::ai::AiImageAttachment{
+        .id = "image:" + digest.toStdString(),
+        .fileName = utf8String(fileName),
+        .mediaType = *mediaType,
+        .base64Data = bytes.toBase64().toStdString(),
+        .previewBase64Data = previewBytes.toBase64().toStdString(),
+        .byteSize = static_cast<std::uint64_t>(bytes.size()),
+        .pixelWidth = static_cast<std::uint32_t>(imageSize.width()),
+        .pixelHeight = static_cast<std::uint32_t>(imageSize.height()),
+    };
 }
 
 [[nodiscard]] ztermy::ai::AiProviderKind aiProviderKind(const ztermy::config::AiProviderPreference provider) noexcept
@@ -9045,9 +9102,14 @@ bool AppController::attachAiRecentCommands(const int count)
 bool AppController::attachAiTextFiles(const QStringList &localFileUrls)
 {
     TerminalTab *tab = activeTab();
-    if (tab == nullptr || localFileUrls.isEmpty()
-        || localFileUrls.size() > static_cast<qsizetype>(maximumAiTextAttachmentFiles))
+    if (tab == nullptr || localFileUrls.isEmpty())
     {
+        return false;
+    }
+    if (localFileUrls.size() > static_cast<qsizetype>(maximumAiTextAttachmentFiles))
+    {
+        tab->aiError = tr("Attach no more than four text files to one message.");
+        emit aiConversationChanged();
         return false;
     }
 
@@ -9203,23 +9265,6 @@ bool AppController::attachAiImageFiles(const QStringList &localFileUrls)
                 continue;
             }
 
-            QImageReader reader(canonicalPath);
-            reader.setDecideFormatFromContent(true);
-            if (!reader.canRead())
-            {
-                result.rejectedFiles.push_back(info.fileName());
-                continue;
-            }
-            const auto mediaType = imageMediaType(reader.format());
-            const QSize imageSize = reader.size();
-            if (!mediaType.has_value() || !imageSize.isValid() || imageSize.width() <= 0 || imageSize.height() <= 0
-                || static_cast<quint64>(imageSize.width()) * static_cast<quint64>(imageSize.height())
-                       > maximumAiImagePixels)
-            {
-                result.rejectedFiles.push_back(info.fileName());
-                continue;
-            }
-
             QFile file(canonicalPath);
             if (!file.open(QIODevice::ReadOnly))
             {
@@ -9233,29 +9278,14 @@ bool AppController::attachAiImageFiles(const QStringList &localFileUrls)
                 continue;
             }
 
-            reader.setAutoTransform(true);
-            reader.setScaledSize(imageSize.scaled(QSize(512, 384), Qt::KeepAspectRatio));
-            const QImage preview = reader.read();
-            QByteArray previewBytes;
-            QBuffer previewBuffer(&previewBytes);
-            if (preview.isNull() || !previewBuffer.open(QIODevice::WriteOnly) || !preview.save(&previewBuffer, "PNG"))
+            auto attachment = aiImageAttachmentFromBytes(info.fileName(), bytes);
+            if (!attachment.has_value())
             {
                 result.rejectedFiles.push_back(info.fileName());
                 continue;
             }
-
-            const QByteArray digest = QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex();
-            result.attachments.push_back(ai::AiImageAttachment{
-                .id = "image:" + digest.toStdString(),
-                .fileName = utf8String(info.fileName()),
-                .mediaType = *mediaType,
-                .base64Data = bytes.toBase64().toStdString(),
-                .previewBase64Data = previewBytes.toBase64().toStdString(),
-                .byteSize = static_cast<std::uint64_t>(bytes.size()),
-                .pixelWidth = static_cast<std::uint32_t>(imageSize.width()),
-                .pixelHeight = static_cast<std::uint32_t>(imageSize.height()),
-            });
-            totalBytes += bytes.size();
+            totalBytes += static_cast<qsizetype>(attachment->byteSize);
+            result.attachments.push_back(std::move(*attachment));
         }
 
         if (!self)
@@ -9263,6 +9293,100 @@ bool AppController::attachAiImageFiles(const QStringList &localFileUrls)
             return;
         }
         emit self->aiImageAttachmentTaskCompleted(tabId, std::move(result.attachments), result.rejectedFiles);
+    });
+    emit aiConversationChanged();
+    return true;
+}
+
+bool AppController::attachAiClipboardContent()
+{
+    TerminalTab *tab = activeTab();
+    QClipboard *clipboard = QGuiApplication::clipboard();
+    const QMimeData *mimeData = clipboard == nullptr ? nullptr : clipboard->mimeData();
+    if (tab == nullptr || mimeData == nullptr)
+    {
+        return false;
+    }
+
+    if (mimeData->hasUrls())
+    {
+        QStringList imageUrls;
+        QStringList textUrls;
+        for (const QUrl &url : mimeData->urls())
+        {
+            if (!url.isLocalFile())
+            {
+                continue;
+            }
+            const QString value = url.toString();
+            (isAiImageFile(url.toLocalFile()) ? imageUrls : textUrls).push_back(value);
+        }
+        const bool hasLocalFiles = !imageUrls.isEmpty() || !textUrls.isEmpty();
+        if (!imageUrls.isEmpty())
+        {
+            static_cast<void>(attachAiImageFiles(imageUrls));
+        }
+        if (!textUrls.isEmpty())
+        {
+            static_cast<void>(attachAiTextFiles(textUrls));
+        }
+        if (hasLocalFiles)
+        {
+            return true;
+        }
+    }
+
+    if (!mimeData->hasImage())
+    {
+        return false;
+    }
+    if (tab->aiImageAttachments.size() >= static_cast<std::size_t>(maximumAiImageAttachmentFiles))
+    {
+        tab->aiError = tr("Attach no more than four images to one message.");
+        emit aiConversationChanged();
+        return true;
+    }
+
+    QImage image = clipboard->image();
+    if (image.isNull() || image.width() <= 0 || image.height() <= 0
+        || static_cast<quint64>(image.width()) * static_cast<quint64>(image.height()) > maximumAiImagePixels)
+    {
+        tab->aiError = tr("Could not attach the clipboard image.");
+        emit aiConversationChanged();
+        return true;
+    }
+
+    const auto existingBytes =
+        std::accumulate(tab->aiImageAttachments.begin(), tab->aiImageAttachments.end(), qsizetype{0},
+                        [](const qsizetype total, const ai::AiImageAttachment &attachment) {
+                            return total + static_cast<qsizetype>(attachment.byteSize);
+                        });
+    tab->aiError.clear();
+    const QString tabId = tab->id;
+    const QPointer<AppController> self(this);
+    QThreadPool::globalInstance()->start([self, tabId, image = std::move(image), existingBytes] {
+        AiImageAttachmentLoadResult result;
+        constexpr auto clipboardFileName = "clipboard-image.png";
+        QByteArray bytes;
+        QBuffer output(&bytes);
+        if (!output.open(QIODevice::WriteOnly) || !image.save(&output, "PNG") || bytes.isEmpty()
+            || existingBytes + bytes.size() > maximumAiImageAttachmentTotalBytes)
+        {
+            result.rejectedFiles.push_back(QString::fromLatin1(clipboardFileName));
+        }
+        else if (auto attachment = aiImageAttachmentFromBytes(QString::fromLatin1(clipboardFileName), std::move(bytes));
+                 attachment.has_value())
+        {
+            result.attachments.push_back(std::move(*attachment));
+        }
+        else
+        {
+            result.rejectedFiles.push_back(QString::fromLatin1(clipboardFileName));
+        }
+        if (self)
+        {
+            emit self->aiImageAttachmentTaskCompleted(tabId, std::move(result.attachments), result.rejectedFiles);
+        }
     });
     emit aiConversationChanged();
     return true;

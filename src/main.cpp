@@ -26,6 +26,7 @@
 #include <QJsonObject>
 #include <QLoggingCategory>
 #include <QMetaType>
+#include <QMimeData>
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickStyle>
@@ -83,6 +84,20 @@ template <typename Predicate>
         processWindowEventsFor(std::chrono::milliseconds{25});
     }
     return predicate();
+}
+
+[[nodiscard]] std::unique_ptr<QMimeData> cloneMimeData(const QMimeData *source)
+{
+    auto clone = std::make_unique<QMimeData>();
+    if (source == nullptr)
+    {
+        return clone;
+    }
+    for (const QString &format : source->formats())
+    {
+        clone->setData(format, source->data(format));
+    }
+    return clone;
 }
 
 [[nodiscard]] bool runWindowRuntimeSmoke(ztermy::NativeWindow &window)
@@ -809,6 +824,122 @@ struct ResizeHitRuntimeCase
         && std::ranges::any_of(controller.activeAiContextItems(), [&firstAiContextId](const QVariant &item) {
                return item.toMap().value(QStringLiteral("id")).toString() == firstAiContextId;
            });
+    QClipboard *clipboard = QGuiApplication::clipboard();
+    std::unique_ptr<QMimeData> savedClipboard = cloneMimeData(clipboard == nullptr ? nullptr : clipboard->mimeData());
+    QImage clipboardImage(32, 24, QImage::Format_ARGB32_Premultiplied);
+    clipboardImage.fill(QColor(QStringLiteral("#2D7FF9")));
+    if (clipboard != nullptr)
+    {
+        clipboard->setImage(clipboardImage);
+    }
+    const auto pasteIntoAiEditor = [&window, aiPromptEditor] {
+        if (aiPromptEditor == nullptr)
+        {
+            return;
+        }
+        aiPromptEditor->forceActiveFocus(Qt::TabFocusReason);
+        processWindowEventsFor(std::chrono::milliseconds{40});
+        qt_handleKeyEvent(&window, QEvent::KeyPress, Qt::Key_V, Qt::ControlModifier);
+        qt_handleKeyEvent(&window, QEvent::KeyRelease, Qt::Key_V, Qt::ControlModifier);
+    };
+    pasteIntoAiEditor();
+    const bool clipboardImageAttached = processWindowEventsUntil(
+        [&controller] {
+            return std::ranges::any_of(controller.activeAiContextItems(), [](const QVariant &item) {
+                const QVariantMap value = item.toMap();
+                return value.value(QStringLiteral("kind")).toString() == QStringLiteral("image")
+                       && value.value(QStringLiteral("title")).toString() == QStringLiteral("clipboard-image.png");
+            });
+        },
+        std::chrono::milliseconds{2'000});
+    QString clipboardImageId;
+    if (clipboardImageAttached)
+    {
+        const QVariantList contextItems = controller.activeAiContextItems();
+        const auto item = std::ranges::find_if(contextItems, [](const QVariant &candidate) {
+            const QVariantMap value = candidate.toMap();
+            return value.value(QStringLiteral("kind")).toString() == QStringLiteral("image")
+                   && value.value(QStringLiteral("title")).toString() == QStringLiteral("clipboard-image.png");
+        });
+        if (item != contextItems.cend())
+        {
+            clipboardImageId = item->toMap().value(QStringLiteral("id")).toString();
+        }
+    }
+    const bool clipboardImageRemoved = !clipboardImageId.isEmpty() && controller.removeAiContextItem(clipboardImageId);
+
+    QFile clipboardFile{QDir(outputDirectory).filePath(QStringLiteral("clipboard-context.txt"))};
+    const bool clipboardFileWritten = clipboardFile.open(QIODevice::WriteOnly | QIODevice::Text)
+                                      && clipboardFile.write("clipboard file context\n") == qint64{23};
+    clipboardFile.close();
+    if (clipboard != nullptr && clipboardFileWritten)
+    {
+        auto fileMimeData = std::make_unique<QMimeData>();
+        fileMimeData->setUrls({QUrl::fromLocalFile(clipboardFile.fileName())});
+        clipboard->setMimeData(fileMimeData.release());
+    }
+    pasteIntoAiEditor();
+    const bool clipboardFileAttached = processWindowEventsUntil(
+        [&controller] {
+            return std::ranges::any_of(controller.activeAiContextItems(), [](const QVariant &item) {
+                const QVariantMap value = item.toMap();
+                return value.value(QStringLiteral("kind")).toString() == QStringLiteral("attachment")
+                       && value.value(QStringLiteral("title")).toString() == QStringLiteral("clipboard-context.txt");
+            });
+        },
+        std::chrono::milliseconds{2'000});
+    QString clipboardFileId;
+    if (clipboardFileAttached)
+    {
+        const QVariantList contextItems = controller.activeAiContextItems();
+        const auto item = std::ranges::find_if(contextItems, [](const QVariant &candidate) {
+            const QVariantMap value = candidate.toMap();
+            return value.value(QStringLiteral("kind")).toString() == QStringLiteral("attachment")
+                   && value.value(QStringLiteral("title")).toString() == QStringLiteral("clipboard-context.txt");
+        });
+        if (item != contextItems.cend())
+        {
+            clipboardFileId = item->toMap().value(QStringLiteral("id")).toString();
+        }
+    }
+    const bool clipboardFileRemoved = !clipboardFileId.isEmpty() && controller.removeAiContextItem(clipboardFileId);
+
+    constexpr auto clipboardTextFixture = "clipboard-text-fixture";
+    if (aiPromptEditor != nullptr)
+    {
+        aiPromptEditor->setProperty("text", QString{});
+    }
+    if (clipboard != nullptr)
+    {
+        clipboard->setText(QString::fromLatin1(clipboardTextFixture));
+        processWindowEventsFor(std::chrono::milliseconds{40});
+    }
+    pasteIntoAiEditor();
+    processWindowEventsFor(std::chrono::milliseconds{40});
+    const bool clipboardTextPasted =
+        aiPromptEditor != nullptr
+        && aiPromptEditor->property("text").toString() == QString::fromLatin1(clipboardTextFixture);
+    if (aiPromptEditor != nullptr)
+    {
+        aiPromptEditor->setProperty("text", QString{});
+    }
+    if (clipboard != nullptr)
+    {
+        clipboard->setMimeData(savedClipboard.release());
+    }
+    const bool clipboardPastePassed = clipboard != nullptr && aiPromptEditor != nullptr && clipboardImageAttached
+                                      && clipboardImageRemoved && clipboardFileWritten && clipboardFileAttached
+                                      && clipboardFileRemoved && clipboardTextPasted;
+    QFile clipboardArtifact{QDir(outputDirectory).filePath(QStringLiteral("ai-clipboard-paste-contract.txt"))};
+    if (clipboardArtifact.open(QIODevice::WriteOnly | QIODevice::Text))
+    {
+        QTextStream artifact{&clipboardArtifact};
+        artifact << "imageAttached=" << clipboardImageAttached << '\n';
+        artifact << "imageRemoved=" << clipboardImageRemoved << '\n';
+        artifact << "fileAttached=" << clipboardFileAttached << '\n';
+        artifact << "fileRemoved=" << clipboardFileRemoved << '\n';
+        artifact << "plainTextPasted=" << clipboardTextPasted << '\n';
+    }
     if (aiAssistantPane != nullptr)
     {
         aiAssistantPane->setProperty("contextExpanded", true);
@@ -983,7 +1114,7 @@ struct ResizeHitRuntimeCase
     }
     return titleBrandPalettePassed && lightCompactPassed && lightRegularPassed && chineseShortcuts && chinesePalette
            && aiWorkbenchOpened && missingProviderShown && aiDarkCaptured && aiCompactCaptured && aiLightCaptured
-           && longApprovalBounded && restoredDark;
+           && longApprovalBounded && clipboardPastePassed && restoredDark;
 }
 
 [[nodiscard]] QQuickItem *quickItem(QQuickItem *rootObject, const char *objectName)

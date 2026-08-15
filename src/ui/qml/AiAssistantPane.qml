@@ -2533,6 +2533,12 @@ Rectangle {
                         font.pixelSize: Theme.textBody
                         Accessible.name: qsTr("AI message")
                         Keys.onPressed: event => {
+                            if (event.matches(StandardKey.Paste)) {
+                                if (!pane.controller.attachAiClipboardContent())
+                                    promptEditor.paste();
+                                event.accepted = true;
+                                return;
+                            }
                             if (slashCommandList.visible && (event.key === Qt.Key_Down || event.key === Qt.Key_Up)) {
                                 const offset = event.key === Qt.Key_Down ? 1 : -1;
                                 slashCommandList.currentIndex = Math.max(0, Math.min(slashCommandList.count - 1, slashCommandList.currentIndex + offset));
