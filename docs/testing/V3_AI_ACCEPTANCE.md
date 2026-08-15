@@ -132,6 +132,9 @@ evaluations serve different purposes and are reported separately.
       widening the sidebar, supports image-only and text-plus-image sends, and keeps each draft bound
       to its terminal. Invalid, inaccessible, oversized, over-40-megapixel, or more than four images
       are rejected without freezing the UI.
+- [ ] Owner check: drag a supported image and a UTF-8 text file from Explorer over the composer.
+      Expected: a themed drop target appears, both files become removable attachments in the owning
+      terminal draft, focus returns to the editor, and no message is sent until the user sends it.
 - [ ] Owner/provider check: a vision-capable model receives the image through its provider-native
       payload and answers from its contents. Follow-up turns retain a visible historical-image marker
       without silently resending binary data; restoring history clears unrelated draft attachments.

@@ -21,6 +21,10 @@ Base64 in the context preview, and lose provider-native vision behavior.
 
 - Images are explicit draft attachments owned by the active terminal sidebar.
   They are never discovered from the filesystem or another terminal.
+- The file picker and drag-and-drop composer affordance feed the same loader.
+  A drop is an explicit attachment gesture, never an implicit send action;
+  mixed drops classify supported image suffixes for image loading and send all
+  remaining local URLs through the bounded UTF-8 text loader.
 - Load and decode on a worker thread. Accept PNG, JPEG, WebP, and GIF by decoded
   content rather than filename, with limits of four images, 5 MiB per image,
   12 MiB per draft, and 40 megapixels per decoded image.

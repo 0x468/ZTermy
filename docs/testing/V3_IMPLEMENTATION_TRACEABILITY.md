@@ -112,6 +112,7 @@ covered by `application-settings`, `ai-permission-policy`,
 | Keyboard-first built-in slash commands | `src/ui/qml/AiAssistantPane.qml`, existing `AppController` AI actions | QML compilation, translation gate, owner keyboard acceptance | Product review 2026-08-13 |
 | Consecutive tool calls grouped per assistant turn, expandable bounded arguments/results, and inert restored snapshots | `src/application/ai/AiConversationModel.*`, `src/infrastructure/ai/AiConversationStore.*`, `src/ui/qml/AiAssistantPane.qml` | `ai-conversation-model`, `ai-conversation-store`, `qml-native-window-smoke`, `ui-layout-runtime-smoke` | ADR 0061, Netcatty comparison 2026-08-15 |
 | Compact one-row header with low-frequency conversation actions in overflow | `src/ui/qml/AiAssistantPane.qml`, `src/main.cpp` | `ui-layout-runtime-smoke` accessibility and 260 px geometry contracts | Netcatty comparison 2026-08-15 |
+| Drag local images/text onto the owning terminal composer without auto-send or cross-terminal routing | `src/ui/qml/AiAssistantPane.qml`, existing `AppController` asynchronous attachment loaders | `ui-layout-runtime-smoke` 260 px geometry contract, owner Explorer drag/drop acceptance | ADR 0087, 0089 |
 
 ## 0.3.10 — current-terminal native tool contract
 

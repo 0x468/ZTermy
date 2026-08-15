@@ -938,7 +938,8 @@ struct ResizeHitRuntimeCase
     window.resize(QSize{500, 360});
     processWindowEventsFor(std::chrono::milliseconds{250});
     constexpr std::array compactAiActionNames{"aiAgentPickerButton",      "aiHistoryToggle", "aiNewConversationButton",
-                                              "aiConversationMoreButton", "aiContextToggle", "aiSendButton"};
+                                              "aiConversationMoreButton", "aiContextToggle", "aiSendButton",
+                                              "aiAttachmentDropArea"};
     bool compactAiActionsInsidePanel = aiAssistantPane != nullptr;
     QFile compactAiArtifact{QDir(outputDirectory).filePath(QStringLiteral("compact-ai-layout-contract.txt"))};
     const bool compactAiArtifactOpened = compactAiArtifact.open(QIODevice::WriteOnly | QIODevice::Text);

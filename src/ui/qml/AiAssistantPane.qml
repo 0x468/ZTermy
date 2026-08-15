@@ -254,6 +254,23 @@ Rectangle {
         return count;
     }
 
+    function attachDroppedFiles(values) {
+        const imageUrls = [];
+        const textUrls = [];
+        for (let index = 0; index < values.length; ++index) {
+            const value = values[index].toString();
+            const normalized = value.split(/[?#]/, 1)[0].toLocaleLowerCase();
+            if (/\.(png|jpe?g|webp|gif)$/.test(normalized))
+                imageUrls.push(value);
+            else
+                textUrls.push(value);
+        }
+        if (imageUrls.length > 0)
+            pane.controller.attachAiImageFiles(imageUrls);
+        if (textUrls.length > 0)
+            pane.controller.attachAiTextFiles(textUrls);
+    }
+
     function addSelectedSkill(slug) {
         if (!slug || selectedSkillSlugs.indexOf(slug) >= 0 || selectedSkillSlugs.length >= 4)
             return;
@@ -2274,6 +2291,61 @@ Rectangle {
             visible: !pane.historyExpanded
             color: Theme.elevatedBackground
             border.color: Theme.border
+
+            DropArea {
+                id: attachmentDropArea
+
+                anchors.fill: parent
+                z: 20
+                objectName: "aiAttachmentDropArea"
+                onEntered: drag => drag.accepted = drag.hasUrls
+                onDropped: drop => {
+                    if (!drop.hasUrls)
+                        return;
+                    pane.attachDroppedFiles(drop.urls);
+                    drop.acceptProposedAction();
+                    pane.focusEditor();
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    visible: attachmentDropArea.containsDrag
+                    radius: Theme.radiusPanel
+                    color: Theme.mixColor(Theme.elevatedBackground, Theme.accent, 0.12)
+                    border.color: Theme.accent
+                    border.width: 2
+
+                    Column {
+                        anchors.centerIn: parent
+                        spacing: 4
+
+                        AppIcon {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: 22
+                            height: 22
+                            name: "plus"
+                            color: Theme.accent
+                        }
+
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: qsTr("Drop files to attach")
+                            color: Theme.text
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.textBody
+                            font.weight: Font.DemiBold
+                        }
+
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: qsTr("Images or UTF-8 text files")
+                            color: Theme.textMuted
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.textCompact
+                        }
+                    }
+                }
+            }
 
             ColumnLayout {
                 anchors.fill: parent
