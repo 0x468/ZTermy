@@ -220,9 +220,13 @@ void ProviderHttpClientTests::streamsAnthropicTypedEvents()
         .payload =
             "event: message_start\n"
             "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"usage\":{\"input_tokens\":3}}}\n\n"
+            "event: content_block_start\n"
+            "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n"
             "event: content_block_delta\n"
             "data: "
             "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"hi\"}}\n\n"
+            "event: content_block_stop\n"
+            "data: {\"type\":\"content_block_stop\",\"index\":0}\n\n"
             "event: message_stop\n"
             "data: {\"type\":\"message_stop\"}\n\n"});
     ProviderHttpClient client(&network);
