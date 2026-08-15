@@ -16,9 +16,9 @@ namespace ztermy::ai
 namespace
 {
 constexpr std::size_t maximumWebSourcesPerMessage = 24;
-constexpr std::size_t maximumWebSourceUrlBytes = 8 * 1024;
+constexpr std::size_t maximumWebSourceUrlBytes = std::size_t{8} * 1024;
 constexpr std::size_t maximumWebSourceTitleBytes = 1024;
-constexpr std::size_t maximumWebSourceCitationBytes = 4 * 1024;
+constexpr std::size_t maximumWebSourceCitationBytes = std::size_t{4} * 1024;
 
 [[nodiscard]] std::size_t imageStorageBytes(const std::span<const AiImageAttachment> images) noexcept
 {
@@ -330,6 +330,7 @@ bool AiConversationModel::restoreTranscript(const std::vector<AiConversationTran
     {
         if ((entry.content.empty() && entry.role != AiConversationTranscriptRole::assistant)
             || entry.content.size() + sourceStorageBytes(entry.sources) > m_limits.maxMessageBytes
+            || (entry.role != AiConversationTranscriptRole::assistant && !entry.sources.empty())
             || entry.sources.size() > maximumWebSourcesPerMessage
             || !std::ranges::all_of(entry.sources, [](const AiWebSource &source) {
                    return validWebSourceUrl(source.url) && source.title.size() <= maximumWebSourceTitleBytes
@@ -382,9 +383,10 @@ bool AiConversationModel::restoreTranscript(const std::vector<AiConversationTran
         }
         const std::uint64_t messageId = beginAssistantMessage();
         if ((!entry.content.empty() && !appendAssistantDelta(messageId, QString::fromUtf8(entry.content)))
-            || !std::ranges::all_of(entry.sources, [this, messageId](const AiWebSource &source) {
-                   return appendAssistantSource(messageId, source);
-               })
+            || !std::ranges::all_of(entry.sources,
+                                    [this, messageId](const AiWebSource &source) {
+                                        return appendAssistantSource(messageId, source);
+                                    })
             || !completeAssistantMessage(messageId))
         {
             clear();

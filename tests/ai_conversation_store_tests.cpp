@@ -124,6 +124,7 @@ private slots:
     void exportsPlaintextAndDeletesStoreAndKey();
     void recoversFromBackupOnAuthenticationFailure();
     void preservesUpdatesAcrossStoreInstances();
+    void roundTripsAndValidatesWebSources();
 };
 
 void AiConversationStoreTests::roundTripsWithoutPlaintextAndRotatesNonce()
@@ -285,6 +286,32 @@ void AiConversationStoreTests::preservesUpdatesAcrossStoreInstances()
     QVERIFY(loaded.has_value());
     QCOMPARE(loaded->size(), 3ULL);
     QVERIFY(!QFileInfo::exists(path + QStringLiteral(".lock")));
+}
+
+void AiConversationStoreTests::roundTripsAndValidatesWebSources()
+{
+    QTemporaryDir directory;
+    TestVault vault;
+    ai::AiConversationStore store(directory.filePath(QStringLiteral("history.enc")), vault);
+    auto value = conversation(QStringLiteral("sources"), QStringLiteral("question"));
+    value.messages.at(1).sources = {
+        {.url = "https://example.test/reference", .title = "Primary reference", .citedText = "The cited passage."}};
+    QVERIFY(store.upsert(value).has_value());
+
+    const auto loaded = store.load();
+    QVERIFY(loaded.has_value());
+    QCOMPARE(loaded->front().messages.at(1).sources, value.messages.at(1).sources);
+
+    value.messages.at(1).sources.front().url = "file:///C:/private.txt";
+    const auto invalidScheme = store.upsert(value);
+    QVERIFY(!invalidScheme.has_value());
+    QCOMPARE(invalidScheme.error(), ai::AiConversationStoreError::invalidData);
+
+    value.messages.at(1).sources.front().url = "https://example.test/reference";
+    value.messages.front().sources = value.messages.at(1).sources;
+    const auto sourcesOnUserMessage = store.upsert(value);
+    QVERIFY(!sourcesOnUserMessage.has_value());
+    QCOMPARE(sourcesOnUserMessage.error(), ai::AiConversationStoreError::invalidData);
 }
 
 QTEST_GUILESS_MAIN(AiConversationStoreTests)

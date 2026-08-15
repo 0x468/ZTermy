@@ -10,6 +10,7 @@
 #include <QJsonObject>
 #include <QLockFile>
 #include <QSaveFile>
+#include <QUrl>
 
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
@@ -19,6 +20,7 @@
 #include <limits>
 #include <memory>
 #include <ranges>
+#include <span>
 #include <utility>
 
 namespace ztermy::ai
@@ -31,9 +33,9 @@ constexpr int nonceSize = 12;
 constexpr int tagSize = 16;
 constexpr qsizetype maximumEnvelopeBytes = qsizetype{8} * 1024 * 1024;
 constexpr std::size_t maximumSourcesPerMessage = 24;
-constexpr std::size_t maximumSourceUrlBytes = 8 * 1024;
+constexpr std::size_t maximumSourceUrlBytes = std::size_t{8} * 1024;
 constexpr std::size_t maximumSourceTitleBytes = 1024;
-constexpr std::size_t maximumSourceCitationBytes = 4 * 1024;
+constexpr std::size_t maximumSourceCitationBytes = std::size_t{4} * 1024;
 constexpr std::string_view keyReference = "ai-conversation-history";
 
 using CipherContext = std::unique_ptr<EVP_CIPHER_CTX, decltype(&EVP_CIPHER_CTX_free)>;
@@ -49,6 +51,26 @@ struct LoadedStore final
     std::vector<AiStoredConversation> conversations;
     std::uint64_t generation = 0;
 };
+
+[[nodiscard]] bool validSourceUrl(const std::string &url)
+{
+    if (url.empty() || url.size() > maximumSourceUrlBytes)
+    {
+        return false;
+    }
+    const QUrl value = QUrl::fromEncoded(QByteArray(url.data(), static_cast<qsizetype>(url.size())));
+    return value.isValid() && (value.scheme() == QStringLiteral("https") || value.scheme() == QStringLiteral("http"));
+}
+
+[[nodiscard]] std::size_t sourceStorageBytes(const std::span<const AiWebSource> sources) noexcept
+{
+    std::size_t bytes = 0;
+    for (const auto &source : sources)
+    {
+        bytes += source.url.size() + source.title.size() + source.citedText.size();
+    }
+    return bytes;
+}
 
 void clearBytes(QByteArray &bytes) noexcept
 {
@@ -266,11 +288,14 @@ decrypt(const QByteArray &ciphertext, const QByteArray &tag, const std::string_v
                && std::cmp_less_equal(message.text.toUtf8().size(), limits.maximumMessageBytes)
                && (message.role == QStringLiteral("assistant") || message.sources.empty())
                && message.sources.size() <= maximumSourcesPerMessage
-               && std::ranges::all_of(message.sources, [](const AiWebSource &source) {
-                      return !source.url.empty() && source.url.size() <= maximumSourceUrlBytes
-                             && source.title.size() <= maximumSourceTitleBytes
-                             && source.citedText.size() <= maximumSourceCitationBytes;
-                  });
+               && std::ranges::all_of(message.sources,
+                                      [](const AiWebSource &source) {
+                                          return validSourceUrl(source.url)
+                                                 && source.title.size() <= maximumSourceTitleBytes
+                                                 && source.citedText.size() <= maximumSourceCitationBytes;
+                                      })
+               && static_cast<std::size_t>(message.text.toUtf8().size()) + sourceStorageBytes(message.sources)
+                      <= limits.maximumMessageBytes;
     });
 }
 

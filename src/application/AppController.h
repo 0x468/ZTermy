@@ -81,11 +81,13 @@ namespace ztermy
 
 using ShellHistoryEntries = std::vector<workbench::ShellHistoryEntry>;
 using NoteSearchResults = std::vector<workbench::NoteSearchResult>;
+using AiImageAttachments = std::vector<ai::AiImageAttachment>;
 
 } // namespace ztermy
 
 Q_DECLARE_METATYPE(ztermy::ShellHistoryEntries)
 Q_DECLARE_METATYPE(ztermy::NoteSearchResults)
+Q_DECLARE_METATYPE(ztermy::AiImageAttachments)
 
 namespace ztermy
 {
@@ -622,6 +624,8 @@ private:
     Q_SIGNAL void noteSearchTaskCompleted(quint64 requestId, NoteSearchResults results, const QString &error);
     Q_SIGNAL void aiNoteReadTaskCompleted(const QString &tabId, quint64 requestId, quint64 generation,
                                           const QString &relativePath, const QByteArray &outputJson);
+    Q_SIGNAL void aiImageAttachmentTaskCompleted(const QString &tabId, AiImageAttachments attachments,
+                                                 const QStringList &rejectedFiles);
     Q_SIGNAL void scriptOutputObserved(const QString &tabId, const QByteArray &bytes);
     Q_SIGNAL void portForwardingSnapshotReady(const QString &ruleId, int state, int failure, qulonglong activeClients,
                                               qulonglong bytesFromClients, qulonglong bytesToClients,
@@ -870,6 +874,8 @@ private:
     void applyNoteSearchTaskResult(quint64 requestId, const NoteSearchResults &results, const QString &error);
     void applyAiNoteReadTaskResult(const QString &tabId, quint64 requestId, quint64 generation,
                                    const QString &relativePath, const QByteArray &outputJson);
+    void applyAiImageAttachmentTaskResult(const QString &tabId, AiImageAttachments attachments,
+                                          const QStringList &rejectedFiles);
     void setNoteOperationError(QString message);
     void setQuickCommandOperationError(QString message);
     void setAiQuickMessageError(QString message);

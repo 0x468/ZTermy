@@ -1382,101 +1382,6 @@ Rectangle {
                                 onCopyRequested: text => pane.controller.copyAiText(text)
                             }
 
-                            Button {
-                                id: sourcesToggle
-
-                                property bool expanded: false
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: visible ? 30 : 0
-                                visible: messageItem.messageRole === "assistant" && messageItem.sources.length > 0
-                                text: expanded ? qsTr("Hide sources · %1").arg(messageItem.sources.length) : qsTr("Sources · %1").arg(messageItem.sources.length)
-                                Accessible.name: text
-                                onClicked: expanded = !expanded
-
-                                contentItem: RowLayout {
-                                    spacing: 6
-
-                                    AppIcon {
-                                        Layout.preferredWidth: 14
-                                        Layout.preferredHeight: 14
-                                        name: sourcesToggle.expanded ? "chevron-down" : "chevron-right"
-                                        color: Theme.textMuted
-                                    }
-
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: sourcesToggle.text
-                                        color: Theme.textSoft
-                                        font.family: Theme.uiFont
-                                        font.pixelSize: Theme.textCompact
-                                    }
-                                }
-                                background: Rectangle {
-                                    radius: Theme.radiusSmall
-                                    color: sourcesToggle.down ? Theme.controlPressed : sourcesToggle.hovered ? Theme.controlHover : "transparent"
-                                }
-                            }
-
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: visible ? implicitHeight : 0
-                                visible: sourcesToggle.visible && sourcesToggle.expanded
-                                spacing: 3
-
-                                Repeater {
-                                    model: messageItem.sources
-
-                                    delegate: Button {
-                                        id: sourceButton
-
-                                        required property var modelData
-                                        Layout.fillWidth: true
-                                        Layout.preferredHeight: 38
-                                        hoverEnabled: true
-                                        focusPolicy: Qt.StrongFocus
-                                        Accessible.name: qsTr("Open source %1").arg(modelData.title || modelData.url)
-                                        onClicked: Qt.openUrlExternally(modelData.url)
-
-                                        contentItem: ColumnLayout {
-                                            spacing: 0
-
-                                            Text {
-                                                Layout.fillWidth: true
-                                                text: sourceButton.modelData.title || sourceButton.modelData.url
-                                                color: sourceButton.hovered || sourceButton.activeFocus ? Theme.accent : Theme.text
-                                                elide: Text.ElideRight
-                                                font.family: Theme.uiFont
-                                                font.pixelSize: Theme.textCompact
-                                                font.weight: Font.Medium
-                                            }
-
-                                            Text {
-                                                Layout.fillWidth: true
-                                                text: sourceButton.modelData.url
-                                                color: Theme.textSubtle
-                                                elide: Text.ElideMiddle
-                                                font.family: Theme.terminalFont
-                                                font.pixelSize: Theme.textCompact
-                                            }
-                                        }
-                                        background: Rectangle {
-                                            radius: Theme.radiusSmall
-                                            color: sourceButton.down ? Theme.controlPressed : sourceButton.hovered ? Theme.controlHover : Theme.controlBackground
-                                            border.color: sourceButton.activeFocus ? Theme.focus : Theme.border
-                                            border.width: sourceButton.activeFocus ? 2 : 1
-                                        }
-
-                                        HoverHandler {
-                                            cursorShape: Qt.PointingHandCursor
-                                        }
-
-                                        AppToolTip {
-                                            text: sourceButton.modelData.citedText || sourceButton.modelData.url
-                                        }
-                                    }
-                                }
-                            }
-
                             Repeater {
                                 model: messageItem.toolActivities
 
@@ -1619,6 +1524,104 @@ Rectangle {
                                 textFormat: messageItem.messageRole === "assistant" ? TextEdit.MarkdownText : TextEdit.PlainText
                                 font.pixelSize: Theme.textBody
                                 onCopyRequested: text => pane.controller.copyAiText(text)
+                            }
+
+                            Button {
+                                id: sourcesToggle
+
+                                property bool expanded: false
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: visible ? 30 : 0
+                                visible: messageItem.messageRole === "assistant" && messageItem.sources.length > 0
+                                text: expanded ? qsTr("Hide sources · %1").arg(messageItem.sources.length) : qsTr("Sources · %1").arg(messageItem.sources.length)
+                                Accessible.name: text
+                                onClicked: expanded = !expanded
+
+                                contentItem: RowLayout {
+                                    spacing: 6
+
+                                    AppIcon {
+                                        Layout.preferredWidth: 14
+                                        Layout.preferredHeight: 14
+                                        name: sourcesToggle.expanded ? "chevron-down" : "chevron-right"
+                                        color: Theme.textMuted
+                                    }
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: sourcesToggle.text
+                                        color: Theme.textSoft
+                                        font.family: Theme.uiFont
+                                        font.pixelSize: Theme.textCompact
+                                    }
+                                }
+                                background: Rectangle {
+                                    radius: Theme.radiusSmall
+                                    color: sourcesToggle.down ? Theme.controlPressed : sourcesToggle.hovered ? Theme.controlHover : "transparent"
+                                }
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: visible ? implicitHeight : 0
+                                visible: sourcesToggle.visible && sourcesToggle.expanded
+                                spacing: 3
+
+                                Repeater {
+                                    model: messageItem.sources
+
+                                    delegate: Button {
+                                        id: sourceButton
+
+                                        required property var modelData
+                                        Layout.fillWidth: true
+                                        Layout.minimumWidth: 0
+                                        Layout.preferredHeight: 38
+                                        hoverEnabled: true
+                                        focusPolicy: Qt.StrongFocus
+                                        Accessible.name: qsTr("Open source %1").arg(modelData.title || modelData.url)
+                                        onClicked: Qt.openUrlExternally(modelData.url)
+
+                                        contentItem: ColumnLayout {
+                                            spacing: 0
+
+                                            Text {
+                                                Layout.fillWidth: true
+                                                Layout.minimumWidth: 0
+                                                text: sourceButton.modelData.title || sourceButton.modelData.url
+                                                color: sourceButton.hovered || sourceButton.activeFocus ? Theme.accent : Theme.text
+                                                elide: Text.ElideRight
+                                                font.family: Theme.uiFont
+                                                font.pixelSize: Theme.textCompact
+                                                font.weight: Font.Medium
+                                            }
+
+                                            Text {
+                                                Layout.fillWidth: true
+                                                Layout.minimumWidth: 0
+                                                text: sourceButton.modelData.url
+                                                color: Theme.textSubtle
+                                                elide: Text.ElideMiddle
+                                                font.family: Theme.terminalFont
+                                                font.pixelSize: Theme.textCompact
+                                            }
+                                        }
+                                        background: Rectangle {
+                                            radius: Theme.radiusSmall
+                                            color: sourceButton.down ? Theme.controlPressed : sourceButton.hovered ? Theme.controlHover : Theme.controlBackground
+                                            border.color: sourceButton.activeFocus ? Theme.focus : Theme.border
+                                            border.width: sourceButton.activeFocus ? 2 : 1
+                                        }
+
+                                        HoverHandler {
+                                            cursorShape: Qt.PointingHandCursor
+                                        }
+
+                                        AppToolTip {
+                                            text: sourceButton.modelData.citedText || sourceButton.modelData.url
+                                        }
+                                    }
+                                }
                             }
 
                             Text {
@@ -2147,6 +2150,7 @@ Rectangle {
                     ContextToolButton {
                         id: webSearchButton
 
+                        objectName: "aiWebSearchButton"
                         checkable: true
                         checked: pane.webSearchEnabled && pane.controller.aiWebSearchAvailable
                         enabled: !pane.busy && pane.controller.aiWebSearchAvailable
@@ -2157,7 +2161,7 @@ Rectangle {
                             color: webSearchButton.checked ? Theme.accent : Theme.textMuted
                         }
                         AppToolTip {
-                            text: pane.controller.aiWebSearchAvailable ? webSearchButton.checked ? qsTr("Web search enabled for this conversation") : qsTr("Let the model search the web when useful") : qsTr("Native web search is unavailable for this provider")
+                            text: pane.controller.aiWebSearchAvailable ? webSearchButton.checked ? qsTr("Web search enabled for new prompts") : qsTr("Let the model search the web when useful") : qsTr("Native web search is unavailable for this provider")
                         }
                     }
 
@@ -2169,8 +2173,8 @@ Rectangle {
                         id: modelBox
 
                         objectName: "aiModelBox"
-                        visible: pane.width >= 320
-                        Layout.preferredWidth: pane.width < 380 ? 94 : 124
+                        visible: pane.width >= 430
+                        Layout.preferredWidth: pane.width < 500 ? 104 : 124
                         model: pane.modelOptions()
                         currentIndex: Math.max(0, model.indexOf(pane.controller.aiModel))
                         accessibleName: qsTr("AI model")

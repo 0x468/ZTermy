@@ -144,8 +144,8 @@ not by copying its React/Electron component structure.
 | MCP tools | Implemented | Native typed registry and lifecycle rather than UI scripting |
 | Built-in slash commands | Implemented | Keyboard-first picker for conversation, history, context, explanation, and command-generation actions |
 | Reusable user-authored skills | Planned | `0.3.10`; extend the same picker without coupling skills to one provider |
-| Explicit local text/file and image attachments | Planned | `0.3.10`; never ambient or silently attached |
-| Optional web search | Planned | `0.3.10`; provider-independent tool with visible citations |
+| Explicit local text/file and image attachments | Implemented | `0.3.10`; never ambient or silently attached |
+| Optional web search | Implemented | Provider-native OpenAI Responses/Anthropic search with typed activity and persisted citations; unsupported protocols degrade explicitly |
 | External Agent/SDK selector | Planned | `0.3.11`; adapters remain separate from the built-in ztermy Agent |
 
 The current composer follows the reference hierarchy: identity and conversation

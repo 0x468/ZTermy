@@ -124,6 +124,18 @@ evaluations serve different purposes and are reported separately.
       without silently resending binary data; restoring history clears unrelated draft attachments.
 - [x] Developer check: enabling AI debug trace preserves request/response structure and image metadata
       but writes no raw image Base64 or data-URL payload into the JSONL trace.
+- [x] Provider contract check: OpenAI Responses and Anthropic Messages receive their native web-search
+      tool definitions; compatible Chat Completions and Ollama reject search rather than silently
+      omitting it. Provider stream fixtures map search lifecycle and citations into typed events.
+- [x] Persistence check: cited HTTP(S) sources are URL-deduplicated, bounded by the assistant-message
+      budget, rejected on user/evidence messages, and survive encrypted conversation-history reload.
+- [ ] Owner/provider check: the composer search control is available for OpenAI Responses and Anthropic,
+      disabled with a clear explanation for unsupported protocols, and never overflows the 320 px sidebar.
+- [ ] Owner/provider check: a live search shows one updating activity card and a collapsed, keyboard-
+      reachable Sources section; opening a source launches its original URL and copying the answer copies
+      only the provider's original Markdown.
+- [ ] Follow-up contract: preserve bounded provider-native result blocks needed for exact Anthropic
+      multi-turn replay and implement `pause_turn` continuation before claiming lossless search replay.
 - [ ] Owner check: restored SSH tabs expose Reconnect in both the disconnected terminal card
       and tab context menu without reconnecting implicitly.
 

@@ -272,8 +272,10 @@ becomes conversation retention.
   validation, explicit chips, and provider-neutral progressive loading are
   implemented (`ADR 0088`), while separately bounded supporting resources remain
   a follow-up;
-- add optional web search as a typed Agent tool with visible provenance and
-  citations;
+- add optional provider-native web search with typed activity, visible
+  provenance, persisted citations, and explicit unavailability for protocols
+  without a native search contract (`ADR 0090`); exact replay of opaque
+  provider search blocks and paused server-tool turns remains a follow-up;
 - cover attachment, skill, and search persistence/compaction boundaries in the
   deterministic evaluation corpus.
 

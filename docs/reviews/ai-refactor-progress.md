@@ -5,9 +5,31 @@
 > Netcatty 对照：`docs/reviews/netcatty-ai-comparison-2026-08.md`；
 > Codex 专项：`docs/research/CODEX_CLI_ARCHITECTURE.md`。
 
+## 节点 N15 — Provider 原生联网检索与引用（2026-08-15）
+
+**commits**: `98fe65f` + pending follow-up
+
+**范围**：
+
+1. OpenAI Responses 与 Anthropic Messages 分别接入官方原生联网检索协议；兼容 Chat Completions 与 Ollama 明确显示不支持，不静默降级；
+2. Provider 流事件统一映射为检索开始、查询、完成和结构化来源，活动卡片与最终来源列表分工展示；
+3. 来源按 URL 去重并允许后续标题/摘要补全，只接受有界 HTTP(S)，其容量计入助手消息预算；
+4. 来源随助手消息进入加密会话历史，恢复后仍可点击；用户消息和 Agent evidence 不得携带来源；
+5. 320px 窄侧栏隐藏模型下拉框为上下文、命令、联网、Agent 模式和发送控件让位；ADR 0090 记录 Provider 原生策略与精确原生结果回放的后续边界。
+
+**验证**：Provider request/stream 聚焦测试通过；conversation model/store 来源去重、校验与往返测试通过；翻译、AppController、QML、全量 Debug/静态 Release 与真实窗口验收待本节点收口。
+
+## 节点 N14 — Provider 原生图像附件收口（2026-08-15）
+
+**commits**: `b6a1a60`, `55cffcd`, `98f81d6`, `25ca982`
+
+**范围**：显式图像选择、异步解码与缩略图、当前终端草稿隔离、四类 Provider 原生载荷、历史回放占位、调试跟踪脱敏、中英文翻译和 Windows 真实窗口选择验收；详见 ADR 0089。
+
+**验证**：动态 Debug 与静态 Release 112/112，翻译 1733/1733；真实窗口附件选择与预览通过。
+
 ## 节点 N13 — NetCatty 级会话主界面（2026-08-15）
 
-**commit**: pending
+**commit**: `fc2d61a`
 
 **范围**：
 

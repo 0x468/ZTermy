@@ -15,6 +15,7 @@ using ztermy::ai::AiImageAttachment;
 using ztermy::ai::AiMessageRole;
 using ztermy::ai::AiTokenUsage;
 using ztermy::ai::AiTurnMetrics;
+using ztermy::ai::AiWebSource;
 
 class AiConversationModelTests final : public QObject
 {
@@ -31,6 +32,7 @@ private slots:
     void restoresOnlyBoundedTranscriptEntries();
     void preservesHiddenAgentEvidenceWithoutAddingVisibleRows();
     void preservesAgentEvidenceChronology();
+    void exposesDeduplicatesAndRestoresWebSources();
 };
 
 void AiConversationModelTests::streamsAssistantMessageAndUsage()
@@ -252,6 +254,42 @@ void AiConversationModelTests::preservesAgentEvidenceChronology()
     AiConversationModel restored;
     QVERIFY(restored.restoreTranscript(expected));
     QCOMPARE(restored.transcript(), expected);
+}
+
+void AiConversationModelTests::exposesDeduplicatesAndRestoresWebSources()
+{
+    AiConversationModel model;
+    const auto assistantId = model.beginAssistantMessage();
+    QVERIFY(model.appendAssistantDelta(assistantId, QStringLiteral("Current information with citations.")));
+    QVERIFY(model.appendAssistantSource(assistantId, AiWebSource{.url = "https://example.test/reference"}));
+    QVERIFY(model.appendAssistantSource(assistantId, AiWebSource{.url = "https://example.test/reference",
+                                                                 .title = "Primary reference",
+                                                                 .citedText = "The cited passage."}));
+    QVERIFY(!model.appendAssistantSource(assistantId, AiWebSource{.url = "file:///C:/private.txt"}));
+    QVERIFY(model.completeAssistantMessage(assistantId));
+
+    const QVariantList sources = model.data(model.index(0), AiConversationModel::SourcesRole).toList();
+    QCOMPARE(sources.size(), 1);
+    QCOMPARE(sources.constFirst().toMap().value(QStringLiteral("url")).toString(),
+             QStringLiteral("https://example.test/reference"));
+    QCOMPARE(sources.constFirst().toMap().value(QStringLiteral("title")).toString(),
+             QStringLiteral("Primary reference"));
+    QCOMPARE(sources.constFirst().toMap().value(QStringLiteral("citedText")).toString(),
+             QStringLiteral("The cited passage."));
+
+    const auto transcript = model.transcript();
+    QCOMPARE(transcript.size(), std::size_t{1});
+    QCOMPARE(transcript.front().sources.size(), std::size_t{1});
+
+    AiConversationModel restored;
+    QVERIFY(restored.restoreTranscript(transcript));
+    QCOMPARE(restored.transcript(), transcript);
+    QCOMPARE(restored.data(restored.index(0), AiConversationModel::SourcesRole).toList(), sources);
+
+    auto invalidRole = transcript;
+    invalidRole.front().role = AiConversationTranscriptRole::user;
+    QVERIFY(!restored.restoreTranscript(invalidRole));
+    QCOMPARE(restored.transcript(), transcript);
 }
 
 } // namespace

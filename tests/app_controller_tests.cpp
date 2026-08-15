@@ -846,6 +846,7 @@ void AppControllerTests::persistsApplicationSettings()
     QCOMPARE(controller.terminalBackgroundOpacity(), 1.0);
     QCOMPARE(controller.languagePreference(), QStringLiteral("system"));
     QCOMPARE(controller.aiProviderPreference(), QStringLiteral("openai-responses"));
+    QVERIFY(controller.aiWebSearchAvailable());
     QCOMPARE(controller.aiBaseUrl(), QStringLiteral("https://api.openai.com/v1"));
     QVERIFY(controller.aiEndpointPath().isEmpty());
     QVERIFY(controller.aiModel().isEmpty());
@@ -856,6 +857,7 @@ void AppControllerTests::persistsApplicationSettings()
                                               QStringLiteral("/api/chat"), QStringLiteral("qwen3"), false,
                                               QStringLiteral("auto")));
     QCOMPARE(controller.aiProviderPreference(), QStringLiteral("ollama"));
+    QVERIFY(!controller.aiWebSearchAvailable());
     QCOMPARE(controller.aiBaseUrl(), QStringLiteral("http://127.0.0.1:11434"));
     QCOMPARE(controller.aiEndpointPath(), QStringLiteral("/api/chat"));
     QCOMPARE(controller.aiModel(), QStringLiteral("qwen3"));
@@ -923,6 +925,7 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(!reloaded.sftpConfirmDelete());
     QCOMPARE(reloaded.languagePreference(), QStringLiteral("zh_CN"));
     QCOMPARE(reloaded.aiProviderPreference(), QStringLiteral("ollama"));
+    QVERIFY(!reloaded.aiWebSearchAvailable());
     QCOMPARE(reloaded.aiBaseUrl(), QStringLiteral("http://127.0.0.1:11434"));
     QCOMPARE(reloaded.aiModel(), QStringLiteral("qwen3"));
     QVERIFY(!reloaded.aiAutomaticContext());
@@ -936,6 +939,7 @@ void AppControllerTests::persistsApplicationSettings()
     QCOMPARE(reloaded.terminalFontFamily(), QStringLiteral("Cascadia Mono"));
     QCOMPARE(reloaded.terminalBackgroundOpacity(), 1.0);
     QCOMPARE(reloaded.languagePreference(), QStringLiteral("system"));
+    QVERIFY(reloaded.aiWebSearchAvailable());
 }
 
 void AppControllerTests::managesActionShortcutsAndDispatchContext()
