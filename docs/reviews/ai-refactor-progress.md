@@ -5,6 +5,19 @@
 > Netcatty 对照：`docs/reviews/netcatty-ai-comparison-2026-08.md`；
 > Codex 专项：`docs/research/CODEX_CLI_ARCHITECTURE.md`。
 
+## 节点 N16 — Anthropic Server Tool 精确续接（2026-08-15）
+
+**commit**: `ed980d2`
+
+**范围**：
+
+1. 将 Anthropic `pause_turn` 视为同一逻辑轮次的暂停而非完成，自动原样续接，最多四次；
+2. 按事件索引重建有界 assistant content block，保留服务端搜索结果及 `encrypted_content`，同时兼容同轮 client/server tool；
+3. 续接期间不发布残缺助手消息，最终只对 UI 发布一次完成结果；协议异常或循环超限明确失败；
+4. Provider 原生续接内容计入上下文预算且不可被截断破坏。当前仅保证活动轮次内精确回放，跨用户轮次与重启后的持久化仍为后续合同。
+
+**验证**：Anthropic stream mapper、request factory、turn runner 与 context compactor 聚焦测试通过，覆盖暂停后续接、加密搜索结果回放、单次完成发布和循环上限。
+
 ## 节点 N15 — Provider 原生联网检索与引用（2026-08-15）
 
 **commits**: `98fe65f`, `69ffab4`, `3038b80`

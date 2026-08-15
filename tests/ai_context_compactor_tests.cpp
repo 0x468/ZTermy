@@ -21,6 +21,7 @@ private slots:
     void leavesSmallRequestsUntouched();
     void truncatesOldMessagesAndPreservesRecentTail();
     void capsToolOutputsInHistory();
+    void accountsForOpaqueProviderContinuationContent();
     void utf8TruncationNeverSplitsCodePoints();
     void accountsForImageTilesWithoutCountingBase64AsText();
 };
@@ -89,6 +90,23 @@ void AiContextCompactorTests::capsToolOutputsInHistory()
     QVERIFY(result.request.toolHistory.front().outputs.front().outputJson.size() < 3'000);
     QVERIFY(result.request.toolHistory.front().outputs.front().outputJson.find("...[truncated]...")
             != std::string::npos);
+}
+
+void AiContextCompactorTests::accountsForOpaqueProviderContinuationContent()
+{
+    AiGenerationRequest request;
+    const std::string providerContent(4'000, 'p');
+    request.toolHistory.push_back(ztermy::ai::AiToolExchange{.providerAssistantContentJson = providerContent});
+
+    const auto estimate = AiContextCompactor::estimateRequestTokens(request);
+    QVERIFY(estimate >= std::size_t{1'000});
+
+    const AiCompactionLimits limits{.contextWindowTokens = 900,
+                                    .reservedOutputTokens = 100,
+                                    .reserveBufferTokens = 100};
+    const auto result = AiContextCompactor::compact(std::move(request), limits);
+    QVERIFY(result.overBudget);
+    QCOMPARE(result.request.toolHistory.front().providerAssistantContentJson, providerContent);
 }
 
 void AiContextCompactorTests::utf8TruncationNeverSplitsCodePoints()

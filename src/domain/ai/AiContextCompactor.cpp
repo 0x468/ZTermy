@@ -101,7 +101,8 @@ std::size_t AiContextCompactor::estimateRequestTokens(const AiGenerationRequest 
     }
     for (const auto &exchange : request.toolHistory)
     {
-        total += estimateTextTokens(exchange.reasoning) + estimateTextTokens(exchange.reasoningSignature);
+        total += estimateTextTokens(exchange.reasoning) + estimateTextTokens(exchange.reasoningSignature)
+                 + estimateTextTokens(exchange.providerAssistantContentJson);
         for (const auto &call : exchange.calls)
         {
             total += 4 + estimateTextTokens(call.id) + estimateTextTokens(call.name)

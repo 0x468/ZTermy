@@ -47,11 +47,19 @@ References:
 - Display a collapsed source section under the assistant answer. Each source is
   keyboard reachable and opens the original URL. Copying the answer continues
   to copy the provider's original Markdown, not ztermy's source-card rendering.
-- The first implementation replays the accumulated assistant answer text on a
-  later turn but does not persist opaque provider search-result payloads such
-  as Anthropic `encrypted_content`. A later web-enabled prompt may therefore
-  search again. Exact provider-native result replay and `pause_turn` continuation
-  require a separate bounded wire-context contract before they are enabled.
+- Anthropic streamed assistant content is reconstructed as a bounded provider-
+  owned JSON block sequence. A `pause_turn` response is not published as a
+  completed assistant answer: ztermy replays that exact sequence, including
+  opaque `encrypted_content`, with the unchanged tool definitions and continues
+  the same turn. At most four automatic continuations are allowed, and the
+  reconstructed wire context is capped at 1 MiB and counted against the input
+  context budget.
+- The exact provider-owned block sequence currently lives only for the active
+  logical turn. Completed conversation history persists provider-neutral answer
+  text and citations, but not opaque provider search-result payloads. A later
+  user turn may therefore search again. Persisting exact provider replay state
+  across user turns and application restart requires a separate encrypted,
+  bounded conversation contract.
 
 ## Consequences
 
@@ -64,5 +72,5 @@ References:
 - Anthropic basic search is chosen for broad model compatibility. Newer dynamic
   filtering versions are not selected implicitly because their model and code
   execution requirements differ.
-- Exact opaque search-result replay remains an explicit follow-up rather than an
-  undocumented compatibility guess.
+- Exact in-turn server-tool replay is protocol-correct and covered by fixtures;
+  durable replay across completed user turns remains an explicit follow-up.

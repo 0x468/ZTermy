@@ -274,8 +274,9 @@ becomes conversation retention.
   a follow-up;
 - add optional provider-native web search with typed activity, visible
   provenance, persisted citations, and explicit unavailability for protocols
-  without a native search contract (`ADR 0090`); exact replay of opaque
-  provider search blocks and paused server-tool turns remains a follow-up;
+  without a native search contract (`ADR 0090`); bounded opaque provider blocks
+  and paused server-tool turns replay exactly inside the active logical turn,
+  while durable replay across later user turns remains a follow-up;
 - cover attachment, skill, and search persistence/compaction boundaries in the
   deterministic evaluation corpus.
 

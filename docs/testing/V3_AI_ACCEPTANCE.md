@@ -138,8 +138,11 @@ evaluations serve different purposes and are reported separately.
 - [ ] Owner/provider check: a live search shows one updating activity card and a collapsed, keyboard-
       reachable Sources section; opening a source launches its original URL and copying the answer copies
       only the provider's original Markdown.
-- [ ] Follow-up contract: preserve bounded provider-native result blocks needed for exact Anthropic
-      multi-turn replay and implement `pause_turn` continuation before claiming lossless search replay.
+- [x] Provider continuation contract: reconstruct bounded Anthropic assistant blocks, preserve opaque
+      search results including `encrypted_content`, continue `pause_turn` without publishing an interim
+      answer, count the replay payload in the context budget, and stop after four continuations.
+- [ ] Follow-up persistence contract: preserve bounded provider-native result blocks needed for exact
+      Anthropic replay across later user turns and restored conversation history.
 - [ ] Owner check: restored SSH tabs expose Reconnect in both the disconnected terminal card
       and tab context menu without reconnecting implicitly.
 
