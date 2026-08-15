@@ -1,6 +1,7 @@
 #pragma once
 
 #include "application/actions/ActionRegistry.h"
+#include "application/ai/AcpAgentTurnRunner.h"
 #include "application/ai/AiActionToolDispatcher.h"
 #include "application/ai/AiActivityModel.h"
 #include "application/ai/AiConversationHistoryModel.h"
@@ -30,6 +31,7 @@
 #include "domain/terminal/SemanticTerminalObserver.h"
 #include "domain/workbench/ScriptExecution.h"
 #include "domain/workbench/ScriptRecorder.h"
+#include "infrastructure/ai/AcpAgentDiscovery.h"
 #include "infrastructure/ai/AiPermissionRuleStore.h"
 #include "infrastructure/ai/AiQuickMessageStore.h"
 #include "infrastructure/ai/AiUserSkillCatalog.h"
@@ -700,6 +702,7 @@ private:
         std::unique_ptr<ai::AiConversationModel> aiConversation;
         std::unique_ptr<ai::AiTurnRunner> aiTurnRunner;
         std::unique_ptr<ai::CodexAgentTurnRunner> codexTurnRunner;
+        std::unique_ptr<ai::AcpAgentTurnRunner> acpTurnRunner;
         std::unique_ptr<ai::AiAgentTurnBudget> aiTurnBudget;
         std::optional<ai::AiTerminalAction> pendingAiAction;
         std::optional<PendingAiSftpRead> pendingAiSftpRead;
@@ -762,6 +765,7 @@ private:
         QString aiContextPreview;
         QString aiConversationId;
         QString codexThreadId;
+        QString acpSessionId;
         QVariantList aiContextItems;
         std::unordered_set<std::string> aiExcludedContextIds;
         std::unordered_set<std::string> aiPinnedContextIds;
@@ -775,6 +779,7 @@ private:
         workbench::ScriptExecution scriptExecution;
         std::optional<telemetry::Sample> telemetrySample;
         std::optional<ai::AiTokenUsage> aiUsage;
+        std::optional<ai::AcpUsageUpdate> acpUsage;
         std::uint64_t aiAssistantMessageId = 0;
         std::uint32_t searchCurrent = 0;
         std::uint32_t searchTotal = 0;
@@ -851,6 +856,7 @@ private:
     [[nodiscard]] bool completePendingAiTool(TerminalTab &tab, const ai::AiToolOutput &output);
     [[nodiscard]] bool cancelAiTurn(TerminalTab &tab);
     void initializeCodexAgentDiscovery();
+    void initializeOpenCodeAgentDiscovery();
     void handleAiStreamEvent(const QString &tabId, std::uint64_t assistantMessageId, const ai::AiStreamEvent &event);
     [[nodiscard]] ai::AiTurnRunner::ToolHandlingResult handleAiWaitCommand(TerminalTab &tab, const QString &tabId,
                                                                            const ai::AiToolCall &call,
@@ -1026,9 +1032,12 @@ private:
     QPointer<QNetworkReply> m_aiModelsReply;
     std::unique_ptr<ai::CodexAppServerDiscovery> m_codexDiscovery;
     std::optional<ai::CodexAppServerInstallation> m_codexInstallation;
+    std::unique_ptr<ai::AcpAgentDiscovery> m_openCodeDiscovery;
+    std::optional<ai::AcpAgentInstallation> m_openCodeInstallation;
     QStringList m_aiAvailableModels;
     QString m_aiModelsError;
     QString m_codexDiscoveryError;
+    QString m_openCodeDiscoveryError;
     QString m_aiPermissionRuleError;
     std::vector<ai::AiQuickMessage> m_aiQuickMessages;
     QString m_aiQuickMessageError;

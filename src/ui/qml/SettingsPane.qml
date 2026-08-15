@@ -1545,7 +1545,7 @@ Rectangle {
 
                     Text {
                         Layout.fillWidth: true
-                        text: qsTr("Use ztermy's built-in Agent with any configured model provider, or hand the same current-terminal tools to an installed Codex CLI.")
+                        text: qsTr("Use ztermy's built-in Agent with any configured model provider, or hand the same current-terminal tools to an installed Codex or OpenCode Agent.")
                         color: Theme.textMuted
                         wrapMode: Text.WordWrap
                         font.family: Theme.uiFont
@@ -1606,6 +1606,16 @@ Rectangle {
                         Layout.fillWidth: true
                         visible: pane.controller.aiAgentPreference !== "codex" && pane.aiAgentOption("codex").state === "unavailable"
                         text: qsTr("Codex unavailable: %1").arg(pane.aiAgentOption("codex").description)
+                        color: Theme.textSubtle
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textCompact
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        visible: pane.controller.aiAgentPreference !== "opencode" && pane.aiAgentOption("opencode").state === "unavailable"
+                        text: qsTr("OpenCode unavailable: %1").arg(pane.aiAgentOption("opencode").description)
                         color: Theme.textSubtle
                         wrapMode: Text.WordWrap
                         font.family: Theme.uiFont
@@ -1704,7 +1714,7 @@ Rectangle {
                 Layout.fillWidth: true
                 visible: pane.currentCategory === "ai"
                 compact: true
-                heading: pane.controller.aiAgentPreference === "codex" ? qsTr("Agent behavior") : qsTr("Model provider")
+                heading: pane.controller.aiAgentPreference !== "ztermy" ? qsTr("Agent behavior") : qsTr("Model provider")
 
                 ColumnLayout {
                     Layout.fillWidth: true
@@ -1712,7 +1722,7 @@ Rectangle {
 
                     Text {
                         Layout.fillWidth: true
-                        text: pane.controller.aiAgentPreference === "codex" ? qsTr("Codex uses its existing CLI login, model, and configuration. ztermy still owns current-terminal context, tools, permissions, and cancellation.") : qsTr("Choose a provider, enter its API key, fetch the available models, and select one for the terminal assistant.")
+                        text: pane.controller.aiAgentPreference === "codex" ? qsTr("Codex uses its existing CLI login, model, and configuration. ztermy still owns current-terminal context, tools, permissions, and cancellation.") : pane.controller.aiAgentPreference === "opencode" ? qsTr("OpenCode uses its existing providers, models, Agent configuration, and ACP permission requests. ztermy binds every terminal operation to this terminal tab.") : qsTr("Choose a provider, enter its API key, fetch the available models, and select one for the terminal assistant.")
                         color: Theme.textMuted
                         wrapMode: Text.WordWrap
                         font.family: Theme.uiFont
@@ -1728,7 +1738,7 @@ Rectangle {
                         Label {
                             text: qsTr("Provider")
                             color: Theme.text
-                            visible: pane.controller.aiAgentPreference !== "codex"
+                            visible: pane.controller.aiAgentPreference === "ztermy"
                         }
                         AppComboBox {
                             id: aiProviderBox
@@ -1738,14 +1748,14 @@ Rectangle {
                             model: pane.aiProviderTokens
                             displayTextModel: [qsTr("OpenAI (ChatGPT / Codex)"), qsTr("Anthropic (Claude)"), qsTr("DeepSeek"), qsTr("Kimi"), qsTr("Z.AI (GLM)"), qsTr("Ollama"), qsTr("OpenAI-compatible")]
                             accessibleName: qsTr("AI model provider")
-                            visible: pane.controller.aiAgentPreference !== "codex"
+                            visible: pane.controller.aiAgentPreference === "ztermy"
                             onActivated: index => pane.selectAiProvider(index)
                         }
 
                         Label {
                             text: qsTr("API address")
                             color: Theme.text
-                            visible: pane.controller.aiAgentPreference !== "codex"
+                            visible: pane.controller.aiAgentPreference === "ztermy"
                         }
                         AppTextField {
                             id: aiBaseUrlField
@@ -1755,14 +1765,14 @@ Rectangle {
                             text: pane.aiBaseUrlDraft
                             placeholderText: qsTr("https://api.example.com")
                             accessibleName: qsTr("AI provider base URL")
-                            visible: pane.controller.aiAgentPreference !== "codex"
+                            visible: pane.controller.aiAgentPreference === "ztermy"
                             onTextEdited: pane.aiBaseUrlDraft = text
                         }
 
                         Label {
                             text: qsTr("API key")
                             color: Theme.text
-                            visible: pane.controller.aiAgentPreference !== "codex"
+                            visible: pane.controller.aiAgentPreference === "ztermy"
                         }
                         AppTextField {
                             id: aiApiKeyField
@@ -1772,19 +1782,19 @@ Rectangle {
                             placeholderText: pane.controller.aiApiKeyConfigured ? qsTr("Saved · enter only to replace") : pane.aiProviderToken() === "ollama" ? qsTr("Not required for local Ollama") : qsTr("Enter API key")
                             passwordRevealable: true
                             accessibleName: qsTr("AI provider API key")
-                            visible: pane.controller.aiAgentPreference !== "codex"
+                            visible: pane.controller.aiAgentPreference === "ztermy"
                         }
 
                         Label {
                             text: qsTr("Model")
                             color: Theme.text
-                            visible: pane.controller.aiAgentPreference !== "codex"
+                            visible: pane.controller.aiAgentPreference === "ztermy"
                         }
                         RowLayout {
                             Layout.fillWidth: true
                             Layout.minimumWidth: 0
                             spacing: 8
-                            visible: pane.controller.aiAgentPreference !== "codex"
+                            visible: pane.controller.aiAgentPreference === "ztermy"
 
                             EditableSuggestionField {
                                 id: aiModelField
@@ -1812,12 +1822,12 @@ Rectangle {
                         Label {
                             text: qsTr("Reasoning")
                             color: Theme.text
-                            visible: pane.controller.aiAgentPreference !== "codex"
+                            visible: pane.controller.aiAgentPreference === "ztermy"
                         }
                         ColumnLayout {
                             Layout.fillWidth: true
                             spacing: 4
-                            visible: pane.controller.aiAgentPreference !== "codex"
+                            visible: pane.controller.aiAgentPreference === "ztermy"
 
                             AppComboBox {
                                 id: aiReasoningBox
@@ -1874,7 +1884,7 @@ Rectangle {
                         }
 
                         Item {
-                            visible: !pane.compactLayout && pane.controller.aiAgentPreference !== "codex"
+                            visible: !pane.compactLayout && pane.controller.aiAgentPreference === "ztermy"
                             implicitHeight: aiDebugTraceSwitch.implicitHeight
                         }
                         AppSwitch {
@@ -1884,7 +1894,7 @@ Rectangle {
                             Layout.fillWidth: true
                             text: qsTr("Record full AI request and response trace")
                             accessibleName: text
-                            visible: pane.controller.aiAgentPreference !== "codex"
+                            visible: pane.controller.aiAgentPreference === "ztermy"
                         }
 
                         Item {
@@ -1905,7 +1915,7 @@ Rectangle {
 
                     Text {
                         Layout.fillWidth: true
-                        visible: pane.controller.aiAgentPreference !== "codex"
+                        visible: pane.controller.aiAgentPreference === "ztermy"
                         text: qsTr("Request: %1").arg(pane.controller.aiProviderEndpointPreview(pane.aiProviderToken(), pane.aiBaseUrlDraft))
                         color: Theme.textSubtle
                         elide: Text.ElideMiddle
@@ -1915,7 +1925,7 @@ Rectangle {
 
                     Text {
                         Layout.fillWidth: true
-                        visible: pane.controller.aiAgentPreference !== "codex" && aiDebugTraceSwitch.checked
+                        visible: pane.controller.aiAgentPreference === "ztermy" && aiDebugTraceSwitch.checked
                         text: pane.controller.aiDebugTracePath.length > 0 ? qsTr("Debug trace: %1").arg(pane.controller.aiDebugTracePath) : qsTr("A new JSONL trace file will be created after saving.")
                         color: Theme.warning
                         elide: Text.ElideMiddle
@@ -1925,7 +1935,7 @@ Rectangle {
 
                     Text {
                         Layout.fillWidth: true
-                        visible: pane.controller.aiAgentPreference !== "codex" && pane.controller.aiModelsError.length > 0
+                        visible: pane.controller.aiAgentPreference === "ztermy" && pane.controller.aiModelsError.length > 0
                         text: pane.controller.aiModelsError
                         color: Theme.danger
                         wrapMode: Text.WordWrap
@@ -1938,7 +1948,7 @@ Rectangle {
 
                         Text {
                             Layout.fillWidth: true
-                            text: pane.controller.aiAgentPreference === "codex" ? qsTr("The selected permission and context behavior apply to the current terminal only.") : pane.controller.aiApiKeyConfigured ? qsTr("API key saved for this provider.") : qsTr("The model field remains editable when a provider does not expose a model list.")
+                            text: pane.controller.aiAgentPreference !== "ztermy" ? qsTr("The selected permission and context behavior apply to the current terminal only.") : pane.controller.aiApiKeyConfigured ? qsTr("API key saved for this provider.") : qsTr("The model field remains editable when a provider does not expose a model list.")
                             color: Theme.textMuted
                             wrapMode: Text.WordWrap
                             font.family: Theme.uiFont
@@ -1952,7 +1962,7 @@ Rectangle {
                             variant: "primary"
                             onClicked: {
                                 const saved = pane.controller.saveAiProviderConfiguration(pane.aiProviderToken(), pane.aiBaseUrlDraft, pane.aiModelDraft, aiAutomaticContextSwitch.checked, pane.aiPermissionToken(), aiApiKeyField.text, aiDebugTraceSwitch.checked, pane.aiReasoningToken());
-                                pane.presentStatus(saved ? (pane.controller.aiAgentPreference === "codex" ? qsTr("Agent settings saved.") : qsTr("AI provider saved.")) : qsTr("The provider settings or API key could not be saved."), !saved, saved);
+                                pane.presentStatus(saved ? (pane.controller.aiAgentPreference !== "ztermy" ? qsTr("Agent settings saved.") : qsTr("AI provider saved.")) : qsTr("The provider settings or API key could not be saved."), !saved, saved);
                                 if (saved)
                                     aiApiKeyField.text = "";
                             }

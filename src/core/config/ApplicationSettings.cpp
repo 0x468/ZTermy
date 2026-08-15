@@ -218,6 +218,10 @@ template <>
     {
         return AiAgentPreference::codex;
     }
+    if (token == QStringLiteral("opencode"))
+    {
+        return AiAgentPreference::openCode;
+    }
     return std::nullopt;
 }
 
@@ -770,6 +774,8 @@ QString aiAgentPreferenceToken(const AiAgentPreference preference)
 {
     switch (preference)
     {
+        case AiAgentPreference::openCode:
+            return QStringLiteral("opencode");
         case AiAgentPreference::codex:
             return QStringLiteral("codex");
         case AiAgentPreference::ztermy:

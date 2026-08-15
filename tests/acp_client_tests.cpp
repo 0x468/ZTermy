@@ -23,7 +23,8 @@ namespace
 {
     return {.program = testAgentPath(),
             .arguments = arguments,
-            .workingDirectory = QDir::tempPath(),
+            .processWorkingDirectory = QDir::tempPath(),
+            .sessionWorkingDirectory = QDir::tempPath(),
             .clientVersion = "0.3.0-test"};
 }
 

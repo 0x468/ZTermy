@@ -5,6 +5,21 @@
 > Netcatty 对照：`docs/reviews/netcatty-ai-comparison-2026-08.md`；
 > Codex 专项：`docs/research/CODEX_CLI_ARCHITECTURE.md`。
 
+## 节点 N27 — OpenCode ACP 当前终端接线（2026-08-15）
+
+**commit**: 本节点提交（见 git 历史）
+
+**范围**：
+
+1. 新增 `AcpAgentTurnRunner`，把 ACP terminal create/output/wait/kill/release 映射到侧栏所属的唯一终端，不提供 Session 枚举、跨 Tab 发现或模型选路；
+2. 本地 Agent 进程目录与远端 Session cwd 明确分离；POSIX/PowerShell 参数、环境和 cwd 经过各自 shell 编码；等待以 Qt 定时器异步轮询，不阻塞 GUI；
+3. ACP 权限请求复用 Read-only/Ask/Auto/YOLO 与现有审批卡；一次/持续允许不会在 terminal/create 再弹第二次确认；取消会结束待审批、工具和等待；
+4. OpenCode 从 PATH 异步发现，设置页和 AI 标题栏可选择并显示版本/可用状态；其 Provider、模型和登录仍由 OpenCode 自己管理；
+5. 运行中的语义命令块现在暴露已有的有界输出、覆盖率和省略字节，ACP `terminal/output` 不必等命令结束才返回内容；
+6. fake `opencode.exe` 覆盖发现、当前终端执行和完整 ACP 生命周期；ADR 0095 固化单终端桥接合同。
+
+**验证**：聚焦 `application-settings`、`ai-command-tracker`、`acp-protocol`、`acp-client`、`acp-session-update-mapper`、`acp-agent-turn-runner`、`app-controller` 7/7 通过；最终全量门禁见本节点提交记录。
+
 ## 节点 N26 — ACP 异步进程与 Session 事件（2026-08-15）
 
 **commit**: 本节点提交（见 git 历史）

@@ -70,6 +70,7 @@ enum class AiAgentPreference : std::uint8_t
 {
     ztermy,
     codex,
+    openCode,
 };
 
 enum class AiPermissionPreference : std::uint8_t

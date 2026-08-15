@@ -689,6 +689,14 @@ Rectangle {
                             onTriggered: pane.selectAgent("codex")
                         }
 
+                        AppMenuItem {
+                            text: pane.agentOption("opencode").available ? qsTr("OpenCode") : pane.controller.aiAgentsLoading ? qsTr("OpenCode · detecting") : qsTr("OpenCode · unavailable")
+                            checkable: true
+                            checked: pane.controller.aiAgentPreference === "opencode"
+                            enabled: !pane.busy && pane.agentOption("opencode").available
+                            onTriggered: pane.selectAgent("opencode")
+                        }
+
                         AppMenuSeparator {}
 
                         AppMenuItem {

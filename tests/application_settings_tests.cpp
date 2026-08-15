@@ -107,7 +107,8 @@ void ApplicationSettingsTests::roundTripsEveryAiAgentPreference()
     QVERIFY(directory.isValid());
     const ztermy::config::ApplicationSettingsStore store(directory.filePath(QStringLiteral("settings.json")));
 
-    constexpr std::array agents{ztermy::config::AiAgentPreference::ztermy, ztermy::config::AiAgentPreference::codex};
+    constexpr std::array agents{ztermy::config::AiAgentPreference::ztermy, ztermy::config::AiAgentPreference::codex,
+                                ztermy::config::AiAgentPreference::openCode};
     for (const auto agent : agents)
     {
         auto expected = ztermy::config::ApplicationSettings{};

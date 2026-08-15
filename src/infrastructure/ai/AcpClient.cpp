@@ -130,10 +130,14 @@ std::expected<void, QString> AcpClient::start(AcpClientConfiguration configurati
     {
         return std::unexpected(QStringLiteral("ACP requires an existing absolute Agent executable path."));
     }
-    if (!QDir::isAbsolutePath(configuration.workingDirectory) || !QFileInfo(configuration.workingDirectory).isDir()
+    const bool absoluteSessionDirectory = QDir::isAbsolutePath(configuration.sessionWorkingDirectory)
+                                          || configuration.sessionWorkingDirectory.startsWith(QLatin1Char('/'));
+    if (!QDir::isAbsolutePath(configuration.processWorkingDirectory)
+        || !QFileInfo(configuration.processWorkingDirectory).isDir() || !absoluteSessionDirectory
         || configuration.clientVersion.empty())
     {
-        return std::unexpected(QStringLiteral("ACP requires a valid absolute working directory and client version."));
+        return std::unexpected(QStringLiteral(
+            "ACP requires valid absolute process and session working directories and a client version."));
     }
 
     auto initializeRequest = m_protocol.initializeRequest(initializeRequestId, configuration.clientVersion,
@@ -142,7 +146,7 @@ std::expected<void, QString> AcpClient::start(AcpClientConfiguration configurati
     {
         return std::unexpected(initializeRequest.error());
     }
-    const QByteArray workingDirectory = configuration.workingDirectory.toUtf8();
+    const QByteArray workingDirectory = configuration.sessionWorkingDirectory.toUtf8();
     std::expected<QByteArray, QString> openRequest =
         configuration.resumeSessionId.has_value()
             ? m_protocol.resumeSessionRequest(openSessionRequestId, *configuration.resumeSessionId,
@@ -163,7 +167,7 @@ std::expected<void, QString> AcpClient::start(AcpClientConfiguration configurati
     m_nextRequestId = 3;
     m_process.setProgram(m_configuration.program);
     m_process.setArguments(m_configuration.arguments);
-    m_process.setWorkingDirectory(m_configuration.workingDirectory);
+    m_process.setWorkingDirectory(m_configuration.processWorkingDirectory);
     m_process.setProcessEnvironment(QProcessEnvironment::systemEnvironment());
     m_process.setProcessChannelMode(QProcess::SeparateChannels);
     m_state = State::starting;

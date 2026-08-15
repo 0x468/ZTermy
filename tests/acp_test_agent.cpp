@@ -40,12 +40,40 @@ int run(int &argc, char **argv)
 {
     const QCoreApplication application(argc, argv);
     const QStringList arguments = application.arguments();
+    if (hasArgument(arguments, QStringLiteral("--version")))
+    {
+        std::cout << "opencode 1.18.5-test\n" << std::flush;
+        return 0;
+    }
     const bool cancelMode = hasArgument(arguments, QStringLiteral("--cancel"));
     const bool foreignUpdate = hasArgument(arguments, QStringLiteral("--foreign-update"));
     const bool duplicateRequest = hasArgument(arguments, QStringLiteral("--duplicate-request"));
+    const bool fullTerminal = hasArgument(arguments, QStringLiteral("--full-terminal"));
+    const bool permissionMode = hasArgument(arguments, QStringLiteral("--permission"));
     QString sessionId = QStringLiteral("session-ztermy");
     std::optional<QJsonValue> promptId;
     int pendingToolResponses = 0;
+
+    const auto requestTerminal = [&sessionId, duplicateRequest, &pendingToolResponses] {
+        const QJsonObject request{
+            {QStringLiteral("id"), QStringLiteral("terminal-request-1")},
+            {QStringLiteral("method"), QStringLiteral("terminal/create")},
+            {QStringLiteral("params"),
+             QJsonObject{
+                 {QStringLiteral("sessionId"), sessionId},
+                 {QStringLiteral("command"), QStringLiteral("printf")},
+                 {QStringLiteral("args"), QJsonArray{QStringLiteral("hello world")}},
+                 {QStringLiteral("cwd"), QStringLiteral("/srv/project")},
+                 {QStringLiteral("env"), QJsonArray{QJsonObject{{QStringLiteral("name"), QStringLiteral("ZTERMY_TEST")},
+                                                                {QStringLiteral("value"), QStringLiteral("yes")}}}},
+                 {QStringLiteral("outputByteLimit"), 8}}}};
+        writeObject(request);
+        if (duplicateRequest)
+        {
+            writeObject(request);
+        }
+        pendingToolResponses = duplicateRequest ? 2 : 1;
+    };
 
     std::string line;
     while (std::getline(std::cin, line))
@@ -125,17 +153,29 @@ int run(int &argc, char **argv)
                                                {QStringLiteral("status"), QStringLiteral("in_progress")},
                                                {QStringLiteral("rawInput"),
                                                 QJsonObject{{QStringLiteral("command"), QStringLiteral("pwd")}}}});
-            const QJsonObject request{
-                {QStringLiteral("id"), QStringLiteral("terminal-request-1")},
-                {QStringLiteral("method"), QStringLiteral("terminal/create")},
-                {QStringLiteral("params"), QJsonObject{{QStringLiteral("sessionId"), sessionId},
-                                                       {QStringLiteral("command"), QStringLiteral("pwd")}}}};
-            writeObject(request);
-            if (duplicateRequest)
+            if (permissionMode)
             {
-                writeObject(request);
+                writeObject(QJsonObject{
+                    {QStringLiteral("id"), QStringLiteral("permission-request-1")},
+                    {QStringLiteral("method"), QStringLiteral("session/request_permission")},
+                    {QStringLiteral("params"),
+                     QJsonObject{{QStringLiteral("sessionId"), sessionId},
+                                 {QStringLiteral("toolCall"),
+                                  QJsonObject{{QStringLiteral("toolCallId"), QStringLiteral("tool-1")},
+                                              {QStringLiteral("title"), QStringLiteral("Run printf")},
+                                              {QStringLiteral("kind"), QStringLiteral("execute")}}},
+                                 {QStringLiteral("options"),
+                                  QJsonArray{QJsonObject{{QStringLiteral("optionId"), QStringLiteral("allow-once")},
+                                                         {QStringLiteral("name"), QStringLiteral("Allow once")},
+                                                         {QStringLiteral("kind"), QStringLiteral("allow_once")}},
+                                             QJsonObject{{QStringLiteral("optionId"), QStringLiteral("reject-once")},
+                                                         {QStringLiteral("name"), QStringLiteral("Reject")},
+                                                         {QStringLiteral("kind"), QStringLiteral("reject_once")}}}}}}});
             }
-            pendingToolResponses = duplicateRequest ? 2 : 1;
+            else
+            {
+                requestTerminal();
+            }
             continue;
         }
         if (method == QStringLiteral("session/cancel"))
@@ -156,6 +196,19 @@ int run(int &argc, char **argv)
             --pendingToolResponses;
             if (pendingToolResponses == 0 && promptId.has_value())
             {
+                if (fullTerminal)
+                {
+                    const QString terminalId = message.value(QStringLiteral("result"))
+                                                   .toObject()
+                                                   .value(QStringLiteral("terminalId"))
+                                                   .toString();
+                    writeObject(QJsonObject{
+                        {QStringLiteral("id"), QStringLiteral("terminal-output-1")},
+                        {QStringLiteral("method"), QStringLiteral("terminal/output")},
+                        {QStringLiteral("params"), QJsonObject{{QStringLiteral("sessionId"), sessionId},
+                                                               {QStringLiteral("terminalId"), terminalId}}}});
+                    continue;
+                }
                 writeUpdate(sessionId,
                             QJsonObject{{QStringLiteral("sessionUpdate"), QStringLiteral("tool_call_update")},
                                         {QStringLiteral("toolCallId"), QStringLiteral("tool-1")},
@@ -167,6 +220,45 @@ int run(int &argc, char **argv)
                                                    {QStringLiteral("cost"),
                                                     QJsonObject{{QStringLiteral("amount"), 0.01},
                                                                 {QStringLiteral("currency"), QStringLiteral("USD")}}}});
+                writeResponse(*promptId, QJsonObject{{QStringLiteral("stopReason"), QStringLiteral("end_turn")}});
+            }
+            continue;
+        }
+        if (method.isEmpty() && id.toString() == QStringLiteral("permission-request-1"))
+        {
+            requestTerminal();
+            continue;
+        }
+        if (method.isEmpty() && id.toString() == QStringLiteral("terminal-output-1"))
+        {
+            const QString terminalId =
+                message.value(QStringLiteral("result")).toObject().value(QStringLiteral("terminalId")).toString();
+            Q_UNUSED(terminalId);
+            writeObject(QJsonObject{{QStringLiteral("id"), QStringLiteral("terminal-wait-1")},
+                                    {QStringLiteral("method"), QStringLiteral("terminal/wait_for_exit")},
+                                    {QStringLiteral("params"), QJsonObject{{QStringLiteral("sessionId"), sessionId},
+                                                                           {QStringLiteral("terminalId"),
+                                                                            QStringLiteral("ztermy-terminal-1")}}}});
+            continue;
+        }
+        if (method.isEmpty() && id.toString() == QStringLiteral("terminal-wait-1"))
+        {
+            writeObject(QJsonObject{{QStringLiteral("id"), QStringLiteral("terminal-release-1")},
+                                    {QStringLiteral("method"), QStringLiteral("terminal/release")},
+                                    {QStringLiteral("params"), QJsonObject{{QStringLiteral("sessionId"), sessionId},
+                                                                           {QStringLiteral("terminalId"),
+                                                                            QStringLiteral("ztermy-terminal-1")}}}});
+            continue;
+        }
+        if (method.isEmpty() && id.toString() == QStringLiteral("terminal-release-1"))
+        {
+            writeUpdate(sessionId,
+                        QJsonObject{{QStringLiteral("sessionUpdate"), QStringLiteral("tool_call_update")},
+                                    {QStringLiteral("toolCallId"), QStringLiteral("tool-1")},
+                                    {QStringLiteral("status"), QStringLiteral("completed")},
+                                    {QStringLiteral("rawOutput"), QJsonObject{{QStringLiteral("exitCode"), 0}}}});
+            if (promptId.has_value())
+            {
                 writeResponse(*promptId, QJsonObject{{QStringLiteral("stopReason"), QStringLiteral("end_turn")}});
             }
         }

@@ -2089,6 +2089,10 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     {
         initializeCodexAgentDiscovery();
     }
+    else if (m_settings.aiAgent == config::AiAgentPreference::openCode)
+    {
+        initializeOpenCodeAgentDiscovery();
+    }
     loadAiPermissionRules();
     loadAiQuickMessages();
     initializeAiDebugTrace();
@@ -2178,6 +2182,10 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     if (m_settings.aiAgent == config::AiAgentPreference::codex)
     {
         initializeCodexAgentDiscovery();
+    }
+    else if (m_settings.aiAgent == config::AiAgentPreference::openCode)
+    {
+        initializeOpenCodeAgentDiscovery();
     }
     loadAiPermissionRules();
     loadAiQuickMessages();
@@ -2317,6 +2325,10 @@ void AppController::shutdown() noexcept
     if (m_codexDiscovery)
     {
         m_codexDiscovery->stop();
+    }
+    if (m_openCodeDiscovery)
+    {
+        m_openCodeDiscovery->stop();
     }
     m_aiProviderClient.setTraceHandler({});
     if (m_aiDebugTrace)
@@ -3226,7 +3238,8 @@ QString AppController::aiAgentPreference() const
 
 QVariantList AppController::aiAgentOptions() const
 {
-    const bool loading = aiAgentsLoading();
+    const bool codexLoading = m_codexDiscovery && m_codexDiscovery->running();
+    const bool openCodeLoading = m_openCodeDiscovery && m_openCodeDiscovery->running();
     const bool codexAvailable = m_codexInstallation.has_value() && m_codexInstallation->dynamicToolsVerified;
     QString codexState = QStringLiteral("not-checked");
     QString codexDetail = tr("Detect the installed Codex CLI to use its login, model, and configuration.");
@@ -3235,7 +3248,7 @@ QVariantList AppController::aiAgentOptions() const
         codexState = QStringLiteral("ready");
         codexDetail = tr("Ready · %1").arg(m_codexInstallation->version);
     }
-    else if (loading)
+    else if (codexLoading)
     {
         codexState = QStringLiteral("loading");
         codexDetail = tr("Detecting the installed Codex CLI…");
@@ -3262,17 +3275,51 @@ QVariantList AppController::aiAgentOptions() const
         {QStringLiteral("available"), codexAvailable},
         {QStringLiteral("version"), m_codexInstallation.has_value() ? m_codexInstallation->version : QString{}},
     });
+    QString openCodeState = QStringLiteral("not-checked");
+    QString openCodeDetail = tr("Detect the installed OpenCode CLI and use its providers, models, and Agent config.");
+    if (m_openCodeInstallation.has_value())
+    {
+        openCodeState = QStringLiteral("ready");
+        openCodeDetail = tr("Ready · %1 · ACP v1").arg(m_openCodeInstallation->version);
+    }
+    else if (openCodeLoading)
+    {
+        openCodeState = QStringLiteral("loading");
+        openCodeDetail = tr("Detecting the installed OpenCode CLI…");
+    }
+    else if (!m_openCodeDiscoveryError.isEmpty())
+    {
+        openCodeState = QStringLiteral("unavailable");
+        openCodeDetail = m_openCodeDiscoveryError;
+    }
+    options.push_back(QVariantMap{
+        {QStringLiteral("id"), QStringLiteral("opencode")},
+        {QStringLiteral("name"), tr("OpenCode")},
+        {QStringLiteral("description"), openCodeDetail},
+        {QStringLiteral("state"), openCodeState},
+        {QStringLiteral("available"), m_openCodeInstallation.has_value()},
+        {QStringLiteral("version"), m_openCodeInstallation.has_value() ? m_openCodeInstallation->version : QString{}},
+    });
     return options;
 }
 
 bool AppController::aiAgentsLoading() const noexcept
 {
-    return m_codexDiscovery && m_codexDiscovery->running();
+    return (m_codexDiscovery && m_codexDiscovery->running()) || (m_openCodeDiscovery && m_openCodeDiscovery->running());
 }
 
 QString AppController::aiAgentsError() const
 {
-    return m_codexDiscoveryError;
+    QStringList errors;
+    if (!m_codexDiscoveryError.isEmpty())
+    {
+        errors.push_back(m_codexDiscoveryError);
+    }
+    if (!m_openCodeDiscoveryError.isEmpty())
+    {
+        errors.push_back(m_openCodeDiscoveryError);
+    }
+    return errors.join(QLatin1Char('\n'));
 }
 
 QString AppController::aiProviderPreference() const
@@ -3317,7 +3364,7 @@ QString AppController::aiModelsError() const
 
 bool AppController::aiWebSearchAvailable() const noexcept
 {
-    if (m_settings.aiAgent == config::AiAgentPreference::codex)
+    if (m_settings.aiAgent != config::AiAgentPreference::ztermy)
     {
         return false;
     }
@@ -3542,6 +3589,28 @@ QVariantMap AppController::activeAiToolApproval() const
     if (tab == nullptr)
     {
         return {};
+    }
+    if (tab->activeAiAgent == config::AiAgentPreference::openCode && tab->acpTurnRunner)
+    {
+        const auto pending = tab->acpTurnRunner->pendingPermission();
+        if (pending.has_value())
+        {
+            QString description = pending->title.isEmpty() ? tr("OpenCode requests permission") : pending->title;
+            if (!pending->detailsJson.isEmpty())
+            {
+                description += QStringLiteral("\n\n") + pending->detailsJson.left(qsizetype{16} * 1024);
+            }
+            return {{QStringLiteral("visible"), true},
+                    {QStringLiteral("toolCallId"), pending->toolCallId},
+                    {QStringLiteral("command"), description},
+                    {QStringLiteral("kind"), QStringLiteral("acp_permission")},
+                    {QStringLiteral("sessionId"), tab->id},
+                    {QStringLiteral("sessionGeneration"), QVariant::fromValue<qulonglong>(tab->reconnectGeneration)},
+                    {QStringLiteral("ruleSupported"), false},
+                    {QStringLiteral("profileAvailable"), false},
+                    {QStringLiteral("highRisk"), false},
+                    {QStringLiteral("riskReason"), QString{}}};
+        }
     }
     if (tab->pendingAiMcpCall.has_value())
     {
@@ -7918,6 +7987,11 @@ bool AppController::setAiAgentPreference(const QString &agent)
         refreshAiAgents();
         return false;
     }
+    if (*parsed == config::AiAgentPreference::openCode && !m_openCodeInstallation.has_value())
+    {
+        refreshAiAgents();
+        return false;
+    }
     if (std::ranges::any_of(m_tabs, [this](const auto &tab) {
             return aiTurnActive(*tab);
         }))
@@ -7938,6 +8012,7 @@ bool AppController::setAiAgentPreference(const QString &agent)
     for (const auto &tab : m_tabs)
     {
         tab->codexThreadId.clear();
+        tab->acpSessionId.clear();
         tab->activeAiAgent = config::AiAgentPreference::ztermy;
     }
     emit aiConversationChanged();
@@ -7946,12 +8021,20 @@ bool AppController::setAiAgentPreference(const QString &agent)
 
 void AppController::refreshAiAgents()
 {
-    if (m_shutdownStarted || m_codexInstallation.has_value() || aiAgentsLoading())
+    if (m_shutdownStarted)
     {
         return;
     }
-    m_codexDiscoveryError.clear();
-    initializeCodexAgentDiscovery();
+    if (!m_codexInstallation.has_value() && !(m_codexDiscovery && m_codexDiscovery->running()))
+    {
+        m_codexDiscoveryError.clear();
+        initializeCodexAgentDiscovery();
+    }
+    if (!m_openCodeInstallation.has_value() && !(m_openCodeDiscovery && m_openCodeDiscovery->running()))
+    {
+        m_openCodeDiscoveryError.clear();
+        initializeOpenCodeAgentDiscovery();
+    }
 }
 
 QVariantMap AppController::aiReasoningCapabilities(const QString &provider, const QString &model) const
@@ -8285,10 +8368,18 @@ bool AppController::restoreAiConversationHistory(const QString &conversationId)
     {
         tab->codexTurnRunner->stop();
     }
+    if (tab->acpTurnRunner)
+    {
+        tab->acpTurnRunner->stop();
+    }
     const auto storedAgent = config::parseAiAgentPreference(stored->agent);
     tab->activeAiAgent = storedAgent.value_or(config::AiAgentPreference::ztermy);
     tab->codexThreadId =
         storedAgent == config::AiAgentPreference::codex && m_settings.aiAgent == config::AiAgentPreference::codex
+            ? stored->externalThreadId
+            : QString{};
+    tab->acpSessionId =
+        storedAgent == config::AiAgentPreference::openCode && m_settings.aiAgent == config::AiAgentPreference::openCode
             ? stored->externalThreadId
             : QString{};
     emit aiConversationChanged();
@@ -8651,6 +8742,19 @@ bool AppController::openAiUserSkillsDirectory()
 bool AppController::approveAiTool()
 {
     TerminalTab *tab = activeTab();
+    if (tab != nullptr && tab->activeAiAgent == config::AiAgentPreference::openCode && tab->acpTurnRunner)
+    {
+        const auto pending = tab->acpTurnRunner->pendingPermission();
+        if (pending.has_value())
+        {
+            const auto option =
+                std::ranges::find(pending->options, QStringLiteral("allow_once"), &ai::AcpPermissionOption::kind);
+            const bool completed =
+                option != pending->options.end() && tab->acpTurnRunner->completePendingPermission(option->id);
+            emit aiConversationChanged();
+            return completed;
+        }
+    }
     if (tab != nullptr && tab->pendingAiMcpCall.has_value())
     {
         return approveAiMcpTool(*tab);
@@ -8703,6 +8807,24 @@ bool AppController::approveAiTool()
 bool AppController::denyAiTool()
 {
     TerminalTab *tab = activeTab();
+    if (tab != nullptr && tab->activeAiAgent == config::AiAgentPreference::openCode && tab->acpTurnRunner)
+    {
+        const auto pending = tab->acpTurnRunner->pendingPermission();
+        if (pending.has_value())
+        {
+            auto option =
+                std::ranges::find(pending->options, QStringLiteral("reject_once"), &ai::AcpPermissionOption::kind);
+            if (option == pending->options.end())
+            {
+                option = std::ranges::find(pending->options, QStringLiteral("reject_always"),
+                                           &ai::AcpPermissionOption::kind);
+            }
+            const bool completed =
+                option != pending->options.end() && tab->acpTurnRunner->completePendingPermission(option->id);
+            emit aiConversationChanged();
+            return completed;
+        }
+    }
     if (tab != nullptr && tab->pendingAiMcpCall.has_value())
     {
         return denyAiMcpTool(*tab);
@@ -8877,7 +8999,12 @@ void AppController::clearAiConversation()
     {
         tab->codexTurnRunner->stop();
     }
+    if (tab->acpTurnRunner)
+    {
+        tab->acpTurnRunner->stop();
+    }
     tab->codexThreadId.clear();
+    tab->acpSessionId.clear();
     tab->activeAiAgent = config::AiAgentPreference::ztermy;
     m_aiActionToolDispatcher.clearConversation(utf8String(previousConversationId));
     m_mcpDispatchLedger.clearConversation(utf8String(previousConversationId));
@@ -9954,8 +10081,58 @@ void AppController::initializeCodexAgentDiscovery()
     emit aiAgentsChanged();
 }
 
+void AppController::initializeOpenCodeAgentDiscovery()
+{
+    if (m_shutdownStarted || (m_openCodeDiscovery && m_openCodeDiscovery->running()))
+    {
+        return;
+    }
+    const QString program = QStandardPaths::findExecutable(QStringLiteral("opencode"));
+    if (program.isEmpty())
+    {
+        m_openCodeInstallation.reset();
+        m_openCodeDiscoveryError = tr("OpenCode CLI was not found on PATH.");
+        emit aiAgentsChanged();
+        return;
+    }
+    if (!m_openCodeDiscovery)
+    {
+        m_openCodeDiscovery = std::make_unique<ai::AcpAgentDiscovery>();
+    }
+    m_openCodeInstallation.reset();
+    m_openCodeDiscoveryError.clear();
+    auto started = m_openCodeDiscovery->start(program, [this](auto result) {
+        if (m_shutdownStarted)
+        {
+            return;
+        }
+        if (result.has_value())
+        {
+            m_openCodeInstallation = std::move(*result);
+            m_openCodeDiscoveryError.clear();
+            qCInfo(appControllerLog) << "OpenCode ACP Agent discovered:" << m_openCodeInstallation->version;
+        }
+        else
+        {
+            m_openCodeInstallation.reset();
+            m_openCodeDiscoveryError = result.error();
+            qCWarning(appControllerLog) << "OpenCode ACP Agent discovery failed:" << m_openCodeDiscoveryError;
+        }
+        emit aiAgentsChanged();
+    });
+    if (!started.has_value())
+    {
+        m_openCodeDiscoveryError = started.error();
+    }
+    emit aiAgentsChanged();
+}
+
 bool AppController::aiTurnActive(const TerminalTab &tab) const noexcept
 {
+    if (tab.activeAiAgent == config::AiAgentPreference::openCode)
+    {
+        return tab.acpTurnRunner && tab.acpTurnRunner->active();
+    }
     if (tab.activeAiAgent == config::AiAgentPreference::codex)
     {
         return tab.codexTurnRunner && tab.codexTurnRunner->active();
@@ -9965,6 +10142,10 @@ bool AppController::aiTurnActive(const TerminalTab &tab) const noexcept
 
 ai::AiTurnRunner::TurnId AppController::activeAiTurnId(const TerminalTab &tab) const noexcept
 {
+    if (tab.activeAiAgent == config::AiAgentPreference::openCode)
+    {
+        return tab.acpTurnRunner ? tab.acpTurnRunner->activeTurnId() : 0;
+    }
     if (tab.activeAiAgent == config::AiAgentPreference::codex)
     {
         return tab.codexTurnRunner ? tab.codexTurnRunner->activeTurnId() : 0;
@@ -9974,6 +10155,10 @@ ai::AiTurnRunner::TurnId AppController::activeAiTurnId(const TerminalTab &tab) c
 
 std::optional<ai::AiToolCall> AppController::pendingAiToolCall(const TerminalTab &tab) const
 {
+    if (tab.activeAiAgent == config::AiAgentPreference::openCode)
+    {
+        return tab.acpTurnRunner ? tab.acpTurnRunner->pendingToolCall() : std::nullopt;
+    }
     if (tab.activeAiAgent == config::AiAgentPreference::codex)
     {
         return tab.codexTurnRunner ? tab.codexTurnRunner->pendingToolCall() : std::nullopt;
@@ -9990,6 +10175,10 @@ bool AppController::completePendingAiTool(TerminalTab &tab, const ai::AiToolOutp
             tab.aiAssistantMessageId, utf8QString(output.callId), aiToolDetailText(pending->argumentsJson),
             aiToolDetailText(output.outputJson)));
     }
+    if (tab.activeAiAgent == config::AiAgentPreference::openCode)
+    {
+        return tab.acpTurnRunner && tab.acpTurnRunner->completePendingTool(output);
+    }
     return tab.activeAiAgent == config::AiAgentPreference::codex
                ? tab.codexTurnRunner && tab.codexTurnRunner->completePendingTool(output)
                : tab.aiTurnRunner && tab.aiTurnRunner->completePendingTool(output);
@@ -9997,6 +10186,10 @@ bool AppController::completePendingAiTool(TerminalTab &tab, const ai::AiToolOutp
 
 bool AppController::cancelAiTurn(TerminalTab &tab)
 {
+    if (tab.activeAiAgent == config::AiAgentPreference::openCode)
+    {
+        return tab.acpTurnRunner && tab.acpTurnRunner->cancel();
+    }
     if (tab.activeAiAgent == config::AiAgentPreference::codex)
     {
         return tab.codexTurnRunner && tab.codexTurnRunner->cancel();
@@ -10011,6 +10204,240 @@ std::expected<ai::AiTurnRunner::TurnId, ai::AiProviderError> AppController::star
     ai::AiTurnRunner::JitterSource jitterSource, ai::AiTurnRunner::ToolHandler toolHandler,
     ai::AiTurnRunner::ToolOutputHandler toolOutputHandler)
 {
+    if (m_settings.aiAgent == config::AiAgentPreference::openCode)
+    {
+        if (!tab.acpTurnRunner)
+        {
+            return std::unexpected(ai::AiProviderError{.code = ai::AiProviderErrorCode::invalidRequest,
+                                                       .message = "The ACP Agent runtime is unavailable.",
+                                                       .retryable = false});
+        }
+        if (!m_openCodeInstallation.has_value())
+        {
+            initializeOpenCodeAgentDiscovery();
+            const QString detail = m_openCodeDiscoveryError.isEmpty()
+                                       ? tr("OpenCode Agent discovery is still running. Try again in a moment.")
+                                       : m_openCodeDiscoveryError;
+            return std::unexpected(ai::AiProviderError{.code = ai::AiProviderErrorCode::invalidRequest,
+                                                       .message = utf8String(detail),
+                                                       .retryable = false});
+        }
+        if (generation.webSearchEnabled)
+        {
+            return std::unexpected(ai::AiProviderError{
+                .code = ai::AiProviderErrorCode::invalidRequest,
+                .message = "ztermy native web search is not injected into external ACP Agents; configure web tools "
+                           "inside OpenCode instead.",
+                .retryable = false});
+        }
+        const bool continuingSession = !tab.acpSessionId.isEmpty();
+        auto prompt = ai::CodexAgentPromptBuilder::build(generation, continuingSession);
+        if (!prompt.has_value())
+        {
+            const char *message = prompt.error() == ai::CodexAgentPromptError::imageUnsupported
+                                      ? "Image attachments are not available through the ACP Agent bridge yet."
+                                      : "The ACP Agent prompt is empty or exceeds its bounded transport limit.";
+            return std::unexpected(ai::AiProviderError{.code = ai::AiProviderErrorCode::invalidRequest,
+                                                       .message = message,
+                                                       .retryable = false});
+        }
+        constexpr std::size_t maximumAcpPromptBytes = std::size_t{900} * 1024;
+        std::string acpPrompt = "ztermy current-terminal instructions:\n";
+        acpPrompt.append(generation.instructions);
+        acpPrompt.append("\n\n");
+        if (prompt->size() > maximumAcpPromptBytes - std::min(acpPrompt.size(), maximumAcpPromptBytes))
+        {
+            return std::unexpected(ai::AiProviderError{.code = ai::AiProviderErrorCode::invalidRequest,
+                                                       .message = "The ACP Agent prompt exceeds 900 KiB.",
+                                                       .retryable = false});
+        }
+        acpPrompt.append(*prompt);
+
+        QStringList workingDirectoryCandidates;
+        const QString cacheRoot = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+        if (!cacheRoot.isEmpty())
+        {
+            workingDirectoryCandidates.push_back(QDir(cacheRoot).filePath(QStringLiteral("opencode-agent")));
+        }
+        const QString settingsDirectory = QFileInfo(m_settingsStore.filePath()).absolutePath();
+        if (!settingsDirectory.isEmpty())
+        {
+            workingDirectoryCandidates.push_back(
+                QDir(settingsDirectory).filePath(QStringLiteral("opencode-agent-cache")));
+        }
+        workingDirectoryCandidates.push_back(QDir(QDir::tempPath()).filePath(QStringLiteral("ztermy-opencode-agent")));
+        QString processWorkingDirectory;
+        for (const QString &candidate : std::as_const(workingDirectoryCandidates))
+        {
+            if (QDir().mkpath(candidate))
+            {
+                processWorkingDirectory = candidate;
+                break;
+            }
+        }
+        if (processWorkingDirectory.isEmpty())
+        {
+            return std::unexpected(
+                ai::AiProviderError{.code = ai::AiProviderErrorCode::invalidRequest,
+                                    .message = "The OpenCode Agent working directory is unavailable.",
+                                    .retryable = false});
+        }
+        QString sessionWorkingDirectory = tab.terminalWorkingDirectory.trimmed();
+        if (sessionWorkingDirectory.isEmpty())
+        {
+            sessionWorkingDirectory = tab.kind == TerminalTabKind::Local ? QDir::homePath() : QStringLiteral("/");
+        }
+        const QString clientVersion = QCoreApplication::applicationVersion().isEmpty()
+                                          ? QStringLiteral("development")
+                                          : QCoreApplication::applicationVersion();
+        ai::AcpClientConfiguration acpConfiguration{
+            .program = m_openCodeInstallation->program,
+            .arguments = {QStringLiteral("acp")},
+            .processWorkingDirectory = processWorkingDirectory,
+            .sessionWorkingDirectory = sessionWorkingDirectory,
+            .clientVersion = utf8String(clientVersion),
+            .resumeSessionId = continuingSession ? std::optional{utf8String(tab.acpSessionId)} : std::nullopt,
+            .terminalCapability = true,
+        };
+        const QString tabId = tab.id;
+        const ai::AiSessionTarget target{.sessionId = utf8String(tab.id), .sessionGeneration = tab.reconnectGeneration};
+        const std::uint64_t targetGeneration = target.sessionGeneration;
+        const std::string conversationId = utf8String(tab.aiConversationId);
+        const auto observerContext =
+            std::make_shared<const std::pair<std::string, std::string>>(target.sessionId, conversationId);
+        const auto permissionMode = aiPermissionMode(m_settings.aiPermission);
+        auto externalFinished = [this, tabId, finished = std::move(finishedHandler)](
+                                    const auto turnId, const ai::AiTurnMetrics &metrics) mutable {
+            if (TerminalTab *targetTab = findTab(tabId); targetTab != nullptr && targetTab->acpTurnRunner)
+            {
+                targetTab->acpSessionId = targetTab->acpTurnRunner->sessionId();
+                persistAiConversation(*targetTab);
+            }
+            if (finished)
+            {
+                finished(turnId, metrics);
+            }
+        };
+        auto observer =
+            [this, tabId, observerContext, targetGeneration](
+                const std::string_view commandId) -> std::expected<ai::AcpTerminalSnapshot, ai::AiProviderError> {
+            TerminalTab *current = findTab(tabId);
+            const auto tracked = m_aiCommandTracker.find(commandId);
+            if (current == nullptr || current->reconnectGeneration != targetGeneration || !tracked.has_value()
+                || tracked->target.sessionId != observerContext->first
+                || tracked->target.sessionGeneration != targetGeneration
+                || tracked->conversationId != observerContext->second)
+            {
+                return std::unexpected(ai::AiProviderError{.code = ai::AiProviderErrorCode::invalidRequest,
+                                                           .message = "The ACP terminal handle is no longer bound to "
+                                                                      "the current terminal generation.",
+                                                           .retryable = false});
+            }
+            terminal::SemanticTerminalSnapshot semantic;
+            if (current->semanticObserver)
+            {
+                semantic = current->semanticObserver->snapshot();
+            }
+            const auto observed = m_aiCommandTracker.observe(commandId, semantic.commandBlocks, current->running);
+            if (!observed.has_value())
+            {
+                return std::unexpected(ai::AiProviderError{.code = ai::AiProviderErrorCode::invalidRequest,
+                                                           .message = "The ACP terminal command is no longer tracked.",
+                                                           .retryable = false});
+            }
+            const bool finished = observed->state == ai::AiTrackedCommandState::finished
+                                  || observed->state == ai::AiTrackedCommandState::disconnected
+                                  || observed->state == ai::AiTrackedCommandState::outcomeUnknown;
+            QString signal;
+            if (observed->state == ai::AiTrackedCommandState::disconnected)
+            {
+                signal = QStringLiteral("connection_lost");
+            }
+            else if (observed->state == ai::AiTrackedCommandState::outcomeUnknown)
+            {
+                signal = QStringLiteral("outcome_unknown");
+            }
+            return ai::AcpTerminalSnapshot{
+                .output = observed->output,
+                .exitCode = observed->exitStatus,
+                .signal = std::move(signal),
+                .exited = finished,
+                .truncated = observed->omittedOutputBytes != 0
+                             || observed->outputCoverage != terminal::CommandOutputCoverage::complete,
+            };
+        };
+        auto permission =
+            [permissionMode](
+                const ai::AcpPermissionRequest &request) -> std::expected<std::optional<QString>, ai::AiProviderError> {
+            const auto findKind = [&request](const QString &kind) -> std::optional<QString> {
+                const auto found = std::ranges::find(request.options, kind, &ai::AcpPermissionOption::kind);
+                return found == request.options.end() ? std::nullopt : std::optional<QString>{found->id};
+            };
+            if (permissionMode == ai::AiPermissionMode::ask)
+            {
+                return std::optional<QString>{};
+            }
+            const bool allow =
+                permissionMode == ai::AiPermissionMode::automatic || permissionMode == ai::AiPermissionMode::yolo;
+            const QString preferred = allow && permissionMode == ai::AiPermissionMode::yolo
+                                          ? QStringLiteral("allow_always")
+                                      : allow ? QStringLiteral("allow_once")
+                                              : QStringLiteral("reject_once");
+            auto selected = findKind(preferred);
+            if (!selected.has_value())
+            {
+                selected = findKind(allow ? QStringLiteral("allow_once") : QStringLiteral("reject_always"));
+            }
+            if (!selected.has_value())
+            {
+                return std::unexpected(ai::AiProviderError{.code = ai::AiProviderErrorCode::protocol,
+                                                           .message = "The ACP Agent offered no compatible "
+                                                                      "permission decision.",
+                                                           .retryable = false});
+            }
+            return selected;
+        };
+        auto started = tab.acpTurnRunner->startConfigured(
+            std::move(acpConfiguration), std::move(acpPrompt),
+            tab.kind == TerminalTabKind::Local ? ai::AcpTerminalShell::powerShell : ai::AcpTerminalShell::posix,
+            std::move(eventHandler), std::move(externalFinished), std::move(toolHandler), std::move(toolOutputHandler),
+            std::move(observer), std::move(permission),
+            [this, tabId](const ai::AcpPermissionRequest &) {
+                if (m_activeTabId == tabId || m_focusedTabId == tabId)
+                {
+                    emit aiConversationChanged();
+                }
+            },
+            [this, tabId](const ai::AiToolActivity &activity) {
+                TerminalTab *targetTab = findTab(tabId);
+                if (targetTab == nullptr || !targetTab->aiConversation || targetTab->aiAssistantMessageId == 0)
+                {
+                    return;
+                }
+                static_cast<void>(targetTab->aiConversation->upsertAssistantToolActivity(
+                    targetTab->aiAssistantMessageId, utf8QString(activity.id), utf8QString(activity.name),
+                    utf8QString(activity.summary), utf8QString(activity.state), utf8QString(activity.resultCode),
+                    activity.sideEffecting, activity.highRisk));
+                static_cast<void>(targetTab->aiConversation->setAssistantToolDetails(
+                    targetTab->aiAssistantMessageId, utf8QString(activity.id), aiToolDetailText(activity.argumentsJson),
+                    aiToolDetailText(activity.resultJson)));
+                if (m_activeTabId == tabId || m_focusedTabId == tabId)
+                {
+                    emit aiConversationChanged();
+                }
+            },
+            [this, tabId](const ai::AcpUsageUpdate &usage) {
+                if (TerminalTab *targetTab = findTab(tabId); targetTab != nullptr)
+                {
+                    targetTab->acpUsage = usage;
+                }
+            });
+        if (started.has_value())
+        {
+            tab.activeAiAgent = config::AiAgentPreference::openCode;
+        }
+        return started;
+    }
     if (m_settings.aiAgent == config::AiAgentPreference::codex)
     {
         if (!tab.codexTurnRunner)
@@ -10226,7 +10653,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
         configuration.kind == ai::AiProviderKind::openAiResponses
         && providerUrl.scheme().compare(QStringLiteral("https"), Qt::CaseInsensitive) == 0
         && providerUrl.host().compare(QStringLiteral("api.openai.com"), Qt::CaseInsensitive) == 0;
-    const bool externalCodexAgent = m_settings.aiAgent == config::AiAgentPreference::codex;
+    const bool externalAgent = m_settings.aiAgent != config::AiAgentPreference::ztermy;
     const auto permissionMode = aiPermissionMode(m_settings.aiPermission);
     std::string instructions = utf8String(ai::AiSystemPromptBuilder::build(commandRequest, permissionMode));
     const auto turnSkills = std::make_shared<const std::vector<ai::AiUserSkill>>(m_aiUserSkills);
@@ -10323,12 +10750,12 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
             handleAiStreamEvent(tabId, assistantMessageId, event);
         },
         [this, tabId, assistantMessageId, providerKind = configuration.kind, model = configuration.model,
-         officialOpenAiEndpoint, externalCodexAgent](const auto, const ai::AiTurnMetrics &metrics) {
+         officialOpenAiEndpoint, externalAgent](const auto, const ai::AiTurnMetrics &metrics) {
             TerminalTab *target = findTab(tabId);
             if (target != nullptr)
             {
                 const auto cost =
-                    target->aiUsage.has_value() && !externalCodexAgent
+                    target->aiUsage.has_value() && !externalAgent
                         ? ai::AiUsageEstimator::estimate(providerKind, model, *target->aiUsage, officialOpenAiEndpoint)
                         : ai::AiCostEstimate{};
                 if (target->aiConversation && target->aiAssistantMessageId == assistantMessageId)
@@ -10909,16 +11336,20 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                                                        tr("The target terminal session is unavailable."))},
                         .sideEffecting = true};
                 }
+                const bool acpPermissionDelegated = target->activeAiAgent == config::AiAgentPreference::openCode
+                                                    && call.id.starts_with("acp-terminal-")
+                                                    && call.id.contains("-authorized-");
                 const auto plan = m_aiActionToolDispatcher.prepare(
                     call,
-                    ai::AiActionToolContext{.conversationId = utf8String(target->aiConversationId),
-                                            .turnId = activeAiTurnId(*target),
-                                            .target = *turnTarget,
-                                            .permissionMode = aiPermissionMode(m_settings.aiPermission),
-                                            .profileId = utf8String(target->sourceProfileId),
-                                            .writable =
-                                                target->running && (target->ssh || target->local)
-                                                && target->reconnectGeneration == turnTarget->sessionGeneration},
+                    ai::AiActionToolContext{
+                        .conversationId = utf8String(target->aiConversationId),
+                        .turnId = activeAiTurnId(*target),
+                        .target = *turnTarget,
+                        .permissionMode = acpPermissionDelegated ? ai::AiPermissionMode::yolo
+                                                                 : aiPermissionMode(m_settings.aiPermission),
+                        .profileId = utf8String(target->sourceProfileId),
+                        .writable = target->running && (target->ssh || target->local)
+                                    && target->reconnectGeneration == turnTarget->sessionGeneration},
                     *target->aiTurnBudget);
                 if (plan.disposition == ai::AiActionToolDisposition::respond || !plan.action.has_value())
                 {
@@ -12371,6 +12802,10 @@ void AppController::initializeAiRuntime(TerminalTab &tab)
     {
         tab.codexTurnRunner = std::make_unique<ai::CodexAgentTurnRunner>();
     }
+    if (!tab.acpTurnRunner)
+    {
+        tab.acpTurnRunner = std::make_unique<ai::AcpAgentTurnRunner>();
+    }
 }
 
 void AppController::initializeAiConversationHistory()
@@ -12406,11 +12841,13 @@ void AppController::persistAiConversation(const TerminalTab &tab)
     {
         return;
     }
-    ai::AiStoredConversation stored{
-        .id = tab.aiConversationId,
-        .agent = config::aiAgentPreferenceToken(tab.activeAiAgent),
-        .externalThreadId = tab.activeAiAgent == config::AiAgentPreference::codex ? tab.codexThreadId : QString{},
-        .updatedAtUtc = QDateTime::currentDateTimeUtc()};
+    ai::AiStoredConversation stored{.id = tab.aiConversationId,
+                                    .agent = config::aiAgentPreferenceToken(tab.activeAiAgent),
+                                    .externalThreadId =
+                                        tab.activeAiAgent == config::AiAgentPreference::codex      ? tab.codexThreadId
+                                        : tab.activeAiAgent == config::AiAgentPreference::openCode ? tab.acpSessionId
+                                                                                                   : QString{},
+                                    .updatedAtUtc = QDateTime::currentDateTimeUtc()};
     stored.messages.reserve(transcript.size());
     for (const auto &entry : transcript)
     {

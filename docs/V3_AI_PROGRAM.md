@@ -368,9 +368,12 @@ Current closure work:
   without mislabelling ACP context usage as Provider tokens (`ADR 0094`).
 - a deterministic fake ACP Agent proves new/resumed Sessions, streaming,
   current-Session terminal requests, cancellation, foreign-Session rejection,
-  and duplicate-request suppression without a model account or network. The
-  remaining ACP application node is terminal/permission callback dispatch and
-  the visible OpenCode Agent option.
+  and duplicate-request suppression without a model account or network;
+- the OpenCode application bridge now discovers `opencode` from PATH, exposes
+  it in the Agent selector, separates the local process directory from the
+  current terminal cwd, and maps ACP terminal/permission calls through the
+  existing one-terminal permission, activity, cancellation, and semantic
+  command-result path (`ADR 0095`).
 
 Delivery status:
 

@@ -582,6 +582,8 @@ target_link_libraries(ztermy_external_agent_protocol
 )
 
 add_library(ztermy_external_agent_runtime STATIC
+    src/infrastructure/ai/AcpAgentDiscovery.cpp
+    src/infrastructure/ai/AcpAgentDiscovery.h
     src/infrastructure/ai/AcpClient.cpp
     src/infrastructure/ai/AcpClient.h
     src/infrastructure/ai/AcpSessionUpdateMapper.cpp
@@ -655,6 +657,8 @@ target_link_libraries(ztermy_ai_application
 )
 
 add_library(ztermy_external_agent_application STATIC
+    src/application/ai/AcpAgentTurnRunner.cpp
+    src/application/ai/AcpAgentTurnRunner.h
     src/application/ai/CodexAgentPromptBuilder.cpp
     src/application/ai/CodexAgentPromptBuilder.h
     src/application/ai/CodexAgentTurnRunner.cpp
@@ -2905,6 +2909,27 @@ if(BUILD_TESTING)
 
     add_test(NAME acp-session-update-mapper COMMAND ztermy_acp_session_update_mapper_tests)
 
+    qt_add_executable(ztermy_acp_agent_turn_runner_tests
+        tests/acp_agent_turn_runner_tests.cpp
+    )
+    target_compile_features(ztermy_acp_agent_turn_runner_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_acp_agent_turn_runner_tests PRIVATE
+        ztermy_external_agent_application
+        Qt6::Test
+    )
+    add_dependencies(ztermy_acp_agent_turn_runner_tests ztermy_acp_test_agent)
+
+    if(MSVC)
+        target_compile_options(ztermy_acp_agent_turn_runner_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME acp-agent-turn-runner COMMAND ztermy_acp_agent_turn_runner_tests)
+
     add_executable(ztermy_codex_app_server_test_server
         tests/codex_app_server_test_server.cpp
     )
@@ -4006,7 +4031,7 @@ if(BUILD_TESTING)
         ztermy_workbench_persistence
         Qt6::Test
     )
-    add_dependencies(ztermy_app_controller_tests ztermy_codex_app_server_test_server)
+    add_dependencies(ztermy_app_controller_tests ztermy_codex_app_server_test_server ztermy_acp_test_agent)
 
     if(MSVC)
         target_compile_options(ztermy_app_controller_tests PRIVATE

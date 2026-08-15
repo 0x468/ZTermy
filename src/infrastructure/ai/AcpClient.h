@@ -23,7 +23,8 @@ struct AcpClientConfiguration final
 {
     QString program;
     QStringList arguments;
-    QString workingDirectory;
+    QString processWorkingDirectory;
+    QString sessionWorkingDirectory;
     std::string clientVersion;
     std::optional<std::string> resumeSessionId;
     bool terminalCapability = true;

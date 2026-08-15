@@ -2,7 +2,8 @@
 
 Status: `0.3.0`-`0.3.9` implementation audit in progress; owner/environment
 release acceptance tracked separately; `0.3.10` implemented and `0.3.11`
-external-Agent integration in progress (`ADR 0091`)
+includes native Codex plus OpenCode ACP current-terminal integration
+(`ADR 0091`, `ADR 0095`)
 
 Date: 2026-08-13
 
@@ -128,6 +129,14 @@ covered by `application-settings`, `ai-permission-policy`,
 | Tab focus changes cannot retarget a turn; reconnect/closure invalidates live work | `src/application/AppController.*` and host-injected `AiSessionTarget` values | `app-controller`, Agent scenario tests, owner concurrency acceptance | ADR 0086 |
 | Explicit images remain in the owning draft and use native multimodal provider payloads | `src/application/AppController.*`, `AiConversationModel.*`, `ProviderRequestFactory.*`, `AiAssistantPane.qml` | `provider-request-factory`, `ai-conversation-model`, `ai-context-compactor`, `ai-trace-sanitizer`, `app-controller`, owner multimodal acceptance | ADR 0089 |
 | Provider-native web search remains current-terminal scoped and exposes structured source provenance | `src/application/AppController.*`, `AiConversationModel.*`, `AiConversationStore.*`, `ProviderRequestFactory.*`, `ProviderStreamMapper.*`, `AiAssistantPane.qml` | `provider-request-factory`, `provider-stream-mapper`, `ai-conversation-model`, `ai-conversation-store`, `app-controller`, owner/provider acceptance | ADR 0090 |
+
+## 0.3.11 — external Agent ecosystem
+
+| Approved boundary | Representative implementation | Focused contracts | Decisions |
+| --- | --- | --- | --- |
+| Native Codex App Server integration with current-terminal dynamic tools and external thread resume | `src/infrastructure/ai/CodexAppServer*`; `src/application/ai/CodexAgentTurnRunner.*`; `src/application/AppController.*` | `codex-app-server-protocol`, `codex-app-server-client`, `codex-agent-turn-runner`, `app-controller` | ADR 0091 |
+| Bounded ACP v1 transport, process/Session lifecycle, and typed updates | `src/infrastructure/ai/AcpProtocol.*`, `AcpClient.*`, `AcpSessionUpdateMapper.*` | `acp-protocol`, `acp-client`, `acp-session-update-mapper` | ADR 0093, ADR 0094 |
+| OpenCode discovery and single-owning-terminal terminal/permission bridge | `src/infrastructure/ai/AcpAgentDiscovery.*`; `src/application/ai/AcpAgentTurnRunner.*`; `src/application/AppController.*` | `acp-agent-turn-runner`, `ai-command-tracker`, `app-controller` | ADR 0086, ADR 0095 |
 
 ## Evidence classification
 
