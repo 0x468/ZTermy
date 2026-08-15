@@ -57,6 +57,11 @@ void CodexAppServerProtocolTests::buildsHandshakeThreadTurnAndInterruptRequests(
     QCOMPARE(tool.value(QStringLiteral("name")).toString(), QStringLiteral("run_command"));
     QVERIFY(tool.value(QStringLiteral("inputSchema")).isObject());
 
+    const auto defaultModelThread =
+        protocol.startThreadRequest(6, {}, workingDirectory, "Use only the owning ztermy terminal tools.", tools);
+    QVERIFY(defaultModelThread.has_value());
+    QVERIFY(!object(*defaultModelThread).value(QStringLiteral("params")).toObject().contains(QStringLiteral("model")));
+
     const auto turn = protocol.startTurnRequest(3, "thread-1", "Inspect disk usage");
     QVERIFY(turn.has_value());
     QCOMPARE(object(*turn).value(QStringLiteral("method")).toString(), QStringLiteral("turn/start"));

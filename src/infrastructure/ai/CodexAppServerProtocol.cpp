@@ -113,7 +113,7 @@ constexpr std::uint64_t maximumJsonInteger = 9'007'199'254'740'991ULL;
                                                                       const std::string_view developerInstructions,
                                                                       const std::span<const AiToolDefinition> tools)
 {
-    if (!validIdentifier(model) || !validIdentifier(localWorkingDirectory, 4096)
+    if ((!model.empty() && !validIdentifier(model)) || !validIdentifier(localWorkingDirectory, 4096)
         || !QDir::isAbsolutePath(text(localWorkingDirectory))
         || !validUtf8(developerInstructions, maximumPromptBytes, true) || tools.empty() || tools.size() > maximumTools)
     {
@@ -138,13 +138,17 @@ constexpr std::uint64_t maximumJsonInteger = 9'007'199'254'740'991ULL;
                                         {QStringLiteral("inputSchema"), *schema}});
     }
 
-    return QJsonObject{{QStringLiteral("model"), text(model)},
-                       {QStringLiteral("cwd"), text(localWorkingDirectory)},
+    QJsonObject result{{QStringLiteral("cwd"), text(localWorkingDirectory)},
                        {QStringLiteral("approvalPolicy"), QStringLiteral("never")},
                        {QStringLiteral("sandbox"), QStringLiteral("read-only")},
                        {QStringLiteral("serviceName"), QStringLiteral("ztermy")},
                        {QStringLiteral("developerInstructions"), text(developerInstructions)},
                        {QStringLiteral("dynamicTools"), dynamicTools}};
+    if (!model.empty())
+    {
+        result.insert(QStringLiteral("model"), text(model));
+    }
+    return result;
 }
 
 } // namespace
