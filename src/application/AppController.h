@@ -32,6 +32,7 @@
 #include "infrastructure/ai/AiPermissionRuleStore.h"
 #include "infrastructure/ai/AiQuickMessageStore.h"
 #include "infrastructure/ai/AiUserSkillCatalog.h"
+#include "infrastructure/ai/CodexAppServerDiscovery.h"
 #include "infrastructure/ai/ProviderModelCatalog.h"
 #include "infrastructure/forwarding/PortForwardingRuleStore.h"
 #include "infrastructure/logging/SessionLogWriter.h"
@@ -747,6 +748,7 @@ private:
         QHash<QString, QString> aiWebSearchQueries;
         QString aiContextPreview;
         QString aiConversationId;
+        QString codexThreadId;
         QVariantList aiContextItems;
         std::unordered_set<std::string> aiExcludedContextIds;
         std::unordered_set<std::string> aiPinnedContextIds;
@@ -835,6 +837,7 @@ private:
     [[nodiscard]] std::optional<ai::AiToolCall> pendingAiToolCall(const TerminalTab &tab) const;
     [[nodiscard]] bool completePendingAiTool(TerminalTab &tab, const ai::AiToolOutput &output);
     [[nodiscard]] bool cancelAiTurn(TerminalTab &tab);
+    void initializeCodexAgentDiscovery();
     void handleAiStreamEvent(const QString &tabId, std::uint64_t assistantMessageId, const ai::AiStreamEvent &event);
     [[nodiscard]] ai::AiTurnRunner::ToolHandlingResult handleAiWaitCommand(TerminalTab &tab, const QString &tabId,
                                                                            const ai::AiToolCall &call,
@@ -1008,8 +1011,11 @@ private:
     QString m_aiDebugTracePath;
     QNetworkAccessManager m_aiModelNetwork;
     QPointer<QNetworkReply> m_aiModelsReply;
+    std::unique_ptr<ai::CodexAppServerDiscovery> m_codexDiscovery;
+    std::optional<ai::CodexAppServerInstallation> m_codexInstallation;
     QStringList m_aiAvailableModels;
     QString m_aiModelsError;
+    QString m_codexDiscoveryError;
     QString m_aiPermissionRuleError;
     std::vector<ai::AiQuickMessage> m_aiQuickMessages;
     QString m_aiQuickMessageError;

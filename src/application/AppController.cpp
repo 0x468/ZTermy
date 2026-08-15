@@ -5,6 +5,7 @@
 #include "application/ai/AiTerminalFrameTool.h"
 #include "application/ai/AiUserSkillTool.h"
 #include "application/ai/AiWaitCommandTool.h"
+#include "application/ai/CodexAgentPromptBuilder.h"
 #include "domain/ai/AiCommandEcho.h"
 #include "domain/ai/AiContextCompactor.h"
 #include "domain/ai/AiContextSerializer.h"
@@ -2011,6 +2012,10 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     loadHostProfiles();
     loadPortForwardingRules();
     loadApplicationSettings();
+    if (m_settings.aiAgent == config::AiAgentPreference::codex)
+    {
+        initializeCodexAgentDiscovery();
+    }
     loadAiPermissionRules();
     loadAiQuickMessages();
     initializeAiDebugTrace();
@@ -2097,6 +2102,10 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     loadHostProfiles();
     loadPortForwardingRules();
     loadApplicationSettings();
+    if (m_settings.aiAgent == config::AiAgentPreference::codex)
+    {
+        initializeCodexAgentDiscovery();
+    }
     loadAiPermissionRules();
     loadAiQuickMessages();
     initializeAiDebugTrace();
@@ -2232,6 +2241,10 @@ void AppController::shutdown() noexcept
         reply->deleteLater();
     }
     m_aiModelsLoading = false;
+    if (m_codexDiscovery)
+    {
+        m_codexDiscovery->stop();
+    }
     m_aiProviderClient.setTraceHandler({});
     if (m_aiDebugTrace)
     {
@@ -3175,6 +3188,10 @@ QString AppController::aiModelsError() const
 
 bool AppController::aiWebSearchAvailable() const noexcept
 {
+    if (m_settings.aiAgent == config::AiAgentPreference::codex)
+    {
+        return false;
+    }
     return m_settings.aiProvider == config::AiProviderPreference::openAiResponses
            || m_settings.aiProvider == config::AiProviderPreference::anthropic;
 }
@@ -8088,6 +8105,12 @@ bool AppController::restoreAiConversationHistory(const QString &conversationId)
     tab->aiError.clear();
     tab->aiTurnBudget.reset();
     tab->pendingAiAction.reset();
+    if (tab->codexTurnRunner)
+    {
+        tab->codexTurnRunner->stop();
+    }
+    tab->codexThreadId.clear();
+    tab->activeAiAgent = config::AiAgentPreference::ztermy;
     emit aiConversationChanged();
     return true;
 }
@@ -8674,6 +8697,7 @@ void AppController::clearAiConversation()
     {
         tab->codexTurnRunner->stop();
     }
+    tab->codexThreadId.clear();
     tab->activeAiAgent = config::AiAgentPreference::ztermy;
     m_aiActionToolDispatcher.clearConversation(utf8String(previousConversationId));
     m_mcpDispatchLedger.clearConversation(utf8String(previousConversationId));
@@ -9603,6 +9627,47 @@ void AppController::handleAiStreamEvent(const QString &tabId, const std::uint64_
     }
 }
 
+void AppController::initializeCodexAgentDiscovery()
+{
+    if (m_shutdownStarted || (m_codexDiscovery && m_codexDiscovery->running()))
+    {
+        return;
+    }
+    const QString program = QStandardPaths::findExecutable(QStringLiteral("codex"));
+    if (program.isEmpty())
+    {
+        m_codexInstallation.reset();
+        m_codexDiscoveryError = tr("Codex CLI was not found on PATH.");
+        return;
+    }
+    if (!m_codexDiscovery)
+    {
+        m_codexDiscovery = std::make_unique<ai::CodexAppServerDiscovery>();
+    }
+    m_codexInstallation.reset();
+    m_codexDiscoveryError.clear();
+    auto started = m_codexDiscovery->start(program, [this](auto result) {
+        if (m_shutdownStarted)
+        {
+            return;
+        }
+        if (result.has_value())
+        {
+            m_codexInstallation = std::move(*result);
+            m_codexDiscoveryError.clear();
+            qCInfo(appControllerLog) << "Codex Agent discovered:" << m_codexInstallation->version;
+            return;
+        }
+        m_codexInstallation.reset();
+        m_codexDiscoveryError = result.error();
+        qCWarning(appControllerLog) << "Codex Agent discovery failed:" << m_codexDiscoveryError;
+    });
+    if (!started.has_value())
+    {
+        m_codexDiscoveryError = started.error();
+    }
+}
+
 bool AppController::aiTurnActive(const TerminalTab &tab) const noexcept
 {
     if (tab.activeAiAgent == config::AiAgentPreference::codex)
@@ -9655,6 +9720,89 @@ std::expected<ai::AiTurnRunner::TurnId, ai::AiProviderError> AppController::star
     ai::AiTurnRunner::JitterSource jitterSource, ai::AiTurnRunner::ToolHandler toolHandler,
     ai::AiTurnRunner::ToolOutputHandler toolOutputHandler)
 {
+    if (m_settings.aiAgent == config::AiAgentPreference::codex)
+    {
+        if (!tab.codexTurnRunner)
+        {
+            return std::unexpected(ai::AiProviderError{.code = ai::AiProviderErrorCode::invalidRequest,
+                                                       .message = "The Codex Agent runtime is unavailable.",
+                                                       .retryable = false});
+        }
+        if (!m_codexInstallation.has_value())
+        {
+            initializeCodexAgentDiscovery();
+            const QString detail = m_codexDiscoveryError.isEmpty()
+                                       ? tr("Codex Agent discovery is still running. Try again in a moment.")
+                                       : m_codexDiscoveryError;
+            return std::unexpected(ai::AiProviderError{.code = ai::AiProviderErrorCode::invalidRequest,
+                                                       .message = utf8String(detail),
+                                                       .retryable = false});
+        }
+        if (generation.webSearchEnabled)
+        {
+            return std::unexpected(ai::AiProviderError{.code = ai::AiProviderErrorCode::invalidRequest,
+                                                       .message = "Native web search is not available through the "
+                                                                  "Codex Agent bridge yet.",
+                                                       .retryable = false});
+        }
+        const bool continuingThread = !tab.codexThreadId.isEmpty();
+        auto prompt = ai::CodexAgentPromptBuilder::build(generation, continuingThread);
+        if (!prompt.has_value())
+        {
+            const char *message = prompt.error() == ai::CodexAgentPromptError::imageUnsupported
+                                      ? "Image attachments are not available through the Codex Agent bridge yet."
+                                      : "The Codex Agent prompt is empty or exceeds its bounded transport limit.";
+            return std::unexpected(ai::AiProviderError{.code = ai::AiProviderErrorCode::invalidRequest,
+                                                       .message = message,
+                                                       .retryable = false});
+        }
+        QString cacheRoot = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+        if (cacheRoot.isEmpty())
+        {
+            cacheRoot = QDir::tempPath();
+        }
+        QDir cacheDirectory(cacheRoot);
+        if (!cacheDirectory.mkpath(QStringLiteral("codex-agent")))
+        {
+            return std::unexpected(ai::AiProviderError{.code = ai::AiProviderErrorCode::invalidRequest,
+                                                       .message = "The Codex Agent working directory is unavailable.",
+                                                       .retryable = false});
+        }
+        const QString clientVersion = QCoreApplication::applicationVersion().isEmpty()
+                                          ? QStringLiteral("development")
+                                          : QCoreApplication::applicationVersion();
+        ai::CodexAppServerConfiguration codexConfiguration{
+            .program = m_codexInstallation->program,
+            .arguments = {QStringLiteral("app-server")},
+            .workingDirectory = cacheDirectory.filePath(QStringLiteral("codex-agent")),
+            .model = {},
+            .clientVersion = utf8String(clientVersion),
+            .developerInstructions = std::move(generation.instructions),
+            .tools = std::move(generation.tools),
+            .resumeThreadId = continuingThread ? std::optional{utf8String(tab.codexThreadId)} : std::nullopt,
+            .dynamicToolsVerified = m_codexInstallation->dynamicToolsVerified,
+        };
+        const QString tabId = tab.id;
+        auto externalFinished = [this, tabId, finished = std::move(finishedHandler)](
+                                    const auto turnId, const ai::AiTurnMetrics &metrics) mutable {
+            if (TerminalTab *target = findTab(tabId); target != nullptr && target->codexTurnRunner)
+            {
+                target->codexThreadId = target->codexTurnRunner->threadId();
+            }
+            if (finished)
+            {
+                finished(turnId, metrics);
+            }
+        };
+        auto started = tab.codexTurnRunner->startConfigured(std::move(codexConfiguration), std::move(*prompt),
+                                                            std::move(eventHandler), std::move(externalFinished),
+                                                            std::move(toolHandler), std::move(toolOutputHandler));
+        if (started.has_value())
+        {
+            tab.activeAiAgent = config::AiAgentPreference::codex;
+        }
+        return started;
+    }
     if (!tab.aiTurnRunner)
     {
         return std::unexpected(ai::AiProviderError{.code = ai::AiProviderErrorCode::invalidRequest,
@@ -9681,7 +9829,8 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
     {
         return false;
     }
-    if (m_settings.aiModel.trimmed().isEmpty() || m_settings.aiBaseUrl.trimmed().isEmpty())
+    if (m_settings.aiAgent == config::AiAgentPreference::ztermy
+        && (m_settings.aiModel.trimmed().isEmpty() || m_settings.aiBaseUrl.trimmed().isEmpty()))
     {
         tab.aiError = tr("Configure an AI provider URL and model before starting a conversation.");
         emit aiConversationChanged();
@@ -9766,6 +9915,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
         configuration.kind == ai::AiProviderKind::openAiResponses
         && providerUrl.scheme().compare(QStringLiteral("https"), Qt::CaseInsensitive) == 0
         && providerUrl.host().compare(QStringLiteral("api.openai.com"), Qt::CaseInsensitive) == 0;
+    const bool externalCodexAgent = m_settings.aiAgent == config::AiAgentPreference::codex;
     const auto permissionMode = aiPermissionMode(m_settings.aiPermission);
     std::string instructions = utf8String(ai::AiSystemPromptBuilder::build(commandRequest, permissionMode));
     const auto turnSkills = std::make_shared<const std::vector<ai::AiUserSkill>>(m_aiUserSkills);
@@ -9861,12 +10011,12 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
             handleAiStreamEvent(tabId, assistantMessageId, event);
         },
         [this, tabId, assistantMessageId, providerKind = configuration.kind, model = configuration.model,
-         officialOpenAiEndpoint](const auto, const ai::AiTurnMetrics &metrics) {
+         officialOpenAiEndpoint, externalCodexAgent](const auto, const ai::AiTurnMetrics &metrics) {
             TerminalTab *target = findTab(tabId);
             if (target != nullptr)
             {
                 const auto cost =
-                    target->aiUsage.has_value()
+                    target->aiUsage.has_value() && !externalCodexAgent
                         ? ai::AiUsageEstimator::estimate(providerKind, model, *target->aiUsage, officialOpenAiEndpoint)
                         : ai::AiCostEstimate{};
                 if (target->aiConversation && target->aiAssistantMessageId == assistantMessageId)
