@@ -314,6 +314,25 @@ the unified release-candidate verifier.
   verifier pass. The owner/provider and previous-Windows-build matrix remains
   explicit manual/environment acceptance.
 
+### 0.3.11 Codex Agent bridge developer evidence — 2026-08-15
+
+- the deterministic AppController scenario discovers a copied fake
+  `codex.exe`, validates its generated schema, opens the current local terminal,
+  completes a `read_session_info` dynamic-tool round trip, renders the shared
+  conversation/tool activity state, and switches back to ztermy Agent;
+- protocol, process client, event mapper, and turn-runner tests cover JSONL
+  fragmentation and bounds, start/resume, dynamic tools, queued cancellation,
+  text/reasoning/failure mapping, asynchronous tool completion, and thread scope;
+- the installed `codex-cli 0.146.0` opt-in gate validates the real generated
+  schema, initialize handshake, and thread/turn start. The managed sandbox blocks
+  outbound access to the Responses API, and the observed `turn.status=failed`
+  remains an expected environment limitation rather than a claimed successful
+  provider run; owner or explicitly approved network execution is still open;
+- App Server shutdown now closes stdin and waits for normal exit before
+  terminate/kill escalation. The same real failure scenario restores its
+  temporary Windows sandbox directory cleanly instead of leaving inaccessible
+  ACL state.
+
 ## Evaluation corpus
 
 Maintain versioned synthetic tasks with expected evidence and allowed actions:
@@ -366,6 +385,21 @@ only when it passes the same evidence and action contract.
 
 ## Manual real-window matrix
 
+- [ ] Agent engine: open Settings > AI, click Detect, and verify the installed
+      Codex version appears without blocking the window. Select Codex and verify
+      provider URL/key/model fields disappear while permission and explicit
+      context controls remain. The AI header must show Codex; switching back to
+      ztermy Agent while idle must start a clean external resume point. Switching
+      is rejected during an active turn rather than orphaning it.
+- [ ] Installed Codex: with an authenticated CLI, set
+      `$env:ZTERMY_TEST_CODEX_REAL = "1"` and run
+      `build/msvc-dynamic-debug/ztermy_codex_app_server_client_tests.exe
+      connectsToInstalledCodexWhenEnabled`; remove the environment variable
+      afterward, then send one current-terminal prompt in the real window.
+      Schema discovery, handshake, thread start,
+      streaming/final message, failure status, cancellation, and the owning
+      terminal's tool cards must remain coherent; ordinary `ctest` must keep
+      this network gate skipped.
 - [ ] Conversation surface: with retained history available, New starts an empty
       current-terminal conversation; the empty view shows no more than three
       recent rows; History replaces the message/composer region with a full-height

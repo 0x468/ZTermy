@@ -8,6 +8,15 @@
 
 ## 1. Provider 与模型
 
+- [ ] 打开“设置 > AI”，点击“检测 Agent”。预期能异步显示本机 Codex CLI 的版本；未安装、
+      检测中和不可用状态都有明确提示，窗口始终可操作。
+- [ ] 在 ztermy Agent 与 Codex 之间切换。选择 Codex 后不再显示 Provider URL、API Key 和
+      模型端点配置，因为登录、模型和配置由现有 Codex CLI 管理；权限模式和显式终端上下文
+      仍然可用，AI 面板标题同步显示 Codex。活动回合期间不能切换，空闲切换会开始干净的
+      Agent 上下文，不会把一个运行时的隐藏 thread 冒充成另一个运行时的延续。
+- [ ] 使用已登录的 Codex，在当前终端侧栏发起一次只读询问，再执行一次当前终端工具。
+      预期命令和结果只属于这个侧栏对应的终端；流式正文、思考摘要、工具卡、取消和失败提示
+      与内置 Agent 使用同一套交互，不出现跨终端选择器或 `list_session` 一类工具。
 - [ ] 打开“设置 > AI”，依次切换 OpenAI、Anthropic、DeepSeek、Kimi、Z.AI、
       Ollama 和 OpenAI-compatible。预期 API 地址与请求预览跟随厂商变化；自定义地址
       仍可编辑。

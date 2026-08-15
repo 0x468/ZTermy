@@ -307,9 +307,23 @@ Implementation status:
 - a native turn orchestrator now reuses the built-in runner's event, tool,
   asynchronous completion, cancellation, and metrics vocabulary. Its fake App
   Server scenarios cover immediate tools, pending-tool resume, and cancellation;
-- current-terminal application dispatch, durable resume ownership, discovery
-  UI, and packaging remain open. The Agent selector stays hidden until those
-  paths work end to end.
+- current-terminal application dispatch is integrated into `AppController` and
+  keeps the external thread id on the owning terminal tab. The same bounded
+  tool dispatcher, permission mode, activity cards, cancellation path, and
+  conversation model are used without exposing cross-terminal session tools;
+- Settings and the terminal AI header now expose a ztermy Agent / Codex selector,
+  asynchronous Detect action, discovered version/detail, and explicit
+  unavailable/loading states. Selecting Codex hides provider credentials and
+  model endpoint fields because the installed CLI owns login, model, and config;
+- deterministic application coverage copies the fake App Server to a discovered
+  `codex.exe`, starts a local terminal, completes a current-terminal dynamic-tool
+  turn, and verifies Agent switching. An opt-in installed-CLI gate separately
+  verifies the exact generated schema, process handshake, thread, stream, and
+  completion status without adding network traffic to ordinary `ctest` runs;
+- durable Codex thread recovery across application restart, installed/portable
+  packaging evidence, and owner real-window acceptance remain open. Switching
+  Agent while idle deliberately starts a clean external resume point so one
+  conversation is never silently continued by a different runtime.
 
 Current closure work:
 

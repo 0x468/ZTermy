@@ -4,6 +4,8 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QEventLoop>
+#include <QJsonDocument>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QtTest/QTest>
@@ -45,6 +47,7 @@ private slots:
     void resumesThreadWithCurrentToolCatalog();
     void rejectsUnverifiedRuntime();
     void discoversExperimentalDynamicToolSchema();
+    void connectsToInstalledCodexWhenEnabled();
 };
 
 void CodexAppServerClientTests::startsTurnAndCompletesHostToolCall()
@@ -230,6 +233,120 @@ void CodexAppServerClientTests::discoversExperimentalDynamicToolSchema()
     QVERIFY(
         !ztermy::ai::CodexAppServerDiscovery::inspectGeneratedSchema(incomplete.path(), helper, QStringLiteral("test"))
              .has_value());
+}
+
+void CodexAppServerClientTests::connectsToInstalledCodexWhenEnabled()
+{
+    if (qgetenv("ZTERMY_TEST_CODEX_REAL") != QByteArrayLiteral("1"))
+    {
+        QSKIP("Set ZTERMY_TEST_CODEX_REAL=1 to run the installed Codex app-server smoke test");
+    }
+
+    const QString program = QStandardPaths::findExecutable(QStringLiteral("codex"));
+    QVERIFY2(!program.isEmpty(), "Codex is not available on PATH");
+
+    ztermy::ai::CodexAppServerDiscovery discovery;
+    QEventLoop discoveryLoop;
+    std::optional<ztermy::ai::CodexAppServerInstallation> installation;
+    QString failure;
+    const auto discoveryStarted = discovery.start(program, [&discoveryLoop, &installation, &failure](auto result) {
+        if (result.has_value())
+        {
+            installation = std::move(*result);
+        }
+        else
+        {
+            failure = result.error();
+        }
+        discoveryLoop.quit();
+    });
+    if (!discoveryStarted.has_value())
+    {
+        QFAIL(qPrintable(discoveryStarted.error()));
+    }
+    QTimer::singleShot(35'000, &discoveryLoop, &QEventLoop::quit);
+    discoveryLoop.exec();
+    QVERIFY2(failure.isEmpty(), qPrintable(failure));
+    QVERIFY2(installation.has_value(), "Codex discovery timed out");
+    QVERIFY(installation->dynamicToolsVerified);
+
+    QTemporaryDir workingDirectory;
+    QVERIFY(workingDirectory.isValid());
+    ztermy::ai::CodexAppServerClient client;
+    QEventLoop readyLoop;
+    QEventLoop turnLoop;
+    bool sawAgentDelta = false;
+    bool sawCompletedAgentMessage = false;
+    bool completed = false;
+    QStringList methods;
+    QJsonObject completion;
+    auto started = client.start(
+        {.program = installation->program,
+         .arguments = {QStringLiteral("app-server")},
+         .workingDirectory = workingDirectory.path(),
+         .model = {},
+         .clientVersion = "0.3.0-real-smoke",
+         .developerInstructions = "Do not call tools. Reply with exactly ZTERMY_CODEX_REAL_READY.",
+         .tools = tools(),
+         .dynamicToolsVerified = true},
+        [&readyLoop, &failure](auto result) {
+            if (!result.has_value())
+            {
+                failure = result.error();
+            }
+            readyLoop.quit();
+        },
+        [&turnLoop, &failure, &sawAgentDelta, &sawCompletedAgentMessage, &completed, &methods,
+         &completion](auto event) {
+            if (!event.has_value())
+            {
+                failure = event.error();
+                turnLoop.quit();
+                return;
+            }
+            methods.push_back(event->method);
+            sawAgentDelta = sawAgentDelta || event->method == QStringLiteral("item/agentMessage/delta");
+            if (event->method == QStringLiteral("item/completed"))
+            {
+                const QJsonObject item = event->params.value(QStringLiteral("item")).toObject();
+                sawCompletedAgentMessage =
+                    sawCompletedAgentMessage
+                    || (item.value(QStringLiteral("type")).toString() == QStringLiteral("agentMessage")
+                        && !item.value(QStringLiteral("text")).toString().isEmpty());
+            }
+            if (event->method == QStringLiteral("turn/completed"))
+            {
+                completed = true;
+                completion = event->params;
+                turnLoop.quit();
+            }
+        },
+        {});
+    if (!started.has_value())
+    {
+        QFAIL(qPrintable(started.error()));
+    }
+    QTimer::singleShot(15'000, &readyLoop, &QEventLoop::quit);
+    readyLoop.exec();
+    QVERIFY2(failure.isEmpty(), qPrintable(failure));
+    QVERIFY2(client.ready(), "Codex app-server handshake timed out");
+
+    const auto turn = client.startTurn("Reply with exactly ZTERMY_CODEX_REAL_READY.");
+    if (!turn.has_value())
+    {
+        QFAIL(qPrintable(turn.error()));
+    }
+    QTimer::singleShot(90'000, &turnLoop, &QEventLoop::quit);
+    turnLoop.exec();
+    QVERIFY2(failure.isEmpty(), qPrintable(failure));
+    QVERIFY2(completed, "Codex app-server turn timed out");
+    QVERIFY2(completion.value(QStringLiteral("turn")).toObject().value(QStringLiteral("status")).toString()
+                 == QStringLiteral("completed"),
+             qPrintable(QString::fromUtf8(QJsonDocument(completion).toJson(QJsonDocument::Compact))));
+    QVERIFY2(sawAgentDelta || sawCompletedAgentMessage,
+             qPrintable(QStringLiteral("Observed methods: %1").arg(methods.join(QLatin1Char(',')))));
+    QVERIFY(client.ready());
+    client.stop();
 }
 
 } // namespace

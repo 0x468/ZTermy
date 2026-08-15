@@ -193,8 +193,19 @@ void CodexAppServerClient::stop()
     m_interruptRequested = false;
     if (m_process.state() != QProcess::NotRunning)
     {
-        m_process.kill();
-        static_cast<void>(m_process.waitForFinished(1'000));
+        // App Server may own a Windows sandbox whose ACL cleanup runs while it
+        // handles stdin EOF. Give it a graceful exit window before escalating;
+        // killing it first can leave the working directory inaccessible.
+        m_process.closeWriteChannel();
+        if (!m_process.waitForFinished(1'000))
+        {
+            m_process.terminate();
+            if (!m_process.waitForFinished(500))
+            {
+                m_process.kill();
+                static_cast<void>(m_process.waitForFinished(500));
+            }
+        }
     }
     m_readyHandler = {};
     m_eventHandler = {};
