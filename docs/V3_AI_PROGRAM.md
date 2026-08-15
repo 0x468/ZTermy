@@ -275,8 +275,11 @@ becomes conversation retention.
 - add optional provider-native web search with typed activity, visible
   provenance, persisted citations, and explicit unavailability for protocols
   without a native search contract (`ADR 0090`); bounded opaque provider blocks
-  and paused server-tool turns replay exactly inside the active logical turn,
-  while durable replay across later user turns remains a follow-up;
+  and paused server-tool turns replay exactly inside the active logical turn;
+  completed Anthropic turns now retain a strict 256 KiB provider-replay
+  envelope in encrypted history, expand it at the original assistant-message
+  position on later turns/restores, and discard oldest hidden replay first when
+  compacting context;
 - cover attachment, skill, and search persistence/compaction boundaries in the
   deterministic evaluation corpus.
 

@@ -88,7 +88,7 @@ std::size_t AiContextCompactor::estimateRequestTokens(const AiGenerationRequest 
     for (const auto &message : request.messages)
     {
         // Role marker overhead plus content.
-        total += 2 + estimateTextTokens(message.content);
+        total += 2 + estimateTextTokens(message.content) + estimateTextTokens(message.providerReplayJson);
         for (const auto &image : message.images)
         {
             total += estimateImageTokens(image);
@@ -141,6 +141,12 @@ AiCompactionResult AiContextCompactor::compact(AiGenerationRequest request, cons
     for (std::size_t index = 0; index < oldCount; ++index)
     {
         auto &message = request.messages[index];
+        if (!message.providerReplayJson.empty())
+        {
+            compactedCharacters += message.providerReplayJson.size();
+            message.providerReplayJson.clear();
+            ++compactedMessages;
+        }
         if (message.content.size()
             <= limits.oldMessageHeadCharacters + limits.oldMessageTailCharacters + std::size_t{32})
         {

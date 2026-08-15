@@ -74,6 +74,12 @@ constexpr std::size_t maximumReasoningBytes = std::size_t{128} * 1024;
     {
         return std::unexpected(AiProviderReplayError::invalidData);
     }
+    if (!object.value(QStringLiteral("calls")).isArray() || !object.value(QStringLiteral("outputs")).isArray()
+        || !object.value(QStringLiteral("reasoning")).isString()
+        || !object.value(QStringLiteral("reasoningSignature")).isString())
+    {
+        return std::unexpected(AiProviderReplayError::invalidData);
+    }
     const QJsonArray calls = object.value(QStringLiteral("calls")).toArray();
     const QJsonArray outputs = object.value(QStringLiteral("outputs")).toArray();
     const QString reasoning = object.value(QStringLiteral("reasoning")).toString();
@@ -88,15 +94,17 @@ constexpr std::size_t maximumReasoningBytes = std::size_t{128} * 1024;
     AiToolExchange exchange{.reasoning = reasoning.toUtf8().toStdString(),
                             .reasoningSignature = reasoningSignature.toUtf8().toStdString()};
     exchange.calls.reserve(static_cast<std::size_t>(calls.size()));
-    for (const QJsonValue &value : calls)
+    for (const auto &value : calls)
     {
         const QJsonObject call = value.toObject();
         static const QSet<QString> callKeys{QStringLiteral("id"), QStringLiteral("name"), QStringLiteral("arguments")};
         const QByteArray id = call.value(QStringLiteral("id")).toString().toUtf8();
         const QByteArray name = call.value(QStringLiteral("name")).toString().toUtf8();
         const QByteArray arguments = call.value(QStringLiteral("arguments")).toString().toUtf8();
-        if (!value.isObject() || !hasOnlyKeys(call, callKeys) || id.isEmpty() || name.isEmpty()
-            || std::cmp_greater(id.size(), maximumIdBytes) || std::cmp_greater(name.size(), maximumNameBytes)
+        if (!value.isObject() || !hasOnlyKeys(call, callKeys) || !call.value(QStringLiteral("id")).isString()
+            || !call.value(QStringLiteral("name")).isString() || !call.value(QStringLiteral("arguments")).isString()
+            || id.isEmpty() || name.isEmpty() || std::cmp_greater(id.size(), maximumIdBytes)
+            || std::cmp_greater(name.size(), maximumNameBytes)
             || std::cmp_greater(arguments.size(), maximumPayloadBytes))
         {
             return std::unexpected(AiProviderReplayError::invalidData);
@@ -105,7 +113,7 @@ constexpr std::size_t maximumReasoningBytes = std::size_t{128} * 1024;
             {.id = id.toStdString(), .name = name.toStdString(), .argumentsJson = arguments.toStdString()});
     }
     exchange.outputs.reserve(static_cast<std::size_t>(outputs.size()));
-    for (const QJsonValue &value : outputs)
+    for (const auto &value : outputs)
     {
         const QJsonObject output = value.toObject();
         static const QSet<QString> outputKeys{QStringLiteral("callId"), QStringLiteral("name"),
@@ -113,9 +121,10 @@ constexpr std::size_t maximumReasoningBytes = std::size_t{128} * 1024;
         const QByteArray callId = output.value(QStringLiteral("callId")).toString().toUtf8();
         const QByteArray name = output.value(QStringLiteral("name")).toString().toUtf8();
         const QByteArray payload = output.value(QStringLiteral("output")).toString().toUtf8();
-        if (!value.isObject() || !hasOnlyKeys(output, outputKeys) || callId.isEmpty() || name.isEmpty()
-            || std::cmp_greater(callId.size(), maximumIdBytes) || std::cmp_greater(name.size(), maximumNameBytes)
-            || std::cmp_greater(payload.size(), maximumPayloadBytes))
+        if (!value.isObject() || !hasOnlyKeys(output, outputKeys) || !output.value(QStringLiteral("callId")).isString()
+            || !output.value(QStringLiteral("name")).isString() || !output.value(QStringLiteral("output")).isString()
+            || callId.isEmpty() || name.isEmpty() || std::cmp_greater(callId.size(), maximumIdBytes)
+            || std::cmp_greater(name.size(), maximumNameBytes) || std::cmp_greater(payload.size(), maximumPayloadBytes))
         {
             return std::unexpected(AiProviderReplayError::invalidData);
         }
@@ -134,6 +143,11 @@ constexpr std::size_t maximumReasoningBytes = std::size_t{128} * 1024;
         }
         exchange.providerAssistantContentJson =
             bytes(QJsonDocument(assistantContent.toArray()).toJson(QJsonDocument::Compact));
+    }
+    if (exchange.calls.empty() && exchange.outputs.empty() && exchange.reasoning.empty()
+        && exchange.reasoningSignature.empty() && exchange.providerAssistantContentJson.empty())
+    {
+        return std::unexpected(AiProviderReplayError::invalidData);
     }
     return exchange;
 }
@@ -238,14 +252,14 @@ std::expected<AiProviderReplay, AiProviderReplayError> AiProviderReplayCodec::de
                                     QStringLiteral("finalAssistantContent")};
     const QJsonArray exchanges = root.value(QStringLiteral("toolHistory")).toArray();
     if (error.error != QJsonParseError::NoError || !document.isObject() || !hasOnlyKeys(root, keys)
-        || root.value(QStringLiteral("version")).toInt() != 1 || !root.value(QStringLiteral("toolHistory")).isArray()
-        || exchanges.size() > maximumExchanges)
+        || !root.value(QStringLiteral("version")).isDouble() || root.value(QStringLiteral("version")).toInteger(-1) != 1
+        || !root.value(QStringLiteral("toolHistory")).isArray() || exchanges.size() > maximumExchanges)
     {
         return std::unexpected(AiProviderReplayError::invalidData);
     }
     AiProviderReplay replay;
     replay.toolHistory.reserve(static_cast<std::size_t>(exchanges.size()));
-    for (const QJsonValue &value : exchanges)
+    for (const auto &value : exchanges)
     {
         if (!value.isObject())
         {

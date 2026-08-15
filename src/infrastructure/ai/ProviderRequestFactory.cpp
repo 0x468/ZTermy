@@ -1,6 +1,8 @@
 #include "infrastructure/ai/ProviderRequestFactory.h"
 #include "infrastructure/ai/ProviderEndpointResolver.h"
 
+#include "domain/ai/AiProviderReplayCodec.h"
+
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -384,38 +386,41 @@ void applyCompatibleReasoning(QJsonObject &body, const AiProviderConfiguration &
     return body;
 }
 
-[[nodiscard]] QJsonArray anthropicMessages(const AiGenerationRequest &generation)
+[[nodiscard]] QJsonArray anthropicContentBlocks(const QJsonValue &content)
 {
-    QJsonArray result;
-    for (const auto &message : generation.messages)
+    if (content.isArray())
     {
-        if (message.role == AiMessageRole::system || message.role == AiMessageRole::tool)
-        {
-            continue;
-        }
-        QJsonValue content = fromUtf8(message.content);
-        if (!message.images.empty())
-        {
-            QJsonArray parts;
-            if (!message.content.empty())
-            {
-                parts.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("text")},
-                                         {QStringLiteral("text"), fromUtf8(message.content)}});
-            }
-            for (const auto &image : message.images)
-            {
-                parts.append(QJsonObject{
-                    {QStringLiteral("type"), QStringLiteral("image")},
-                    {QStringLiteral("source"), QJsonObject{{QStringLiteral("type"), QStringLiteral("base64")},
-                                                           {QStringLiteral("media_type"), fromUtf8(image.mediaType)},
-                                                           {QStringLiteral("data"), fromUtf8(image.base64Data)}}}});
-            }
-            content = parts;
-        }
-        result.append(
-            QJsonObject{{QStringLiteral("role"), roleName(message.role)}, {QStringLiteral("content"), content}});
+        return content.toArray();
     }
-    for (const auto &exchange : generation.toolHistory)
+    return {
+        QJsonObject{{QStringLiteral("type"), QStringLiteral("text")}, {QStringLiteral("text"), content.toString()}}};
+}
+
+void appendAnthropicMessage(QJsonArray &messages, const QString &role, const QJsonValue &content)
+{
+    if (!messages.isEmpty())
+    {
+        QJsonObject previous = messages.last().toObject();
+        if (previous.value(QStringLiteral("role")).toString() == role)
+        {
+            QJsonArray merged = anthropicContentBlocks(previous.value(QStringLiteral("content")));
+            const QJsonArray appended = anthropicContentBlocks(content);
+            for (const auto &value : appended)
+            {
+                merged.append(value);
+            }
+            previous.insert(QStringLiteral("content"), merged);
+            messages[messages.size() - 1] = previous;
+            return;
+        }
+    }
+    messages.append(QJsonObject{{QStringLiteral("role"), role}, {QStringLiteral("content"), content}});
+}
+
+[[nodiscard]] std::expected<void, AiProviderError>
+appendAnthropicExchanges(QJsonArray &result, const std::span<const AiToolExchange> toolHistory)
+{
+    for (const auto &exchange : toolHistory)
     {
         QJsonArray uses;
         if (!exchange.providerAssistantContentJson.empty())
@@ -425,10 +430,13 @@ void applyCompatibleReasoning(QJsonObject &body, const AiProviderConfiguration &
                 QByteArray(exchange.providerAssistantContentJson.data(),
                            static_cast<qsizetype>(exchange.providerAssistantContentJson.size())),
                 &parseError);
-            if (parseError.error == QJsonParseError::NoError && content.isArray())
+            if (parseError.error != QJsonParseError::NoError || !content.isArray())
             {
-                uses = content.array();
+                return std::unexpected(AiProviderError{.code = AiProviderErrorCode::invalidRequest,
+                                                       .message = "Anthropic replay content is invalid.",
+                                                       .retryable = false});
             }
+            uses = content.array();
         }
         else if (!exchange.reasoning.empty() && !exchange.reasoningSignature.empty())
         {
@@ -453,8 +461,7 @@ void applyCompatibleReasoning(QJsonObject &body, const AiProviderConfiguration &
         }
         if (!uses.isEmpty())
         {
-            result.append(
-                QJsonObject{{QStringLiteral("role"), QStringLiteral("assistant")}, {QStringLiteral("content"), uses}});
+            appendAnthropicMessage(result, QStringLiteral("assistant"), uses);
         }
         QJsonArray outputs;
         for (const auto &output : exchange.outputs)
@@ -465,9 +472,76 @@ void applyCompatibleReasoning(QJsonObject &body, const AiProviderConfiguration &
         }
         if (!outputs.isEmpty())
         {
-            result.append(
-                QJsonObject{{QStringLiteral("role"), QStringLiteral("user")}, {QStringLiteral("content"), outputs}});
+            appendAnthropicMessage(result, QStringLiteral("user"), outputs);
         }
+    }
+    return {};
+}
+
+[[nodiscard]] std::expected<QJsonArray, AiProviderError> anthropicMessages(const AiGenerationRequest &generation)
+{
+    QJsonArray result;
+    for (const auto &message : generation.messages)
+    {
+        if (message.role == AiMessageRole::system || message.role == AiMessageRole::tool)
+        {
+            continue;
+        }
+        if (!message.providerReplayJson.empty())
+        {
+            if (message.role != AiMessageRole::assistant)
+            {
+                return std::unexpected(AiProviderError{.code = AiProviderErrorCode::invalidRequest,
+                                                       .message = "Provider replay belongs to an assistant message.",
+                                                       .retryable = false});
+            }
+            const auto replay = AiProviderReplayCodec::decode(message.providerReplayJson);
+            if (!replay.has_value())
+            {
+                return std::unexpected(AiProviderError{.code = AiProviderErrorCode::invalidRequest,
+                                                       .message = "Provider replay content is invalid.",
+                                                       .retryable = false});
+            }
+            const auto appended = appendAnthropicExchanges(result, replay->toolHistory);
+            if (!appended.has_value())
+            {
+                return std::unexpected(appended.error());
+            }
+            if (!replay->finalAssistantContentJson.empty())
+            {
+                const auto finalContent = QJsonDocument::fromJson(
+                    QByteArray(replay->finalAssistantContentJson.data(),
+                               static_cast<qsizetype>(replay->finalAssistantContentJson.size())));
+                appendAnthropicMessage(result, QStringLiteral("assistant"), finalContent.array());
+                continue;
+            }
+        }
+
+        QJsonValue content = fromUtf8(message.content);
+        if (!message.images.empty())
+        {
+            QJsonArray parts;
+            if (!message.content.empty())
+            {
+                parts.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("text")},
+                                         {QStringLiteral("text"), fromUtf8(message.content)}});
+            }
+            for (const auto &image : message.images)
+            {
+                parts.append(QJsonObject{
+                    {QStringLiteral("type"), QStringLiteral("image")},
+                    {QStringLiteral("source"), QJsonObject{{QStringLiteral("type"), QStringLiteral("base64")},
+                                                           {QStringLiteral("media_type"), fromUtf8(image.mediaType)},
+                                                           {QStringLiteral("data"), fromUtf8(image.base64Data)}}}});
+            }
+            content = parts;
+        }
+        appendAnthropicMessage(result, roleName(message.role), content);
+    }
+    const auto appended = appendAnthropicExchanges(result, generation.toolHistory);
+    if (!appended.has_value())
+    {
+        return std::unexpected(appended.error());
     }
     return result;
 }
@@ -499,8 +573,13 @@ void applyCompatibleReasoning(QJsonObject &body, const AiProviderConfiguration &
                                  {QStringLiteral("name"), QStringLiteral("web_search")},
                                  {QStringLiteral("max_uses"), 5}});
     }
+    const auto messages = anthropicMessages(generation);
+    if (!messages.has_value())
+    {
+        return std::unexpected(messages.error());
+    }
     QJsonObject body{{QStringLiteral("model"), fromUtf8(configuration.model)},
-                     {QStringLiteral("messages"), anthropicMessages(generation)},
+                     {QStringLiteral("messages"), *messages},
                      {QStringLiteral("max_tokens"), 8192},
                      {QStringLiteral("stream"), true}};
     if (!generation.instructions.empty())

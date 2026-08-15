@@ -146,8 +146,10 @@ evaluations serve different purposes and are reported separately.
 - [x] Provider continuation contract: reconstruct bounded Anthropic assistant blocks, preserve opaque
       search results including `encrypted_content`, continue `pause_turn` without publishing an interim
       answer, count the replay payload in the context budget, and stop after four continuations.
-- [ ] Follow-up persistence contract: preserve bounded provider-native result blocks needed for exact
-      Anthropic replay across later user turns and restored conversation history.
+- [x] Follow-up persistence contract: bounded provider-native result blocks needed for exact Anthropic
+      replay survive later user turns and encrypted conversation-history restore. The strict codec rejects
+      malformed/oversized state, requests restore tool/result/final-content blocks at the original assistant
+      message position, and compaction drops oldest hidden replay without losing the visible answer.
 - [ ] Owner check: restored SSH tabs expose Reconnect in both the disconnected terminal card
       and tab context menu without reconnecting implicitly.
 

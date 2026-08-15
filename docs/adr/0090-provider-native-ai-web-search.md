@@ -54,12 +54,18 @@ References:
   the same turn. At most four automatic continuations are allowed, and the
   reconstructed wire context is capped at 1 MiB and counted against the input
   context budget.
-- The exact provider-owned block sequence currently lives only for the active
-  logical turn. Completed conversation history persists provider-neutral answer
-  text and citations, but not opaque provider search-result payloads. A later
-  user turn may therefore search again. Persisting exact provider replay state
-  across user turns and application restart requires a separate encrypted,
-  bounded conversation contract.
+- A completed Anthropic assistant message owns a separate provider-replay
+  envelope containing its ordered tool exchanges and final provider content.
+  The versioned envelope is strict JSON, capped at 256 KiB, counted against the
+  message/conversation/context budgets, and persisted as a nested object inside
+  encrypted conversation history. It is never rendered or copied as answer
+  text.
+- Later Anthropic requests expand each replay envelope at the original assistant
+  message position. This preserves tool-use/result ordering, thinking
+  signatures, server-tool blocks, and opaque `encrypted_content` before the
+  next user turn. Invalid or oversized replay is discarded without losing the
+  visible answer; context compaction discards the oldest hidden replay before
+  truncating visible history.
 
 ## Consequences
 
@@ -72,5 +78,7 @@ References:
 - Anthropic basic search is chosen for broad model compatibility. Newer dynamic
   filtering versions are not selected implicitly because their model and code
   execution requirements differ.
-- Exact in-turn server-tool replay is protocol-correct and covered by fixtures;
-  durable replay across completed user turns remains an explicit follow-up.
+- Exact server-tool replay is protocol-correct both inside an active logical
+  turn and across later user turns/application restart. Codec, request-order,
+  model restore, encrypted-store, compaction, and turn-runner fixtures cover the
+  complete path.

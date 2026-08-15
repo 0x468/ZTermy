@@ -1,6 +1,7 @@
 #include "infrastructure/ai/AiConversationStore.h"
 
 #include "core/security/SensitiveByteArray.h"
+#include "domain/ai/AiProviderReplayCodec.h"
 
 #include <QFile>
 #include <QJsonDocument>
@@ -125,6 +126,7 @@ private slots:
     void recoversFromBackupOnAuthenticationFailure();
     void preservesUpdatesAcrossStoreInstances();
     void roundTripsAndValidatesWebSources();
+    void roundTripsAndValidatesProviderReplay();
 };
 
 void AiConversationStoreTests::roundTripsWithoutPlaintextAndRotatesNonce()
@@ -329,6 +331,37 @@ void AiConversationStoreTests::roundTripsAndValidatesWebSources()
     const auto sourcesOnUserMessage = store.upsert(value);
     QVERIFY(!sourcesOnUserMessage.has_value());
     QCOMPARE(sourcesOnUserMessage.error(), ai::AiConversationStoreError::invalidData);
+}
+
+void AiConversationStoreTests::roundTripsAndValidatesProviderReplay()
+{
+    QTemporaryDir directory;
+    TestVault vault;
+    ai::AiConversationStore store(directory.filePath(QStringLiteral("history.enc")), vault);
+    auto value = conversation(QStringLiteral("replay"), QStringLiteral("question"));
+    const std::vector history{ai::AiToolExchange{
+        .calls = {ai::AiToolCall{.id = "tool_1", .name = "run_command", .argumentsJson = R"({"command":"pwd"})"}},
+        .outputs = {ai::AiToolOutput{.callId = "tool_1", .name = "run_command", .outputJson = R"({"ok":true})"}}}};
+    const auto replay = ai::AiProviderReplayCodec::encode(
+        history, R"([{"type":"text","text":"The working directory is /home/test."}])");
+    QVERIFY(replay.has_value());
+    value.messages.at(1).providerReplayJson = *replay;
+    QVERIFY(store.upsert(value).has_value());
+
+    const auto loaded = store.load();
+    QVERIFY(loaded.has_value());
+    QCOMPARE(loaded->front().messages.at(1).providerReplayJson, *replay);
+
+    value.messages.front().providerReplayJson = *replay;
+    const auto replayOnUser = store.upsert(value);
+    QVERIFY(!replayOnUser.has_value());
+    QCOMPARE(replayOnUser.error(), ai::AiConversationStoreError::invalidData);
+
+    value.messages.front().providerReplayJson.clear();
+    value.messages.at(1).providerReplayJson = "{}";
+    const auto malformed = store.upsert(value);
+    QVERIFY(!malformed.has_value());
+    QCOMPARE(malformed.error(), ai::AiConversationStoreError::invalidData);
 }
 
 QTEST_GUILESS_MAIN(AiConversationStoreTests)

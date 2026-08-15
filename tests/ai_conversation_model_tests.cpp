@@ -1,5 +1,7 @@
 #include "application/ai/AiConversationModel.h"
 
+#include "domain/ai/AiProviderReplayCodec.h"
+
 #include <QSignalSpy>
 #include <QtTest/QTest>
 
@@ -13,7 +15,11 @@ using ztermy::ai::AiConversationTranscriptRole;
 using ztermy::ai::AiCostEstimate;
 using ztermy::ai::AiImageAttachment;
 using ztermy::ai::AiMessageRole;
+using ztermy::ai::AiProviderReplayCodec;
 using ztermy::ai::AiTokenUsage;
+using ztermy::ai::AiToolCall;
+using ztermy::ai::AiToolExchange;
+using ztermy::ai::AiToolOutput;
 using ztermy::ai::AiTurnMetrics;
 using ztermy::ai::AiWebSource;
 
@@ -33,6 +39,7 @@ private slots:
     void preservesHiddenAgentEvidenceWithoutAddingVisibleRows();
     void preservesAgentEvidenceChronology();
     void exposesDeduplicatesAndRestoresWebSources();
+    void preservesBoundedProviderReplayAcrossRestore();
 };
 
 void AiConversationModelTests::streamsAssistantMessageAndUsage()
@@ -290,6 +297,68 @@ void AiConversationModelTests::exposesDeduplicatesAndRestoresWebSources()
     invalidRole.front().role = AiConversationTranscriptRole::user;
     QVERIFY(!restored.restoreTranscript(invalidRole));
     QCOMPARE(restored.transcript(), transcript);
+}
+
+void AiConversationModelTests::preservesBoundedProviderReplayAcrossRestore()
+{
+    AiConversationModel model;
+    static_cast<void>(model.appendUserMessage(QStringLiteral("Inspect disk usage")));
+    const auto assistantId = model.beginAssistantMessage();
+    QVERIFY(model.appendAssistantDelta(assistantId, QStringLiteral("Disk usage is healthy.")));
+    const std::vector history{AiToolExchange{
+        .calls = {AiToolCall{.id = "tool_1", .name = "run_command", .argumentsJson = R"({"command":"df -h"})"}},
+        .outputs = {AiToolOutput{.callId = "tool_1", .name = "run_command", .outputJson = R"({"ok":true})"}}}};
+    QVERIFY(
+        model.setAssistantProviderReplay(assistantId, history, R"([{"type":"text","text":"Disk usage is healthy."}])"));
+    QVERIFY(model.completeAssistantMessage(assistantId));
+
+    const auto messages = model.providerMessages();
+    QCOMPARE(messages.size(), std::size_t{2});
+    QVERIFY(!messages.back().providerReplayJson.empty());
+    const auto transcript = model.transcript();
+    QCOMPARE(transcript.back().providerReplayJson, messages.back().providerReplayJson);
+
+    AiConversationModel restored;
+    QVERIFY(restored.restoreTranscript(transcript));
+    QCOMPARE(restored.providerMessages().back().providerReplayJson, messages.back().providerReplayJson);
+    QCOMPARE(restored.transcript(), transcript);
+
+    auto invalid = transcript;
+    invalid.back().providerReplayJson = "{}";
+    QVERIFY(!restored.restoreTranscript(invalid));
+    QCOMPARE(restored.transcript(), transcript);
+
+    AiConversationModel bounded(
+        AiConversationLimits{.maxMessages = 4, .maxMessageBytes = 32, .maxConversationBytes = 64});
+    const auto boundedAssistant = bounded.beginAssistantMessage();
+    QVERIFY(bounded.appendAssistantDelta(boundedAssistant, QStringLiteral("visible answer")));
+    QVERIFY(
+        !bounded.setAssistantProviderReplay(boundedAssistant, history, R"([{"type":"text","text":"visible answer"}])"));
+    QVERIFY(bounded.data(bounded.index(0), AiConversationModel::TruncatedRole).toBool());
+    QVERIFY(bounded.completeAssistantMessage(boundedAssistant));
+    QCOMPARE(bounded.data(bounded.index(0), AiConversationModel::TextRole).toString(),
+             QStringLiteral("visible answer"));
+
+    const auto replayEnvelope =
+        AiProviderReplayCodec::encode(history, R"([{"type":"text","text":"visible answer retained"}])");
+    QVERIFY(replayEnvelope.has_value());
+    AiConversationModel prioritized(AiConversationLimits{.maxMessages = 6,
+                                                         .maxMessageBytes = replayEnvelope->size() + 64,
+                                                         .maxConversationBytes = 2 * (replayEnvelope->size() + 32)});
+    for (int index = 0; index < 3; ++index)
+    {
+        const auto id = prioritized.beginAssistantMessage();
+        QVERIFY(prioritized.appendAssistantDelta(id, QStringLiteral("visible answer %1").arg(index)));
+        QVERIFY(prioritized.setAssistantProviderReplay(id, history,
+                                                       R"([{"type":"text","text":"visible answer retained"}])"));
+        QVERIFY(prioritized.completeAssistantMessage(id));
+    }
+    QCOMPARE(prioritized.rowCount(), 3);
+    const auto prioritizedMessages = prioritized.providerMessages();
+    QCOMPARE(prioritizedMessages.size(), std::size_t{3});
+    QVERIFY(prioritizedMessages.front().providerReplayJson.empty());
+    QVERIFY(!prioritizedMessages.back().providerReplayJson.empty());
+    QVERIFY(prioritized.data(prioritized.index(0), AiConversationModel::TruncatedRole).toBool());
 }
 
 } // namespace

@@ -1,6 +1,8 @@
 #include "infrastructure/ai/ProviderModelCatalog.h"
 #include "infrastructure/ai/ProviderRequestFactory.h"
 
+#include "domain/ai/AiProviderReplayCodec.h"
+
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -41,6 +43,7 @@ private slots:
     void appliesProviderSpecificReasoningControls();
     void preservesAnthropicThinkingSignatureAcrossTools();
     void replaysOpaqueAnthropicAssistantContent();
+    void replaysPersistedAnthropicTurnInMessageOrder();
     void resolvesFriendlyApiAddressesAndModels();
     void rejectsUnsafeOrIncompleteConfiguration();
 };
@@ -328,6 +331,47 @@ void ProviderRequestFactoryTests::replaysOpaqueAnthropicAssistantContent()
     QCOMPARE(replay.at(0).toObject().value("type").toString(), QStringLiteral("server_tool_use"));
     QCOMPARE(replay.at(1).toObject().value("content").toArray().at(0).toObject().value("encrypted_content").toString(),
              QStringLiteral("opaque"));
+}
+
+void ProviderRequestFactoryTests::replaysPersistedAnthropicTurnInMessageOrder()
+{
+    const AiProviderConfiguration configuration{.kind = AiProviderKind::anthropicMessages,
+                                                .flavor = AiProviderFlavor::anthropic,
+                                                .baseUrl = "https://api.anthropic.com",
+                                                .model = "claude-sonnet-4-6"};
+    const std::vector history{AiToolExchange{
+        .calls = {AiToolCall{.id = "tool_1", .name = "run_command", .argumentsJson = R"({"command":"pwd"})"}},
+        .outputs = {AiToolOutput{.callId = "tool_1", .name = "run_command", .outputJson = R"({"cwd":"/home/test"})"}},
+        .providerAssistantContentJson =
+            R"([{"type":"tool_use","id":"tool_1","name":"run_command","input":{"command":"pwd"}}])"}};
+    const auto replay = ztermy::ai::AiProviderReplayCodec::encode(
+        history, R"([{"type":"text","text":"The working directory is /home/test."}])");
+    QVERIFY(replay.has_value());
+    const AiGenerationRequest generation{
+        .messages = {AiChatMessage{.role = AiMessageRole::user, .content = "Where am I?"},
+                     AiChatMessage{.role = AiMessageRole::assistant,
+                                   .content = "The working directory is /home/test.",
+                                   .providerReplayJson = *replay},
+                     AiChatMessage{.role = AiMessageRole::user, .content = "List its files."}}};
+
+    const auto prepared = ProviderRequestFactory::prepare(configuration, generation, "key");
+    QVERIFY(prepared.has_value());
+    const auto messages = QJsonDocument::fromJson(prepared->body).object().value("messages").toArray();
+    QCOMPARE(messages.size(), 5);
+    QCOMPARE(messages.at(0).toObject().value("role").toString(), QStringLiteral("user"));
+    QCOMPARE(messages.at(1).toObject().value("content").toArray().at(0).toObject().value("type").toString(),
+             QStringLiteral("tool_use"));
+    QCOMPARE(messages.at(2).toObject().value("content").toArray().at(0).toObject().value("type").toString(),
+             QStringLiteral("tool_result"));
+    QCOMPARE(messages.at(3).toObject().value("content").toArray().at(0).toObject().value("text").toString(),
+             QStringLiteral("The working directory is /home/test."));
+    QCOMPARE(messages.at(4).toObject().value("content").toString(), QStringLiteral("List its files."));
+
+    auto invalid = generation;
+    invalid.messages.at(1).providerReplayJson = "{}";
+    const auto rejected = ProviderRequestFactory::prepare(configuration, invalid, "key");
+    QVERIFY(!rejected.has_value());
+    QCOMPARE(rejected.error().code, AiProviderErrorCode::invalidRequest);
 }
 
 void ProviderRequestFactoryTests::resolvesFriendlyApiAddressesAndModels()

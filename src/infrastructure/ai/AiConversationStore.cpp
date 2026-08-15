@@ -2,6 +2,7 @@
 
 #include "core/persistence/LastKnownGoodFile.h"
 #include "core/security/SensitiveByteArray.h"
+#include "domain/ai/AiProviderReplayCodec.h"
 
 #include <QFile>
 #include <QFileInfo>
@@ -292,6 +293,9 @@ decrypt(const QByteArray &ciphertext, const QByteArray &tag, const std::string_v
                 || message.role == QStringLiteral("evidence"))
                && std::cmp_less_equal(message.text.toUtf8().size(), limits.maximumMessageBytes)
                && (message.role == QStringLiteral("assistant") || message.sources.empty())
+               && (message.role == QStringLiteral("assistant") || message.providerReplayJson.empty())
+               && (message.providerReplayJson.empty()
+                   || AiProviderReplayCodec::decode(message.providerReplayJson).has_value())
                && message.sources.size() <= maximumSourcesPerMessage
                && std::ranges::all_of(message.sources,
                                       [](const AiWebSource &source) {
@@ -300,6 +304,7 @@ decrypt(const QByteArray &ciphertext, const QByteArray &tag, const std::string_v
                                                  && source.citedText.size() <= maximumSourceCitationBytes;
                                       })
                && static_cast<std::size_t>(message.text.toUtf8().size()) + sourceStorageBytes(message.sources)
+                          + message.providerReplayJson.size()
                       <= limits.maximumMessageBytes;
     });
 }
@@ -323,6 +328,14 @@ decrypt(const QByteArray &ciphertext, const QByteArray &tag, const std::string_v
             if (!sources.isEmpty())
             {
                 value.insert(QStringLiteral("sources"), sources);
+            }
+            if (!message.providerReplayJson.empty())
+            {
+                value.insert(
+                    QStringLiteral("providerReplay"),
+                    QJsonDocument::fromJson(QByteArray(message.providerReplayJson.data(),
+                                                       static_cast<qsizetype>(message.providerReplayJson.size())))
+                        .object());
             }
             messages.push_back(value);
         }
@@ -381,6 +394,16 @@ parsePlaintext(const QByteArray &plaintext, const AiConversationStoreLimits &lim
             const auto message = messageValue.toObject();
             AiStoredMessage stored{.role = message.value(QStringLiteral("role")).toString(),
                                    .text = message.value(QStringLiteral("text")).toString()};
+            const QJsonValue replay = message.value(QStringLiteral("providerReplay"));
+            if (!replay.isUndefined())
+            {
+                if (!replay.isObject())
+                {
+                    return std::unexpected(AiConversationStoreError::invalidData);
+                }
+                const QByteArray encoded = QJsonDocument(replay.toObject()).toJson(QJsonDocument::Compact);
+                stored.providerReplayJson = {encoded.constData(), static_cast<std::size_t>(encoded.size())};
+            }
             const auto sources = message.value(QStringLiteral("sources")).toArray();
             stored.sources.reserve(static_cast<std::size_t>(sources.size()));
             for (const auto &sourceValue : sources)

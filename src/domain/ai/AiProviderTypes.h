@@ -91,6 +91,8 @@ struct AiToolCall final
     std::string id;
     std::string name;
     std::string argumentsJson;
+
+    [[nodiscard]] friend bool operator==(const AiToolCall &, const AiToolCall &) = default;
 };
 
 struct AiToolOutput final
@@ -98,6 +100,8 @@ struct AiToolOutput final
     std::string callId;
     std::string name;
     std::string outputJson;
+
+    [[nodiscard]] friend bool operator==(const AiToolOutput &, const AiToolOutput &) = default;
 };
 
 struct AiToolExchange final
@@ -110,6 +114,8 @@ struct AiToolExchange final
     // protocols whose tool state lives inside typed content blocks. The JSON
     // is a validated, bounded array and is never shown to the model as text.
     std::string providerAssistantContentJson;
+
+    [[nodiscard]] friend bool operator==(const AiToolExchange &, const AiToolExchange &) = default;
 };
 
 struct AiWebSource final

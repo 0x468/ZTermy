@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <string>
 #include <vector>
 
 namespace ztermy::ai
@@ -19,6 +20,7 @@ struct AiStoredMessage final
     QString role;
     QString text;
     std::vector<AiWebSource> sources;
+    std::string providerReplayJson;
 
     [[nodiscard]] friend bool operator==(const AiStoredMessage &, const AiStoredMessage &) = default;
 };
@@ -52,7 +54,7 @@ struct AiConversationStoreLimits final
 {
     std::size_t maximumConversations = 50;
     std::size_t maximumMessagesPerConversation = 200;
-    std::size_t maximumMessageBytes = std::size_t{128} * 1024;
+    std::size_t maximumMessageBytes = std::size_t{512} * 1024;
     std::size_t maximumPlaintextBytes = std::size_t{6} * 1024 * 1024;
     int retentionDays = 90;
 };

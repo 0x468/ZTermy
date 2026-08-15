@@ -1,5 +1,7 @@
 #include "application/ai/AiConversationModel.h"
 
+#include "domain/ai/AiProviderReplayCodec.h"
+
 #include <QByteArray>
 #include <QStringList>
 #include <QUrl>
@@ -252,7 +254,8 @@ std::vector<AiChatMessage> AiConversationModel::providerMessages() const
         const QString content = includeImages ? message.text : replayText(message.text, message.images);
         messages.push_back(AiChatMessage{.role = message.role,
                                          .content = content.toUtf8().toStdString(),
-                                         .images = includeImages ? message.images : std::vector<AiImageAttachment>{}});
+                                         .images = includeImages ? message.images : std::vector<AiImageAttachment>{},
+                                         .providerReplayJson = message.providerReplayJson});
     }
     return messages;
 }
@@ -269,7 +272,8 @@ std::vector<AiConversationTranscriptEntry> AiConversationModel::transcript() con
             entries.push_back({.role = message.role == AiMessageRole::user ? AiConversationTranscriptRole::user
                                                                            : AiConversationTranscriptRole::assistant,
                                .content = replayText(message.text, message.images).toUtf8().toStdString(),
-                               .sources = message.sources});
+                               .sources = message.sources,
+                               .providerReplayJson = message.providerReplayJson});
         }
         for (const auto &evidence : m_evidenceMessages)
         {
@@ -307,7 +311,8 @@ std::vector<AiChatMessage> AiConversationModel::providerMessagesWithEvidence() c
         const QString content = includeImages ? message.text : replayText(message.text, message.images);
         messages.push_back({.role = message.role,
                             .content = content.toUtf8().toStdString(),
-                            .images = includeImages ? message.images : std::vector<AiImageAttachment>{}});
+                            .images = includeImages ? message.images : std::vector<AiImageAttachment>{},
+                            .providerReplayJson = message.providerReplayJson});
         for (const auto &evidence : m_evidenceMessages)
         {
             if (evidence.afterMessageId == message.id)
@@ -328,9 +333,13 @@ bool AiConversationModel::restoreTranscript(const std::vector<AiConversationTran
     bool hasEvidenceAnchor = false;
     for (const auto &entry : entries)
     {
+        const auto replay = AiProviderReplayCodec::decode(entry.providerReplayJson);
         if ((entry.content.empty() && entry.role != AiConversationTranscriptRole::assistant)
-            || entry.content.size() + sourceStorageBytes(entry.sources) > m_limits.maxMessageBytes
+            || entry.content.size() + sourceStorageBytes(entry.sources) + entry.providerReplayJson.size()
+                   > m_limits.maxMessageBytes
             || (entry.role != AiConversationTranscriptRole::assistant && !entry.sources.empty())
+            || (entry.role != AiConversationTranscriptRole::assistant && !entry.providerReplayJson.empty())
+            || (!entry.providerReplayJson.empty() && !replay.has_value())
             || entry.sources.size() > maximumWebSourcesPerMessage
             || !std::ranges::all_of(entry.sources, [](const AiWebSource &source) {
                    return validWebSourceUrl(source.url) && source.title.size() <= maximumWebSourceTitleBytes
@@ -356,7 +365,7 @@ bool AiConversationModel::restoreTranscript(const std::vector<AiConversationTran
         {
             hasEvidenceAnchor = true;
             ++messageCount;
-            messageBytes += entry.content.size() + sourceStorageBytes(entry.sources);
+            messageBytes += entry.content.size() + sourceStorageBytes(entry.sources) + entry.providerReplayJson.size();
             if (messageCount > m_limits.maxMessages || messageBytes > m_limits.maxConversationBytes)
             {
                 return false;
@@ -382,11 +391,14 @@ bool AiConversationModel::restoreTranscript(const std::vector<AiConversationTran
             continue;
         }
         const std::uint64_t messageId = beginAssistantMessage();
+        const auto replay = AiProviderReplayCodec::decode(entry.providerReplayJson);
         if ((!entry.content.empty() && !appendAssistantDelta(messageId, QString::fromUtf8(entry.content)))
             || !std::ranges::all_of(entry.sources,
                                     [this, messageId](const AiWebSource &source) {
                                         return appendAssistantSource(messageId, source);
                                     })
+            || (!entry.providerReplayJson.empty()
+                && !setAssistantProviderReplay(messageId, replay->toolHistory, replay->finalAssistantContentJson))
             || !completeAssistantMessage(messageId))
         {
             clear();
@@ -624,6 +636,52 @@ bool AiConversationModel::upsertAssistantToolActivity(const std::uint64_t messag
     return true;
 }
 
+bool AiConversationModel::setAssistantProviderReplay(const std::uint64_t messageId,
+                                                     const std::span<const AiToolExchange> toolHistory,
+                                                     const std::string_view finalAssistantContentJson)
+{
+    auto *message = find(messageId);
+    if (message == nullptr || message->role != AiMessageRole::assistant || message->state != MessageState::streaming)
+    {
+        return false;
+    }
+    const auto encoded = AiProviderReplayCodec::encode(toolHistory, finalAssistantContentJson);
+    if (!encoded.has_value())
+    {
+        message->truncated = true;
+        const auto row = indexOf(messageId);
+        emit dataChanged(index(row), index(row), {TruncatedRole});
+        return false;
+    }
+
+    const std::size_t previousBytes = message->providerReplayJson.size();
+    const std::size_t messageWithoutReplay = message->bytes - std::min(message->bytes, previousBytes);
+    if (messageWithoutReplay + encoded->size() > m_limits.maxMessageBytes
+        || encoded->size() > m_limits.maxConversationBytes)
+    {
+        message->truncated = true;
+        const auto row = indexOf(messageId);
+        emit dataChanged(index(row), index(row), {TruncatedRole});
+        return false;
+    }
+
+    while (m_totalBytes - std::min(m_totalBytes, previousBytes) + encoded->size() > m_limits.maxConversationBytes
+           && discardOldestProviderReplay(messageId))
+    {
+    }
+    if (m_totalBytes - std::min(m_totalBytes, previousBytes) + encoded->size() > m_limits.maxConversationBytes)
+    {
+        message->truncated = true;
+        const auto row = indexOf(messageId);
+        emit dataChanged(index(row), index(row), {TruncatedRole});
+        return false;
+    }
+    message->bytes = messageWithoutReplay + encoded->size();
+    m_totalBytes = m_totalBytes - std::min(m_totalBytes, previousBytes) + encoded->size();
+    message->providerReplayJson = *encoded;
+    return true;
+}
+
 bool AiConversationModel::completeAssistantMessage(const std::uint64_t messageId, std::optional<AiTokenUsage> usage)
 {
     auto *message = find(messageId);
@@ -838,8 +896,31 @@ int AiConversationModel::indexOf(const std::uint64_t messageId) const
     return iterator == m_messages.end() ? -1 : static_cast<int>(std::distance(m_messages.begin(), iterator));
 }
 
+bool AiConversationModel::discardOldestProviderReplay(const std::optional<std::uint64_t> excludedMessageId)
+{
+    const auto iterator = std::ranges::find_if(m_messages, [excludedMessageId](const Message &message) {
+        return !message.providerReplayJson.empty()
+               && (!excludedMessageId.has_value() || message.id != *excludedMessageId);
+    });
+    if (iterator == m_messages.end())
+    {
+        return false;
+    }
+    const std::size_t bytes = iterator->providerReplayJson.size();
+    iterator->providerReplayJson.clear();
+    iterator->bytes -= std::min(iterator->bytes, bytes);
+    iterator->truncated = true;
+    m_totalBytes -= std::min(m_totalBytes, bytes);
+    const auto row = static_cast<int>(std::distance(m_messages.begin(), iterator));
+    emit dataChanged(index(row), index(row), {TruncatedRole});
+    return true;
+}
+
 void AiConversationModel::evictFor(const std::size_t incomingBytes)
 {
+    while (m_totalBytes + incomingBytes > m_limits.maxConversationBytes && discardOldestProviderReplay())
+    {
+    }
     while (
         !m_messages.empty()
         && (m_messages.size() >= m_limits.maxMessages || m_totalBytes + incomingBytes > m_limits.maxConversationBytes))

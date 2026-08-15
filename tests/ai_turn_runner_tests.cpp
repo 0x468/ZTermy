@@ -724,6 +724,10 @@ void AiTurnRunnerTests::continuesAnthropicPausedTurnWithOpaqueContent()
     QCOMPARE(std::ranges::count(events, AiStreamEventType::responseCompleted, &AiStreamEvent::type), std::ptrdiff_t{1});
     QCOMPARE(events.back().type, AiStreamEventType::responseCompleted);
     QCOMPARE(events.back().stopReason, ztermy::ai::AiResponseStopReason::endTurn);
+    QCOMPARE(events.back().providerToolHistory.size(), std::size_t{1});
+    QVERIFY(events.back().providerToolHistory.front().providerAssistantContentJson.find("opaque-result")
+            != std::string::npos);
+    QVERIFY(events.back().providerAssistantContentJson.find("finished") != std::string::npos);
     QVERIFY(network.requestBodies().size() >= 2);
     const auto continuation = QJsonDocument::fromJson(network.requestBodies().at(1)).object();
     const auto messages = continuation.value("messages").toArray();

@@ -22,6 +22,7 @@ private slots:
     void truncatesOldMessagesAndPreservesRecentTail();
     void capsToolOutputsInHistory();
     void accountsForOpaqueProviderContinuationContent();
+    void dropsOldProviderReplayBeforeVisibleHistory();
     void utf8TruncationNeverSplitsCodePoints();
     void accountsForImageTilesWithoutCountingBase64AsText();
 };
@@ -107,6 +108,28 @@ void AiContextCompactorTests::accountsForOpaqueProviderContinuationContent()
     const auto result = AiContextCompactor::compact(std::move(request), limits);
     QVERIFY(result.overBudget);
     QCOMPARE(result.request.toolHistory.front().providerAssistantContentJson, providerContent);
+}
+
+void AiContextCompactorTests::dropsOldProviderReplayBeforeVisibleHistory()
+{
+    AiGenerationRequest request;
+    for (int index = 0; index < 3; ++index)
+    {
+        request.messages.push_back(AiChatMessage{.role = ztermy::ai::AiMessageRole::assistant,
+                                                 .content = "visible answer",
+                                                 .providerReplayJson = std::string(1'000, 'r')});
+    }
+    const AiCompactionLimits limits{.contextWindowTokens = 800,
+                                    .reservedOutputTokens = 100,
+                                    .reserveBufferTokens = 100,
+                                    .preserveRecentMessages = 1};
+    const auto result = AiContextCompactor::compact(std::move(request), limits);
+    QVERIFY(result.compacted);
+    QVERIFY(!result.overBudget);
+    QVERIFY(result.request.messages.at(0).providerReplayJson.empty());
+    QVERIFY(result.request.messages.at(1).providerReplayJson.empty());
+    QCOMPARE(result.request.messages.at(2).providerReplayJson.size(), std::size_t{1'000});
+    QCOMPARE(result.request.messages.at(0).content, std::string("visible answer"));
 }
 
 void AiContextCompactorTests::utf8TruncationNeverSplitsCodePoints()

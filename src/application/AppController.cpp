@@ -8178,7 +8178,10 @@ bool AppController::restoreAiConversationHistory(const QString &conversationId)
         {
             return false;
         }
-        transcript.push_back({.role = role, .content = utf8String(message.text), .sources = message.sources});
+        transcript.push_back({.role = role,
+                              .content = utf8String(message.text),
+                              .sources = message.sources,
+                              .providerReplayJson = message.providerReplayJson});
     }
     if (!tab->aiConversation->restoreTranscript(transcript))
     {
@@ -9666,6 +9669,8 @@ void AppController::handleAiStreamEvent(const QString &tabId, const std::uint64_
             }
             break;
         case ai::AiStreamEventType::responseCompleted:
+            static_cast<void>(target->aiConversation->setAssistantProviderReplay(
+                assistantMessageId, event.providerToolHistory, event.providerAssistantContentJson));
             if (target->aiConversation->completeAssistantMessage(assistantMessageId, target->aiUsage))
             {
                 persistAiConversation(*target);
@@ -12258,7 +12263,10 @@ void AppController::persistAiConversation(const TerminalTab &tab)
         {
             stored.title = text.simplified().left(80);
         }
-        stored.messages.push_back({.role = std::move(role), .text = text, .sources = entry.sources});
+        stored.messages.push_back({.role = std::move(role),
+                                   .text = text,
+                                   .sources = entry.sources,
+                                   .providerReplayJson = entry.providerReplayJson});
     }
     if (stored.title.isEmpty())
     {

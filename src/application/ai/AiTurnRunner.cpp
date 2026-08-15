@@ -317,6 +317,16 @@ void AiTurnRunner::handleEvent(const ProviderHttpClient::RequestId requestId, co
         m_firstTokenAt = std::chrono::steady_clock::now();
     }
     m_visibleOutputObserved = true;
+    if (event.type == AiStreamEventType::responseCompleted)
+    {
+        AiStreamEvent completed = event;
+        if (m_configuration.kind == AiProviderKind::anthropicMessages)
+        {
+            completed.providerToolHistory = m_generation.toolHistory;
+        }
+        m_eventHandler(m_turnId, completed);
+        return;
+    }
     m_eventHandler(m_turnId, event);
 }
 

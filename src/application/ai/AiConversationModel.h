@@ -9,7 +9,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ztermy::ai
@@ -34,6 +36,7 @@ struct AiConversationTranscriptEntry final
     AiConversationTranscriptRole role = AiConversationTranscriptRole::user;
     std::string content;
     std::vector<AiWebSource> sources;
+    std::string providerReplayJson;
 
     [[nodiscard]] friend bool operator==(const AiConversationTranscriptEntry &,
                                          const AiConversationTranscriptEntry &) = default;
@@ -95,6 +98,8 @@ public:
     [[nodiscard]] bool upsertAssistantToolActivity(std::uint64_t messageId, QString toolCallId, QString toolName,
                                                    QString summary, QString state, QString resultCode,
                                                    bool sideEffecting, bool highRisk);
+    [[nodiscard]] bool setAssistantProviderReplay(std::uint64_t messageId, std::span<const AiToolExchange> toolHistory,
+                                                  std::string_view finalAssistantContentJson);
     [[nodiscard]] bool completeAssistantMessage(std::uint64_t messageId,
                                                 std::optional<AiTokenUsage> usage = std::nullopt);
     // Late usage updates (some providers emit usage after the completion
@@ -139,6 +144,7 @@ private:
         QVariantList toolActivities;
         std::vector<AiImageAttachment> images;
         std::vector<AiWebSource> sources;
+        std::string providerReplayJson;
     };
 
     struct EvidenceMessage final
@@ -154,6 +160,7 @@ private:
     [[nodiscard]] static QString commandSuggestion(const QString &text);
     [[nodiscard]] Message *find(std::uint64_t messageId);
     [[nodiscard]] int indexOf(std::uint64_t messageId) const;
+    [[nodiscard]] bool discardOldestProviderReplay(std::optional<std::uint64_t> excludedMessageId = std::nullopt);
     void evictFor(std::size_t incomingBytes);
     void updateStreaming();
 

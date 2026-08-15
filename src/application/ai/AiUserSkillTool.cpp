@@ -174,8 +174,8 @@ std::string AiUserSkillTool::execute(const std::string_view toolName, const std:
     }
 
     const auto available = readySkills(skills);
-    const std::size_t offset = static_cast<std::size_t>(offsetValue.toInteger());
-    const std::size_t limit = static_cast<std::size_t>(limitValue.toInteger());
+    const auto offset = static_cast<std::size_t>(offsetValue.toInteger());
+    const auto limit = static_cast<std::size_t>(limitValue.toInteger());
     const std::size_t last = std::min(offset + limit, available.size());
     QJsonArray items;
     if (offset < available.size())
