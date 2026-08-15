@@ -304,6 +304,9 @@ Implementation status:
 - typed stream-to-conversation mapping now covers text, readable reasoning,
   dynamic-tool and web-search activities, usage, completion, cancellation, and
   failures. It rejects cross-turn events and applies bounded linear buffering;
+- a native turn orchestrator now reuses the built-in runner's event, tool,
+  asynchronous completion, cancellation, and metrics vocabulary. Its fake App
+  Server scenarios cover immediate tools, pending-tool resume, and cancellation;
 - current-terminal application dispatch, durable resume ownership, discovery
   UI, and packaging remain open. The Agent selector stays hidden until those
   paths work end to end.

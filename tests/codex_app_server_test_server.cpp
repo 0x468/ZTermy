@@ -124,6 +124,7 @@ int run(int argc, char **argv)
                              {QStringLiteral("params"),
                               QJsonObject{{QStringLiteral("threadId"), threadId},
                                           {QStringLiteral("turnId"), QStringLiteral("turn-ztermy")},
+                                          {QStringLiteral("itemId"), QStringLiteral("message-ztermy")},
                                           {QStringLiteral("delta"), QStringLiteral("Inspecting the terminal")}}}});
             if (noTool)
             {

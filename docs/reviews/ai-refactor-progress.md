@@ -5,6 +5,19 @@
 > Netcatty 对照：`docs/reviews/netcatty-ai-comparison-2026-08.md`；
 > Codex 专项：`docs/research/CODEX_CLI_ARCHITECTURE.md`。
 
+## 节点 N20 — Codex 外部 Agent 轮次编排（2026-08-15）
+
+**commit**: 本节点提交（见 git 历史）
+
+**范围**：
+
+1. 新增原生 `CodexAgentTurnRunner`，将 App Server 初始化、轮次、流事件、指标、取消和工具请求收敛为与内置 `AiTurnRunner` 相同的应用语义；
+2. 同时覆盖即时工具结果和异步挂起/恢复，后续可直接复用现有终端、SFTP、等待命令、MCP 与审批执行链，不另造工具实现；
+3. 每次仅允许一个当前终端工具挂起，取消时先终止挂起操作并回送取消结果，再中断 Codex turn；
+4. 保留 App Server 线程供同一终端后续轮次继续使用，并记录墙钟与首 token 延迟。
+
+**验证**：MSVC 动态 Debug 下全部 `codex-*` 4/4；假 App Server 覆盖即时工具、异步恢复和立即取消；新增/修改 C++ 文件通过 clang-tidy warnings-as-errors。
+
 ## 节点 N19 — Codex 类型化事件映射（2026-08-15）
 
 **commit**: 本节点提交（见 git 历史）

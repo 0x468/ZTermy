@@ -74,7 +74,9 @@ References:
 - The protocol, asynchronous installation probe, process lifecycle, and typed
   event-to-conversation mapping are independently testable. Text, reasoning,
   tool/search activity, usage, cancellation, and failure share the built-in
-  Agent's event vocabulary. Current-terminal tool dispatch is still required
-  before UI availability can be claimed.
+  Agent's event vocabulary. A native turn orchestrator also shares its tool
+  callback and asynchronous completion contracts, so current-terminal dispatch
+  can be extracted once rather than copied. The AppController bridge is still
+  required before UI availability can be claimed.
 - Codex versions that lack dynamic-tool negotiation remain unavailable rather
   than receiving broader local-machine access.

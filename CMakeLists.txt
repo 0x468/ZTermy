@@ -642,6 +642,17 @@ target_link_libraries(ztermy_ai_application
     PRIVATE ztermy_ai_conversation_store ztermy_core_persistence ztermy_sftp_domain
 )
 
+add_library(ztermy_external_agent_application STATIC
+    src/application/ai/CodexAgentTurnRunner.cpp
+    src/application/ai/CodexAgentTurnRunner.h
+)
+
+target_compile_features(ztermy_external_agent_application PUBLIC cxx_std_23)
+target_include_directories(ztermy_external_agent_application PUBLIC src)
+target_link_libraries(ztermy_external_agent_application
+    PUBLIC ztermy_ai_application ztermy_external_agent_runtime Qt6::Core
+)
+
 add_library(ztermy_session_logging STATIC
     src/infrastructure/logging/SessionLogWriter.cpp
     src/infrastructure/logging/SessionLogWriter.h
@@ -2857,6 +2868,27 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME codex-app-server-event-mapper COMMAND ztermy_codex_app_server_event_mapper_tests)
+
+    qt_add_executable(ztermy_codex_agent_turn_runner_tests
+        tests/codex_agent_turn_runner_tests.cpp
+    )
+    target_compile_features(ztermy_codex_agent_turn_runner_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_codex_agent_turn_runner_tests PRIVATE
+        ztermy_external_agent_application
+        Qt6::Test
+    )
+    add_dependencies(ztermy_codex_agent_turn_runner_tests ztermy_codex_app_server_test_server)
+
+    if(MSVC)
+        target_compile_options(ztermy_codex_agent_turn_runner_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME codex-agent-turn-runner COMMAND ztermy_codex_agent_turn_runner_tests)
 
     add_executable(ztermy_mcp_test_server tests/mcp_test_server.cpp)
     target_compile_features(ztermy_mcp_test_server PRIVATE cxx_std_23)
