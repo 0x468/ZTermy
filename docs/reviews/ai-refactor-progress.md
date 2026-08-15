@@ -7,7 +7,7 @@
 
 ## 节点 N15 — Provider 原生联网检索与引用（2026-08-15）
 
-**commits**: `98fe65f`, `69ffab4` + pending follow-up
+**commits**: `98fe65f`, `69ffab4`, `3038b80`
 
 **范围**：
 
@@ -77,7 +77,7 @@ qml-native-window-smoke 4/4 通过；翻译门禁确认 1651 条全部完成。
 
 ## 节点 N10 — 原生 AI 工具绑定当前终端（2026-08-15）
 
-**commits**: `12db6c2` + pending follow-up
+**commits**: `12db6c2`, `7300c15` + pending follow-up
 
 **范围**：
 
@@ -87,11 +87,14 @@ qml-native-window-smoke 4/4 通过；翻译门禁确认 1651 条全部完成。
 3. AppController 在回合开始冻结所属 tab ID + reconnect generation，通过宿主上下文注入
    工具；切换焦点不重定向，关闭或重连返回 `scope_changed`；
 4. 序列化上下文与系统提示不再暴露内部路由标识；
-5. ADR 0086 固化“一侧栏、一对话、一终端”，并记录 Warp、VS Code、OpenCode、Claude
+5. 领域读取层直接接收唯一当前终端快照，应用层不再把它包装为候选会话集合或查找
+   allowed-target set；内部 tab ID 与 reconnect generation 只用于异步代际校验；
+6. ADR 0086 固化“一侧栏、一对话、一终端”，并记录 Warp、VS Code、OpenCode、Claude
    Code/Codex 的宿主资源绑定共性。
 
-**验证**：动态 Debug 构建通过；12 个关联 AI 聚焦测试与 `app-controller` 通过。全量门禁
-在本节点后续提交前继续执行。
+**验证**：动态 Debug 构建通过；读取层、terminal-frame、Agent scenario 与
+`app-controller` 聚焦测试通过。模型可见 schema、结果、系统提示均有负向断言，确保旧
+多会话工具与身份字段不会重新出现。全量门禁在本节点后续提交前继续执行。
 
 ## 节点 N11 — Provider 原生图片附件（2026-08-15）
 

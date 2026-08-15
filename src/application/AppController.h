@@ -817,7 +817,6 @@ private:
     void persistAiConversation(const TerminalTab &tab);
     [[nodiscard]] ai::AiContextBundle buildAiContext(TerminalTab &tab, bool preferLastFailure);
     [[nodiscard]] ai::AiTerminalReadSnapshot aiReadSnapshot(const TerminalTab &tab) const;
-    [[nodiscard]] std::vector<ai::AiTerminalReadSnapshot> aiReadSnapshots(const TerminalTab &tab) const;
     void acceptAiSelectedText(TerminalTab &tab, const QString &text);
     [[nodiscard]] bool sendAiMessage(TerminalTab &tab, const QString &prompt, bool preferLastFailure,
                                      bool appendPrompt = true, bool commandRequest = false,
@@ -827,7 +826,7 @@ private:
                                                                            const ai::AiSessionTarget &turnTarget);
     [[nodiscard]] ai::AiTurnRunner::ToolHandlingResult
     handleAiTerminalFrameTool(TerminalTab &owner, const QString &ownerTabId, const ai::AiToolCall &call,
-                              std::span<const ai::AiTerminalReadSnapshot> allowedTargets);
+                              const ai::AiTerminalReadSnapshot &turnSnapshot);
     [[nodiscard]] std::string executeAiTerminalAction(TerminalTab &tab, const ai::AiTerminalAction &action);
     [[nodiscard]] std::string executeAiRunCommand(TerminalTab &tab, const ai::AiTerminalAction &action);
     [[nodiscard]] std::string executeAiWriteToPty(TerminalTab &tab, const ai::AiTerminalAction &action);

@@ -29,6 +29,9 @@ terminal generation.
 - At turn start, ztermy captures an internal immutable target consisting of the
   tab ID and reconnect generation. Parsers receive that target from the host,
   not from provider JSON.
+- Read tools receive one immutable current-terminal snapshot directly. The
+  domain and application layers do not wrap that snapshot in a collection or
+  search an allowed-target set.
 - Live reads, waits, writes, SFTP operations, and completion callbacks re-check
   the captured generation. A tab closure or reconnect returns `scope_changed`;
   it never retargets to the currently focused tab.
@@ -47,8 +50,9 @@ terminal generation.
   one terminal.
 - Internal tab identity and reconnect generation remain correctness guards but
   are no longer prompt surface or model output.
+- The native read path has no multi-session abstraction to accidentally expose
+  in a later schema change.
 - Switching tabs while a turn runs does not redirect the turn. Reconnecting the
   owning tab invalidates outstanding live work.
 - Existing tests and evaluation fixtures must use targetless native schemas and
   separately assert host-side scope invalidation.
-
