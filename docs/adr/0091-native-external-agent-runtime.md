@@ -71,9 +71,10 @@ References:
   single-terminal product model and existing UI/event vocabulary.
 - Codex owns planning, reasoning, and resumable thread state; ztermy owns the
   terminal, credentials, permissions, evidence, and tool execution.
-- The protocol, asynchronous installation probe, and process lifecycle are now
-  independently testable. Typed event-to-conversation mapping and current-
-  terminal tool dispatch are still required before UI availability can be
-  claimed.
+- The protocol, asynchronous installation probe, process lifecycle, and typed
+  event-to-conversation mapping are independently testable. Text, reasoning,
+  tool/search activity, usage, cancellation, and failure share the built-in
+  Agent's event vocabulary. Current-terminal tool dispatch is still required
+  before UI availability can be claimed.
 - Codex versions that lack dynamic-tool negotiation remain unavailable rather
   than receiving broader local-machine access.

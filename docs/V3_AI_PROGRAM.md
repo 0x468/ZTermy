@@ -301,9 +301,12 @@ Implementation status:
   bounded host-tool round trips, terminal-thread scope checks, and failure
   propagation. Discovery verifies the exact installed experimental schema
   rather than guessing support from a version string;
-- typed stream-to-conversation mapping, current-terminal application dispatch,
-  durable resume ownership, discovery UI, and packaging remain open. The Agent
-  selector stays hidden until those paths work end to end.
+- typed stream-to-conversation mapping now covers text, readable reasoning,
+  dynamic-tool and web-search activities, usage, completion, cancellation, and
+  failures. It rejects cross-turn events and applies bounded linear buffering;
+- current-terminal application dispatch, durable resume ownership, discovery
+  UI, and packaging remain open. The Agent selector stays hidden until those
+  paths work end to end.
 
 Current closure work:
 

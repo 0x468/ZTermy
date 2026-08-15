@@ -5,6 +5,19 @@
 > Netcatty 对照：`docs/reviews/netcatty-ai-comparison-2026-08.md`；
 > Codex 专项：`docs/research/CODEX_CLI_ARCHITECTURE.md`。
 
+## 节点 N19 — Codex 类型化事件映射（2026-08-15）
+
+**commit**: 本节点提交（见 git 历史）
+
+**范围**：
+
+1. 将 App Server 的文本、思考摘要、工具、联网检索、用量、完成、取消与失败通知映射到现有 `AiStreamEvent`，直接复用 ztermy 已有对话和活动卡语义；
+2. 思考流优先展示可读摘要，仅在服务端没有摘要时于条目完成后回退到原始内容，避免重复展示；
+3. 事件严格绑定活动 turn，拒绝迟到或游离事件，限制标识符、增量、错误及工具参数大小；
+4. 原始思考使用线性字节累计，避免长流式输出产生二次复制开销；JSON 用量仅接受 IEEE-754 可精确表达的非负整数。
+
+**验证**：MSVC 动态 Debug 下 `codex-app-server-*` 3/3；新增映射器及测试通过 clang-tidy warnings-as-errors。
+
 ## 节点 N18 — Codex 原生进程生命周期与能力探测（2026-08-15）
 
 **commit**: 本节点提交（见 git 历史）

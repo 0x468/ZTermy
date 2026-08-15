@@ -580,6 +580,8 @@ add_library(ztermy_external_agent_runtime STATIC
     src/infrastructure/ai/CodexAppServerClient.h
     src/infrastructure/ai/CodexAppServerDiscovery.cpp
     src/infrastructure/ai/CodexAppServerDiscovery.h
+    src/infrastructure/ai/CodexAppServerEventMapper.cpp
+    src/infrastructure/ai/CodexAppServerEventMapper.h
 )
 
 target_compile_features(ztermy_external_agent_runtime PUBLIC cxx_std_23)
@@ -2835,6 +2837,26 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME codex-app-server-client COMMAND ztermy_codex_app_server_client_tests)
+
+    qt_add_executable(ztermy_codex_app_server_event_mapper_tests
+        tests/codex_app_server_event_mapper_tests.cpp
+    )
+    target_compile_features(ztermy_codex_app_server_event_mapper_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_codex_app_server_event_mapper_tests PRIVATE
+        ztermy_external_agent_runtime
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_codex_app_server_event_mapper_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME codex-app-server-event-mapper COMMAND ztermy_codex_app_server_event_mapper_tests)
 
     add_executable(ztermy_mcp_test_server tests/mcp_test_server.cpp)
     target_compile_features(ztermy_mcp_test_server PRIVATE cxx_std_23)

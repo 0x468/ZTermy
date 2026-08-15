@@ -123,7 +123,7 @@ token 估算 → 预压缩（LLM 摘要 temp=0，保护最近 N 条，保留最�
 | 权限模式 | observer / confirm / auto + 全局 blocklist + 持久 grant | Read-only / Ask / Edit / Auto / YOLO 五档 + allow/ask/deny 规则（精确/前缀/glob/正则 + once/session/profile/global）+ 可编辑建议匹配器（0.3.6）——比 Netcatty 更细 |
 | 工具面 | 50+：terminal/sftp/vault hosts/snippets/scripts/portforward/notes/web/url | run_command/read_command_output/wait_command/interrupt_command/write_to_pty + SFTP 读写 + 遥测/转发/脚本/笔记/历史工具 + MCP 客户端（0.3.4+） |
 | Provider | 12 预设 + custom + 三协议族；key 主进程持有 | OpenAI Responses / Anthropic / DeepSeek / Kimi / Z.AI / Ollama / 兼容端点，品牌预设不泄漏协议到 UI（原则 3） |
-| 外部 Agent | 内置 Catty + Claude/Codex/Cursor/Copilot CLI/Codebuddy/OpenCode SDK 驱动 | 0.3.11 进行中：Codex App Server 有界协议、异步进程生命周期、实验 schema 探测、工具往返和排队取消已落地；事件映射、当前终端应用桥、恢复所有权和选择器仍待端到端完成，保持权限/审计/取消契约一致 |
+| 外部 Agent | 内置 Catty + Claude/Codex/Cursor/Copilot CLI/Codebuddy/OpenCode SDK 驱动 | 0.3.11 进行中：Codex App Server 有界协议、异步进程生命周期、实验 schema 探测、工具往返、排队取消和类型化 UI 事件映射已落地；当前终端应用桥、恢复所有权和选择器仍待端到端完成，保持权限/审计/取消契约一致 |
 | 流式 | streamText + thinking 块 + usage/performance 事件 + 413 压缩重试 | 流式 + 合并后再做 Markdown 布局（Qt Quick 线程不阻塞）；reasoning 跟随流式展开、出正文即折叠 |
 | 记忆 | 每作用域持久会话 + token 预算压缩（LLM 摘要）+ 会话状态再注入 | 默认仅会话保留；持久加密历史 opt-in（0.3.1 ADR 0061）；Agent 工具证据随会话保留（bounded） |
 | 斜杠命令 | Quick Messages（用户自定义 prompt 快捷）+ 技能，光标锚定 listbox | 键盘优先的内置斜杠选择器（0.3.9）；用户技能 0.3.10 复用同一选择器 |
