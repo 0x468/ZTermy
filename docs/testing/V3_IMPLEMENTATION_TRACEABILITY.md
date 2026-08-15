@@ -110,6 +110,8 @@ covered by `application-settings`, `ai-permission-policy`,
 | Local table/code overflow and per-code raw copy | `src/ui/qml/MarkdownMessage.qml`, `src/platform/windows/WindowsProtectedClipboard.*` | `windows-protected-clipboard`, owner real-window acceptance | ADR 0078 |
 | Explicit recent commands with honest non-semantic fallback | `src/application/AppController.*`, `src/domain/terminal/SemanticTerminalObserver.*` | `app-controller`, `semantic-terminal-observer` | ADR 0055, product review 2026-08-13 |
 | Keyboard-first built-in slash commands | `src/ui/qml/AiAssistantPane.qml`, existing `AppController` AI actions | QML compilation, translation gate, owner keyboard acceptance | Product review 2026-08-13 |
+| Consecutive tool calls grouped per assistant turn, expandable bounded arguments/results, and inert restored snapshots | `src/application/ai/AiConversationModel.*`, `src/infrastructure/ai/AiConversationStore.*`, `src/ui/qml/AiAssistantPane.qml` | `ai-conversation-model`, `ai-conversation-store`, `qml-native-window-smoke`, `ui-layout-runtime-smoke` | ADR 0061, Netcatty comparison 2026-08-15 |
+| Compact one-row header with low-frequency conversation actions in overflow | `src/ui/qml/AiAssistantPane.qml`, `src/main.cpp` | `ui-layout-runtime-smoke` accessibility and 260 px geometry contracts | Netcatty comparison 2026-08-15 |
 
 ## 0.3.10 — current-terminal native tool contract
 

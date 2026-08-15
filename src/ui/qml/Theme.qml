@@ -78,6 +78,7 @@ QtObject {
     readonly property color focus: highContrast ? highContrastHighlight : ztermyAccent ? (dark ? "#86EFAC" : "#16A34A") : mixColor(accentBase, accentText, 0.34)
     readonly property color selectedBackground: highContrast ? mixColor(highContrastBackground, highContrastText, 0.22) : ztermyAccent ? (dark ? "#173A2B" : "#DCFCE7") : mixColor(accentBase, dark ? "#0B1017" : "#FFFFFF", dark ? 0.72 : 0.84)
     readonly property color selectedHover: highContrast ? mixColor(highContrastBackground, highContrastText, 0.30) : ztermyAccent ? (dark ? "#1F513A" : "#BBF7D0") : mixColor(accentBase, dark ? "#0B1017" : "#FFFFFF", dark ? 0.58 : 0.72)
+    readonly property color success: highContrast ? highContrastHighlight : dark ? "#22C55E" : "#15803D"
     readonly property color successText: highContrast ? highContrastText : dark ? "#86EFAC" : "#15803D"
     readonly property color warning: highContrast ? highContrastHighlight : dark ? "#F59E0B" : "#D97706"
     readonly property color danger: highContrast ? highContrastHighlight : dark ? "#EF4444" : "#DC2626"

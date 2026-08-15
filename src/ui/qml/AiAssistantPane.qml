@@ -681,16 +681,15 @@ Rectangle {
                 }
 
                 ContextToolButton {
-                    objectName: "aiExportConversationButton"
-                    enabled: !pane.busy && pane.conversation !== null && pane.conversation.count > 0
-                    Accessible.name: qsTr("Export AI conversation")
-                    onClicked: conversationExportDialog.open()
+                    objectName: "aiConversationMoreButton"
+                    Accessible.name: qsTr("More conversation actions")
+                    onClicked: conversationMenu.popup()
                     contentItem: AppIcon {
-                        name: "save"
+                        name: "more"
                         color: Theme.textMuted
                     }
                     AppToolTip {
-                        text: qsTr("Export conversation")
+                        text: qsTr("More conversation actions")
                     }
                 }
 
@@ -1639,7 +1638,7 @@ Rectangle {
                                     hoverEnabled: true
                                     focusPolicy: Qt.StrongFocus
                                     text: toolTimeline.active ? qsTr("Using %1 tools…").arg(messageItem.toolActivities.length) : qsTr("Used %1 tools").arg(messageItem.toolActivities.length)
-                                    Accessible.name: (toolTimeline.expanded ? qsTr("Collapse") : qsTr("Expand")) + " · " + text
+                                    Accessible.name: (toolTimeline.expanded ? qsTr("Collapse") : qsTr("Expand")) + " · " + toolGroupToggle.text
                                     onClicked: {
                                         toolTimeline.manualExpanded = !toolTimeline.expanded;
                                         toolTimeline.autoManaged = false;
@@ -2051,7 +2050,7 @@ Rectangle {
                                 ActionButton {
                                     visible: messageItem.messageRole === "assistant" && messageItem.state === "complete" && messageItem.hasCommandSuggestion
                                     text: qsTr("Insert")
-                                    iconName: "composer"
+                                    iconName: "compose"
                                     accessibleName: qsTr("Insert the suggested command without running it")
                                     onClicked: pane.controller.insertTerminalCommand(messageItem.commandSuggestion)
                                 }

@@ -109,6 +109,12 @@ evaluations serve different purposes and are reported separately.
       preserves the reading position and exposes Return to latest until the user returns.
 - [ ] Owner check: provider-exposed reasoning opens while reasoning streams, collapses when the
       answer begins, and remains manually expandable afterward.
+- [x] Developer Windows UI check: consecutive tool calls render as one keyboard-reachable
+      `Used N tools` group, active work expands automatically, completed work collapses, and
+      every item exposes bounded arguments/results without widening a 260 px sidebar.
+- [ ] Owner check: expand a completed tool group and then each tool row. Expected: status,
+      command summary, arguments, result, copy controls, and local scrolling remain usable;
+      collapsing the group restores a compact assistant reply without losing the details.
 - [ ] Owner check: on a plain SSH shell without OSC 133/633, attaching the last 1/3/5 commands
       succeeds with an explicitly labelled approximate recent-activity attachment and includes
       bounded real scrollback rather than only the currently visible viewport.

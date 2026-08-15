@@ -845,7 +845,7 @@ struct ResizeHitRuntimeCase
         aiMarkdownFixturePrepared = markdownAdded && toolActivityAdded && toolDetailsAdded && secondToolAdded
                                     && aiConversation->completeAssistantMessage(markdownMessageId);
     }
-    processWindowEventsFor(std::chrono::milliseconds{100});
+    processWindowEventsFor(std::chrono::milliseconds{500});
     QQuickItem *aiContextToggle = quickItem(rootObject, "aiContextToggle");
     QAccessibleInterface *aiContextInterface =
         aiContextToggle == nullptr ? nullptr : QAccessible::queryAccessibleInterface(aiContextToggle);
@@ -998,17 +998,22 @@ struct ResizeHitRuntimeCase
     }
     const QString expectedName = QString::fromLatin1(objectName);
     std::vector<QQuickItem *> pending{rootObject};
+    QQuickItem *fallback = nullptr;
     for (std::size_t index = 0; index < pending.size(); ++index)
     {
         QQuickItem *candidate = pending[index];
         if (candidate->objectName() == expectedName)
         {
-            return candidate;
+            fallback = fallback == nullptr ? candidate : fallback;
+            if (candidate->isVisible())
+            {
+                return candidate;
+            }
         }
         const QList<QQuickItem *> children = candidate->childItems();
         pending.insert(pending.end(), children.cbegin(), children.cend());
     }
-    return nullptr;
+    return fallback;
 }
 
 [[nodiscard]] QString namedFocusItem(const ztermy::NativeWindow &window)
@@ -1114,7 +1119,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
 {
     QQuickItem *item = visualQuickItem(rootObject, objectName);
     QAccessibleInterface *interface = item == nullptr ? nullptr : QAccessible::queryAccessibleInterface(item);
-    const QString expected = QString::fromLatin1(expectedName);
+    const QString expected = QString::fromUtf8(expectedName);
     if (interface == nullptr || interface->role() != QAccessible::Button
         || interface->text(QAccessible::Name) != expected)
     {
@@ -1133,7 +1138,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
 {
     QQuickItem *item = visualQuickItem(rootObject, objectName);
     QAccessibleInterface *interface = item == nullptr ? nullptr : QAccessible::queryAccessibleInterface(item);
-    const QString expected = QString::fromLatin1(expectedName);
+    const QString expected = QString::fromUtf8(expectedName);
     const bool toggleRole = interface != nullptr
                             && (interface->role() == QAccessible::Button || interface->role() == QAccessible::CheckBox);
     if (!toggleRole || interface->text(QAccessible::Name) != expected)

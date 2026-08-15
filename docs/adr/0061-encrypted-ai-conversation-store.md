@@ -32,7 +32,8 @@ ztermy stores optional conversation history in a dedicated encrypted envelope:
 - envelope and plaintext schemas are independently validated and unsupported
   versions fail closed;
 - completed assistant turns retain their bounded presentation snapshot: visible
-  Markdown, provider-exposed reasoning, native tool activity cards, citations,
+  Markdown, provider-exposed reasoning, native tool activity cards including
+  bounded argument/result snapshots, citations,
   usage, latency/retry metrics, cost metadata, truncation state, and opaque
   provider replay needed for an exact follow-up;
 - the store is bounded to 50 conversations, 200 messages per conversation,
@@ -43,7 +44,9 @@ ztermy stores optional conversation history in a dedicated encrypted envelope:
   key; explicit export is the only operation that writes decrypted JSON.
 
 Conversation replay remains untrusted evidence. Restored tool activities are
-historical presentation records, not executable calls. Loading old text never
+historical presentation records, not executable calls. Their arguments and
+results exist only so the owner can inspect what happened; they cannot be
+redispatched from history. Loading old text never
 restores tool approval, agent control, target ownership, a pending action, or a
 permission grant. Those are reconstructed from live policy outside the
 transcript.
