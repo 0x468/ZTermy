@@ -287,16 +287,6 @@ Rectangle {
             resetAiQuickMessageDraft();
     }
 
-    function aiEndpointScopeLabel(token) {
-        if (token === "loopback")
-            return qsTr("Loopback device");
-        if (token === "private-network")
-            return qsTr("Private network");
-        if (token === "remote")
-            return qsTr("Remote network");
-        return qsTr("Invalid or unset");
-    }
-
     function resetMcpDraft() {
         mcpOriginalId = "";
         mcpEditingId = "";
@@ -1475,92 +1465,6 @@ Rectangle {
                                 }
                             }
                         }
-                    }
-                }
-            }
-
-            SectionCard {
-                Layout.fillWidth: true
-                visible: pane.currentCategory === "ai"
-                compact: true
-                heading: qsTr("Privacy diagnostics")
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: Theme.spacingControl
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: qsTr("Counts and policy state only. This diagnostic view never contains prompts, responses, terminal text, credentials, endpoint host names, model identifiers, or MCP arguments and results.")
-                        color: Theme.textMuted
-                        wrapMode: Text.WordWrap
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.textLabel
-                    }
-
-                    GridLayout {
-                        readonly property var report: pane.controller.aiPrivacyDiagnostics
-
-                        Layout.fillWidth: true
-                        columns: pane.compactLayout ? 1 : 2
-                        columnSpacing: 18
-                        rowSpacing: 8
-
-                        Label {
-                            text: qsTr("Provider endpoint")
-                            color: Theme.text
-                        }
-                        Text {
-                            Layout.fillWidth: true
-                            text: pane.aiEndpointScopeLabel(parent.report.provider.endpointScope)
-                            color: Theme.textSoft
-                            font.family: Theme.uiFont
-                        }
-
-                        Label {
-                            text: qsTr("Request context")
-                            color: Theme.text
-                        }
-                        Text {
-                            Layout.fillWidth: true
-                            text: qsTr("%1 item(s) · %2 redacted · %3 truncated · %4 byte(s)").arg(parent.report.context.itemCount).arg(parent.report.context.redactedItemCount).arg(parent.report.context.truncatedItemCount).arg(parent.report.context.serializedBytes)
-                            color: Theme.textSoft
-                            wrapMode: Text.WordWrap
-                            font.family: Theme.uiFont
-                        }
-
-                        Label {
-                            text: qsTr("AI runtime")
-                            color: Theme.text
-                        }
-                        Text {
-                            Layout.fillWidth: true
-                            text: qsTr("%1 conversation(s) · %2 active request(s)").arg(parent.report.runtime.activeConversations).arg(parent.report.runtime.activeRequests)
-                            color: Theme.textSoft
-                            wrapMode: Text.WordWrap
-                            font.family: Theme.uiFont
-                        }
-
-                        Label {
-                            text: qsTr("MCP boundary")
-                            color: Theme.text
-                        }
-                        Text {
-                            Layout.fillWidth: true
-                            text: qsTr("%1 server(s) · %2 ready · %3 approved tool(s)").arg(parent.report.mcp.serverCount).arg(parent.report.mcp.readyServerCount).arg(parent.report.mcp.approvedToolCount)
-                            color: Theme.textSoft
-                            wrapMode: Text.WordWrap
-                            font.family: Theme.uiFont
-                        }
-                    }
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: qsTr("Only the user prompt, conversation messages, and the bounded context preview shown in the AI panel can enter a provider request. Raw keystrokes and unselected files are excluded.")
-                        color: Theme.textMuted
-                        wrapMode: Text.WordWrap
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.textCompact
                     }
                 }
             }

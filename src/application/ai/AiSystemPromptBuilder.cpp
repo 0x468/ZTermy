@@ -8,7 +8,7 @@ QString AiSystemPromptBuilder::build(const bool commandRequest, const AiPermissi
     // Core identity and behavior contract. Written as plain text so the full
     // prompt is readable in tests and review; keep the sections in this order.
     QString prompt =
-        QStringLiteral("You are ztermy's terminal assistant, an agent that operates one exact terminal session "
+        QStringLiteral("You are ztermy's terminal assistant for the one terminal that owns this sidebar "
                        "(local or SSH). You help the user explain failures, inspect command output, and run "
                        "commands. You act only through the provided tools.\n"
                        "\n"
@@ -55,7 +55,7 @@ QString AiSystemPromptBuilder::build(const bool commandRequest, const AiPermissi
                        "- Never retry a failed side-effecting action blindly; inspect the error and change the "
                        "approach.\n"
                        "- Every native terminal tool is already bound by ztermy to this sidebar's current terminal. "
-                       "Never ask for, invent, discover, or select another terminal session.\n"
+                       "Never ask for, invent, discover, or select another terminal.\n"
                        "\n"
                        "# Output format\n"
                        "- Be concise and direct. Explain important assumptions briefly, then give the answer.\n"

@@ -42,6 +42,8 @@ void AiSystemPromptBuilderTests::buildsLayeredPrompt()
     QVERIFY(prompt.contains(QStringLiteral("client will show the approval UI")));
     QVERIFY(prompt.contains(QStringLiteral("already bound by ztermy to this sidebar's current terminal")));
     QVERIFY(prompt.contains(QStringLiteral("Never ask for, invent, discover, or select another terminal")));
+    QVERIFY(prompt.contains(QStringLiteral("one terminal that owns this sidebar")));
+    QVERIFY(!prompt.contains(QStringLiteral("terminal session"), Qt::CaseInsensitive));
     QVERIFY(prompt.contains(QStringLiteral("review every tool result from this turn")));
     QVERIFY(prompt.contains(QStringLiteral("Never describe an intended or attempted action as completed")));
     QVERIFY(!prompt.contains(QStringLiteral("session_id")));
