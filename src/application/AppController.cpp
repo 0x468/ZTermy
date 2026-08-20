@@ -9,6 +9,7 @@
 #include "domain/ai/AiCommandEcho.h"
 #include "domain/ai/AiContextCompactor.h"
 #include "domain/ai/AiContextSerializer.h"
+#include "domain/ai/AiProviderRecoveryPolicy.h"
 #include "domain/ssh/SshTarget.h"
 #include "infrastructure/ai/AiTraceSanitizer.h"
 #include "infrastructure/ai/ProviderEndpointResolver.h"
@@ -3388,6 +3389,74 @@ QString AppController::activeAiError() const
 {
     const TerminalTab *tab = activeTab();
     return tab == nullptr ? QString{} : tab->aiError;
+}
+
+QVariantMap AppController::activeAiErrorRecovery() const
+{
+    const TerminalTab *tab = activeTab();
+    if (tab == nullptr || (tab->aiState != QStringLiteral("error") && tab->aiState != QStringLiteral("cancelled")))
+    {
+        return {};
+    }
+
+    if (!tab->aiProviderErrorCode.has_value() && tab->aiState != QStringLiteral("cancelled"))
+    {
+        return {{QStringLiteral("code"), QStringLiteral("unknown")},
+                {QStringLiteral("hint"), tr("Retry the response. If it fails again, review the provider settings.")},
+                {QStringLiteral("messageAnchored"), tab->aiAssistantMessageId != 0},
+                {QStringLiteral("retryAvailable"), true},
+                {QStringLiteral("settingsAvailable"), false},
+                {QStringLiteral("newConversationAvailable"), false}};
+    }
+    const ai::AiProviderErrorCode code = tab->aiProviderErrorCode.value_or(ai::AiProviderErrorCode::cancelled);
+    const ai::AiProviderRecoveryPlan recovery = ai::AiProviderRecoveryPolicy::plan(code);
+    QString codeToken;
+    QString hint;
+    switch (code)
+    {
+        case ai::AiProviderErrorCode::network:
+            codeToken = QStringLiteral("network");
+            hint = tr("Check the connection and retry this response.");
+            break;
+        case ai::AiProviderErrorCode::authentication:
+            codeToken = QStringLiteral("authentication");
+            hint = tr("Update the API key in AI settings, then retry this response.");
+            break;
+        case ai::AiProviderErrorCode::rateLimited:
+            codeToken = QStringLiteral("rate_limited");
+            hint = tr("Wait a moment and retry, or switch the provider or model in AI settings.");
+            break;
+        case ai::AiProviderErrorCode::quotaExceeded:
+            codeToken = QStringLiteral("quota_exceeded");
+            hint = tr("Switch the provider or model, or update the provider quota before retrying.");
+            break;
+        case ai::AiProviderErrorCode::invalidRequest:
+            codeToken = QStringLiteral("invalid_request");
+            hint = tr("Check the endpoint, model, and provider settings before retrying.");
+            break;
+        case ai::AiProviderErrorCode::server:
+            codeToken = QStringLiteral("server");
+            hint = tr("The provider is temporarily unavailable. Retry in a moment.");
+            break;
+        case ai::AiProviderErrorCode::cancelled:
+            codeToken = QStringLiteral("cancelled");
+            hint = tr("The response was stopped. Retry when ready.");
+            break;
+        case ai::AiProviderErrorCode::protocol:
+            codeToken = QStringLiteral("protocol");
+            hint = tr("Check endpoint compatibility in AI settings, or retry the response.");
+            break;
+        case ai::AiProviderErrorCode::contextOverflow:
+            codeToken = QStringLiteral("context_overflow");
+            hint = tr("Start a new conversation or send a shorter request with less attached context.");
+            break;
+    }
+    return {{QStringLiteral("code"), codeToken},
+            {QStringLiteral("hint"), hint},
+            {QStringLiteral("messageAnchored"), tab->aiAssistantMessageId != 0},
+            {QStringLiteral("retryAvailable"), recovery.retryAvailable},
+            {QStringLiteral("settingsAvailable"), recovery.settingsAvailable},
+            {QStringLiteral("newConversationAvailable"), recovery.newConversationAvailable}};
 }
 
 QString AppController::activeAiContextPreview() const
@@ -8825,8 +8894,10 @@ void AppController::clearAiConversation()
     }
     const QString previousConversationId = tab->aiConversationId;
     tab->aiConversation->clear();
+    tab->aiAssistantMessageId = 0;
     tab->aiState = QStringLiteral("idle");
     tab->aiError.clear();
+    tab->aiProviderErrorCode.reset();
     tab->aiLastPrompt.clear();
     tab->aiLastPreferFailure = false;
     tab->aiLastCommandRequest = false;
@@ -9807,11 +9878,13 @@ void AppController::handleAiStreamEvent(const QString &tabId, const std::uint64_
             }
             target->aiState = QStringLiteral("complete");
             target->aiError.clear();
+            target->aiProviderErrorCode.reset();
             break;
         case ai::AiStreamEventType::responseFailed:
             if (event.error.has_value() && event.error->code == ai::AiProviderErrorCode::cancelled)
             {
                 target->aiError.clear();
+                target->aiProviderErrorCode = ai::AiProviderErrorCode::cancelled;
                 static_cast<void>(target->aiConversation->cancelAssistantMessage(assistantMessageId));
                 target->aiState = QStringLiteral("cancelled");
             }
@@ -9819,6 +9892,7 @@ void AppController::handleAiStreamEvent(const QString &tabId, const std::uint64_
             {
                 const auto providerError = event.error.value_or(ai::AiProviderError{});
                 target->aiError = utf8QString(providerError.message);
+                target->aiProviderErrorCode = providerError.code;
                 QStringList details;
                 if (providerError.httpStatus.has_value())
                 {
@@ -10036,6 +10110,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
     tab.aiAssistantMessageId = tab.aiConversation->beginAssistantMessage();
     tab.aiUsage.reset();
     tab.aiError.clear();
+    tab.aiProviderErrorCode.reset();
     tab.aiState = QStringLiteral("starting");
     tab.aiWebSearchQueries.clear();
     const QString tabId = tab.id;
@@ -10866,6 +10941,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
     if (!started.has_value())
     {
         tab.aiError = utf8QString(started.error().message);
+        tab.aiProviderErrorCode = started.error().code;
         static_cast<void>(tab.aiConversation->failAssistantMessage(assistantMessageId, tab.aiError));
         tab.aiState = QStringLiteral("error");
         emit aiConversationChanged();

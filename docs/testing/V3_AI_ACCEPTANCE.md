@@ -599,3 +599,11 @@ the `0.3.6` gate below.
    retry loop, `stream_has_more=true`, `has_more=false`, and omitted bytes are
    explicit. Reconnect the SSH tab and confirm an old-generation read fails
    with `scope_changed`; another tab can never enumerate or read the artifact.
+7. Return deterministic authentication, network, rate-limit, server,
+   cancellation, protocol, and context-overflow failures from a test provider.
+   The latest failed message shows one concise error and recovery hint: ordinary
+   transient failures offer Retry, configuration failures also offer AI
+   settings, and context overflow offers New conversation. The global error
+   banner does not repeat an inline provider failure. AI settings opens the AI
+   category directly, all actions remain keyboard accessible and inside a
+   260 px sidebar, and clearing the conversation removes the stale recovery.

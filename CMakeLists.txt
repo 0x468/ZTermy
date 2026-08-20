@@ -438,6 +438,8 @@ add_library(ztermy_ai_domain STATIC
     src/domain/ai/AiPermissionPolicy.h
     src/domain/ai/AiProviderRetryPolicy.cpp
     src/domain/ai/AiProviderRetryPolicy.h
+    src/domain/ai/AiProviderRecoveryPolicy.cpp
+    src/domain/ai/AiProviderRecoveryPolicy.h
     src/domain/ai/AiProviderReplayCodec.cpp
     src/domain/ai/AiProviderReplayCodec.h
     src/domain/ai/AiProviderTypes.h

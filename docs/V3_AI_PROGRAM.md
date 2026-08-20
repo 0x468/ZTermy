@@ -312,6 +312,9 @@ becomes conversation retention.
   separate from the head/tail preview, with explicit per-command and
   per-terminal caps and live pagination for commands created during the same
   turn (`ADR 0094`);
+- preserve typed provider failures through the UI and expose only the relevant
+  inline recovery actions—Retry, AI settings, or New conversation—without a
+  duplicate global banner or modal interruption (`ADR 0099`);
 - close provider switching, conversation resume, failure recovery, narrow-panel
   layout, and packaging acceptance before declaring V3 complete (`ADR 0093`).
 

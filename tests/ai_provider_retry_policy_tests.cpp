@@ -1,3 +1,4 @@
+#include "domain/ai/AiProviderRecoveryPolicy.h"
 #include "domain/ai/AiProviderRetryPolicy.h"
 
 #include <QtTest/QTest>
@@ -7,6 +8,7 @@ namespace
 
 using ztermy::ai::AiProviderError;
 using ztermy::ai::AiProviderErrorCode;
+using ztermy::ai::AiProviderRecoveryPolicy;
 using ztermy::ai::AiProviderRetryLimits;
 using ztermy::ai::AiProviderRetryPolicy;
 
@@ -18,6 +20,7 @@ private slots:
     void retriesBoundedTransientFailures();
     void honorsBoundedRetryAfter();
     void rejectsPermanentAndCancelledFailures();
+    void classifiesUserRecoveryActions();
 };
 
 void AiProviderRetryPolicyTests::retriesBoundedTransientFailures()
@@ -77,6 +80,32 @@ void AiProviderRetryPolicyTests::rejectsPermanentAndCancelledFailures()
                                       .message = "retry disabled",
                                       .retryable = false};
     QVERIFY(!policy.decide(serverError, 0).retry);
+}
+
+void AiProviderRetryPolicyTests::classifiesUserRecoveryActions()
+{
+    for (const auto code : {AiProviderErrorCode::network, AiProviderErrorCode::server, AiProviderErrorCode::cancelled})
+    {
+        const auto recovery = AiProviderRecoveryPolicy::plan(code);
+        QVERIFY(recovery.retryAvailable);
+        QVERIFY(!recovery.settingsAvailable);
+        QVERIFY(!recovery.newConversationAvailable);
+    }
+
+    for (const auto code :
+         {AiProviderErrorCode::authentication, AiProviderErrorCode::rateLimited, AiProviderErrorCode::quotaExceeded,
+          AiProviderErrorCode::invalidRequest, AiProviderErrorCode::protocol})
+    {
+        const auto recovery = AiProviderRecoveryPolicy::plan(code);
+        QVERIFY(recovery.retryAvailable);
+        QVERIFY(recovery.settingsAvailable);
+        QVERIFY(!recovery.newConversationAvailable);
+    }
+
+    const auto contextOverflow = AiProviderRecoveryPolicy::plan(AiProviderErrorCode::contextOverflow);
+    QVERIFY(!contextOverflow.retryAvailable);
+    QVERIFY(!contextOverflow.settingsAvailable);
+    QVERIFY(contextOverflow.newConversationAvailable);
 }
 
 } // namespace

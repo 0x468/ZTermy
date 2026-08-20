@@ -21,6 +21,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QHostAddress>
 #include <QIcon>
 #include <QImage>
 #include <QJsonObject>
@@ -33,6 +34,8 @@
 #include <QQuickWindow>
 #include <QSet>
 #include <QStandardPaths>
+#include <QTcpServer>
+#include <QTcpSocket>
 #include <QTextStream>
 #include <QTimer>
 #include <QUrl>
@@ -1194,13 +1197,114 @@ struct ResizeHitRuntimeCase
         aiLightTheme && aiAssistantPane != nullptr && aiAssistantPane->isVisible()
         && captureLayout(window, outputDirectory, QStringLiteral("light-regular-ai-assistant"));
     const bool restoredDark = applyUiLayoutSmokeTheme(controller, QStringLiteral("dark"), QStringLiteral("en"));
+
+    controller.clearAiConversation();
+    QTcpServer providerFailureServer;
+    const bool providerFailureServerListening = providerFailureServer.listen(QHostAddress::LocalHost, 0);
+    QObject::connect(&providerFailureServer, &QTcpServer::newConnection, &controller, [&providerFailureServer] {
+        while (QTcpSocket *socket = providerFailureServer.nextPendingConnection())
+        {
+            QObject::connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+            QObject::connect(socket, &QTcpSocket::readyRead, socket, [socket] {
+                QByteArray request = socket->property("requestBuffer").toByteArray();
+                request += socket->readAll();
+                socket->setProperty("requestBuffer", request);
+                if (!request.contains("\r\n\r\n") || socket->property("responseSent").toBool())
+                {
+                    return;
+                }
+                socket->setProperty("responseSent", true);
+                const QByteArray body =
+                    R"({"error":{"message":"Invalid API key","type":"authentication_error","code":"invalid_api_key"}})";
+                QByteArray response = "HTTP/1.1 401 Unauthorized\r\nContent-Type: application/json\r\nConnection: "
+                                      "close\r\nContent-Length: ";
+                response += QByteArray::number(body.size());
+                response += "\r\n\r\n";
+                response += body;
+                socket->write(response);
+                socket->disconnectFromHost();
+            });
+        }
+    });
+    const QString providerFailureEndpoint =
+        QStringLiteral("http://127.0.0.1:%1").arg(providerFailureServer.serverPort());
+    const bool providerFailureConfigured =
+        providerFailureServerListening
+        && controller.saveAiProviderSettings(QStringLiteral("ollama"), providerFailureEndpoint,
+                                             QStringLiteral("/api/chat"), QStringLiteral("qwen3"), false,
+                                             QStringLiteral("ask"));
+    const bool providerFailureStarted =
+        providerFailureConfigured && controller.sendAiMessage(QStringLiteral("Inspect this terminal."));
+    const bool providerFailureReached = providerFailureStarted
+                                        && processWindowEventsUntil(
+                                            [&controller] {
+                                                return controller.activeAiState() == QStringLiteral("error");
+                                            },
+                                            std::chrono::seconds{5});
+    processWindowEventsFor(std::chrono::milliseconds{150});
+    auto *aiGlobalErrorStatus = visualQuickItem(rootObject, "aiGlobalErrorStatus");
+    auto *aiErrorSettingsAction = visualQuickItem(rootObject, "aiErrorSettingsAction");
+    auto *aiErrorRetryAction = visualQuickItem(rootObject, "aiErrorRetryAction");
+    auto *aiErrorNewConversationAction = visualQuickItem(rootObject, "aiErrorNewConversationAction");
+    const QVariantMap providerFailureRecovery = controller.activeAiErrorRecovery();
+    const bool providerFailureRegular =
+        providerFailureReached
+        && providerFailureRecovery.value(QStringLiteral("code")).toString() == QStringLiteral("authentication")
+        && providerFailureRecovery.value(QStringLiteral("messageAnchored")).toBool() && aiGlobalErrorStatus != nullptr
+        && !aiGlobalErrorStatus->isVisible() && aiErrorSettingsAction != nullptr && aiErrorSettingsAction->isVisible()
+        && aiErrorRetryAction != nullptr && aiErrorRetryAction->isVisible() && aiErrorNewConversationAction != nullptr
+        && !aiErrorNewConversationAction->isVisible()
+        && verifyAccessibleButton(rootObject, "aiErrorSettingsAction", "Open AI settings to fix the provider")
+        && verifyAccessibleButton(rootObject, "aiErrorRetryAction", "Retry the failed assistant response")
+        && captureLayout(window, outputDirectory, QStringLiteral("dark-regular-ai-provider-error"));
+    window.resize(QSize{500, 360});
+    processWindowEventsFor(std::chrono::milliseconds{200});
+    const QPointF recoverySettingsTopLeft = aiErrorSettingsAction == nullptr || aiAssistantPane == nullptr
+                                                ? QPointF{}
+                                                : aiErrorSettingsAction->mapToItem(aiAssistantPane, QPointF{});
+    const qreal recoverySettingsRight =
+        aiErrorSettingsAction == nullptr ? 0.0 : recoverySettingsTopLeft.x() + aiErrorSettingsAction->width();
+    const bool providerFailureCompact =
+        aiErrorSettingsAction != nullptr && aiErrorSettingsAction->isVisible() && aiAssistantPane != nullptr
+        && recoverySettingsTopLeft.x() >= -0.5 && recoverySettingsRight <= aiAssistantPane->width() + 0.5
+        && captureLayout(window, outputDirectory, QStringLiteral("dark-compact-ai-provider-error"));
+    window.resize(QSize{1120, 800});
+    processWindowEventsFor(std::chrono::milliseconds{150});
+    const bool providerFailureSettingsInvoked =
+        aiErrorSettingsAction != nullptr
+        && QMetaObject::invokeMethod(aiErrorSettingsAction, "click", Qt::DirectConnection);
+    processWindowEventsFor(std::chrono::milliseconds{100});
+    const bool providerFailureSettingsOpened =
+        providerFailureSettingsInvoked && rootObject != nullptr
+        && rootObject->property("currentPage").toString() == QStringLiteral("settings") && settingsPane != nullptr
+        && settingsPane->property("currentCategory").toString() == QStringLiteral("ai");
+    if (rootObject != nullptr)
+    {
+        rootObject->setProperty("currentPage", QStringLiteral("terminal"));
+    }
+    const bool providerFailureRecoveryPassed =
+        providerFailureRegular && providerFailureCompact && providerFailureSettingsOpened;
+    QFile providerFailureArtifact{
+        QDir(outputDirectory).filePath(QStringLiteral("ai-provider-failure-recovery-contract.txt"))};
+    if (providerFailureArtifact.open(QIODevice::WriteOnly | QIODevice::Text))
+    {
+        QTextStream artifact{&providerFailureArtifact};
+        artifact << "regular=" << providerFailureRegular << '\n';
+        artifact << "compact=" << providerFailureCompact << '\n';
+        artifact << "settingsOpened=" << providerFailureSettingsOpened << '\n';
+        artifact << "code=" << providerFailureRecovery.value(QStringLiteral("code")).toString() << '\n';
+        artifact << "globalErrorVisible=" << (aiGlobalErrorStatus != nullptr && aiGlobalErrorStatus->isVisible())
+                 << '\n';
+    }
+    providerFailureServer.close();
+    controller.clearAiConversation();
     if (!aiTerminalId.isEmpty())
     {
         static_cast<void>(controller.closeTerminalTab(aiTerminalId));
     }
     return titleBrandPalettePassed && lightCompactPassed && lightRegularPassed && chineseShortcuts && chinesePalette
            && aiWorkbenchOpened && aiProviderOnboardingPassed && aiDarkCaptured && aiCompactCaptured && aiLightCaptured
-           && longApprovalBounded && clipboardPastePassed && restoredDark;
+           && longApprovalBounded && clipboardPastePassed && providerFailureRecoveryPassed && restoredDark;
 }
 
 [[nodiscard]] QQuickItem *quickItem(QQuickItem *rootObject, const char *objectName)

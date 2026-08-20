@@ -193,6 +193,7 @@ class AppController final : public QObject
     Q_PROPERTY(QObject *activeAiConversation READ activeAiConversation NOTIFY aiConversationChanged)
     Q_PROPERTY(QString activeAiState READ activeAiState NOTIFY aiConversationChanged)
     Q_PROPERTY(QString activeAiError READ activeAiError NOTIFY aiConversationChanged)
+    Q_PROPERTY(QVariantMap activeAiErrorRecovery READ activeAiErrorRecovery NOTIFY aiConversationChanged)
     Q_PROPERTY(QString activeAiContextPreview READ activeAiContextPreview NOTIFY aiConversationChanged)
     Q_PROPERTY(QVariantList activeAiContextItems READ activeAiContextItems NOTIFY aiConversationChanged)
     Q_PROPERTY(QVariantMap activeAiCompaction READ activeAiCompaction NOTIFY aiConversationChanged)
@@ -337,6 +338,7 @@ public:
     [[nodiscard]] QObject *activeAiConversation() const noexcept;
     [[nodiscard]] QString activeAiState() const;
     [[nodiscard]] QString activeAiError() const;
+    [[nodiscard]] QVariantMap activeAiErrorRecovery() const;
     [[nodiscard]] QString activeAiContextPreview() const;
     [[nodiscard]] QVariantList activeAiContextItems() const;
     [[nodiscard]] QVariantMap activeAiCompaction() const;
@@ -744,6 +746,7 @@ private:
         QString telemetryState = QStringLiteral("paused");
         QString aiState = QStringLiteral("idle");
         QString aiError;
+        std::optional<ai::AiProviderErrorCode> aiProviderErrorCode;
         QString aiLastPrompt;
         QStringList aiLastSelectedSkillIds;
         QHash<QString, QString> aiWebSearchQueries;

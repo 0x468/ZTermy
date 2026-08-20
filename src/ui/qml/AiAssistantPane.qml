@@ -674,11 +674,12 @@ Rectangle {
         }
 
         StatusMessage {
+            objectName: "aiGlobalErrorStatus"
             Layout.fillWidth: true
             Layout.leftMargin: 10
             Layout.rightMargin: 10
             kind: "error"
-            text: pane.controller.activeAiError
+            text: pane.controller.activeAiErrorRecovery.messageAnchored === true ? "" : pane.controller.activeAiError
         }
 
         Rectangle {
@@ -1558,6 +1559,8 @@ Rectangle {
                     required property int toolEvidencePendingCount
                     required property int toolEvidenceFailedSideEffectCount
                     readonly property bool reasoningActive: state === "streaming" && reasoning.length > 0 && text.length === 0
+                    readonly property bool recoveryActive: messageRole === "assistant" && (state === "failed" || state === "cancelled") && index === conversationList.count - 1
+                    readonly property var recovery: recoveryActive ? pane.controller.activeAiErrorRecovery : ({})
                     width: ListView.view.width
                     height: messageBubble.implicitHeight
 
@@ -2144,6 +2147,16 @@ Rectangle {
 
                             Text {
                                 Layout.fillWidth: true
+                                visible: messageItem.recoveryActive && String(messageItem.recovery.hint || "").length > 0
+                                text: String(messageItem.recovery.hint || "")
+                                color: Theme.textMuted
+                                wrapMode: Text.WordWrap
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.textCompact
+                            }
+
+                            Text {
+                                Layout.fillWidth: true
                                 Layout.alignment: Qt.AlignRight
                                 visible: messageItem.usageAvailable
                                 text: {
@@ -2208,7 +2221,32 @@ Rectangle {
                                 }
 
                                 ActionButton {
-                                    visible: messageItem.messageRole === "assistant" && (messageItem.state === "failed" || messageItem.state === "cancelled") && messageItem.index === conversationList.count - 1
+                                    objectName: "aiErrorSettingsAction"
+                                    visible: messageItem.recoveryActive && messageItem.recovery.settingsAvailable === true
+                                    text: qsTr("AI settings")
+                                    iconName: "settings"
+                                    variant: "primary"
+                                    accessibleName: qsTr("Open AI settings to fix the provider")
+                                    onClicked: pane.settingsRequested()
+                                }
+
+                                ActionButton {
+                                    objectName: "aiErrorNewConversationAction"
+                                    visible: messageItem.recoveryActive && messageItem.recovery.newConversationAvailable === true
+                                    text: qsTr("New conversation")
+                                    iconName: "plus"
+                                    variant: "primary"
+                                    accessibleName: qsTr("Start a new AI conversation")
+                                    onClicked: {
+                                        pane.historyExpanded = false;
+                                        pane.activityExpanded = false;
+                                        pane.controller.clearAiConversation();
+                                    }
+                                }
+
+                                ActionButton {
+                                    objectName: "aiErrorRetryAction"
+                                    visible: messageItem.recoveryActive && messageItem.recovery.retryAvailable === true
                                     text: qsTr("Retry")
                                     iconName: "refresh"
                                     accessibleName: qsTr("Retry the failed assistant response")

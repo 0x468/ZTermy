@@ -12,9 +12,12 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
+#include <QHostAddress>
 #include <QImage>
 #include <QSet>
 #include <QSignalSpy>
+#include <QTcpServer>
+#include <QTcpSocket>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QUrl>
@@ -155,6 +158,7 @@ private slots:
     void managesMcpServerConfiguration();
     void managesActionShortcutsAndDispatchContext();
     void restoresCompleteAgentPresentationFromHistory();
+    void exposesProviderFailureRecoveryActions();
     void managesMultipleLocalTerminalTabs();
     void managesPersistentTerminalWorkspaceSplits();
     void restoresSavedSshWorkspaceWithoutConnecting();
@@ -1157,6 +1161,64 @@ void AppControllerTests::restoresCompleteAgentPresentationFromHistory()
              qulonglong{680});
     QVERIFY(
         conversation->data(conversation->index(1), ztermy::ai::AiConversationModel::EstimatedCostKnownRole).toBool());
+}
+
+void AppControllerTests::exposesProviderFailureRecoveryActions()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const auto sessionState = std::make_shared<FakeLocalSessionState>();
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
+                                     directory.filePath(QStringLiteral("known_hosts.json")),
+                                     directory.filePath(QStringLiteral("settings.json")), [sessionState] {
+                                         return std::make_unique<FakeLocalTerminalSession>(sessionState);
+                                     });
+    QVERIFY(!controller.startLocalTerminal().isEmpty());
+
+    QTcpServer provider;
+    QVERIFY(provider.listen(QHostAddress::LocalHost, 0));
+    QObject::connect(&provider, &QTcpServer::newConnection, &controller, [&provider] {
+        while (QTcpSocket *socket = provider.nextPendingConnection())
+        {
+            QObject::connect(socket, &QTcpSocket::readyRead, socket, [socket] {
+                QByteArray request = socket->property("requestBuffer").toByteArray();
+                request += socket->readAll();
+                socket->setProperty("requestBuffer", request);
+                if (!request.contains("\r\n\r\n") || socket->property("responseSent").toBool())
+                {
+                    return;
+                }
+                socket->setProperty("responseSent", true);
+                const QByteArray body =
+                    R"({"error":{"message":"Invalid API key","type":"authentication_error","code":"invalid_api_key"}})";
+                QByteArray response = "HTTP/1.1 401 Unauthorized\r\nContent-Type: application/json\r\nConnection: "
+                                      "close\r\nContent-Length: ";
+                response += QByteArray::number(body.size());
+                response += "\r\n\r\n";
+                response += body;
+                socket->write(response);
+                socket->disconnectFromHost();
+            });
+        }
+    });
+
+    const QString endpoint = QStringLiteral("http://127.0.0.1:%1").arg(provider.serverPort());
+    QVERIFY(controller.saveAiProviderSettings(QStringLiteral("ollama"), endpoint, QStringLiteral("/api/chat"),
+                                              QStringLiteral("qwen3"), false, QStringLiteral("ask")));
+    QVERIFY(controller.sendAiMessage(QStringLiteral("Summarize the current terminal.")));
+    QTRY_COMPARE_WITH_TIMEOUT(controller.activeAiState(), QStringLiteral("error"), 5'000);
+
+    const QVariantMap recovery = controller.activeAiErrorRecovery();
+    QCOMPARE(recovery.value(QStringLiteral("code")).toString(), QStringLiteral("authentication"));
+    QVERIFY(recovery.value(QStringLiteral("messageAnchored")).toBool());
+    QVERIFY(recovery.value(QStringLiteral("retryAvailable")).toBool());
+    QVERIFY(recovery.value(QStringLiteral("settingsAvailable")).toBool());
+    QVERIFY(!recovery.value(QStringLiteral("newConversationAvailable")).toBool());
+    QVERIFY(recovery.value(QStringLiteral("hint")).toString().contains(QStringLiteral("API key")));
+
+    controller.clearAiConversation();
+    QCOMPARE(controller.activeAiState(), QStringLiteral("idle"));
+    QVERIFY(controller.activeAiErrorRecovery().isEmpty());
 }
 
 void AppControllerTests::managesMultipleLocalTerminalTabs()

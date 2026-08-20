@@ -133,6 +133,7 @@ covered by `application-settings`, `ai-permission-policy`,
 | One sidebar owns exactly one current terminal and exposes no cross-terminal enumeration or control | `src/application/AppController.*`, `src/application/ai/AiReadToolDispatcher.*`, `AiActionToolDispatcher.*` | `ai-read-tool-dispatcher`, `ai-action-tool-dispatcher`, `app-controller` | ADR 0086, 0093 |
 | Composer wraps words and unbroken content at compact width without a panel-wide horizontal scrollbar | `src/ui/qml/AiAssistantPane.qml`, `src/main.cpp` | `ui-layout-runtime-smoke` 260 px real-window contract | ADR 0078, 0093 |
 | Missing provider/model/credential state is actionable onboarding rather than a failed turn | `src/ui/qml/AiAssistantPane.qml`, `TerminalWorkbench.qml`, `Main.qml`, `src/main.cpp` | `ui-layout-runtime-smoke` setup visibility, accessibility, direct AI-settings navigation, reactive dismissal, and compact layout | ADR 0098 |
+| Typed provider failures expose relevant inline recovery without a duplicate global banner | `src/domain/ai/AiProviderRecoveryPolicy.*`, `src/application/AppController.*`, `src/ui/qml/AiAssistantPane.qml`, `src/main.cpp` | `ai-provider-retry-policy`, `app-controller`, `ui-layout-runtime-smoke` authentication recovery, accessibility, direct AI-settings navigation, and 260 px geometry | ADR 0099 |
 | Typed request compaction and provider-overflow retry expose one non-blocking, current-terminal status without mutating stored conversation text | `src/domain/ai/AiContextCompactor.*`, `src/application/ai/AiTurnRunner.*`, `src/application/AppController.*`, `src/ui/qml/AiAssistantPane.qml` | `ai-context-compactor`, `ai-turn-runner`, `app-controller`, `ui-layout-runtime-smoke` | ADR 0078, 0093; Netcatty comparison 2026-08-21 |
 | Long command output uses a live current-terminal artifact separate from the head/tail preview, with explicit per-command/terminal caps, gaps, expiration, and pageable middle recovery | `src/domain/terminal/CommandBlockStore.*`, `SemanticTerminalObserver.*`, `src/domain/ai/AiReadTools.*`, `src/application/ai/AiReadToolDispatcher.*`, `src/application/AppController.*` | `command-block-store`, `ai-read-tools`, `ai-read-tool-dispatcher`, `app-controller`; owner long-output acceptance | ADR 0094 |
 | Mainstream provider presets retain editable endpoints/models and preserve required compatible-protocol state across tool continuations | `src/core/config/ApplicationSettings.*`, `src/infrastructure/ai/ProviderRequestFactory.*`, `ProviderStreamMapper.*`, `src/domain/ai/AiProviderReplayCodec.*`, `src/application/ai/AiTurnRunner.*`, `src/ui/qml/SettingsPane.qml` | `application-settings`, `provider-request-factory`, `provider-stream-mapper`, `ai-provider-replay-codec`, `ai-turn-runner`, `app-controller`; live-provider owner acceptance | ADR 0079, 0093 |
@@ -151,10 +152,11 @@ covered by `application-settings`, `ai-permission-policy`,
   failures. Both reports pass the unified RC verifier with the final rebuilt
   release bundle.
 - **Current developer evidence:** the post-`0.3.11` dynamic Debug and static
-  Release candidates each pass 114/114 tests; full clang-tidy covers 245
-  translation units; QML/C++ format and the 1774/1774 translation catalog pass;
+  Release candidates each pass 115/115 tests; full clang-tidy covers 250
+  translation units; QML/C++ format and the 1782/1782 translation catalog pass;
   focused provider contracts cover Gemini/OpenRouter/Qwen endpoint, reasoning,
-  usage-only stream, and exact Gemini tool metadata continuation behavior;
+  usage-only stream, exact Gemini tool metadata continuation behavior, and
+  typed provider-failure recovery actions;
   the 260 px real-window contract verifies that the composer has no horizontal
   scrollbar and the compaction notice stays within its owning sidebar. The prior formal
   `0.3.8` evidence retains its 20-run scenario, 224-unit clang-tidy, static
