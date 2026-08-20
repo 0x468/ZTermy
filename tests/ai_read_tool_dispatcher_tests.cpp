@@ -107,7 +107,7 @@ void AiReadToolDispatcherTests::publishesStrictReadOnlyCatalog()
 {
     const auto definitions = AiReadToolDispatcher::definitions();
     constexpr std::array expected{
-        std::string_view{"read_session_info"},    std::string_view{"read_terminal"},
+        std::string_view{"read_terminal_info"},   std::string_view{"read_terminal"},
         std::string_view{"read_command_block"},   std::string_view{"read_command_output"},
         std::string_view{"list_sftp_directory"},  std::string_view{"list_shell_history"},
         std::string_view{"list_scripts"},         std::string_view{"read_script"},
@@ -132,7 +132,7 @@ void AiReadToolDispatcherTests::executesBoundedReads()
     const AiReadToolDispatcher dispatcher;
     const auto snapshots = sessions();
     const auto &snapshot = snapshots.front();
-    auto result = object(dispatcher.execute("read_session_info", "{}", snapshot));
+    auto result = object(dispatcher.execute("read_terminal_info", "{}", snapshot));
     QVERIFY(result.value("ok").toBool());
     const auto sessionInfo = result.value("session").toObject();
     QCOMPARE(sessionInfo.value("title").toString(), QStringLiteral("Test"));
@@ -206,10 +206,13 @@ void AiReadToolDispatcherTests::rejectsMalformedScopedAndUnknownRequests()
     QVERIFY(!result.value("ok").toBool());
     QCOMPARE(result.value("error").toObject().value("code").toString(), QStringLiteral("invalid_arguments"));
 
-    result = object(dispatcher.execute("read_session_info", R"({"session_id":"session-1"})", snapshot));
+    result = object(dispatcher.execute("read_terminal_info", R"({"session_id":"session-1"})", snapshot));
     QCOMPARE(result.value("error").toObject().value("code").toString(), QStringLiteral("invalid_arguments"));
 
     result = object(dispatcher.execute("list_sessions", "{}", snapshot));
+    QCOMPARE(result.value("error").toObject().value("code").toString(), QStringLiteral("unsupported"));
+
+    result = object(dispatcher.execute("read_session_info", "{}", snapshot));
     QCOMPARE(result.value("error").toObject().value("code").toString(), QStringLiteral("unsupported"));
 
     result = object(dispatcher.execute("run_command", "{}", snapshot));

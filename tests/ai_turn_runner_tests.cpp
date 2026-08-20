@@ -388,7 +388,7 @@ void AiTurnRunnerTests::executesReadToolAndContinuesTheSameTurn()
             "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\"}}\n\n"
             "data: "
             "{\"type\":\"response.output_item.added\",\"item\":{\"type\":\"function_call\",\"id\":\"item_1\",\"call_"
-            "id\":\"call_1\",\"name\":\"read_session_info\"}}\n\n"
+            "id\":\"call_1\",\"name\":\"read_terminal_info\"}}\n\n"
             "data: {\"type\":\"response.function_call_arguments.done\",\"item_id\":\"item_1\",\"arguments\":\"{}\"}\n\n"
             "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\"}}\n\n"});
     network.enqueue(FakeResponse{.payload =
@@ -440,7 +440,7 @@ void AiTurnRunnerTests::preservesCompatibleProviderToolMetadataAcrossTurn()
     network.enqueue(FakeResponse{
         .payload = "data: {\"id\":\"chat_1\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\","
                    "\"extra_content\":{\"google\":{\"thought_signature\":\"opaque-signature\"}},\"function\":{"
-                   "\"name\":\"read_session_info\",\"arguments\":\"{}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\n"
+                   "\"name\":\"read_terminal_info\",\"arguments\":\"{}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\n"
                    "data: [DONE]\n\n"});
     network.enqueue(FakeResponse{
         .payload =

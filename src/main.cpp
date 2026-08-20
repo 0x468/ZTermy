@@ -966,7 +966,7 @@ struct ResizeHitRuntimeCase
             markdownMessageId, QStringLiteral("layout-fixture-tool"), QStringLiteral("{\n  \"after_revision\": 12\n}"),
             QStringLiteral("{\n  \"ok\": true,\n  \"revision\": 13\n}"));
         const bool secondToolAdded = aiConversation->upsertAssistantToolActivity(
-            markdownMessageId, QStringLiteral("layout-fixture-tool-2"), QStringLiteral("read_session_info"),
+            markdownMessageId, QStringLiteral("layout-fixture-tool-2"), QStringLiteral("read_terminal_info"),
             QStringLiteral("Read current shell metadata"), QStringLiteral("failed"), QStringLiteral("timeout"), false,
             false);
         aiMarkdownFixturePrepared = markdownAdded && toolActivityAdded && toolDetailsAdded && secondToolAdded

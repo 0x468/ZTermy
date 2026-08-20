@@ -88,12 +88,12 @@ void ProviderRequestFactoryTests::preparesOllamaRequest()
     const AiGenerationRequest generation{
         .instructions = "Be concise.",
         .messages = {AiChatMessage{.content = "hello"}},
-        .tools = {AiToolDefinition{.name = "read_session_info",
+        .tools = {AiToolDefinition{.name = "read_terminal_info",
                                    .description = "Read the current terminal session.",
                                    .parametersJson = R"({"type":"object","properties":{}})"}},
         .toolHistory = {AiToolExchange{
-            .calls = {AiToolCall{.id = "call_1", .name = "read_session_info", .argumentsJson = "{}"}},
-            .outputs = {AiToolOutput{.callId = "call_1", .name = "read_session_info", .outputJson = "[]"}}}}};
+            .calls = {AiToolCall{.id = "call_1", .name = "read_terminal_info", .argumentsJson = "{}"}},
+            .outputs = {AiToolOutput{.callId = "call_1", .name = "read_terminal_info", .outputJson = "[]"}}}}};
     const auto prepared = ProviderRequestFactory::prepare(configuration, generation, {});
     QVERIFY(prepared.has_value());
     QCOMPARE(prepared->request.url().toString(), QStringLiteral("http://127.0.0.1:11434/api/chat"));
@@ -104,7 +104,7 @@ void ProviderRequestFactoryTests::preparesOllamaRequest()
     QCOMPARE(input.first().toObject().value("role").toString(), QStringLiteral("system"));
     const auto body = QJsonDocument::fromJson(prepared->body).object();
     QCOMPARE(body.value("tools").toArray().first().toObject().value("function").toObject().value("name").toString(),
-             QStringLiteral("read_session_info"));
+             QStringLiteral("read_terminal_info"));
     QCOMPARE(input.last().toObject().value("role").toString(), QStringLiteral("tool"));
 }
 

@@ -9,6 +9,30 @@
 > 后续 AI 工作永远只打磨 ztermy 自有的供应商驱动助手；竞品研究只能转化为
 > 原生 UI/UX 或能力改进，不能转化为外部 Agent 集成需求。
 
+## 节点 N30 — 当前终端能力驱动的原生工具目录（2026-08-21）
+
+**commit**: 本节点提交（见 git 历史）
+
+**范围**：
+
+1. 新增独立 `AiNativeToolCatalog`，每轮从所属终端的冻结读快照与实时能力标志构建一次工具目录，不再由 `AppController::sendAiMessage` 无条件堆叠全部原生工具；
+2. 仅在有实际数据或后端时公布命令块、长输出、历史、脚本、笔记、遥测、SFTP、端口转发与终端 frame 工具；断开的终端不再公布 PTY 写入，未连接的 SFTP 浏览器不再公布远程目录/文件读取；
+3. SFTP 传输仅对已保存的 SSH Profile 公布；端口转发读快照只包含当前 Profile 的规则，不再把其它主机的规则作为当前终端证据；
+4. 模型可见的 `read_session_info` 更名为 `read_terminal_info`，旧名称不保留兼容别名；`list_sessions`、终端 ID 与重连代际继续由负向测试永久禁止；
+5. ADR 0095 固化“工具存在即当前可用”的合同，并记录 Warp Full Terminal Use、VS Code shell-integration quality 与 Netcatty 当前作用域工具构造的产品共性；外部 Agent 仍仅是历史研究，永不集成。
+
+**验证**：聚焦 Debug 的 `ai-native-tool-catalog`、`ai-read-tool-dispatcher`、
+`provider-request-factory`、`ai-turn-runner`、`app-controller` 5/5 通过；MSVC 动态 Debug
+和静态 Release 完整构建通过，两套全量测试均为 `115/115`。C++ 格式与全项目
+clang-tidy（warnings-as-errors）、48 个 QML 文件的 `qmlformat`/`qmllint`、1777/1777
+翻译目录全部通过。便携 ZIP 与 MSI 已重新生成，SHA-256 分别为
+`a1536f1afd97772f229e1f9298c769dfee6e8cd86fe68d2ca1b38723f54f28e8` 和
+`5a2ba896654a0ba4ecc057e4a28801be6539db3aa352298f088552e9adeab4f0`，checksummed
+release bundle 组装成功。本机 WiX ICE 仍因 Windows Installer Service 不可访问返回
+已知的 `WIX0217/217`；显式跳过 ICE 后，MSI 反编译结构合同全部通过。最终 V3 RC
+证据验证器仍要求重新生成 schema 2 的 2 小时 AI 并发报告和 8 小时终端稳定性报告，
+旧 schema 1 报告不会被当作本节点的新证据。
+
 ## 节点 N29 — 供应商错误可诊断性与统一分类（2026-08-21）
 
 **commit**: 本节点提交（见 git 历史）

@@ -53,6 +53,11 @@ evaluations serve different purposes and are reported separately.
       status-unknown modes.
 - [x] Read tools reject wrong session, stale generation, missing block, invalid
       range, oversized request, and unavailable capability.
+- [x] The provider-visible native tool catalog is frozen per turn and includes
+      only actionable capabilities of the owning terminal. It rejects the old
+      `read_session_info` alias, never exposes `list_sessions` or terminal IDs,
+      hides disconnected writes and closed-SFTP tools, and filters port
+      forwarding to the current saved SSH profile.
 - [x] Provider errors distinguish user-action and transient classes; 429 honors
       `Retry-After`; capped jittered backoff never replays a side-effecting tool.
 - [x] HTTP and mid-stream provider failures preserve bounded provider prose,
@@ -426,6 +431,12 @@ only when it passes the same evidence and action contract.
       missing-signature error; OpenRouter/Qwen must report non-zero usage when
       supplied, expose provider reasoning only when returned, and never target
       another terminal.
+- [ ] With AI debug tracing enabled, compare a new turn before/after opening the
+      current SSH terminal's SFTP browser, receiving its first telemetry sample,
+      and disconnecting/reconnecting it. Only the next turn changes catalog:
+      SFTP/telemetry tools appear when usable, PTY writes disappear while
+      disconnected, and no tool/schema/result contains another tab or Profile's
+      port-forwarding rule.
 - [ ] AI panel: open/close/toggle, left/right workbench, resize, narrow mode,
       context chips/remove/pin/preview, evidence badges, streaming/cancel/retry,
       copy, usage/estimated cost, audit view, keyboard-only, focus

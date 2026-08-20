@@ -227,7 +227,7 @@ AiReadToolDispatcher::AiReadToolDispatcher(const AiReadTools tools) : m_tools(to
 std::vector<AiToolDefinition> AiReadToolDispatcher::definitions()
 {
     return {
-        {.name = "read_session_info",
+        {.name = "read_terminal_info",
          .description = "Read bounded metadata for the current terminal.",
          .parametersJson = R"({"type":"object","properties":{},"additionalProperties":false})"},
         {.name = "read_terminal",
@@ -301,7 +301,7 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
         return failure(QStringLiteral("invalid_arguments"), QStringLiteral("Tool arguments must be a JSON object."));
     }
     const auto object = arguments.object();
-    const bool supported = toolName == "read_session_info" || toolName == "read_terminal"
+    const bool supported = toolName == "read_terminal_info" || toolName == "read_terminal"
                            || toolName == "read_command_block" || toolName == "read_command_output"
                            || toolName == "list_sftp_directory" || toolName == "list_shell_history"
                            || toolName == "list_scripts" || toolName == "read_script" || toolName == "list_notes"
@@ -311,7 +311,7 @@ std::string AiReadToolDispatcher::execute(const std::string_view toolName, const
         return failure(QStringLiteral("unsupported"), QStringLiteral("The requested read tool is not supported."));
     }
     const auto *snapshot = &session;
-    if (toolName == "read_session_info")
+    if (toolName == "read_terminal_info")
     {
         if (!object.isEmpty())
         {

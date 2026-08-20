@@ -591,6 +591,8 @@ add_library(ztermy_ai_application STATIC
     src/application/ai/AiConversationModel.h
     src/application/ai/AiConversationHistoryModel.cpp
     src/application/ai/AiConversationHistoryModel.h
+    src/application/ai/AiNativeToolCatalog.cpp
+    src/application/ai/AiNativeToolCatalog.h
     src/application/ai/AiNoteReadTool.cpp
     src/application/ai/AiNoteReadTool.h
     src/application/ai/AiPrivacyDiagnostics.cpp
@@ -3596,6 +3598,27 @@ if(BUILD_TESTING)
 
     add_test(NAME ai-read-tool-dispatcher COMMAND ztermy_ai_read_tool_dispatcher_tests)
 
+    qt_add_executable(ztermy_ai_native_tool_catalog_tests
+        tests/ai_native_tool_catalog_tests.cpp
+    )
+
+    target_compile_features(ztermy_ai_native_tool_catalog_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ai_native_tool_catalog_tests PRIVATE
+        ztermy_ai_application
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ai_native_tool_catalog_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ai-native-tool-catalog COMMAND ztermy_ai_native_tool_catalog_tests)
+
     qt_add_executable(ztermy_ai_context_broker_tests
         tests/ai_context_broker_tests.cpp
     )
@@ -4104,6 +4127,7 @@ if(BUILD_TESTING)
             ztermy_ai_user_skill_catalog_tests
             ztermy_ai_user_skill_tool_tests
             ztermy_ai_read_tool_dispatcher_tests
+            ztermy_ai_native_tool_catalog_tests
             ztermy_ai_context_broker_tests
             ztermy_ai_read_tools_tests
             ztermy_ai_context_redactor_tests

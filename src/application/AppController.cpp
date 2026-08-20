@@ -1,5 +1,6 @@
 #include "application/AppController.h"
 
+#include "application/ai/AiNativeToolCatalog.h"
 #include "application/ai/AiPrivacyDiagnostics.h"
 #include "application/ai/AiSystemPromptBuilder.h"
 #include "application/ai/AiTerminalFrameTool.h"
@@ -9592,6 +9593,10 @@ ai::AiTerminalReadSnapshot AppController::aiReadSnapshot(const TerminalTab &tab)
     operations.portForwarding.reserve(m_portForwardingRules.size());
     for (const auto &rule : m_portForwardingRules)
     {
+        if (tab.sourceProfileId.isEmpty() || rule.profileId != utf8String(tab.sourceProfileId))
+        {
+            continue;
+        }
         const auto profile = std::ranges::find(m_profiles, rule.profileId, &ssh::SshProfile::id);
         const PortForwardingRuntime *runtime = findPortForwardingRuntime(rule.id);
         const forwarding::PortForwardingJobSnapshot forwardingSnapshot =
@@ -10017,38 +10022,27 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
         selectedSkillNames.push_back(utf8String(id));
     }
     instructions += ai::AiUserSkillTool::selectedInstructions(*turnSkills, selectedSkillNames);
-    auto toolDefinitions = ai::AiReadToolDispatcher::definitions();
-    toolDefinitions.push_back(ai::AiTerminalOutputTool::definition());
-    toolDefinitions.insert(toolDefinitions.end(), userSkillDefinitions.begin(), userSkillDefinitions.end());
+    const auto turnReadSnapshot = std::make_shared<const ai::AiTerminalReadSnapshot>(aiReadSnapshot(tab));
     const bool actionsAvailable = !commandRequest && permissionMode != ai::AiPermissionMode::readOnly;
-    if (actionsAvailable)
-    {
-        auto actionDefinitions = ai::AiActionToolDispatcher::definitions();
-        toolDefinitions.insert(toolDefinitions.end(), std::make_move_iterator(actionDefinitions.begin()),
-                               std::make_move_iterator(actionDefinitions.end()));
-    }
-    terminal::SemanticTerminalSnapshot semanticSnapshot;
-    if (tab.semanticObserver)
-    {
-        semanticSnapshot = tab.semanticObserver->snapshot();
-    }
-    const auto commandWaitCapability = semanticCapability(semanticSnapshot);
-    if (ai::AiWaitCommandTool::supportsLifecycleWait(commandWaitCapability))
-    {
-        toolDefinitions.push_back(ai::AiWaitCommandTool::definition());
-    }
-    toolDefinitions.push_back(ai::AiTerminalFrameTool::readDefinition());
-    toolDefinitions.push_back(ai::AiTerminalFrameTool::waitDefinition());
-    toolDefinitions.push_back(ai::AiSftpReadTool::definition());
-    toolDefinitions.push_back(ai::AiSftpListTool::definition());
-    toolDefinitions.push_back(ai::AiNoteReadTool::definition());
+    const ai::AiNativeToolCapabilities nativeCapabilities{
+        .terminalBufferAvailable = tab.ssh != nullptr || tab.local != nullptr,
+        .terminalFrameAvailable = tab.aiFrameTracker != nullptr,
+        .actionsAllowed = actionsAvailable,
+        .terminalWriteAvailable = tab.running && (tab.ssh != nullptr || tab.local != nullptr),
+        .commandWaitAvailable = ai::AiWaitCommandTool::supportsLifecycleWait(turnReadSnapshot->capability),
+        .sftpBrowserAvailable = tab.sftpSession != nullptr && tab.sftpSession->running(),
+        .sftpTransferAvailable =
+            tab.kind == TerminalTabKind::Ssh && !tab.sourceProfileId.isEmpty() && m_transferManager != nullptr,
+        .remoteTelemetryAvailable = tab.telemetrySample.has_value(),
+    };
+    auto toolDefinitions = ai::AiNativeToolCatalog::build(*turnReadSnapshot, nativeCapabilities);
+    toolDefinitions.insert(toolDefinitions.end(), userSkillDefinitions.begin(), userSkillDefinitions.end());
     if (actionsAvailable)
     {
         auto mcpDefinitions = m_mcpRuntime.definitions();
         toolDefinitions.insert(toolDefinitions.end(), std::make_move_iterator(mcpDefinitions.begin()),
                                std::make_move_iterator(mcpDefinitions.end()));
     }
-    const auto turnReadSnapshot = std::make_shared<const ai::AiTerminalReadSnapshot>(aiReadSnapshot(tab));
     const auto turnTarget = std::make_shared<const ai::AiSessionTarget>(
         ai::AiSessionTarget{.sessionId = utf8String(tab.id), .sessionGeneration = tab.reconnectGeneration});
     ai::AiGenerationRequest generation{.instructions = std::move(instructions),

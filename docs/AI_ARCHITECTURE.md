@@ -2,6 +2,24 @@
 
 Status: accepted architecture baseline for `0.3.x`
 
+## Permanent product boundary
+
+ztermy owns exactly one built-in, provider-backed terminal assistant. Codex,
+OpenCode, Claude Code, and every other external Agent or harness product must
+never be integrated, detected, installed, launched, bridged, embedded, exposed
+through a selector, or supported through a compatibility/plugin layer. This is
+a permanent, version-independent owner decision, not deferred work and not a
+candidate for a future roadmap, prototype, feature flag, or architectural
+extension point.
+
+Publicly observable interaction patterns from those products may be studied as
+UX research only. Any useful behavior must be implemented natively inside
+ztermy's provider-backed assistant, with its tools scoped to the terminal tab
+that owns the assistant sidebar. Supporting an ordinary model-provider API,
+including an OpenAI-compatible API, does not permit integration with the Agent
+product built by that provider. The normative decision and rejection test are
+recorded in [ADR 0093](adr/0093-built-in-provider-agent-only.md).
+
 ## Current reusable seams
 
 V2 already provides most of the native execution substrate:
@@ -242,11 +260,18 @@ and `QNetworkReply::readyRead` feeds an incremental SSE/NDJSON parser. Provider
 code never blocks on a synchronous HTTP call and never exposes `QJsonObject` to
 the domain or QML layers.
 
-## Initial tool catalog
+## Capability-filtered current-terminal tool catalog
+
+The provider sees only tools that are actionable for the sidebar's owning
+terminal at the start of the turn. A closed SFTP browser does not advertise
+SFTP reads; missing history, scripts, notes, telemetry, or current-profile port
+forwarding do not advertise empty resource tools; a disconnected terminal does
+not advertise PTY writes. The catalog never accepts a provider-visible terminal
+identifier and cannot enumerate another tab. See ADR 0095.
 
 | Tool | Mode | Milestone | Backing service |
 | --- | --- | --- | --- |
-| `read_session_info` | Read | 0.3.0 | active tab/session state |
+| `read_terminal_info` | Read | 0.3.0 | owning terminal state |
 | `read_terminal` | Read | 0.3.0 | command store/frame source |
 | `read_command_block` | Read | 0.3.0 | command store |
 | `run_command` | Write | 0.3.1 | existing input queue + block lifecycle |
