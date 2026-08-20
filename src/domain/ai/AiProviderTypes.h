@@ -62,6 +62,18 @@ struct AiImageAttachment final
     [[nodiscard]] friend bool operator==(const AiImageAttachment &, const AiImageAttachment &) = default;
 };
 
+struct AiContextAttachmentSummary final
+{
+    std::string title;
+    std::string kind;
+    std::string quality;
+    bool redacted = false;
+    bool truncated = false;
+
+    [[nodiscard]] friend bool operator==(const AiContextAttachmentSummary &,
+                                         const AiContextAttachmentSummary &) = default;
+};
+
 struct AiChatMessage final
 {
     AiMessageRole role = AiMessageRole::user;

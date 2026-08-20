@@ -265,8 +265,9 @@ becomes conversation retention.
 - provide a keyboard-first built-in slash-command picker for conversation,
   history, context attachment, explanation, and command-generation actions;
 - preserve explicit selection/recent-command evidence across follow-up turns,
-  with a clearly labelled approximate fallback for shells without semantic
-  command marks.
+  keep bounded source summaries visibly bound to the originating user message
+  across encrypted-history restore, and use a clearly labelled approximate
+  fallback for shells without semantic command marks (`ADR 0097`).
 
 ### 0.3.10 — explicit context and reusable skills
 

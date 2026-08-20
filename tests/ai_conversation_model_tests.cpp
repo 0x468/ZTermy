@@ -9,6 +9,7 @@
 namespace
 {
 
+using ztermy::ai::AiContextAttachmentSummary;
 using ztermy::ai::AiConversationLimits;
 using ztermy::ai::AiConversationModel;
 using ztermy::ai::AiConversationTranscriptEntry;
@@ -42,6 +43,7 @@ private slots:
     void restoresOnlyBoundedTranscriptEntries();
     void preservesHiddenAgentEvidenceWithoutAddingVisibleRows();
     void preservesAgentEvidenceChronology();
+    void bindsContextAttachmentsToTheUserMessage();
     void exposesDeduplicatesAndRestoresWebSources();
     void preservesBoundedProviderReplayAcrossRestore();
     void preservesAgentTurnPresentationAcrossRestore();
@@ -274,6 +276,63 @@ void AiConversationModelTests::preservesAgentEvidenceChronology()
     AiConversationModel restored;
     QVERIFY(restored.restoreTranscript(expected));
     QCOMPARE(restored.transcript(), expected);
+}
+
+void AiConversationModelTests::bindsContextAttachmentsToTheUserMessage()
+{
+    AiConversationModel model;
+    const std::vector summaries{
+        AiContextAttachmentSummary{.title = "Terminal command: df -h", .kind = "command", .quality = "rich"},
+        AiContextAttachmentSummary{.title = "deployment.md",
+                                   .kind = "file",
+                                   .quality = "none",
+                                   .redacted = true,
+                                   .truncated = true}};
+    const auto userId = model.appendUserMessage(QStringLiteral("Explain this output"), {}, summaries);
+    const auto assistantId = model.beginAssistantMessage();
+    QVERIFY(model.appendAssistantDelta(assistantId, QStringLiteral("The disk is nearly full.")));
+    QVERIFY(model.appendEvidenceMessageAfter(userId, QStringLiteral("bounded terminal context")));
+    QVERIFY(!model.appendEvidenceMessageAfter(userId + assistantId + 100, QStringLiteral("invalid anchor")));
+    QVERIFY(model.completeAssistantMessage(assistantId));
+
+    const QVariantList visible = model.data(model.index(0), AiConversationModel::ContextAttachmentsRole).toList();
+    QCOMPARE(visible.size(), 2);
+    QCOMPARE(visible.at(0).toMap().value(QStringLiteral("title")).toString(),
+             QStringLiteral("Terminal command: df -h"));
+    QCOMPARE(visible.at(0).toMap().value(QStringLiteral("kind")).toString(), QStringLiteral("command"));
+    QVERIFY(visible.at(1).toMap().value(QStringLiteral("redacted")).toBool());
+    QVERIFY(visible.at(1).toMap().value(QStringLiteral("truncated")).toBool());
+    QVERIFY(model.data(model.index(1), AiConversationModel::ContextAttachmentsRole).toList().isEmpty());
+
+    const auto transcript = model.transcript();
+    QCOMPARE(transcript.size(), std::size_t{3});
+    QCOMPARE(transcript.at(0).role, AiConversationTranscriptRole::user);
+    QCOMPARE(transcript.at(0).contextAttachments, summaries);
+    QCOMPARE(transcript.at(1).role, AiConversationTranscriptRole::evidence);
+    QCOMPARE(transcript.at(1).content, std::string("bounded terminal context"));
+    QCOMPARE(transcript.at(2).role, AiConversationTranscriptRole::assistant);
+
+    const auto providerMessages = model.providerMessagesWithEvidence();
+    QCOMPARE(providerMessages.size(), std::size_t{3});
+    QCOMPARE(providerMessages.at(0).content, std::string("Explain this output"));
+    QCOMPARE(providerMessages.at(1).content, std::string("bounded terminal context"));
+    QCOMPARE(providerMessages.at(2).content, std::string("The disk is nearly full."));
+
+    AiConversationModel restored;
+    QVERIFY(restored.restoreTranscript(transcript));
+    QCOMPARE(restored.transcript(), transcript);
+    QCOMPARE(restored.data(restored.index(0), AiConversationModel::ContextAttachmentsRole).toList(), visible);
+
+    auto invalid = transcript;
+    invalid.front().contextAttachments.front().title.clear();
+    QVERIFY(!restored.restoreTranscript(invalid));
+    QCOMPARE(restored.transcript(), transcript);
+
+    std::vector<AiContextAttachmentSummary> untrustedSummaries(20, summaries.front());
+    untrustedSummaries.front().title.clear();
+    AiConversationModel bounded;
+    static_cast<void>(bounded.appendUserMessage(QStringLiteral("Bound inputs"), {}, std::move(untrustedSummaries)));
+    QCOMPARE(bounded.data(bounded.index(0), AiConversationModel::ContextAttachmentsRole).toList().size(), 16);
 }
 
 void AiConversationModelTests::exposesDeduplicatesAndRestoresWebSources()

@@ -125,6 +125,7 @@ private slots:
     void exportsPlaintextAndDeletesStoreAndKey();
     void recoversFromBackupOnAuthenticationFailure();
     void preservesUpdatesAcrossStoreInstances();
+    void roundTripsAndValidatesContextAttachments();
     void roundTripsAndValidatesWebSources();
     void roundTripsAndValidatesProviderReplay();
     void roundTripsAgentTurnPresentation();
@@ -289,6 +290,32 @@ void AiConversationStoreTests::preservesUpdatesAcrossStoreInstances()
     QVERIFY(loaded.has_value());
     QCOMPARE(loaded->size(), 3ULL);
     QVERIFY(!QFileInfo::exists(path + QStringLiteral(".lock")));
+}
+
+void AiConversationStoreTests::roundTripsAndValidatesContextAttachments()
+{
+    QTemporaryDir directory;
+    TestVault vault;
+    ai::AiConversationStore store(directory.filePath(QStringLiteral("history.enc")), vault);
+    auto value = conversation(QStringLiteral("context"), QStringLiteral("question"));
+    value.messages.front().contextAttachments = {
+        {.title = "Terminal command: df -h", .kind = "command", .quality = "rich"},
+        {.title = "deployment.md", .kind = "file", .quality = "none", .redacted = true, .truncated = true}};
+    QVERIFY(store.upsert(value).has_value());
+    const auto loaded = store.load();
+    QVERIFY(loaded.has_value());
+    QCOMPARE(loaded->size(), std::size_t{1});
+    QCOMPARE(loaded->front(), value);
+
+    value.messages.at(1).contextAttachments = value.messages.front().contextAttachments;
+    const auto assistantAttachments = store.upsert(value);
+    QVERIFY(!assistantAttachments.has_value());
+    QCOMPARE(assistantAttachments.error(), ai::AiConversationStoreError::invalidData);
+    value.messages.at(1).contextAttachments.clear();
+    value.messages.front().contextAttachments.front().title.clear();
+    const auto invalidTitle = store.upsert(value);
+    QVERIFY(!invalidTitle.has_value());
+    QCOMPARE(invalidTitle.error(), ai::AiConversationStoreError::invalidData);
 }
 
 void AiConversationStoreTests::roundTripsAndValidatesWebSources()

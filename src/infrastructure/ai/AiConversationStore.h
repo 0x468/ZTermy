@@ -30,6 +30,7 @@ struct AiStoredMessage final
     QString costCatalogDate;
     bool longContextRates = false;
     bool truncated = false;
+    std::vector<AiContextAttachmentSummary> contextAttachments;
 
     [[nodiscard]] friend bool operator==(const AiStoredMessage &, const AiStoredMessage &) = default;
 };

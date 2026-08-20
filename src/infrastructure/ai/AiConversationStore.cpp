@@ -39,6 +39,10 @@ constexpr std::size_t maximumSourceUrlBytes = std::size_t{8} * 1024;
 constexpr std::size_t maximumSourceTitleBytes = 1024;
 constexpr std::size_t maximumSourceCitationBytes = std::size_t{4} * 1024;
 constexpr std::size_t maximumToolActivitiesPerMessage = 32;
+constexpr std::size_t maximumContextAttachmentsPerMessage = 16;
+constexpr std::size_t maximumContextAttachmentTitleBytes = 1024;
+constexpr std::size_t maximumContextAttachmentKindBytes = 64;
+constexpr std::size_t maximumContextAttachmentQualityBytes = 64;
 constexpr std::size_t maximumToolActivityIdBytes = 256;
 constexpr std::size_t maximumToolActivityNameBytes = 128;
 constexpr std::size_t maximumToolActivitySummaryBytes = 4096;
@@ -92,6 +96,24 @@ struct LoadedStore final
                  + activity.resultJson.size() + activity.state.size() + activity.resultCode.size();
     }
     return bytes;
+}
+
+[[nodiscard]] std::size_t
+contextAttachmentStorageBytes(const std::span<const AiContextAttachmentSummary> attachments) noexcept
+{
+    std::size_t bytes = 0;
+    for (const auto &attachment : attachments)
+    {
+        bytes += attachment.title.size() + attachment.kind.size() + attachment.quality.size();
+    }
+    return bytes;
+}
+
+[[nodiscard]] bool validContextAttachment(const AiContextAttachmentSummary &attachment) noexcept
+{
+    return !attachment.title.empty() && attachment.title.size() <= maximumContextAttachmentTitleBytes
+           && !attachment.kind.empty() && attachment.kind.size() <= maximumContextAttachmentKindBytes
+           && attachment.quality.size() <= maximumContextAttachmentQualityBytes;
 }
 
 [[nodiscard]] bool validToolActivity(const AiToolActivity &activity) noexcept
@@ -323,7 +345,8 @@ decrypt(const QByteArray &ciphertext, const QByteArray &tag, const std::string_v
                                         + static_cast<std::size_t>(message.reasoning.toUtf8().size())
                                         + toolActivityStorageBytes(message.toolActivities)
                                         + sourceStorageBytes(message.sources) + message.providerReplayJson.size()
-                                        + static_cast<std::size_t>(message.costCatalogDate.toUtf8().size());
+                                        + static_cast<std::size_t>(message.costCatalogDate.toUtf8().size())
+                                        + contextAttachmentStorageBytes(message.contextAttachments);
         return validRole && std::cmp_less_equal(message.text.toUtf8().size(), limits.maximumMessageBytes)
                && (assistant
                    || (message.reasoning.isEmpty() && message.toolActivities.empty() && message.sources.empty()
@@ -335,6 +358,9 @@ decrypt(const QByteArray &ciphertext, const QByteArray &tag, const std::string_v
                && message.toolActivities.size() <= maximumToolActivitiesPerMessage
                && std::ranges::all_of(message.toolActivities, validToolActivity)
                && message.sources.size() <= maximumSourcesPerMessage
+               && message.contextAttachments.size() <= maximumContextAttachmentsPerMessage
+               && (message.role == QStringLiteral("user") || message.contextAttachments.empty())
+               && std::ranges::all_of(message.contextAttachments, validContextAttachment)
                && std::ranges::all_of(message.sources,
                                       [](const AiWebSource &source) {
                                           return validSourceUrl(source.url)
@@ -450,6 +476,20 @@ decrypt(const QByteArray &ciphertext, const QByteArray &tag, const std::string_v
             {
                 value.insert(QStringLiteral("truncated"), true);
             }
+            if (!message.contextAttachments.empty())
+            {
+                QJsonArray attachments;
+                for (const auto &attachment : message.contextAttachments)
+                {
+                    attachments.push_back(
+                        QJsonObject{{QStringLiteral("title"), QString::fromUtf8(attachment.title)},
+                                    {QStringLiteral("kind"), QString::fromUtf8(attachment.kind)},
+                                    {QStringLiteral("quality"), QString::fromUtf8(attachment.quality)},
+                                    {QStringLiteral("redacted"), attachment.redacted},
+                                    {QStringLiteral("truncated"), attachment.truncated}});
+                }
+                value.insert(QStringLiteral("contextAttachments"), attachments);
+            }
             messages.push_back(value);
         }
         values.push_back(
@@ -507,6 +547,35 @@ parsePlaintext(const QByteArray &plaintext, const AiConversationStoreLimits &lim
                                    .costCatalogDate = message.value(QStringLiteral("costCatalogDate")).toString(),
                                    .longContextRates = message.value(QStringLiteral("longContextRates")).toBool(),
                                    .truncated = message.value(QStringLiteral("truncated")).toBool()};
+            const QJsonValue contextAttachmentsValue = message.value(QStringLiteral("contextAttachments"));
+            if (!contextAttachmentsValue.isUndefined() && !contextAttachmentsValue.isArray())
+            {
+                return std::unexpected(AiConversationStoreError::invalidData);
+            }
+            const auto contextAttachments = contextAttachmentsValue.toArray();
+            stored.contextAttachments.reserve(static_cast<std::size_t>(contextAttachments.size()));
+            for (const auto &attachmentValue : contextAttachments)
+            {
+                if (!attachmentValue.isObject())
+                {
+                    return std::unexpected(AiConversationStoreError::invalidData);
+                }
+                const auto attachment = attachmentValue.toObject();
+                if (!attachment.value(QStringLiteral("title")).isString()
+                    || !attachment.value(QStringLiteral("kind")).isString()
+                    || !attachment.value(QStringLiteral("quality")).isString()
+                    || !attachment.value(QStringLiteral("redacted")).isBool()
+                    || !attachment.value(QStringLiteral("truncated")).isBool())
+                {
+                    return std::unexpected(AiConversationStoreError::invalidData);
+                }
+                stored.contextAttachments.push_back(
+                    {.title = attachment.value(QStringLiteral("title")).toString().toUtf8().toStdString(),
+                     .kind = attachment.value(QStringLiteral("kind")).toString().toUtf8().toStdString(),
+                     .quality = attachment.value(QStringLiteral("quality")).toString().toUtf8().toStdString(),
+                     .redacted = attachment.value(QStringLiteral("redacted")).toBool(),
+                     .truncated = attachment.value(QStringLiteral("truncated")).toBool()});
+            }
             const auto activities = message.value(QStringLiteral("toolActivities")).toArray();
             stored.toolActivities.reserve(static_cast<std::size_t>(activities.size()));
             for (const auto &activityValue : activities)

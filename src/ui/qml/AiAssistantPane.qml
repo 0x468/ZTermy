@@ -1477,6 +1477,7 @@ Rectangle {
                     required property bool hasCommandSuggestion
                     required property var toolActivities
                     required property var imageAttachments
+                    required property var contextAttachments
                     required property var sources
                     required property string toolEvidenceState
                     required property int toolEvidenceFailedCount
@@ -1491,7 +1492,7 @@ Rectangle {
 
                         anchors.right: messageItem.messageRole === "user" ? parent.right : undefined
                         anchors.left: messageItem.messageRole === "user" ? undefined : parent.left
-                        width: messageItem.messageRole === "user" ? Math.min(parent.width * 0.92, Math.max(150, messageText.implicitWidth + 24)) : parent.width
+                        width: messageItem.messageRole === "user" ? Math.min(parent.width * 0.92, Math.max(150, messageText.implicitWidth + 24, messageItem.contextAttachments.length > 0 ? 240 : 0)) : parent.width
                         implicitHeight: messageColumn.implicitHeight + 18
                         radius: Theme.radiusPanel
                         color: messageItem.messageRole === "user" ? Theme.selectedBackground : "transparent"
@@ -1762,6 +1763,88 @@ Rectangle {
                                                     }
                                                 }
                                             }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Flow {
+                                id: sentContextFlow
+
+                                objectName: "aiMessageContextAttachments"
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: visible ? implicitHeight : 0
+                                visible: messageItem.messageRole === "user" && messageItem.contextAttachments.length > 0
+                                spacing: 5
+                                Accessible.role: Accessible.StaticText
+                                Accessible.name: qsTr("Attached context · %n item(s)", "", messageItem.contextAttachments.length)
+
+                                Repeater {
+                                    model: messageItem.contextAttachments
+
+                                    delegate: Rectangle {
+                                        id: sentContextChip
+
+                                        required property var modelData
+                                        objectName: "aiMessageContextAttachment"
+                                        width: Math.min(190, Math.max(92, sentContextTitle.implicitWidth + (sentContextChip.modelData.redacted || sentContextChip.modelData.truncated ? 48 : 30)))
+                                        height: 26
+                                        radius: height / 2
+                                        color: Theme.controlBackground
+                                        border.color: Theme.border
+                                        Accessible.role: Accessible.StaticText
+                                        Accessible.name: qsTr("Attached context: %1").arg(modelData.title)
+
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.leftMargin: 8
+                                            anchors.rightMargin: 8
+                                            spacing: 5
+
+                                            AppIcon {
+                                                Layout.preferredWidth: 13
+                                                Layout.preferredHeight: 13
+                                                name: sentContextChip.modelData.kind === "file" ? "file" : sentContextChip.modelData.kind === "selection" ? "copy" : "terminal"
+                                                color: Theme.accent
+                                            }
+
+                                            Text {
+                                                id: sentContextTitle
+
+                                                Layout.fillWidth: true
+                                                Layout.minimumWidth: 0
+                                                text: sentContextChip.modelData.title
+                                                color: Theme.textSoft
+                                                elide: Text.ElideMiddle
+                                                font.family: Theme.uiFont
+                                                font.pixelSize: Theme.textCompact
+                                            }
+
+                                            AppIcon {
+                                                Layout.preferredWidth: 12
+                                                Layout.preferredHeight: 12
+                                                visible: sentContextChip.modelData.redacted || sentContextChip.modelData.truncated
+                                                name: "warning"
+                                                color: Theme.warning
+                                            }
+                                        }
+
+                                        AppToolTip {
+                                            hoverTarget: sentContextHover
+                                            text: {
+                                                const details = [];
+                                                if (sentContextChip.modelData.quality && sentContextChip.modelData.quality !== "none")
+                                                    details.push(sentContextChip.modelData.quality);
+                                                if (sentContextChip.modelData.redacted)
+                                                    details.push(qsTr("redacted"));
+                                                if (sentContextChip.modelData.truncated)
+                                                    details.push(qsTr("truncated"));
+                                                return details.length > 0 ? sentContextChip.modelData.title + " · " + details.join(" · ") : sentContextChip.modelData.title;
+                                            }
+                                        }
+
+                                        HoverHandler {
+                                            id: sentContextHover
                                         }
                                     }
                                 }

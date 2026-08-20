@@ -951,7 +951,11 @@ struct ResizeHitRuntimeCase
     bool aiMarkdownFixturePrepared = false;
     if (aiConversation != nullptr)
     {
-        static_cast<void>(aiConversation->appendUserMessage(QStringLiteral("Summarize the terminal state.")));
+        static_cast<void>(aiConversation->appendUserMessage(
+            QStringLiteral("Summarize the terminal state."), {},
+            std::vector<ztermy::ai::AiContextAttachmentSummary>{
+                {.title = "Terminal command: Get-Location", .kind = "command", .quality = "rich"},
+                {.title = "deployment-notes.md", .kind = "file", .quality = "none", .truncated = true}}));
         const std::uint64_t markdownMessageId = aiConversation->beginAssistantMessage();
         const bool markdownAdded = aiConversation->appendAssistantDelta(
             markdownMessageId,
@@ -990,13 +994,22 @@ struct ResizeHitRuntimeCase
     const bool aiToolEvidenceAccessible =
         verifyAccessibleButton(rootObject, "aiToolEvidenceNotice",
                                "Some tool results were unavailable. This answer may be based on partial evidence.");
+    QQuickItem *aiMessageContextAttachments = visualQuickItem(rootObject, "aiMessageContextAttachment");
+    QAccessibleInterface *aiMessageContextInterface =
+        aiMessageContextAttachments == nullptr ? nullptr
+                                               : QAccessible::queryAccessibleInterface(aiMessageContextAttachments);
+    const bool aiMessageContextAccessible =
+        aiMessageContextInterface != nullptr && aiMessageContextInterface->role() == QAccessible::StaticText
+        && aiMessageContextInterface->text(QAccessible::Name)
+               == QStringLiteral("Attached context: Terminal command: Get-Location");
     const bool aiContextAccessible =
         aiContextInterface != nullptr && aiContextInterface->role() == QAccessible::Button
         && aiContextInterface->text(QAccessible::Name)
                == QStringLiteral("Request context · %1 item(s)").arg(controller.activeAiContextItems().size());
     const bool aiAccessibilityPassed = aiLauncherAccessible && aiToolbarAccessible && aiHistoryAccessible
                                        && aiNewConversationAccessible && aiMoreAccessible && aiSendAccessible
-                                       && aiContextAccessible && aiToolGroupAccessible && aiToolEvidenceAccessible;
+                                       && aiContextAccessible && aiToolGroupAccessible && aiToolEvidenceAccessible
+                                       && aiMessageContextAccessible;
     QAccessibleInterface *aiPaneInterface =
         aiAssistantPane == nullptr ? nullptr : QAccessible::queryAccessibleInterface(aiAssistantPane);
     QAccessibleInterface *aiPromptInterface =
@@ -1019,6 +1032,14 @@ struct ResizeHitRuntimeCase
         artifact << "send=" << aiSendAccessible << '\n';
         artifact << "toolGroup=" << aiToolGroupAccessible << '\n';
         artifact << "toolEvidence=" << aiToolEvidenceAccessible << '\n';
+        artifact << "messageContext=" << aiMessageContextAccessible << '\n';
+        artifact << "messageContextRole="
+                 << (aiMessageContextInterface == nullptr ? -1 : static_cast<int>(aiMessageContextInterface->role()))
+                 << '\n';
+        artifact << "messageContextName="
+                 << (aiMessageContextInterface == nullptr ? QString{}
+                                                          : aiMessageContextInterface->text(QAccessible::Name))
+                 << '\n';
         artifact << "context=" << aiContextAccessible << '\n';
         artifact << "semanticRoles=" << aiSemanticRolesPassed << '\n';
         artifact << "contextRole="

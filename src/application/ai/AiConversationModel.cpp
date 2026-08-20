@@ -33,6 +33,10 @@ constexpr std::size_t maximumToolActivityResultBytes = std::size_t{24} * 1024;
 constexpr std::size_t maximumToolActivityStateBytes = 64;
 constexpr std::size_t maximumToolActivityResultCodeBytes = 128;
 constexpr std::size_t maximumCostCatalogDateBytes = 64;
+constexpr std::size_t maximumContextAttachmentsPerMessage = 16;
+constexpr std::size_t maximumContextAttachmentTitleBytes = 1024;
+constexpr std::size_t maximumContextAttachmentKindBytes = 64;
+constexpr std::size_t maximumContextAttachmentQualityBytes = 64;
 
 [[nodiscard]] std::size_t imageStorageBytes(const std::span<const AiImageAttachment> images) noexcept
 {
@@ -86,6 +90,39 @@ constexpr std::size_t maximumCostCatalogDateBytes = 64;
         });
     }
     return values;
+}
+
+[[nodiscard]] std::size_t
+contextAttachmentStorageBytes(const std::span<const AiContextAttachmentSummary> attachments) noexcept
+{
+    std::size_t bytes = 0;
+    for (const auto &attachment : attachments)
+    {
+        bytes += attachment.title.size() + attachment.kind.size() + attachment.quality.size();
+    }
+    return bytes;
+}
+
+[[nodiscard]] QVariantList contextAttachmentValues(const std::span<const AiContextAttachmentSummary> attachments)
+{
+    QVariantList values;
+    values.reserve(static_cast<qsizetype>(attachments.size()));
+    for (const auto &attachment : attachments)
+    {
+        values.push_back(QVariantMap{{QStringLiteral("title"), QString::fromUtf8(attachment.title)},
+                                     {QStringLiteral("kind"), QString::fromUtf8(attachment.kind)},
+                                     {QStringLiteral("quality"), QString::fromUtf8(attachment.quality)},
+                                     {QStringLiteral("redacted"), attachment.redacted},
+                                     {QStringLiteral("truncated"), attachment.truncated}});
+    }
+    return values;
+}
+
+[[nodiscard]] bool validContextAttachment(const AiContextAttachmentSummary &attachment) noexcept
+{
+    return !attachment.title.empty() && attachment.title.size() <= maximumContextAttachmentTitleBytes
+           && !attachment.kind.empty() && attachment.kind.size() <= maximumContextAttachmentKindBytes
+           && attachment.quality.size() <= maximumContextAttachmentQualityBytes;
 }
 
 [[nodiscard]] std::size_t sourceStorageBytes(const std::span<const AiWebSource> sources) noexcept
@@ -238,6 +275,8 @@ QVariant AiConversationModel::data(const QModelIndex &index, const int role) con
             return toolActivityValues(message.toolActivities);
         case ImageAttachmentsRole:
             return imageValues(message.images);
+        case ContextAttachmentsRole:
+            return contextAttachmentValues(message.contextAttachments);
         case SourcesRole:
             return sourceValues(message.sources);
         case ToolEvidenceStateRole:
@@ -282,6 +321,7 @@ QHash<int, QByteArray> AiConversationModel::roleNames() const
             {HasCommandSuggestionRole, "hasCommandSuggestion"},
             {ToolActivitiesRole, "toolActivities"},
             {ImageAttachmentsRole, "imageAttachments"},
+            {ContextAttachmentsRole, "contextAttachments"},
             {SourcesRole, "sources"},
             {ToolEvidenceStateRole, "toolEvidenceState"},
             {ToolEvidenceFailedCountRole, "toolEvidenceFailedCount"},
@@ -350,7 +390,8 @@ std::vector<AiConversationTranscriptEntry> AiConversationModel::transcript() con
                                .estimatedCostUsd = message.estimatedCostUsd,
                                .costCatalogDate = message.costCatalogDate.toUtf8().toStdString(),
                                .longContextRates = message.longContextRates,
-                               .truncated = message.truncated});
+                               .truncated = message.truncated,
+                               .contextAttachments = message.contextAttachments});
         }
         for (const auto &evidence : m_evidenceMessages)
         {
@@ -413,7 +454,8 @@ bool AiConversationModel::restoreTranscript(const std::vector<AiConversationTran
         const auto replay = AiProviderReplayCodec::decode(entry.providerReplayJson);
         const std::size_t storedBytes =
             entry.content.size() + entry.reasoning.size() + toolActivityStorageBytes(entry.toolActivities)
-            + sourceStorageBytes(entry.sources) + entry.providerReplayJson.size() + entry.costCatalogDate.size();
+            + sourceStorageBytes(entry.sources) + entry.providerReplayJson.size() + entry.costCatalogDate.size()
+            + contextAttachmentStorageBytes(entry.contextAttachments);
         const bool assistant = entry.role == AiConversationTranscriptRole::assistant;
         if ((entry.content.empty() && !assistant) || storedBytes > m_limits.maxMessageBytes
             || (!assistant
@@ -430,6 +472,9 @@ bool AiConversationModel::restoreTranscript(const std::vector<AiConversationTran
                    > m_limits.maxMessageBytes
             || (!entry.providerReplayJson.empty() && !replay.has_value())
             || entry.sources.size() > maximumWebSourcesPerMessage
+            || entry.contextAttachments.size() > maximumContextAttachmentsPerMessage
+            || (entry.role != AiConversationTranscriptRole::user && !entry.contextAttachments.empty())
+            || !std::ranges::all_of(entry.contextAttachments, validContextAttachment)
             || !std::ranges::all_of(entry.sources, [](const AiWebSource &source) {
                    return validWebSourceUrl(source.url) && source.title.size() <= maximumWebSourceTitleBytes
                           && source.citedText.size() <= maximumWebSourceCitationBytes;
@@ -467,7 +512,7 @@ bool AiConversationModel::restoreTranscript(const std::vector<AiConversationTran
     {
         if (entry.role == AiConversationTranscriptRole::user)
         {
-            static_cast<void>(appendUserMessage(QString::fromUtf8(entry.content)));
+            static_cast<void>(appendUserMessage(QString::fromUtf8(entry.content), {}, entry.contextAttachments));
             continue;
         }
         if (entry.role == AiConversationTranscriptRole::evidence)
@@ -527,9 +572,14 @@ bool AiConversationModel::restoreTranscript(const std::vector<AiConversationTran
 
 bool AiConversationModel::appendEvidenceMessage(QString text)
 {
+    return !m_messages.empty() && appendEvidenceMessageAfter(m_messages.back().id, std::move(text));
+}
+
+bool AiConversationModel::appendEvidenceMessageAfter(const std::uint64_t messageId, QString text)
+{
     bool truncated = false;
     text = boundedUtf8(std::move(text), m_limits.maxMessageBytes, truncated);
-    if (text.trimmed().isEmpty() || m_messages.empty())
+    if (text.trimmed().isEmpty() || find(messageId) == nullptr)
     {
         return false;
     }
@@ -546,15 +596,24 @@ bool AiConversationModel::appendEvidenceMessage(QString text)
         return false;
     }
     m_evidenceBytes += bytes;
-    m_evidenceMessages.push_back({.afterMessageId = m_messages.back().id, .text = std::move(text), .bytes = bytes});
+    m_evidenceMessages.push_back({.afterMessageId = messageId, .text = std::move(text), .bytes = bytes});
     return true;
 }
 
-std::uint64_t AiConversationModel::appendUserMessage(QString text, std::vector<AiImageAttachment> images)
+std::uint64_t AiConversationModel::appendUserMessage(QString text, std::vector<AiImageAttachment> images,
+                                                     std::vector<AiContextAttachmentSummary> contextAttachments)
 {
     bool truncated = false;
     text = boundedUtf8(std::move(text), m_limits.maxMessageBytes, truncated);
-    const auto bytes = static_cast<std::size_t>(text.toUtf8().size()) + imageStorageBytes(images);
+    std::erase_if(contextAttachments, [](const AiContextAttachmentSummary &attachment) {
+        return !validContextAttachment(attachment);
+    });
+    if (contextAttachments.size() > maximumContextAttachmentsPerMessage)
+    {
+        contextAttachments.resize(maximumContextAttachmentsPerMessage);
+    }
+    const auto bytes = static_cast<std::size_t>(text.toUtf8().size()) + imageStorageBytes(images)
+                       + contextAttachmentStorageBytes(contextAttachments);
     evictFor(bytes);
     const auto row = rowCount();
     beginInsertRows({}, row, row);
@@ -564,7 +623,8 @@ std::uint64_t AiConversationModel::appendUserMessage(QString text, std::vector<A
                                  .text = std::move(text),
                                  .bytes = bytes,
                                  .truncated = truncated,
-                                 .images = std::move(images)});
+                                 .images = std::move(images),
+                                 .contextAttachments = std::move(contextAttachments)});
     m_totalBytes += bytes;
     endInsertRows();
     emit countChanged();

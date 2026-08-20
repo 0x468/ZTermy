@@ -48,6 +48,10 @@ evaluations serve different purposes and are reported separately.
 - [x] Context chips support remove/pin and evidence-quality labels; pinning cannot
       bypass redaction or the 64 KiB/1,000-line/estimated-16k-token aggregate
       bound.
+- [x] Sent context summaries remain visibly bound to the originating user
+      message, restore from encrypted history, and preserve provider replay
+      order as user → hidden evidence → assistant. Summary metadata is bounded
+      independently and never exposes the hidden evidence body in QML.
 - [x] Explain last failure is exact in rich mode, visibly approximate only when
       a basic integration observed a non-zero status, and unavailable in none or
       status-unknown modes.
@@ -139,6 +143,11 @@ evaluations serve different purposes and are reported separately.
 - [ ] Owner check: on a plain SSH shell without OSC 133/633, attaching the last 1/3/5 commands
       succeeds with an explicitly labelled approximate recent-activity attachment and includes
       bounded real scrollback rather than only the currently visible viewport.
+- [ ] Owner check: attach a terminal selection, recent command, and UTF-8 text file, then send a
+      question. Expected: draft chips clear, compact source chips remain on that user message,
+      warning state identifies redacted/truncated input, and reopening encrypted history restores
+      the same summaries without rendering raw hidden evidence. Repeat at 260 px in light and dark
+      themes; chips wrap without widening or overlapping the terminal.
 - [x] Developer check: `read_terminal_output` is a live current-terminal tool with no model-visible
       session selector, supports deterministic head/tail paging, preserves blank lines and UTF-8,
       reports byte truncation/partial lines/absolute ranges, and is exercised through the built-in

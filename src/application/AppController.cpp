@@ -608,6 +608,50 @@ aiPermissionMode(const ztermy::config::AiPermissionPreference preference) noexce
     return QStringLiteral("none");
 }
 
+[[nodiscard]] std::string aiContextAttachmentKind(const ztermy::ai::AiContextItem &item)
+{
+    if (item.kind == ztermy::ai::AiContextItemKind::commandBlock)
+    {
+        return "command";
+    }
+    if (item.kind == ztermy::ai::AiContextItemKind::currentTerminalFrame)
+    {
+        return "terminal_frame";
+    }
+    if (item.id.starts_with("terminal-selection"))
+    {
+        return "selection";
+    }
+    if (item.id.starts_with("terminal-command"))
+    {
+        return "command";
+    }
+    if (item.id.starts_with("local-file"))
+    {
+        return "file";
+    }
+    return "attachment";
+}
+
+[[nodiscard]] std::vector<ztermy::ai::AiContextAttachmentSummary>
+aiContextAttachmentSummaries(const ztermy::ai::AiContextBundle &context)
+{
+    std::vector<ztermy::ai::AiContextAttachmentSummary> summaries;
+    summaries.reserve(context.items.size());
+    for (const auto &item : context.items)
+    {
+        const std::string_view rawTitle = item.title.empty() ? std::string_view(item.id) : std::string_view(item.title);
+        const QString title = QString::fromUtf8(rawTitle.data(), static_cast<qsizetype>(rawTitle.size())).left(256);
+        const std::string boundedTitle = utf8String(title);
+        summaries.push_back({.title = boundedTitle.empty() ? std::string("Attached context") : boundedTitle,
+                             .kind = aiContextAttachmentKind(item),
+                             .quality = utf8String(semanticCapabilityToken(item.capability)),
+                             .redacted = item.redacted,
+                             .truncated = item.truncated});
+    }
+    return summaries;
+}
+
 [[nodiscard]] ztermy::terminal::TerminalSemanticCapability
 semanticCapability(const ztermy::terminal::SemanticTerminalSnapshot &snapshot) noexcept
 {
@@ -8194,7 +8238,8 @@ bool AppController::restoreAiConversationHistory(const QString &conversationId)
                               .estimatedCostUsd = message.estimatedCostUsd,
                               .costCatalogDate = utf8String(message.costCatalogDate),
                               .longContextRates = message.longContextRates,
-                              .truncated = message.truncated});
+                              .truncated = message.truncated,
+                              .contextAttachments = message.contextAttachments});
     }
     if (!tab->aiConversation->restoreTranscript(transcript))
     {
@@ -9965,9 +10010,11 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
 
     const auto context = buildAiContext(tab, preferLastFailure);
 
+    std::uint64_t userMessageId = 0;
     if (appendPrompt)
     {
-        static_cast<void>(tab.aiConversation->appendUserMessage(normalizedPrompt, std::move(tab.aiImageAttachments)));
+        userMessageId = tab.aiConversation->appendUserMessage(normalizedPrompt, std::move(tab.aiImageAttachments),
+                                                              aiContextAttachmentSummaries(context));
         tab.aiImageAttachments.clear();
         static_cast<void>(buildAiContext(tab, preferLastFailure));
         tab.aiLastPrompt = normalizedPrompt;
@@ -10827,7 +10874,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
     if (appendPrompt && !context.items.empty())
     {
         const auto serialized = ai::AiContextSerializer::serialize(context);
-        static_cast<void>(tab.aiConversation->appendEvidenceMessage(utf8QString(serialized.text)));
+        static_cast<void>(tab.aiConversation->appendEvidenceMessageAfter(userMessageId, utf8QString(serialized.text)));
         tab.aiExplicitContextItems.clear();
         tab.aiExcludedContextIds.clear();
         tab.aiPinnedContextIds.clear();
@@ -12214,7 +12261,8 @@ void AppController::persistAiConversation(const TerminalTab &tab)
                                    .estimatedCostUsd = entry.estimatedCostUsd,
                                    .costCatalogDate = utf8QString(entry.costCatalogDate),
                                    .longContextRates = entry.longContextRates,
-                                   .truncated = entry.truncated});
+                                   .truncated = entry.truncated,
+                                   .contextAttachments = entry.contextAttachments});
     }
     if (stored.title.isEmpty())
     {

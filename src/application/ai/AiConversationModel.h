@@ -45,6 +45,7 @@ struct AiConversationTranscriptEntry final
     std::string costCatalogDate;
     bool longContextRates = false;
     bool truncated = false;
+    std::vector<AiContextAttachmentSummary> contextAttachments;
 
     [[nodiscard]] friend bool operator==(const AiConversationTranscriptEntry &,
                                          const AiConversationTranscriptEntry &) = default;
@@ -82,6 +83,7 @@ public:
         HasCommandSuggestionRole,
         ToolActivitiesRole,
         ImageAttachmentsRole,
+        ContextAttachmentsRole,
         SourcesRole,
         ToolEvidenceStateRole,
         ToolEvidenceFailedCountRole,
@@ -102,7 +104,9 @@ public:
     [[nodiscard]] std::vector<AiConversationTranscriptEntry> transcript() const;
     [[nodiscard]] bool restoreTranscript(const std::vector<AiConversationTranscriptEntry> &entries);
     [[nodiscard]] bool appendEvidenceMessage(QString text);
-    [[nodiscard]] std::uint64_t appendUserMessage(QString text, std::vector<AiImageAttachment> images = {});
+    [[nodiscard]] bool appendEvidenceMessageAfter(std::uint64_t messageId, QString text);
+    [[nodiscard]] std::uint64_t appendUserMessage(QString text, std::vector<AiImageAttachment> images = {},
+                                                  std::vector<AiContextAttachmentSummary> contextAttachments = {});
     [[nodiscard]] std::uint64_t beginAssistantMessage();
     [[nodiscard]] bool appendAssistantDelta(std::uint64_t messageId, QString delta);
     [[nodiscard]] bool appendAssistantReasoningDelta(std::uint64_t messageId, QString delta);
@@ -160,6 +164,7 @@ private:
         std::vector<AiImageAttachment> images;
         std::vector<AiWebSource> sources;
         std::string providerReplayJson;
+        std::vector<AiContextAttachmentSummary> contextAttachments;
     };
 
     struct EvidenceMessage final
