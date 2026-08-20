@@ -40,6 +40,27 @@ bound to the current terminal.
   settings or external thread identifiers. Existing provider conversations
   remain valid when their native transcript can be read without those fields.
 
+## Permanent scope test
+
+A proposal is rejected without prototyping when it would require any of the
+following for Codex, OpenCode, Claude Code, or another external Agent/harness:
+
+- executable discovery, installation, launch, supervision, or authentication;
+- App Server, ACP, CLI, SDK, RPC, event-stream, thread, or session bridging;
+- an Agent selector, external conversation browser, compatibility mode, plugin
+  contract, dormant adapter, feature flag, or migration path;
+- roadmap, backlog, milestone, spike, or architectural extension point whose
+  purpose is to make such an integration possible later.
+
+Public UX comparison remains research only. Any useful behavior must be
+reimplemented as a native capability of ztermy's built-in assistant without an
+external Agent dependency.
+
+Supporting an ordinary model/provider API does not weaken this boundary. For
+example, OpenAI API models may be used through ztermy's provider adapter, but
+ztermy must not discover, authenticate, launch, bridge, or emulate the Codex
+Agent product or its runtime.
+
 ## Consequences
 
 - Agent selectors, external CLI discovery, App Server/ACP processes, external

@@ -14,7 +14,11 @@ external-Agent boundary is not a future decision: Codex, OpenCode, Claude Code,
 and every other external Agent/harness integration are permanently excluded
 from V3 and all later releases. They may be observed only as public UX research;
 no runtime, protocol, account, process, thread, selector, bridge, or plugin
-integration may be planned or implemented. The
+integration may be planned or implemented. This is not a V3-only non-goal and
+must not be reopened for V4 or any later version. Every future AI milestone must
+improve ztermy's own provider-backed assistant; a comparison with an external
+Agent may produce a native UX lesson, but never an integration backlog item.
+The
 accepted `0.3.x` identity is:
 
 - codename: **糸**;

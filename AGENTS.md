@@ -17,6 +17,9 @@
   work. Do not add it to a future roadmap, prototype it behind a feature flag,
   retain dormant adapters, or introduce extension points whose purpose is to
   host those runtimes.
+- Future AI work must deepen ztermy's own provider-backed assistant only.
+  Competitor research, protocol similarity, or provider/model support must
+  never be interpreted as permission to reconsider an external Agent runtime.
 - AI tools are scoped to the terminal tab that owns the assistant sidebar. Do
   not add cross-terminal session enumeration, selection, or control.
 - Do not copy third-party source code, images, icons, themes, or branding unless
