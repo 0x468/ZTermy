@@ -65,6 +65,15 @@ namespace
 void applyCompatibleReasoning(QJsonObject &body, const AiProviderConfiguration &configuration,
                               const AiReasoningEffort effort)
 {
+    const QString model = fromUtf8(configuration.model).toLower();
+    if (configuration.flavor == AiProviderFlavor::qwen && model.startsWith(QStringLiteral("qwen3.8")))
+    {
+        // Qwen 3.8 enables preserved thinking by default, which requires every
+        // previous reasoning_content value to be replayed exactly. ztermy keeps
+        // visible bounded reasoning, not an authoritative provider transcript,
+        // so opt out instead of sending an incomplete reasoning chain.
+        body.insert(QStringLiteral("preserve_thinking"), false);
+    }
     if (effort == AiReasoningEffort::automatic)
     {
         return;
@@ -91,12 +100,31 @@ void applyCompatibleReasoning(QJsonObject &body, const AiProviderConfiguration &
                         {QStringLiteral("clear_thinking"), false}});
         return;
     }
+    if (configuration.flavor == AiProviderFlavor::gemini)
+    {
+        const QString effortToken = reasoningEffortToken(effort);
+        if (!effortToken.isEmpty())
+        {
+            body.insert(QStringLiteral("reasoning_effort"), effortToken);
+        }
+        return;
+    }
+    if (configuration.flavor == AiProviderFlavor::openRouter)
+    {
+        body.insert(QStringLiteral("reasoning_effort"),
+                    effort == AiReasoningEffort::disabled ? QStringLiteral("none") : reasoningEffortToken(effort));
+        return;
+    }
+    if (configuration.flavor == AiProviderFlavor::qwen)
+    {
+        body.insert(QStringLiteral("enable_thinking"), effort != AiReasoningEffort::disabled);
+        return;
+    }
     if (configuration.flavor != AiProviderFlavor::kimi)
     {
         return;
     }
 
-    const QString model = fromUtf8(configuration.model).toLower();
     if (model.startsWith(QStringLiteral("kimi-k3")))
     {
         if (effort != AiReasoningEffort::automatic && effort != AiReasoningEffort::disabled)
@@ -220,6 +248,48 @@ void applyCompatibleReasoning(QJsonObject &body, const AiProviderConfiguration &
     return std::nullopt;
 }
 
+[[nodiscard]] std::optional<AiProviderError> validateCompatibleToolHistory(const AiGenerationRequest &generation)
+{
+    constexpr std::size_t maximumProviderDataBytes = std::size_t{64} * 1024;
+    for (const auto &exchange : generation.toolHistory)
+    {
+        for (const auto &call : exchange.calls)
+        {
+            QJsonParseError argumentsError;
+            const QJsonDocument arguments = QJsonDocument::fromJson(
+                QByteArray(call.argumentsJson.data(), static_cast<qsizetype>(call.argumentsJson.size())),
+                &argumentsError);
+            if (argumentsError.error != QJsonParseError::NoError || !arguments.isObject())
+            {
+                return AiProviderError{.code = AiProviderErrorCode::invalidRequest,
+                                       .message = "AI tool history contains invalid JSON arguments.",
+                                       .retryable = false};
+            }
+            if (call.providerDataJson.empty())
+            {
+                continue;
+            }
+            if (call.providerDataJson.size() > maximumProviderDataBytes)
+            {
+                return AiProviderError{.code = AiProviderErrorCode::invalidRequest,
+                                       .message = "Provider tool metadata exceeds the 64 KiB limit.",
+                                       .retryable = false};
+            }
+            QJsonParseError providerDataError;
+            const QJsonDocument providerData = QJsonDocument::fromJson(
+                QByteArray(call.providerDataJson.data(), static_cast<qsizetype>(call.providerDataJson.size())),
+                &providerDataError);
+            if (providerDataError.error != QJsonParseError::NoError || !providerData.isObject())
+            {
+                return AiProviderError{.code = AiProviderErrorCode::invalidRequest,
+                                       .message = "Provider tool metadata must be a JSON object.",
+                                       .retryable = false};
+            }
+        }
+    }
+    return std::nullopt;
+}
+
 [[nodiscard]] std::expected<QJsonArray, AiProviderError> toolDefinitions(const AiGenerationRequest &generation,
                                                                          const bool responsesFormat)
 {
@@ -274,11 +344,23 @@ void applyCompatibleReasoning(QJsonObject &body, const AiProviderConfiguration &
                 objectArguments
                     ? QJsonValue{argumentsObject}
                     : QJsonValue{QString::fromUtf8(QJsonDocument(argumentsObject).toJson(QJsonDocument::Compact))};
-            calls.append(QJsonObject{
+            QJsonObject serializedCall{
                 {QStringLiteral("id"), fromUtf8(call.id)},
                 {QStringLiteral("type"), QStringLiteral("function")},
                 {QStringLiteral("function"), QJsonObject{{QStringLiteral("name"), fromUtf8(call.name)},
-                                                         {QStringLiteral("arguments"), serializedArguments}}}});
+                                                         {QStringLiteral("arguments"), serializedArguments}}}};
+            if (!call.providerDataJson.empty())
+            {
+                QJsonParseError providerDataError;
+                const QJsonDocument providerData = QJsonDocument::fromJson(
+                    QByteArray(call.providerDataJson.data(), static_cast<qsizetype>(call.providerDataJson.size())),
+                    &providerDataError);
+                if (providerDataError.error == QJsonParseError::NoError && providerData.isObject())
+                {
+                    serializedCall.insert(QStringLiteral("extra_content"), providerData.object());
+                }
+            }
+            calls.append(serializedCall);
         }
         if (!calls.isEmpty())
         {
@@ -633,6 +715,13 @@ ProviderRequestFactory::prepare(const AiProviderConfiguration &configuration, co
     if (const auto imageError = validateImages(generation); imageError.has_value())
     {
         return std::unexpected(*imageError);
+    }
+    if (configuration.kind == AiProviderKind::openAiCompatible)
+    {
+        if (const auto toolHistoryError = validateCompatibleToolHistory(generation); toolHistoryError.has_value())
+        {
+            return std::unexpected(*toolHistoryError);
+        }
     }
     if (generation.webSearchEnabled && configuration.kind != AiProviderKind::openAiResponses
         && configuration.kind != AiProviderKind::anthropicMessages)

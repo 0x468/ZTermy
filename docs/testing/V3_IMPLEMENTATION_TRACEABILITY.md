@@ -134,6 +134,7 @@ covered by `application-settings`, `ai-permission-policy`,
 | Composer wraps words and unbroken content at compact width without a panel-wide horizontal scrollbar | `src/ui/qml/AiAssistantPane.qml`, `src/main.cpp` | `ui-layout-runtime-smoke` 260 px real-window contract | ADR 0078, 0093 |
 | Typed request compaction and provider-overflow retry expose one non-blocking, current-terminal status without mutating stored conversation text | `src/domain/ai/AiContextCompactor.*`, `src/application/ai/AiTurnRunner.*`, `src/application/AppController.*`, `src/ui/qml/AiAssistantPane.qml` | `ai-context-compactor`, `ai-turn-runner`, `app-controller`, `ui-layout-runtime-smoke` | ADR 0078, 0093; Netcatty comparison 2026-08-21 |
 | Long command output uses a live current-terminal artifact separate from the head/tail preview, with explicit per-command/terminal caps, gaps, expiration, and pageable middle recovery | `src/domain/terminal/CommandBlockStore.*`, `SemanticTerminalObserver.*`, `src/domain/ai/AiReadTools.*`, `src/application/ai/AiReadToolDispatcher.*`, `src/application/AppController.*` | `command-block-store`, `ai-read-tools`, `ai-read-tool-dispatcher`, `app-controller`; owner long-output acceptance | ADR 0094 |
+| Mainstream provider presets retain editable endpoints/models and preserve required compatible-protocol state across tool continuations | `src/core/config/ApplicationSettings.*`, `src/infrastructure/ai/ProviderRequestFactory.*`, `ProviderStreamMapper.*`, `src/domain/ai/AiProviderReplayCodec.*`, `src/application/ai/AiTurnRunner.*`, `src/ui/qml/SettingsPane.qml` | `application-settings`, `provider-request-factory`, `provider-stream-mapper`, `ai-provider-replay-codec`, `ai-turn-runner`, `app-controller`; live-provider owner acceptance | ADR 0079, 0093 |
 
 ## Evidence classification
 
@@ -149,8 +150,10 @@ covered by `application-settings`, `ai-permission-policy`,
   failures. Both reports pass the unified RC verifier with the final rebuilt
   release bundle.
 - **Current developer evidence:** the post-`0.3.11` dynamic Debug and static
-  Release candidates each pass 114/114 tests; full clang-tidy covers 254
-  translation units; QML/C++ format and the 1771/1771 translation catalog pass;
+  Release candidates each pass 114/114 tests; full clang-tidy covers 245
+  translation units; QML/C++ format and the 1774/1774 translation catalog pass;
+  focused provider contracts cover Gemini/OpenRouter/Qwen endpoint, reasoning,
+  usage-only stream, and exact Gemini tool metadata continuation behavior;
   the 260 px real-window contract verifies that the composer has no horizontal
   scrollbar and the compaction notice stays within its owning sidebar. The prior formal
   `0.3.8` evidence retains its 20-run scenario, 224-unit clang-tidy, static

@@ -20,6 +20,18 @@ evaluations serve different purposes and are reported separately.
       and reject invalid event order or oversized function arguments.
   - OpenAI Responses SSE, OpenAI-compatible chat-completions SSE, and Ollama
     NDJSON now have deterministic request/stream lifecycle fixtures (`ADR 0077`).
+- [x] Branded provider presets cover OpenAI, Anthropic, Gemini, OpenRouter,
+      DeepSeek, Kimi, Qwen, Z.AI, and Ollama while keeping both API address and
+      model editable. Endpoint previews and reasoning-option matrices are
+      deterministic (`ADR 0079`).
+- [x] OpenAI-compatible streams accept both token-usage field families and the
+      final usage-only empty-`choices` chunk. Gemini `extra_content` thought
+      signatures are bounded and survive stream mapping, tool execution,
+      encrypted replay encoding, and the following request. Invalid metadata is
+      rejected rather than silently dropped (`ADR 0079`).
+- [x] Qwen hybrid thinking maps to `enable_thinking`; Qwen 3.8 explicitly opts
+      out of provider-side preserved thinking so a bounded UI reasoning summary
+      cannot be misrepresented as a complete provider reasoning transcript.
 - [x] API keys remain absent from settings JSON, QML models, logs, diagnostics,
       test snapshots, and error text.
 - [x] Command blocks cover rich/basic/none integration, exact command, multiline
@@ -397,12 +409,19 @@ only when it passes the same evidence and action contract.
       advertised, retry preserves the sent selection, and transient chips never
       leak to another terminal.
 
-- [ ] Settings AI category: choose each provider preset, verify the default API
-      address and resolved request preview, enter/replace the masked API key,
-      fetch models into the editable selector, manually enter a model when list
-      discovery is unavailable, and verify offline/auth/TLS feedback. Installed
-      and portable storage must preserve the key without exposing vault or
-      credential-reference concepts in the workflow.
+- [ ] Settings AI category: choose OpenAI, Anthropic, Gemini, OpenRouter,
+      DeepSeek, Kimi, Qwen, Z.AI, Ollama, and generic-compatible presets; verify
+      each default API address and resolved request preview, enter/replace the
+      masked API key, fetch models into the editable selector, manually enter a
+      model when list discovery is unavailable, and verify offline/auth/TLS
+      feedback. Installed and portable storage must preserve the key without
+      exposing vault or credential-reference concepts in the workflow.
+- [ ] With disposable provider credentials, run one read-only current-terminal
+      tool turn through Gemini and one ordinary streamed turn through OpenRouter
+      and Qwen. Gemini must complete the post-tool continuation without a
+      missing-signature error; OpenRouter/Qwen must report non-zero usage when
+      supplied, expose provider reasoning only when returned, and never target
+      another terminal.
 - [ ] AI panel: open/close/toggle, left/right workbench, resize, narrow mode,
       context chips/remove/pin/preview, evidence badges, streaming/cancel/retry,
       copy, usage/estimated cost, audit view, keyboard-only, focus

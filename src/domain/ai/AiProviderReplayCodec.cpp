@@ -66,6 +66,25 @@ constexpr std::size_t maximumReasoningBytes = std::size_t{128} * 1024;
     return document.array();
 }
 
+[[nodiscard]] std::expected<QJsonObject, AiProviderReplayError> providerDataObject(const std::string_view json)
+{
+    if (json.empty())
+    {
+        return QJsonObject{};
+    }
+    if (json.size() > maximumPayloadBytes)
+    {
+        return std::unexpected(AiProviderReplayError::limitExceeded);
+    }
+    QJsonParseError error;
+    const auto document = QJsonDocument::fromJson(QByteArray(json.data(), static_cast<qsizetype>(json.size())), &error);
+    if (error.error != QJsonParseError::NoError || !document.isObject())
+    {
+        return std::unexpected(AiProviderReplayError::invalidData);
+    }
+    return document.object();
+}
+
 [[nodiscard]] std::expected<AiToolExchange, AiProviderReplayError> decodeExchange(const QJsonObject &object)
 {
     static const QSet<QString> keys{QStringLiteral("calls"), QStringLiteral("outputs"), QStringLiteral("reasoning"),
@@ -97,7 +116,8 @@ constexpr std::size_t maximumReasoningBytes = std::size_t{128} * 1024;
     for (const auto &value : calls)
     {
         const QJsonObject call = value.toObject();
-        static const QSet<QString> callKeys{QStringLiteral("id"), QStringLiteral("name"), QStringLiteral("arguments")};
+        static const QSet<QString> callKeys{QStringLiteral("id"), QStringLiteral("name"), QStringLiteral("arguments"),
+                                            QStringLiteral("providerData")};
         const QByteArray id = call.value(QStringLiteral("id")).toString().toUtf8();
         const QByteArray name = call.value(QStringLiteral("name")).toString().toUtf8();
         const QByteArray arguments = call.value(QStringLiteral("arguments")).toString().toUtf8();
@@ -109,8 +129,25 @@ constexpr std::size_t maximumReasoningBytes = std::size_t{128} * 1024;
         {
             return std::unexpected(AiProviderReplayError::invalidData);
         }
-        exchange.calls.push_back(
-            {.id = id.toStdString(), .name = name.toStdString(), .argumentsJson = arguments.toStdString()});
+        std::string providerDataJson;
+        const QJsonValue providerData = call.value(QStringLiteral("providerData"));
+        if (!providerData.isUndefined())
+        {
+            if (!providerData.isObject())
+            {
+                return std::unexpected(AiProviderReplayError::invalidData);
+            }
+            const QByteArray encoded = QJsonDocument(providerData.toObject()).toJson(QJsonDocument::Compact);
+            if (std::cmp_greater(encoded.size(), maximumPayloadBytes))
+            {
+                return std::unexpected(AiProviderReplayError::limitExceeded);
+            }
+            providerDataJson = encoded.toStdString();
+        }
+        exchange.calls.push_back({.id = id.toStdString(),
+                                  .name = name.toStdString(),
+                                  .argumentsJson = arguments.toStdString(),
+                                  .providerDataJson = std::move(providerDataJson)});
     }
     exchange.outputs.reserve(static_cast<std::size_t>(outputs.size()));
     for (const auto &value : outputs)
@@ -190,9 +227,19 @@ AiProviderReplayCodec::encode(const std::span<const AiToolExchange> toolHistory,
             {
                 return std::unexpected(AiProviderReplayError::invalidData);
             }
-            calls.push_back(QJsonObject{{QStringLiteral("id"), text(call.id)},
-                                        {QStringLiteral("name"), text(call.name)},
-                                        {QStringLiteral("arguments"), text(call.argumentsJson)}});
+            QJsonObject encodedCall{{QStringLiteral("id"), text(call.id)},
+                                    {QStringLiteral("name"), text(call.name)},
+                                    {QStringLiteral("arguments"), text(call.argumentsJson)}};
+            const auto providerData = providerDataObject(call.providerDataJson);
+            if (!providerData.has_value())
+            {
+                return std::unexpected(providerData.error());
+            }
+            if (!providerData->isEmpty())
+            {
+                encodedCall.insert(QStringLiteral("providerData"), *providerData);
+            }
+            calls.push_back(encodedCall);
         }
         QJsonArray outputs;
         for (const AiToolOutput &output : exchange.outputs)

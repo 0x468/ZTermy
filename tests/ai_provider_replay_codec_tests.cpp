@@ -26,7 +26,10 @@ private slots:
 void AiProviderReplayCodecTests::roundTripsOpaqueProviderState()
 {
     const std::vector history{AiToolExchange{
-        .calls = {AiToolCall{.id = "tool_1", .name = "run_command", .argumentsJson = R"({"command":"df -h"})"}},
+        .calls = {AiToolCall{.id = "tool_1",
+                             .name = "run_command",
+                             .argumentsJson = R"({"command":"df -h"})",
+                             .providerDataJson = R"({"google":{"thought_signature":"opaque-signature"}})"}},
         .outputs = {AiToolOutput{.callId = "tool_1", .name = "run_command", .outputJson = R"({"ok":true})"}},
         .reasoning = "provider reasoning",
         .reasoningSignature = "signed-reasoning",
@@ -58,6 +61,12 @@ void AiProviderReplayCodecTests::rejectsMalformedAndOversizedState()
     QCOMPARE(malformed.error(), AiProviderReplayError::invalidData);
 
     QVERIFY(!AiProviderReplayCodec::decode(R"({"version":1,"toolHistory":[{}]})").has_value());
+
+    const std::vector invalidProviderData{AiToolExchange{
+        .calls = {AiToolCall{.id = "tool_1", .name = "run_command", .argumentsJson = "{}", .providerDataJson = "[]"}}}};
+    const auto invalidProviderReplay = AiProviderReplayCodec::encode(invalidProviderData, {});
+    QVERIFY(!invalidProviderReplay.has_value());
+    QCOMPARE(invalidProviderReplay.error(), AiProviderReplayError::invalidData);
     QVERIFY(
         !AiProviderReplayCodec::decode(
              R"({"version":1,"toolHistory":[{"calls":[{"id":"tool_1","name":"run_command","arguments":{}}],"outputs":[],"reasoning":"","reasoningSignature":""}]})")

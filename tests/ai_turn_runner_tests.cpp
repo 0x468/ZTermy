@@ -170,6 +170,14 @@ private:
                                    .model = "claude-sonnet-4-6"};
 }
 
+[[nodiscard]] AiProviderConfiguration compatibleConfiguration()
+{
+    return AiProviderConfiguration{.kind = AiProviderKind::openAiCompatible,
+                                   .flavor = ztermy::ai::AiProviderFlavor::gemini,
+                                   .baseUrl = "https://generativelanguage.googleapis.com/v1beta/openai/",
+                                   .model = "gemini-3.7-flash"};
+}
+
 [[nodiscard]] auto emptySecretLoader()
 {
     return []() -> std::expected<SensitiveByteArray, AiProviderError> {
@@ -196,6 +204,7 @@ private slots:
     void cancelsActiveRequestSynchronously();
     void destroyingRunnerCancelsSafely();
     void executesReadToolAndContinuesTheSameTurn();
+    void preservesCompatibleProviderToolMetadataAcrossTurn();
     void waitsForDeferredToolCompletion();
     void cancelsDeferredToolWait();
     void doesNotRetryAfterSideEffectingTool();
@@ -423,6 +432,52 @@ void AiTurnRunnerTests::executesReadToolAndContinuesTheSameTurn()
     QCOMPARE(observedToolOutputs, std::size_t{1});
     QCOMPARE(events.back().type, AiStreamEventType::responseCompleted);
     QCOMPARE(events.at(events.size() - 2).delta, std::string("done"));
+}
+
+void AiTurnRunnerTests::preservesCompatibleProviderToolMetadataAcrossTurn()
+{
+    FakeNetworkAccessManager network;
+    network.enqueue(FakeResponse{
+        .payload = "data: {\"id\":\"chat_1\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\","
+                   "\"extra_content\":{\"google\":{\"thought_signature\":\"opaque-signature\"}},\"function\":{"
+                   "\"name\":\"read_session_info\",\"arguments\":\"{}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\n"
+                   "data: [DONE]\n\n"});
+    network.enqueue(FakeResponse{
+        .payload =
+            "data: {\"id\":\"chat_2\",\"choices\":[{\"delta\":{\"content\":\"done\"},\"finish_reason\":\"stop\"}]}\n\n"
+            "data: [DONE]\n\n"});
+    ProviderHttpClient client(&network);
+    AiTurnRunner runner(client, fastRetryPolicy());
+    bool finished = false;
+    std::string observedProviderData;
+
+    QVERIFY(runner
+                .start(
+                    compatibleConfiguration(), AiGenerationRequest{}, emptySecretLoader(),
+                    [](const auto, const AiStreamEvent &) {
+                    },
+                    [&finished](const auto, const AiTurnMetrics &) {
+                        finished = true;
+                    },
+                    {}, {},
+                    [&observedProviderData](const ztermy::ai::AiToolCall &call)
+                        -> std::expected<AiTurnRunner::ToolHandlingResult, AiProviderError> {
+                        observedProviderData = call.providerDataJson;
+                        return AiTurnRunner::ToolHandlingResult{
+                            .output =
+                                AiToolOutput{.callId = call.id, .name = call.name, .outputJson = R"({"ok":true})"}};
+                    })
+                .has_value());
+
+    QTRY_VERIFY_WITH_TIMEOUT(finished, 1000);
+    QCOMPARE(observedProviderData, std::string(R"({"google":{"thought_signature":"opaque-signature"}})"));
+    QCOMPARE(network.requestCount(), std::size_t{2});
+    QCOMPARE(network.requestBodies().size(), std::size_t{2});
+    const auto messages = QJsonDocument::fromJson(network.requestBodies().at(1)).object().value("messages").toArray();
+    const auto replayCall = messages.first().toObject().value("tool_calls").toArray().first().toObject();
+    QCOMPARE(
+        replayCall.value("extra_content").toObject().value("google").toObject().value("thought_signature").toString(),
+        QStringLiteral("opaque-signature"));
 }
 
 void AiTurnRunnerTests::waitsForDeferredToolCompletion()

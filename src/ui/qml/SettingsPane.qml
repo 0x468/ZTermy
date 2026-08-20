@@ -30,7 +30,7 @@ Rectangle {
     property string aiQuickMessageDescriptionDraft: ""
     property string aiQuickMessageContentDraft: ""
     property bool aiQuickMessageSlugManual: false
-    readonly property var aiProviderTokens: ["openai-responses", "anthropic", "deepseek", "kimi", "zai", "ollama", "openai-compatible"]
+    readonly property var aiProviderTokens: ["openai-responses", "anthropic", "gemini", "openrouter", "deepseek", "kimi", "qwen", "zai", "ollama", "openai-compatible"]
     readonly property var aiReasoningOptions: controller.aiReasoningCapabilities(aiProviderToken(), aiModelDraft)
     property string mcpOriginalId: ""
     property string mcpEditingId: ""
@@ -179,6 +179,12 @@ Rectangle {
             return "https://api.moonshot.ai";
         if (token === "zai")
             return "https://api.z.ai/api/paas/v4";
+        if (token === "gemini")
+            return "https://generativelanguage.googleapis.com/v1beta/openai/";
+        if (token === "openrouter")
+            return "https://openrouter.ai/api/v1";
+        if (token === "qwen")
+            return "https://dashscope.aliyuncs.com/compatible-mode/v1";
         if (token === "ollama")
             return "http://127.0.0.1:11434";
         if (token === "openai-compatible")
@@ -1594,7 +1600,7 @@ Rectangle {
                             objectName: "settingsAiProvider"
                             Layout.fillWidth: true
                             model: pane.aiProviderTokens
-                            displayTextModel: [qsTr("OpenAI (ChatGPT / Codex)"), qsTr("Anthropic (Claude)"), qsTr("DeepSeek"), qsTr("Kimi"), qsTr("Z.AI (GLM)"), qsTr("Ollama"), qsTr("OpenAI-compatible")]
+                            displayTextModel: [qsTr("OpenAI"), qsTr("Anthropic (Claude)"), qsTr("Google Gemini"), qsTr("OpenRouter"), qsTr("DeepSeek"), qsTr("Kimi"), qsTr("Alibaba Qwen"), qsTr("Z.AI (GLM)"), qsTr("Ollama"), qsTr("OpenAI-compatible")]
                             accessibleName: qsTr("AI model provider")
                             onActivated: index => pane.selectAiProvider(index)
                         }

@@ -44,6 +44,7 @@ private:
     {
         std::string callId;
         std::string name;
+        std::string providerDataJson;
     };
 
     std::unordered_map<std::size_t, ToolState> m_toolsByIndex;

@@ -89,7 +89,7 @@ void ProviderRequestFactoryTests::preparesOllamaRequest()
         .instructions = "Be concise.",
         .messages = {AiChatMessage{.content = "hello"}},
         .tools = {AiToolDefinition{.name = "read_session_info",
-                                   .description = "List sessions.",
+                                   .description = "Read the current terminal session.",
                                    .parametersJson = R"({"type":"object","properties":{}})"}},
         .toolHistory = {AiToolExchange{
             .calls = {AiToolCall{.id = "call_1", .name = "read_session_info", .argumentsJson = "{}"}},
@@ -119,6 +119,27 @@ void ProviderRequestFactoryTests::preparesCompatibleRequest()
     QCOMPARE(prepared->request.url().toString(), QStringLiteral("https://example.test/v1/custom/chat"));
     const auto body = QJsonDocument::fromJson(prepared->body).object();
     QVERIFY(body.value("stream_options").toObject().value("include_usage").toBool());
+
+    const AiGenerationRequest replayGeneration{
+        .toolHistory = {AiToolExchange{
+            .calls = {AiToolCall{.id = "call_1",
+                                 .name = "run_command",
+                                 .argumentsJson = R"({"command":"df -h"})",
+                                 .providerDataJson = R"({"google":{"thought_signature":"opaque-signature"}})"}},
+            .outputs = {AiToolOutput{.callId = "call_1", .name = "run_command", .outputJson = R"({"ok":true})"}}}}};
+    const auto replayPrepared = ProviderRequestFactory::prepare(configuration, replayGeneration, "key");
+    QVERIFY(replayPrepared.has_value());
+    const auto replayMessages = QJsonDocument::fromJson(replayPrepared->body).object().value("messages").toArray();
+    const auto replayCall = replayMessages.first().toObject().value("tool_calls").toArray().first().toObject();
+    QCOMPARE(
+        replayCall.value("extra_content").toObject().value("google").toObject().value("thought_signature").toString(),
+        QStringLiteral("opaque-signature"));
+
+    auto invalidReplay = replayGeneration;
+    invalidReplay.toolHistory.front().calls.front().providerDataJson = "[]";
+    const auto invalidMetadata = ProviderRequestFactory::prepare(configuration, invalidReplay, "key");
+    QVERIFY(!invalidMetadata.has_value());
+    QCOMPARE(invalidMetadata.error().code, AiProviderErrorCode::invalidRequest);
 
     const AiGenerationRequest invalidGeneration{.tools = {AiToolDefinition{.name = "broken", .parametersJson = "[]"}}};
     const auto invalidTool = ProviderRequestFactory::prepare(configuration, invalidGeneration, "key");
@@ -275,6 +296,37 @@ void ProviderRequestFactoryTests::appliesProviderSpecificReasoningControls()
     body = QJsonDocument::fromJson(prepared->body).object();
     QCOMPARE(body.value("reasoning_effort").toString(), QStringLiteral("max"));
 
+    configuration.flavor = AiProviderFlavor::gemini;
+    prepared = ProviderRequestFactory::prepare(
+        configuration, AiGenerationRequest{.reasoningEffort = AiReasoningEffort::medium}, "key");
+    QVERIFY(prepared.has_value());
+    body = QJsonDocument::fromJson(prepared->body).object();
+    QCOMPARE(body.value("reasoning_effort").toString(), QStringLiteral("medium"));
+
+    configuration.flavor = AiProviderFlavor::openRouter;
+    prepared = ProviderRequestFactory::prepare(
+        configuration, AiGenerationRequest{.reasoningEffort = AiReasoningEffort::disabled}, "key");
+    QVERIFY(prepared.has_value());
+    body = QJsonDocument::fromJson(prepared->body).object();
+    QCOMPARE(body.value("reasoning_effort").toString(), QStringLiteral("none"));
+
+    configuration.flavor = AiProviderFlavor::qwen;
+    prepared = ProviderRequestFactory::prepare(
+        configuration, AiGenerationRequest{.reasoningEffort = AiReasoningEffort::disabled}, "key");
+    QVERIFY(prepared.has_value());
+    body = QJsonDocument::fromJson(prepared->body).object();
+    QVERIFY(body.contains("enable_thinking"));
+    QCOMPARE(body.value("enable_thinking").toBool(), false);
+
+    configuration.model = "qwen3.8-max";
+    prepared = ProviderRequestFactory::prepare(
+        configuration, AiGenerationRequest{.reasoningEffort = AiReasoningEffort::automatic}, "key");
+    QVERIFY(prepared.has_value());
+    body = QJsonDocument::fromJson(prepared->body).object();
+    QVERIFY(body.contains("preserve_thinking"));
+    QCOMPARE(body.value("preserve_thinking").toBool(), false);
+    QVERIFY(!body.contains("enable_thinking"));
+
     configuration.kind = AiProviderKind::openAiResponses;
     configuration.flavor = AiProviderFlavor::openAi;
     configuration.baseUrl = "https://api.openai.com/v1";
@@ -409,6 +461,32 @@ void ProviderRequestFactoryTests::resolvesFriendlyApiAddressesAndModels()
         configuration.kind, R"({"data":[{"id":"zeta"},{"id":"alpha"},{"id":"alpha"}]})");
     QVERIFY(models.has_value());
     QCOMPARE(*models, QStringList({QStringLiteral("alpha"), QStringLiteral("zeta")}));
+
+    configuration.baseUrl = "https://generativelanguage.googleapis.com/v1beta/openai/";
+    prepared = ProviderRequestFactory::prepare(configuration, AiGenerationRequest{}, "key");
+    QVERIFY(prepared.has_value());
+    QCOMPARE(prepared->request.url().toString(),
+             QStringLiteral("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"));
+    catalogRequest = ztermy::ai::ProviderModelCatalog::prepareRequest(
+        configuration, ztermy::security::SensitiveByteArray(QByteArray("key")));
+    QVERIFY(catalogRequest.has_value());
+    QCOMPARE(catalogRequest->url().toString(),
+             QStringLiteral("https://generativelanguage.googleapis.com/v1beta/openai/models"));
+
+    configuration.baseUrl = "https://openrouter.ai/api/v1";
+    prepared = ProviderRequestFactory::prepare(configuration, AiGenerationRequest{}, "key");
+    QVERIFY(prepared.has_value());
+    QCOMPARE(prepared->request.url().toString(), QStringLiteral("https://openrouter.ai/api/v1/chat/completions"));
+    catalogRequest = ztermy::ai::ProviderModelCatalog::prepareRequest(
+        configuration, ztermy::security::SensitiveByteArray(QByteArray("key")));
+    QVERIFY(catalogRequest.has_value());
+    QCOMPARE(catalogRequest->url().toString(), QStringLiteral("https://openrouter.ai/api/v1/models"));
+
+    configuration.baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1";
+    prepared = ProviderRequestFactory::prepare(configuration, AiGenerationRequest{}, "key");
+    QVERIFY(prepared.has_value());
+    QCOMPARE(prepared->request.url().toString(),
+             QStringLiteral("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"));
 }
 
 void ProviderRequestFactoryTests::rejectsUnsafeOrIncompleteConfiguration()

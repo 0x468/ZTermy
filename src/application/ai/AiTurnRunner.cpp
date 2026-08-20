@@ -545,6 +545,7 @@ std::expected<void, AiProviderError> AiTurnRunner::executeNextTool()
 void AiTurnRunner::observeToolEvent(const AiStreamEvent &event)
 {
     constexpr std::size_t maximumArgumentsBytes = std::size_t{16} * 1024;
+    constexpr std::size_t maximumProviderDataBytes = std::size_t{64} * 1024;
     auto tool = std::ranges::find(m_pendingToolCalls, event.toolCallId, &AiToolCall::id);
     if (tool == m_pendingToolCalls.end())
     {
@@ -558,6 +559,18 @@ void AiTurnRunner::observeToolEvent(const AiStreamEvent &event)
     if (!event.toolName.empty())
     {
         tool->name = event.toolName;
+    }
+    if (!event.providerDataJson.empty())
+    {
+        if (event.providerDataJson.size() > maximumProviderDataBytes)
+        {
+            m_pendingError = AiProviderError{.code = AiProviderErrorCode::protocol,
+                                             .message = "Provider tool metadata exceeds the 64 KiB limit.",
+                                             .retryable = false};
+            static_cast<void>(m_client.cancel(*m_requestId));
+            return;
+        }
+        tool->providerDataJson = event.providerDataJson;
     }
     if (event.type == AiStreamEventType::toolCallCompleted && !event.delta.empty())
     {

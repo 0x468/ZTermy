@@ -9,6 +9,26 @@
 > 后续 AI 工作永远只打磨 ztermy 自有的供应商驱动助手；竞品研究只能转化为
 > 原生 UI/UX 或能力改进，不能转化为外部 Agent 集成需求。
 
+## 节点 N28 — 主流供应商协议与工具续接（2026-08-21）
+
+**commit**: 本节点提交（见 git 历史）
+
+**范围**：
+
+1. 在既有 OpenAI、Anthropic、DeepSeek、Kimi、Z.AI、Ollama 与通用兼容配置之外，新增 Google Gemini、OpenRouter 和 Alibaba Qwen 的一等供应商预设；端点与模型始终可编辑；
+2. Gemini 使用官方 OpenAI 兼容端点与 `reasoning_effort`，OpenRouter 映射完整推理强度，Qwen 映射 `enable_thinking`；对 Qwen 3.8 显式关闭 `preserve_thinking`，避免把经过有界展示的推理文本伪装成供应商要求的完整历史推理；
+3. 兼容流同时解析 Chat Completions 与 Responses 风格 token usage，并接受只有 usage、没有 `choices` 的最终数据块；
+4. Gemini 工具调用的 `extra_content` 作为有界、不解释的供应商元数据，从流式事件、待执行工具、加密对话回放一直原样续接到下一次请求；畸形、非对象或超过 64 KiB 的元数据会被拒绝，不静默丢失；
+5. 设置、端点预览、模型获取、推理选项、请求生成、流式解析、回放与完整工具轮次均有自动化合同；所有能力仍只属于当前终端的 ztermy 内置助手，不引入外部 Agent 或跨终端控制。
+
+**验证**：MSVC 动态 Debug 与静态 Release 构建通过，两套完整测试均为 `114/114`；
+clang-tidy 以 warnings-as-errors 覆盖 245 个 C++ 翻译单元；48 个 QML 文件、C++ 格式和
+1774/1774 翻译目录通过。便携 ZIP 与 MSI 均重新生成，SHA-256 分别为
+`2d1ebf048c4136a8b4827bb00c0b4113a77145f97c2bce787ab2eb83268c16e4` 和
+`696f9275dc518f779b3c5cba478722aabc68fa6037a69209ae22c65e9f772883`，checksummed release
+bundle 组装成功。本机 WiX ICE 合同检查仍因 Windows Installer 服务不可访问返回已知的
+`WIX0217/217`；跳过 ICE 后的 MSI 反编译结构合同全部通过。
+
 ## 节点 N27 — 当前终端长输出工件与实时分页（2026-08-21）
 
 **commit**: 本节点提交（见 git 历史）

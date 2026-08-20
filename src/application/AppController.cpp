@@ -344,6 +344,9 @@ private:
         case ztermy::config::AiProviderPreference::deepSeek:
         case ztermy::config::AiProviderPreference::kimi:
         case ztermy::config::AiProviderPreference::zai:
+        case ztermy::config::AiProviderPreference::gemini:
+        case ztermy::config::AiProviderPreference::openRouter:
+        case ztermy::config::AiProviderPreference::qwen:
         case ztermy::config::AiProviderPreference::openAiCompatible:
             return ztermy::ai::AiProviderKind::openAiCompatible;
         case ztermy::config::AiProviderPreference::ollama:
@@ -368,6 +371,12 @@ aiProviderFlavor(const ztermy::config::AiProviderPreference provider) noexcept
             return Flavor::kimi;
         case ztermy::config::AiProviderPreference::zai:
             return Flavor::zai;
+        case ztermy::config::AiProviderPreference::gemini:
+            return Flavor::gemini;
+        case ztermy::config::AiProviderPreference::openRouter:
+            return Flavor::openRouter;
+        case ztermy::config::AiProviderPreference::qwen:
+            return Flavor::qwen;
         case ztermy::config::AiProviderPreference::ollama:
             return Flavor::ollama;
         case ztermy::config::AiProviderPreference::openAiCompatible:
@@ -425,6 +434,13 @@ aiReasoningEffort(const ztermy::config::AiReasoningPreference preference) noexce
             return {QStringLiteral("auto")};
         }
         case ztermy::config::AiProviderPreference::zai:
+            return {QStringLiteral("auto"), QStringLiteral("off")};
+        case ztermy::config::AiProviderPreference::gemini:
+            return {QStringLiteral("auto"), QStringLiteral("low"), QStringLiteral("medium"), QStringLiteral("high")};
+        case ztermy::config::AiProviderPreference::openRouter:
+            return {QStringLiteral("auto"),   QStringLiteral("off"),  QStringLiteral("low"),
+                    QStringLiteral("medium"), QStringLiteral("high"), QStringLiteral("max")};
+        case ztermy::config::AiProviderPreference::qwen:
             return {QStringLiteral("auto"), QStringLiteral("off")};
         case ztermy::config::AiProviderPreference::ollama:
         case ztermy::config::AiProviderPreference::openAiCompatible:

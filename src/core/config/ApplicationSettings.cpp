@@ -202,6 +202,18 @@ template <>
     {
         return AiProviderPreference::zai;
     }
+    if (token == QStringLiteral("gemini"))
+    {
+        return AiProviderPreference::gemini;
+    }
+    if (token == QStringLiteral("openrouter"))
+    {
+        return AiProviderPreference::openRouter;
+    }
+    if (token == QStringLiteral("qwen"))
+    {
+        return AiProviderPreference::qwen;
+    }
     return std::nullopt;
 }
 
@@ -730,6 +742,12 @@ QString aiProviderPreferenceToken(const AiProviderPreference preference)
             return QStringLiteral("kimi");
         case AiProviderPreference::zai:
             return QStringLiteral("zai");
+        case AiProviderPreference::gemini:
+            return QStringLiteral("gemini");
+        case AiProviderPreference::openRouter:
+            return QStringLiteral("openrouter");
+        case AiProviderPreference::qwen:
+            return QStringLiteral("qwen");
         case AiProviderPreference::ollama:
             return QStringLiteral("ollama");
         case AiProviderPreference::openAiCompatible:

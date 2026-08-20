@@ -871,6 +871,29 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(controller.aiModel().isEmpty());
     QVERIFY(!controller.aiAutomaticContext());
     QCOMPARE(controller.aiPermissionPreference(), QStringLiteral("ask"));
+    QCOMPARE(controller.aiProviderEndpointPreview(
+                 QStringLiteral("gemini"), QStringLiteral("https://generativelanguage.googleapis.com/v1beta/openai/")),
+             QStringLiteral("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"));
+    QCOMPARE(controller.aiProviderEndpointPreview(QStringLiteral("openrouter"),
+                                                  QStringLiteral("https://openrouter.ai/api/v1")),
+             QStringLiteral("https://openrouter.ai/api/v1/chat/completions"));
+    QCOMPARE(controller.aiProviderEndpointPreview(QStringLiteral("qwen"),
+                                                  QStringLiteral("https://dashscope.aliyuncs.com/compatible-mode/v1")),
+             QStringLiteral("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"));
+    QCOMPARE(
+        controller.aiReasoningCapabilities(QStringLiteral("gemini"), QStringLiteral("gemini-3.7-flash"))
+            .value(QStringLiteral("tokens"))
+            .toStringList(),
+        QStringList({QStringLiteral("auto"), QStringLiteral("low"), QStringLiteral("medium"), QStringLiteral("high")}));
+    QCOMPARE(controller.aiReasoningCapabilities(QStringLiteral("openrouter"), QStringLiteral("openai/gpt-latest"))
+                 .value(QStringLiteral("tokens"))
+                 .toStringList(),
+             QStringList({QStringLiteral("auto"), QStringLiteral("off"), QStringLiteral("low"),
+                          QStringLiteral("medium"), QStringLiteral("high"), QStringLiteral("max")}));
+    QCOMPARE(controller.aiReasoningCapabilities(QStringLiteral("qwen"), QStringLiteral("qwen3.7-plus"))
+                 .value(QStringLiteral("tokens"))
+                 .toStringList(),
+             QStringList({QStringLiteral("auto"), QStringLiteral("off")}));
 
     QVERIFY(controller.saveAiProviderSettings(QStringLiteral("ollama"), QStringLiteral("http://127.0.0.1:11434"),
                                               QStringLiteral("/api/chat"), QStringLiteral("qwen3"), false,

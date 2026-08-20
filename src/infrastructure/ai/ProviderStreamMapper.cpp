@@ -84,10 +84,27 @@ namespace
     {
         return std::nullopt;
     }
-    const auto inputDetails = object.value("input_tokens_details").toObject();
-    const auto outputDetails = object.value("output_tokens_details").toObject();
-    return AiTokenUsage{.inputTokens = object.value("input_tokens").toVariant().toULongLong(),
-                        .outputTokens = object.value("output_tokens").toVariant().toULongLong(),
+    const auto inputDetails =
+        object
+            .value(object.contains("input_tokens_details") ? QStringLiteral("input_tokens_details")
+                                                           : QStringLiteral("prompt_tokens_details"))
+            .toObject();
+    const auto outputDetails =
+        object
+            .value(object.contains("output_tokens_details") ? QStringLiteral("output_tokens_details")
+                                                            : QStringLiteral("completion_tokens_details"))
+            .toObject();
+    return AiTokenUsage{.inputTokens = object
+                                           .value(object.contains("input_tokens") ? QStringLiteral("input_tokens")
+                                                                                  : QStringLiteral("prompt_tokens"))
+                                           .toVariant()
+                                           .toULongLong(),
+                        .outputTokens =
+                            object
+                                .value(object.contains("output_tokens") ? QStringLiteral("output_tokens")
+                                                                        : QStringLiteral("completion_tokens"))
+                                .toVariant()
+                                .toULongLong(),
                         .reasoningTokens = outputDetails.value("reasoning_tokens").toVariant().toULongLong(),
                         .cachedInputTokens = inputDetails.value("cached_tokens").toVariant().toULongLong()};
 }
@@ -106,6 +123,29 @@ void appendUsageAndCompletion(const QJsonObject &response, std::vector<AiStreamE
 [[nodiscard]] std::string syntheticToolId(const std::uint64_t sequence)
 {
     return "ollama-tool-" + std::to_string(sequence);
+}
+
+[[nodiscard]] std::expected<std::string, AiProviderError> boundedProviderData(const QJsonValue &value)
+{
+    constexpr qsizetype maximumProviderDataBytes = qsizetype{64} * 1024;
+    if (value.isUndefined() || value.isNull())
+    {
+        return std::string{};
+    }
+    if (!value.isObject())
+    {
+        return std::unexpected(AiProviderError{.code = AiProviderErrorCode::protocol,
+                                               .message = "Provider tool metadata must be a JSON object.",
+                                               .retryable = false});
+    }
+    const QByteArray encoded = QJsonDocument(value.toObject()).toJson(QJsonDocument::Compact);
+    if (encoded.size() > maximumProviderDataBytes)
+    {
+        return std::unexpected(AiProviderError{.code = AiProviderErrorCode::protocol,
+                                               .message = "Provider tool metadata exceeds the 64 KiB limit.",
+                                               .retryable = false});
+    }
+    return std::string(encoded.constData(), static_cast<std::size_t>(encoded.size()));
 }
 
 [[nodiscard]] std::optional<AiWebSource> webSourceFromObject(QJsonObject object)
@@ -347,7 +387,8 @@ OpenAiCompatibleStreamMapper::map(const ServerSentEvent &event)
             static_cast<void>(index);
             events.push_back(AiStreamEvent{.type = AiStreamEventType::toolCallCompleted,
                                            .toolCallId = tool.callId,
-                                           .toolName = tool.name});
+                                           .toolName = tool.name,
+                                           .providerDataJson = tool.providerDataJson});
         }
         events.push_back(AiStreamEvent{.type = AiStreamEventType::responseCompleted});
         return events;
@@ -371,6 +412,14 @@ OpenAiCompatibleStreamMapper::map(const ServerSentEvent &event)
     {
         m_started = true;
         events.push_back(AiStreamEvent{.type = AiStreamEventType::responseStarted, .responseId = responseId});
+    }
+    // OpenAI-compatible providers commonly emit usage in a final chunk whose
+    // choices array is empty. Emit it before completion regardless of whether
+    // this chunk also carries a choice.
+    if (const auto usage = openAiUsage(object.value("usage").toObject()); usage.has_value())
+    {
+        events.push_back(
+            AiStreamEvent{.type = AiStreamEventType::usageUpdated, .responseId = responseId, .usage = usage});
     }
     const auto choices = object.value("choices").toArray();
     if (!choices.isEmpty())
@@ -411,12 +460,22 @@ OpenAiCompatibleStreamMapper::map(const ServerSentEvent &event)
             {
                 state.name = name;
             }
-            if (!callId.empty() || !name.empty())
+            const auto providerData = boundedProviderData(tool.value("extra_content"));
+            if (!providerData.has_value())
+            {
+                return std::unexpected(providerData.error());
+            }
+            if (!providerData->empty())
+            {
+                state.providerDataJson = *providerData;
+            }
+            if (!callId.empty() || !name.empty() || !providerData->empty())
             {
                 events.push_back(AiStreamEvent{.type = AiStreamEventType::toolCallStarted,
                                                .responseId = responseId,
                                                .toolCallId = state.callId,
-                                               .toolName = state.name});
+                                               .toolName = state.name,
+                                               .providerDataJson = state.providerDataJson});
             }
             const auto arguments = utf8(function.value("arguments").toString());
             if (!arguments.empty())
@@ -428,15 +487,6 @@ OpenAiCompatibleStreamMapper::map(const ServerSentEvent &event)
                                                .delta = arguments});
             }
         }
-        // Usage must be emitted before responseCompleted: the conversation
-        // model snapshots usage exactly when the completion event arrives, and
-        // emitting it afterwards would surface a zero token count on every
-        // reply from OpenAI-compatible endpoints.
-        if (const auto usage = openAiUsage(object.value("usage").toObject()); usage.has_value())
-        {
-            events.push_back(
-                AiStreamEvent{.type = AiStreamEventType::usageUpdated, .responseId = responseId, .usage = usage});
-        }
         if (!choice.value("finish_reason").isNull() && !m_completed)
         {
             m_completed = true;
@@ -446,7 +496,8 @@ OpenAiCompatibleStreamMapper::map(const ServerSentEvent &event)
                 events.push_back(AiStreamEvent{.type = AiStreamEventType::toolCallCompleted,
                                                .responseId = responseId,
                                                .toolCallId = tool.callId,
-                                               .toolName = tool.name});
+                                               .toolName = tool.name,
+                                               .providerDataJson = tool.providerDataJson});
             }
             events.push_back(AiStreamEvent{.type = AiStreamEventType::responseCompleted, .responseId = responseId});
         }

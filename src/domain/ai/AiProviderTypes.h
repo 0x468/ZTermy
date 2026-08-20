@@ -23,6 +23,9 @@ enum class AiProviderFlavor : std::uint8_t
     deepSeek,
     kimi,
     zai,
+    gemini,
+    openRouter,
+    qwen,
     ollama,
     compatible,
 };
@@ -91,6 +94,10 @@ struct AiToolCall final
     std::string id;
     std::string name;
     std::string argumentsJson;
+    // Bounded, opaque provider metadata attached to this tool call. OpenAI-
+    // compatible providers such as Gemini require extra_content (including a
+    // thought signature) to be replayed exactly after the tool returns.
+    std::string providerDataJson;
 
     [[nodiscard]] friend bool operator==(const AiToolCall &, const AiToolCall &) = default;
 };
@@ -221,6 +228,7 @@ struct AiStreamEvent final
     std::string toolCallId;
     std::string toolName;
     std::string delta;
+    std::string providerDataJson;
     AiResponseStopReason stopReason = AiResponseStopReason::unspecified;
     std::string providerAssistantContentJson;
     // Populated only on the final completion event for providers that require

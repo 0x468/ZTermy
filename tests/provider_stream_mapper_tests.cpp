@@ -32,6 +32,7 @@ private slots:
     void mapsOpenAiWebSearchAndCitations();
     void rejectsMalformedProviderJson();
     void mapsCompatibleTextToolsAndCompletion();
+    void mapsCompatibleUsageFields();
     void mapsAnthropicTextToolsUsageAndCompletion();
     void mapsAnthropicThinkingSignature();
     void mapsAnthropicWebSearchAndCitations();
@@ -129,17 +130,36 @@ void ProviderStreamMapperTests::mapsCompatibleTextToolsAndCompletion()
     OpenAiCompatibleStreamMapper mapper;
     auto events = mapper.map(ServerSentEvent{
         .data =
-            R"json({"id":"chat_1","choices":[{"delta":{"content":"hi","tool_calls":[{"index":0,"id":"call_1","function":{"name":"run_command","arguments":"{\""}}]},"finish_reason":null}]})json"});
+            R"json({"id":"chat_1","choices":[{"delta":{"content":"hi","tool_calls":[{"index":0,"id":"call_1","extra_content":{"google":{"thought_signature":"opaque-signature"}},"function":{"name":"run_command","arguments":"{\""}}]},"finish_reason":null}]})json"});
     QVERIFY(events.has_value());
     QCOMPARE(events->at(1).type, AiStreamEventType::textDelta);
     QCOMPARE(events->at(2).type, AiStreamEventType::toolCallStarted);
+    QCOMPARE(events->at(2).providerDataJson, std::string(R"({"google":{"thought_signature":"opaque-signature"}})"));
     QCOMPARE(events->at(3).type, AiStreamEventType::toolArgumentsDelta);
 
     events = mapper.map(ServerSentEvent{.data = "[DONE]"});
     QCOMPARE(events->size(), std::size_t{2});
     QCOMPARE(events->at(0).type, AiStreamEventType::toolCallCompleted);
+    QCOMPARE(events->at(0).providerDataJson, std::string(R"({"google":{"thought_signature":"opaque-signature"}})"));
     QCOMPARE(events->at(1).type, AiStreamEventType::responseCompleted);
     QVERIFY(mapper.map(ServerSentEvent{.data = "[DONE]"})->empty());
+}
+
+void ProviderStreamMapperTests::mapsCompatibleUsageFields()
+{
+    OpenAiCompatibleStreamMapper mapper;
+    const auto events = mapper.map(ServerSentEvent{
+        .data =
+            R"json({"id":"chat_usage","choices":[],"usage":{"prompt_tokens":21,"completion_tokens":13,"prompt_tokens_details":{"cached_tokens":5},"completion_tokens_details":{"reasoning_tokens":8}}})json"});
+    QVERIFY(events.has_value());
+    QCOMPARE(events->size(), std::size_t{2});
+    QCOMPARE(events->at(0).type, AiStreamEventType::responseStarted);
+    QCOMPARE(events->at(1).type, AiStreamEventType::usageUpdated);
+    const auto usage = events->at(1).usage.value_or(AiTokenUsage{});
+    QCOMPARE(usage.inputTokens, std::uint64_t{21});
+    QCOMPARE(usage.outputTokens, std::uint64_t{13});
+    QCOMPARE(usage.cachedInputTokens, std::uint64_t{5});
+    QCOMPARE(usage.reasoningTokens, std::uint64_t{8});
 }
 
 void ProviderStreamMapperTests::mapsAnthropicTextToolsUsageAndCompletion()

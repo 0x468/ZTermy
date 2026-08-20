@@ -111,6 +111,9 @@ void ApplicationSettingsTests::roundTripsEveryAiProviderPreference()
         ztermy::config::AiProviderPreference::deepSeek,
         ztermy::config::AiProviderPreference::kimi,
         ztermy::config::AiProviderPreference::zai,
+        ztermy::config::AiProviderPreference::gemini,
+        ztermy::config::AiProviderPreference::openRouter,
+        ztermy::config::AiProviderPreference::qwen,
         ztermy::config::AiProviderPreference::ollama,
         ztermy::config::AiProviderPreference::openAiCompatible,
     };

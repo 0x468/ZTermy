@@ -62,6 +62,9 @@ enum class AiProviderPreference : std::uint8_t
     deepSeek,
     kimi,
     zai,
+    gemini,
+    openRouter,
+    qwen,
     ollama,
     openAiCompatible,
 };
