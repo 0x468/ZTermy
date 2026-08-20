@@ -175,6 +175,11 @@ Rectangle {
         openSettingsTab();
     }
 
+    function openAiSettingsTab() {
+        settingsPane.currentCategory = "ai";
+        openSettingsTab();
+    }
+
     function closeSettingsTab() {
         if (!settingsTabOpen) {
             return;
@@ -2065,6 +2070,7 @@ Rectangle {
                             onRunRequested: command => root.requestTerminalCommandRun(command)
                             onImportLibraryRequested: scriptImportDialog.open()
                             onExportLibraryRequested: scriptExportDialog.open()
+                            onAiSettingsRequested: root.openAiSettingsTab()
                             onCloseRequested: {
                                 root.controller.closeTerminalWorkbench();
                                 terminalViewport.forceActiveFocus();

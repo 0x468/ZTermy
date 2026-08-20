@@ -20,6 +20,10 @@
 
 ## 1. Provider 与模型
 
+- [ ] 清空模型或删除当前 Provider 的 API Key，再打开任意终端的 AI 侧栏。预期只显示
+      “设置终端助手”的非错误引导，不显示不可用输入框；点击“打开 AI 设置”应直接进入
+      设置页的 AI 分类。补全并保存 Provider、模型和凭据后返回终端，预期引导自动消失，
+      输入框恢复，原终端和既有对话不被切换或清空。Ollama 不要求 API Key。
 - [ ] 打开“设置 > AI”，依次切换 OpenAI、Anthropic、DeepSeek、Kimi、Z.AI、
       Ollama 和 OpenAI-compatible。预期 API 地址与请求预览跟随厂商变化；自定义地址
       仍可编辑。

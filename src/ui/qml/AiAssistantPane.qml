@@ -12,6 +12,7 @@ Rectangle {
     required property var controller
     required property var activeTab
     readonly property bool busy: controller.activeAiState === "starting" || controller.activeAiState === "retrying" || controller.activeAiState === "streaming" || controller.activeAiState === "cancelling"
+    readonly property bool assistantConfigured: controller.aiBaseUrl.trim().length > 0 && controller.aiModel.trim().length > 0 && (controller.aiProviderPreference === "ollama" || controller.aiApiKeyConfigured)
     readonly property var conversation: controller.activeAiConversation
     readonly property var contextCompaction: controller.activeAiCompaction || ({})
     readonly property var toolApproval: controller.activeAiToolApproval || ({
@@ -36,6 +37,7 @@ Rectangle {
     property bool commandRequest: false
     property bool webSearchEnabled: false
     property var selectedSkillSlugs: []
+    signal settingsRequested
     readonly property var slashCommands: [
         {
             "command": "/new",
@@ -677,6 +679,78 @@ Rectangle {
             Layout.rightMargin: 10
             kind: "error"
             text: pane.controller.activeAiError
+        }
+
+        Rectangle {
+            id: providerSetupCard
+
+            objectName: "aiProviderSetupCard"
+            Layout.fillWidth: true
+            Layout.leftMargin: 10
+            Layout.rightMargin: 10
+            Layout.topMargin: visible ? 8 : 0
+            Layout.preferredHeight: visible ? providerSetupContent.implicitHeight + 20 : 0
+            visible: !pane.historyExpanded && !pane.assistantConfigured
+            radius: Theme.radiusPanel
+            color: Theme.mixColor(Theme.raisedBackground, Theme.accent, 0.06)
+            border.color: Theme.mixColor(Theme.border, Theme.accent, 0.42)
+            Accessible.role: Accessible.Pane
+            Accessible.name: qsTr("Set up the terminal assistant")
+
+            ColumnLayout {
+                id: providerSetupContent
+
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.leftMargin: 10
+                anchors.rightMargin: 10
+                spacing: 7
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 7
+
+                    AppIcon {
+                        Layout.preferredWidth: 18
+                        Layout.preferredHeight: 18
+                        name: "ai"
+                        color: Theme.accent
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        text: qsTr("Set up the terminal assistant")
+                        color: Theme.text
+                        elide: Text.ElideRight
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textBody
+                        font.weight: Font.DemiBold
+                    }
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: qsTr("Choose a provider and model once, then continue the conversation here.")
+                    color: Theme.textMuted
+                    wrapMode: Text.WordWrap
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.textCompact
+                }
+
+                ActionButton {
+                    id: providerSetupButton
+
+                    objectName: "aiProviderSetupButton"
+                    Layout.alignment: Qt.AlignRight
+                    text: qsTr("Open AI settings")
+                    iconName: "settings"
+                    variant: "primary"
+                    accessibleName: qsTr("Open AI provider settings")
+                    onClicked: pane.settingsRequested()
+                }
+            }
         }
 
         ToolButton {
@@ -2199,7 +2273,7 @@ Rectangle {
             ColumnLayout {
                 anchors.centerIn: parent
                 width: Math.min(300, parent.width - 32)
-                visible: pane.conversation === null || pane.conversation.count === 0
+                visible: pane.assistantConfigured && (pane.conversation === null || pane.conversation.count === 0)
                 spacing: 10
 
                 Text {
@@ -2397,9 +2471,10 @@ Rectangle {
         Rectangle {
             id: composerPanel
 
+            objectName: "aiComposerPanel"
             Layout.fillWidth: true
             Layout.preferredHeight: visible ? Math.max(132, Math.min(420, promptEditor.contentHeight + 92 + slashCommandList.implicitHeight + (selectedSkillFlow.visible ? 34 : 0) + (composerContextList.visible ? 34 : 0))) : 0
-            visible: !pane.historyExpanded
+            visible: !pane.historyExpanded && (pane.assistantConfigured || pane.busy)
             color: Theme.elevatedBackground
             border.color: Theme.border
 
@@ -2643,7 +2718,8 @@ Rectangle {
                         width: promptScroll.availableWidth
                         implicitWidth: 0
                         objectName: "aiPromptEditor"
-                        placeholderText: pane.commandRequest ? qsTr("Describe the command you need · Enter sends · Shift+Enter adds a new line") : qsTr("Message the terminal assistant · @ context · / commands")
+                        enabled: pane.assistantConfigured
+                        placeholderText: !pane.assistantConfigured ? qsTr("Set up an AI provider to start chatting") : pane.commandRequest ? qsTr("Describe the command you need · Enter sends · Shift+Enter adds a new line") : qsTr("Message the terminal assistant · @ context · / commands")
                         color: Theme.text
                         placeholderTextColor: Theme.textMuted
                         selectionColor: Theme.accent
@@ -2778,7 +2854,7 @@ Rectangle {
                     ContextToolButton {
                         id: attachContextButton
 
-                        enabled: !pane.busy
+                        enabled: pane.assistantConfigured && !pane.busy
                         Accessible.name: qsTr("Attach terminal context")
                         onClicked: attachmentMenu.popup()
                         contentItem: AppIcon {
@@ -2795,7 +2871,7 @@ Rectangle {
 
                         checkable: true
                         checked: pane.commandRequest
-                        enabled: !pane.busy
+                        enabled: pane.assistantConfigured && !pane.busy
                         Accessible.name: qsTr("Toggle command generation mode")
                         onClicked: pane.commandRequest = !pane.commandRequest
                         contentItem: AppIcon {
@@ -2813,7 +2889,7 @@ Rectangle {
                         objectName: "aiWebSearchButton"
                         checkable: true
                         checked: pane.webSearchEnabled && pane.controller.aiWebSearchAvailable
-                        enabled: !pane.busy && pane.controller.aiWebSearchAvailable
+                        enabled: pane.assistantConfigured && !pane.busy && pane.controller.aiWebSearchAvailable
                         Accessible.name: qsTr("Use web search")
                         onClicked: pane.webSearchEnabled = !pane.webSearchEnabled
                         contentItem: AppIcon {
@@ -2838,7 +2914,7 @@ Rectangle {
                         model: pane.modelOptions()
                         currentIndex: Math.max(0, model.indexOf(pane.controller.aiModel))
                         accessibleName: qsTr("AI model")
-                        enabled: !pane.busy && model.length > 0
+                        enabled: pane.assistantConfigured && !pane.busy && model.length > 0
                         onActivated: index => pane.selectModel(model[index])
 
                         AppToolTip {
@@ -2855,7 +2931,7 @@ Rectangle {
                         displayTextModel: [qsTr("Read-only"), qsTr("Ask"), qsTr("Auto"), qsTr("YOLO")]
                         currentIndex: pane.permissionModeIndex(pane.controller.aiPermissionPreference)
                         accessibleName: qsTr("Assistant execution mode")
-                        enabled: !pane.busy
+                        enabled: pane.assistantConfigured && !pane.busy
                         onActivated: index => pane.controller.setAiPermissionMode(model[index])
 
                         AppToolTip {
@@ -2869,7 +2945,7 @@ Rectangle {
                         text: pane.busy ? qsTr("Cancel") : ""
                         iconName: pane.busy ? "close" : "play"
                         variant: pane.busy ? "destructive" : "primary"
-                        enabled: pane.busy || promptEditor.text.trim().length > 0 || pane.pendingImageCount() > 0
+                        enabled: pane.busy || (pane.assistantConfigured && (promptEditor.text.trim().length > 0 || pane.pendingImageCount() > 0))
                         accessibleName: pane.busy ? qsTr("Cancel") : qsTr("Send")
                         onClicked: {
                             if (pane.busy) {

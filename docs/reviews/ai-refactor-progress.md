@@ -9,6 +9,33 @@
 > 后续 AI 工作永远只打磨 ztermy 自有的供应商驱动助手；竞品研究只能转化为
 > 原生 UI/UX 或能力改进，不能转化为外部 Agent 集成需求。
 
+## 节点 N34 — 未配置供应商的可操作空状态（2026-08-21）
+
+**commit**: 本节点提交（见 git 历史）
+
+**范围**：
+
+1. 对照 CtrlOps AI Terminal 的未配置入口、Wave AI 与 Tempest 的供应商驱动体验，
+   确认 ztermy 不应等到用户发送消息后才以错误提示暴露缺失配置；
+2. 统一以端点、模型和凭据判断助手是否就绪；Ollama 继续允许无 API key，其它供应商
+   使用现有凭据状态，不增加新的保险库步骤；
+3. 未配置时显示主题化的设置卡片，一次点击直达“设置 → AI”，暂时隐藏不可用的输入区；
+   已有对话仍可阅读，保存有效配置后当前侧栏立即恢复输入，无需重启或重开终端；
+4. 设置入口通过 `AiAssistantPane → TerminalWorkbench → Main` 的显式信号链导航，
+   不复制供应商表单、不发探测请求，也不引入配置向导；作用域仍只有拥有侧栏的当前终端；
+5. ADR 0098 固化该空状态合同，并继续服从 ADR 0093：不发现、不选择、不启动、不桥接
+   任何外部 Agent/harness。
+
+**验证**：MSVC 动态 Debug 与静态 Release 完整构建通过，两套全量测试均为
+`115/115`；249 个 clang-tidy 任务以 warnings-as-errors 通过，C++ 格式、48 个 QML
+文件的 `qmlformat`/`qmllint` 和 `1770/1770` 翻译门禁通过。真实 Qt Quick 运行时 smoke
+覆盖常规及 260px 紧凑侧栏、可访问角色/名称、直达 AI 设置和保存配置后的响应式恢复。
+便携 ZIP 与 MSI 已重新生成，SHA-256 分别为
+`4dc96e4096892cc05539235f68d64c7e8f7255610c418e5240b2a6bdf9e0da14` 和
+`de69e2463fbb17310eb3cce2ba115abe5aa7f87e8aab9b427c36cb0a39c9e165`；当前主机的
+Windows Installer Service 仍使 WiX ICE 返回已知环境错误 `WIX0217/217`，显式跳过
+ICE 后，MSI 反编译结构合同与 checksummed release bundle 组装通过。
+
 ## 节点 N33 — 已发送上下文绑定用户消息（2026-08-21）
 
 **commit**: 本节点提交（见 git 历史）

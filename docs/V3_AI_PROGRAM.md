@@ -124,7 +124,9 @@ Deliver the smallest complete vertical slice:
   Kimi, and Z.AI without leaking protocol selection into the UI;
 - integrated provider/API-address/API-key/model settings, asynchronous model
   discovery, and editable model fallback using the existing installed/portable
-  credential boundary transparently;
+  credential boundary transparently; an unavailable provider appears as a
+  one-click assistant empty state that opens the existing AI settings category
+  and restores the composer reactively after setup (`ADR 0098`);
 - bounded `CommandBlockStore` with capability quality (`none`, `basic`, `rich`),
   command text, output, exit status, timestamps, CWD, host, attribution, and
   explicit output coverage (`complete`, bounded/truncated, gapped, interleaved,

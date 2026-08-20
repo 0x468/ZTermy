@@ -797,6 +797,70 @@ struct ResizeHitRuntimeCase
         rootObject == nullptr ? nullptr : rootObject->findChild<QQuickItem *>(QStringLiteral("aiAssistantPane"));
     auto *aiPromptEditor =
         rootObject == nullptr ? nullptr : rootObject->findChild<QQuickItem *>(QStringLiteral("aiPromptEditor"));
+    auto *aiProviderSetupCard = quickItem(rootObject, "aiProviderSetupCard");
+    auto *aiProviderSetupButton = quickItem(rootObject, "aiProviderSetupButton");
+    auto *aiComposerPanel = quickItem(rootObject, "aiComposerPanel");
+    QAccessibleInterface *aiProviderSetupInterface =
+        aiProviderSetupCard == nullptr ? nullptr : QAccessible::queryAccessibleInterface(aiProviderSetupCard);
+    const bool aiProviderSetupRegular =
+        aiProviderSetupCard != nullptr && aiProviderSetupCard->isVisible() && aiPromptEditor != nullptr
+        && !aiPromptEditor->isEnabled() && aiComposerPanel != nullptr && !aiComposerPanel->isVisible()
+        && aiProviderSetupInterface != nullptr && aiProviderSetupInterface->role() == QAccessible::Pane
+        && aiProviderSetupInterface->text(QAccessible::Name) == QStringLiteral("Set up the terminal assistant")
+        && verifyAccessibleButton(rootObject, "aiProviderSetupButton", "Open AI provider settings")
+        && captureLayout(window, outputDirectory, QStringLiteral("dark-regular-ai-provider-setup"));
+    window.resize(QSize{500, 360});
+    processWindowEventsFor(std::chrono::milliseconds{200});
+    const QPointF compactSetupTopLeft = aiProviderSetupCard == nullptr || aiAssistantPane == nullptr
+                                            ? QPointF{}
+                                            : aiProviderSetupCard->mapToItem(aiAssistantPane, QPointF{});
+    const qreal compactSetupRight =
+        aiProviderSetupCard == nullptr ? 0.0 : compactSetupTopLeft.x() + aiProviderSetupCard->width();
+    const bool aiProviderSetupCompact =
+        aiProviderSetupCard != nullptr && aiProviderSetupCard->isVisible() && aiAssistantPane != nullptr
+        && compactSetupTopLeft.x() >= -0.5 && compactSetupRight <= aiAssistantPane->width() + 0.5
+        && captureLayout(window, outputDirectory, QStringLiteral("dark-compact-ai-provider-setup"));
+    window.resize(QSize{1120, 800});
+    processWindowEventsFor(std::chrono::milliseconds{200});
+    const bool aiProviderSetupInvoked =
+        aiProviderSetupButton != nullptr
+        && QMetaObject::invokeMethod(aiProviderSetupButton, "click", Qt::DirectConnection);
+    processWindowEventsFor(std::chrono::milliseconds{150});
+    const bool aiSettingsOpened = aiProviderSetupInvoked && rootObject != nullptr
+                                  && rootObject->property("currentPage").toString() == QStringLiteral("settings")
+                                  && settingsPane != nullptr
+                                  && settingsPane->property("currentCategory").toString() == QStringLiteral("ai");
+    if (rootObject != nullptr)
+    {
+        rootObject->setProperty("currentPage", QStringLiteral("terminal"));
+    }
+    const bool aiProviderConfigured = controller.saveAiProviderSettings(
+        QStringLiteral("ollama"), QStringLiteral("http://127.0.0.1:11434"), QStringLiteral("/api/chat"),
+        QStringLiteral("qwen3"), true, QStringLiteral("ask"));
+    processWindowEventsFor(std::chrono::milliseconds{150});
+    const bool aiProviderSetupDismissed = aiProviderConfigured && aiProviderSetupCard != nullptr
+                                          && !aiProviderSetupCard->isVisible() && aiPromptEditor != nullptr
+                                          && aiPromptEditor->isEnabled() && aiComposerPanel != nullptr
+                                          && aiComposerPanel->isVisible();
+    const bool aiProviderOnboardingPassed =
+        aiProviderSetupRegular && aiProviderSetupCompact && aiSettingsOpened && aiProviderSetupDismissed;
+    QFile aiProviderOnboardingArtifact{
+        QDir(outputDirectory).filePath(QStringLiteral("ai-provider-onboarding-contract.txt"))};
+    if (aiProviderOnboardingArtifact.open(QIODevice::WriteOnly | QIODevice::Text))
+    {
+        QTextStream artifact{&aiProviderOnboardingArtifact};
+        artifact << "setupRegular=" << aiProviderSetupRegular << '\n';
+        artifact << "setupCompact=" << aiProviderSetupCompact << '\n';
+        artifact << "settingsOpened=" << aiSettingsOpened << '\n';
+        artifact << "setupDismissed=" << aiProviderSetupDismissed << '\n';
+        artifact << "setupRole="
+                 << (aiProviderSetupInterface == nullptr ? -1 : static_cast<int>(aiProviderSetupInterface->role()))
+                 << '\n';
+        artifact << "setupName="
+                 << (aiProviderSetupInterface == nullptr ? QString{}
+                                                         : aiProviderSetupInterface->text(QAccessible::Name))
+                 << '\n';
+    }
     const QVariantList initialAiContextItems = controller.activeAiContextItems();
     const QString firstAiContextId =
         initialAiContextItems.isEmpty()
@@ -945,8 +1009,6 @@ struct ResizeHitRuntimeCase
         aiPromptEditor->forceActiveFocus(Qt::TabFocusReason);
         processWindowEventsFor(std::chrono::milliseconds{40});
     }
-    const bool missingProviderShown =
-        !controller.sendAiMessage(QStringLiteral("Explain this terminal")) && !controller.activeAiError().isEmpty();
     auto *aiConversation = qobject_cast<ztermy::ai::AiConversationModel *>(controller.activeAiConversation());
     bool aiMarkdownFixturePrepared = false;
     if (aiConversation != nullptr)
@@ -1137,7 +1199,7 @@ struct ResizeHitRuntimeCase
         static_cast<void>(controller.closeTerminalTab(aiTerminalId));
     }
     return titleBrandPalettePassed && lightCompactPassed && lightRegularPassed && chineseShortcuts && chinesePalette
-           && aiWorkbenchOpened && missingProviderShown && aiDarkCaptured && aiCompactCaptured && aiLightCaptured
+           && aiWorkbenchOpened && aiProviderOnboardingPassed && aiDarkCaptured && aiCompactCaptured && aiLightCaptured
            && longApprovalBounded && clipboardPastePassed && restoredDark;
 }
 

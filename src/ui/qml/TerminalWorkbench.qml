@@ -40,6 +40,7 @@ Rectangle {
     signal runRequested(string command, var sourceItem)
     signal importLibraryRequested
     signal exportLibraryRequested
+    signal aiSettingsRequested
     signal closeRequested
 
     component WorkbenchToolButton: ToolButton {
@@ -399,6 +400,7 @@ Rectangle {
                     visible: workbench.currentPage === "ai"
                     controller: workbench.controller
                     activeTab: workbench.activeTab
+                    onSettingsRequested: workbench.aiSettingsRequested()
                 }
 
                 Item {

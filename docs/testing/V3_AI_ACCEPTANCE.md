@@ -24,6 +24,11 @@ evaluations serve different purposes and are reported separately.
       DeepSeek, Kimi, Qwen, Z.AI, and Ollama while keeping both API address and
       model editable. Endpoint previews and reasoning-option matrices are
       deterministic (`ADR 0079`).
+- [x] A missing URL, model, or required credential renders one non-error setup
+      state in the owning terminal sidebar. Its accessible action opens Settings
+      directly on AI; saving a complete configuration removes the state and
+      restores the composer without reopening or retargeting the conversation
+      (`ADR 0098`).
 - [x] OpenAI-compatible streams accept both token-usage field families and the
       final usage-only empty-`choices` chunk. Gemini `extra_content` thought
       signatures are bounded and survive stream mapping, tool execution,
