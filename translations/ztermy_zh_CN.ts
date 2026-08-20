@@ -473,6 +473,11 @@
         <translation>预计请求：%1 个令牌 · 已移除：%2 字节</translation>
     </message>
     <message>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2563"/>
+        <source>Message the terminal assistant · @ context · / commands</source>
+        <translation>向终端助手发送消息 · @ 引用上下文 · / 使用命令</translation>
+    </message>
+    <message>
         <location filename="../src/ui/qml/AiAssistantPane.qml" line="2772"/>
         <source>Read-only</source>
         <translation>只读</translation>
@@ -488,19 +493,9 @@
         <translation>YOLO</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2774"/>
-        <source>Agent execution mode</source>
-        <translation>Agent 执行模式</translation>
-    </message>
-    <message>
         <location filename="../src/ui/qml/AiAssistantPane.qml" line="637"/>
         <source>Hide AI conversation history</source>
         <translation>隐藏 AI 对话历史</translation>
-    </message>
-    <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="43"/>
-        <source>Start a clean Agent conversation</source>
-        <translation>开始一个全新的 Agent 对话</translation>
     </message>
     <message>
         <location filename="../src/ui/qml/AiAssistantPane.qml" line="48"/>
@@ -1052,6 +1047,11 @@
         <translation>附加的图片 %1</translation>
     </message>
     <message>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="43"/>
+        <source>Start a clean assistant conversation</source>
+        <translation>开始一个全新的助手对话</translation>
+    </message>
+    <message>
         <location filename="../src/ui/qml/AiAssistantPane.qml" line="369"/>
         <source>Attach the current terminal selection</source>
         <translation>附加当前终端选区</translation>
@@ -1256,11 +1256,6 @@
         <translation>移除技能 %1</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2563"/>
-        <source>Message ztermy Agent · @ context · / commands</source>
-        <translation>向 ztermy Agent 发送消息 · @ 引用上下文 · / 使用命令</translation>
-    </message>
-    <message>
         <location filename="../src/ui/qml/AiAssistantPane.qml" line="2706"/>
         <source>Attach images, text files, selected text, or recent commands</source>
         <translation>附加图片、文本文件、选中文本或最近命令</translation>
@@ -1284,6 +1279,11 @@
         <location filename="../src/ui/qml/AiAssistantPane.qml" line="2741"/>
         <source>Native web search is unavailable for this provider</source>
         <translation>当前供应商不支持原生联网检索</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/AiAssistantPane.qml" line="2774"/>
+        <source>Assistant execution mode</source>
+        <translation>助手执行模式</translation>
     </message>
     <message>
         <location filename="../src/ui/qml/AiAssistantPane.qml" line="2779"/>
@@ -4702,6 +4702,11 @@
         <translation>这些全局默认设置适用于所有集成 SFTP 浏览器。“隐藏”按钮仍可仅更改当前会话，而不会覆盖默认设置。</translation>
     </message>
     <message>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1331"/>
+        <source>Add portable AI skills as one folder per skill with a SKILL.md file. ztermy advertises only names and descriptions, then loads full instructions when you or the assistant selects a skill.</source>
+        <translation>添加便携 AI 技能：每项技能使用一个包含 SKILL.md 的文件夹。ztermy 只公布名称和描述，并在你或助手选择技能时加载完整指令。</translation>
+    </message>
+    <message>
         <location filename="../src/ui/qml/SettingsPane.qml" line="1476"/>
         <source>Model provider</source>
         <translation>模型提供商</translation>
@@ -4725,11 +4730,6 @@
         <location filename="../src/ui/qml/SettingsPane.qml" line="1508"/>
         <source>AI model provider</source>
         <translation>AI 模型提供商</translation>
-    </message>
-    <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1605"/>
-        <source>Agent permissions</source>
-        <translation>代理权限</translation>
     </message>
     <message>
         <location filename="../src/ui/qml/SettingsPane.qml" line="1615"/>
@@ -4832,6 +4832,11 @@
         <translation>从此供应商获取模型</translation>
     </message>
     <message>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1605"/>
+        <source>Assistant permissions</source>
+        <translation>助手权限</translation>
+    </message>
+    <message>
         <location filename="../src/ui/qml/SettingsPane.qml" line="1614"/>
         <source>Read-only</source>
         <translation>只读</translation>
@@ -4898,20 +4903,65 @@
         <translation>无法保存供应商设置或 API 密钥。</translation>
     </message>
     <message>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1733"/>
+        <source>Create reusable prompts. Type / in the AI composer to search one, then edit or send the inserted text.</source>
+        <translation>创建可复用提示词。在 AI 输入框中输入 / 搜索，然后编辑或发送插入的内容。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1894"/>
+        <source>Prompt text inserted into the AI composer</source>
+        <translation>插入到 AI 输入框的提示词内容</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1946"/>
+        <source>Assistant permission rules</source>
+        <translation>助手权限规则</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="1974"/>
+        <source>No remembered assistant rules yet.</source>
+        <translation>尚无已记住的助手规则。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2027"/>
+        <source>Enable this assistant rule</source>
+        <translation>启用此助手规则</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2069"/>
+        <source>Remove this assistant permission rule</source>
+        <translation>移除此助手权限规则</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2077"/>
+        <source>Save this assistant permission rule</source>
+        <translation>保存此助手权限规则</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2080"/>
+        <source>Assistant rule saved.</source>
+        <translation>助手规则已保存。</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2080"/>
+        <source>The assistant rule could not be saved.</source>
+        <translation>无法保存助手规则。</translation>
+    </message>
+    <message>
         <location filename="../src/ui/qml/SettingsPane.qml" line="2094"/>
         <source>MCP extensions</source>
         <translation>MCP 扩展</translation>
-    </message>
-    <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2102"/>
-        <source>MCP servers run as local stdio child processes. Trust and review a server once; calls then follow the current Agent mode and reusable rules.</source>
-        <translation>MCP 服务器以本地 stdio 子进程运行。完成一次信任与审核后，调用将遵循当前 Agent 模式和可复用规则。</translation>
     </message>
     <message>
         <location filename="../src/ui/qml/SettingsPane.qml" line="1805"/>
         <location filename="../src/ui/qml/SettingsPane.qml" line="2170"/>
         <source>Edit</source>
         <translation>编辑</translation>
+    </message>
+    <message>
+        <location filename="../src/ui/qml/SettingsPane.qml" line="2102"/>
+        <source>MCP servers run as local stdio child processes. Trust and review a server once; calls then follow the current assistant mode and reusable rules.</source>
+        <translation>MCP 服务器作为本地 stdio 子进程运行。信任并审核一次服务器后，调用将遵循当前助手模式和可复用规则。</translation>
     </message>
     <message>
         <location filename="../src/ui/qml/SettingsPane.qml" line="2171"/>
@@ -5014,11 +5064,6 @@
         <location filename="../src/ui/qml/SettingsPane.qml" line="1323"/>
         <source>User skills</source>
         <translation>用户技能</translation>
-    </message>
-    <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1331"/>
-        <source>Add portable Agent Skills as one folder per skill with a SKILL.md file. ztermy advertises only names and descriptions, then loads full instructions when you or the Agent selects a skill.</source>
-        <translation>以每个技能一个文件夹和一个 SKILL.md 文件的方式添加便携 Agent 技能。ztermy 仅公布名称与描述，并在你或 Agent 选择技能时加载完整指令。</translation>
     </message>
     <message>
         <location filename="../src/ui/qml/SettingsPane.qml" line="1351"/>
@@ -5146,11 +5191,6 @@
         <translation>快捷消息</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1733"/>
-        <source>Create reusable prompts. Type / in the Agent composer to search one, then edit or send the inserted text.</source>
-        <translation>创建可复用的提示词。在 Agent 输入框中键入 / 进行搜索，插入后可编辑或发送。</translation>
-    </message>
-    <message>
         <location filename="../src/ui/qml/SettingsPane.qml" line="1753"/>
         <source>No quick messages yet.</source>
         <translation>暂无快捷消息。</translation>
@@ -5211,11 +5251,6 @@
         <translation>快捷消息描述</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1894"/>
-        <source>Prompt text inserted into the Agent composer</source>
-        <translation>插入 Agent 输入框的提示词</translation>
-    </message>
-    <message>
         <location filename="../src/ui/qml/SettingsPane.qml" line="1902"/>
         <source>Quick message prompt</source>
         <translation>快捷消息提示词</translation>
@@ -5241,19 +5276,9 @@
         <translation>添加快捷消息</translation>
     </message>
     <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1946"/>
-        <source>Agent permission rules</source>
-        <translation>Agent 权限规则</translation>
-    </message>
-    <message>
         <location filename="../src/ui/qml/SettingsPane.qml" line="1954"/>
         <source>Ask mode can remember an allow or deny choice for this session, one saved Profile, or all Profiles. Exact, prefix, wildcard, and regular-expression matching are supported.</source>
         <translation>询问模式可在本次会话、一个已保存的 Profile 或所有 Profile 中记住允许或拒绝选择，并支持精确、前缀、通配符和正则表达式匹配。</translation>
-    </message>
-    <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="1974"/>
-        <source>No remembered Agent rules yet.</source>
-        <translation>尚未记住任何 Agent 规则。</translation>
     </message>
     <message>
         <location filename="../src/ui/qml/SettingsPane.qml" line="2015"/>
@@ -5269,11 +5294,6 @@
         <location filename="../src/ui/qml/SettingsPane.qml" line="2015"/>
         <source>Ask</source>
         <translation>询问</translation>
-    </message>
-    <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2027"/>
-        <source>Enable this Agent rule</source>
-        <translation>启用此 Agent 规则</translation>
     </message>
     <message>
         <location filename="../src/ui/qml/SettingsPane.qml" line="2043"/>
@@ -5309,26 +5329,6 @@
         <location filename="../src/ui/qml/SettingsPane.qml" line="2053"/>
         <source>Command or action pattern</source>
         <translation>命令或操作匹配模式</translation>
-    </message>
-    <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2069"/>
-        <source>Remove this Agent permission rule</source>
-        <translation>删除此 Agent 权限规则</translation>
-    </message>
-    <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2077"/>
-        <source>Save this Agent permission rule</source>
-        <translation>保存此 Agent 权限规则</translation>
-    </message>
-    <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2080"/>
-        <source>Agent rule saved.</source>
-        <translation>Agent 规则已保存。</translation>
-    </message>
-    <message>
-        <location filename="../src/ui/qml/SettingsPane.qml" line="2080"/>
-        <source>The Agent rule could not be saved.</source>
-        <translation>无法保存 Agent 规则。</translation>
     </message>
     <message>
         <location filename="../src/ui/qml/SettingsPane.qml" line="2186"/>
@@ -8305,6 +8305,26 @@ Recent terminal output:
         <translation>联网检索</translation>
     </message>
     <message>
+        <location filename="../src/application/AppController.cpp" line="13652"/>
+        <source>Assistant permission rules could not be loaded.</source>
+        <translation>无法加载助手权限规则。</translation>
+    </message>
+    <message>
+        <location filename="../src/application/AppController.cpp" line="13658"/>
+        <source>Assistant permission rules are invalid.</source>
+        <translation>助手权限规则无效。</translation>
+    </message>
+    <message>
+        <location filename="../src/application/AppController.cpp" line="13688"/>
+        <source>The assistant permission rule is invalid.</source>
+        <translation>此助手权限规则无效。</translation>
+    </message>
+    <message>
+        <location filename="../src/application/AppController.cpp" line="13706"/>
+        <source>Assistant permission rules could not be saved.</source>
+        <translation>无法保存助手权限规则。</translation>
+    </message>
+    <message>
         <location filename="../src/application/AppController.cpp" line="14006"/>
         <source>Skill directories and SKILL.md must be regular local entries.</source>
         <translation>技能目录和 SKILL.md 必须是普通本地条目。</translation>
@@ -8817,29 +8837,9 @@ Output:
         <translation>转发工作线程耗尽了内部资源。</translation>
     </message>
     <message>
-        <location filename="../src/application/AppController.cpp" line="13652"/>
-        <source>Agent permission rules could not be loaded.</source>
-        <translation>无法加载 Agent 权限规则。</translation>
-    </message>
-    <message>
-        <location filename="../src/application/AppController.cpp" line="13658"/>
-        <source>Agent permission rules are invalid.</source>
-        <translation>Agent 权限规则无效。</translation>
-    </message>
-    <message>
         <location filename="../src/application/AppController.cpp" line="13675"/>
         <source>Quick messages could not be loaded.</source>
         <translation>无法加载快捷消息。</translation>
-    </message>
-    <message>
-        <location filename="../src/application/AppController.cpp" line="13688"/>
-        <source>The Agent permission rule is invalid.</source>
-        <translation>此 Agent 权限规则无效。</translation>
-    </message>
-    <message>
-        <location filename="../src/application/AppController.cpp" line="13706"/>
-        <source>Agent permission rules could not be saved.</source>
-        <translation>无法保存 Agent 权限规则。</translation>
     </message>
     <message>
         <location filename="../src/application/AppController.cpp" line="13754"/>

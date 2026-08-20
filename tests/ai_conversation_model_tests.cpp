@@ -222,7 +222,8 @@ void AiConversationModelTests::preservesHiddenAgentEvidenceWithoutAddingVisibleR
 {
     AiConversationModel model;
     static_cast<void>(model.appendUserMessage(QStringLiteral("check disks")));
-    QVERIFY(model.appendEvidenceMessage(QStringLiteral("[Agent tool evidence]\nTool: run_command\nResult: df output")));
+    QVERIFY(
+        model.appendEvidenceMessage(QStringLiteral("[Assistant tool evidence]\nTool: run_command\nResult: df output")));
     QCOMPARE(model.rowCount(), 1);
     const auto transcript = model.transcript();
     QCOMPARE(transcript.size(), std::size_t{2});

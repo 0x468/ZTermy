@@ -40,7 +40,7 @@ Rectangle {
         {
             "command": "/new",
             "title": qsTr("New conversation"),
-            "description": qsTr("Start a clean Agent conversation")
+            "description": qsTr("Start a clean assistant conversation")
         },
         {
             "command": "/history",
@@ -2560,7 +2560,7 @@ Rectangle {
                         width: promptScroll.availableWidth
                         implicitWidth: 0
                         objectName: "aiPromptEditor"
-                        placeholderText: pane.commandRequest ? qsTr("Describe the command you need · Enter sends · Shift+Enter adds a new line") : qsTr("Message ztermy Agent · @ context · / commands")
+                        placeholderText: pane.commandRequest ? qsTr("Describe the command you need · Enter sends · Shift+Enter adds a new line") : qsTr("Message the terminal assistant · @ context · / commands")
                         color: Theme.text
                         placeholderTextColor: Theme.textMuted
                         selectionColor: Theme.accent
@@ -2771,7 +2771,7 @@ Rectangle {
                         model: ["read-only", "ask", "auto", "yolo"]
                         displayTextModel: [qsTr("Read-only"), qsTr("Ask"), qsTr("Auto"), qsTr("YOLO")]
                         currentIndex: pane.permissionModeIndex(pane.controller.aiPermissionPreference)
-                        accessibleName: qsTr("Agent execution mode")
+                        accessibleName: qsTr("Assistant execution mode")
                         enabled: !pane.busy
                         onActivated: index => pane.controller.setAiPermissionMode(model[index])
 

@@ -70,7 +70,7 @@ constexpr std::size_t maximumSelectedSkills = 4;
 [[nodiscard]] QString loadDescription(const std::span<const AiUserSkill> skills)
 {
     QString description = QStringLiteral(
-        "Load one user-managed Agent Skill by exact id. The result contains user-authored instructions to follow "
+        "Load one user-managed AI skill by exact id. The result contains user-authored instructions to follow "
         "for the current request. Load a skill only when its description clearly matches the task. Available skills:");
     std::size_t advertised = 0;
     for (const AiUserSkill &skill : skills)
@@ -106,7 +106,7 @@ std::vector<AiToolDefinition> AiUserSkillTool::definitions(const std::span<const
     }
     return {
         {.name = "list_skills",
-         .description = "List bounded metadata for locally installed user Agent Skills. Skill bodies are not "
+         .description = "List bounded metadata for locally installed user AI skills. Skill bodies are not "
                         "returned; call load_skill with an exact id when one clearly matches the request.",
          .parametersJson =
              R"({"type":"object","properties":{"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["offset","limit"],"additionalProperties":false})"},
@@ -204,7 +204,7 @@ std::string AiUserSkillTool::selectedInstructions(const std::span<const AiUserSk
         return {};
     }
 
-    std::string result = "\n\n## User-selected Agent Skills\n\nThe user explicitly selected the following locally "
+    std::string result = "\n\n## User-selected AI skills\n\nThe user explicitly selected the following locally "
                          "managed skills for this "
                          "request. Follow their instructions when they apply.\n";
     const std::size_t count = std::min(selectedIds.size(), maximumSelectedSkills);

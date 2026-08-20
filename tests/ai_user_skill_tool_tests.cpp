@@ -77,7 +77,7 @@ void AiUserSkillToolTests::buildsExplicitSelectionInstructions()
     const std::vector selected{std::string("release-check"), std::string("missing"),
                                std::string("service-diagnostics")};
     const std::string instructions = AiUserSkillTool::selectedInstructions(values, selected);
-    QVERIFY(instructions.find("User-selected Agent Skills") != std::string::npos);
+    QVERIFY(instructions.find("User-selected AI skills") != std::string::npos);
     QVERIFY(instructions.find("/release-check") != std::string::npos);
     QVERIFY(instructions.find("/service-diagnostics") != std::string::npos);
     QVERIFY(instructions.find("/missing") == std::string::npos);

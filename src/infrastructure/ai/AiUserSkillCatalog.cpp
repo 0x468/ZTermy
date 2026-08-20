@@ -23,8 +23,8 @@ constexpr auto readmeFileName = "README.txt";
 constexpr auto readmeContents = std::to_array(
     "ztermy user skills\n"
     "\n"
-    "Add one directory per skill. Each directory must contain a SKILL.md file that follows the Agent Skills "
-    "specification.\n"
+    "Add one directory per skill. Each directory must contain a SKILL.md file that follows ztermy's portable AI "
+    "skill format.\n"
     "\n"
     "Example:\n"
     "  Skills/\n"

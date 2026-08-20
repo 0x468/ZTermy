@@ -149,16 +149,16 @@ std::vector<AiToolDefinition> AiActionToolDispatcher::definitions()
          .parametersJson =
              R"({"type":"object","properties":{"data":{"type":"string","minLength":1,"maxLength":4096},"append_enter":{"type":"boolean","default":false}},"required":["data"],"additionalProperties":false})"},
         {.name = "save_runbook",
-         .description = "Save a reusable ztermy script according to the active agent mode and rules.",
+         .description = "Save a reusable ztermy script according to the active assistant mode and rules.",
          .parametersJson =
              R"({"type":"object","properties":{"runbook":{"type":"object","properties":{"name":{"type":"string","minLength":1,"maxLength":128},"description":{"type":"string","maxLength":4096},"shell":{"type":"string","enum":["any","powershell","bash","zsh","fish","sh"]},"steps":{"type":"array","minItems":1,"maxItems":64,"items":{"type":"object","properties":{"command":{"type":"string","minLength":1,"maxLength":16384},"continuation":{"type":"string","enum":["immediate","literal-output"]},"output_marker":{"type":"string","maxLength":1024},"timeout_ms":{"type":"integer","minimum":0,"maximum":4294967295}},"required":["command","continuation","output_marker","timeout_ms"],"additionalProperties":false}}},"required":["name","description","shell","steps"],"additionalProperties":false}},"required":["runbook"],"additionalProperties":false})"},
         {.name = "queue_sftp_download",
-         .description = "Queue one remote regular file for download according to the active agent mode and rules.",
+         .description = "Queue one remote regular file for download according to the active assistant mode and rules.",
          .parametersJson =
              R"({"type":"object","properties":{"remote_path":{"type":"string","minLength":1,"maxLength":4096},"local_path":{"type":"string","minLength":1,"maxLength":4096}},"required":["remote_path","local_path"],"additionalProperties":false})"},
         {.name = "queue_sftp_upload",
          .description =
-             "Queue one local regular non-symlink file for upload according to the active agent mode and rules.",
+             "Queue one local regular non-symlink file for upload according to the active assistant mode and rules.",
          .parametersJson =
              R"({"type":"object","properties":{"local_path":{"type":"string","minLength":1,"maxLength":4096},"remote_path":{"type":"string","minLength":1,"maxLength":4096}},"required":["local_path","remote_path"],"additionalProperties":false})"}};
 }

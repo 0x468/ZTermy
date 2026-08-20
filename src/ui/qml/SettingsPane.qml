@@ -1328,7 +1328,7 @@ Rectangle {
 
                     Text {
                         Layout.fillWidth: true
-                        text: qsTr("Add portable Agent Skills as one folder per skill with a SKILL.md file. ztermy advertises only names and descriptions, then loads full instructions when you or the Agent selects a skill.")
+                        text: qsTr("Add portable AI skills as one folder per skill with a SKILL.md file. ztermy advertises only names and descriptions, then loads full instructions when you or the assistant selects a skill.")
                         color: Theme.textMuted
                         wrapMode: Text.WordWrap
                         font.family: Theme.uiFont
@@ -1602,7 +1602,7 @@ Rectangle {
                         }
 
                         Label {
-                            text: qsTr("Agent permissions")
+                            text: qsTr("Assistant permissions")
                             color: Theme.text
                         }
                         AppComboBox {
@@ -1730,7 +1730,7 @@ Rectangle {
 
                     Text {
                         Layout.fillWidth: true
-                        text: qsTr("Create reusable prompts. Type / in the Agent composer to search one, then edit or send the inserted text.")
+                        text: qsTr("Create reusable prompts. Type / in the AI composer to search one, then edit or send the inserted text.")
                         color: Theme.textMuted
                         wrapMode: Text.WordWrap
                         font.family: Theme.uiFont
@@ -1891,7 +1891,7 @@ Rectangle {
 
                                 TextArea {
                                     text: pane.aiQuickMessageContentDraft
-                                    placeholderText: qsTr("Prompt text inserted into the Agent composer")
+                                    placeholderText: qsTr("Prompt text inserted into the AI composer")
                                     color: Theme.text
                                     placeholderTextColor: Theme.textMuted
                                     selectionColor: Theme.accent
@@ -1943,7 +1943,7 @@ Rectangle {
                 Layout.fillWidth: true
                 visible: pane.currentCategory === "ai"
                 compact: true
-                heading: qsTr("Agent permission rules")
+                heading: qsTr("Assistant permission rules")
 
                 ColumnLayout {
                     Layout.fillWidth: true
@@ -1971,7 +1971,7 @@ Rectangle {
                     Text {
                         Layout.fillWidth: true
                         visible: pane.controller.aiPermissionRules.length === 0
-                        text: qsTr("No remembered Agent rules yet.")
+                        text: qsTr("No remembered assistant rules yet.")
                         color: Theme.textSubtle
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.textLabel
@@ -2024,7 +2024,7 @@ Rectangle {
                                         id: aiRuleEnabledSwitch
 
                                         checked: aiRuleRow.enabledDraft
-                                        accessibleName: qsTr("Enable this Agent rule")
+                                        accessibleName: qsTr("Enable this assistant rule")
                                         onToggled: aiRuleRow.enabledDraft = checked
                                     }
                                 }
@@ -2066,7 +2066,7 @@ Rectangle {
                                     ActionButton {
                                         text: qsTr("Remove")
                                         iconName: "trash"
-                                        accessibleName: qsTr("Remove this Agent permission rule")
+                                        accessibleName: qsTr("Remove this assistant permission rule")
                                         onClicked: pane.controller.deleteAiPermissionRule(aiRuleRow.modelData.id)
                                     }
 
@@ -2074,10 +2074,10 @@ Rectangle {
                                         text: qsTr("Save")
                                         iconName: "save"
                                         variant: "primary"
-                                        accessibleName: qsTr("Save this Agent permission rule")
+                                        accessibleName: qsTr("Save this assistant permission rule")
                                         onClicked: {
                                             const saved = pane.controller.updateAiPermissionRule(aiRuleRow.modelData.id, aiRuleMatcherBox.currentValue, aiRuleRow.patternDraft, aiRuleRow.enabledDraft);
-                                            pane.presentStatus(saved ? qsTr("Agent rule saved.") : qsTr("The Agent rule could not be saved."), !saved, saved);
+                                            pane.presentStatus(saved ? qsTr("Assistant rule saved.") : qsTr("The assistant rule could not be saved."), !saved, saved);
                                         }
                                     }
                                 }
@@ -2099,7 +2099,7 @@ Rectangle {
 
                     Text {
                         Layout.fillWidth: true
-                        text: qsTr("MCP servers run as local stdio child processes. Trust and review a server once; calls then follow the current Agent mode and reusable rules.")
+                        text: qsTr("MCP servers run as local stdio child processes. Trust and review a server once; calls then follow the current assistant mode and reusable rules.")
                         color: Theme.textMuted
                         wrapMode: Text.WordWrap
                         font.family: Theme.uiFont

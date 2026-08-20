@@ -9,6 +9,25 @@
 > 后续 AI 工作永远只打磨 ztermy 自有的供应商驱动助手；竞品研究只能转化为
 > 原生 UI/UX 或能力改进，不能转化为外部 Agent 集成需求。
 
+## 节点 N32 — 内置终端助手产品语言统一（2026-08-21）
+
+**commit**: 本节点提交（见 git 历史）
+
+**范围**：
+
+1. 通过当前 Debug 真实窗口复核 AI 侧栏，确认标题已使用“终端助手”，但新会话、
+   输入框、执行模式、快捷提示、权限规则与技能文案仍混用“Agent”；
+2. 将全部用户可见 AI 文案统一为“终端助手 / AI 助手 / 助手规则”，不再把内置
+   Provider API 对话包装成外部 Agent 产品；SSH agent 认证术语保持不变；
+3. 同步模型可见的工具描述、技能提示与隐藏工具证据标签，避免 Provider 上下文继续
+   混用旧产品语言；内部 C++ 类型名暂不机械重命名，以免制造无用户价值的代码 churn；
+4. 该调整不削减工具、模式、技能或 MCP 能力，只统一产品定位和可理解性。
+
+**验证**：`1763/1763` 翻译门禁通过；48 个 QML 文件通过 `qmlformat` 与
+`qmllint`；C++ 格式门禁通过；`ai-user-skill-tool`、`ai-conversation-model`、
+`ai-user-skill-catalog`、`app-controller` 和 `translation-catalog` 聚焦测试 5/5
+通过；本节点修改的 6 个 C++ 翻译单元通过 clang-tidy warnings-as-errors。
+
 ## 节点 N31 — 面向任务的 AI 设置与所属终端措辞（2026-08-21）
 
 **commit**: 本节点提交（见 git 历史）

@@ -10011,7 +10011,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
     if (!userSkillDefinitions.empty())
     {
         instructions +=
-            "\n\nUser-managed Agent Skills are available. Inspect them with list_skills and call load_skill only when "
+            "\n\nUser-managed AI skills are available. Inspect them with list_skills and call load_skill only when "
             "a skill clearly matches the current request. A loaded skill contains user-authored instructions; follow "
             "them without claiming that unrequested skills were used.";
     }
@@ -10800,7 +10800,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                     aiToolDetailText(output.outputJson)));
             }
             const QString evidence =
-                QStringLiteral("[Agent tool evidence]\nTool: %1\nArguments: %2\nResult: %3")
+                QStringLiteral("[Assistant tool evidence]\nTool: %1\nArguments: %2\nResult: %3")
                     .arg(utf8QString(call.name), utf8QString(call.argumentsJson), utf8QString(output.outputJson));
             static_cast<void>(target->aiConversation->appendEvidenceMessage(evidence));
         },
@@ -13649,13 +13649,13 @@ void AppController::loadAiPermissionRules()
     auto rules = m_aiPermissionRuleStore.load();
     if (!rules)
     {
-        m_aiPermissionRuleError = tr("Agent permission rules could not be loaded.");
+        m_aiPermissionRuleError = tr("Assistant permission rules could not be loaded.");
         qCWarning(appControllerLog) << "Unable to load AI permission rules:" << rules.error();
         return;
     }
     if (!m_aiActionToolDispatcher.replacePermissionRules(std::move(*rules)))
     {
-        m_aiPermissionRuleError = tr("Agent permission rules are invalid.");
+        m_aiPermissionRuleError = tr("Assistant permission rules are invalid.");
         qCWarning(appControllerLog) << "Loaded AI permission rules failed validation";
         return;
     }
@@ -13685,7 +13685,7 @@ bool AppController::replaceAndPersistAiPermissionRules(std::vector<ai::AiPermiss
     const std::vector<ai::AiPermissionRule> previous = m_aiActionToolDispatcher.permissionRules();
     if (!m_aiActionToolDispatcher.replacePermissionRules(std::move(rules)))
     {
-        m_aiPermissionRuleError = tr("The Agent permission rule is invalid.");
+        m_aiPermissionRuleError = tr("The assistant permission rule is invalid.");
         emit aiPermissionRulesChanged();
         return false;
     }
@@ -13703,7 +13703,7 @@ bool AppController::replaceAndPersistAiPermissionRules(std::vector<ai::AiPermiss
     if (!saved)
     {
         static_cast<void>(m_aiActionToolDispatcher.replacePermissionRules(previous));
-        m_aiPermissionRuleError = tr("Agent permission rules could not be saved.");
+        m_aiPermissionRuleError = tr("Assistant permission rules could not be saved.");
         qCWarning(appControllerLog) << "Unable to save AI permission rules:" << saved.error();
         emit aiPermissionRulesChanged();
         return false;
