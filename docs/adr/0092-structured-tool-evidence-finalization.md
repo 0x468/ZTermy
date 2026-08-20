@@ -51,8 +51,9 @@ References:
 
 - A polished but unsupported success claim remains visible for diagnosis, but
   it is no longer presented without the contradictory tool state beside it.
-- The feature works for built-in and external Agents because both already map
-  into the same `AiToolActivity` vocabulary.
+- The feature is part of ztermy's built-in provider-backed assistant. Earlier
+  external-Agent adapters that once mapped into `AiToolActivity` were removed
+  and must not be restored; ADR 0093 is the permanent product boundary.
 - The evaluator is deterministic, provider-independent, language-independent,
   and cheap enough to derive in the item model.
 - New tool states default to pending until deliberately classified, so an
