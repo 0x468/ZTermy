@@ -16,6 +16,7 @@ using ztermy::terminal::CommandBlockStore;
 using ztermy::terminal::CommandBlockStoreError;
 using ztermy::terminal::CommandBlockStoreLimits;
 using ztermy::terminal::CommandBoundaryConfidence;
+using ztermy::terminal::CommandOutputArtifactErrorCode;
 using ztermy::terminal::CommandOutputCoverage;
 using ztermy::terminal::CommandOutputObservation;
 using ztermy::terminal::CommandProvenance;
@@ -42,6 +43,9 @@ private slots:
     void deduplicatesOverlappingObservations();
     void preservesInterleavedEvidence();
     void evictsOnlyFinishedBlocks();
+    void readsArtifactMiddleBeyondHeadTailPreview();
+    void reportsPerCommandArtifactLimitExplicitly();
+    void evictsOldestFinishedArtifactAtTerminalLimit();
 };
 
 void CommandBlockStoreTests::recordsExactCommandLifecycle()
@@ -126,6 +130,13 @@ void CommandBlockStoreTests::marksMissingOutputExplicitly()
     QCOMPARE(block->observedOutputBytes, std::uint64_t{6});
     QCOMPARE(block->nextOutputStreamOffset, std::uint64_t{110});
     QCOMPARE(text(block->retainedHead()), std::string("abcxyz"));
+
+    const auto afterGap = store.readOutputArtifact(*id, 103, 16);
+    QVERIFY(afterGap.has_value());
+    QCOMPARE(text(afterGap->output), std::string("xyz"));
+    QCOMPARE(afterGap->skippedBytes, std::uint64_t{4});
+    QCOMPARE(afterGap->outputCoverage, CommandOutputCoverage::gapped);
+    QVERIFY(!afterGap->artifactComplete);
 }
 
 void CommandBlockStoreTests::deduplicatesOverlappingObservations()
@@ -179,6 +190,93 @@ void CommandBlockStoreTests::evictsOnlyFinishedBlocks()
     QVERIFY(store.find(*first) == nullptr);
     QVERIFY(store.find(*second) != nullptr);
     QVERIFY(store.find(*third) != nullptr);
+}
+
+void CommandBlockStoreTests::readsArtifactMiddleBeyondHeadTailPreview()
+{
+    CommandBlockStore store(CommandBlockStoreLimits{
+        .maxBlocks = 4,
+        .maxOutputBytesPerBlock = 8,
+        .retainedHeadBytes = 2,
+        .maxArtifactBytesPerBlock = 32,
+        .maxArtifactBytesTotal = 64,
+    });
+    const auto id = store.begin(CommandBlockStart{.outputStreamOffset = 100});
+    QVERIFY(id.has_value());
+    QVERIFY(store.append(*id, {.bytes = bytes("0123456789ABCDEF"), .streamOffset = 100}).has_value());
+    QVERIFY(store.finish(*id, 0, 20).has_value());
+
+    const auto *block = store.find(*id);
+    QVERIFY(block != nullptr);
+    QCOMPARE(block->outputCoverage, CommandOutputCoverage::boundedHeadTail);
+    QCOMPARE(text(block->retainedHead()), std::string("01"));
+    QCOMPARE(text(block->retainedTail()), std::string("ABCDEF"));
+
+    const auto middle = store.readOutputArtifact(*id, 104, 6);
+    QVERIFY(middle.has_value());
+    QCOMPARE(text(middle->output), std::string("456789"));
+    QCOMPARE(middle->nextCursor, std::uint64_t{110});
+    QCOMPARE(middle->retainedBytes, std::uint64_t{16});
+    QCOMPARE(middle->omittedBytes, std::uint64_t{0});
+    QCOMPARE(middle->outputCoverage, CommandOutputCoverage::complete);
+    QVERIFY(middle->readableMore);
+    QVERIFY(middle->streamHasMore);
+    QVERIFY(middle->pageTruncated);
+    QVERIFY(middle->artifactComplete);
+}
+
+void CommandBlockStoreTests::reportsPerCommandArtifactLimitExplicitly()
+{
+    CommandBlockStore store(CommandBlockStoreLimits{
+        .maxOutputBytesPerBlock = 8,
+        .retainedHeadBytes = 2,
+        .maxArtifactBytesPerBlock = 10,
+        .maxArtifactBytesTotal = 20,
+    });
+    const auto id = store.begin(CommandBlockStart{});
+    QVERIFY(id.has_value());
+    QVERIFY(store.append(*id, {.bytes = bytes("0123456789ABCDEF"), .streamOffset = 0}).has_value());
+
+    const auto retained = store.readOutputArtifact(*id, 0, 16);
+    QVERIFY(retained.has_value());
+    QCOMPARE(text(retained->output), std::string("0123456789"));
+    QCOMPARE(retained->retainedBytes, std::uint64_t{10});
+    QCOMPARE(retained->omittedBytes, std::uint64_t{6});
+    QVERIFY(!retained->readableMore);
+    QVERIFY(retained->streamHasMore);
+    QVERIFY(!retained->artifactComplete);
+
+    const auto unavailable = store.readOutputArtifact(*id, 10, 16);
+    QVERIFY(!unavailable.has_value());
+    QCOMPARE(unavailable.error().code, CommandOutputArtifactErrorCode::outputUnavailable);
+}
+
+void CommandBlockStoreTests::evictsOldestFinishedArtifactAtTerminalLimit()
+{
+    CommandBlockStore store(CommandBlockStoreLimits{
+        .maxBlocks = 4,
+        .maxOutputBytesPerBlock = 4,
+        .retainedHeadBytes = 1,
+        .maxArtifactBytesPerBlock = 8,
+        .maxArtifactBytesTotal = 8,
+    });
+    const auto first = store.begin(CommandBlockStart{});
+    QVERIFY(first.has_value());
+    QVERIFY(store.append(*first, {.bytes = bytes("12345678"), .streamOffset = 0}).has_value());
+    QVERIFY(store.finish(*first, 0, 10).has_value());
+
+    const auto second = store.begin(CommandBlockStart{.outputStreamOffset = 100});
+    QVERIFY(second.has_value());
+    QVERIFY(store.append(*second, {.bytes = bytes("ABCDEFGH"), .streamOffset = 100}).has_value());
+
+    const auto expired = store.readOutputArtifact(*first, 0, 8);
+    QVERIFY(!expired.has_value());
+    QCOMPARE(expired.error().code, CommandOutputArtifactErrorCode::artifactExpired);
+
+    const auto current = store.readOutputArtifact(*second, 0, 8);
+    QVERIFY(current.has_value());
+    QCOMPARE(text(current->output), std::string("ABCDEFGH"));
+    QVERIFY(current->artifactComplete);
 }
 
 } // namespace

@@ -160,9 +160,9 @@ AiTerminalOutputRead AiTerminalOutputTool::read(const AiTerminalOutputRequest &r
     }
     else
     {
-        for (auto iterator = page.lines.rbegin(); iterator != page.lines.rend(); ++iterator)
+        for (const auto &line : std::views::reverse(page.lines))
         {
-            if (!append(*iterator))
+            if (!append(line))
             {
                 break;
             }

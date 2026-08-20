@@ -301,6 +301,10 @@ becomes conversation retention.
 - keep final-answer claims aligned with the typed tool ledger: the model reviews
   every result, while the client derives and displays failed/pending evidence
   without rewriting the provider response (`ADR 0092`);
+- retain long command output in a current-terminal, session-lifetime artifact
+  separate from the head/tail preview, with explicit per-command and
+  per-terminal caps and live pagination for commands created during the same
+  turn (`ADR 0094`);
 - close provider switching, conversation resume, failure recovery, narrow-panel
   layout, and packaging acceptance before declaring V3 complete (`ADR 0093`).
 

@@ -7,6 +7,27 @@
 > Claude Code 及任何其他外部 Agent/harness 的集成。该方向不是延期事项，
 > 不得重新进入任何未来版本、路线图、待办、实验、功能开关或插件接口。
 
+## 节点 N27 — 当前终端长输出工件与实时分页（2026-08-21）
+
+**commit**: 本节点提交（见 git 历史）
+
+**范围**：
+
+1. 保留 64 KiB head/tail 命令块作为快速预览，同时为每个终端增加独立的输出工件：默认单命令 2 MiB、单终端 8 MiB；
+2. 输出在终端工作线程进入 UI 队列前采集，AI 每次只复制最多 16 KiB 的请求页，不把多 MiB 工件复制进 QML 或普通语义快照；
+3. `read_command_output` 改用当前终端代际的实时读取器，因此能分页读取本轮刚执行、但轮次初始快照中不存在的命令；
+4. 中间页、自然流缺口、单命令超限和终端总量淘汰分别返回 `skipped_bytes`、`artifact_omitted_bytes`、`stream_has_more`、`artifact_complete` 或明确错误，不再静默伪装为完整输出；
+5. 完成工件按最旧优先淘汰，运行中工件不为其他块让路；关闭标签或重连仍由既有当前终端/代际检查使读取失效；决策见 ADR 0094。
+
+**验证**：MSVC 动态 Debug 与静态 Release 构建通过，两套完整测试均为 `114/114`；
+clang-tidy 以 warnings-as-errors 覆盖 254 个 C++ 翻译单元；48 个 QML 文件、C++ 格式和
+1771/1771 翻译目录通过。聚焦用例覆盖预览中间段恢复、UTF-8 分页、自然流缺口、单命令
+2 MiB 上限、单终端 8 MiB 淘汰以及本轮新命令的实时读取。便携 ZIP 与 MSI 均重新生成，
+SHA-256 分别为 `fa99d251dec5f7d71bef41b6fc8e20c0c21c1111a528e354cfe0153ecf7a078b`
+和 `32fa36f95e2a68a4fa14eaaec564dbe90c43d76b50a28e865691894e3151c9a3`，checksummed
+release bundle 组装成功。本机 WiX ICE 合同检查仍因 Windows Installer 服务不可访问返回
+已知的 `WIX0217/217`；MSI 本身已由 CPack 成功生成。
+
 ## 节点 N26 — 长对话上下文压缩可见反馈（2026-08-21）
 
 **commit**: 本节点提交（见 git 历史）

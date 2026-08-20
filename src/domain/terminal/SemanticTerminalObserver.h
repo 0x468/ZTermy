@@ -41,6 +41,8 @@ public:
     void finish(CommandCompletionReason reason = CommandCompletionReason::disconnect) noexcept;
 
     [[nodiscard]] SemanticTerminalSnapshot snapshot() const;
+    [[nodiscard]] std::expected<CommandOutputArtifactPage, CommandOutputArtifactError>
+    readCommandOutput(CommandBlockId id, std::uint64_t afterCursor, std::size_t maximumBytes) const;
     [[nodiscard]] const std::string &expectedNonce() const noexcept;
 
 private:

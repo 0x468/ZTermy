@@ -61,6 +61,7 @@ private slots:
     void readsBoundedTerminalRangesWithoutSplittingUtf8();
     void readsBoundedCommandBlocks();
     void readsCommandOutputWithExplicitCursorGaps();
+    void readsLiveArtifactForCommandCreatedDuringTurn();
 };
 
 void AiReadToolsTests::readsCurrentSessionInfo()
@@ -157,6 +158,36 @@ void AiReadToolsTests::readsCommandOutputWithExplicitCursorGaps()
     const auto split = tools.readCommandOutput(unicodeSnapshot, 7, 0, 1);
     QVERIFY(!split.has_value());
     QCOMPARE(split.error().code, AiReadToolErrorCode::invalidArguments);
+}
+
+void AiReadToolsTests::readsLiveArtifactForCommandCreatedDuringTurn()
+{
+    ztermy::terminal::CommandBlockStore store(ztermy::terminal::CommandBlockStoreLimits{
+        .maxOutputBytesPerBlock = 8,
+        .retainedHeadBytes = 2,
+        .maxArtifactBytesPerBlock = 64,
+        .maxArtifactBytesTotal = 64,
+    });
+    const auto id = store.begin(ztermy::terminal::CommandBlockStart{.command = "generated during turn"});
+    QVERIFY(id.has_value());
+    const auto output = bytes("0123456789ABCDEF");
+    QVERIFY(store.append(*id, {.bytes = std::span(output), .streamOffset = 0}).has_value());
+    QVERIFY(store.finish(*id, 0, 100).has_value());
+
+    auto snapshot = session("session-1", 3);
+    snapshot.commandOutputReader = [&store](const auto blockId, const auto cursor, const auto maximumBytes) {
+        return store.readOutputArtifact(blockId, cursor, maximumBytes);
+    };
+    const AiReadTools tools(AiReadToolLimits{.maxCommandOutputBytes = 16});
+    const auto middle = tools.readCommandOutput(snapshot, *id, 4, 6);
+    QVERIFY(middle.has_value());
+    QCOMPARE(middle->output, std::string("456789"));
+    QCOMPARE(middle->nextCursor, std::uint64_t{10});
+    QCOMPARE(middle->artifactRetainedBytes, std::uint64_t{16});
+    QCOMPARE(middle->artifactOmittedBytes, std::uint64_t{0});
+    QVERIFY(middle->artifactBacked);
+    QVERIFY(middle->artifactComplete);
+    QVERIFY(middle->streamHasMore);
 }
 
 } // namespace

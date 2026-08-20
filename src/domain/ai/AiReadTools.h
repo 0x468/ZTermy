@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <functional>
 #include <optional>
 #include <span>
 #include <string>
@@ -20,6 +21,8 @@ enum class AiReadToolErrorCode : std::uint8_t
     commandBlockNotFound,
     rangeOutOfBounds,
     cursorExpired,
+    artifactExpired,
+    outputUnavailable,
     limitExceeded,
 };
 
@@ -140,6 +143,10 @@ struct AiOperationsReadSnapshot final
     AiTelemetrySnapshot telemetry;
 };
 
+using AiCommandOutputReader =
+    std::function<std::expected<terminal::CommandOutputArtifactPage, terminal::CommandOutputArtifactError>(
+        terminal::CommandBlockId, std::uint64_t, std::size_t)>;
+
 struct AiTerminalReadSnapshot final
 {
     std::string sessionId;
@@ -153,6 +160,7 @@ struct AiTerminalReadSnapshot final
     bool connected = false;
     std::vector<terminal::CommandBlock> commandBlocks;
     AiOperationsReadSnapshot operations;
+    AiCommandOutputReader commandOutputReader;
 };
 
 struct AiSessionSummary final
@@ -211,8 +219,14 @@ struct AiCommandOutputRead final
     std::uint64_t streamStart = 0;
     std::uint64_t streamEnd = 0;
     std::uint64_t skippedBytes = 0;
+    std::uint64_t artifactRetainedBytes = 0;
+    std::uint64_t artifactOmittedBytes = 0;
     bool hasMore = false;
+    bool streamHasMore = false;
     bool truncated = false;
+    bool artifactBacked = false;
+    bool artifactComplete = false;
+    bool artifactExpired = false;
     bool untrustedEvidence = true;
 };
 

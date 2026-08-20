@@ -184,6 +184,64 @@ AiReadTools::readCommandOutput(const AiTerminalReadSnapshot &session, const term
             AiReadToolError{.code = AiReadToolErrorCode::invalidArguments,
                             .message = "Command output reads require a block id and a bounded positive byte count."});
     }
+    if (session.commandOutputReader)
+    {
+        auto artifact = session.commandOutputReader(blockId, afterCursor, maximumBytes);
+        if (!artifact)
+        {
+            switch (artifact.error().code)
+            {
+                case terminal::CommandOutputArtifactErrorCode::blockNotFound:
+                    return std::unexpected(
+                        AiReadToolError{.code = AiReadToolErrorCode::commandBlockNotFound,
+                                        .message = "The command block does not exist in the current terminal."});
+                case terminal::CommandOutputArtifactErrorCode::cursorExpired:
+                    return std::unexpected(
+                        AiReadToolError{.code = AiReadToolErrorCode::cursorExpired,
+                                        .message = "The command-output cursor precedes the retained artifact.",
+                                        .nextAvailableCursor = artifact.error().nextAvailableCursor});
+                case terminal::CommandOutputArtifactErrorCode::artifactExpired:
+                    return std::unexpected(
+                        AiReadToolError{.code = AiReadToolErrorCode::artifactExpired,
+                                        .message = "The bounded command-output artifact has expired.",
+                                        .nextAvailableCursor = artifact.error().nextAvailableCursor});
+                case terminal::CommandOutputArtifactErrorCode::rangeOutOfBounds:
+                    return std::unexpected(
+                        AiReadToolError{.code = AiReadToolErrorCode::rangeOutOfBounds,
+                                        .message = "The command-output cursor is beyond the observed stream."});
+                case terminal::CommandOutputArtifactErrorCode::outputUnavailable:
+                    return std::unexpected(AiReadToolError{
+                        .code = AiReadToolErrorCode::outputUnavailable,
+                        .message = "The remaining command output exceeds the retained artifact limit."});
+                case terminal::CommandOutputArtifactErrorCode::limitExceeded:
+                    return std::unexpected(AiReadToolError{
+                        .code = AiReadToolErrorCode::invalidArguments,
+                        .message = "The command-output byte limit cannot encode the next UTF-8 character."});
+            }
+            return std::unexpected(AiReadToolError{.code = AiReadToolErrorCode::outputUnavailable,
+                                                   .message = "The command-output artifact is unavailable."});
+        }
+        return AiCommandOutputRead{
+            .id = artifact->id,
+            .state = artifact->state,
+            .outputCoverage = artifact->outputCoverage,
+            .exitStatus = artifact->exitStatus,
+            .output = bytesText(artifact->output),
+            .requestedCursor = artifact->requestedCursor,
+            .nextCursor = artifact->nextCursor,
+            .streamStart = artifact->streamStart,
+            .streamEnd = artifact->streamEnd,
+            .skippedBytes = artifact->skippedBytes,
+            .artifactRetainedBytes = artifact->retainedBytes,
+            .artifactOmittedBytes = artifact->omittedBytes,
+            .hasMore = artifact->readableMore,
+            .streamHasMore = artifact->streamHasMore,
+            .truncated = artifact->pageTruncated,
+            .artifactBacked = true,
+            .artifactComplete = artifact->artifactComplete,
+            .artifactExpired = artifact->artifactExpired,
+        };
+    }
     const auto block = std::ranges::find(session.commandBlocks, blockId, &terminal::CommandBlock::id);
     if (block == session.commandBlocks.end())
     {
@@ -258,8 +316,12 @@ AiReadTools::readCommandOutput(const AiTerminalReadSnapshot &session, const term
                                .streamStart = streamStart,
                                .streamEnd = streamEnd,
                                .skippedBytes = skippedBytes,
+                               .artifactRetainedBytes = block->retainedOutput.size(),
+                               .artifactOmittedBytes = block->omittedOutputBytes,
                                .hasMore = sourceHasMore || retainedGapAhead || streamHasMore,
-                               .truncated = sourceHasMore};
+                               .streamHasMore = streamHasMore,
+                               .truncated = sourceHasMore,
+                               .artifactComplete = block->hasCompleteOutput()};
 }
 
 } // namespace ztermy::ai

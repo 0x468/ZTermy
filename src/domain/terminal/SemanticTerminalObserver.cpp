@@ -99,6 +99,14 @@ SemanticTerminalSnapshot SemanticTerminalObserver::snapshot() const
     };
 }
 
+std::expected<CommandOutputArtifactPage, CommandOutputArtifactError>
+SemanticTerminalObserver::readCommandOutput(const CommandBlockId id, const std::uint64_t afterCursor,
+                                            const std::size_t maximumBytes) const
+{
+    std::scoped_lock lock(m_mutex);
+    return m_store.readOutputArtifact(id, afterCursor, maximumBytes);
+}
+
 const std::string &SemanticTerminalObserver::expectedNonce() const noexcept
 {
     return m_expectedNonce;

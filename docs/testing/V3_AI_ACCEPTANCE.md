@@ -541,3 +541,13 @@ the `0.3.6` gate below.
    stale compaction state. If the provider still rejects the payload as too
    large, the same notice updates after the tighter 413 retry rather than
    creating a second banner or modal.
+6. In the owning terminal, let the assistant run a command that produces more
+   than 64 KiB but less than 2 MiB of distinct numbered UTF-8 output. After the
+   command finishes, inspect the tool timeline/debug trace: repeated
+   `read_command_output` calls recover a page from the middle that is absent
+   from the head/tail preview, cursors advance without duplication, and
+   `artifact_complete=true`. The terminal remains responsive while output is
+   produced and read. Repeat above 2 MiB: the readable prefix stops without a
+   retry loop, `stream_has_more=true`, `has_more=false`, and omitted bytes are
+   explicit. Reconnect the SSH tab and confirm an old-generation read fails
+   with `scope_changed`; another tab can never enumerate or read the artifact.

@@ -133,6 +133,7 @@ covered by `application-settings`, `ai-permission-policy`,
 | One sidebar owns exactly one current terminal and exposes no cross-terminal enumeration or control | `src/application/AppController.*`, `src/application/ai/AiReadToolDispatcher.*`, `AiActionToolDispatcher.*` | `ai-read-tool-dispatcher`, `ai-action-tool-dispatcher`, `app-controller` | ADR 0086, 0093 |
 | Composer wraps words and unbroken content at compact width without a panel-wide horizontal scrollbar | `src/ui/qml/AiAssistantPane.qml`, `src/main.cpp` | `ui-layout-runtime-smoke` 260 px real-window contract | ADR 0078, 0093 |
 | Typed request compaction and provider-overflow retry expose one non-blocking, current-terminal status without mutating stored conversation text | `src/domain/ai/AiContextCompactor.*`, `src/application/ai/AiTurnRunner.*`, `src/application/AppController.*`, `src/ui/qml/AiAssistantPane.qml` | `ai-context-compactor`, `ai-turn-runner`, `app-controller`, `ui-layout-runtime-smoke` | ADR 0078, 0093; Netcatty comparison 2026-08-21 |
+| Long command output uses a live current-terminal artifact separate from the head/tail preview, with explicit per-command/terminal caps, gaps, expiration, and pageable middle recovery | `src/domain/terminal/CommandBlockStore.*`, `SemanticTerminalObserver.*`, `src/domain/ai/AiReadTools.*`, `src/application/ai/AiReadToolDispatcher.*`, `src/application/AppController.*` | `command-block-store`, `ai-read-tools`, `ai-read-tool-dispatcher`, `app-controller`; owner long-output acceptance | ADR 0094 |
 
 ## Evidence classification
 

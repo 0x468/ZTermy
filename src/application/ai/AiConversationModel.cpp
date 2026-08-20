@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <ranges>
 #include <span>
 #include <utility>
 
@@ -303,11 +304,11 @@ std::vector<AiChatMessage> AiConversationModel::providerMessages() const
     std::vector<AiChatMessage> messages;
     messages.reserve(m_messages.size());
     std::uint64_t latestUserMessageId = 0;
-    for (auto iterator = m_messages.rbegin(); iterator != m_messages.rend(); ++iterator)
+    for (const auto &message : std::views::reverse(m_messages))
     {
-        if (iterator->role == AiMessageRole::user && iterator->state == MessageState::complete)
+        if (message.role == AiMessageRole::user && message.state == MessageState::complete)
         {
-            latestUserMessageId = iterator->id;
+            latestUserMessageId = message.id;
             break;
         }
     }
@@ -368,11 +369,11 @@ std::vector<AiChatMessage> AiConversationModel::providerMessagesWithEvidence() c
     std::vector<AiChatMessage> messages;
     messages.reserve(m_messages.size() + m_evidenceMessages.size());
     std::uint64_t latestUserMessageId = 0;
-    for (auto iterator = m_messages.rbegin(); iterator != m_messages.rend(); ++iterator)
+    for (const auto &message : std::views::reverse(m_messages))
     {
-        if (iterator->role == AiMessageRole::user && iterator->state == MessageState::complete)
+        if (message.role == AiMessageRole::user && message.state == MessageState::complete)
         {
-            latestUserMessageId = iterator->id;
+            latestUserMessageId = message.id;
             break;
         }
     }

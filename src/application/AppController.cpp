@@ -54,6 +54,7 @@
 #include <limits>
 #include <new>
 #include <optional>
+#include <ranges>
 #include <string_view>
 #include <system_error>
 #include <type_traits>
@@ -8873,13 +8874,13 @@ bool AppController::attachAiRecentCommands(const int count)
     const auto maximum = static_cast<std::size_t>(std::clamp(count, 1, 5));
     std::vector<const terminal::CommandBlock *> selected;
     selected.reserve(maximum);
-    for (auto iterator = snapshot.commandBlocks.rbegin(); iterator != snapshot.commandBlocks.rend(); ++iterator)
+    for (const auto &commandBlock : std::views::reverse(snapshot.commandBlocks))
     {
-        if (iterator->state != terminal::CommandBlockState::finished)
+        if (commandBlock.state != terminal::CommandBlockState::finished)
         {
             continue;
         }
-        selected.push_back(&*iterator);
+        selected.push_back(&commandBlock);
         if (selected.size() == maximum)
         {
             break;
@@ -8973,9 +8974,9 @@ bool AppController::attachAiRecentCommands(const int count)
         emit aiConversationChanged();
         return true;
     }
-    for (auto iterator = selected.rbegin(); iterator != selected.rend(); ++iterator)
+    for (const auto *commandBlock : std::views::reverse(selected))
     {
-        const auto &block = **iterator;
+        const auto &block = *commandBlock;
         const auto outputBytes = QByteArray(reinterpret_cast<const char *>(block.retainedOutput.data()),
                                             static_cast<qsizetype>(block.retainedOutput.size()));
         QString content = tr("Command: %1").arg(utf8QString(block.command));
@@ -9608,6 +9609,15 @@ ai::AiTerminalReadSnapshot AppController::aiReadSnapshot(const TerminalTab &tab)
         operations.telemetry.transmittedBytesPerSecond = sample.transmittedBytesPerSecond;
         operations.telemetry.sshProbeLatencyMs = sample.sshProbeLatencyMs;
     }
+    ai::AiCommandOutputReader commandOutputReader;
+    if (tab.semanticObserver)
+    {
+        commandOutputReader = [observer = tab.semanticObserver](const terminal::CommandBlockId id,
+                                                                const std::uint64_t afterCursor,
+                                                                const std::size_t maximumBytes) {
+            return observer->readCommandOutput(id, afterCursor, maximumBytes);
+        };
+    }
     return ai::AiTerminalReadSnapshot{.sessionId = utf8String(tab.id),
                                       .title = utf8String(tab.title),
                                       .host = utf8String(tab.address),
@@ -9618,7 +9628,8 @@ ai::AiTerminalReadSnapshot AppController::aiReadSnapshot(const TerminalTab &tab)
                                       .capability = capability,
                                       .connected = tab.running,
                                       .commandBlocks = std::move(semantic.commandBlocks),
-                                      .operations = std::move(operations)};
+                                      .operations = std::move(operations),
+                                      .commandOutputReader = std::move(commandOutputReader)};
 }
 
 void AppController::acceptAiSelectedText(TerminalTab &tab, const QString &text)
