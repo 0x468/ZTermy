@@ -65,10 +65,6 @@ std::optional<AiTrackedCommand> AiCommandTracker::observe(const std::string_view
     {
         position->state = AiTrackedCommandState::running;
         position->exitStatus.reset();
-        position->output.assign(reinterpret_cast<const char *>(block->retainedOutput.data()),
-                                block->retainedOutput.size());
-        position->omittedOutputBytes = block->omittedOutputBytes;
-        position->outputCoverage = block->outputCoverage;
         return *position;
     }
     position->state = block->completionReason == terminal::CommandCompletionReason::disconnect

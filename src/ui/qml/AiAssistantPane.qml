@@ -309,27 +309,6 @@ Rectangle {
         return models;
     }
 
-    function agentOption(token) {
-        const options = pane.controller.aiAgentOptions || [];
-        for (let index = 0; index < options.length; ++index) {
-            if (options[index].id === token)
-                return options[index];
-        }
-        return {
-            "id": token,
-            "name": token,
-            "description": "",
-            "state": "unavailable",
-            "available": false
-        };
-    }
-
-    function selectAgent(token) {
-        if (token === pane.controller.aiAgentPreference)
-            return;
-        pane.controller.setAiAgentPreference(token);
-    }
-
     function selectModel(model) {
         if (!model || model === pane.controller.aiModel)
             return;
@@ -592,10 +571,8 @@ Rectangle {
     Accessible.role: Accessible.Pane
     Accessible.name: qsTr("Terminal AI assistant")
     onVisibleChanged: {
-        if (visible) {
-            controller.refreshAiAgents();
+        if (visible)
             focusEditor();
-        }
     }
 
     ColumnLayout {
@@ -614,96 +591,29 @@ Rectangle {
                 anchors.rightMargin: 8
                 spacing: 4
 
-                ToolButton {
-                    id: agentPickerButton
-
-                    objectName: "aiAgentPickerButton"
+                RowLayout {
                     Layout.fillWidth: true
                     Layout.minimumWidth: 0
-                    enabled: !pane.busy && !pane.controller.aiAgentsLoading
-                    hoverEnabled: true
-                    focusPolicy: Qt.StrongFocus
-                    Accessible.name: qsTr("Choose terminal AI Agent")
-                    onClicked: agentMenu.popup()
-                    contentItem: RowLayout {
-                        spacing: 7
+                    spacing: 7
+                    Accessible.role: Accessible.StaticText
+                    Accessible.name: qsTr("Terminal assistant")
 
-                        AppIcon {
-                            Layout.preferredWidth: 17
-                            Layout.preferredHeight: 17
-                            name: "ai"
-                            color: Theme.accent
-                        }
-
-                        Text {
-                            Layout.fillWidth: true
-                            Layout.minimumWidth: 0
-                            text: pane.agentOption(pane.controller.aiAgentPreference).name
-                            elide: Text.ElideRight
-                            color: Theme.text
-                            font.family: Theme.uiFont
-                            font.pixelSize: Theme.textBody
-                            font.weight: Font.DemiBold
-                        }
-
-                        AppIcon {
-                            Layout.preferredWidth: 12
-                            Layout.preferredHeight: 12
-                            name: "chevron-down"
-                            color: Theme.textMuted
-                        }
-                    }
-                    background: Rectangle {
-                        radius: Theme.radiusSmall
-                        color: agentPickerButton.down ? Theme.controlPressed : agentPickerButton.hovered ? Theme.controlHover : "transparent"
-                        border.color: agentPickerButton.activeFocus ? Theme.focus : "transparent"
-                        border.width: agentPickerButton.activeFocus ? 2 : 0
+                    AppIcon {
+                        Layout.preferredWidth: 17
+                        Layout.preferredHeight: 17
+                        name: "ai"
+                        color: Theme.accent
                     }
 
-                    HoverHandler {
-                        cursorShape: agentPickerButton.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    }
-
-                    AppToolTip {
-                        text: (pane.activeTab ? pane.activeTab.title + " · " : "") + pane.agentOption(pane.controller.aiAgentPreference).description
-                    }
-
-                    AppMenu {
-                        id: agentMenu
-
-                        y: agentPickerButton.height + 4
-
-                        AppMenuItem {
-                            text: qsTr("ztermy Agent")
-                            checkable: true
-                            checked: pane.controller.aiAgentPreference === "ztermy"
-                            enabled: !pane.busy
-                            onTriggered: pane.selectAgent("ztermy")
-                        }
-
-                        AppMenuItem {
-                            text: pane.agentOption("codex").available ? qsTr("Codex") : pane.controller.aiAgentsLoading ? qsTr("Codex · detecting") : qsTr("Codex · unavailable")
-                            checkable: true
-                            checked: pane.controller.aiAgentPreference === "codex"
-                            enabled: !pane.busy && pane.agentOption("codex").available
-                            onTriggered: pane.selectAgent("codex")
-                        }
-
-                        AppMenuItem {
-                            text: pane.agentOption("opencode").available ? qsTr("OpenCode") : pane.controller.aiAgentsLoading ? qsTr("OpenCode · detecting") : qsTr("OpenCode · unavailable")
-                            checkable: true
-                            checked: pane.controller.aiAgentPreference === "opencode"
-                            enabled: !pane.busy && pane.agentOption("opencode").available
-                            onTriggered: pane.selectAgent("opencode")
-                        }
-
-                        AppMenuSeparator {}
-
-                        AppMenuItem {
-                            text: pane.controller.aiAgentsLoading ? qsTr("Detecting Agents…") : qsTr("Detect Agents")
-                            enabled: !pane.controller.aiAgentsLoading
-                            onTriggered: pane.controller.refreshAiAgents()
-                        }
+                    Text {
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        text: qsTr("Terminal assistant")
+                        elide: Text.ElideRight
+                        color: Theme.text
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textBody
+                        font.weight: Font.DemiBold
                     }
                 }
 
@@ -1254,7 +1164,6 @@ Rectangle {
                         required property date updatedAt
                         required property int messageCount
                         required property string preview
-                        required property string agent
                         width: ListView.view.width
                         height: 52
                         radius: Theme.radiusSmall
@@ -1295,7 +1204,7 @@ Rectangle {
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: pane.agentOption(historyItem.agent).name + " · " + qsTr("%n message(s)", "", historyItem.messageCount) + " · " + historyItem.updatedAt.toLocaleString(Qt.locale(), Locale.ShortFormat) + " · " + historyItem.preview
+                                    text: qsTr("%n message(s)", "", historyItem.messageCount) + " · " + historyItem.updatedAt.toLocaleString(Qt.locale(), Locale.ShortFormat) + " · " + historyItem.preview
                                     color: Theme.textMuted
                                     elide: Text.ElideRight
                                     font.family: Theme.uiFont
@@ -2278,7 +2187,6 @@ Rectangle {
                             required property string conversationId
                             required property string title
                             required property date updatedAt
-                            required property string agent
                             Layout.fillWidth: true
                             Layout.preferredHeight: visible ? 34 : 0
                             visible: index < 3
@@ -2310,13 +2218,6 @@ Rectangle {
                                     elide: Text.ElideRight
                                     font.family: Theme.uiFont
                                     font.pixelSize: Theme.textLabel
-                                }
-
-                                Text {
-                                    text: pane.agentOption(recentConversation.agent).name
-                                    color: Theme.textSubtle
-                                    font.family: Theme.uiFont
-                                    font.pixelSize: Theme.textCompact
                                 }
 
                                 Text {
@@ -2572,22 +2473,31 @@ Rectangle {
                 }
 
                 ScrollView {
+                    id: promptScroll
+
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    Layout.minimumWidth: 0
                     clip: true
                     contentWidth: availableWidth
+                    ScrollBar.horizontal: ScrollBar {
+                        objectName: "aiPromptHorizontalScrollBar"
+                        policy: ScrollBar.AlwaysOff
+                    }
+                    ScrollBar.vertical.policy: ScrollBar.AsNeeded
 
                     TextArea {
                         id: promptEditor
 
-                        width: parent.width
+                        width: promptScroll.availableWidth
+                        implicitWidth: 0
                         objectName: "aiPromptEditor"
                         placeholderText: pane.commandRequest ? qsTr("Describe the command you need · Enter sends · Shift+Enter adds a new line") : qsTr("Message ztermy Agent · @ context · / commands")
                         color: Theme.text
                         placeholderTextColor: Theme.textMuted
                         selectionColor: Theme.accent
                         selectedTextColor: Theme.accentText
-                        wrapMode: TextEdit.Wrap
+                        wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.textBody
                         Accessible.name: qsTr("AI message")
@@ -2772,7 +2682,7 @@ Rectangle {
                         id: modelBox
 
                         objectName: "aiModelBox"
-                        visible: pane.controller.aiAgentPreference === "ztermy" && pane.width >= 430
+                        visible: pane.width >= 430
                         Layout.preferredWidth: pane.width < 500 ? 104 : 124
                         model: pane.modelOptions()
                         currentIndex: Math.max(0, model.indexOf(pane.controller.aiModel))

@@ -652,13 +652,9 @@ struct ResizeHitRuntimeCase
                       && sftpConfirmDelete != nullptr;
         settingsPane->setProperty("currentCategory", QStringLiteral("ai"));
         processWindowEventsFor(std::chrono::milliseconds{400});
-        auto *aiAgent = rootObject->findChild<QObject *>(QStringLiteral("settingsAiAgent"));
-        auto *aiRefreshAgents = rootObject->findChild<QObject *>(QStringLiteral("settingsAiRefreshAgents"));
         auto *aiProvider = rootObject->findChild<QObject *>(QStringLiteral("settingsAiProvider"));
         aiSettingsCaptured = captureLayout(window, outputDirectory, capturePrefix + QStringLiteral("-ai-settings"));
-        aiSettingsMatch = aiAgent != nullptr && aiAgent->property("visible").toBool()
-                          && aiAgent->property("count").toInt() == 2 && aiRefreshAgents != nullptr
-                          && aiProvider != nullptr && aiProvider->property("visible").toBool();
+        aiSettingsMatch = aiProvider != nullptr && aiProvider->property("visible").toBool();
         settingsPane->setProperty("currentCategory", QStringLiteral("appearance"));
     }
 
@@ -989,8 +985,6 @@ struct ResizeHitRuntimeCase
         verifyAccessibleButton(rootObject, "aiNewConversationButton", "Start a new AI conversation");
     const bool aiMoreAccessible =
         verifyAccessibleButton(rootObject, "aiConversationMoreButton", "More conversation actions");
-    const bool aiAgentPickerAccessible =
-        verifyAccessibleButton(rootObject, "aiAgentPickerButton", "Choose terminal AI Agent");
     const bool aiSendAccessible = verifyAccessibleButton(rootObject, "aiSendButton", "Send");
     const bool aiToolGroupAccessible = verifyAccessibleButton(rootObject, "aiToolGroupToggle", "Expand · Used 2 tools");
     const bool aiToolEvidenceAccessible =
@@ -1002,8 +996,7 @@ struct ResizeHitRuntimeCase
                == QStringLiteral("Request context · %1 item(s)").arg(controller.activeAiContextItems().size());
     const bool aiAccessibilityPassed = aiLauncherAccessible && aiToolbarAccessible && aiHistoryAccessible
                                        && aiNewConversationAccessible && aiMoreAccessible && aiSendAccessible
-                                       && aiAgentPickerAccessible && aiContextAccessible && aiToolGroupAccessible
-                                       && aiToolEvidenceAccessible;
+                                       && aiContextAccessible && aiToolGroupAccessible && aiToolEvidenceAccessible;
     QAccessibleInterface *aiPaneInterface =
         aiAssistantPane == nullptr ? nullptr : QAccessible::queryAccessibleInterface(aiAssistantPane);
     QAccessibleInterface *aiPromptInterface =
@@ -1023,7 +1016,6 @@ struct ResizeHitRuntimeCase
         artifact << "history=" << aiHistoryAccessible << '\n';
         artifact << "newConversation=" << aiNewConversationAccessible << '\n';
         artifact << "more=" << aiMoreAccessible << '\n';
-        artifact << "agentPicker=" << aiAgentPickerAccessible << '\n';
         artifact << "send=" << aiSendAccessible << '\n';
         artifact << "toolGroup=" << aiToolGroupAccessible << '\n';
         artifact << "toolEvidence=" << aiToolEvidenceAccessible << '\n';
@@ -1073,9 +1065,12 @@ struct ResizeHitRuntimeCase
     }
     window.resize(QSize{500, 360});
     processWindowEventsFor(std::chrono::milliseconds{250});
-    constexpr std::array compactAiActionNames{"aiAgentPickerButton",      "aiHistoryToggle", "aiNewConversationButton",
-                                              "aiConversationMoreButton", "aiContextToggle", "aiSendButton",
-                                              "aiAttachmentDropArea"};
+    auto *aiPromptHorizontalScrollBar = quickItem(rootObject, "aiPromptHorizontalScrollBar");
+    const bool compactPromptHasNoHorizontalScroll =
+        aiPromptHorizontalScrollBar != nullptr && !aiPromptHorizontalScrollBar->isVisible();
+    constexpr std::array compactAiActionNames{
+        "aiHistoryToggle", "aiNewConversationButton", "aiConversationMoreButton", "aiContextToggle",
+        "aiSendButton",    "aiAttachmentDropArea"};
     bool compactAiActionsInsidePanel = aiAssistantPane != nullptr;
     QFile compactAiArtifact{QDir(outputDirectory).filePath(QStringLiteral("compact-ai-layout-contract.txt"))};
     const bool compactAiArtifactOpened = compactAiArtifact.open(QIODevice::WriteOnly | QIODevice::Text);
@@ -1100,10 +1095,13 @@ struct ResizeHitRuntimeCase
     if (compactAiArtifactOpened)
     {
         compactAiStream << "paneWidth=" << (aiAssistantPane == nullptr ? 0.0 : aiAssistantPane->width()) << '\n';
+        compactAiStream << "promptHorizontalScrollVisible="
+                        << (aiPromptHorizontalScrollBar != nullptr && aiPromptHorizontalScrollBar->isVisible()) << '\n';
     }
     const bool aiCompactCaptured =
         aiAssistantPane != nullptr && aiAssistantPane->isVisible() && aiAssistantPane->width() > 0.0
         && aiAssistantPane->width() <= window.width() && compactAiActionsInsidePanel
+        && compactPromptHasNoHorizontalScroll
         && captureLayout(window, outputDirectory, QStringLiteral("dark-compact-ai-assistant"));
     window.resize(QSize{1120, 800});
     processWindowEventsFor(std::chrono::milliseconds{250});

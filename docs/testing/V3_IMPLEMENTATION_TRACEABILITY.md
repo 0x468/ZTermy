@@ -1,9 +1,7 @@
 # V3 implementation traceability
 
 Status: `0.3.0`-`0.3.9` implementation audit in progress; owner/environment
-release acceptance tracked separately; `0.3.10` implemented and `0.3.11`
-includes native Codex plus OpenCode ACP current-terminal integration
-(`ADR 0091`, `ADR 0095`)
+release acceptance tracked separately; `0.3.10`-`0.3.11` planned
 
 Date: 2026-08-13
 
@@ -116,9 +114,6 @@ covered by `application-settings`, `ai-permission-policy`,
 | Drag local images/text onto the owning terminal composer without auto-send or cross-terminal routing | `src/ui/qml/AiAssistantPane.qml`, existing `AppController` asynchronous attachment loaders | `ui-layout-runtime-smoke` 260 px geometry contract, owner Explorer drag/drop acceptance | ADR 0087, 0089 |
 | Paste clipboard images and Explorer-copied image/text files while preserving ordinary text paste | `src/ui/qml/AiAssistantPane.qml`, `src/application/AppController.*`, `src/main.cpp` runtime fixture | `ui-layout-runtime-smoke`, `app-controller` | ADR 0087, 0089 |
 | Derive final-answer evidence integrity from persisted tool states and surface failed/pending work without rewriting the answer | `src/domain/ai/AiToolEvidence.*`, `src/application/ai/AiConversationModel.*`, `AiSystemPromptBuilder.*`, `src/ui/qml/AiAssistantPane.qml` | `ai-conversation-model`, `ai-system-prompt-builder`, `ui-layout-runtime-smoke` | ADR 0092 |
-| Negotiate a bounded ACP v1 external-Agent connection without exposing local files or cross-terminal Sessions | `src/infrastructure/ai/AcpProtocol.*` | `acp-protocol` | ADR 0093, ACP v1 official protocol, OpenCode 1.18.5 local handshake |
-| Run one bounded ACP process/Session per owning terminal with streaming, resume, cancellation, failure propagation, and at-most-once Client requests | `src/infrastructure/ai/AcpClient.*` | `acp-client` | ADR 0094 |
-| Preserve ACP assistant text, public thought, tool lifecycle, context-window usage, and cost as typed events | `src/infrastructure/ai/AcpSessionUpdateMapper.*` | `acp-session-update-mapper` | ADR 0094 |
 
 ## 0.3.10 — current-terminal native tool contract
 
@@ -130,17 +125,17 @@ covered by `application-settings`, `ai-permission-policy`,
 | Explicit images remain in the owning draft and use native multimodal provider payloads | `src/application/AppController.*`, `AiConversationModel.*`, `ProviderRequestFactory.*`, `AiAssistantPane.qml` | `provider-request-factory`, `ai-conversation-model`, `ai-context-compactor`, `ai-trace-sanitizer`, `app-controller`, owner multimodal acceptance | ADR 0089 |
 | Provider-native web search remains current-terminal scoped and exposes structured source provenance | `src/application/AppController.*`, `AiConversationModel.*`, `AiConversationStore.*`, `ProviderRequestFactory.*`, `ProviderStreamMapper.*`, `AiAssistantPane.qml` | `provider-request-factory`, `provider-stream-mapper`, `ai-conversation-model`, `ai-conversation-store`, `app-controller`, owner/provider acceptance | ADR 0090 |
 
-## 0.3.11 — external Agent ecosystem
+## 0.3.11 — built-in provider assistant closure
 
 | Approved boundary | Representative implementation | Focused contracts | Decisions |
 | --- | --- | --- | --- |
-| Native Codex App Server integration with current-terminal dynamic tools and external thread resume | `src/infrastructure/ai/CodexAppServer*`; `src/application/ai/CodexAgentTurnRunner.*`; `src/application/AppController.*` | `codex-app-server-protocol`, `codex-app-server-client`, `codex-agent-turn-runner`, `app-controller` | ADR 0091 |
-| Bounded ACP v1 transport, process/Session lifecycle, and typed updates | `src/infrastructure/ai/AcpProtocol.*`, `AcpClient.*`, `AcpSessionUpdateMapper.*` | `acp-protocol`, `acp-client`, `acp-session-update-mapper` | ADR 0093, ADR 0094 |
-| OpenCode discovery and single-owning-terminal terminal/permission bridge | `src/infrastructure/ai/AcpAgentDiscovery.*`; `src/application/ai/AcpAgentTurnRunner.*`; `src/application/AppController.*` | `acp-agent-turn-runner`, `ai-command-tracker`, `app-controller` | ADR 0086, ADR 0095 |
+| Exactly one built-in provider-backed assistant; no external Agent selector, discovery, process, protocol bridge, or external thread ownership | `src/application/AppController.*`, `src/ui/qml/AiAssistantPane.qml`, `CMakeLists.txt` | `app-controller`, full build graph | ADR 0093 |
+| One sidebar owns exactly one current terminal and exposes no cross-terminal enumeration or control | `src/application/AppController.*`, `src/application/ai/AiReadToolDispatcher.*`, `AiActionToolDispatcher.*` | `ai-read-tool-dispatcher`, `ai-action-tool-dispatcher`, `app-controller` | ADR 0086, 0093 |
+| Composer wraps words and unbroken content at compact width without a panel-wide horizontal scrollbar | `src/ui/qml/AiAssistantPane.qml`, `src/main.cpp` | `ui-layout-runtime-smoke` 260 px real-window contract | ADR 0078, 0093 |
 
 ## Evidence classification
 
-- **Implementation coverage:** every approved `0.3.0`–`0.3.8` boundary above
+- **Implementation coverage:** every approved `0.3.0`–`0.3.11` boundary above
   has production code and at least one focused executable or real-window
   contract.
 - **Automated candidate evidence:** the exact builds, test totals, static
@@ -151,9 +146,11 @@ covered by `application-settings`, `ai-permission-policy`,
   The retained AI-idle terminal report covers 28800.1 seconds with zero
   failures. Both reports pass the unified RC verifier with the final rebuilt
   release bundle.
-- **Current developer evidence:** the `0.3.9` dynamic Debug candidate passes
-  105/105 tests, the static Release application builds, QML/C++ format and lint
-  pass, and the expanded translation catalog passes 1619/1619. The prior formal
+- **Current developer evidence:** the `0.3.11` dynamic Debug and static Release
+  candidates each pass 111/111 non-real-host tests; full clang-tidy covers 246
+  translation units; QML/C++ format and the 1766/1766 translation catalog pass;
+  the 260 px real-window contract verifies that the composer has no horizontal
+  scrollbar. The prior formal
   `0.3.8` evidence retains its 20-run scenario, 224-unit clang-tidy, static
   suite, package, and eight-gate real-window results; those full release gates
   are rerun for the next release candidate rather than inferred from this UI

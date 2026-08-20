@@ -311,11 +311,6 @@ decrypt(const QByteArray &ciphertext, const QByteArray &tag, const std::string_v
 [[nodiscard]] bool validConversation(const AiStoredConversation &conversation, const AiConversationStoreLimits &limits)
 {
     if (conversation.id.trimmed().isEmpty() || conversation.id.size() > 128 || conversation.title.size() > 256
-        || (conversation.agent != QStringLiteral("ztermy") && conversation.agent != QStringLiteral("codex"))
-        || conversation.externalThreadId.size() > 256
-        || (!conversation.externalThreadId.isEmpty()
-            && (conversation.agent != QStringLiteral("codex")
-                || conversation.externalThreadId.trimmed() != conversation.externalThreadId))
         || !conversation.updatedAtUtc.isValid() || conversation.messages.size() > limits.maximumMessagesPerConversation)
     {
         return false;
@@ -460,8 +455,6 @@ decrypt(const QByteArray &ciphertext, const QByteArray &tag, const std::string_v
         values.push_back(
             QJsonObject{{QStringLiteral("id"), conversation.id},
                         {QStringLiteral("title"), conversation.title},
-                        {QStringLiteral("agent"), conversation.agent},
-                        {QStringLiteral("externalThreadId"), conversation.externalThreadId},
                         {QStringLiteral("updatedAtUtc"), conversation.updatedAtUtc.toUTC().toString(Qt::ISODateWithMs)},
                         {QStringLiteral("messages"), messages}});
     }
@@ -501,8 +494,6 @@ parsePlaintext(const QByteArray &plaintext, const AiConversationStoreLimits &lim
         AiStoredConversation conversation{
             .id = object.value(QStringLiteral("id")).toString(),
             .title = object.value(QStringLiteral("title")).toString(),
-            .agent = object.value(QStringLiteral("agent")).toString(QStringLiteral("ztermy")),
-            .externalThreadId = object.value(QStringLiteral("externalThreadId")).toString(),
             .updatedAtUtc =
                 QDateTime::fromString(object.value(QStringLiteral("updatedAtUtc")).toString(), Qt::ISODateWithMs)};
         const auto messages = object.value(QStringLiteral("messages")).toArray();

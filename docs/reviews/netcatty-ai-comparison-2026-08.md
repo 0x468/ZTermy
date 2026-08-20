@@ -123,7 +123,7 @@ token 估算 → 预压缩（LLM 摘要 temp=0，保护最近 N 条，保留最�
 | 权限模式 | observer / confirm / auto + 全局 blocklist + 持久 grant | Read-only / Ask / Edit / Auto / YOLO 五档 + allow/ask/deny 规则（精确/前缀/glob/正则 + once/session/profile/global）+ 可编辑建议匹配器（0.3.6）——比 Netcatty 更细 |
 | 工具面 | 50+：terminal/sftp/vault hosts/snippets/scripts/portforward/notes/web/url | run_command/read_command_output/wait_command/interrupt_command/write_to_pty + SFTP 读写 + 遥测/转发/脚本/笔记/历史工具 + MCP 客户端（0.3.4+） |
 | Provider | 12 预设 + custom + 三协议族；key 主进程持有 | OpenAI Responses / Anthropic / DeepSeek / Kimi / Z.AI / Ollama / 兼容端点，品牌预设不泄漏协议到 UI（原则 3） |
-| 外部 Agent | 内置 Catty + Claude/Codex/Cursor/Copilot CLI/Codebuddy/OpenCode SDK 驱动 | 0.3.11 进行中：Codex App Server 有界协议、异步进程、精确 schema 探测、类型化事件、当前终端工具桥、取消、Tab 内 thread 延续、加密历史恢复及 ztermy/Codex 选择器已落地；确定性假服务端覆盖完整应用链，本机 CLI 门禁默认跳过且需显式联网执行。更多 Agent 适配器和最终打包/人工验收仍待完成 |
+| 外部 Agent | 内置 Catty + Claude/Codex/Cursor/Copilot CLI/Codebuddy/OpenCode SDK 驱动 | 永不集成；ztermy 只保留内置供应商助手，外部产品仅作公开 UX 研究（ADR 0093） |
 | 流式 | streamText + thinking 块 + usage/performance 事件 + 413 压缩重试 | 流式 + 合并后再做 Markdown 布局（Qt Quick 线程不阻塞）；reasoning 跟随流式展开、出正文即折叠 |
 | 记忆 | 每作用域持久会话 + token 预算压缩（LLM 摘要）+ 会话状态再注入 | 默认仅会话保留；持久加密历史 opt-in（0.3.1 ADR 0061）；Agent 工具证据随会话保留（bounded） |
 | 斜杠命令 | Quick Messages（用户自定义 prompt 快捷）+ 技能，光标锚定 listbox | 键盘优先的内置斜杠选择器；用户 Quick Messages 与技能复用同一选择器 |
@@ -175,10 +175,12 @@ token 估算 → 预压缩（LLM 摘要 temp=0，保护最近 N 条，保留最�
   保持与 Netcatty 相同的单层标题栏信息密度，且鼠标、键盘与无障碍名称均可用。
 - 图片或 UTF-8 文本现在可直接拖入当前终端的 AI 输入区；落点有主题化反馈，文件继续走
   现有异步、有界加载与内容校验，不自动发送，也不会跨终端附加。
-- ztermy 保留自身更强的单终端语义命令块、四档执行模式、细粒度规则、原生工具卡与
-  Provider/外部 Agent 适配能力；不复制 Netcatty 的 React 组件和跨终端/工作区作用域。
+- ztermy 保留自身更强的单终端语义命令块、执行模式、细粒度规则、原生工具卡与
+  Provider 适配能力；不提供外部 Agent 适配，也不复制 Netcatty 的 React 组件和跨终端/工作区作用域。
 
-## 8. 结构化最终回答复核与外部 Agent 协议更新（2026-08-15）
+## 8. 结构化最终回答复核与已撤回的外部 Agent 调研（2026-08-15）
+
+> 本节记录当时的调研过程。外部 Agent 协议候选现已全部撤回，不得据此重新进入实现路线图；现行决定见 ADR 0093。
 
 - Netcatty 的工具消息携带明确的错误状态并进入同一轮工具分组；OpenAI App Server 也将
   工具作为有生命周期的 typed item。共同点是“工具结果是结构化事件”，而不是从最终
@@ -186,43 +188,13 @@ token 估算 → 预压缩（LLM 摘要 temp=0，保护最近 N 条，保留最�
 - ztermy 现在从持久化工具账本派生 `verified / pending / incomplete`。完成回答存在失败、
   取消或仍等待工具时显示一条可点击提示并展开原有时间线；不重写 Provider 原文，也不
   增加新的确认步骤。对应 ADR 0092。
-- OpenCode 1.18.5 已提供官方 `opencode acp`，ACP 当前稳定协议版本为 1；Zed 也公开将
-  外部 Agent 作为 ACP 客户端接入。它比解析人类 CLI 输出更适合作为后续原生适配候选。
-- 仍不能直接把 OpenCode 的本地 shell 当作 ztermy 终端：适配器必须让远端 SSH/ConPTY
-  写入继续经过当前侧栏所属终端的工具、权限、预算和代际检查。后续设计应评估 ACP 的
-  Client terminal 能力或 MCP bridge，而不是为追求“已接入”而绕开宿主所有权。
+- OpenCode 1.18.5 当时已提供官方 `opencode acp`，ACP 当前稳定协议版本为 1；这只说明
+  外部生态采用了标准协议，不构成 ztermy 的产品需求。
+- ztermy 不评估 ACP/App Server/CLI bridge 的落地，也不借 MCP 绕行接入外部 Agent。
+  MCP 仅作为内置助手显式配置的工具扩展协议。
 
 参考：
 
 - <https://github.com/agentclientprotocol/agent-client-protocol>
 - <https://zed.dev/docs/ai/external-agents>
 - <https://dev.opencode.ai/docs/server/>
-
-## 9. ACP / OpenCode 原生接入边界（2026-08-15）
-
-- ACP v1 将初始化、Session、Prompt、取消、工具进度、权限请求和终端回调定义为标准
-  JSON-RPC；Zed 当前将 Claude、Codex、OpenCode、Gemini、Copilot、Cursor 与 Pi 等外部
-  Agent 统一放在这条边界后，而不是给每个 Harness 维护一套聊天 UI。
-- 本机 OpenCode 1.18.5 的 `opencode acp` 已实际完成 v1 握手和 `session/new`，返回自身
-  模型/模式配置及斜杠命令。Provider、认证和模型应继续由 OpenCode 自己管理，ztermy
-  不再复制一套 OpenCode 凭据表单。
-- ztermy 的使用场景与代码编辑器不同：ACP `cwd` 是本机目录，SSH 当前目录是远端目录。
-  因此 Client 不声明 ACP `fs`，只声明 `terminal`，并将在后续把 `terminal/*` 串行映射到
-  当前侧栏所属的唯一 PTY；不能把本机仓库当作远端文件系统，也不能创建跨 Tab 目标。
-- `AcpProtocol` 已落地稳定 v1 的有界 wire contract；进程生命周期、Session update 映射、
-  terminal/permission callback 和 OpenCode Agent 选项按独立节点接入。对应 ADR 0093。
-- 原生异步 ACP Client 已覆盖进程启动、Session 新建/恢复、Prompt 流、取消和异常退出，
-  并严格拒绝其它 Session 的更新；Agent→Client 请求按单轮 ID 去重，避免网络/进程重放
-  导致同一终端动作执行两次。正文、公开思考、工具进度和上下文用量已有类型化映射，
-  确定性假 Agent 无需账号即可回归。对应 ADR 0094。
-- 与 NetCatty 多私有 SDK 驱动相比，这条边界优先复用 ACP 标准协议并保持“一个侧栏只对应
-  当前终端”。尚未宣称完成的是 `terminal/*` / 权限请求到现有动作链的应用接线，以及
-  OpenCode 在 Agent 选择器中的可见入口；不会为追求功能数量加入跨终端 Session 工具。
-
-参考：
-
-- <https://agentclientprotocol.com/protocol/v1/initialization>
-- <https://agentclientprotocol.com/protocol/v1/terminals>
-- <https://agentclientprotocol.com/protocol/v1/tool-calls>
-- <https://dev.opencode.ai/docs/acp/>
-- <https://zed.dev/docs/ai/external-agents>

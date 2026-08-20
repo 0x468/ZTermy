@@ -9,6 +9,12 @@
   internal security architecture as concepts the user must manage unless a
   concrete risk or explicit user choice requires it.
 - Netcatty and other SSH tools are product references only.
+- ztermy owns and evolves one built-in, provider-backed terminal Agent. Never
+  integrate, detect, launch, bridge, or expose Codex, OpenCode, Claude Code, or
+  any other external Agent/harness runtime. Their public product behavior may
+  be studied as UX reference only.
+- AI tools are scoped to the terminal tab that owns the assistant sidebar. Do
+  not add cross-terminal session enumeration, selection, or control.
 - Do not copy third-party source code, images, icons, themes, or branding unless
   an explicit compatible dependency decision is recorded.
 - Do not add a license file until the owner selects a project license.

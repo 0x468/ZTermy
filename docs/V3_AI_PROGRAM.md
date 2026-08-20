@@ -1,8 +1,9 @@
 # V3 AI program
 
-Status: `0.3.0`-`0.3.9` implementation complete; deeper NetCatty-class context
-and Agent ecosystem parity is planned for `0.3.10`-`0.3.11`; release-candidate
-human and environment-dependent acceptance pending
+Status: `0.3.0`-`0.3.10` implementation complete; `0.3.11` closes the built-in
+provider-backed terminal assistant and explicitly excludes external Agent
+ecosystem integration; release-candidate human and environment-dependent
+acceptance pending
 
 ## Decision
 
@@ -283,57 +284,20 @@ becomes conversation retention.
 - cover attachment, skill, and search persistence/compaction boundaries in the
   deterministic evaluation corpus.
 
-### 0.3.11 — external Agent ecosystem
+### 0.3.11 — built-in terminal assistant closure
 
-- expose an Agent selector that keeps the built-in ztermy Agent as the default;
-- define native adapters for selected external Agent/SDK protocols without
-  embedding a Web or Node runtime in the application;
-- keep terminal target ownership, permission modes, audit, cancellation, and
-  tool-result contracts identical across built-in and external Agents;
+- keep one built-in, provider-backed ztermy Agent with no external Agent
+  selector, runtime discovery, process bridge, or external thread ownership;
+- focus the UI and runtime on streaming responses, Markdown, reasoning,
+  current-terminal context, provider/model setup, cancellation, and tool
+  timelines;
+- keep every model-visible terminal tool bound to the sidebar's owning terminal
+  with no cross-terminal enumeration, selection, or control;
 - keep final-answer claims aligned with the typed tool ledger: the model reviews
   every result, while the client derives and displays failed/pending evidence
   without rewriting the provider response (`ADR 0092`);
-- close provider/Agent switching, resume, failure-recovery, and packaging
-  acceptance before declaring the expanded V3 program complete.
-
-Implementation status:
-
-- `ADR 0091` selects Codex App Server as the first native adapter. The bounded
-  JSONL protocol layer now covers initialization, thread start/resume, turn
-  start/interrupt, dynamic-tool results, typed responses/notifications/requests,
-  malformed input, fragmentation, and buffer limits;
-- the non-blocking native process client now covers initialization, thread
-  start/resume with refreshed tools, turn start, immediate/queued interrupt,
-  bounded host-tool round trips, terminal-thread scope checks, and failure
-  propagation. Discovery verifies the exact installed experimental schema
-  rather than guessing support from a version string;
-- typed stream-to-conversation mapping now covers text, readable reasoning,
-  dynamic-tool and web-search activities, usage, completion, cancellation, and
-  failures. It rejects cross-turn events and applies bounded linear buffering;
-- a native turn orchestrator now reuses the built-in runner's event, tool,
-  asynchronous completion, cancellation, and metrics vocabulary. Its fake App
-  Server scenarios cover immediate tools, pending-tool resume, and cancellation;
-- current-terminal application dispatch is integrated into `AppController` and
-  keeps the external thread id on the owning terminal tab. The same bounded
-  tool dispatcher, permission mode, activity cards, cancellation path, and
-  conversation model are used without exposing cross-terminal session tools;
-- Settings and the terminal AI header now expose a ztermy Agent / Codex selector,
-  asynchronous Detect action, discovered version/detail, and explicit
-  unavailable/loading states. Selecting Codex hides provider credentials and
-  model endpoint fields because the installed CLI owns login, model, and config;
-- deterministic application coverage copies the fake App Server to a discovered
-  `codex.exe`, starts a local terminal, completes a current-terminal dynamic-tool
-  turn, and verifies Agent switching. An opt-in installed-CLI gate separately
-  verifies the exact generated schema, process handshake, thread, stream, and
-  completion status without adding network traffic to ordinary `ctest` runs;
-- encrypted conversation history now records the owning Agent and bounded Codex
-  thread id. Explicitly restoring that history while Codex remains selected
-  resumes the same external thread with the current terminal's refreshed tool
-  catalog; restoring it under another Agent deliberately drops the external
-  resume id so one runtime never impersonates another;
-- installed/portable packaging evidence and owner real-window acceptance remain
-  open. Switching Agent while idle deliberately starts a clean external resume
-  point so one conversation is never silently continued by a different runtime.
+- close provider switching, conversation resume, failure recovery, narrow-panel
+  layout, and packaging acceptance before declaring V3 complete (`ADR 0093`).
 
 Current closure work:
 
@@ -355,25 +319,6 @@ Current closure work:
   persisted tool activities. Failed, cancelled, timed-out, or unexpectedly
   unfinished work gets one compact path back to the exact timeline; no-tool and
   fully successful turns stay visually quiet (`ADR 0092`).
-- a bounded native ACP v1 wire layer now covers initialization, Session
-  creation/resume, prompting, cancellation, close, Client responses, and
-  fragmented NDJSON. OpenCode 1.18.5 is the first exercised target; the Client
-  advertises terminal but not local-file capabilities, and every future
-  callback remains owned by one terminal tab (`ADR 0093`).
-- an asynchronous ACP process Client now enforces a one-process/one-Session
-  state machine, exact Session updates, bounded per-Prompt Client requests,
-  at-most-once request dispatch, cooperative cancellation with a finite
-  deadline, and visible process failure. A typed mapper preserves assistant
-  text, public thought, tool lifecycle, context-window usage, and optional cost
-  without mislabelling ACP context usage as Provider tokens (`ADR 0094`).
-- a deterministic fake ACP Agent proves new/resumed Sessions, streaming,
-  current-Session terminal requests, cancellation, foreign-Session rejection,
-  and duplicate-request suppression without a model account or network;
-- the OpenCode application bridge now discovers `opencode` from PATH, exposes
-  it in the Agent selector, separates the local process directory from the
-  current terminal cwd, and maps ACP terminal/permission calls through the
-  existing one-terminal permission, activity, cancellation, and semantic
-  command-result path (`ADR 0095`).
 
 Delivery status:
 

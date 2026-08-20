@@ -10,7 +10,7 @@ namespace ztermy::ai
 {
 
 // Typed context compaction for provider requests, modeled on the Netcatty
-// typed-compression stage and the opencode preserve-recent-turns budget
+// typed-compression stage and the preserve-recent-turns budget
 // (docs/reviews/ai-product-design-research-2026-08.md section 8). It is a
 // deterministic, provider-independent byte/character pass: old messages are
 // head/tail truncated while the most recent messages stay verbatim, so a long

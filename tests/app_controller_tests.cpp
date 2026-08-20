@@ -130,39 +130,6 @@ private:
     ztermy::security::CredentialKey m_key;
 };
 
-class EnvironmentVariableGuard final
-{
-public:
-    explicit EnvironmentVariableGuard(QByteArray name)
-        : m_name(std::move(name)),
-          m_original(qgetenv(m_name.constData())),
-          m_wasSet(qEnvironmentVariableIsSet(m_name.constData()))
-    {
-    }
-
-    ~EnvironmentVariableGuard()
-    {
-        if (m_wasSet)
-        {
-            static_cast<void>(qputenv(m_name.constData(), m_original));
-        }
-        else
-        {
-            static_cast<void>(qunsetenv(m_name.constData()));
-        }
-    }
-
-    EnvironmentVariableGuard(const EnvironmentVariableGuard &) = delete;
-    EnvironmentVariableGuard &operator=(const EnvironmentVariableGuard &) = delete;
-
-    [[nodiscard]] bool set(const QByteArray &value) const { return qputenv(m_name.constData(), value); }
-
-private:
-    QByteArray m_name;
-    QByteArray m_original;
-    bool m_wasSet = false;
-};
-
 } // namespace
 
 class AppControllerTests final : public QObject
@@ -185,8 +152,6 @@ private slots:
     void usesContextualSshTabTitles();
     void rejectsIncompleteConnections();
     void persistsApplicationSettings();
-    void runsDiscoveredCodexAgentAgainstCurrentTerminal();
-    void runsDiscoveredOpenCodeAgentAgainstCurrentTerminal();
     void managesMcpServerConfiguration();
     void managesActionShortcutsAndDispatchContext();
     void restoresCompleteAgentPresentationFromHistory();
@@ -899,15 +864,6 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(controller.terminalLigatures());
     QCOMPARE(controller.terminalBackgroundOpacity(), 1.0);
     QCOMPARE(controller.languagePreference(), QStringLiteral("system"));
-    QCOMPARE(controller.aiAgentPreference(), QStringLiteral("ztermy"));
-    const QVariantList agentOptions = controller.aiAgentOptions();
-    QCOMPARE(agentOptions.size(), 3);
-    QCOMPARE(agentOptions.front().toMap().value(QStringLiteral("id")).toString(), QStringLiteral("ztermy"));
-    QVERIFY(agentOptions.front().toMap().value(QStringLiteral("available")).toBool());
-    QCOMPARE(agentOptions.at(1).toMap().value(QStringLiteral("id")).toString(), QStringLiteral("codex"));
-    QCOMPARE(agentOptions.back().toMap().value(QStringLiteral("id")).toString(), QStringLiteral("opencode"));
-    QVERIFY(controller.setAiAgentPreference(QStringLiteral("ztermy")));
-    QVERIFY(!controller.setAiAgentPreference(QStringLiteral("unknown")));
     QCOMPARE(controller.aiProviderPreference(), QStringLiteral("openai-responses"));
     QVERIFY(controller.aiWebSearchAvailable());
     QCOMPARE(controller.aiBaseUrl(), QStringLiteral("https://api.openai.com/v1"));
@@ -1076,145 +1032,6 @@ void AppControllerTests::managesActionShortcutsAndDispatchContext()
             QCOMPARE(action.value(QStringLiteral("shortcut")).toString(), QStringLiteral("Ctrl+Shift+F"));
         }
     }
-}
-
-void AppControllerTests::runsDiscoveredCodexAgentAgainstCurrentTerminal()
-{
-    QTemporaryDir directory;
-    QVERIFY(directory.isValid());
-    const QString fakeServerSource = QDir(QCoreApplication::applicationDirPath())
-                                         .filePath(QStringLiteral("ztermy_codex_app_server_test_server.exe"));
-    QVERIFY(QFile::exists(fakeServerSource));
-    const QString executableDirectory = directory.filePath(QStringLiteral("bin"));
-    QVERIFY(QDir().mkpath(executableDirectory));
-    const QString fakeCodex = QDir(executableDirectory).filePath(QStringLiteral("codex.exe"));
-    QVERIFY(QFile::copy(fakeServerSource, fakeCodex));
-
-    EnvironmentVariableGuard pathGuard(QByteArrayLiteral("PATH"));
-    EnvironmentVariableGuard scenarioGuard(QByteArrayLiteral("ZTERMY_TEST_CODEX_SESSION_INFO"));
-    EnvironmentVariableGuard scrollbackGuard(QByteArrayLiteral("ZTERMY_TEST_CODEX_SCROLLBACK"));
-    const QByteArray augmentedPath =
-        QDir::toNativeSeparators(executableDirectory).toLocal8Bit() + QByteArrayLiteral(";") + qgetenv("PATH");
-    QVERIFY(pathGuard.set(augmentedPath));
-    QVERIFY(scenarioGuard.set(QByteArrayLiteral("1")));
-    QVERIFY(scrollbackGuard.set(QByteArrayLiteral("1")));
-
-    const QString settingsPath = directory.filePath(QStringLiteral("settings.json"));
-    ztermy::config::ApplicationSettings settings;
-    settings.aiAgent = ztermy::config::AiAgentPreference::codex;
-    settings.aiConversationHistoryEnabled = false;
-    ztermy::config::ApplicationSettingsStore settingsStore(settingsPath);
-    QVERIFY(settingsStore.save(settings).has_value());
-
-    const auto state = std::make_shared<FakeLocalSessionState>();
-    state->scrollbackLines = {"older output", "latest output"};
-    state->scrollbackLineCount = 1;
-    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
-                                     directory.filePath(QStringLiteral("known_hosts.json")), settingsPath, [state] {
-                                         return std::make_unique<FakeLocalTerminalSession>(state);
-                                     });
-    QTRY_VERIFY_WITH_TIMEOUT(!controller.aiAgentsLoading(), 10'000);
-    QVERIFY2(controller.aiAgentsError().isEmpty(), qPrintable(controller.aiAgentsError()));
-    QCOMPARE(controller.aiAgentPreference(), QStringLiteral("codex"));
-    const QVariantMap codexOption = controller.aiAgentOptions().at(1).toMap();
-    QVERIFY(codexOption.value(QStringLiteral("available")).toBool());
-    QCOMPARE(codexOption.value(QStringLiteral("version")).toString(), QStringLiteral("codex-cli 999.0.0-test"));
-
-    const QString tabId = controller.startLocalTerminal();
-    QVERIFY(!tabId.isEmpty());
-    QCOMPARE(controller.activeTerminalTabId(), tabId);
-    QVERIFY(controller.activeAiConversation() != nullptr);
-    QCOMPARE(controller.activeAiState(), QStringLiteral("idle"));
-    const bool sent = controller.sendAiMessage(QStringLiteral("Inspect this terminal session."));
-    QVERIFY2(sent, qPrintable(controller.activeAiError()));
-    QTRY_VERIFY_WITH_TIMEOUT(controller.activeAiState() == QStringLiteral("complete")
-                                 || controller.activeAiState() == QStringLiteral("error"),
-                             10'000);
-    QCOMPARE(controller.activeAiState(), QStringLiteral("complete"));
-    auto *conversation = qobject_cast<ztermy::ai::AiConversationModel *>(controller.activeAiConversation());
-    QVERIFY(conversation != nullptr);
-    QCOMPARE(conversation->rowCount(), 2);
-    QVERIFY(conversation->data(conversation->index(1), ztermy::ai::AiConversationModel::TextRole)
-                .toString()
-                .contains(QStringLiteral("Inspecting the terminal")));
-    const QVariantList tools =
-        conversation->data(conversation->index(1), ztermy::ai::AiConversationModel::ToolActivitiesRole).toList();
-    QCOMPARE(tools.size(), 1);
-    QCOMPARE(tools.constFirst().toMap().value(QStringLiteral("name")).toString(), QStringLiteral("read_session_info"));
-    QCOMPARE(tools.constFirst().toMap().value(QStringLiteral("state")).toString(), QStringLiteral("succeeded"));
-    QVERIFY(!tools.constFirst().toMap().value(QStringLiteral("argumentsJson")).toString().isEmpty());
-    QVERIFY(!tools.constFirst().toMap().value(QStringLiteral("resultJson")).toString().isEmpty());
-
-    QVERIFY(controller.sendAiMessage(QStringLiteral("Continue inspecting this terminal session.")));
-    QTRY_COMPARE_WITH_TIMEOUT(conversation->rowCount(), 4, 10'000);
-    QTRY_COMPARE_WITH_TIMEOUT(controller.activeAiState(), QStringLiteral("complete"), 10'000);
-    QVERIFY(conversation->data(conversation->index(3), ztermy::ai::AiConversationModel::TextRole)
-                .toString()
-                .contains(QStringLiteral("Resumed the terminal inspection")));
-    const QVariantList resumedTools =
-        conversation->data(conversation->index(3), ztermy::ai::AiConversationModel::ToolActivitiesRole).toList();
-    QCOMPARE(resumedTools.size(), 1);
-    QCOMPARE(resumedTools.constFirst().toMap().value(QStringLiteral("name")).toString(),
-             QStringLiteral("read_terminal_output"));
-    QCOMPARE(resumedTools.constFirst().toMap().value(QStringLiteral("state")).toString(), QStringLiteral("succeeded"));
-    QVERIFY(!resumedTools.constFirst().toMap().value(QStringLiteral("resultJson")).toString().isEmpty());
-
-    QVERIFY(controller.setAiAgentPreference(QStringLiteral("ztermy")));
-    QCOMPARE(controller.aiAgentPreference(), QStringLiteral("ztermy"));
-}
-
-void AppControllerTests::runsDiscoveredOpenCodeAgentAgainstCurrentTerminal()
-{
-    QTemporaryDir directory;
-    QVERIFY(directory.isValid());
-    const QString fakeAgentSource =
-        QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("ztermy_acp_test_agent.exe"));
-    QVERIFY(QFile::exists(fakeAgentSource));
-    const QString executableDirectory = directory.filePath(QStringLiteral("bin"));
-    QVERIFY(QDir().mkpath(executableDirectory));
-    const QString fakeOpenCode = QDir(executableDirectory).filePath(QStringLiteral("opencode.exe"));
-    QVERIFY(QFile::copy(fakeAgentSource, fakeOpenCode));
-
-    EnvironmentVariableGuard pathGuard(QByteArrayLiteral("PATH"));
-    const QByteArray augmentedPath =
-        QDir::toNativeSeparators(executableDirectory).toLocal8Bit() + QByteArrayLiteral(";") + qgetenv("PATH");
-    QVERIFY(pathGuard.set(augmentedPath));
-
-    const QString settingsPath = directory.filePath(QStringLiteral("settings.json"));
-    ztermy::config::ApplicationSettings settings;
-    settings.aiAgent = ztermy::config::AiAgentPreference::openCode;
-    settings.aiPermission = ztermy::config::AiPermissionPreference::automatic;
-    settings.aiConversationHistoryEnabled = false;
-    ztermy::config::ApplicationSettingsStore settingsStore(settingsPath);
-    QVERIFY(settingsStore.save(settings).has_value());
-
-    const auto state = std::make_shared<FakeLocalSessionState>();
-    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
-                                     directory.filePath(QStringLiteral("known_hosts.json")), settingsPath, [state] {
-                                         return std::make_unique<FakeLocalTerminalSession>(state);
-                                     });
-    QTRY_VERIFY_WITH_TIMEOUT(!controller.aiAgentsLoading(), 10'000);
-    QVERIFY2(controller.aiAgentsError().isEmpty(), qPrintable(controller.aiAgentsError()));
-    QCOMPARE(controller.aiAgentPreference(), QStringLiteral("opencode"));
-    const QVariantMap openCodeOption = controller.aiAgentOptions().back().toMap();
-    QCOMPARE(openCodeOption.value(QStringLiteral("id")).toString(), QStringLiteral("opencode"));
-    QVERIFY(openCodeOption.value(QStringLiteral("available")).toBool());
-    QCOMPARE(openCodeOption.value(QStringLiteral("version")).toString(), QStringLiteral("opencode 1.18.5-test"));
-
-    const QString tabId = controller.startLocalTerminal();
-    QVERIFY(!tabId.isEmpty());
-    QVERIFY(controller.sendAiMessage(QStringLiteral("Inspect this terminal with OpenCode.")));
-    QTRY_COMPARE_WITH_TIMEOUT(controller.activeAiState(), QStringLiteral("complete"), 10'000);
-    auto *conversation = qobject_cast<ztermy::ai::AiConversationModel *>(controller.activeAiConversation());
-    QVERIFY(conversation != nullptr);
-    QCOMPARE(conversation->rowCount(), 2);
-    QVERIFY(conversation->data(conversation->index(1), ztermy::ai::AiConversationModel::TextRole)
-                .toString()
-                .contains(QStringLiteral("Done")));
-    QTRY_VERIFY_WITH_TIMEOUT(!state->inputs.isEmpty() || !state->pastes.isEmpty(), 5'000);
-    const QByteArray terminalInput = state->inputs.join() + state->pastes.join();
-    QVERIFY(terminalInput.contains("printf"));
-    QVERIFY(terminalInput.contains("hello world"));
 }
 
 void AppControllerTests::managesMcpServerConfiguration()

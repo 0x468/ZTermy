@@ -3,53 +3,25 @@
 > 每个节点 = 一个可验证的阶段：日期 + git commit + 范围 + 验证结果。
 > 配套研究文档：`docs/reviews/ai-product-design-research-2026-08.md`；
 > Netcatty 对照：`docs/reviews/netcatty-ai-comparison-2026-08.md`；
-> Codex 专项：`docs/research/CODEX_CLI_ARCHITECTURE.md`。
+> 外部 Agent 资料只作为历史产品研究；ADR 0093 永久禁止运行时集成。
 
-## 节点 N27 — OpenCode ACP 当前终端接线（2026-08-15）
-
-**commit**: 本节点提交（见 git 历史）
-
-**范围**：
-
-1. 新增 `AcpAgentTurnRunner`，把 ACP terminal create/output/wait/kill/release 映射到侧栏所属的唯一终端，不提供 Session 枚举、跨 Tab 发现或模型选路；
-2. 本地 Agent 进程目录与远端 Session cwd 明确分离；POSIX/PowerShell 参数、环境和 cwd 经过各自 shell 编码；等待以 Qt 定时器异步轮询，不阻塞 GUI；
-3. ACP 权限请求复用 Read-only/Ask/Auto/YOLO 与现有审批卡；一次/持续允许不会在 terminal/create 再弹第二次确认；取消会结束待审批、工具和等待；
-4. OpenCode 从 PATH 异步发现，设置页和 AI 标题栏可选择并显示版本/可用状态；其 Provider、模型和登录仍由 OpenCode 自己管理；
-5. 运行中的语义命令块现在暴露已有的有界输出、覆盖率和省略字节，ACP `terminal/output` 不必等命令结束才返回内容；
-6. fake `opencode.exe` 覆盖发现、当前终端执行和完整 ACP 生命周期；ADR 0095 固化单终端桥接合同。
-
-**验证**：聚焦 `application-settings`、`ai-command-tracker`、`acp-protocol`、`acp-client`、`acp-session-update-mapper`、`acp-agent-turn-runner`、`app-controller` 7/7 通过；最终全量门禁见本节点提交记录。
-
-## 节点 N26 — ACP 异步进程与 Session 事件（2026-08-15）
+## 节点 N25 — 内置供应商助手收口（2026-08-21）
 
 **commit**: 本节点提交（见 git 历史）
 
 **范围**：
 
-1. 新增原生 `AcpClient`，以 `QProcess` 覆盖 v1 初始化、Session 新建/恢复、Prompt、流式更新、异步 Client 请求、协作取消、关闭和异常退出；
-2. 每个进程只持有当前终端的一个 Session id，外来 Session 更新直接失败；不新增 `session/list`、跨 Tab 发现或路由；
-3. Agent→Client 请求在单轮内按 JSON-RPC id 去重并限制并发/总量，重复请求只返回错误而不会再次派发；取消 5 秒仍不收尾则终止 Agent，避免界面永久卡住；
-4. 新增 `AcpSessionUpdateMapper`，映射正文、公开思考和工具生命周期；ACP `used/size` 与成本保持独立上下文用量，不伪装成 Provider 输入/输出 Token；
-5. 确定性假 Agent 覆盖正常流式、当前 Session 工具回调、恢复、取消、越权更新和重复请求，无需账号或网络。
+1. 删除 Codex App Server、OpenCode ACP 及其发现、进程、线程所有权、选择器、桥接器、测试和构建规则；
+2. ztermy 只保留一个由现有供应商与模型配置驱动的内置终端助手，外部 Agent/Harness 永不进入产品路线图；
+3. 每个 AI 侧栏只绑定其所属终端，不提供会话枚举、跨终端选择或控制工具；
+4. 输入区在 260px 紧凑侧栏中按词或字符换行，禁用整体横向滚动条，仍保留必要的纵向滚动；
+5. ADR 0093、项目守则、V3 计划和验收矩阵共同固化以上边界。N17-N20 仅保留为已撤回实验的历史记录，不代表当前能力或后续计划。
 
-**验证**：聚焦 `acp-protocol`、`acp-client`、`acp-session-update-mapper` 3/3 通过；MSVC 动态 Debug 非真实主机全量 118/118 通过，完整编译数据库 clang-tidy 264 个翻译单元与 C++ 格式门禁通过。ADR 0094 固化进程、取消、去重和事件语义。
-
-## 节点 N25 — ACP / OpenCode 原生协议边界（2026-08-15）
-
-**commit**: 本节点提交（见 git 历史）
-
-**范围**：
-
-1. 对照 ACP v1 官方初始化、Session、Prompt、取消、终端与工具合同，并实测本机 OpenCode 1.18.5 的 `opencode acp` 握手和 Session 元数据；
-2. 新增纯原生 C++ `AcpProtocol`，覆盖标准 JSON-RPC 2.0 + NDJSON、有界分片解析、数值/字符串请求 ID、初始化、Session 新建/恢复、Prompt、取消、关闭及 Client 成功/错误响应；
-3. Client 只声明 `terminal: true`，明确不声明本地 `fs`；后续远端命令必须经过当前侧栏所属终端，不允许跨 Tab Session 发现；
-4. ADR 0093 固化外部 Agent 自有认证/模型、内容为空的本地工作目录、当前终端代际与既有权限/预算/审计复用边界。
-
-**验证**：MSVC 动态 Debug 全量 `119/119` 通过；完整编译数据库 clang-tidy（258 个翻译单元）与 C++ 格式门禁通过；`acp-protocol` 覆盖完整生命周期消息、OpenCode 使用的 v1 包络、分片输入、字符串请求 ID、畸形/越界输入恢复。
+**验证**：MSVC 动态 Debug 与静态 Release 构建通过；两套非真实主机测试均为 `111/111`；完整 clang-tidy（246 个翻译单元）、C++/QML 格式、1766/1766 翻译门禁和 260px 真实窗口布局合同通过。
 
 ## 节点 N24 — 工具证据与最终回答一致性（2026-08-15）
 
-**commit**: `39680ef`（feat(ai): surface incomplete tool evidence）
+**commit**: 本节点提交（见 git 历史）
 
 **范围**：
 

@@ -73,8 +73,6 @@ QVariant AiConversationHistoryModel::data(const QModelIndex &index, const int ro
                                                       });
             return visible == conversation.messages.rend() ? QString{} : visible->text.left(180);
         }
-        case AgentRole:
-            return conversation.agent;
         default:
             return {};
     }
@@ -82,8 +80,11 @@ QVariant AiConversationHistoryModel::data(const QModelIndex &index, const int ro
 
 QHash<int, QByteArray> AiConversationHistoryModel::roleNames() const
 {
-    return {{ConversationIdRole, "conversationId"}, {TitleRole, "title"},     {UpdatedAtRole, "updatedAt"},
-            {MessageCountRole, "messageCount"},     {PreviewRole, "preview"}, {AgentRole, "agent"}};
+    return {{ConversationIdRole, "conversationId"},
+            {TitleRole, "title"},
+            {UpdatedAtRole, "updatedAt"},
+            {MessageCountRole, "messageCount"},
+            {PreviewRole, "preview"}};
 }
 
 bool AiConversationHistoryModel::busy() const noexcept

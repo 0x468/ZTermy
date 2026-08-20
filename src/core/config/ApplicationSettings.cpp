@@ -34,11 +34,9 @@ constexpr qint64 aiReasoningSchemaVersion = 16;
 constexpr qint64 aiExplicitContextSchemaVersion = 17;
 constexpr qint64 aiConversationFirstSchemaVersion = 18;
 constexpr qint64 aiPermissionContractSchemaVersion = 19;
-constexpr qint64 aiAgentPreferenceSchemaVersion = 20;
-constexpr qint64 currentSchemaVersion = aiAgentPreferenceSchemaVersion;
+constexpr qint64 currentSchemaVersion = aiPermissionContractSchemaVersion;
 
 using ztermy::config::AccentPreference;
-using ztermy::config::AiAgentPreference;
 using ztermy::config::AiPermissionPreference;
 using ztermy::config::AiProviderPreference;
 using ztermy::config::AiReasoningPreference;
@@ -208,24 +206,6 @@ template <>
 }
 
 template <>
-[[nodiscard]] std::optional<AiAgentPreference> parsePreference(const QString &token)
-{
-    if (token == QStringLiteral("ztermy"))
-    {
-        return AiAgentPreference::ztermy;
-    }
-    if (token == QStringLiteral("codex"))
-    {
-        return AiAgentPreference::codex;
-    }
-    if (token == QStringLiteral("opencode"))
-    {
-        return AiAgentPreference::openCode;
-    }
-    return std::nullopt;
-}
-
-template <>
 [[nodiscard]] std::optional<AiPermissionPreference> parsePreference(const QString &token)
 {
     if (token == QStringLiteral("read-only") || token == QStringLiteral("observer"))
@@ -346,7 +326,6 @@ template <>
     const QJsonValue credentialStorageValue = root.value(QStringLiteral("credentialStorage"));
     const QJsonValue languageValue = root.value(QStringLiteral("language"));
     const QJsonValue shortcutOverridesValue = root.value(QStringLiteral("shortcutOverrides"));
-    const QJsonValue aiAgentValue = root.value(QStringLiteral("aiAgent"));
     const QJsonValue aiProviderValue = root.value(QStringLiteral("aiProvider"));
     const QJsonValue aiBaseUrlValue = root.value(QStringLiteral("aiBaseUrl"));
     const QJsonValue aiEndpointPathValue = root.value(QStringLiteral("aiEndpointPath"));
@@ -393,10 +372,6 @@ template <>
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
-    if (version >= aiAgentPreferenceSchemaVersion && !aiAgentValue.isString())
-    {
-        return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
-    }
     if (version >= aiProviderSchemaVersion
         && (!aiProviderValue.isString() || !aiBaseUrlValue.isString() || !aiEndpointPathValue.isString()
             || !aiModelValue.isString() || !aiCredentialReferenceValue.isString() || !aiAutomaticContextValue.isBool()))
@@ -433,9 +408,6 @@ template <>
     const auto aiProvider = version >= aiProviderSchemaVersion
                                 ? parsePreference<AiProviderPreference>(aiProviderValue.toString())
                                 : std::optional{AiProviderPreference::openAiResponses};
-    const auto aiAgent = version >= aiAgentPreferenceSchemaVersion
-                             ? parsePreference<AiAgentPreference>(aiAgentValue.toString())
-                             : std::optional{AiAgentPreference::ztermy};
     const auto aiPermission =
         version >= aiPermissionSchemaVersion
             ? (version < aiPermissionContractSchemaVersion && aiPermissionValue.toString() == QStringLiteral("edit")
@@ -446,8 +418,8 @@ template <>
                                  ? parsePreference<AiReasoningPreference>(aiReasoningValue.toString())
                                  : std::optional{AiReasoningPreference::automatic};
     const qint64 fontSize = fontSizeValue.toInteger(-1);
-    if (!theme || !backdrop || !accent || !cursor || !credentialStorage || !language || !aiAgent || !aiProvider
-        || !aiPermission || !aiReasoning || fontSizeValue.toDouble() != static_cast<double>(fontSize))
+    if (!theme || !backdrop || !accent || !cursor || !credentialStorage || !language || !aiProvider || !aiPermission
+        || !aiReasoning || fontSizeValue.toDouble() != static_cast<double>(fontSize))
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
@@ -492,7 +464,6 @@ template <>
         .credentialStorage = *credentialStorage,
         .language = *language,
         .shortcutOverrides = std::move(shortcutOverrides),
-        .aiAgent = *aiAgent,
         .aiProvider = *aiProvider,
         .aiBaseUrl = version >= aiProviderSchemaVersion ? aiBaseUrlValue.toString()
                                                         : QStringLiteral("https://api.openai.com/v1"),
@@ -634,7 +605,6 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
         {QStringLiteral("credentialStorage"), credentialStoragePreferenceToken(settings.credentialStorage)},
         {QStringLiteral("language"), languagePreferenceToken(settings.language)},
         {QStringLiteral("shortcutOverrides"), shortcutOverrides},
-        {QStringLiteral("aiAgent"), aiAgentPreferenceToken(settings.aiAgent)},
         {QStringLiteral("aiProvider"), aiProviderPreferenceToken(settings.aiProvider)},
         {QStringLiteral("aiBaseUrl"), settings.aiBaseUrl.trimmed()},
         {QStringLiteral("aiEndpointPath"), settings.aiEndpointPath.trimmed()},
@@ -770,20 +740,6 @@ QString aiProviderPreferenceToken(const AiProviderPreference preference)
     }
 }
 
-QString aiAgentPreferenceToken(const AiAgentPreference preference)
-{
-    switch (preference)
-    {
-        case AiAgentPreference::openCode:
-            return QStringLiteral("opencode");
-        case AiAgentPreference::codex:
-            return QStringLiteral("codex");
-        case AiAgentPreference::ztermy:
-        default:
-            return QStringLiteral("ztermy");
-    }
-}
-
 QString aiPermissionPreferenceToken(const AiPermissionPreference preference)
 {
     switch (preference)
@@ -853,11 +809,6 @@ std::optional<LanguagePreference> parseLanguagePreference(const QString &token)
 std::optional<AiProviderPreference> parseAiProviderPreference(const QString &token)
 {
     return parsePreference<AiProviderPreference>(token);
-}
-
-std::optional<AiAgentPreference> parseAiAgentPreference(const QString &token)
-{
-    return parsePreference<AiAgentPreference>(token);
 }
 
 std::optional<AiPermissionPreference> parseAiPermissionPreference(const QString &token)

@@ -56,17 +56,11 @@ void AiCommandTrackerTests::linksOnlyExactPostBaselineBlocks()
     QVERIFY(!queuedValue.blockId.has_value());
 
     auto exact = block();
-    exact.retainedOutput = {std::byte{'l'}, std::byte{'i'}, std::byte{'v'}, std::byte{'e'}};
-    exact.omittedOutputBytes = 7;
-    exact.outputCoverage = ztermy::terminal::CommandOutputCoverage::boundedHeadTail;
     const auto running = tracker.observe("command-1", std::span{&exact, std::size_t{1}}, true);
     QVERIFY(running.has_value());
     const auto runningValue = running.value_or(AiTrackedCommand{});
     QCOMPARE(runningValue.state, AiTrackedCommandState::running);
     QCOMPARE(runningValue.blockId, std::optional<ztermy::terminal::CommandBlockId>{9});
-    QCOMPARE(runningValue.output, std::string("live"));
-    QCOMPARE(runningValue.omittedOutputBytes, std::uint64_t{7});
-    QCOMPARE(runningValue.outputCoverage, ztermy::terminal::CommandOutputCoverage::boundedHeadTail);
 
     const std::array<CommandBlock, 0> evicted{};
     const auto unknown = tracker.observe("command-1", evicted, true);

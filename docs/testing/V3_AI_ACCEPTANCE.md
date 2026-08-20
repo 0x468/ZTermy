@@ -120,8 +120,8 @@ evaluations serve different purposes and are reported separately.
       bounded real scrollback rather than only the currently visible viewport.
 - [x] Developer check: `read_terminal_output` is a live current-terminal tool with no model-visible
       session selector, supports deterministic head/tail paging, preserves blank lines and UTF-8,
-      reports byte truncation/partial lines/absolute ranges, and is exercised through the Codex
-      dynamic-tool bridge.
+      reports byte truncation/partial lines/absolute ranges, and is exercised through the built-in
+      provider tool loop.
 - [ ] Owner check: typing `/` opens the built-in command picker; Up/Down, Tab, Enter, and click
       invoke the selected local action without sending the literal slash command to the provider.
 - [ ] Owner check: Attach > Local text files accepts one or more UTF-8 text files, shows removable
@@ -332,29 +332,6 @@ the unified release-candidate verifier.
   verifier pass. The owner/provider and previous-Windows-build matrix remains
   explicit manual/environment acceptance.
 
-### 0.3.11 Codex Agent bridge developer evidence — 2026-08-15
-
-- the deterministic AppController scenario discovers a copied fake
-  `codex.exe`, validates its generated schema, opens the current local terminal,
-  completes a `read_session_info` dynamic-tool round trip, renders the shared
-  conversation/tool activity state, and switches back to ztermy Agent;
-- protocol, process client, event mapper, and turn-runner tests cover JSONL
-  fragmentation and bounds, start/resume, dynamic tools, queued cancellation,
-  text/reasoning/failure mapping, asynchronous tool completion, and thread scope;
-- the installed `codex-cli 0.146.0` opt-in gate validates the real generated
-  schema, initialize handshake, and thread/turn start. The managed sandbox blocks
-  outbound access to the Responses API, and the observed `turn.status=failed`
-  remains an expected environment limitation rather than a claimed successful
-  provider run; owner or explicitly approved network execution is still open;
-- App Server shutdown now closes stdin and waits for normal exit before
-  terminate/kill escalation. The same real failure scenario restores its
-  temporary Windows sandbox directory cleanly instead of leaving inaccessible
-  ACL state;
-- encrypted history round trips the owning Agent and bounded external thread id;
-  history rows expose the Agent, a restored Codex conversation resumes only when
-  Codex is currently selected, and the deterministic application scenario proves
-  a second turn uses `thread/resume` rather than silently opening another thread.
-
 ## Evaluation corpus
 
 Maintain versioned synthetic tasks with expected evidence and allowed actions:
@@ -407,21 +384,6 @@ only when it passes the same evidence and action contract.
 
 ## Manual real-window matrix
 
-- [ ] Agent engine: open Settings > AI, click Detect, and verify the installed
-      Codex version appears without blocking the window. Select Codex and verify
-      provider URL/key/model fields disappear while permission and explicit
-      context controls remain. The AI header must show Codex; switching back to
-      ztermy Agent while idle must start a clean external resume point. Switching
-      is rejected during an active turn rather than orphaning it.
-- [ ] Installed Codex: with an authenticated CLI, set
-      `$env:ZTERMY_TEST_CODEX_REAL = "1"` and run
-      `build/msvc-dynamic-debug/ztermy_codex_app_server_client_tests.exe
-      connectsToInstalledCodexWhenEnabled`; remove the environment variable
-      afterward, then send one current-terminal prompt in the real window.
-      Schema discovery, handshake, thread start,
-      streaming/final message, failure status, cancellation, and the owning
-      terminal's tool cards must remain coherent; ordinary `ctest` must keep
-      this network gate skipped.
 - [ ] Conversation surface: with retained history available, New starts an empty
       current-terminal conversation; the empty view shows no more than three
       recent rows; History replaces the message/composer region with a full-height
@@ -556,3 +518,18 @@ the `0.3.6` gate below.
    inside the panel and keyboard reachable. Reviewed MCP calls follow the same
    active mode and reusable-rule decision path; Ask/Edit display the exact
    approval card, while Auto/YOLO do not add an accidental per-call prompt.
+
+## 0.3.11 built-in assistant boundary acceptance
+
+1. Open the AI sidebar at its minimum width and paste ordinary prose, CJK text,
+   and a long unbroken URL or command. The composer wraps inside the sidebar,
+   remains vertically scrollable, and never exposes a horizontal scrollbar.
+2. The header identifies the terminal assistant directly. No Agent selector,
+   Codex/OpenCode/Claude Code discovery, external authentication, process
+   status, or external conversation ownership is present in Settings or the
+   sidebar.
+3. Provider and model selection, streaming, cancellation, history, Markdown,
+   reasoning summaries, and native tools continue to work through the built-in
+   provider turn runner.
+4. Every terminal-facing tool targets only the terminal that owns the sidebar.
+   The model cannot list, select, or control another terminal tab.

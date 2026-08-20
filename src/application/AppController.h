@@ -1,7 +1,6 @@
 #pragma once
 
 #include "application/actions/ActionRegistry.h"
-#include "application/ai/AcpAgentTurnRunner.h"
 #include "application/ai/AiActionToolDispatcher.h"
 #include "application/ai/AiActivityModel.h"
 #include "application/ai/AiConversationHistoryModel.h"
@@ -13,7 +12,6 @@
 #include "application/ai/AiSftpReadTool.h"
 #include "application/ai/AiTerminalOutputTool.h"
 #include "application/ai/AiTurnRunner.h"
-#include "application/ai/CodexAgentTurnRunner.h"
 #include "application/ai/McpRuntimeManager.h"
 #include "application/forwarding/PortForwardingJob.h"
 #include "application/security/CredentialVaultCoordinator.h"
@@ -31,11 +29,9 @@
 #include "domain/terminal/SemanticTerminalObserver.h"
 #include "domain/workbench/ScriptExecution.h"
 #include "domain/workbench/ScriptRecorder.h"
-#include "infrastructure/ai/AcpAgentDiscovery.h"
 #include "infrastructure/ai/AiPermissionRuleStore.h"
 #include "infrastructure/ai/AiQuickMessageStore.h"
 #include "infrastructure/ai/AiUserSkillCatalog.h"
-#include "infrastructure/ai/CodexAppServerDiscovery.h"
 #include "infrastructure/ai/ProviderModelCatalog.h"
 #include "infrastructure/forwarding/PortForwardingRuleStore.h"
 #include "infrastructure/logging/SessionLogWriter.h"
@@ -177,10 +173,6 @@ class AppController final : public QObject
     Q_PROPERTY(bool sftpShowHiddenFiles READ sftpShowHiddenFiles NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool sftpConfirmDelete READ sftpConfirmDelete NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString languagePreference READ languagePreference NOTIFY applicationSettingsChanged)
-    Q_PROPERTY(QString aiAgentPreference READ aiAgentPreference NOTIFY applicationSettingsChanged)
-    Q_PROPERTY(QVariantList aiAgentOptions READ aiAgentOptions NOTIFY aiAgentsChanged)
-    Q_PROPERTY(bool aiAgentsLoading READ aiAgentsLoading NOTIFY aiAgentsChanged)
-    Q_PROPERTY(QString aiAgentsError READ aiAgentsError NOTIFY aiAgentsChanged)
     Q_PROPERTY(QString aiProviderPreference READ aiProviderPreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString aiReasoningPreference READ aiReasoningPreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString aiBaseUrl READ aiBaseUrl NOTIFY applicationSettingsChanged)
@@ -324,10 +316,6 @@ public:
     [[nodiscard]] bool sftpShowHiddenFiles() const noexcept;
     [[nodiscard]] bool sftpConfirmDelete() const noexcept;
     [[nodiscard]] QString languagePreference() const;
-    [[nodiscard]] QString aiAgentPreference() const;
-    [[nodiscard]] QVariantList aiAgentOptions() const;
-    [[nodiscard]] bool aiAgentsLoading() const noexcept;
-    [[nodiscard]] QString aiAgentsError() const;
     [[nodiscard]] QString aiProviderPreference() const;
     [[nodiscard]] QString aiReasoningPreference() const;
     [[nodiscard]] QString aiBaseUrl() const;
@@ -536,8 +524,6 @@ public:
                                                  bool automaticContext, const QString &permissionMode,
                                                  const QString &apiKey, bool debugTraceEnabled,
                                                  const QString &reasoningPreference);
-    Q_INVOKABLE bool setAiAgentPreference(const QString &agent);
-    Q_INVOKABLE void refreshAiAgents();
     [[nodiscard]] Q_INVOKABLE QVariantMap aiReasoningCapabilities(const QString &provider, const QString &model) const;
     Q_INVOKABLE void refreshAiModels(const QString &provider, const QString &baseUrl, const QString &apiKey);
     [[nodiscard]] Q_INVOKABLE QString aiProviderEndpointPreview(const QString &provider, const QString &baseUrl) const;
@@ -632,7 +618,6 @@ signals:
     void aiPermissionRulesChanged();
     void aiQuickMessagesChanged();
     void aiUserSkillsChanged();
-    void aiAgentsChanged();
     void aiModelsChanged();
     void aiPrivacyDiagnosticsChanged();
     void mcpConfigurationChanged();
@@ -701,8 +686,6 @@ private:
         std::unique_ptr<sftp::SftpDirectoryModel> sftpModel;
         std::unique_ptr<ai::AiConversationModel> aiConversation;
         std::unique_ptr<ai::AiTurnRunner> aiTurnRunner;
-        std::unique_ptr<ai::CodexAgentTurnRunner> codexTurnRunner;
-        std::unique_ptr<ai::AcpAgentTurnRunner> acpTurnRunner;
         std::unique_ptr<ai::AiAgentTurnBudget> aiTurnBudget;
         std::optional<ai::AiTerminalAction> pendingAiAction;
         std::optional<PendingAiSftpRead> pendingAiSftpRead;
@@ -764,8 +747,6 @@ private:
         QHash<QString, QString> aiWebSearchQueries;
         QString aiContextPreview;
         QString aiConversationId;
-        QString codexThreadId;
-        QString acpSessionId;
         QVariantList aiContextItems;
         std::unordered_set<std::string> aiExcludedContextIds;
         std::unordered_set<std::string> aiPinnedContextIds;
@@ -779,7 +760,6 @@ private:
         workbench::ScriptExecution scriptExecution;
         std::optional<telemetry::Sample> telemetrySample;
         std::optional<ai::AiTokenUsage> aiUsage;
-        std::optional<ai::AcpUsageUpdate> acpUsage;
         std::uint64_t aiAssistantMessageId = 0;
         std::uint32_t searchCurrent = 0;
         std::uint32_t searchTotal = 0;
@@ -802,7 +782,6 @@ private:
         bool aiLastPreferFailure = false;
         bool aiLastCommandRequest = false;
         bool aiLastWebSearchEnabled = false;
-        config::AiAgentPreference activeAiAgent = config::AiAgentPreference::ztermy;
         bool workbenchOpen = false;
         bool composerOpen = false;
         bool running = false;
@@ -855,8 +834,6 @@ private:
     [[nodiscard]] std::optional<ai::AiToolCall> pendingAiToolCall(const TerminalTab &tab) const;
     [[nodiscard]] bool completePendingAiTool(TerminalTab &tab, const ai::AiToolOutput &output);
     [[nodiscard]] bool cancelAiTurn(TerminalTab &tab);
-    void initializeCodexAgentDiscovery();
-    void initializeOpenCodeAgentDiscovery();
     void handleAiStreamEvent(const QString &tabId, std::uint64_t assistantMessageId, const ai::AiStreamEvent &event);
     [[nodiscard]] ai::AiTurnRunner::ToolHandlingResult handleAiWaitCommand(TerminalTab &tab, const QString &tabId,
                                                                            const ai::AiToolCall &call,
@@ -1030,14 +1007,8 @@ private:
     QString m_aiDebugTracePath;
     QNetworkAccessManager m_aiModelNetwork;
     QPointer<QNetworkReply> m_aiModelsReply;
-    std::unique_ptr<ai::CodexAppServerDiscovery> m_codexDiscovery;
-    std::optional<ai::CodexAppServerInstallation> m_codexInstallation;
-    std::unique_ptr<ai::AcpAgentDiscovery> m_openCodeDiscovery;
-    std::optional<ai::AcpAgentInstallation> m_openCodeInstallation;
     QStringList m_aiAvailableModels;
     QString m_aiModelsError;
-    QString m_codexDiscoveryError;
-    QString m_openCodeDiscoveryError;
     QString m_aiPermissionRuleError;
     std::vector<ai::AiQuickMessage> m_aiQuickMessages;
     QString m_aiQuickMessageError;
