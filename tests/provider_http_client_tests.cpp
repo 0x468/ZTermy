@@ -31,6 +31,7 @@ struct FakeResponse final
     int status = 200;
     QByteArray payload;
     QByteArray retryAfter;
+    QByteArray requestId;
     int delayMilliseconds = 0;
 };
 
@@ -47,6 +48,10 @@ public:
         if (!m_response.retryAfter.isEmpty())
         {
             setRawHeader("Retry-After", m_response.retryAfter);
+        }
+        if (!m_response.requestId.isEmpty())
+        {
+            setRawHeader("x-request-id", m_response.requestId);
         }
         open(QIODevice::ReadOnly);
         QTimer::singleShot(m_response.delayMilliseconds, this, [this] {
@@ -153,6 +158,8 @@ private slots:
     void streamsCompatibleTypedEvents();
     void streamsOllamaTypedEvents();
     void classifiesRateLimitAndRetryDelay();
+    void classifiesSpecificAuthenticationCode();
+    void classifiesQuotaFromProviderBody();
     void classifiesContextOverflowAsRetryable();
     void cancelsInFlightRequest();
     void tracesExactPayloadWithoutAuthorizationSecret();
@@ -289,7 +296,12 @@ void ProviderHttpClientTests::streamsOllamaTypedEvents()
 void ProviderHttpClientTests::classifiesRateLimitAndRetryDelay()
 {
     FakeNetworkAccessManager network;
-    network.enqueue(FakeResponse{.status = 429, .payload = "too many", .retryAfter = "3"});
+    network.enqueue(FakeResponse{
+        .status = 429,
+        .payload =
+            R"json({"error":{"message":"Rate limit reached for this model.","type":"rate_limit_error","code":"rate_limit_exceeded"}})json",
+        .retryAfter = "3",
+        .requestId = "req_rate_1"});
     ProviderHttpClient client(&network);
     std::vector<AiStreamEvent> events;
     bool finished = false;
@@ -308,8 +320,73 @@ void ProviderHttpClientTests::classifiesRateLimitAndRetryDelay()
     QVERIFY(events.front().error.has_value());
     const auto error = events.front().error.value_or(ztermy::ai::AiProviderError{});
     QCOMPARE(error.code, AiProviderErrorCode::rateLimited);
+    QCOMPARE(error.message, std::string("Rate limit reached for this model."));
     QCOMPARE(error.retryAfterMilliseconds, std::optional<std::uint64_t>{3000});
+    QCOMPARE(error.httpStatus, std::optional<std::uint16_t>{429});
+    QCOMPARE(error.providerCode, std::string("rate_limit_exceeded"));
+    QCOMPARE(error.requestId, std::string("req_rate_1"));
     QVERIFY(error.retryable);
+}
+
+void ProviderHttpClientTests::classifiesSpecificAuthenticationCode()
+{
+    FakeNetworkAccessManager network;
+    network.enqueue(FakeResponse{
+        .status = 401,
+        .payload =
+            R"json({"error":{"message":"The API key is invalid.","type":"invalid_request_error","code":"invalid_api_key"}})json"});
+    ProviderHttpClient client(&network);
+    std::vector<AiStreamEvent> events;
+    bool finished = false;
+    QVERIFY(client
+                .start(
+                    openAiConfiguration(), AiGenerationRequest{}, SensitiveByteArray{},
+                    [&events](const auto, const AiStreamEvent &event) {
+                        events.push_back(event);
+                    },
+                    [&finished](const auto) {
+                        finished = true;
+                    })
+                .has_value());
+    QTRY_VERIFY_WITH_TIMEOUT(finished, 1000);
+    QCOMPARE(events.size(), std::size_t{1});
+    const auto error = events.front().error.value_or(ztermy::ai::AiProviderError{});
+    QCOMPARE(error.code, AiProviderErrorCode::authentication);
+    QCOMPARE(error.message, std::string("The API key is invalid."));
+    QCOMPARE(error.httpStatus, std::optional<std::uint16_t>{401});
+    QCOMPARE(error.providerCode, std::string("invalid_api_key"));
+    QVERIFY(!error.retryable);
+}
+
+void ProviderHttpClientTests::classifiesQuotaFromProviderBody()
+{
+    FakeNetworkAccessManager network;
+    network.enqueue(FakeResponse{
+        .status = 402,
+        .payload =
+            R"json({"error":{"message":"Insufficient credits.","code":"insufficient_quota"},"request_id":"req_quota_1"})json"});
+    ProviderHttpClient client(&network);
+    std::vector<AiStreamEvent> events;
+    bool finished = false;
+    QVERIFY(client
+                .start(
+                    openAiConfiguration(), AiGenerationRequest{}, SensitiveByteArray{},
+                    [&events](const auto, const AiStreamEvent &event) {
+                        events.push_back(event);
+                    },
+                    [&finished](const auto) {
+                        finished = true;
+                    })
+                .has_value());
+    QTRY_VERIFY_WITH_TIMEOUT(finished, 1000);
+    QCOMPARE(events.size(), std::size_t{1});
+    const auto error = events.front().error.value_or(ztermy::ai::AiProviderError{});
+    QCOMPARE(error.code, AiProviderErrorCode::quotaExceeded);
+    QCOMPARE(error.message, std::string("Insufficient credits."));
+    QCOMPARE(error.httpStatus, std::optional<std::uint16_t>{402});
+    QCOMPARE(error.providerCode, std::string("insufficient_quota"));
+    QCOMPARE(error.requestId, std::string("req_quota_1"));
+    QVERIFY(!error.retryable);
 }
 
 void ProviderHttpClientTests::classifiesContextOverflowAsRetryable()
@@ -334,6 +411,8 @@ void ProviderHttpClientTests::classifiesContextOverflowAsRetryable()
     QVERIFY(events.front().error.has_value());
     const auto error = events.front().error.value_or(ztermy::ai::AiProviderError{});
     QCOMPARE(error.code, AiProviderErrorCode::contextOverflow);
+    QCOMPARE(error.message, std::string("request entity too large"));
+    QCOMPARE(error.httpStatus, std::optional<std::uint16_t>{413});
     QVERIFY(error.retryable);
 }
 

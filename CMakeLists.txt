@@ -526,6 +526,8 @@ add_library(ztermy_ai_provider STATIC
     src/infrastructure/ai/AiTraceSanitizer.h
     src/infrastructure/ai/ProviderEndpointResolver.cpp
     src/infrastructure/ai/ProviderEndpointResolver.h
+    src/infrastructure/ai/ProviderErrorParser.cpp
+    src/infrastructure/ai/ProviderErrorParser.h
     src/infrastructure/ai/ProviderHttpClient.cpp
     src/infrastructure/ai/ProviderHttpClient.h
     src/infrastructure/ai/ProviderModelCatalog.cpp

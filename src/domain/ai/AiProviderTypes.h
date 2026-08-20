@@ -218,6 +218,9 @@ struct AiProviderError final
     std::string message;
     std::optional<std::uint64_t> retryAfterMilliseconds;
     bool retryable = false;
+    std::optional<std::uint16_t> httpStatus;
+    std::string providerCode;
+    std::string requestId;
 };
 
 struct AiStreamEvent final

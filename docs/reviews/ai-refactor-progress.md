@@ -9,6 +9,26 @@
 > 后续 AI 工作永远只打磨 ztermy 自有的供应商驱动助手；竞品研究只能转化为
 > 原生 UI/UX 或能力改进，不能转化为外部 Agent 集成需求。
 
+## 节点 N29 — 供应商错误可诊断性与统一分类（2026-08-21）
+
+**commit**: 本节点提交（见 git 历史）
+
+**范围**：
+
+1. 修复 HTTP 层已经有界收集错误正文、结束时却完全丢弃的问题；JSON 正文与纯文本错误现在都会进入统一解析器，HTML 网关页面不会作为助手内容展示；
+2. OpenAI Responses、Anthropic、OpenAI 兼容/OpenRouter、Gemini/Qwen 兼容协议与 Ollama 的 HTTP 错误和流中错误共用分类合同，保留供应商原文、供应商错误码、HTTP 状态、请求 ID 与 `Retry-After`；
+3. 明确区分认证、额度、限流、上下文过长、无效请求、网络与临时服务端错误；HTTP 402 纳入额度不足，429/5xx/超时及可压缩的上下文溢出继续进入既有有界重试策略；
+4. 当前终端 AI 侧栏显示直接可操作的错误原因及紧凑诊断行，长错误码和请求 ID 可在窄侧栏内断行，不引入额外配置或跨终端错误中心；
+5. 自动化合同覆盖 429 + `Retry-After` + 请求头 ID、402 额度错误、413 上下文溢出、Responses 失败事件、OpenRouter HTTP 200 流中错误与 Anthropic `request_id`。
+
+**验证**：MSVC 动态 Debug 与静态 Release 完整构建通过，两套全量测试均为
+`114/114`；clang-tidy 以 warnings-as-errors 覆盖 246 个 C++ 翻译单元；C++ 格式、
+48 个 QML 文件和 `1777/1777` 翻译目录通过。便携 ZIP 与 MSI 已重新生成，SHA-256
+分别为 `16d71f2d695b7102f20ec6403c775c851aec6d5d2c384024e948ff16584172d8`
+和 `10008ee9ad9deb46669fd93294cca30bdb932580cfafec878db8a0444ee6f2bf`，
+checksummed release bundle 组装成功。本机 WiX ICE 仍因 Windows Installer 服务不可访问
+返回已知的 `WIX0217/217`；显式跳过 ICE 后，MSI 反编译结构合同全部通过。
+
 ## 节点 N28 — 主流供应商协议与工具续接（2026-08-21）
 
 **commit**: 本节点提交（见 git 历史）

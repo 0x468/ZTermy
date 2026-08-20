@@ -1,5 +1,7 @@
 #include "infrastructure/ai/ProviderStreamMapper.h"
 
+#include "infrastructure/ai/ProviderErrorParser.h"
+
 #include <QByteArray>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -34,48 +36,6 @@ namespace
                                                .retryable = false});
     }
     return document.object();
-}
-
-[[nodiscard]] AiProviderErrorCode classifyProviderError(const QString &code)
-{
-    if (code.contains("auth", Qt::CaseInsensitive) || code.contains("api_key", Qt::CaseInsensitive))
-    {
-        return AiProviderErrorCode::authentication;
-    }
-    if (code.contains("quota", Qt::CaseInsensitive))
-    {
-        return AiProviderErrorCode::quotaExceeded;
-    }
-    if (code.contains("rate", Qt::CaseInsensitive))
-    {
-        return AiProviderErrorCode::rateLimited;
-    }
-    if (code.contains("server", Qt::CaseInsensitive))
-    {
-        return AiProviderErrorCode::server;
-    }
-    if (code.contains("invalid", Qt::CaseInsensitive))
-    {
-        return AiProviderErrorCode::invalidRequest;
-    }
-    return AiProviderErrorCode::protocol;
-}
-
-[[nodiscard]] AiProviderError providerError(const QJsonValue &value,
-                                            const std::string_view fallbackMessage = "Provider request failed.")
-{
-    const auto object = value.toObject();
-    const auto codeText = object.value("code").toString(object.value("type").toString());
-    const auto code = classifyProviderError(codeText);
-    auto message = utf8(object.value("message").toString());
-    if (message.empty())
-    {
-        message.assign(fallbackMessage);
-    }
-    return AiProviderError{.code = code,
-                           .message = std::move(message),
-                           .retryable =
-                               code == AiProviderErrorCode::rateLimited || code == AiProviderErrorCode::server};
 }
 
 [[nodiscard]] std::optional<AiTokenUsage> openAiUsage(const QJsonObject &object)
@@ -352,14 +312,18 @@ OpenAiResponsesStreamMapper::map(const ServerSentEvent &event)
     else if (type == "response.failed" || type == "response.incomplete")
     {
         const auto response = object.value("response").toObject();
-        auto error = providerError(response.value("error"), "Provider response was incomplete.");
+        auto error = parseProviderError(object, AiProviderError{.code = AiProviderErrorCode::protocol,
+                                                                .message = "Provider response was incomplete.",
+                                                                .retryable = false});
         events.push_back(AiStreamEvent{.type = AiStreamEventType::responseFailed,
                                        .responseId = utf8(response.value("id").toString()),
                                        .error = std::move(error)});
     }
     else if (type == "error")
     {
-        auto error = providerError(object.value("error"));
+        auto error = parseProviderError(object, AiProviderError{.code = AiProviderErrorCode::protocol,
+                                                                .message = "Provider request failed.",
+                                                                .retryable = false});
         events.push_back(AiStreamEvent{.type = AiStreamEventType::responseFailed, .error = std::move(error)});
     }
     return events;
@@ -402,7 +366,9 @@ OpenAiCompatibleStreamMapper::map(const ServerSentEvent &event)
     const auto &object = parsed.value();
     if (object.contains("error"))
     {
-        auto error = providerError(object.value("error"));
+        auto error = parseProviderError(object, AiProviderError{.code = AiProviderErrorCode::protocol,
+                                                                .message = "Provider request failed.",
+                                                                .retryable = false});
         return std::vector{AiStreamEvent{.type = AiStreamEventType::responseFailed, .error = std::move(error)}};
     }
 
@@ -535,7 +501,9 @@ std::expected<std::vector<AiStreamEvent>, AiProviderError> AnthropicStreamMapper
     };
     if (type == QStringLiteral("error"))
     {
-        auto error = providerError(object.value("error"));
+        auto error = parseProviderError(object, AiProviderError{.code = AiProviderErrorCode::protocol,
+                                                                .message = "Provider request failed.",
+                                                                .retryable = false});
         events.push_back(AiStreamEvent{.type = AiStreamEventType::responseFailed, .error = std::move(error)});
     }
     else if (type == QStringLiteral("message_start"))
@@ -807,9 +775,9 @@ std::expected<std::vector<AiStreamEvent>, AiProviderError> OllamaStreamMapper::m
     const auto &object = parsed.value();
     if (object.contains("error"))
     {
-        AiProviderError error{.code = AiProviderErrorCode::server,
-                              .message = utf8(object.value("error").toString()),
-                              .retryable = false};
+        auto error = parseProviderError(object, AiProviderError{.code = AiProviderErrorCode::server,
+                                                                .message = "Ollama request failed.",
+                                                                .retryable = false});
         return std::vector{AiStreamEvent{.type = AiStreamEventType::responseFailed, .error = std::move(error)}};
     }
 

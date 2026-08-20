@@ -55,6 +55,10 @@ evaluations serve different purposes and are reported separately.
       range, oversized request, and unavailable capability.
 - [x] Provider errors distinguish user-action and transient classes; 429 honors
       `Retry-After`; capped jittered backoff never replays a side-effecting tool.
+- [x] HTTP and mid-stream provider failures preserve bounded provider prose,
+      canonical error code, HTTP status, request ID, and retryability across
+      OpenAI Responses, Anthropic, OpenAI-compatible/OpenRouter, and Ollama
+      fixtures. Long diagnostics wrap within the owning terminal sidebar.
 - [x] AI protected copy opts out of Windows history/cloud sync, and optional
       auto-clear does not erase a newer clipboard item.
 - [x] Cancelling or closing a tab discards late stream events and releases every

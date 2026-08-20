@@ -30,10 +30,13 @@ private slots:
     void mapsOpenAiTextAndUsage();
     void mapsOpenAiToolArguments();
     void mapsOpenAiWebSearchAndCitations();
+    void mapsOpenAiFailedResponseDetails();
     void rejectsMalformedProviderJson();
     void mapsCompatibleTextToolsAndCompletion();
     void mapsCompatibleUsageFields();
+    void mapsOpenRouterMidStreamErrorDetails();
     void mapsAnthropicTextToolsUsageAndCompletion();
+    void mapsAnthropicErrorDetails();
     void mapsAnthropicThinkingSignature();
     void mapsAnthropicWebSearchAndCitations();
     void reconstructsAnthropicPausedContent();
@@ -117,6 +120,24 @@ void ProviderStreamMapperTests::mapsOpenAiWebSearchAndCitations()
     QCOMPARE(events->front().type, AiStreamEventType::webSearchCompleted);
 }
 
+void ProviderStreamMapperTests::mapsOpenAiFailedResponseDetails()
+{
+    OpenAiResponsesStreamMapper mapper;
+    const auto events = mapper.map(ServerSentEvent{
+        .data =
+            R"json({"type":"response.failed","request_id":"req_response_1","response":{"id":"resp_failed","error_type":"server_error","error":{"code":"server_error","message":"The provider is temporarily unavailable."}}})json"});
+    QVERIFY(events.has_value());
+    QCOMPARE(events->size(), std::size_t{1});
+    QCOMPARE(events->front().type, AiStreamEventType::responseFailed);
+    QCOMPARE(events->front().responseId, std::string("resp_failed"));
+    const auto error = events->front().error.value_or(AiProviderError{});
+    QCOMPARE(error.code, AiProviderErrorCode::server);
+    QCOMPARE(error.message, std::string("The provider is temporarily unavailable."));
+    QCOMPARE(error.providerCode, std::string("server_error"));
+    QCOMPARE(error.requestId, std::string("req_response_1"));
+    QVERIFY(error.retryable);
+}
+
 void ProviderStreamMapperTests::rejectsMalformedProviderJson()
 {
     OpenAiResponsesStreamMapper mapper;
@@ -160,6 +181,23 @@ void ProviderStreamMapperTests::mapsCompatibleUsageFields()
     QCOMPARE(usage.outputTokens, std::uint64_t{13});
     QCOMPARE(usage.cachedInputTokens, std::uint64_t{5});
     QCOMPARE(usage.reasoningTokens, std::uint64_t{8});
+}
+
+void ProviderStreamMapperTests::mapsOpenRouterMidStreamErrorDetails()
+{
+    OpenAiCompatibleStreamMapper mapper;
+    const auto events = mapper.map(ServerSentEvent{
+        .data =
+            R"json({"id":"chat_error","error":{"code":429,"message":"Upstream model rate limited.","metadata":{"error_type":"provider_rate_limit","provider_code":"429"}},"request_id":"req_router_1"})json"});
+    QVERIFY(events.has_value());
+    QCOMPARE(events->size(), std::size_t{1});
+    QCOMPARE(events->front().type, AiStreamEventType::responseFailed);
+    const auto error = events->front().error.value_or(AiProviderError{});
+    QCOMPARE(error.code, AiProviderErrorCode::rateLimited);
+    QCOMPARE(error.message, std::string("Upstream model rate limited."));
+    QCOMPARE(error.providerCode, std::string("provider_rate_limit"));
+    QCOMPARE(error.requestId, std::string("req_router_1"));
+    QVERIFY(error.retryable);
 }
 
 void ProviderStreamMapperTests::mapsAnthropicTextToolsUsageAndCompletion()
@@ -208,6 +246,24 @@ void ProviderStreamMapperTests::mapsAnthropicTextToolsUsageAndCompletion()
     QCOMPARE(replay.array().at(0).toObject().value("text").toString(), QStringLiteral("hello"));
     QCOMPARE(replay.array().at(1).toObject().value("input").toObject().value("command").toString(),
              QStringLiteral("pwd"));
+}
+
+void ProviderStreamMapperTests::mapsAnthropicErrorDetails()
+{
+    AnthropicStreamMapper mapper;
+    const auto events = mapper.map(ServerSentEvent{
+        .event = "error",
+        .data =
+            R"json({"type":"error","error":{"type":"overloaded_error","message":"Anthropic is temporarily overloaded."},"request_id":"req_anthropic_1"})json"});
+    QVERIFY(events.has_value());
+    QCOMPARE(events->size(), std::size_t{1});
+    QCOMPARE(events->front().type, AiStreamEventType::responseFailed);
+    const auto error = events->front().error.value_or(AiProviderError{});
+    QCOMPARE(error.code, AiProviderErrorCode::server);
+    QCOMPARE(error.message, std::string("Anthropic is temporarily overloaded."));
+    QCOMPARE(error.providerCode, std::string("overloaded_error"));
+    QCOMPARE(error.requestId, std::string("req_anthropic_1"));
+    QVERIFY(error.retryable);
 }
 
 void ProviderStreamMapperTests::mapsAnthropicThinkingSignature()

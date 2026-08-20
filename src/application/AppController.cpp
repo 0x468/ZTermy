@@ -9767,7 +9767,25 @@ void AppController::handleAiStreamEvent(const QString &tabId, const std::uint64_
             }
             else
             {
-                target->aiError = utf8QString(event.error.value_or(ai::AiProviderError{}).message);
+                const auto providerError = event.error.value_or(ai::AiProviderError{});
+                target->aiError = utf8QString(providerError.message);
+                QStringList details;
+                if (providerError.httpStatus.has_value())
+                {
+                    details.append(tr("HTTP %1").arg(*providerError.httpStatus));
+                }
+                if (!providerError.providerCode.empty())
+                {
+                    details.append(tr("Code: %1").arg(utf8QString(providerError.providerCode)));
+                }
+                if (!providerError.requestId.empty())
+                {
+                    details.append(tr("Request: %1").arg(utf8QString(providerError.requestId)));
+                }
+                if (!details.isEmpty())
+                {
+                    target->aiError += QLatin1Char('\n') + details.join(QStringLiteral(" · "));
+                }
                 static_cast<void>(target->aiConversation->failAssistantMessage(assistantMessageId, target->aiError));
                 persistAiConversation(*target);
                 target->aiState = QStringLiteral("error");

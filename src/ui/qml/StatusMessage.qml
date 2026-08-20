@@ -12,7 +12,7 @@ Text {
     visible: text.length > 0 || opacity > 0.001
     opacity: text.length > 0 ? 1.0 : 0.0
     color: error ? Theme.dangerText : success ? Theme.successText : Theme.textMuted
-    wrapMode: Text.WordWrap
+    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
     font.family: Theme.uiFont
     font.pixelSize: Theme.textLabel
     Accessible.role: error ? Accessible.AlertMessage : Accessible.StaticText

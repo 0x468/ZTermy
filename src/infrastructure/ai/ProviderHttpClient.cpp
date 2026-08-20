@@ -1,5 +1,7 @@
 #include "infrastructure/ai/ProviderHttpClient.h"
 
+#include "infrastructure/ai/ProviderErrorParser.h"
+
 #include <QByteArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -7,6 +9,7 @@
 #include <QVariant>
 
 #include <algorithm>
+#include <array>
 #include <charconv>
 #include <string>
 #include <string_view>
@@ -44,7 +47,21 @@ constexpr qsizetype maxErrorBodyBytes = qsizetype{64} * 1024;
     return std::nullopt;
 }
 
-[[nodiscard]] AiProviderError httpError(const QNetworkReply &reply)
+[[nodiscard]] std::string requestIdHeader(const QNetworkReply &reply)
+{
+    constexpr std::array headers{"x-request-id", "request-id", "x-dashscope-request-id", "x-goog-request-id"};
+    for (const auto *header : headers)
+    {
+        const QByteArray value = reply.rawHeader(header).trimmed();
+        if (!value.isEmpty())
+        {
+            return {value.constData(), static_cast<std::size_t>(value.size())};
+        }
+    }
+    return {};
+}
+
+[[nodiscard]] AiProviderError httpError(const QNetworkReply &reply, const QByteArray &body)
 {
     const auto status = statusCode(reply);
     auto code = AiProviderErrorCode::server;
@@ -68,6 +85,10 @@ constexpr qsizetype maxErrorBodyBytes = qsizetype{64} * 1024;
         code = AiProviderErrorCode::contextOverflow;
         retryable = true;
     }
+    else if (status == 402)
+    {
+        code = AiProviderErrorCode::quotaExceeded;
+    }
     else if (status >= 400 && status < 500)
     {
         code = AiProviderErrorCode::invalidRequest;
@@ -76,10 +97,13 @@ constexpr qsizetype maxErrorBodyBytes = qsizetype{64} * 1024;
     {
         retryable = true;
     }
-    return AiProviderError{.code = code,
-                           .message = "Provider HTTP request failed with status " + std::to_string(status) + '.',
-                           .retryAfterMilliseconds = retryAfter(reply),
-                           .retryable = retryable};
+    auto error = AiProviderError{.code = code,
+                                 .message = "Provider HTTP request failed with status " + std::to_string(status) + '.',
+                                 .retryAfterMilliseconds = retryAfter(reply),
+                                 .retryable = retryable,
+                                 .httpStatus = static_cast<std::uint16_t>(std::clamp(status, 0, 65535)),
+                                 .requestId = requestIdHeader(reply)};
+    return parseProviderErrorBody(body, std::move(error));
 }
 
 [[nodiscard]] AiProviderError networkError(const QNetworkReply &reply)
@@ -313,7 +337,7 @@ void ProviderHttpClient::finish(QNetworkReply *reply)
     auto &state = *iterator->second;
     if (!state.failed && statusCode(*reply) >= 400)
     {
-        fail(state, httpError(*reply), reply);
+        fail(state, httpError(*reply, state.errorBody), reply);
     }
     else if (!state.failed && reply->error() != QNetworkReply::NoError)
     {
