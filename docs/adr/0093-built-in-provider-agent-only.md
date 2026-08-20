@@ -23,6 +23,10 @@ bound to the current terminal.
 - Codex, OpenCode, Claude Code, and other external Agent or harness runtimes
   must never be integrated, detected, launched, bridged, or presented as a
   selectable Agent.
+- This is a permanent, version-independent product boundary. External Agent
+  integration is rejected rather than postponed: it must not appear in any
+  future roadmap, milestone, backlog, experimental spike, feature flag, plugin
+  contract, dormant adapter, or compatibility layer.
 - External products may be studied through public documentation and observable
   behavior to improve ztermy's interaction design. Their runtime protocols,
   account state, conversation ownership, and process lifecycle are not product
@@ -46,3 +50,6 @@ bound to the current terminal.
   target, reducing ambiguity and preventing cross-terminal orchestration from
   entering the product.
 - ADR 0091 and the experimental external-Agent implementation are superseded.
+- Historical research and progress records that mention such integrations are
+  non-normative records of discarded work. They cannot be used as justification
+  to restore external Agent integration.

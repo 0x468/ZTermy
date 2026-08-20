@@ -10,6 +10,11 @@ acceptance pending
 V3 focuses on native AI assistance and terminal agency. Cross-platform work,
 cloud collaboration, serial support, and a general remote IDE remain separate
 future decisions. All `0.3.z` releases share one owner-selected codename. The
+external-Agent boundary is not a future decision: Codex, OpenCode, Claude Code,
+and every other external Agent/harness integration are permanently excluded
+from V3 and all later releases. They may be observed only as public UX research;
+no runtime, protocol, account, process, thread, selector, bridge, or plugin
+integration may be planned or implemented. The
 accepted `0.3.x` identity is:
 
 - codename: **糸**;

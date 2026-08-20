@@ -3,7 +3,9 @@
 > 每个节点 = 一个可验证的阶段：日期 + git commit + 范围 + 验证结果。
 > 配套研究文档：`docs/reviews/ai-product-design-research-2026-08.md`；
 > Netcatty 对照：`docs/reviews/netcatty-ai-comparison-2026-08.md`；
-> 外部 Agent 资料只作为历史产品研究；ADR 0093 永久禁止运行时集成。
+> 外部 Agent 资料只作为历史产品研究；ADR 0093 永久禁止 Codex、OpenCode、
+> Claude Code 及任何其他外部 Agent/harness 的集成。该方向不是延期事项，
+> 不得重新进入任何未来版本、路线图、待办、实验、功能开关或插件接口。
 
 ## 节点 N26 — 长对话上下文压缩可见反馈（2026-08-21）
 

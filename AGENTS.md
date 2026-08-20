@@ -13,6 +13,10 @@
   integrate, detect, launch, bridge, or expose Codex, OpenCode, Claude Code, or
   any other external Agent/harness runtime. Their public product behavior may
   be studied as UX reference only.
+- This external-Agent exclusion is a permanent product boundary, not deferred
+  work. Do not add it to a future roadmap, prototype it behind a feature flag,
+  retain dormant adapters, or introduce extension points whose purpose is to
+  host those runtimes.
 - AI tools are scoped to the terminal tab that owns the assistant sidebar. Do
   not add cross-terminal session enumeration, selection, or control.
 - Do not copy third-party source code, images, icons, themes, or branding unless
