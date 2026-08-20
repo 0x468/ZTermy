@@ -13,6 +13,7 @@ Rectangle {
     required property var activeTab
     readonly property bool busy: controller.activeAiState === "starting" || controller.activeAiState === "retrying" || controller.activeAiState === "streaming" || controller.activeAiState === "cancelling"
     readonly property var conversation: controller.activeAiConversation
+    readonly property var contextCompaction: controller.activeAiCompaction || ({})
     readonly property var toolApproval: controller.activeAiToolApproval || ({
             "visible": false,
             "kind": "",
@@ -2240,6 +2241,73 @@ Rectangle {
                         }
                     }
                 }
+            }
+        }
+
+        Rectangle {
+            id: compactionNotice
+
+            objectName: "aiCompactionNotice"
+            Layout.fillWidth: true
+            Layout.leftMargin: 8
+            Layout.rightMargin: 8
+            Layout.preferredHeight: visible ? compactionContent.implicitHeight + 12 : 0
+            visible: !pane.historyExpanded && pane.contextCompaction.visible === true
+            radius: Theme.radiusSmall
+            color: Theme.mixColor(Theme.elevatedBackground, pane.contextCompaction.overBudget === true ? Theme.warning : Theme.accent, 0.08)
+            border.color: Theme.mixColor(Theme.border, pane.contextCompaction.overBudget === true ? Theme.warning : Theme.accent, 0.4)
+            Accessible.role: Accessible.StaticText
+            Accessible.name: compactionTitle.text + ". " + compactionDetail.text
+
+            RowLayout {
+                id: compactionContent
+
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.leftMargin: 9
+                anchors.rightMargin: 9
+                spacing: 7
+
+                AppIcon {
+                    Layout.preferredWidth: 14
+                    Layout.preferredHeight: 14
+                    name: pane.contextCompaction.overBudget === true ? "warning" : "ai"
+                    color: pane.contextCompaction.overBudget === true ? Theme.warning : Theme.accent
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    spacing: 0
+
+                    Text {
+                        id: compactionTitle
+
+                        Layout.fillWidth: true
+                        text: pane.contextCompaction.overBudget === true ? qsTr("Context limit reached") : qsTr("Context optimized")
+                        color: Theme.text
+                        elide: Text.ElideRight
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textCompact
+                        font.weight: Font.DemiBold
+                    }
+
+                    Text {
+                        id: compactionDetail
+
+                        Layout.fillWidth: true
+                        text: pane.contextCompaction.overBudget === true ? qsTr("The provider may require a shorter conversation.") : qsTr("%n older context item(s) shortened", "", Number(pane.contextCompaction.itemCount || 0))
+                        color: Theme.textMuted
+                        elide: Text.ElideRight
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textCompact
+                    }
+                }
+            }
+
+            AppToolTip {
+                text: qsTr("Estimated request: %1 tokens · removed: %2 bytes").arg(Number(pane.contextCompaction.estimatedInputTokens || 0).toLocaleString(Qt.locale(), "f", 0)).arg(Number(pane.contextCompaction.removedBytes || 0).toLocaleString(Qt.locale(), "f", 0))
             }
         }
 

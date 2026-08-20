@@ -1070,7 +1070,7 @@ struct ResizeHitRuntimeCase
         aiPromptHorizontalScrollBar != nullptr && !aiPromptHorizontalScrollBar->isVisible();
     constexpr std::array compactAiActionNames{
         "aiHistoryToggle", "aiNewConversationButton", "aiConversationMoreButton", "aiContextToggle",
-        "aiSendButton",    "aiAttachmentDropArea"};
+        "aiSendButton",    "aiAttachmentDropArea",    "aiCompactionNotice"};
     bool compactAiActionsInsidePanel = aiAssistantPane != nullptr;
     QFile compactAiArtifact{QDir(outputDirectory).filePath(QStringLiteral("compact-ai-layout-contract.txt"))};
     const bool compactAiArtifactOpened = compactAiArtifact.open(QIODevice::WriteOnly | QIODevice::Text);

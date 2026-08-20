@@ -1172,6 +1172,7 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
     QVERIFY(conversationMarkdown.contains("## Assistant"));
     QVERIFY(conversationMarkdown.contains("Use `df -h`."));
     QCOMPARE(controller.activeAiState(), QStringLiteral("idle"));
+    QCOMPARE(controller.activeAiCompaction(), QVariantMap{});
     QVERIFY(controller.activeAiContextItems().isEmpty());
     QVERIFY(controller.activeAiToolApproval().isEmpty());
     QVERIFY(!controller.approveAiTool());

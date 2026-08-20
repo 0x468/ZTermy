@@ -26,6 +26,7 @@ public:
     using EventHandler = std::function<void(TurnId, const AiStreamEvent &)>;
     using FinishedHandler = std::function<void(TurnId, const AiTurnMetrics &)>;
     using RetryHandler = std::function<void(TurnId, std::uint32_t, std::uint64_t)>;
+    using CompactionHandler = std::function<void(TurnId, const AiCompactionResult &)>;
     using JitterSource = std::function<double()>;
     struct ToolHandlingResult final
     {
@@ -46,7 +47,8 @@ public:
     [[nodiscard]] std::expected<TurnId, AiProviderError>
     start(AiProviderConfiguration configuration, AiGenerationRequest generation, SecretLoader secretLoader,
           EventHandler eventHandler, FinishedHandler finishedHandler, RetryHandler retryHandler = {},
-          JitterSource jitterSource = {}, ToolHandler toolHandler = {}, ToolOutputHandler toolOutputHandler = {});
+          JitterSource jitterSource = {}, ToolHandler toolHandler = {}, ToolOutputHandler toolOutputHandler = {},
+          CompactionHandler compactionHandler = {});
     [[nodiscard]] bool cancel();
     [[nodiscard]] bool completePendingTool(AiToolOutput output);
     [[nodiscard]] std::optional<AiToolCall> pendingToolCall() const;
@@ -78,6 +80,7 @@ private:
     JitterSource m_jitterSource;
     ToolHandler m_toolHandler;
     ToolOutputHandler m_toolOutputHandler;
+    CompactionHandler m_compactionHandler;
     std::optional<ProviderHttpClient::RequestId> m_requestId;
     std::optional<AiStreamEvent> m_bufferedStart;
     std::optional<AiProviderError> m_pendingError;

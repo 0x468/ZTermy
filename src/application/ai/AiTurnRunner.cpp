@@ -42,7 +42,8 @@ AiTurnRunner::~AiTurnRunner()
 std::expected<AiTurnRunner::TurnId, AiProviderError>
 AiTurnRunner::start(AiProviderConfiguration configuration, AiGenerationRequest generation, SecretLoader secretLoader,
                     EventHandler eventHandler, FinishedHandler finishedHandler, RetryHandler retryHandler,
-                    JitterSource jitterSource, ToolHandler toolHandler, ToolOutputHandler toolOutputHandler)
+                    JitterSource jitterSource, ToolHandler toolHandler, ToolOutputHandler toolOutputHandler,
+                    CompactionHandler compactionHandler)
 {
     if (active())
     {
@@ -66,6 +67,7 @@ AiTurnRunner::start(AiProviderConfiguration configuration, AiGenerationRequest g
     m_jitterSource = std::move(jitterSource);
     m_toolHandler = std::move(toolHandler);
     m_toolOutputHandler = std::move(toolOutputHandler);
+    m_compactionHandler = std::move(compactionHandler);
     m_turnId = m_nextTurnId++;
     m_completedRetries = 0;
     m_completedToolCalls = 0;
@@ -385,6 +387,10 @@ void AiTurnRunner::handleFinished(const ProviderHttpClient::RequestId requestId)
                 .oldMessageTailCharacters = m_compactionLimits.oldMessageTailCharacters / 2,
                 .maximumToolOutputCharacters = m_compactionLimits.maximumToolOutputCharacters / 2};
             auto compacted = ai::AiContextCompactor::compact(std::move(m_generation), tighterLimits);
+            if (m_compactionHandler)
+            {
+                m_compactionHandler(m_turnId, compacted);
+            }
             m_generation = std::move(compacted.request);
             if (m_retryHandler)
             {
@@ -634,6 +640,7 @@ void AiTurnRunner::clearTurn()
     m_jitterSource = {};
     m_toolHandler = {};
     m_toolOutputHandler = {};
+    m_compactionHandler = {};
     m_requestId.reset();
     m_bufferedStart.reset();
     m_pendingError.reset();

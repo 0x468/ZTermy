@@ -623,6 +623,8 @@ void AiTurnRunnerTests::compactsAndRetriesOnContextOverflow()
     AiTurnRunner runner(client, fastRetryPolicy());
     std::vector<AiStreamEvent> events;
     bool finished = false;
+    std::size_t compactedItems = 0;
+    std::size_t removedBytes = 0;
 
     AiGenerationRequest generation;
     // 8 x 80k-char messages: over the tighter 413 retry budget so the
@@ -643,6 +645,11 @@ void AiTurnRunnerTests::compactsAndRetriesOnContextOverflow()
                     },
                     [&finished](const auto, const AiTurnMetrics &) {
                         finished = true;
+                    },
+                    {}, {}, {}, {},
+                    [&compactedItems, &removedBytes](const auto, const ztermy::ai::AiCompactionResult &result) {
+                        compactedItems += result.compactedItemCount;
+                        removedBytes += result.removedBytes;
                     })
                 .has_value());
 
@@ -652,6 +659,8 @@ void AiTurnRunnerTests::compactsAndRetriesOnContextOverflow()
     // The retried payload must be smaller: the 413 forced a tighter
     // compaction of the request view.
     QVERIFY(network.requestBodySizes().at(1) < network.requestBodySizes().at(0));
+    QVERIFY(compactedItems > 0);
+    QVERIFY(removedBytes > 0);
     QCOMPARE(events.back().type, AiStreamEventType::responseCompleted);
 }
 

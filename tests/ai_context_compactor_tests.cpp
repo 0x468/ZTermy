@@ -64,7 +64,7 @@ void AiContextCompactorTests::truncatesOldMessagesAndPreservesRecentTail()
     QVERIFY(result.request.messages[0].content.find("...[older content truncated]...") != std::string::npos);
     QVERIFY(result.request.messages[19].content.size() < 10'000);
     QCOMPARE(result.request.messages[29].content.size(), longMessage.size());
-    QCOMPARE(result.compactedMessageCount, std::size_t{20});
+    QCOMPARE(result.compactedItemCount, std::size_t{20});
 }
 
 void AiContextCompactorTests::capsToolOutputsInHistory()
@@ -130,6 +130,8 @@ void AiContextCompactorTests::dropsOldProviderReplayBeforeVisibleHistory()
     QVERIFY(result.request.messages.at(1).providerReplayJson.empty());
     QCOMPARE(result.request.messages.at(2).providerReplayJson.size(), std::size_t{1'000});
     QCOMPARE(result.request.messages.at(0).content, std::string("visible answer"));
+    QCOMPARE(result.compactedItemCount, std::size_t{2});
+    QVERIFY(result.removedBytes >= std::size_t{2'000});
 }
 
 void AiContextCompactorTests::utf8TruncationNeverSplitsCodePoints()

@@ -31,8 +31,8 @@ struct AiCompactionResult final
 {
     AiGenerationRequest request;
     std::size_t estimatedInputTokens = 0;
-    std::size_t compactedMessageCount = 0;
-    std::size_t compactedCharacters = 0;
+    std::size_t compactedItemCount = 0;
+    std::size_t removedBytes = 0;
     bool compacted = false;
     bool overBudget = false;
 };

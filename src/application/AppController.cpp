@@ -237,6 +237,23 @@ private:
     return {bytes.constData(), static_cast<std::size_t>(bytes.size())};
 }
 
+[[nodiscard]] QVariantMap aiCompactionValue(const ztermy::ai::AiCompactionResult &result,
+                                            const QVariantMap &previous = {})
+{
+    const qulonglong previousItems = previous.value(QStringLiteral("itemCount")).toULongLong();
+    const qulonglong previousBytes = previous.value(QStringLiteral("removedBytes")).toULongLong();
+    const qulonglong itemCount = previousItems + static_cast<qulonglong>(result.compactedItemCount);
+    const qulonglong removedBytes = previousBytes + static_cast<qulonglong>(result.removedBytes);
+    const bool compacted = previous.value(QStringLiteral("compacted")).toBool() || result.compacted;
+    return {{QStringLiteral("visible"), compacted || result.overBudget},
+            {QStringLiteral("compacted"), compacted},
+            {QStringLiteral("itemCount"), QVariant::fromValue(itemCount)},
+            {QStringLiteral("removedBytes"), QVariant::fromValue(removedBytes)},
+            {QStringLiteral("estimatedInputTokens"),
+             QVariant::fromValue(static_cast<qulonglong>(result.estimatedInputTokens))},
+            {QStringLiteral("overBudget"), result.overBudget}};
+}
+
 [[nodiscard]] std::optional<std::string> imageMediaType(QByteArray format)
 {
     format = format.toLower();
@@ -3321,6 +3338,12 @@ QVariantList AppController::activeAiContextItems() const
 {
     const TerminalTab *tab = activeTab();
     return tab == nullptr ? QVariantList{} : tab->aiContextItems;
+}
+
+QVariantMap AppController::activeAiCompaction() const
+{
+    const TerminalTab *tab = activeTab();
+    return tab == nullptr ? QVariantMap{} : tab->aiCompaction;
 }
 
 QVariantMap AppController::aiPrivacyDiagnostics() const
@@ -8165,6 +8188,7 @@ bool AppController::restoreAiConversationHistory(const QString &conversationId)
     tab->aiPinnedContextIds.clear();
     tab->aiContextItems.clear();
     tab->aiContextPreview.clear();
+    tab->aiCompaction.clear();
     m_aiActionToolDispatcher.clearConversation(utf8String(tab->aiConversationId));
     m_aiCommandTracker.clearConversation(utf8String(tab->aiConversationId));
     tab->aiConversationId = stored->id;
@@ -8747,6 +8771,7 @@ void AppController::clearAiConversation()
     tab->aiWebSearchQueries.clear();
     tab->aiContextPreview.clear();
     tab->aiContextItems.clear();
+    tab->aiCompaction.clear();
     tab->aiExplicitContextItems.clear();
     tab->aiImageAttachments.clear();
     tab->aiExcludedContextIds.clear();
@@ -9821,7 +9846,7 @@ std::expected<ai::AiTurnRunner::TurnId, ai::AiProviderError> AppController::star
     ai::AiTurnRunner::SecretLoader secretLoader, ai::AiTurnRunner::EventHandler eventHandler,
     ai::AiTurnRunner::FinishedHandler finishedHandler, ai::AiTurnRunner::RetryHandler retryHandler,
     ai::AiTurnRunner::JitterSource jitterSource, ai::AiTurnRunner::ToolHandler toolHandler,
-    ai::AiTurnRunner::ToolOutputHandler toolOutputHandler)
+    ai::AiTurnRunner::ToolOutputHandler toolOutputHandler, ai::AiTurnRunner::CompactionHandler compactionHandler)
 {
     if (!tab.aiTurnRunner)
     {
@@ -9831,7 +9856,8 @@ std::expected<ai::AiTurnRunner::TurnId, ai::AiProviderError> AppController::star
     }
     return tab.aiTurnRunner->start(std::move(configuration), std::move(generation), std::move(secretLoader),
                                    std::move(eventHandler), std::move(finishedHandler), std::move(retryHandler),
-                                   std::move(jitterSource), std::move(toolHandler), std::move(toolOutputHandler));
+                                   std::move(jitterSource), std::move(toolHandler), std::move(toolOutputHandler),
+                                   std::move(compactionHandler));
 }
 
 bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const bool preferLastFailure,
@@ -9991,10 +10017,11 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
     // The conversation model itself is untouched; only the request view
     // changes, so follow-up turns re-compact deterministically.
     auto compacted = ai::AiContextCompactor::compact(std::move(generation));
+    tab.aiCompaction = aiCompactionValue(compacted);
     if (compacted.compacted)
     {
-        qCInfo(appControllerLog) << "AI context compacted for" << compacted.compactedMessageCount
-                                 << "message(s), saving" << compacted.compactedCharacters << "character(s),"
+        qCInfo(appControllerLog) << "AI context compacted for" << compacted.compactedItemCount << "item(s), removing"
+                                 << compacted.removedBytes << "byte(s),"
                                  << (compacted.overBudget ? "still over budget" : "within budget");
     }
     generation = std::move(compacted.request);
@@ -10737,6 +10764,18 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                 QStringLiteral("[Agent tool evidence]\nTool: %1\nArguments: %2\nResult: %3")
                     .arg(utf8QString(call.name), utf8QString(call.argumentsJson), utf8QString(output.outputJson));
             static_cast<void>(target->aiConversation->appendEvidenceMessage(evidence));
+        },
+        [this, tabId](const auto, const ai::AiCompactionResult &result) {
+            TerminalTab *target = findTab(tabId);
+            if (target == nullptr)
+            {
+                return;
+            }
+            target->aiCompaction = aiCompactionValue(result, target->aiCompaction);
+            if (m_activeTabId == tabId || m_focusedTabId == tabId)
+            {
+                emit aiConversationChanged();
+            }
         });
     if (!started.has_value())
     {

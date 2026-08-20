@@ -132,6 +132,7 @@ covered by `application-settings`, `ai-permission-policy`,
 | Exactly one built-in provider-backed assistant; no external Agent selector, discovery, process, protocol bridge, or external thread ownership | `src/application/AppController.*`, `src/ui/qml/AiAssistantPane.qml`, `CMakeLists.txt` | `app-controller`, full build graph | ADR 0093 |
 | One sidebar owns exactly one current terminal and exposes no cross-terminal enumeration or control | `src/application/AppController.*`, `src/application/ai/AiReadToolDispatcher.*`, `AiActionToolDispatcher.*` | `ai-read-tool-dispatcher`, `ai-action-tool-dispatcher`, `app-controller` | ADR 0086, 0093 |
 | Composer wraps words and unbroken content at compact width without a panel-wide horizontal scrollbar | `src/ui/qml/AiAssistantPane.qml`, `src/main.cpp` | `ui-layout-runtime-smoke` 260 px real-window contract | ADR 0078, 0093 |
+| Typed request compaction and provider-overflow retry expose one non-blocking, current-terminal status without mutating stored conversation text | `src/domain/ai/AiContextCompactor.*`, `src/application/ai/AiTurnRunner.*`, `src/application/AppController.*`, `src/ui/qml/AiAssistantPane.qml` | `ai-context-compactor`, `ai-turn-runner`, `app-controller`, `ui-layout-runtime-smoke` | ADR 0078, 0093; Netcatty comparison 2026-08-21 |
 
 ## Evidence classification
 
@@ -146,11 +147,11 @@ covered by `application-settings`, `ai-permission-policy`,
   The retained AI-idle terminal report covers 28800.1 seconds with zero
   failures. Both reports pass the unified RC verifier with the final rebuilt
   release bundle.
-- **Current developer evidence:** the `0.3.11` dynamic Debug and static Release
-  candidates each pass 111/111 non-real-host tests; full clang-tidy covers 246
-  translation units; QML/C++ format and the 1766/1766 translation catalog pass;
+- **Current developer evidence:** the post-`0.3.11` dynamic Debug and static
+  Release candidates each pass 114/114 tests; full clang-tidy covers 254
+  translation units; QML/C++ format and the 1771/1771 translation catalog pass;
   the 260 px real-window contract verifies that the composer has no horizontal
-  scrollbar. The prior formal
+  scrollbar and the compaction notice stays within its owning sidebar. The prior formal
   `0.3.8` evidence retains its 20-run scenario, 224-unit clang-tidy, static
   suite, package, and eight-gate real-window results; those full release gates
   are rerun for the next release candidate rather than inferred from this UI

@@ -533,3 +533,11 @@ the `0.3.6` gate below.
    provider turn runner.
 4. Every terminal-facing tool targets only the terminal that owns the sidebar.
    The model cannot list, select, or control another terminal tab.
+5. Continue a conversation until older context exceeds the configured request
+   budget. The owning sidebar shows a compact `Context optimized` notice while
+   the original conversation remains intact. The notice stays inside a 260 px
+   sidebar, does not steal focus or block sending, and its tooltip reports the
+   bounded request estimate. Starting or restoring another conversation clears
+   stale compaction state. If the provider still rejects the payload as too
+   large, the same notice updates after the tighter 413 retry rather than
+   creating a second banner or modal.

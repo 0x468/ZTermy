@@ -136,31 +136,34 @@ AiCompactionResult AiContextCompactor::compact(AiGenerationRequest request, cons
     const std::size_t preserved =
         std::min(limits.preserveRecentMessages, static_cast<std::size_t>(request.messages.size()));
     const std::size_t oldCount = request.messages.size() - preserved;
-    std::size_t compactedMessages = 0;
-    std::size_t compactedCharacters = 0;
+    std::size_t compactedItems = 0;
+    std::size_t removedBytes = 0;
     for (std::size_t index = 0; index < oldCount; ++index)
     {
         auto &message = request.messages[index];
+        bool messageCompacted = false;
         if (!message.providerReplayJson.empty())
         {
-            compactedCharacters += message.providerReplayJson.size();
+            removedBytes += message.providerReplayJson.size();
             message.providerReplayJson.clear();
-            ++compactedMessages;
+            messageCompacted = true;
         }
         if (message.content.size()
             <= limits.oldMessageHeadCharacters + limits.oldMessageTailCharacters + std::size_t{32})
         {
+            compactedItems += messageCompacted ? 1 : 0;
             continue;
         }
+        const std::size_t originalSize = message.content.size();
         const auto head = truncatedPrefix(message.content, limits.oldMessageHeadCharacters);
         const auto tail = truncatedSuffix(message.content, limits.oldMessageTailCharacters);
-        compactedCharacters += message.content.size() - (head.size() + tail.size());
         message.content.clear();
         message.content.reserve(head.size() + tail.size() + std::size_t{32});
         message.content += head;
         message.content += "\n...[older content truncated]...\n";
         message.content += tail;
-        ++compactedMessages;
+        removedBytes += originalSize > message.content.size() ? originalSize - message.content.size() : 0;
+        ++compactedItems;
     }
     // Tool results in retained exchanges get a tighter cap so the transcript
     // history cannot dominate the window.
@@ -170,9 +173,11 @@ AiCompactionResult AiContextCompactor::compact(AiGenerationRequest request, cons
         {
             if (output.outputJson.size() > limits.maximumToolOutputCharacters)
             {
+                const std::size_t originalSize = output.outputJson.size();
                 output.outputJson =
                     truncatedPrefix(output.outputJson, limits.maximumToolOutputCharacters) + "\n...[truncated]...";
-                ++compactedMessages;
+                removedBytes += originalSize > output.outputJson.size() ? originalSize - output.outputJson.size() : 0;
+                ++compactedItems;
             }
         }
     }
@@ -181,9 +186,9 @@ AiCompactionResult AiContextCompactor::compact(AiGenerationRequest request, cons
     const bool overBudget = estimated > usableTokens;
     return AiCompactionResult{.request = std::move(request),
                               .estimatedInputTokens = estimated,
-                              .compactedMessageCount = compactedMessages,
-                              .compactedCharacters = compactedCharacters,
-                              .compacted = compactedMessages > 0,
+                              .compactedItemCount = compactedItems,
+                              .removedBytes = removedBytes,
+                              .compacted = compactedItems > 0,
                               .overBudget = overBudget};
 }
 

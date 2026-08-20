@@ -198,3 +198,30 @@ token 估算 → 预压缩（LLM 摘要 temp=0，保护最近 N 条，保留最�
 - <https://github.com/agentclientprotocol/agent-client-protocol>
 - <https://zed.dev/docs/ai/external-agents>
 - <https://dev.opencode.ai/docs/server/>
+
+## 9. 2026-08-21 长对话与输出保真复核
+
+本轮再次核对 Netcatty 当前发布说明、Warp/Termius/Wave 的公开终端 AI 文档，以及 ztermy
+现有请求链路。结论限定为产品行为与公开架构模式，不复制第三方实现：
+
+- Netcatty 已把上下文压缩做成用户可感知的会话状态，并在缩短上下文后保留近期消息；
+  ztermy 原先已有确定性的 typed 压缩与 413 重试，但只有开发日志。本轮增加同一终端侧栏内
+  的轻量状态条，明确旧上下文是否被缩短以及供应商预算是否仍不足。
+- Warp 的公开文档同时强调实时终端缓冲区读取和由用户显式附加 Terminal Block；Termius
+  强调当前连接/输出的深度集成；Wave 通过显式 AI 开关使用当前终端/部件上下文。这继续
+  支持 ztermy 的决定：普通对话只累计对话与本轮 Agent 工具证据，终端内容必须由用户显式
+  附加或由当前终端工具按需读取。
+- Netcatty 新版还提供“完整工具输出存储 + 有界预览句柄”。ztermy 当前
+  `CommandBlockStore` 是明确标注缺口的 head/tail 有界保留，游标无法补读已淘汰的中段。
+  这是后续独立节点，而不是在本轮引入无界内存；方案必须有总量/生命周期上限、保持当前
+  终端所有权，并且不得阻塞 GUI 或 Qt Quick 渲染线程。
+- 外部 Codex/OpenCode/Claude Code 等 Agent/Harness 仍永久不进入产品。它们的历史研究不再
+  参与能力规划；当前对照只面向内置供应商终端助手的公开 UX。
+
+公开参考：
+
+- <https://netcatty.app/en/release-notes/>
+- <https://docs.warp.dev/agent-platform/capabilities/full-terminal-use>
+- <https://docs.warp.dev/agent-platform/local-agents/agent-context/blocks-as-context>
+- <https://termius.com/blog/ai-agent>
+- <https://docs.waveterm.dev/waveai>

@@ -195,6 +195,7 @@ class AppController final : public QObject
     Q_PROPERTY(QString activeAiError READ activeAiError NOTIFY aiConversationChanged)
     Q_PROPERTY(QString activeAiContextPreview READ activeAiContextPreview NOTIFY aiConversationChanged)
     Q_PROPERTY(QVariantList activeAiContextItems READ activeAiContextItems NOTIFY aiConversationChanged)
+    Q_PROPERTY(QVariantMap activeAiCompaction READ activeAiCompaction NOTIFY aiConversationChanged)
     Q_PROPERTY(QVariantMap activeAiToolApproval READ activeAiToolApproval NOTIFY aiConversationChanged)
     Q_PROPERTY(QVariantList aiPermissionRules READ aiPermissionRules NOTIFY aiPermissionRulesChanged)
     Q_PROPERTY(QString aiPermissionRuleError READ aiPermissionRuleError NOTIFY aiPermissionRulesChanged)
@@ -338,6 +339,7 @@ public:
     [[nodiscard]] QString activeAiError() const;
     [[nodiscard]] QString activeAiContextPreview() const;
     [[nodiscard]] QVariantList activeAiContextItems() const;
+    [[nodiscard]] QVariantMap activeAiCompaction() const;
     [[nodiscard]] QVariantMap activeAiToolApproval() const;
     [[nodiscard]] QVariantList aiPermissionRules() const;
     [[nodiscard]] QString aiPermissionRuleError() const;
@@ -748,6 +750,7 @@ private:
         QString aiContextPreview;
         QString aiConversationId;
         QVariantList aiContextItems;
+        QVariantMap aiCompaction;
         std::unordered_set<std::string> aiExcludedContextIds;
         std::unordered_set<std::string> aiPinnedContextIds;
         std::vector<ai::AiExplicitContext> aiExplicitContextItems;
@@ -828,7 +831,8 @@ private:
                 ai::AiTurnRunner::SecretLoader secretLoader, ai::AiTurnRunner::EventHandler eventHandler,
                 ai::AiTurnRunner::FinishedHandler finishedHandler, ai::AiTurnRunner::RetryHandler retryHandler,
                 ai::AiTurnRunner::JitterSource jitterSource, ai::AiTurnRunner::ToolHandler toolHandler,
-                ai::AiTurnRunner::ToolOutputHandler toolOutputHandler);
+                ai::AiTurnRunner::ToolOutputHandler toolOutputHandler,
+                ai::AiTurnRunner::CompactionHandler compactionHandler = {});
     [[nodiscard]] bool aiTurnActive(const TerminalTab &tab) const noexcept;
     [[nodiscard]] ai::AiTurnRunner::TurnId activeAiTurnId(const TerminalTab &tab) const noexcept;
     [[nodiscard]] std::optional<ai::AiToolCall> pendingAiToolCall(const TerminalTab &tab) const;
