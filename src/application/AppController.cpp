@@ -340,6 +340,7 @@ private:
     switch (provider)
     {
         case ztermy::config::AiProviderPreference::openAiResponses:
+        case ztermy::config::AiProviderPreference::openAiChatGpt:
             return ztermy::ai::AiProviderKind::openAiResponses;
         case ztermy::config::AiProviderPreference::anthropic:
             return ztermy::ai::AiProviderKind::anthropicMessages;
@@ -364,6 +365,7 @@ aiProviderFlavor(const ztermy::config::AiProviderPreference provider) noexcept
     switch (provider)
     {
         case ztermy::config::AiProviderPreference::openAiResponses:
+        case ztermy::config::AiProviderPreference::openAiChatGpt:
             return Flavor::openAi;
         case ztermy::config::AiProviderPreference::anthropic:
             return Flavor::anthropic;
@@ -415,6 +417,7 @@ aiReasoningEffort(const ztermy::config::AiReasoningPreference preference) noexce
     switch (provider)
     {
         case ztermy::config::AiProviderPreference::openAiResponses:
+        case ztermy::config::AiProviderPreference::openAiChatGpt:
         case ztermy::config::AiProviderPreference::anthropic:
             return {QStringLiteral("auto"), QStringLiteral("low"), QStringLiteral("medium"), QStringLiteral("high"),
                     QStringLiteral("max")};
@@ -3331,6 +3334,7 @@ QString AppController::aiModelsError() const
 bool AppController::aiWebSearchAvailable() const noexcept
 {
     return m_settings.aiProvider == config::AiProviderPreference::openAiResponses
+           || m_settings.aiProvider == config::AiProviderPreference::openAiChatGpt
            || m_settings.aiProvider == config::AiProviderPreference::anthropic;
 }
 
@@ -3363,6 +3367,36 @@ bool AppController::aiApiKeyConfigured() const
 {
     const ai::AiSecretStore store(m_credentialVaults->active());
     return store.readApiKey(m_settings.aiCredentialReference.toStdString()).has_value();
+}
+
+bool AppController::aiChatGptConfigured() const
+{
+    const ai::AiSecretStore store(m_credentialVaults->active());
+    return store.readOAuthTokens(aiCredentialReference(config::AiProviderPreference::openAiChatGpt).toStdString())
+        .has_value();
+}
+
+QString AppController::aiChatGptAuthState() const
+{
+    if (m_aiSubscriptionAuth && m_aiSubscriptionAuth->active())
+    {
+        return QStringLiteral("signing-in");
+    }
+    if (!m_aiChatGptAuthError.isEmpty())
+    {
+        return QStringLiteral("error");
+    }
+    return aiChatGptConfigured() ? QStringLiteral("signed-in") : QStringLiteral("signed-out");
+}
+
+QString AppController::aiChatGptAccountId() const
+{
+    return m_aiChatGptAccountId;
+}
+
+QString AppController::aiChatGptAuthError() const
+{
+    return m_aiChatGptAuthError;
 }
 
 QObject *AppController::aiActivity() noexcept
@@ -8219,6 +8253,86 @@ bool AppController::removeAiApiKey()
     }
     setCredentialOperationError({});
     emit credentialVaultChanged();
+    return true;
+}
+
+bool AppController::beginAiChatGptSignIn()
+{
+    if (!m_aiSubscriptionAuth)
+    {
+        m_aiSubscriptionAuth = std::make_unique<ai::OpenAiSubscriptionAuthSession>(&m_aiModelNetwork, this);
+    }
+    if (m_aiSubscriptionAuth->active())
+    {
+        return false;
+    }
+    m_aiChatGptAuthError.clear();
+    emit aiSubscriptionAuthChanged();
+
+    auto started = m_aiSubscriptionAuth->beginBrowserLogin([this](ai::OpenAiSubscriptionAuthSession::Result result) {
+        if (!result)
+        {
+            m_aiChatGptAuthError = result.error().message;
+            emit aiSubscriptionAuthChanged();
+            return;
+        }
+        ai::AiSecretStore store(m_credentialVaults->active());
+        const auto reference = aiCredentialReference(config::AiProviderPreference::openAiChatGpt).toStdString();
+        auto stored = store.storeOAuthTokens(reference, {.accessToken = std::move(result->accessToken),
+                                                         .refreshToken = std::move(result->refreshToken)});
+        if (!stored)
+        {
+            m_aiChatGptAuthError = credentialVaultErrorMessage(stored.error());
+            emit aiSubscriptionAuthChanged();
+            return;
+        }
+        m_aiChatGptAccountId = result->accountId;
+        m_aiChatGptAuthError.clear();
+        setCredentialOperationError({});
+        emit credentialVaultChanged();
+        emit aiSubscriptionAuthChanged();
+        refreshConfiguredAiModels();
+    });
+    if (!started)
+    {
+        m_aiChatGptAuthError = started.error().message;
+        emit aiSubscriptionAuthChanged();
+        return false;
+    }
+    if (!QDesktopServices::openUrl(*started))
+    {
+        m_aiSubscriptionAuth->cancel();
+        m_aiChatGptAuthError = tr("Could not open the browser for ChatGPT sign-in.");
+        emit aiSubscriptionAuthChanged();
+        return false;
+    }
+    return true;
+}
+
+void AppController::cancelAiChatGptSignIn()
+{
+    if (m_aiSubscriptionAuth)
+    {
+        m_aiSubscriptionAuth->cancel();
+    }
+}
+
+bool AppController::signOutAiChatGpt()
+{
+    cancelAiChatGptSignIn();
+    ai::AiSecretStore store(m_credentialVaults->active());
+    const auto removed =
+        store.removeOAuthTokens(aiCredentialReference(config::AiProviderPreference::openAiChatGpt).toStdString());
+    if (!removed)
+    {
+        m_aiChatGptAuthError = credentialVaultErrorMessage(removed.error());
+        emit aiSubscriptionAuthChanged();
+        return false;
+    }
+    m_aiChatGptAccountId.clear();
+    m_aiChatGptAuthError.clear();
+    emit credentialVaultChanged();
+    emit aiSubscriptionAuthChanged();
     return true;
 }
 

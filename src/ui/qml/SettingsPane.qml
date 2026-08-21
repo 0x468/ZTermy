@@ -30,7 +30,7 @@ Rectangle {
     property string aiQuickMessageDescriptionDraft: ""
     property string aiQuickMessageContentDraft: ""
     property bool aiQuickMessageSlugManual: false
-    readonly property var aiProviderTokens: ["openai-responses", "anthropic", "gemini", "openrouter", "deepseek", "kimi", "qwen", "zai", "ollama", "openai-compatible"]
+    readonly property var aiProviderTokens: ["openai-responses", "openai-chatgpt", "anthropic", "gemini", "openrouter", "deepseek", "kimi", "qwen", "zai", "ollama", "openai-compatible"]
     readonly property var aiReasoningOptions: controller.aiReasoningCapabilities(aiProviderToken(), aiModelDraft)
     property string mcpOriginalId: ""
     property string mcpEditingId: ""
@@ -171,6 +171,8 @@ Rectangle {
     }
 
     function aiProviderDefault(token) {
+        if (token === "openai-chatgpt")
+            return "https://chatgpt.com/backend-api/codex";
         if (token === "anthropic")
             return "https://api.anthropic.com";
         if (token === "deepseek")
@@ -1481,7 +1483,7 @@ Rectangle {
 
                     Text {
                         Layout.fillWidth: true
-                        text: qsTr("Choose a provider, enter its API key, fetch the available models, and select one for the terminal assistant.")
+                        text: pane.aiProviderToken() === "openai-chatgpt" ? qsTr("Use your ChatGPT subscription for ztermy's built-in terminal assistant.") : qsTr("Choose a provider, enter its API key, fetch the available models, and select one for the terminal assistant.")
                         color: Theme.textMuted
                         wrapMode: Text.WordWrap
                         font.family: Theme.uiFont
@@ -1504,7 +1506,7 @@ Rectangle {
                             objectName: "settingsAiProvider"
                             Layout.fillWidth: true
                             model: pane.aiProviderTokens
-                            displayTextModel: [qsTr("OpenAI"), qsTr("Anthropic (Claude)"), qsTr("Google Gemini"), qsTr("OpenRouter"), qsTr("DeepSeek"), qsTr("Kimi"), qsTr("Alibaba Qwen"), qsTr("Z.AI (GLM)"), qsTr("Ollama"), qsTr("OpenAI-compatible")]
+                            displayTextModel: [qsTr("OpenAI API"), qsTr("OpenAI (ChatGPT subscription)"), qsTr("Anthropic (Claude)"), qsTr("Google Gemini"), qsTr("OpenRouter"), qsTr("DeepSeek"), qsTr("Kimi"), qsTr("Alibaba Qwen"), qsTr("Z.AI (GLM)"), qsTr("Ollama"), qsTr("OpenAI-compatible")]
                             accessibleName: qsTr("AI model provider")
                             onActivated: index => pane.selectAiProvider(index)
                         }
@@ -1512,6 +1514,7 @@ Rectangle {
                         Label {
                             text: qsTr("API address")
                             color: Theme.text
+                            visible: pane.aiProviderToken() !== "openai-chatgpt"
                         }
                         AppTextField {
                             id: aiBaseUrlField
@@ -1522,11 +1525,13 @@ Rectangle {
                             placeholderText: qsTr("https://api.example.com")
                             accessibleName: qsTr("AI provider base URL")
                             onTextEdited: pane.aiBaseUrlDraft = text
+                            visible: pane.aiProviderToken() !== "openai-chatgpt"
                         }
 
                         Label {
                             text: qsTr("API key")
                             color: Theme.text
+                            visible: pane.aiProviderToken() !== "openai-chatgpt"
                         }
                         AppTextField {
                             id: aiApiKeyField
@@ -1536,6 +1541,40 @@ Rectangle {
                             placeholderText: pane.controller.aiApiKeyConfigured ? qsTr("Saved · enter only to replace") : pane.aiProviderToken() === "ollama" ? qsTr("Not required for local Ollama") : qsTr("Enter API key")
                             passwordRevealable: true
                             accessibleName: qsTr("AI provider API key")
+                            visible: pane.aiProviderToken() !== "openai-chatgpt"
+                        }
+
+                        Label {
+                            text: qsTr("ChatGPT account")
+                            color: Theme.text
+                            visible: pane.aiProviderToken() === "openai-chatgpt"
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            spacing: 8
+                            visible: pane.aiProviderToken() === "openai-chatgpt"
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: pane.controller.aiChatGptAuthState === "signed-in" ? (pane.controller.aiChatGptAccountId.length > 0 ? qsTr("Connected · %1").arg(pane.controller.aiChatGptAccountId) : qsTr("Connected")) : pane.controller.aiChatGptAuthState === "signing-in" ? qsTr("Waiting for browser authorization…") : qsTr("Not connected")
+                                color: pane.controller.aiChatGptAuthState === "error" ? Theme.danger : Theme.textMuted
+                                elide: Text.ElideMiddle
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.textLabel
+                            }
+
+                            ActionButton {
+                                text: pane.controller.aiChatGptAuthState === "signing-in" ? qsTr("Cancel") : qsTr("Sign in")
+                                visible: pane.controller.aiChatGptAuthState !== "signed-in"
+                                onClicked: pane.controller.aiChatGptAuthState === "signing-in" ? pane.controller.cancelAiChatGptSignIn() : pane.controller.beginAiChatGptSignIn()
+                            }
+
+                            ActionButton {
+                                text: qsTr("Sign out")
+                                visible: pane.controller.aiChatGptAuthState === "signed-in"
+                                onClicked: pane.controller.signOutAiChatGpt()
+                            }
                         }
 
                         Label {
@@ -1564,7 +1603,7 @@ Rectangle {
                                 objectName: "settingsAiFetchModels"
                                 text: pane.controller.aiModelsLoading ? qsTr("Fetching…") : qsTr("Fetch models")
                                 iconName: "refresh"
-                                enabled: !pane.controller.aiModelsLoading && pane.aiBaseUrlDraft.trim().length > 0
+                                enabled: !pane.controller.aiModelsLoading && pane.aiBaseUrlDraft.trim().length > 0 && (pane.aiProviderToken() !== "openai-chatgpt" || pane.controller.aiChatGptConfigured)
                                 accessibleName: qsTr("Fetch models from this provider")
                                 onClicked: pane.controller.refreshAiModels(pane.aiProviderToken(), pane.aiBaseUrlDraft, aiApiKeyField.text)
                             }
@@ -1690,12 +1729,22 @@ Rectangle {
                         font.pixelSize: Theme.textCompact
                     }
 
+                    Text {
+                        Layout.fillWidth: true
+                        visible: pane.aiProviderToken() === "openai-chatgpt" && pane.controller.aiChatGptAuthError.length > 0
+                        text: pane.controller.aiChatGptAuthError
+                        color: Theme.danger
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textCompact
+                    }
+
                     RowLayout {
                         Layout.fillWidth: true
 
                         Text {
                             Layout.fillWidth: true
-                            text: pane.controller.aiApiKeyConfigured ? qsTr("API key saved for this provider.") : qsTr("The model field remains editable when a provider does not expose a model list.")
+                            text: pane.aiProviderToken() === "openai-chatgpt" ? (pane.controller.aiChatGptConfigured ? qsTr("ChatGPT subscription authorization is saved in the active credential vault.") : qsTr("Sign in with a ChatGPT Plus, Pro, Business, Edu, or Enterprise account.")) : pane.controller.aiApiKeyConfigured ? qsTr("API key saved for this provider.") : qsTr("The model field remains editable when a provider does not expose a model list.")
                             color: Theme.textMuted
                             wrapMode: Text.WordWrap
                             font.family: Theme.uiFont

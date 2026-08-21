@@ -875,6 +875,10 @@ void AppControllerTests::persistsApplicationSettings()
     QCOMPARE(controller.languagePreference(), QStringLiteral("system"));
     QCOMPARE(controller.aiProviderPreference(), QStringLiteral("openai-responses"));
     QVERIFY(controller.aiWebSearchAvailable());
+    QVERIFY(!controller.aiChatGptConfigured());
+    QCOMPARE(controller.aiChatGptAuthState(), QStringLiteral("signed-out"));
+    QVERIFY(controller.aiChatGptAccountId().isEmpty());
+    QVERIFY(controller.aiChatGptAuthError().isEmpty());
     QCOMPARE(controller.aiBaseUrl(), QStringLiteral("https://api.openai.com/v1"));
     QVERIFY(controller.aiEndpointPath().isEmpty());
     QVERIFY(controller.aiModel().isEmpty());
@@ -903,6 +907,14 @@ void AppControllerTests::persistsApplicationSettings()
                  .value(QStringLiteral("tokens"))
                  .toStringList(),
              QStringList({QStringLiteral("auto"), QStringLiteral("off")}));
+
+    QVERIFY(controller.saveAiProviderConfiguration(
+        QStringLiteral("openai-chatgpt"), QStringLiteral("https://chatgpt.com/backend-api/codex"),
+        QStringLiteral("gpt-5.4"), false, QStringLiteral("ask"), {}, false, QStringLiteral("high")));
+    QCOMPARE(controller.aiProviderPreference(), QStringLiteral("openai-chatgpt"));
+    QVERIFY(controller.aiWebSearchAvailable());
+    QVERIFY(controller.signOutAiChatGpt());
+    QCOMPARE(controller.aiChatGptAuthState(), QStringLiteral("signed-out"));
 
     QVERIFY(controller.saveAiProviderConfiguration(QStringLiteral("openai-compatible"),
                                                    QStringLiteral("https://gateway.example.test/v1"),

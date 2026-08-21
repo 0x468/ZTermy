@@ -32,6 +32,7 @@
 #include "infrastructure/ai/AiPermissionRuleStore.h"
 #include "infrastructure/ai/AiQuickMessageStore.h"
 #include "infrastructure/ai/AiUserSkillCatalog.h"
+#include "infrastructure/ai/OpenAiSubscriptionAuthSession.h"
 #include "infrastructure/ai/ProviderModelCatalog.h"
 #include "infrastructure/forwarding/PortForwardingRuleStore.h"
 #include "infrastructure/logging/SessionLogWriter.h"
@@ -188,6 +189,10 @@ class AppController final : public QObject
     Q_PROPERTY(bool aiDebugTraceEnabled READ aiDebugTraceEnabled NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString aiDebugTracePath READ aiDebugTracePath NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool aiApiKeyConfigured READ aiApiKeyConfigured NOTIFY credentialVaultChanged)
+    Q_PROPERTY(bool aiChatGptConfigured READ aiChatGptConfigured NOTIFY credentialVaultChanged)
+    Q_PROPERTY(QString aiChatGptAuthState READ aiChatGptAuthState NOTIFY aiSubscriptionAuthChanged)
+    Q_PROPERTY(QString aiChatGptAccountId READ aiChatGptAccountId NOTIFY aiSubscriptionAuthChanged)
+    Q_PROPERTY(QString aiChatGptAuthError READ aiChatGptAuthError NOTIFY aiSubscriptionAuthChanged)
     Q_PROPERTY(QObject *aiActivity READ aiActivity CONSTANT)
     Q_PROPERTY(QObject *aiConversationHistory READ aiConversationHistory CONSTANT)
     Q_PROPERTY(QObject *activeAiConversation READ activeAiConversation NOTIFY aiConversationChanged)
@@ -333,6 +338,10 @@ public:
     [[nodiscard]] bool aiDebugTraceEnabled() const noexcept;
     [[nodiscard]] QString aiDebugTracePath() const;
     [[nodiscard]] bool aiApiKeyConfigured() const;
+    [[nodiscard]] bool aiChatGptConfigured() const;
+    [[nodiscard]] QString aiChatGptAuthState() const;
+    [[nodiscard]] QString aiChatGptAccountId() const;
+    [[nodiscard]] QString aiChatGptAuthError() const;
     [[nodiscard]] QObject *aiActivity() noexcept;
     [[nodiscard]] QObject *aiConversationHistory() noexcept;
     [[nodiscard]] QObject *activeAiConversation() const noexcept;
@@ -533,6 +542,9 @@ public:
     [[nodiscard]] Q_INVOKABLE QString aiProviderEndpointPreview(const QString &provider, const QString &baseUrl) const;
     Q_INVOKABLE bool saveAiApiKey(const QString &apiKey);
     Q_INVOKABLE bool removeAiApiKey();
+    Q_INVOKABLE bool beginAiChatGptSignIn();
+    Q_INVOKABLE void cancelAiChatGptSignIn();
+    Q_INVOKABLE bool signOutAiChatGpt();
     Q_INVOKABLE bool saveMcpServer(const QString &id, const QString &nameSpace, const QString &program,
                                    const QStringList &arguments, const QString &workingDirectory, const QString &trust,
                                    bool enabled);
@@ -623,6 +635,7 @@ signals:
     void aiQuickMessagesChanged();
     void aiUserSkillsChanged();
     void aiModelsChanged();
+    void aiSubscriptionAuthChanged();
     void aiPrivacyDiagnosticsChanged();
     void mcpConfigurationChanged();
     void portForwardingRulesChanged();
@@ -1017,6 +1030,7 @@ private:
     std::shared_ptr<logging::SessionLogWriter> m_aiDebugTrace;
     QString m_aiDebugTracePath;
     QNetworkAccessManager m_aiModelNetwork;
+    std::unique_ptr<ai::OpenAiSubscriptionAuthSession> m_aiSubscriptionAuth;
     QPointer<QNetworkReply> m_aiModelsReply;
     QStringList m_aiAvailableModels;
     QString m_aiModelsError;
@@ -1030,6 +1044,8 @@ private:
     bool m_openAiUserSkillsAfterReload = false;
     quint64 m_aiModelsRequestGeneration = 0;
     bool m_aiModelsLoading = false;
+    QString m_aiChatGptAccountId;
+    QString m_aiChatGptAuthError;
     std::size_t m_aiModelRefreshObservedTabCount = 0;
     ai::AiContextBroker m_aiContextBroker;
     ai::AiCommandTracker m_aiCommandTracker;
