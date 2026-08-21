@@ -150,6 +150,7 @@ void OpenAiSubscriptionTokenRefresher::cancel()
     {
         return;
     }
+    m_reply->disconnect(this);
     m_reply->abort();
     finish(std::unexpected(AiProviderError{.code = AiProviderErrorCode::cancelled,
                                            .message = "ChatGPT token refresh was cancelled.",

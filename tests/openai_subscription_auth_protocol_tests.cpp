@@ -123,6 +123,43 @@ private:
     QTcpServer m_server;
 };
 
+class HangingTokenServer final : public QObject
+{
+public:
+    HangingTokenServer()
+    {
+        QObject::connect(&m_server, &QTcpServer::newConnection, this, [this] {
+            while (m_server.hasPendingConnections())
+            {
+                QTcpSocket *socket = m_server.nextPendingConnection();
+                socket->setParent(this);
+                auto request = std::make_shared<QByteArray>();
+                auto counted = std::make_shared<bool>(false);
+                QObject::connect(socket, &QTcpSocket::readyRead, this, [this, socket, request, counted] {
+                    request->append(socket->readAll());
+                    if (!*counted && request->contains(QByteArrayLiteral("\r\n\r\n")))
+                    {
+                        *counted = true;
+                        ++m_requestCount;
+                    }
+                });
+            }
+        });
+        m_server.listen(QHostAddress::LocalHost, 0);
+    }
+
+    [[nodiscard]] QUrl url() const
+    {
+        return {QStringLiteral("http://127.0.0.1:%1/oauth/token").arg(m_server.serverPort())};
+    }
+
+    [[nodiscard]] int requestCount() const noexcept { return m_requestCount; }
+
+private:
+    QTcpServer m_server;
+    int m_requestCount = 0;
+};
+
 class FakeDeviceAuthServer final : public QObject
 {
 public:
@@ -196,6 +233,7 @@ private slots:
     void deviceSessionRetriesPendingAuthorization();
     void deviceSessionCanBeCancelledBeforePolling();
     void refreshesAndRetainsUnrotatedRefreshToken();
+    void rejectsConcurrentRefreshAndCancelsOnce();
     void classifiesRefreshRateLimits();
     void preparesAndParsesSubscriptionUsage();
     void rejectsInvalidSubscriptionUsage();
@@ -492,6 +530,43 @@ void OpenAiSubscriptionAuthProtocolTests::refreshesAndRetainsUnrotatedRefreshTok
     QCOMPARE(bytes(completed.value().refreshToken), QByteArrayLiteral("old-refresh"));
     QVERIFY(tokenServer.request().contains(QByteArrayLiteral("grant_type=refresh_token")));
     QVERIFY(tokenServer.request().contains(QByteArrayLiteral("refresh_token=old-refresh")));
+    QVERIFY(!refresher.active());
+}
+
+void OpenAiSubscriptionAuthProtocolTests::rejectsConcurrentRefreshAndCancelsOnce()
+{
+    HangingTokenServer tokenServer;
+    QNetworkAccessManager network;
+    ztermy::ai::OpenAiSubscriptionTokenRefresher refresher(&network);
+    std::optional<ztermy::ai::OpenAiSubscriptionTokenRefresher::Result> result;
+    int completionCount = 0;
+    const auto started = refresher.start(
+        ztermy::security::SensitiveByteArray(QByteArrayLiteral("refresh-one")),
+        [&result, &completionCount](ztermy::ai::OpenAiSubscriptionTokenRefresher::Result completed) {
+            ++completionCount;
+            result = std::move(completed);
+        },
+        tokenServer.url());
+    QVERIFY(started.has_value());
+    QTRY_COMPARE_WITH_TIMEOUT(tokenServer.requestCount(), 1, 2'000);
+    QVERIFY(refresher.active());
+
+    const auto concurrent = refresher.start(
+        ztermy::security::SensitiveByteArray(QByteArrayLiteral("refresh-two")),
+        [](ztermy::ai::OpenAiSubscriptionTokenRefresher::Result) {
+        },
+        tokenServer.url());
+    QVERIFY(!concurrent.has_value());
+    QCOMPARE(concurrent.error().code, ztermy::ai::AiProviderErrorCode::invalidRequest);
+    QCOMPARE(tokenServer.requestCount(), 1);
+
+    refresher.cancel();
+    refresher.cancel();
+    QTRY_VERIFY_WITH_TIMEOUT(result.has_value(), 1'000);
+    auto &completed = requiredOptionalValue(result);
+    QVERIFY(!completed.has_value());
+    QCOMPARE(completed.error().code, ztermy::ai::AiProviderErrorCode::cancelled);
+    QCOMPARE(completionCount, 1);
     QVERIFY(!refresher.active());
 }
 
