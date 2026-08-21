@@ -35,6 +35,7 @@ class ProviderRequestFactoryTests final : public QObject
 
 private slots:
     void preparesOpenAiResponsesRequest();
+    void adaptsOpenAiToolStrictnessAndCapabilities();
     void preparesOllamaRequest();
     void preparesCompatibleRequest();
     void preparesAnthropicRequest();
@@ -78,6 +79,59 @@ void ProviderRequestFactoryTests::preparesOpenAiResponsesRequest()
              QStringLiteral("function_call_output"));
     QCOMPARE(body.value("tools").toArray().first().toObject().value("name").toString(),
              QStringLiteral("read_terminal"));
+    QVERIFY(!body.value("tools").toArray().first().toObject().value("strict").toBool());
+}
+
+void ProviderRequestFactoryTests::adaptsOpenAiToolStrictnessAndCapabilities()
+{
+    const AiProviderConfiguration configuration{.kind = AiProviderKind::openAiResponses,
+                                                .baseUrl = "https://chatgpt.com/backend-api/codex/responses#",
+                                                .model = "gpt-5.3-codex-spark",
+                                                .accountId = "account-1",
+                                                .chatGptSubscription = true,
+                                                .supportsReasoningSummaryParameter = false};
+    const AiGenerationRequest generation{
+        .tools =
+            {
+                AiToolDefinition{
+                    .name = "read_terminal",
+                    .parametersJson =
+                        R"({"type":"object","properties":{"line_count":{"type":"integer"}},"required":["line_count"],"additionalProperties":false})"},
+                AiToolDefinition{
+                    .name = "wait_terminal_frame",
+                    .parametersJson =
+                        R"({"type":"object","properties":{"after_revision":{"type":"integer"},"condition":{"type":"string","default":"changed"}},"required":["after_revision"],"additionalProperties":false})"},
+            },
+        .reasoningEffort = AiReasoningEffort::medium};
+
+    const auto prepared = ProviderRequestFactory::prepare(configuration, generation, "access-token");
+    QVERIFY(prepared.has_value());
+    const QJsonObject body = QJsonDocument::fromJson(prepared->body).object();
+    const QJsonArray tools = body.value("tools").toArray();
+    QCOMPARE(tools.size(), 2);
+    QVERIFY(tools.at(0).toObject().value("strict").toBool());
+    QVERIFY(!tools.at(1).toObject().value("strict").toBool());
+    const QJsonObject reasoning = body.value("reasoning").toObject();
+    QCOMPARE(reasoning.value("effort").toString(), QStringLiteral("medium"));
+    QVERIFY(!reasoning.contains("summary"));
+
+    const auto continuation = ProviderRequestFactory::prepare(
+        configuration,
+        AiGenerationRequest{
+            .messages = {AiChatMessage{.role = AiMessageRole::user, .content = "Inspect the terminal."}},
+            .toolHistory = {AiToolExchange{
+                .calls = {AiToolCall{.id = "call-1", .name = "read_terminal", .argumentsJson = R"({"line_count":20})"}},
+                .outputs =
+                    {AiToolOutput{.callId = "call-1", .name = "read_terminal", .outputJson = R"({"ok":true})"}}}},
+            .previousResponseId = "resp-private"},
+        "access-token");
+    QVERIFY(continuation.has_value());
+    const auto continuationBody = QJsonDocument::fromJson(continuation->body).object();
+    QVERIFY(!continuationBody.contains("previous_response_id"));
+    const auto continuationInput = continuationBody.value("input").toArray();
+    QCOMPARE(continuationInput.size(), 3);
+    QCOMPARE(continuationInput.at(1).toObject().value("type").toString(), QStringLiteral("function_call"));
+    QCOMPARE(continuationInput.at(2).toObject().value("type").toString(), QStringLiteral("function_call_output"));
 }
 
 void ProviderRequestFactoryTests::preparesOllamaRequest()
@@ -487,9 +541,14 @@ void ProviderRequestFactoryTests::resolvesFriendlyApiAddressesAndModels()
     QCOMPARE(subscriptionCatalog->rawHeader("Authorization"), QByteArrayLiteral("Bearer access-token"));
     QCOMPARE(subscriptionCatalog->rawHeader("ChatGPT-Account-Id"), QByteArrayLiteral("account-1"));
     const auto subscriptionModels = ztermy::ai::ProviderModelCatalog::parseOpenAiSubscription(
-        R"({"models":[{"slug":"hidden","supported_in_api":false,"priority":0},{"slug":"gpt-5.2","supported_in_api":true,"priority":2},{"slug":"gpt-5.3-codex","supported_in_api":true,"priority":1},{"slug":"gpt-5.2","supported_in_api":true,"priority":3}]})");
+        R"({"models":[{"slug":"gpt-5.3-codex-spark","supported_in_api":false,"visibility":"list","supports_reasoning_summary_parameter":false,"priority":0},{"slug":"gpt-reserve","visibility":"hide","priority":0},{"slug":"gpt-5.2","supported_in_api":true,"visibility":"list","priority":2},{"slug":"gpt-5.3-codex","supported_in_api":true,"visibility":"list","priority":1},{"slug":"gpt-5.2","supported_in_api":true,"visibility":"list","priority":3}]})");
     QVERIFY(subscriptionModels.has_value());
-    QCOMPARE(*subscriptionModels, QStringList({QStringLiteral("gpt-5.3-codex"), QStringLiteral("gpt-5.2")}));
+    QCOMPARE(subscriptionModels->models.size(), 3);
+    QCOMPARE(subscriptionModels->models.at(0).slug, QStringLiteral("gpt-5.3-codex-spark"));
+    QVERIFY(!subscriptionModels->models.at(0).supportsReasoningSummaryParameter);
+    QCOMPARE(subscriptionModels->models.at(1).slug, QStringLiteral("gpt-5.3-codex"));
+    QVERIFY(subscriptionModels->models.at(1).supportsReasoningSummaryParameter);
+    QCOMPARE(subscriptionModels->models.at(2).slug, QStringLiteral("gpt-5.2"));
 
     configuration.baseUrl = "https://generativelanguage.googleapis.com/v1beta/openai/";
     prepared = ProviderRequestFactory::prepare(configuration, AiGenerationRequest{}, "key");

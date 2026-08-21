@@ -94,6 +94,7 @@ struct AiProviderConfiguration final
     std::string model;
     std::string accountId;
     bool chatGptSubscription = false;
+    bool supportsReasoningSummaryParameter = true;
 };
 
 struct AiToolDefinition final

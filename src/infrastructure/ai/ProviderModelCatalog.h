@@ -4,13 +4,26 @@
 #include "domain/ai/AiProviderTypes.h"
 
 #include <QByteArray>
+#include <QList>
 #include <QNetworkRequest>
+#include <QString>
 #include <QStringList>
 
 #include <expected>
 
 namespace ztermy::ai
 {
+
+struct OpenAiSubscriptionModel final
+{
+    QString slug;
+    bool supportsReasoningSummaryParameter = true;
+};
+
+struct OpenAiSubscriptionModelCatalog final
+{
+    QList<OpenAiSubscriptionModel> models;
+};
 
 class ProviderModelCatalog final
 {
@@ -22,7 +35,8 @@ public:
                                      const QString &clientVersion);
     [[nodiscard]] static std::expected<QStringList, AiProviderError> parse(const AiProviderKind kind,
                                                                            const QByteArray &body);
-    [[nodiscard]] static std::expected<QStringList, AiProviderError> parseOpenAiSubscription(const QByteArray &body);
+    [[nodiscard]] static std::expected<OpenAiSubscriptionModelCatalog, AiProviderError>
+    parseOpenAiSubscription(const QByteArray &body);
 };
 
 } // namespace ztermy::ai

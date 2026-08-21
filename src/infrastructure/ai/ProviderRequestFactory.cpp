@@ -290,6 +290,79 @@ void applyCompatibleReasoning(QJsonObject &body, const AiProviderConfiguration &
     return std::nullopt;
 }
 
+[[nodiscard]] bool schemaTypeContains(const QJsonValue &type, const QString &expected)
+{
+    if (type.isString())
+    {
+        return type.toString() == expected;
+    }
+    return type.isArray() && type.toArray().contains(expected);
+}
+
+[[nodiscard]] bool jsonSchemaSupportsStrict(const QJsonObject &schema, const bool root = false)
+{
+    if (schema.contains(QStringLiteral("$ref")))
+    {
+        return false;
+    }
+    for (const auto *keyword : {"anyOf", "oneOf", "allOf"})
+    {
+        const QString key = QString::fromLatin1(keyword);
+        if (!schema.contains(key))
+        {
+            continue;
+        }
+        const QJsonArray alternatives = schema.value(key).toArray();
+        if (alternatives.isEmpty() || std::ranges::any_of(alternatives, [](const QJsonValue &alternative) {
+                return !alternative.isObject() || !jsonSchemaSupportsStrict(alternative.toObject());
+            }))
+        {
+            return false;
+        }
+    }
+
+    const QJsonValue type = schema.value(QStringLiteral("type"));
+    const bool objectType = schemaTypeContains(type, QStringLiteral("object"));
+    const bool arrayType = schemaTypeContains(type, QStringLiteral("array"));
+    if (root && !objectType)
+    {
+        return false;
+    }
+    if (objectType)
+    {
+        const QJsonValue propertiesValue = schema.value(QStringLiteral("properties"));
+        const QJsonValue requiredValue = schema.value(QStringLiteral("required"));
+        if (!propertiesValue.isObject() || !requiredValue.isArray()
+            || schema.value(QStringLiteral("additionalProperties")) != QJsonValue(false))
+        {
+            return false;
+        }
+        const QJsonObject properties = propertiesValue.toObject();
+        const QJsonArray required = requiredValue.toArray();
+        if (required.size() != properties.size())
+        {
+            return false;
+        }
+        for (auto property = properties.constBegin(); property != properties.constEnd(); ++property)
+        {
+            if (!required.contains(property.key()) || !property.value().isObject()
+                || !jsonSchemaSupportsStrict(property.value().toObject()))
+            {
+                return false;
+            }
+        }
+    }
+    if (arrayType)
+    {
+        const QJsonValue items = schema.value(QStringLiteral("items"));
+        if (!items.isObject() || !jsonSchemaSupportsStrict(items.toObject()))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 [[nodiscard]] std::expected<QJsonArray, AiProviderError> toolDefinitions(const AiGenerationRequest &generation,
                                                                          const bool responsesFormat)
 {
@@ -313,7 +386,7 @@ void applyCompatibleReasoning(QJsonObject &body, const AiProviderConfiguration &
         if (responsesFormat)
         {
             function.insert(QStringLiteral("type"), QStringLiteral("function"));
-            function.insert(QStringLiteral("strict"), true);
+            function.insert(QStringLiteral("strict"), jsonSchemaSupportsStrict(parameters.object(), true));
             result.append(function);
         }
         else
@@ -384,8 +457,33 @@ void applyCompatibleReasoning(QJsonObject &body, const AiProviderConfiguration &
     return result;
 }
 
-[[nodiscard]] QJsonArray responsesInput(const AiGenerationRequest &generation)
+[[nodiscard]] QJsonArray responsesInput(const AiGenerationRequest &generation, const bool replayToolHistory)
 {
+    if (replayToolHistory)
+    {
+        QJsonArray result;
+        for (const auto &message : generation.messages)
+        {
+            result.append(responsesMessage(message));
+        }
+        for (const auto &exchange : generation.toolHistory)
+        {
+            for (const auto &call : exchange.calls)
+            {
+                result.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("function_call")},
+                                          {QStringLiteral("call_id"), fromUtf8(call.id)},
+                                          {QStringLiteral("name"), fromUtf8(call.name)},
+                                          {QStringLiteral("arguments"), fromUtf8(call.argumentsJson)}});
+            }
+            for (const auto &output : exchange.outputs)
+            {
+                result.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("function_call_output")},
+                                          {QStringLiteral("call_id"), fromUtf8(output.callId)},
+                                          {QStringLiteral("output"), fromUtf8(output.outputJson)}});
+            }
+        }
+        return result;
+    }
     if (generation.toolHistory.empty() || generation.toolHistory.back().outputs.empty())
     {
         QJsonArray result;
@@ -414,7 +512,7 @@ void applyCompatibleReasoning(QJsonObject &body, const AiProviderConfiguration &
         effectiveTools.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("web_search")}});
     }
     QJsonObject body{{QStringLiteral("model"), fromUtf8(configuration.model)},
-                     {QStringLiteral("input"), responsesInput(generation)},
+                     {QStringLiteral("input"), responsesInput(generation, configuration.chatGptSubscription)},
                      {QStringLiteral("stream"), true},
                      {QStringLiteral("store"), false}};
     if (!generation.instructions.empty())
@@ -426,11 +524,15 @@ void applyCompatibleReasoning(QJsonObject &body, const AiProviderConfiguration &
         body.insert(QStringLiteral("tools"), effectiveTools);
     }
     const auto previousResponseId = generation.previousResponseId.value_or(std::string{});
-    if (!previousResponseId.empty())
+    if (!configuration.chatGptSubscription && !previousResponseId.empty())
     {
         body.insert(QStringLiteral("previous_response_id"), fromUtf8(previousResponseId));
     }
-    QJsonObject reasoning{{QStringLiteral("summary"), QStringLiteral("auto")}};
+    QJsonObject reasoning;
+    if (configuration.supportsReasoningSummaryParameter)
+    {
+        reasoning.insert(QStringLiteral("summary"), QStringLiteral("auto"));
+    }
     if (generation.reasoningEffort == AiReasoningEffort::disabled)
     {
         reasoning.insert(QStringLiteral("effort"), QStringLiteral("none"));
@@ -443,7 +545,10 @@ void applyCompatibleReasoning(QJsonObject &body, const AiProviderConfiguration &
             reasoning.insert(QStringLiteral("effort"), effort);
         }
     }
-    body.insert(QStringLiteral("reasoning"), reasoning);
+    if (!reasoning.isEmpty())
+    {
+        body.insert(QStringLiteral("reasoning"), reasoning);
+    }
     return body;
 }
 

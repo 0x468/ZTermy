@@ -109,7 +109,8 @@ std::expected<QStringList, AiProviderError> ProviderModelCatalog::parse(const Ai
     return models;
 }
 
-std::expected<QStringList, AiProviderError> ProviderModelCatalog::parseOpenAiSubscription(const QByteArray &body)
+std::expected<OpenAiSubscriptionModelCatalog, AiProviderError>
+ProviderModelCatalog::parseOpenAiSubscription(const QByteArray &body)
 {
     QJsonParseError parseError;
     const QJsonDocument document = QJsonDocument::fromJson(body, &parseError);
@@ -123,6 +124,7 @@ std::expected<QStringList, AiProviderError> ProviderModelCatalog::parseOpenAiSub
     {
         QString slug;
         qint64 priority = std::numeric_limits<qint64>::max();
+        bool supportsReasoningSummaryParameter = true;
     };
     std::vector<Entry> entries;
     const QJsonArray values = document.object().value(QStringLiteral("models")).toArray();
@@ -130,8 +132,8 @@ std::expected<QStringList, AiProviderError> ProviderModelCatalog::parseOpenAiSub
     for (const auto &value : values)
     {
         const QJsonObject object = value.toObject();
-        if (object.contains(QStringLiteral("supported_in_api"))
-            && !object.value(QStringLiteral("supported_in_api")).toBool())
+        const QString visibility = object.value(QStringLiteral("visibility")).toString().trimmed().toLower();
+        if (!visibility.isEmpty() && visibility != QStringLiteral("list"))
         {
             continue;
         }
@@ -148,7 +150,10 @@ std::expected<QStringList, AiProviderError> ProviderModelCatalog::parseOpenAiSub
         }
         entries.push_back(
             {.slug = std::move(slug),
-             .priority = object.value(QStringLiteral("priority")).toInteger(std::numeric_limits<qint64>::max())});
+             .priority = object.value(QStringLiteral("priority")).toInteger(std::numeric_limits<qint64>::max()),
+             .supportsReasoningSummaryParameter =
+                 !object.contains(QStringLiteral("supports_reasoning_summary_parameter"))
+                 || object.value(QStringLiteral("supports_reasoning_summary_parameter")).toBool()});
     }
     std::ranges::stable_sort(entries, [](const Entry &left, const Entry &right) {
         if (left.priority != right.priority)
@@ -157,13 +162,16 @@ std::expected<QStringList, AiProviderError> ProviderModelCatalog::parseOpenAiSub
         }
         return QString::localeAwareCompare(left.slug, right.slug) < 0;
     });
-    QStringList models;
-    models.reserve(static_cast<qsizetype>(entries.size()));
+    OpenAiSubscriptionModelCatalog catalog;
+    catalog.models.reserve(static_cast<qsizetype>(entries.size()));
     for (auto &entry : entries)
     {
-        models.push_back(std::move(entry.slug));
+        catalog.models.push_back(OpenAiSubscriptionModel{
+            .slug = std::move(entry.slug),
+            .supportsReasoningSummaryParameter = entry.supportsReasoningSummaryParameter,
+        });
     }
-    return models;
+    return catalog;
 }
 
 } // namespace ztermy::ai

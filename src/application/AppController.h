@@ -1068,6 +1068,7 @@ private:
     QPointer<QNetworkReply> m_aiModelsReply;
     QPointer<QNetworkReply> m_aiSubscriptionUsageReply;
     QStringList m_aiAvailableModels;
+    QHash<QString, bool> m_aiModelReasoningSummarySupport;
     QString m_aiModelsError;
     QString m_aiPermissionRuleError;
     std::vector<ai::AiQuickMessage> m_aiQuickMessages;

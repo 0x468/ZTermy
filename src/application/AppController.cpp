@@ -8259,6 +8259,7 @@ void AppController::resetAiModelCatalog()
     const bool changed = m_aiModelsLoading || !m_aiAvailableModels.isEmpty() || !m_aiModelsError.isEmpty();
     m_aiModelsLoading = false;
     m_aiAvailableModels.clear();
+    m_aiModelReasoningSummarySupport.clear();
     m_aiModelsError.clear();
     if (changed)
     {
@@ -8500,6 +8501,7 @@ void AppController::startAiModelsRequest(const QNetworkRequest &request, const q
         m_aiModelsLoading = false;
         QString error;
         QStringList models;
+        QHash<QString, bool> reasoningSummarySupport;
         const auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         if (reply->error() != QNetworkReply::NoError || status >= 400)
         {
@@ -8530,25 +8532,49 @@ void AppController::startAiModelsRequest(const QNetworkRequest &request, const q
             }
             else
             {
-                const auto parsed = openAiSubscription ? ai::ProviderModelCatalog::parseOpenAiSubscription(body)
-                                                       : ai::ProviderModelCatalog::parse(kind, body);
-                if (parsed.has_value())
+                if (openAiSubscription)
                 {
-                    models = *parsed;
-                    if (models.isEmpty())
+                    const auto parsed = ai::ProviderModelCatalog::parseOpenAiSubscription(body);
+                    if (parsed.has_value())
                     {
-                        error = tr("The provider returned no models.");
+                        models.reserve(parsed->models.size());
+                        reasoningSummarySupport.reserve(parsed->models.size());
+                        for (const auto &entry : parsed->models)
+                        {
+                            models.push_back(entry.slug);
+                            reasoningSummarySupport.insert(entry.slug, entry.supportsReasoningSummaryParameter);
+                        }
+                    }
+                    else
+                    {
+                        error = QString::fromStdString(parsed.error().message);
                     }
                 }
                 else
                 {
-                    error = QString::fromStdString(parsed.error().message);
+                    const auto parsed = ai::ProviderModelCatalog::parse(kind, body);
+                    if (parsed.has_value())
+                    {
+                        models = *parsed;
+                    }
+                    else
+                    {
+                        error = QString::fromStdString(parsed.error().message);
+                    }
+                }
+                if (error.isEmpty())
+                {
+                    if (models.isEmpty())
+                    {
+                        error = tr("The provider returned no models.");
+                    }
                 }
             }
         }
         if (error.isEmpty())
         {
             m_aiAvailableModels = std::move(models);
+            m_aiModelReasoningSummarySupport = std::move(reasoningSummarySupport);
             m_aiModelsError.clear();
             if (openAiSubscription && !m_aiChatGptAuthError.isEmpty())
             {
@@ -10935,14 +10961,16 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
         effectiveBaseUrl =
             ai::OpenAiSubscriptionAuthProtocol::inferenceUrl().toString(QUrl::FullyEncoded) + QLatin1Char('#');
     }
-    const auto configuration =
-        ai::AiProviderConfiguration{.kind = aiProviderKind(provider),
-                                    .flavor = aiProviderFlavor(provider),
-                                    .baseUrl = utf8String(effectiveBaseUrl),
-                                    .endpointPath = utf8String(m_settings.aiEndpointPath),
-                                    .model = utf8String(m_settings.aiModel),
-                                    .accountId = chatGptSubscription ? utf8String(aiChatGptAccountId()) : std::string{},
-                                    .chatGptSubscription = chatGptSubscription};
+    const auto configuration = ai::AiProviderConfiguration{
+        .kind = aiProviderKind(provider),
+        .flavor = aiProviderFlavor(provider),
+        .baseUrl = utf8String(effectiveBaseUrl),
+        .endpointPath = utf8String(m_settings.aiEndpointPath),
+        .model = utf8String(m_settings.aiModel),
+        .accountId = chatGptSubscription ? utf8String(aiChatGptAccountId()) : std::string{},
+        .chatGptSubscription = chatGptSubscription,
+        .supportsReasoningSummaryParameter =
+            !chatGptSubscription || m_aiModelReasoningSummarySupport.value(m_settings.aiModel, false)};
     const QUrl providerUrl(m_settings.aiBaseUrl);
     const bool officialOpenAiEndpoint =
         configuration.kind == ai::AiProviderKind::openAiResponses
