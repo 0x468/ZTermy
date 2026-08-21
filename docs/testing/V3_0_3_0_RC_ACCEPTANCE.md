@@ -3,7 +3,7 @@
 Status: final-source automated release candidate; owner/provider and
 environment-dependent interaction checks remain
 
-Date: 2026-08-13
+Date: 2026-08-21
 
 Identity:
 
@@ -11,19 +11,20 @@ Identity:
 - codename: **糸**;
 - verse: **「剪不断，理还乱，是离愁」**;
 - supported release platform: Windows 11 x64;
-- candidate package source: `aabd724`.
+- candidate package source: `db6265c`.
 
 This document records the final-source automated evidence for that exact
 package. It includes the mainstream Agent conversation, five-mode/rule model,
-Markdown and reasoning presentation, local and real-SSH end-to-end scenarios,
-and the expanded schema-2 Agent/MCP duration gate. It does not convert the
-unchecked owner/provider matrix below into a pass.
+Markdown and reasoning presentation, native ChatGPT subscription transport,
+local and real-SSH end-to-end scenarios, and the expanded schema-2 Agent/MCP
+duration gate. It does not convert the unchecked owner/provider matrix below
+into a pass.
 
 ## Environment
 
 - Microsoft Windows 11 Pro 10.0.26200, x64;
 - Qt 6.8.3 static Release and official Qt 6.8.3 dynamic Debug;
-- Microsoft Visual Studio 2022 17.14.15, MSVC x64;
+- Microsoft Visual Studio 2022 17.14.38, MSVC x64;
 - CMake 4.4.0 and Ninja 1.13.1;
 - PowerShell 7.6.4;
 - clang-format/clang-tidy 22.1.6.
@@ -32,14 +33,14 @@ unchecked owner/provider matrix below into a pass.
 
 The following gates completed with exit code zero:
 
-1. Dynamic Debug configure/build and 105/105 CTest tests. The final-source run
-   took 98.03 seconds.
-2. Static Release configure/build and 105/105 CTest tests. The final-source run
-   took 94.70 seconds. Both configurations include the 32-cycle MCP process
+1. Dynamic Debug configure/build and 116/116 CTest tests. The final-source run
+   took 41 seconds.
+2. Static Release configure/build and 116/116 CTest tests. The final-source run
+   took 41 seconds without test retry. Both configurations include the 32-cycle MCP process
    lifecycle stress and the deterministic local Agent scenario.
 3. C++ format, QML format, QML lint, translation, branding, executable metadata,
    and package contracts.
-4. clang-tidy with warnings as errors over all 224 C++ translation units in the
+4. clang-tidy with warnings as errors over all 255 C++ translation units in the
    static compilation database.
 5. The inherited 30-second local-terminal interaction gate and its 16-test
    persistence/lifecycle core.
@@ -54,8 +55,12 @@ The following gates completed with exit code zero:
      seconds with zero failures. The content-free report spans 2026-08-12
      21:27:30Z through 23:28:03Z, belongs to the static Release build directory,
      and contains the exact 11-test approved set.
-8. WiX generation, ICE validation, decompilation, and structural inspection.
-   Only the retained and reviewed ICE61, ICE69, and ICE91 warnings were emitted.
+8. WiX generation, decompilation, and structural inspection. WiX ICE validation
+   was explicitly skipped for this rebuild because the local Windows Installer
+   service returned WIX0217/exit 217 before running any ICE rule. Structural
+   inspection still passed the per-user LocalAppData, executable identity,
+   product icon, Start-menu shortcut, same-version upgrade, and uninstall-folder
+   contracts.
 9. Final portable archive extraction, `portable.flag` inspection, and packaged
    executable lifecycle smoke. The executable extracted from the checksummed
    final ZIP additionally passed the work-area/caption, appearance,
@@ -80,7 +85,12 @@ The following gates completed with exit code zero:
     directory, and passes the unified release-candidate evidence verifier.
 12. The final-source protected clipboard contract completed 100 consecutive
     Release repetitions after adding bounded Win32 clipboard contention retry.
-    The same contract passed in the final Debug and Release 105-test suites.
+    The same contract passed in the final Debug and Release 116-test suites.
+13. ChatGPT subscription tests cover PKCE, loopback callback success, state
+    rejection, cancellation, token refresh without rotation, typed 429 recovery,
+    model-catalog filtering, allowance parsing, credential persistence, and
+    provider error recovery. The background model-refresh controller test passed
+    20 consecutive Static Release repetitions before both final full suites.
 
 The formal soak reports are generated at
 `build/msvc-static-release/ai-concurrency-soak-2h-schema2.json` and
@@ -99,9 +109,9 @@ build/msvc-static-release/package/release/ztermy-0.3.0-windows-x64
 It contains exactly:
 
 - `ztermy-0.3.0-windows-x64-portable.zip` — SHA-256
-  `ad831637c897172f5f0eae2294a5d4ebe33b9db696407b8f7b6cfc41217dacec`;
+  `41dba4cce03d23789da84a81fca839ca11bbc5f03863da6fa3a4c7982466f70f`;
 - `ztermy-0.3.0-windows-x64.msi` — SHA-256
-  `40663e8984a6cb98573d46bb4ae1d493b664ebc1e0540e84c7bd810f2adee744`;
+  `3e29a8fff43970b3f2f557d446cb4f452045160261e74801ba9bd281412422d7`;
 - `SHA256SUMS.txt`;
 - `release-manifest.json`.
 
@@ -109,10 +119,12 @@ The manifest and checksum file are authoritative if packaging is run again,
 because MSI and ZIP container metadata can change artifact hashes without a
 source change.
 
-This final bundle was rebuilt and verified on 2026-08-13. WiX ICE validation
-completed through the Windows Installer service with only the reviewed ICE61,
-ICE69, and ICE91 warnings; structural decompilation, portable extraction, the
-packaged executable lifecycle smoke, and the unified RC verifier all passed.
+This final bundle was rebuilt and verified on 2026-08-21. WiX ICE validation
+could not access the local Windows Installer service and was explicitly skipped;
+structural decompilation, the packaged executable metadata and native-window
+smoke, and the unified RC verifier all passed. The prior owner-approved sandbox
+install/uninstall acceptance remains recorded, while this rebuild's ICE exception
+is not represented as a pass.
 
 ## Owner acceptance — exact checks
 
@@ -126,14 +138,29 @@ diagnostic export, or this document.
 2. Close and reopen Settings and restart ztermy.
 3. Exercise an invalid key, offline endpoint, TLS failure, 429 response, and a
    valid request.
-4. Open the AI privacy diagnostics and export ordinary application diagnostics.
+4. Select ChatGPT, complete system-browser sign-in, and verify that model
+   discovery and plan usage refresh automatically after restart, terminal
+   creation, and first AI-panel open.
+5. Complete an ordinary subscription response and one harmless terminal tool
+   call, then exercise cancel, retry, revoked authorization, sign-in again, and
+   sign-out.
+6. Exercise system, direct, custom HTTP, and custom SOCKS5 AI proxy modes while
+   an SSH session remains connected. Export ordinary application diagnostics.
 
 Expected:
 
 - keys remain masked and survive only in the selected vault;
 - errors distinguish authentication, configuration, transient, and offline
   causes without exposing request content or credentials;
-- diagnostics show coarse endpoint scope, policy, and counts only;
+- ChatGPT subscription model discovery, allowance windows, streaming responses,
+  tool continuation, token refresh, and sign-out behave as described in
+  `V3_OWNER_ACCEPTANCE_ZH_CN.md`;
+- an expired or revoked subscription asks for ChatGPT sign-in again, not an API
+  key, and a network retry never repeats a completed tool call;
+- AI proxy changes affect provider traffic only; SSH, SFTP, and forwarding are
+  unchanged;
+- diagnostics contain no API key, OAuth token, authorization code, terminal
+  input, or unredacted secret-bearing command;
 - the last selected provider and model are restored.
 
 ### 2. Semantic assistant and context control
