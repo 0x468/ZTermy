@@ -1207,10 +1207,14 @@ void AppControllerTests::refreshesConfiguredAiModelsInBackground()
     QCOMPARE(requestCount, 1);
     QVERIFY(controller.aiModelsError().isEmpty());
 
+    QSignalSpy modelsChanged(&controller, &ztermy::AppController::aiModelsChanged);
     QVERIFY(!controller.startLocalTerminal().isEmpty());
-    QTRY_COMPARE_WITH_TIMEOUT(requestCount, 2, 5'000);
+    QTRY_VERIFY_WITH_TIMEOUT(modelsChanged.count() >= 1, 5'000);
+    QCOMPARE(requestCount, 2);
+    modelsChanged.clear();
     QVERIFY(controller.toggleTerminalWorkbench(QStringLiteral("ai")));
-    QTRY_COMPARE_WITH_TIMEOUT(requestCount, 3, 5'000);
+    QTRY_VERIFY_WITH_TIMEOUT(modelsChanged.count() >= 1, 5'000);
+    QCOMPARE(requestCount, 3);
     QCOMPARE(controller.aiAvailableModels(), QStringList({QStringLiteral("model-a"), QStringLiteral("model-b")}));
     QVERIFY(controller.aiModelsError().isEmpty());
 
