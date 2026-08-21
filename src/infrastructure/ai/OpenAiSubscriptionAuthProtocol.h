@@ -40,7 +40,8 @@ class OpenAiSubscriptionAuthProtocol final
 public:
     [[nodiscard]] static OpenAiSubscriptionPkce createPkce();
     [[nodiscard]] static QByteArray challengeForVerifier(QByteArrayView verifier);
-    [[nodiscard]] static QUrl authorizationUrl(const OpenAiSubscriptionPkce &pkce, const QUrl &redirectUri);
+    [[nodiscard]] static QUrl authorizationUrl(const OpenAiSubscriptionPkce &pkce, const QUrl &redirectUri,
+                                               const QUrl &authorizationEndpoint = {});
     [[nodiscard]] static QByteArray authorizationCodeForm(QByteArrayView code, QByteArrayView verifier,
                                                           const QUrl &redirectUri);
     [[nodiscard]] static QByteArray refreshTokenForm(QByteArrayView refreshToken);

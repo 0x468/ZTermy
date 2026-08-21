@@ -86,13 +86,15 @@ QByteArray OpenAiSubscriptionAuthProtocol::challengeForVerifier(const QByteArray
         QCryptographicHash::hash(QByteArray(verifier.data(), verifier.size()), QCryptographicHash::Sha256));
 }
 
-QUrl OpenAiSubscriptionAuthProtocol::authorizationUrl(const OpenAiSubscriptionPkce &pkce, const QUrl &redirectUri)
+QUrl OpenAiSubscriptionAuthProtocol::authorizationUrl(const OpenAiSubscriptionPkce &pkce, const QUrl &redirectUri,
+                                                      const QUrl &authorizationEndpoint)
 {
     if (pkce.verifier.size() < 43 || pkce.challenge.isEmpty() || pkce.state.isEmpty() || !redirectUri.isValid())
     {
         return {};
     }
-    QUrl url = issuerUrl().resolved(QUrl(QStringLiteral("/oauth/authorize")));
+    QUrl url = authorizationEndpoint.isEmpty() ? issuerUrl().resolved(QUrl(QStringLiteral("/oauth/authorize")))
+                                               : authorizationEndpoint;
     QUrlQuery query;
     query.addQueryItem(QStringLiteral("response_type"), QStringLiteral("code"));
     query.addQueryItem(QStringLiteral("client_id"), QString::fromLatin1(ClientId));

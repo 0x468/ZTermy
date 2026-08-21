@@ -1,10 +1,14 @@
 #include "infrastructure/ai/OpenAiSubscriptionAuthProtocol.h"
+#include "infrastructure/ai/OpenAiSubscriptionAuthSession.h"
 
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QTcpServer>
+#include <QTcpSocket>
 #include <QTest>
 #include <QUrlQuery>
 
+#include <optional>
 #include <string_view>
 
 namespace
@@ -28,6 +32,49 @@ namespace
     return header + '.' + payload + '.';
 }
 
+class FakeTokenServer final : public QObject
+{
+public:
+    FakeTokenServer()
+    {
+        QObject::connect(&m_server, &QTcpServer::newConnection, this, [this] {
+            QTcpSocket *socket = m_server.nextPendingConnection();
+            socket->setParent(this);
+            QObject::connect(socket, &QTcpSocket::readyRead, this, [this, socket] {
+                m_request += socket->readAll();
+                const qsizetype headerEnd = m_request.indexOf(QByteArrayLiteral("\r\n\r\n"));
+                if (headerEnd < 0)
+                {
+                    return;
+                }
+                const QByteArray body =
+                    QJsonDocument(QJsonObject{{QStringLiteral("access_token"), QStringLiteral("access")},
+                                              {QStringLiteral("refresh_token"), QStringLiteral("refresh")},
+                                              {QStringLiteral("id_token"),
+                                               QString::fromLatin1(jwtWithAccount(QStringLiteral("account-1")))},
+                                              {QStringLiteral("expires_in"), 3600}})
+                        .toJson(QJsonDocument::Compact);
+                socket->write(QByteArrayLiteral("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: "
+                                                "close\r\nContent-Length: ")
+                              + QByteArray::number(body.size()) + QByteArrayLiteral("\r\n\r\n") + body);
+                socket->disconnectFromHost();
+            });
+        });
+        m_server.listen(QHostAddress::LocalHost, 0);
+    }
+
+    [[nodiscard]] QUrl url() const
+    {
+        return QUrl(QStringLiteral("http://127.0.0.1:%1/oauth/token").arg(m_server.serverPort()));
+    }
+
+    [[nodiscard]] const QByteArray &request() const noexcept { return m_request; }
+
+private:
+    QTcpServer m_server;
+    QByteArray m_request;
+};
+
 class OpenAiSubscriptionAuthProtocolTests final : public QObject
 {
     Q_OBJECT
@@ -38,6 +85,9 @@ private slots:
     void createsEncodedTokenForms();
     void parsesTokensAndAccountIdentity();
     void rejectsIncompleteTokenResponses();
+    void browserSessionCompletesThroughLoopback();
+    void browserSessionRejectsMismatchedState();
+    void browserSessionCanBeCancelled();
 };
 
 void OpenAiSubscriptionAuthProtocolTests::derivesRfc7636Challenge()
@@ -116,6 +166,81 @@ void OpenAiSubscriptionAuthProtocolTests::rejectsIncompleteTokenResponses()
         QByteArrayLiteral(R"({"access_token":"access"})"), false);
     QVERIFY(parsed);
     QVERIFY(parsed->refreshToken.empty());
+}
+
+void OpenAiSubscriptionAuthProtocolTests::browserSessionCompletesThroughLoopback()
+{
+    FakeTokenServer tokenServer;
+    QNetworkAccessManager network;
+    ztermy::ai::OpenAiSubscriptionAuthSession session(&network);
+    std::optional<ztermy::ai::OpenAiSubscriptionAuthSession::Result> result;
+    auto started = session.beginBrowserLogin(
+        [&result](ztermy::ai::OpenAiSubscriptionAuthSession::Result completed) {
+            result = std::move(completed);
+        },
+        {.authorization = QUrl(QStringLiteral("https://auth.example.test/authorize")), .token = tokenServer.url()}, 0);
+    QVERIFY(started);
+    const QUrlQuery authorization(*started);
+    QUrl callback(authorization.queryItemValue(QStringLiteral("redirect_uri")));
+    QUrlQuery callbackQuery;
+    callbackQuery.addQueryItem(QStringLiteral("code"), QStringLiteral("code-1"));
+    callbackQuery.addQueryItem(QStringLiteral("state"), authorization.queryItemValue(QStringLiteral("state")));
+    callback.setQuery(callbackQuery);
+    QNetworkReply *browserReply = network.get(QNetworkRequest(callback));
+
+    QTRY_VERIFY_WITH_TIMEOUT(result.has_value(), 3000);
+    QVERIFY(result->has_value());
+    QCOMPARE(bytes(result->value().accessToken), QByteArrayLiteral("access"));
+    QCOMPARE(bytes(result->value().refreshToken), QByteArrayLiteral("refresh"));
+    QCOMPARE(result->value().accountId, QStringLiteral("account-1"));
+    QTRY_COMPARE_WITH_TIMEOUT(browserReply->error(), QNetworkReply::NoError, 1000);
+    QVERIFY(tokenServer.request().contains(QByteArrayLiteral("grant_type=authorization_code")));
+    QVERIFY(!session.active());
+    browserReply->deleteLater();
+}
+
+void OpenAiSubscriptionAuthProtocolTests::browserSessionRejectsMismatchedState()
+{
+    FakeTokenServer tokenServer;
+    QNetworkAccessManager network;
+    ztermy::ai::OpenAiSubscriptionAuthSession session(&network);
+    std::optional<ztermy::ai::OpenAiSubscriptionAuthSession::Result> result;
+    auto started = session.beginBrowserLogin(
+        [&result](ztermy::ai::OpenAiSubscriptionAuthSession::Result completed) {
+            result = std::move(completed);
+        },
+        {.authorization = QUrl(QStringLiteral("https://auth.example.test/authorize")), .token = tokenServer.url()}, 0);
+    QVERIFY(started);
+    QUrl callback(QUrlQuery(*started).queryItemValue(QStringLiteral("redirect_uri")));
+    QUrlQuery callbackQuery;
+    callbackQuery.addQueryItem(QStringLiteral("code"), QStringLiteral("code-1"));
+    callbackQuery.addQueryItem(QStringLiteral("state"), QStringLiteral("wrong-state"));
+    callback.setQuery(callbackQuery);
+    QNetworkReply *browserReply = network.get(QNetworkRequest(callback));
+
+    QTRY_VERIFY_WITH_TIMEOUT(result.has_value(), 2000);
+    QVERIFY(!result->has_value());
+    QCOMPARE(result->error().code, ztermy::ai::OpenAiSubscriptionSessionErrorCode::callbackRejected);
+    QVERIFY(tokenServer.request().isEmpty());
+    browserReply->deleteLater();
+}
+
+void OpenAiSubscriptionAuthProtocolTests::browserSessionCanBeCancelled()
+{
+    QNetworkAccessManager network;
+    ztermy::ai::OpenAiSubscriptionAuthSession session(&network);
+    std::optional<ztermy::ai::OpenAiSubscriptionAuthSession::Result> result;
+    auto started = session.beginBrowserLogin(
+        [&result](ztermy::ai::OpenAiSubscriptionAuthSession::Result completed) {
+            result = std::move(completed);
+        },
+        {}, 0);
+    QVERIFY(started);
+    session.cancel();
+    QVERIFY(result.has_value());
+    QVERIFY(!result->has_value());
+    QCOMPARE(result->error().code, ztermy::ai::OpenAiSubscriptionSessionErrorCode::cancelled);
+    QVERIFY(!session.active());
 }
 
 } // namespace
