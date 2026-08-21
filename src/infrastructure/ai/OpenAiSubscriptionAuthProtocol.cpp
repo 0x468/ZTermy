@@ -220,6 +220,14 @@ QUrl OpenAiSubscriptionAuthProtocol::modelsUrl(const QString &clientVersion)
     return url;
 }
 
+QString OpenAiSubscriptionAuthProtocol::modelCatalogCompatibilityVersion()
+{
+    // The catalog endpoint filters models by a protocol compatibility version,
+    // not by the calling application's product version. Ask for the complete
+    // current catalog and retain only entries the service marks API-capable.
+    return QStringLiteral("99.99.99");
+}
+
 QUrl OpenAiSubscriptionAuthProtocol::usageUrl()
 {
     return {QString::fromLatin1(UsageEndpoint)};

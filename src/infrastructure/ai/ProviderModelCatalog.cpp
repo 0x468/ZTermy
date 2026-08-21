@@ -57,7 +57,8 @@ ProviderModelCatalog::prepareOpenAiSubscriptionRequest(security::SensitiveByteAr
                                                .message = "ChatGPT sign-in is incomplete.",
                                                .retryable = false});
     }
-    QNetworkRequest request(OpenAiSubscriptionAuthProtocol::modelsUrl(clientVersion));
+    QNetworkRequest request(
+        OpenAiSubscriptionAuthProtocol::modelsUrl(OpenAiSubscriptionAuthProtocol::modelCatalogCompatibilityVersion()));
     request.setRawHeader("Accept", "application/json");
     request.setRawHeader("ChatGPT-Account-Id", accountId.trimmed().toUtf8());
     request.setRawHeader("originator", "ztermy");

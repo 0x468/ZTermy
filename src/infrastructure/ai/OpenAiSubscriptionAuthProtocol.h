@@ -55,6 +55,7 @@ public:
     [[nodiscard]] static QUrl tokenUrl();
     [[nodiscard]] static QUrl inferenceUrl();
     [[nodiscard]] static QUrl modelsUrl(const QString &clientVersion);
+    [[nodiscard]] static QString modelCatalogCompatibilityVersion();
     [[nodiscard]] static QUrl usageUrl();
     [[nodiscard]] static QByteArray clientId();
 };

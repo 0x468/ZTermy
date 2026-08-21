@@ -8109,6 +8109,7 @@ bool AppController::saveAiProviderSettings(const QString &provider, const QStrin
     {
         return false;
     }
+    const bool providerChanged = *parsedProvider != m_settings.aiProvider;
     auto candidate = m_settings;
     candidate.aiProvider = *parsedProvider;
     candidate.aiBaseUrl = baseUrl.trimmed();
@@ -8116,7 +8117,15 @@ bool AppController::saveAiProviderSettings(const QString &provider, const QStrin
     candidate.aiModel = model.trimmed();
     candidate.aiAutomaticContext = automaticContext;
     candidate.aiPermission = *parsedPermission;
-    return persistApplicationSettings(candidate);
+    if (!persistApplicationSettings(candidate))
+    {
+        return false;
+    }
+    if (providerChanged)
+    {
+        resetAiModelCatalog();
+    }
+    return true;
 }
 
 bool AppController::saveAiProviderConfiguration(const QString &provider, const QString &baseUrl, const QString &model,
@@ -8136,6 +8145,7 @@ bool AppController::saveAiProviderConfiguration(const QString &provider, const Q
     {
         return false;
     }
+    const bool providerChanged = *parsedProvider != m_settings.aiProvider;
     auto candidate = m_settings;
     candidate.aiProvider = *parsedProvider;
     candidate.aiBaseUrl = baseUrl.trimmed();
@@ -8152,6 +8162,10 @@ bool AppController::saveAiProviderConfiguration(const QString &provider, const Q
     if (!persistApplicationSettings(candidate))
     {
         return false;
+    }
+    if (providerChanged)
+    {
+        resetAiModelCatalog();
     }
     if (!apiKey.isEmpty() && !saveAiApiKey(apiKey))
     {
@@ -8230,6 +8244,26 @@ QString AppController::aiProviderEndpointPreview(const QString &provider, const 
 void AppController::refreshAiModels(const QString &provider, const QString &baseUrl, const QString &apiKey)
 {
     refreshAiModelsInternal(provider, baseUrl, apiKey, false);
+}
+
+void AppController::resetAiModelCatalog()
+{
+    ++m_aiModelsRequestGeneration;
+    if (m_aiModelsReply)
+    {
+        QNetworkReply *reply = std::exchange(m_aiModelsReply, nullptr);
+        reply->disconnect(this);
+        reply->abort();
+        reply->deleteLater();
+    }
+    const bool changed = m_aiModelsLoading || !m_aiAvailableModels.isEmpty() || !m_aiModelsError.isEmpty();
+    m_aiModelsLoading = false;
+    m_aiAvailableModels.clear();
+    m_aiModelsError.clear();
+    if (changed)
+    {
+        emit aiModelsChanged();
+    }
 }
 
 void AppController::withAiChatGptAccessToken(AiSubscriptionAccessHandler handler)
@@ -8734,6 +8768,10 @@ bool AppController::copyAiChatGptDeviceCode()
 
 bool AppController::signOutAiChatGpt()
 {
+    if (m_settings.aiProvider == config::AiProviderPreference::openAiChatGpt)
+    {
+        resetAiModelCatalog();
+    }
     cancelAiChatGptSignIn();
     if (m_aiSubscriptionTokenRefresher && m_aiSubscriptionTokenRefresher->active())
     {

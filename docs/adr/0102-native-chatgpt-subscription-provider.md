@@ -67,6 +67,14 @@ The user-facing name intentionally says **ChatGPT subscription**, while source
 types may use `OpenAiCodexSubscription` where protocol precision is required.
 Subscription allowance is never described as OpenAI API credit.
 
+The model catalog's `client_version` is a backend protocol-compatibility
+filter, not ztermy's product semantic version. Catalog discovery therefore
+uses the compatibility marker `99.99.99` to request the complete current
+catalog, while the real ztermy version remains in the user agent and all
+returned entries are still filtered by the service's `supported_in_api`
+capability. This marker is confined to catalog discovery and does not imply an
+external Codex runtime integration.
+
 ## Settings and migration
 
 Authentication mode belongs inside the OpenAI provider experience:

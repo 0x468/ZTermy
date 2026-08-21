@@ -929,6 +929,7 @@ private:
     void applyAiNetworkProxy();
     void initializeAiModelCatalogRefresh();
     void refreshConfiguredAiModels();
+    void resetAiModelCatalog();
     void refreshAiModelsInternal(const QString &provider, const QString &baseUrl, const QString &apiKey,
                                  bool background);
     using AiSubscriptionAccessHandler =

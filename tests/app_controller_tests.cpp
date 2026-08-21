@@ -159,6 +159,7 @@ private slots:
     void persistsApplicationSettings();
     void refreshesConfiguredAiModelsAtStartup();
     void refreshesConfiguredAiModelsInBackground();
+    void clearsAiModelCatalogWhenProviderChangesOrChatGptSignsOut();
     void routesAiModelDiscoveryThroughCustomProxy();
     void managesMcpServerConfiguration();
     void managesActionShortcutsAndDispatchContext();
@@ -1226,6 +1227,63 @@ void AppControllerTests::refreshesConfiguredAiModelsInBackground()
     QTRY_COMPARE_WITH_TIMEOUT(requestCount, 4, 5'000);
     QTest::qWait(50);
     QCOMPARE(controller.aiAvailableModels(), QStringList({QStringLiteral("model-a"), QStringLiteral("model-b")}));
+    QVERIFY(controller.aiModelsError().isEmpty());
+}
+
+void AppControllerTests::clearsAiModelCatalogWhenProviderChangesOrChatGptSignsOut()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    QTcpServer provider;
+    QVERIFY(provider.listen(QHostAddress::LocalHost, 0));
+    connect(&provider, &QTcpServer::newConnection, &provider, [&] {
+        while (provider.hasPendingConnections())
+        {
+            QTcpSocket *socket = provider.nextPendingConnection();
+            QVERIFY(socket != nullptr);
+            auto request = std::make_shared<QByteArray>();
+            connect(socket, &QTcpSocket::readyRead, socket, [socket, request] {
+                request->append(socket->readAll());
+                if (!request->contains("\r\n\r\n"))
+                {
+                    return;
+                }
+                const QByteArray body = QByteArrayLiteral(R"({"data":[{"id":"stale-model"}]})");
+                QByteArray response = QByteArrayLiteral(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: ");
+                response += QByteArray::number(body.size());
+                response += QByteArrayLiteral("\r\n\r\n");
+                response += body;
+                socket->write(response);
+                socket->disconnectFromHost();
+            });
+        }
+    });
+
+    const QString profilesPath = directory.filePath(QStringLiteral("profiles.json"));
+    const QString knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json"));
+    const QString settingsPath = directory.filePath(QStringLiteral("settings.json"));
+    const auto sessionState = std::make_shared<FakeLocalSessionState>();
+    ztermy::AppController controller(profilesPath, knownHostsPath, settingsPath, [sessionState] {
+        return std::make_unique<FakeLocalTerminalSession>(sessionState);
+    });
+    const QString endpoint = QStringLiteral("http://127.0.0.1:%1/v1").arg(provider.serverPort());
+
+    controller.refreshAiModels(QStringLiteral("openai-compatible"), endpoint, QStringLiteral("test-api-key"));
+    QTRY_COMPARE_WITH_TIMEOUT(controller.aiAvailableModels(), QStringList({QStringLiteral("stale-model")}), 5'000);
+
+    QVERIFY(controller.saveAiProviderConfiguration(
+        QStringLiteral("openai-chatgpt"), QStringLiteral("https://chatgpt.com/backend-api/codex"),
+        QStringLiteral("gpt-5.3-codex"), false, QStringLiteral("ask"), {}, false, QStringLiteral("auto")));
+    QVERIFY(controller.aiAvailableModels().isEmpty());
+    QVERIFY(!controller.aiModelsLoading());
+    QVERIFY(controller.aiModelsError().isEmpty());
+
+    controller.refreshAiModels(QStringLiteral("openai-compatible"), endpoint, QStringLiteral("test-api-key"));
+    QTRY_COMPARE_WITH_TIMEOUT(controller.aiAvailableModels(), QStringList({QStringLiteral("stale-model")}), 5'000);
+    QVERIFY(controller.signOutAiChatGpt());
+    QVERIFY(controller.aiAvailableModels().isEmpty());
+    QVERIFY(!controller.aiModelsLoading());
     QVERIFY(controller.aiModelsError().isEmpty());
 }
 

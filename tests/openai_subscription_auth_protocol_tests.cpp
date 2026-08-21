@@ -311,6 +311,8 @@ void OpenAiSubscriptionAuthProtocolTests::readsPersistedAccessTokenClaims()
 
     const QUrl models = ztermy::ai::OpenAiSubscriptionAuthProtocol::modelsUrl(QStringLiteral("0.3.0"));
     QCOMPARE(models.toString(), QStringLiteral("https://chatgpt.com/backend-api/codex/models?client_version=0.3.0"));
+    QCOMPARE(ztermy::ai::OpenAiSubscriptionAuthProtocol::modelCatalogCompatibilityVersion(),
+             QStringLiteral("99.99.99"));
 }
 
 void OpenAiSubscriptionAuthProtocolTests::rejectsIncompleteTokenResponses()
