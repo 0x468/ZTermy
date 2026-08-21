@@ -155,6 +155,8 @@ private slots:
     void usesContextualSshTabTitles();
     void rejectsIncompleteConnections();
     void persistsApplicationSettings();
+    void refreshesConfiguredAiModelsAtStartup();
+    void refreshesConfiguredAiModelsInBackground();
     void managesMcpServerConfiguration();
     void managesActionShortcutsAndDispatchContext();
     void restoresCompleteAgentPresentationFromHistory();
@@ -899,6 +901,15 @@ void AppControllerTests::persistsApplicationSettings()
                  .toStringList(),
              QStringList({QStringLiteral("auto"), QStringLiteral("off")}));
 
+    QVERIFY(controller.saveAiProviderConfiguration(QStringLiteral("openai-compatible"),
+                                                   QStringLiteral("https://gateway.example.test/v1"),
+                                                   QStringLiteral("saved-model"), false, QStringLiteral("auto"),
+                                                   QStringLiteral("test-api-key"), false, QStringLiteral("auto")));
+    QCOMPARE(controller.aiProviderPreference(), QStringLiteral("openai-compatible"));
+    QCOMPARE(controller.aiBaseUrl(), QStringLiteral("https://gateway.example.test/v1"));
+    QCOMPARE(controller.aiModel(), QStringLiteral("saved-model"));
+    QVERIFY(controller.aiApiKeyConfigured());
+
     QVERIFY(controller.saveAiProviderSettings(QStringLiteral("ollama"), QStringLiteral("http://127.0.0.1:11434"),
                                               QStringLiteral("/api/chat"), QStringLiteral("qwen3"), false,
                                               QStringLiteral("auto")));
@@ -1059,6 +1070,127 @@ void AppControllerTests::managesActionShortcutsAndDispatchContext()
             QCOMPARE(action.value(QStringLiteral("shortcut")).toString(), QStringLiteral("Ctrl+Shift+F"));
         }
     }
+}
+
+void AppControllerTests::refreshesConfiguredAiModelsAtStartup()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    QTcpServer provider;
+    QVERIFY(provider.listen(QHostAddress::LocalHost, 0));
+    int requestCount = 0;
+    connect(&provider, &QTcpServer::newConnection, &provider, [&] {
+        while (provider.hasPendingConnections())
+        {
+            QTcpSocket *socket = provider.nextPendingConnection();
+            QVERIFY(socket != nullptr);
+            auto request = std::make_shared<QByteArray>();
+            connect(socket, &QTcpSocket::readyRead, socket, [socket, request, &requestCount] {
+                request->append(socket->readAll());
+                if (!request->contains("\r\n\r\n"))
+                {
+                    return;
+                }
+                ++requestCount;
+                const QByteArray body = QByteArrayLiteral(R"({"models":[{"name":"qwen3"},{"name":"gemma3"}]})");
+                QByteArray response = QByteArrayLiteral(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: ");
+                response += QByteArray::number(body.size());
+                response += QByteArrayLiteral("\r\n\r\n");
+                response += body;
+                socket->write(response);
+                socket->disconnectFromHost();
+            });
+        }
+    });
+
+    const QString profilesPath = directory.filePath(QStringLiteral("profiles.json"));
+    const QString knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json"));
+    const QString settingsPath = directory.filePath(QStringLiteral("settings.json"));
+    auto settings = ztermy::config::ApplicationSettings{};
+    settings.aiProvider = ztermy::config::AiProviderPreference::ollama;
+    settings.aiBaseUrl = QStringLiteral("http://127.0.0.1:%1").arg(provider.serverPort());
+    settings.aiModel = QStringLiteral("qwen3");
+    QVERIFY(ztermy::config::ApplicationSettingsStore(settingsPath).save(settings));
+    const auto sessionState = std::make_shared<FakeLocalSessionState>();
+    ztermy::AppController controller(profilesPath, knownHostsPath, settingsPath, [sessionState] {
+        return std::make_unique<FakeLocalTerminalSession>(sessionState);
+    });
+
+    QTRY_COMPARE_WITH_TIMEOUT(controller.aiAvailableModels(),
+                              QStringList({QStringLiteral("gemma3"), QStringLiteral("qwen3")}), 5'000);
+    QCOMPARE(requestCount, 1);
+    QVERIFY(controller.aiModelsError().isEmpty());
+}
+
+void AppControllerTests::refreshesConfiguredAiModelsInBackground()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    QTcpServer provider;
+    QVERIFY(provider.listen(QHostAddress::LocalHost, 0));
+    int requestCount = 0;
+    connect(&provider, &QTcpServer::newConnection, &provider, [&] {
+        while (provider.hasPendingConnections())
+        {
+            QTcpSocket *socket = provider.nextPendingConnection();
+            QVERIFY(socket != nullptr);
+            auto request = std::make_shared<QByteArray>();
+            connect(socket, &QTcpSocket::readyRead, socket, [socket, request, &requestCount] {
+                request->append(socket->readAll());
+                if (!request->contains("\r\n\r\n"))
+                {
+                    return;
+                }
+                ++requestCount;
+                const bool fail = requestCount >= 4;
+                const QByteArray body = fail ? QByteArrayLiteral(R"({"error":"temporary catalog failure"})")
+                                             : QByteArrayLiteral(R"({"data":[{"id":"model-a"},{"id":"model-b"}]})");
+                QByteArray response =
+                    fail ? QByteArrayLiteral("HTTP/1.1 500 Internal Server Error\r\nContent-Type: "
+                                             "application/json\r\nConnection: close\r\nContent-Length: ")
+                         : QByteArrayLiteral("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: "
+                                             "close\r\nContent-Length: ");
+                response += QByteArray::number(body.size());
+                response += QByteArrayLiteral("\r\n\r\n");
+                response += body;
+                socket->write(response);
+                socket->disconnectFromHost();
+            });
+        }
+    });
+
+    const QString profilesPath = directory.filePath(QStringLiteral("profiles.json"));
+    const QString knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json"));
+    const QString settingsPath = directory.filePath(QStringLiteral("settings.json"));
+    const auto sessionState = std::make_shared<FakeLocalSessionState>();
+    ztermy::AppController controller(profilesPath, knownHostsPath, settingsPath, [sessionState] {
+        return std::make_unique<FakeLocalTerminalSession>(sessionState);
+    });
+    const QString endpoint = QStringLiteral("http://127.0.0.1:%1/v1").arg(provider.serverPort());
+    QVERIFY(controller.saveAiProviderConfiguration(QStringLiteral("openai-compatible"), endpoint,
+                                                   QStringLiteral("model-a"), false, QStringLiteral("auto"),
+                                                   QStringLiteral("test-api-key"), false, QStringLiteral("auto")));
+    QVERIFY(!controller.aiModelsLoading());
+
+    QTRY_COMPARE_WITH_TIMEOUT(controller.aiAvailableModels(),
+                              QStringList({QStringLiteral("model-a"), QStringLiteral("model-b")}), 5'000);
+    QCOMPARE(requestCount, 1);
+    QVERIFY(controller.aiModelsError().isEmpty());
+
+    QVERIFY(!controller.startLocalTerminal().isEmpty());
+    QTRY_COMPARE_WITH_TIMEOUT(requestCount, 2, 5'000);
+    QVERIFY(controller.toggleTerminalWorkbench(QStringLiteral("ai")));
+    QTRY_COMPARE_WITH_TIMEOUT(requestCount, 3, 5'000);
+    QCOMPARE(controller.aiAvailableModels(), QStringList({QStringLiteral("model-a"), QStringLiteral("model-b")}));
+    QVERIFY(controller.aiModelsError().isEmpty());
+
+    QVERIFY(controller.toggleTerminalWorkbench(QStringLiteral("ai")));
+    QVERIFY(controller.toggleTerminalWorkbench(QStringLiteral("ai")));
+    QTRY_COMPARE_WITH_TIMEOUT(requestCount, 4, 5'000);
+    QTest::qWait(50);
+    QCOMPARE(controller.aiAvailableModels(), QStringList({QStringLiteral("model-a"), QStringLiteral("model-b")}));
+    QVERIFY(controller.aiModelsError().isEmpty());
 }
 
 void AppControllerTests::managesMcpServerConfiguration()

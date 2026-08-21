@@ -2175,6 +2175,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     loadQuickCommands();
     loadWorkspaceState();
     refreshNotes();
+    initializeAiModelCatalogRefresh();
 }
 
 AppController::AppController(QString profileStorePath, QString knownHostsPath, QString settingsPath,
@@ -2261,6 +2262,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     loadQuickCommands();
     loadWorkspaceState();
     refreshNotes();
+    initializeAiModelCatalogRefresh();
 }
 
 AppController::~AppController()
@@ -4509,6 +4511,7 @@ bool AppController::toggleTerminalWorkbench(const QString &page)
         }
         else if (page == QStringLiteral("ai"))
         {
+            refreshConfiguredAiModels();
             static_cast<void>(buildAiContext(*tab, false));
             emit aiConversationChanged();
         }
@@ -7996,7 +7999,12 @@ bool AppController::saveAiProviderConfiguration(const QString &provider, const Q
     {
         return false;
     }
-    return apiKey.isEmpty() || saveAiApiKey(apiKey);
+    if (!apiKey.isEmpty() && !saveAiApiKey(apiKey))
+    {
+        return false;
+    }
+    refreshConfiguredAiModels();
+    return true;
 }
 
 QVariantMap AppController::aiReasoningCapabilities(const QString &provider, const QString &model) const
@@ -8059,11 +8067,24 @@ QString AppController::aiProviderEndpointPreview(const QString &provider, const 
 
 void AppController::refreshAiModels(const QString &provider, const QString &baseUrl, const QString &apiKey)
 {
+    refreshAiModelsInternal(provider, baseUrl, apiKey, false);
+}
+
+void AppController::refreshAiModelsInternal(const QString &provider, const QString &baseUrl, const QString &apiKey,
+                                            const bool background)
+{
     const auto parsedProvider = config::parseAiProviderPreference(provider);
     if (!parsedProvider)
     {
-        m_aiModelsError = tr("Choose a supported model provider.");
-        emit aiModelsChanged();
+        if (!background)
+        {
+            m_aiModelsError = tr("Choose a supported model provider.");
+            emit aiModelsChanged();
+        }
+        return;
+    }
+    if (background && m_aiModelsReply)
+    {
         return;
     }
     ++m_aiModelsRequestGeneration;
@@ -8098,17 +8119,23 @@ void AppController::refreshAiModels(const QString &provider, const QString &base
     if (!request.has_value())
     {
         m_aiModelsLoading = false;
-        m_aiModelsError = QString::fromStdString(request.error().message);
-        emit aiModelsChanged();
+        if (!background)
+        {
+            m_aiModelsError = QString::fromStdString(request.error().message);
+            emit aiModelsChanged();
+        }
         return;
     }
 
-    m_aiModelsLoading = true;
-    m_aiModelsError.clear();
-    emit aiModelsChanged();
+    if (!background)
+    {
+        m_aiModelsLoading = true;
+        m_aiModelsError.clear();
+        emit aiModelsChanged();
+    }
     auto *reply = m_aiModelNetwork.get(*request);
     m_aiModelsReply = reply;
-    connect(reply, &QNetworkReply::finished, this, [this, reply, generation, kind = configuration.kind] {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, generation, kind = configuration.kind, background] {
         if (generation != m_aiModelsRequestGeneration || m_aiModelsReply != reply)
         {
             reply->deleteLater();
@@ -8116,11 +8143,13 @@ void AppController::refreshAiModels(const QString &provider, const QString &base
         }
         m_aiModelsReply = nullptr;
         m_aiModelsLoading = false;
+        QString error;
+        QStringList models;
         const auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         if (reply->error() != QNetworkReply::NoError || status >= 400)
         {
-            m_aiModelsError = status > 0 ? tr("Could not fetch models (HTTP %1).").arg(status)
-                                         : tr("Could not reach the model provider.");
+            error = status > 0 ? tr("Could not fetch models (HTTP %1).").arg(status)
+                               : tr("Could not reach the model provider.");
         }
         else
         {
@@ -8128,25 +8157,39 @@ void AppController::refreshAiModels(const QString &provider, const QString &base
             const auto body = reply->read(maximumCatalogBytes + 1);
             if (body.size() > maximumCatalogBytes)
             {
-                m_aiModelsError = tr("The provider model list is too large.");
+                error = tr("The provider model list is too large.");
             }
             else
             {
                 const auto parsed = ai::ProviderModelCatalog::parse(kind, body);
                 if (parsed.has_value())
                 {
-                    m_aiAvailableModels = *parsed;
-                    m_aiModelsError =
-                        m_aiAvailableModels.isEmpty() ? tr("The provider returned no models.") : QString{};
+                    models = *parsed;
+                    if (models.isEmpty())
+                    {
+                        error = tr("The provider returned no models.");
+                    }
                 }
                 else
                 {
-                    m_aiModelsError = QString::fromStdString(parsed.error().message);
+                    error = QString::fromStdString(parsed.error().message);
                 }
             }
         }
+        if (error.isEmpty())
+        {
+            m_aiAvailableModels = std::move(models);
+            m_aiModelsError.clear();
+        }
+        else if (!background)
+        {
+            m_aiModelsError = std::move(error);
+        }
         reply->deleteLater();
-        emit aiModelsChanged();
+        if (error.isEmpty() || !background)
+        {
+            emit aiModelsChanged();
+        }
     });
 }
 
@@ -13766,6 +13809,35 @@ void AppController::loadApplicationSettings()
             break;
     }
     m_credentialVaults->select(selected);
+}
+
+void AppController::initializeAiModelCatalogRefresh()
+{
+    m_aiModelRefreshObservedTabCount = m_tabs.size();
+    connect(this, &AppController::terminalTabsChanged, this, [this] {
+        const std::size_t currentTabCount = m_tabs.size();
+        if (currentTabCount > m_aiModelRefreshObservedTabCount)
+        {
+            refreshConfiguredAiModels();
+        }
+        m_aiModelRefreshObservedTabCount = currentTabCount;
+    });
+    QTimer::singleShot(0, this, [this] {
+        refreshConfiguredAiModels();
+    });
+}
+
+void AppController::refreshConfiguredAiModels()
+{
+    if (m_settings.aiBaseUrl.trimmed().isEmpty())
+    {
+        return;
+    }
+    if (m_settings.aiProvider != config::AiProviderPreference::ollama && !aiApiKeyConfigured())
+    {
+        return;
+    }
+    refreshAiModelsInternal(config::aiProviderPreferenceToken(m_settings.aiProvider), m_settings.aiBaseUrl, {}, true);
 }
 
 void AppController::loadAiPermissionRules()

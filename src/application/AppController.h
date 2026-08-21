@@ -890,6 +890,10 @@ private:
     void resolvePortForwardingHostKey(PortForwardingRuntime &runtime, ssh::UnknownHostKeyDecision decision) noexcept;
     void stopAllPortForwardingRules() noexcept;
     void loadApplicationSettings();
+    void initializeAiModelCatalogRefresh();
+    void refreshConfiguredAiModels();
+    void refreshAiModelsInternal(const QString &provider, const QString &baseUrl, const QString &apiKey,
+                                 bool background);
     void loadAiQuickMessages();
     void loadQuickCommands();
     void loadWorkspaceState();
@@ -1026,6 +1030,7 @@ private:
     bool m_openAiUserSkillsAfterReload = false;
     quint64 m_aiModelsRequestGeneration = 0;
     bool m_aiModelsLoading = false;
+    std::size_t m_aiModelRefreshObservedTabCount = 0;
     ai::AiContextBroker m_aiContextBroker;
     ai::AiCommandTracker m_aiCommandTracker;
     ai::AiActionToolDispatcher m_aiActionToolDispatcher;
