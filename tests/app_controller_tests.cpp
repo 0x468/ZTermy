@@ -1497,7 +1497,7 @@ void AppControllerTests::retriesProviderResponseWithoutRepeatingCompletedTool()
     int originalPromptCount = 0;
     bool foundToolEvidence = false;
     bool foundRetryContinuation = false;
-    for (const QJsonValue &value : retryMessages)
+    for (const auto &value : retryMessages)
     {
         const QString content = value.toObject().value(QStringLiteral("content")).toString();
         originalPromptCount += content == QStringLiteral("Inspect disk usage") ? 1 : 0;

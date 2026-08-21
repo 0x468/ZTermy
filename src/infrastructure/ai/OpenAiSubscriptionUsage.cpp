@@ -65,8 +65,8 @@ parseLimit(const QJsonObject &object, QString name = {}, QString meteredFeature 
         .meteredFeature = std::move(meteredFeature),
         .allowed = !object.contains(QStringLiteral("allowed")) || object.value(QStringLiteral("allowed")).toBool(),
         .reached = object.value(QStringLiteral("limit_reached")).toBool(),
-        .primary = std::move(*primary),
-        .secondary = std::move(*secondary),
+        .primary = *primary,
+        .secondary = *secondary,
     };
 }
 
@@ -130,7 +130,7 @@ std::expected<OpenAiSubscriptionUsageSnapshot, AiProviderError> OpenAiSubscripti
     }
     const QJsonArray additional = root.value(QStringLiteral("additional_rate_limits")).toArray();
     snapshot.additional.reserve(static_cast<std::size_t>(std::min(additional.size(), qsizetype{16})));
-    for (const QJsonValue &value : additional)
+    for (const auto &value : additional)
     {
         if (snapshot.additional.size() >= 16 || !value.isObject())
         {

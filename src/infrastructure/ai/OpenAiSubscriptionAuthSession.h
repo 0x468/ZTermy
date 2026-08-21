@@ -62,7 +62,7 @@ public:
 private:
     void acceptConnections();
     void consumeCallback(QTcpSocket *socket);
-    void exchangeAuthorizationCode(QByteArray code);
+    void exchangeAuthorizationCode(const QByteArray &code);
     void finish(Result result);
     void resetTransport() noexcept;
 

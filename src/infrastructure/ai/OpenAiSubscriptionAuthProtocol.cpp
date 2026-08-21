@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cstring>
 #include <limits>
+#include <utility>
 
 namespace
 {
@@ -159,7 +160,7 @@ OpenAiSubscriptionAuthProtocol::parseTokenResponse(const QByteArrayView body, co
         return std::unexpected(OpenAiSubscriptionAuthError::missingRefreshToken);
     }
     const qint64 expires = object.value(QStringLiteral("expires_in")).toInteger(3600);
-    if (expires <= 0 || expires > std::numeric_limits<std::uint32_t>::max())
+    if (expires <= 0 || std::cmp_greater(expires, std::numeric_limits<std::uint32_t>::max()))
     {
         return std::unexpected(OpenAiSubscriptionAuthError::invalidResponse);
     }
@@ -194,7 +195,7 @@ std::optional<qint64> OpenAiSubscriptionAuthProtocol::expirationUtcSeconds(const
 
 QUrl OpenAiSubscriptionAuthProtocol::issuerUrl()
 {
-    return QUrl(QString::fromLatin1(Issuer));
+    return {QString::fromLatin1(Issuer)};
 }
 
 QUrl OpenAiSubscriptionAuthProtocol::tokenUrl()
@@ -204,7 +205,7 @@ QUrl OpenAiSubscriptionAuthProtocol::tokenUrl()
 
 QUrl OpenAiSubscriptionAuthProtocol::inferenceUrl()
 {
-    return QUrl(QString::fromLatin1(InferenceEndpoint));
+    return {QString::fromLatin1(InferenceEndpoint)};
 }
 
 QUrl OpenAiSubscriptionAuthProtocol::modelsUrl(const QString &clientVersion)
@@ -221,12 +222,12 @@ QUrl OpenAiSubscriptionAuthProtocol::modelsUrl(const QString &clientVersion)
 
 QUrl OpenAiSubscriptionAuthProtocol::usageUrl()
 {
-    return QUrl(QString::fromLatin1(UsageEndpoint));
+    return {QString::fromLatin1(UsageEndpoint)};
 }
 
 QByteArray OpenAiSubscriptionAuthProtocol::clientId()
 {
-    return QByteArray(ClientId);
+    return {ClientId};
 }
 
 } // namespace ztermy::ai

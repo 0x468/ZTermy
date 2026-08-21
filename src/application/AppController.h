@@ -929,8 +929,8 @@ private:
     using AiSubscriptionAccessHandler =
         std::function<void(std::expected<security::SensitiveByteArray, ai::AiProviderError>, QString)>;
     void withAiChatGptAccessToken(AiSubscriptionAccessHandler handler);
-    void startAiModelsRequest(QNetworkRequest request, quint64 generation, ai::AiProviderKind kind, bool background,
-                              bool openAiSubscription);
+    void startAiModelsRequest(const QNetworkRequest &request, quint64 generation, ai::AiProviderKind kind,
+                              bool background, bool openAiSubscription);
     void refreshAiChatGptUsageInternal(bool background);
     void loadAiQuickMessages();
     void loadQuickCommands();

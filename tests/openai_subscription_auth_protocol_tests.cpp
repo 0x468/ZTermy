@@ -16,6 +16,16 @@
 namespace
 {
 
+template <typename T>
+[[nodiscard]] T &requiredOptionalValue(std::optional<T> &value)
+{
+    if (!value.has_value())
+    {
+        qFatal("Required test result is missing.");
+    }
+    return *value;
+}
+
 [[nodiscard]] QByteArray bytes(const ztermy::security::SensitiveByteArray &secret)
 {
     const std::string_view view = secret.view();
@@ -70,7 +80,7 @@ public:
 
     [[nodiscard]] QUrl url() const
     {
-        return QUrl(QStringLiteral("http://127.0.0.1:%1/oauth/token").arg(m_server.serverPort()));
+        return {QStringLiteral("http://127.0.0.1:%1/oauth/token").arg(m_server.serverPort())};
     }
 
     [[nodiscard]] const QByteArray &request() const noexcept { return m_request; }
@@ -104,7 +114,7 @@ public:
 
     [[nodiscard]] QUrl url() const
     {
-        return QUrl(QStringLiteral("http://127.0.0.1:%1/oauth/token").arg(m_server.serverPort()));
+        return {QStringLiteral("http://127.0.0.1:%1/oauth/token").arg(m_server.serverPort())};
     }
 
 private:
@@ -243,10 +253,11 @@ void OpenAiSubscriptionAuthProtocolTests::browserSessionCompletesThroughLoopback
     QNetworkReply *browserReply = network.get(QNetworkRequest(callback));
 
     QTRY_VERIFY_WITH_TIMEOUT(result.has_value(), 3000);
-    QVERIFY(result->has_value());
-    QCOMPARE(bytes(result->value().accessToken), QByteArrayLiteral("access"));
-    QCOMPARE(bytes(result->value().refreshToken), QByteArrayLiteral("refresh"));
-    QCOMPARE(result->value().accountId, QStringLiteral("account-1"));
+    auto &completed = requiredOptionalValue(result);
+    QVERIFY(completed.has_value());
+    QCOMPARE(bytes(completed.value().accessToken), QByteArrayLiteral("access"));
+    QCOMPARE(bytes(completed.value().refreshToken), QByteArrayLiteral("refresh"));
+    QCOMPARE(completed.value().accountId, QStringLiteral("account-1"));
     QTRY_COMPARE_WITH_TIMEOUT(browserReply->error(), QNetworkReply::NoError, 1000);
     QVERIFY(tokenServer.request().contains(QByteArrayLiteral("grant_type=authorization_code")));
     QVERIFY(!session.active());
@@ -273,8 +284,9 @@ void OpenAiSubscriptionAuthProtocolTests::browserSessionRejectsMismatchedState()
     QNetworkReply *browserReply = network.get(QNetworkRequest(callback));
 
     QTRY_VERIFY_WITH_TIMEOUT(result.has_value(), 2000);
-    QVERIFY(!result->has_value());
-    QCOMPARE(result->error().code, ztermy::ai::OpenAiSubscriptionSessionErrorCode::callbackRejected);
+    auto &completed = requiredOptionalValue(result);
+    QVERIFY(!completed.has_value());
+    QCOMPARE(completed.error().code, ztermy::ai::OpenAiSubscriptionSessionErrorCode::callbackRejected);
     QVERIFY(tokenServer.request().isEmpty());
     browserReply->deleteLater();
 }
@@ -292,8 +304,9 @@ void OpenAiSubscriptionAuthProtocolTests::browserSessionCanBeCancelled()
     QVERIFY(started);
     session.cancel();
     QVERIFY(result.has_value());
-    QVERIFY(!result->has_value());
-    QCOMPARE(result->error().code, ztermy::ai::OpenAiSubscriptionSessionErrorCode::cancelled);
+    auto &completed = requiredOptionalValue(result);
+    QVERIFY(!completed.has_value());
+    QCOMPARE(completed.error().code, ztermy::ai::OpenAiSubscriptionSessionErrorCode::cancelled);
     QVERIFY(!session.active());
 }
 
@@ -311,9 +324,10 @@ void OpenAiSubscriptionAuthProtocolTests::refreshesAndRetainsUnrotatedRefreshTok
         tokenServer.url());
     QVERIFY(started.has_value());
     QTRY_VERIFY_WITH_TIMEOUT(result.has_value(), 3000);
-    QVERIFY(result->has_value());
-    QCOMPARE(bytes(result->value().accessToken), QByteArrayLiteral("access"));
-    QCOMPARE(bytes(result->value().refreshToken), QByteArrayLiteral("old-refresh"));
+    auto &completed = requiredOptionalValue(result);
+    QVERIFY(completed.has_value());
+    QCOMPARE(bytes(completed.value().accessToken), QByteArrayLiteral("access"));
+    QCOMPARE(bytes(completed.value().refreshToken), QByteArrayLiteral("old-refresh"));
     QVERIFY(tokenServer.request().contains(QByteArrayLiteral("grant_type=refresh_token")));
     QVERIFY(tokenServer.request().contains(QByteArrayLiteral("refresh_token=old-refresh")));
     QVERIFY(!refresher.active());
@@ -333,12 +347,13 @@ void OpenAiSubscriptionAuthProtocolTests::classifiesRefreshRateLimits()
         server.url());
     QVERIFY(started.has_value());
     QTRY_VERIFY_WITH_TIMEOUT(result.has_value(), 3000);
-    QVERIFY(!result->has_value());
-    QCOMPARE(result->error().code, ztermy::ai::AiProviderErrorCode::rateLimited);
-    QCOMPARE(result->error().httpStatus, std::optional<std::uint16_t>{429});
-    QCOMPARE(result->error().retryAfterMilliseconds, std::optional<std::uint64_t>{3000});
-    QVERIFY(result->error().retryable);
-    QCOMPARE(result->error().message, std::string("Token refresh is temporarily rate limited."));
+    auto &completed = requiredOptionalValue(result);
+    QVERIFY(!completed.has_value());
+    QCOMPARE(completed.error().code, ztermy::ai::AiProviderErrorCode::rateLimited);
+    QCOMPARE(completed.error().httpStatus, std::optional<std::uint16_t>{429});
+    QCOMPARE(completed.error().retryAfterMilliseconds, std::optional<std::uint64_t>{3000});
+    QVERIFY(completed.error().retryable);
+    QCOMPARE(completed.error().message, std::string("Token refresh is temporarily rate limited."));
 }
 
 void OpenAiSubscriptionAuthProtocolTests::preparesAndParsesSubscriptionUsage()
@@ -375,8 +390,8 @@ void OpenAiSubscriptionAuthProtocolTests::preparesAndParsesSubscriptionUsage()
     QVERIFY(usage->codex.allowed);
     QVERIFY(!usage->codex.reached);
     QVERIFY(usage->codex.primary.has_value());
-    QCOMPARE(usage->codex.primary->usedPercent, 18.5);
-    QCOMPARE(usage->codex.secondary->durationSeconds, qint64{604800});
+    QCOMPARE(requiredOptionalValue(usage->codex.primary).usedPercent, 18.5);
+    QCOMPARE(requiredOptionalValue(usage->codex.secondary).durationSeconds, qint64{604800});
     QCOMPARE(usage->additional.size(), std::size_t{1});
     QCOMPARE(usage->additional.front().name, QStringLiteral("Fast model"));
     QCOMPARE(usage->creditBalance, QStringLiteral("12.50"));

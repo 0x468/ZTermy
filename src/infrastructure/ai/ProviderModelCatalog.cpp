@@ -126,7 +126,7 @@ std::expected<QStringList, AiProviderError> ProviderModelCatalog::parseOpenAiSub
     std::vector<Entry> entries;
     const QJsonArray values = document.object().value(QStringLiteral("models")).toArray();
     entries.reserve(static_cast<std::size_t>(values.size()));
-    for (const QJsonValue &value : values)
+    for (const auto &value : values)
     {
         const QJsonObject object = value.toObject();
         if (object.contains(QStringLiteral("supported_in_api"))

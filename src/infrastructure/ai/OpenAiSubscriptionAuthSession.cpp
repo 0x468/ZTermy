@@ -9,7 +9,7 @@
 namespace
 {
 
-constexpr qsizetype MaximumCallbackBytes = 16 * 1024;
+constexpr qsizetype MaximumCallbackBytes = qsizetype{16} * 1024;
 constexpr int AuthorizationTimeoutMilliseconds = 5 * 60 * 1000;
 
 void replyToBrowser(QTcpSocket *socket, const int status, const QByteArrayView title, const QByteArrayView message)
@@ -203,7 +203,7 @@ void OpenAiSubscriptionAuthSession::consumeCallback(QTcpSocket *socket)
     exchangeAuthorizationCode(code);
 }
 
-void OpenAiSubscriptionAuthSession::exchangeAuthorizationCode(QByteArray code)
+void OpenAiSubscriptionAuthSession::exchangeAuthorizationCode(const QByteArray &code)
 {
     QNetworkRequest request(m_endpoints.token);
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/x-www-form-urlencoded"));
@@ -262,7 +262,7 @@ void OpenAiSubscriptionAuthSession::resetTransport() noexcept
         m_tokenReply = nullptr;
     }
     m_pkce = {};
-    m_redirectUri = {};
+    m_redirectUri = QUrl{};
 }
 
 } // namespace ztermy::ai
