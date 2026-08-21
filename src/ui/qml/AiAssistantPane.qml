@@ -12,7 +12,7 @@ Rectangle {
     required property var controller
     required property var activeTab
     readonly property bool busy: controller.activeAiState === "starting" || controller.activeAiState === "retrying" || controller.activeAiState === "streaming" || controller.activeAiState === "cancelling"
-    readonly property bool assistantConfigured: controller.aiBaseUrl.trim().length > 0 && controller.aiModel.trim().length > 0 && (controller.aiProviderPreference === "ollama" || controller.aiApiKeyConfigured)
+    readonly property bool assistantConfigured: controller.aiModel.trim().length > 0 && (controller.aiProviderPreference === "openai-chatgpt" ? controller.aiChatGptConfigured : controller.aiBaseUrl.trim().length > 0 && (controller.aiProviderPreference === "ollama" || controller.aiApiKeyConfigured))
     readonly property var conversation: controller.activeAiConversation
     readonly property var contextCompaction: controller.activeAiCompaction || ({})
     readonly property var toolApproval: controller.activeAiToolApproval || ({
@@ -200,6 +200,27 @@ Rectangle {
         default:
             return qsTr("Ready");
         }
+    }
+
+    function subscriptionUsageSummary() {
+        const usage = controller.aiChatGptUsage || ({});
+        if (usage.state === "loading")
+            return qsTr("Checking Codex allowance…");
+        if (usage.state === "error")
+            return usage.error || qsTr("Codex allowance is unavailable.");
+        const limits = usage.limits || [];
+        if (usage.state !== "ready" || limits.length === 0)
+            return qsTr("Click to check Codex allowance");
+        const parts = [];
+        if (usage.planType)
+            parts.push(String(usage.planType).toUpperCase());
+        const primary = limits[0].primary || ({});
+        const secondary = limits[0].secondary || ({});
+        if (primary.remainingPercent !== undefined)
+            parts.push(qsTr("%1% left in the current window").arg(Math.round(Number(primary.remainingPercent))));
+        if (secondary.remainingPercent !== undefined)
+            parts.push(qsTr("%1% weekly left").arg(Math.round(Number(secondary.remainingPercent))));
+        return parts.join(" · ");
     }
 
     function toolStateLabel(state, resultCode) {
@@ -574,8 +595,11 @@ Rectangle {
     Accessible.role: Accessible.Pane
     Accessible.name: qsTr("Terminal AI assistant")
     onVisibleChanged: {
-        if (visible)
+        if (visible) {
             focusEditor();
+            if (controller.aiProviderPreference === "openai-chatgpt" && controller.aiChatGptConfigured)
+                controller.refreshAiChatGptUsage();
+        }
     }
 
     ColumnLayout {
@@ -617,6 +641,20 @@ Rectangle {
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.textBody
                         font.weight: Font.DemiBold
+                    }
+                }
+
+                ContextToolButton {
+                    visible: pane.controller.aiProviderPreference === "openai-chatgpt" && pane.controller.aiChatGptConfigured
+                    enabled: pane.controller.aiChatGptUsage.state !== "loading"
+                    Accessible.name: pane.subscriptionUsageSummary()
+                    onClicked: pane.controller.refreshAiChatGptUsage()
+                    contentItem: AppIcon {
+                        name: "activity"
+                        color: pane.controller.aiChatGptUsage.state === "error" ? Theme.danger : Theme.textMuted
+                    }
+                    AppToolTip {
+                        text: pane.subscriptionUsageSummary()
                     }
                 }
 

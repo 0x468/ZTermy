@@ -18,6 +18,7 @@ constexpr auto ClientId = "app_EMoamEEZ73f0CkXaXp7hrann";
 constexpr auto Issuer = "https://auth.openai.com";
 constexpr auto InferenceEndpoint = "https://chatgpt.com/backend-api/codex/responses";
 constexpr auto ModelsEndpoint = "https://chatgpt.com/backend-api/codex/models";
+constexpr auto UsageEndpoint = "https://chatgpt.com/backend-api/codex/usage";
 
 [[nodiscard]] QByteArray base64Url(const QByteArrayView bytes)
 {
@@ -216,6 +217,11 @@ QUrl OpenAiSubscriptionAuthProtocol::modelsUrl(const QString &clientVersion)
     }
     url.setQuery(query);
     return url;
+}
+
+QUrl OpenAiSubscriptionAuthProtocol::usageUrl()
+{
+    return QUrl(QString::fromLatin1(UsageEndpoint));
 }
 
 QByteArray OpenAiSubscriptionAuthProtocol::clientId()

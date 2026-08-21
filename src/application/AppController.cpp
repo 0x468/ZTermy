@@ -80,6 +80,29 @@ public:
     }
 };
 
+[[nodiscard]] QVariantMap
+subscriptionUsageWindowValue(const std::optional<ztermy::ai::OpenAiSubscriptionUsageWindow> &window)
+{
+    if (!window.has_value())
+    {
+        return {};
+    }
+    return {{QStringLiteral("usedPercent"), window->usedPercent},
+            {QStringLiteral("remainingPercent"), std::clamp(100.0 - window->usedPercent, 0.0, 100.0)},
+            {QStringLiteral("durationSeconds"), window->durationSeconds},
+            {QStringLiteral("resetAtUtcSeconds"), window->resetAtUtcSeconds}};
+}
+
+[[nodiscard]] QVariantMap subscriptionUsageLimitValue(const ztermy::ai::OpenAiSubscriptionUsageLimit &limit)
+{
+    return {{QStringLiteral("name"), limit.name},
+            {QStringLiteral("meteredFeature"), limit.meteredFeature},
+            {QStringLiteral("allowed"), limit.allowed},
+            {QStringLiteral("reached"), limit.reached},
+            {QStringLiteral("primary"), subscriptionUsageWindowValue(limit.primary)},
+            {QStringLiteral("secondary"), subscriptionUsageWindowValue(limit.secondary)}};
+}
+
 constexpr std::size_t maximumRecentHostProfiles = 6;
 constexpr quint64 aiSftpListRequestFlag = quint64{1} << 63U;
 constexpr qsizetype maximumAiTextAttachmentBytes = qsizetype{256} * 1024;
@@ -3446,6 +3469,32 @@ QString AppController::aiChatGptAccountId() const
 QString AppController::aiChatGptAuthError() const
 {
     return m_aiChatGptAuthError;
+}
+
+QVariantMap AppController::aiChatGptUsage() const
+{
+    QVariantMap value{{QStringLiteral("state"), m_aiSubscriptionUsageLoading            ? QStringLiteral("loading")
+                                                : !m_aiSubscriptionUsageError.isEmpty() ? QStringLiteral("error")
+                                                : m_aiSubscriptionUsage.has_value()     ? QStringLiteral("ready")
+                                                                                        : QStringLiteral("idle")},
+                      {QStringLiteral("error"), m_aiSubscriptionUsageError}};
+    if (!m_aiSubscriptionUsage.has_value())
+    {
+        return value;
+    }
+    QVariantList limits;
+    limits.reserve(static_cast<qsizetype>(m_aiSubscriptionUsage->additional.size() + 1));
+    limits.push_back(subscriptionUsageLimitValue(m_aiSubscriptionUsage->codex));
+    for (const auto &limit : m_aiSubscriptionUsage->additional)
+    {
+        limits.push_back(subscriptionUsageLimitValue(limit));
+    }
+    value.insert(QStringLiteral("planType"), m_aiSubscriptionUsage->planType);
+    value.insert(QStringLiteral("limits"), limits);
+    value.insert(QStringLiteral("hasCredits"), m_aiSubscriptionUsage->hasCredits);
+    value.insert(QStringLiteral("unlimitedCredits"), m_aiSubscriptionUsage->unlimitedCredits);
+    value.insert(QStringLiteral("creditBalance"), m_aiSubscriptionUsage->creditBalance);
+    return value;
 }
 
 QObject *AppController::aiActivity() noexcept
@@ -8090,6 +8139,10 @@ bool AppController::saveAiProviderConfiguration(const QString &provider, const Q
         return false;
     }
     refreshConfiguredAiModels();
+    if (*parsedProvider == config::AiProviderPreference::openAiChatGpt)
+    {
+        refreshAiChatGptUsageInternal(true);
+    }
     return true;
 }
 
@@ -8556,6 +8609,7 @@ bool AppController::beginAiChatGptSignIn()
         emit credentialVaultChanged();
         emit aiSubscriptionAuthChanged();
         refreshConfiguredAiModels();
+        refreshAiChatGptUsageInternal(true);
     });
     if (!started)
     {
@@ -8588,6 +8642,13 @@ bool AppController::signOutAiChatGpt()
     {
         m_aiSubscriptionTokenRefresher->cancel();
     }
+    ++m_aiSubscriptionUsageGeneration;
+    if (m_aiSubscriptionUsageReply)
+    {
+        m_aiSubscriptionUsageReply->abort();
+        m_aiSubscriptionUsageReply->deleteLater();
+        m_aiSubscriptionUsageReply = nullptr;
+    }
     ai::AiSecretStore store(m_credentialVaults->active());
     const auto removed =
         store.removeOAuthTokens(aiCredentialReference(config::AiProviderPreference::openAiChatGpt).toStdString());
@@ -8599,9 +8660,134 @@ bool AppController::signOutAiChatGpt()
     }
     m_aiChatGptAccountId.clear();
     m_aiChatGptAuthError.clear();
+    m_aiSubscriptionUsage.reset();
+    m_aiSubscriptionUsageError.clear();
+    m_aiSubscriptionUsageLoading = false;
     emit credentialVaultChanged();
     emit aiSubscriptionAuthChanged();
+    emit aiSubscriptionUsageChanged();
     return true;
+}
+
+void AppController::refreshAiChatGptUsage()
+{
+    refreshAiChatGptUsageInternal(false);
+}
+
+void AppController::refreshAiChatGptUsageInternal(const bool background)
+{
+    if (!aiChatGptConfigured())
+    {
+        if (!background)
+        {
+            m_aiSubscriptionUsageError = tr("Sign in with ChatGPT to view subscription usage.");
+            emit aiSubscriptionUsageChanged();
+        }
+        return;
+    }
+    if (background && m_aiSubscriptionUsageReply)
+    {
+        return;
+    }
+    ++m_aiSubscriptionUsageGeneration;
+    const quint64 generation = m_aiSubscriptionUsageGeneration;
+    if (m_aiSubscriptionUsageReply)
+    {
+        m_aiSubscriptionUsageReply->abort();
+        m_aiSubscriptionUsageReply->deleteLater();
+        m_aiSubscriptionUsageReply = nullptr;
+    }
+    m_aiSubscriptionUsageLoading = true;
+    if (!background)
+    {
+        m_aiSubscriptionUsageError.clear();
+    }
+    emit aiSubscriptionUsageChanged();
+    withAiChatGptAccessToken([this, generation, background](auto accessToken, const QString &accountId) mutable {
+        if (generation != m_aiSubscriptionUsageGeneration)
+        {
+            return;
+        }
+        if (!accessToken.has_value())
+        {
+            m_aiSubscriptionUsageLoading = false;
+            if (!background)
+            {
+                m_aiSubscriptionUsageError = QString::fromStdString(accessToken.error().message);
+            }
+            if (accessToken.error().code == ai::AiProviderErrorCode::authentication)
+            {
+                m_aiChatGptAuthError = QString::fromStdString(accessToken.error().message);
+                emit aiSubscriptionAuthChanged();
+            }
+            emit aiSubscriptionUsageChanged();
+            return;
+        }
+        auto request = ai::OpenAiSubscriptionUsage::prepareRequest(std::move(*accessToken), accountId,
+                                                                   QCoreApplication::applicationVersion());
+        if (!request.has_value())
+        {
+            m_aiSubscriptionUsageLoading = false;
+            if (!background)
+            {
+                m_aiSubscriptionUsageError = QString::fromStdString(request.error().message);
+            }
+            emit aiSubscriptionUsageChanged();
+            return;
+        }
+        QNetworkReply *reply = m_aiNetwork.get(*request);
+        m_aiSubscriptionUsageReply = reply;
+        connect(reply, &QNetworkReply::finished, this, [this, reply, generation, background] {
+            if (generation != m_aiSubscriptionUsageGeneration || m_aiSubscriptionUsageReply != reply)
+            {
+                reply->deleteLater();
+                return;
+            }
+            m_aiSubscriptionUsageReply = nullptr;
+            m_aiSubscriptionUsageLoading = false;
+            QString error;
+            const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+            if (reply->error() != QNetworkReply::NoError || status >= 400)
+            {
+                error = status == 401 || status == 403 ? tr("ChatGPT sign-in expired. Sign in again.")
+                        : status > 0                   ? tr("Could not fetch ChatGPT usage (HTTP %1).").arg(status)
+                                                       : tr("Could not reach ChatGPT usage.");
+                if (status == 401 || status == 403)
+                {
+                    m_aiChatGptAuthError = error;
+                    emit aiSubscriptionAuthChanged();
+                }
+            }
+            else
+            {
+                constexpr qsizetype maximumUsageBytes = qsizetype{512} * 1024;
+                const QByteArray body = reply->read(maximumUsageBytes + 1);
+                if (body.size() > maximumUsageBytes)
+                {
+                    error = tr("ChatGPT returned an oversized usage response.");
+                }
+                else
+                {
+                    auto parsed = ai::OpenAiSubscriptionUsage::parse(body);
+                    if (parsed.has_value())
+                    {
+                        m_aiSubscriptionUsage = std::move(*parsed);
+                        m_aiSubscriptionUsageError.clear();
+                    }
+                    else
+                    {
+                        error = QString::fromStdString(parsed.error().message);
+                    }
+                }
+            }
+            if (!error.isEmpty() && !background)
+            {
+                m_aiSubscriptionUsageError = std::move(error);
+            }
+            reply->deleteLater();
+            emit aiSubscriptionUsageChanged();
+        });
+    });
 }
 
 bool AppController::saveMcpServer(const QString &id, const QString &nameSpace, const QString &program,
@@ -10704,7 +10890,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
             handleAiStreamEvent(tabId, assistantMessageId, event);
         },
         [this, tabId, assistantMessageId, providerKind = configuration.kind, model = configuration.model,
-         officialOpenAiEndpoint](const auto, const ai::AiTurnMetrics &metrics) {
+         officialOpenAiEndpoint, chatGptSubscription](const auto, const ai::AiTurnMetrics &metrics) {
             TerminalTab *target = findTab(tabId);
             if (target != nullptr)
             {
@@ -10726,6 +10912,10 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
             if (m_activeTabId == tabId || m_focusedTabId == tabId)
             {
                 emit aiConversationChanged();
+            }
+            if (chatGptSubscription)
+            {
+                refreshAiChatGptUsageInternal(true);
             }
         },
         [this, tabId](const auto, const auto, const auto) {
@@ -14308,6 +14498,10 @@ void AppController::initializeAiModelCatalogRefresh()
     });
     QTimer::singleShot(0, this, [this] {
         refreshConfiguredAiModels();
+        if (m_settings.aiProvider == config::AiProviderPreference::openAiChatGpt)
+        {
+            refreshAiChatGptUsageInternal(true);
+        }
     });
 }
 

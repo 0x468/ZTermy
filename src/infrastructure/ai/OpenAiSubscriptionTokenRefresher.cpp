@@ -1,9 +1,14 @@
 #include "infrastructure/ai/OpenAiSubscriptionTokenRefresher.h"
 
+#include "infrastructure/ai/ProviderErrorParser.h"
+
+#include <QDateTime>
 #include <QNetworkRequest>
 #include <QPointer>
 
+#include <charconv>
 #include <cstdint>
+#include <optional>
 #include <string_view>
 #include <utility>
 
@@ -14,6 +19,73 @@ namespace
 {
     const std::string_view value = secret.view();
     return ztermy::security::SensitiveByteArray(QByteArray(value.data(), static_cast<qsizetype>(value.size())));
+}
+
+[[nodiscard]] std::optional<std::uint64_t> retryAfterMilliseconds(const QNetworkReply &reply)
+{
+    const QByteArray header = reply.rawHeader("Retry-After").trimmed();
+    std::uint64_t seconds = 0;
+    const auto parsed = std::from_chars(header.constData(), header.constData() + header.size(), seconds);
+    if (parsed.ec == std::errc{} && parsed.ptr == header.constData() + header.size())
+    {
+        return seconds * 1000;
+    }
+    const QDateTime date = QDateTime::fromString(QString::fromLatin1(header), Qt::RFC2822Date);
+    if (!date.isValid())
+    {
+        return std::nullopt;
+    }
+    const qint64 delay = date.toMSecsSinceEpoch() - QDateTime::currentMSecsSinceEpoch();
+    return delay > 0 ? std::optional<std::uint64_t>{static_cast<std::uint64_t>(delay)}
+                     : std::optional<std::uint64_t>{1};
+}
+
+[[nodiscard]] ztermy::ai::AiProviderError refreshError(QNetworkReply &reply, const int status)
+{
+    using ztermy::ai::AiProviderError;
+    using ztermy::ai::AiProviderErrorCode;
+    AiProviderErrorCode code = AiProviderErrorCode::network;
+    bool retryable = reply.error() != QNetworkReply::SslHandshakeFailedError;
+    if (status == 400 || status == 401 || status == 403)
+    {
+        code = AiProviderErrorCode::authentication;
+        retryable = false;
+    }
+    else if (status == 402)
+    {
+        code = AiProviderErrorCode::quotaExceeded;
+        retryable = false;
+    }
+    else if (status == 429)
+    {
+        code = AiProviderErrorCode::rateLimited;
+        retryable = true;
+    }
+    else if (status >= 500)
+    {
+        code = AiProviderErrorCode::server;
+        retryable = true;
+    }
+    else if (status >= 400)
+    {
+        code = AiProviderErrorCode::invalidRequest;
+        retryable = false;
+    }
+    constexpr qsizetype maximumErrorBytes = qsizetype{64} * 1024;
+    QByteArray body = reply.read(maximumErrorBytes + 1);
+    if (body.size() > maximumErrorBytes)
+    {
+        body.truncate(maximumErrorBytes);
+    }
+    AiProviderError fallback{
+        .code = code,
+        .message = code == AiProviderErrorCode::authentication ? "ChatGPT sign-in expired. Sign in again."
+                                                               : "Could not refresh the ChatGPT sign-in.",
+        .retryAfterMilliseconds = retryAfterMilliseconds(reply),
+        .retryable = retryable,
+        .httpStatus = status > 0 ? std::optional<std::uint16_t>{static_cast<std::uint16_t>(status)} : std::nullopt,
+    };
+    return ztermy::ai::parseProviderErrorBody(body, std::move(fallback));
 }
 
 } // namespace
@@ -88,14 +160,7 @@ std::expected<void, AiProviderError> OpenAiSubscriptionTokenRefresher::start(sec
         const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         if (reply->error() != QNetworkReply::NoError || status >= 400)
         {
-            const bool authenticationFailure = status == 400 || status == 401 || status == 403;
-            guardedThis->finish(std::unexpected(AiProviderError{
-                .code = authenticationFailure ? AiProviderErrorCode::authentication : AiProviderErrorCode::network,
-                .message = authenticationFailure ? "ChatGPT sign-in expired. Sign in again."
-                                                 : "Could not refresh the ChatGPT sign-in.",
-                .retryable = !authenticationFailure,
-                .httpStatus =
-                    status > 0 ? std::optional<std::uint16_t>{static_cast<std::uint16_t>(status)} : std::nullopt}));
+            guardedThis->finish(std::unexpected(refreshError(*reply, status)));
             return;
         }
         constexpr qsizetype maximumTokenResponseBytes = qsizetype{256} * 1024;

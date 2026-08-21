@@ -320,6 +320,16 @@ becomes conversation retention.
 
 Current closure work:
 
+- the built-in assistant now offers a native **OpenAI (ChatGPT subscription)**
+  provider without launching or bridging an external Agent runtime. Browser
+  PKCE authorization, credential refresh, account-bound model discovery,
+  Responses transport, usage-limit display, and typed recovery errors remain
+  inside the provider adapter (`ADR 0102`);
+- one global AI-only proxy setting now covers provider inference, model
+  discovery, ChatGPT authorization/refresh, and usage lookup through system,
+  direct, custom HTTP, or custom SOCKS routing. SSH, SFTP, forwarding, update,
+  and other application networking remain unaffected; schema 22 preserves the
+  monotonic migration contract (`ADR 0101`);
 - a deterministic provider-independent Agent scenario now crosses mode
   evaluation, approval/automatic execution, real ConPTY/PowerShell, semantic
   command blocks, retained `wait_command` output, at-most-once replay, user

@@ -233,6 +233,29 @@ Rectangle {
         return ["system", "direct", "custom"][aiProxyBox.currentIndex];
     }
 
+    function aiSubscriptionWindowLabel(window) {
+        if (!window || window.remainingPercent === undefined)
+            return "";
+        const duration = Number(window.durationSeconds || 0);
+        const period = duration >= 604800 ? qsTr("weekly") : duration >= 3600 ? qsTr("%1 h").arg(Math.round(duration / 3600)) : qsTr("current window");
+        return qsTr("%1 · %2% left").arg(period).arg(Math.round(Number(window.remainingPercent)));
+    }
+
+    function aiSubscriptionUsageSummary() {
+        const usage = controller.aiChatGptUsage || ({});
+        if (usage.state === "loading")
+            return qsTr("Checking Codex allowance…");
+        if (usage.state === "error")
+            return usage.error || qsTr("Codex allowance is unavailable.");
+        const limits = usage.limits || [];
+        if (usage.state !== "ready" || limits.length === 0)
+            return qsTr("Codex allowance has not been checked yet.");
+        const plan = usage.planType ? String(usage.planType).toUpperCase() : qsTr("ChatGPT plan");
+        const primary = aiSubscriptionWindowLabel(limits[0].primary);
+        const secondary = aiSubscriptionWindowLabel(limits[0].secondary);
+        return [plan, primary, secondary].filter(value => value.length > 0).join(" · ");
+    }
+
     function aiRuleMatcherIndex(token) {
         return token === "prefix" ? 1 : token === "glob" ? 2 : token === "regex" ? 3 : token === "all" ? 4 : 0;
     }
@@ -1594,6 +1617,35 @@ Rectangle {
                         }
 
                         Label {
+                            text: qsTr("Codex usage")
+                            color: Theme.text
+                            visible: pane.aiProviderToken() === "openai-chatgpt" && pane.controller.aiChatGptAuthState === "signed-in"
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            spacing: 8
+                            visible: pane.aiProviderToken() === "openai-chatgpt" && pane.controller.aiChatGptAuthState === "signed-in"
+
+                            Text {
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 0
+                                text: pane.aiSubscriptionUsageSummary()
+                                color: pane.controller.aiChatGptUsage.state === "error" ? Theme.danger : Theme.textMuted
+                                wrapMode: Text.WordWrap
+                                font.family: Theme.uiFont
+                                font.pixelSize: Theme.textLabel
+                            }
+
+                            ActionButton {
+                                text: qsTr("Refresh")
+                                iconName: "refresh"
+                                enabled: pane.controller.aiChatGptUsage.state !== "loading"
+                                onClicked: pane.controller.refreshAiChatGptUsage()
+                            }
+                        }
+
+                        Label {
                             text: qsTr("Model")
                             color: Theme.text
                         }
@@ -1619,7 +1671,7 @@ Rectangle {
                                 objectName: "settingsAiFetchModels"
                                 text: pane.controller.aiModelsLoading ? qsTr("Fetching…") : qsTr("Fetch models")
                                 iconName: "refresh"
-                                enabled: !pane.controller.aiModelsLoading && pane.aiBaseUrlDraft.trim().length > 0 && (pane.aiProviderToken() !== "openai-chatgpt" || pane.controller.aiChatGptConfigured)
+                                enabled: !pane.controller.aiModelsLoading && (pane.aiProviderToken() === "openai-chatgpt" ? pane.controller.aiChatGptConfigured : pane.aiBaseUrlDraft.trim().length > 0)
                                 accessibleName: qsTr("Fetch models from this provider")
                                 onClicked: pane.controller.refreshAiModels(pane.aiProviderToken(), pane.aiBaseUrlDraft, aiApiKeyField.text)
                             }

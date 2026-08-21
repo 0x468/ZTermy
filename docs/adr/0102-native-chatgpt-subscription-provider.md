@@ -91,3 +91,14 @@ schema, and unrelated-setting preservation tests under ADR 0101.
 - Browser callbacks, device-code polling, refresh races, cancellation, proxy
   selection, credential replacement, logout, startup restoration, and model
   refresh require deterministic tests before the provider is exposed in UI.
+
+## Implementation status
+
+The native provider now includes browser PKCE authorization, refreshable
+credential persistence, account-bound model discovery and Responses transport,
+AI-only system/direct/custom proxy routing, and bounded Codex allowance lookup.
+Settings and the assistant header expose the current plan and primary/secondary
+remaining percentages without describing them as API credit. Refresh and usage
+requests preserve typed authentication, quota, rate-limit, server, and network
+errors, including `Retry-After`, while all UI-facing network work remains
+asynchronous and cancellable.

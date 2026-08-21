@@ -78,8 +78,11 @@ Optional proxy credentials should use the existing credential store and remain
 an ordinary part of the proxy form rather than introducing a separate vault
 workflow.
 
-The persisted fields require application-settings schema 21. Following ADR
-0101, the same change must include a schema-20 migration fixture and exact
-round-trip tests. Runtime tests should cover direct bypass, custom HTTP and
-SOCKS selection, system-factory selection, model discovery, streaming, proxy
-authentication, and cancellation without blocking the GUI thread.
+The persisted fields use application-settings schema 22. Schema 21 introduced
+the ChatGPT-subscription provider preference; schema 22 adds the AI proxy mode,
+URL, and username while the proxy password remains in the active credential
+store. Following ADR 0101, both transitions have migration fixtures and exact
+round-trip tests. The production AI network manager now applies the selected
+system, direct, custom HTTP, or custom SOCKS proxy to authorization, refresh,
+model discovery, usage lookup, and inference without changing SSH/SFTP or
+other application traffic.

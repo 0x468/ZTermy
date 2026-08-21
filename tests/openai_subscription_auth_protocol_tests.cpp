@@ -1,6 +1,7 @@
 #include "infrastructure/ai/OpenAiSubscriptionAuthProtocol.h"
 #include "infrastructure/ai/OpenAiSubscriptionAuthSession.h"
 #include "infrastructure/ai/OpenAiSubscriptionTokenRefresher.h"
+#include "infrastructure/ai/OpenAiSubscriptionUsage.h"
 
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -80,6 +81,36 @@ private:
     bool m_includeRefreshToken = true;
 };
 
+class FakeRefreshErrorServer final : public QObject
+{
+public:
+    FakeRefreshErrorServer()
+    {
+        QObject::connect(&m_server, &QTcpServer::newConnection, this, [this] {
+            QTcpSocket *socket = m_server.nextPendingConnection();
+            socket->setParent(this);
+            QObject::connect(socket, &QTcpSocket::readyRead, this, [socket] {
+                static_cast<void>(socket->readAll());
+                const QByteArray body = QByteArrayLiteral(
+                    R"({"error":{"message":"Token refresh is temporarily rate limited.","type":"rate_limit_exceeded"}})");
+                socket->write(QByteArrayLiteral("HTTP/1.1 429 Too Many Requests\r\nContent-Type: application/json\r\n"
+                                                "Retry-After: 3\r\nConnection: close\r\nContent-Length: ")
+                              + QByteArray::number(body.size()) + QByteArrayLiteral("\r\n\r\n") + body);
+                socket->disconnectFromHost();
+            });
+        });
+        m_server.listen(QHostAddress::LocalHost, 0);
+    }
+
+    [[nodiscard]] QUrl url() const
+    {
+        return QUrl(QStringLiteral("http://127.0.0.1:%1/oauth/token").arg(m_server.serverPort()));
+    }
+
+private:
+    QTcpServer m_server;
+};
+
 class OpenAiSubscriptionAuthProtocolTests final : public QObject
 {
     Q_OBJECT
@@ -95,6 +126,9 @@ private slots:
     void browserSessionRejectsMismatchedState();
     void browserSessionCanBeCancelled();
     void refreshesAndRetainsUnrotatedRefreshToken();
+    void classifiesRefreshRateLimits();
+    void preparesAndParsesSubscriptionUsage();
+    void rejectsInvalidSubscriptionUsage();
 };
 
 void OpenAiSubscriptionAuthProtocolTests::derivesRfc7636Challenge()
@@ -283,6 +317,81 @@ void OpenAiSubscriptionAuthProtocolTests::refreshesAndRetainsUnrotatedRefreshTok
     QVERIFY(tokenServer.request().contains(QByteArrayLiteral("grant_type=refresh_token")));
     QVERIFY(tokenServer.request().contains(QByteArrayLiteral("refresh_token=old-refresh")));
     QVERIFY(!refresher.active());
+}
+
+void OpenAiSubscriptionAuthProtocolTests::classifiesRefreshRateLimits()
+{
+    FakeRefreshErrorServer server;
+    QNetworkAccessManager network;
+    ztermy::ai::OpenAiSubscriptionTokenRefresher refresher(&network);
+    std::optional<ztermy::ai::OpenAiSubscriptionTokenRefresher::Result> result;
+    const auto started = refresher.start(
+        ztermy::security::SensitiveByteArray(QByteArrayLiteral("refresh")),
+        [&result](ztermy::ai::OpenAiSubscriptionTokenRefresher::Result completed) {
+            result = std::move(completed);
+        },
+        server.url());
+    QVERIFY(started.has_value());
+    QTRY_VERIFY_WITH_TIMEOUT(result.has_value(), 3000);
+    QVERIFY(!result->has_value());
+    QCOMPARE(result->error().code, ztermy::ai::AiProviderErrorCode::rateLimited);
+    QCOMPARE(result->error().httpStatus, std::optional<std::uint16_t>{429});
+    QCOMPARE(result->error().retryAfterMilliseconds, std::optional<std::uint64_t>{3000});
+    QVERIFY(result->error().retryable);
+    QCOMPARE(result->error().message, std::string("Token refresh is temporarily rate limited."));
+}
+
+void OpenAiSubscriptionAuthProtocolTests::preparesAndParsesSubscriptionUsage()
+{
+    auto request = ztermy::ai::OpenAiSubscriptionUsage::prepareRequest(
+        ztermy::security::SensitiveByteArray(QByteArrayLiteral("access-token")), QStringLiteral("account-1"),
+        QStringLiteral("0.3.0"));
+    QVERIFY(request.has_value());
+    QCOMPARE(request->url(), QUrl(QStringLiteral("https://chatgpt.com/backend-api/codex/usage")));
+    QCOMPARE(request->rawHeader("Authorization"), QByteArrayLiteral("Bearer access-token"));
+    QCOMPARE(request->rawHeader("ChatGPT-Account-Id"), QByteArrayLiteral("account-1"));
+    QCOMPARE(request->rawHeader("originator"), QByteArrayLiteral("ztermy"));
+
+    const QByteArray body = QByteArrayLiteral(R"json({
+        "plan_type":"prolite",
+        "rate_limit":{
+            "allowed":true,
+            "limit_reached":false,
+            "primary_window":{"used_percent":18.5,"limit_window_seconds":18000,"reset_at":2000000100},
+            "secondary_window":{"used_percent":42,"limit_window_seconds":604800,"reset_at":2000000200}
+        },
+        "additional_rate_limits":[{
+            "limit_name":"Fast model",
+            "metered_feature":"codex_fast",
+            "rate_limit":{"allowed":true,"limit_reached":false,
+                "primary_window":{"used_percent":5,"limit_window_seconds":86400,"reset_at":2000000300},
+                "secondary_window":null}
+        }],
+        "credits":{"has_credits":true,"unlimited":false,"balance":"12.50"}
+    })json");
+    auto usage = ztermy::ai::OpenAiSubscriptionUsage::parse(body);
+    QVERIFY(usage.has_value());
+    QCOMPARE(usage->planType, QStringLiteral("prolite"));
+    QVERIFY(usage->codex.allowed);
+    QVERIFY(!usage->codex.reached);
+    QVERIFY(usage->codex.primary.has_value());
+    QCOMPARE(usage->codex.primary->usedPercent, 18.5);
+    QCOMPARE(usage->codex.secondary->durationSeconds, qint64{604800});
+    QCOMPARE(usage->additional.size(), std::size_t{1});
+    QCOMPARE(usage->additional.front().name, QStringLiteral("Fast model"));
+    QCOMPARE(usage->creditBalance, QStringLiteral("12.50"));
+}
+
+void OpenAiSubscriptionAuthProtocolTests::rejectsInvalidSubscriptionUsage()
+{
+    auto missing = ztermy::ai::OpenAiSubscriptionUsage::parse(QByteArrayLiteral(R"({"plan_type":"plus"})"));
+    QVERIFY(!missing.has_value());
+    QCOMPARE(missing.error().code, ztermy::ai::AiProviderErrorCode::protocol);
+
+    auto invalid = ztermy::ai::OpenAiSubscriptionUsage::parse(
+        QByteArrayLiteral(R"({"plan_type":"plus","rate_limit":{"primary_window":{"used_percent":101}}})"));
+    QVERIFY(!invalid.has_value());
+    QCOMPARE(invalid.error().code, ztermy::ai::AiProviderErrorCode::protocol);
 }
 
 } // namespace

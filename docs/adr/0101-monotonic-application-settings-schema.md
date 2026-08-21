@@ -35,10 +35,12 @@ the C++ structure.
 
 ## Consequences
 
-- Schema 20 remains current even though `aiAgent` no longer exists.
+- Schema 20 remains a readable tombstone even though `aiAgent` no longer
+  exists. Schema 21 adds the native ChatGPT-subscription provider preference,
+  and schema 22 adds AI-only proxy configuration.
 - Provider, appearance, terminal, and credential-reference settings survive
   removal of unrelated experiments.
-- A future AI proxy setting or another persisted option must use schema 21 or
-  greater and include a schema-20 migration test.
+- The next persisted option must use schema 23 or greater and include a
+  schema-22 migration test.
 - Compatibility is explicit and testable instead of depending on which fields
   happen to exist in the current UI.

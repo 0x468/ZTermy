@@ -34,6 +34,7 @@
 #include "infrastructure/ai/AiUserSkillCatalog.h"
 #include "infrastructure/ai/OpenAiSubscriptionAuthSession.h"
 #include "infrastructure/ai/OpenAiSubscriptionTokenRefresher.h"
+#include "infrastructure/ai/OpenAiSubscriptionUsage.h"
 #include "infrastructure/ai/ProviderModelCatalog.h"
 #include "infrastructure/forwarding/PortForwardingRuleStore.h"
 #include "infrastructure/logging/SessionLogWriter.h"
@@ -198,6 +199,7 @@ class AppController final : public QObject
     Q_PROPERTY(QString aiChatGptAuthState READ aiChatGptAuthState NOTIFY aiSubscriptionAuthChanged)
     Q_PROPERTY(QString aiChatGptAccountId READ aiChatGptAccountId NOTIFY aiSubscriptionAuthChanged)
     Q_PROPERTY(QString aiChatGptAuthError READ aiChatGptAuthError NOTIFY aiSubscriptionAuthChanged)
+    Q_PROPERTY(QVariantMap aiChatGptUsage READ aiChatGptUsage NOTIFY aiSubscriptionUsageChanged)
     Q_PROPERTY(QObject *aiActivity READ aiActivity CONSTANT)
     Q_PROPERTY(QObject *aiConversationHistory READ aiConversationHistory CONSTANT)
     Q_PROPERTY(QObject *activeAiConversation READ activeAiConversation NOTIFY aiConversationChanged)
@@ -351,6 +353,7 @@ public:
     [[nodiscard]] QString aiChatGptAuthState() const;
     [[nodiscard]] QString aiChatGptAccountId() const;
     [[nodiscard]] QString aiChatGptAuthError() const;
+    [[nodiscard]] QVariantMap aiChatGptUsage() const;
     [[nodiscard]] QObject *aiActivity() noexcept;
     [[nodiscard]] QObject *aiConversationHistory() noexcept;
     [[nodiscard]] QObject *activeAiConversation() const noexcept;
@@ -557,6 +560,7 @@ public:
     Q_INVOKABLE bool beginAiChatGptSignIn();
     Q_INVOKABLE void cancelAiChatGptSignIn();
     Q_INVOKABLE bool signOutAiChatGpt();
+    Q_INVOKABLE void refreshAiChatGptUsage();
     Q_INVOKABLE bool saveMcpServer(const QString &id, const QString &nameSpace, const QString &program,
                                    const QStringList &arguments, const QString &workingDirectory, const QString &trust,
                                    bool enabled);
@@ -648,6 +652,7 @@ signals:
     void aiUserSkillsChanged();
     void aiModelsChanged();
     void aiSubscriptionAuthChanged();
+    void aiSubscriptionUsageChanged();
     void aiPrivacyDiagnosticsChanged();
     void mcpConfigurationChanged();
     void portForwardingRulesChanged();
@@ -925,6 +930,7 @@ private:
     void withAiChatGptAccessToken(AiSubscriptionAccessHandler handler);
     void startAiModelsRequest(QNetworkRequest request, quint64 generation, ai::AiProviderKind kind, bool background,
                               bool openAiSubscription);
+    void refreshAiChatGptUsageInternal(bool background);
     void loadAiQuickMessages();
     void loadQuickCommands();
     void loadWorkspaceState();
@@ -1052,6 +1058,7 @@ private:
     std::unique_ptr<ai::OpenAiSubscriptionTokenRefresher> m_aiSubscriptionTokenRefresher;
     std::vector<AiSubscriptionAccessHandler> m_aiSubscriptionAccessHandlers;
     QPointer<QNetworkReply> m_aiModelsReply;
+    QPointer<QNetworkReply> m_aiSubscriptionUsageReply;
     QStringList m_aiAvailableModels;
     QString m_aiModelsError;
     QString m_aiPermissionRuleError;
@@ -1063,9 +1070,13 @@ private:
     quint64 m_aiUserSkillsRequestGeneration = 0;
     bool m_openAiUserSkillsAfterReload = false;
     quint64 m_aiModelsRequestGeneration = 0;
+    quint64 m_aiSubscriptionUsageGeneration = 0;
     bool m_aiModelsLoading = false;
+    bool m_aiSubscriptionUsageLoading = false;
     QString m_aiChatGptAccountId;
     QString m_aiChatGptAuthError;
+    QString m_aiSubscriptionUsageError;
+    std::optional<ai::OpenAiSubscriptionUsageSnapshot> m_aiSubscriptionUsage;
     std::size_t m_aiModelRefreshObservedTabCount = 0;
     ai::AiContextBroker m_aiContextBroker;
     ai::AiCommandTracker m_aiCommandTracker;
