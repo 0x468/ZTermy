@@ -10,8 +10,10 @@
 #include <QTest>
 #include <QUrlQuery>
 
+#include <memory>
 #include <optional>
 #include <string_view>
+#include <vector>
 
 namespace
 {
@@ -121,6 +123,54 @@ private:
     QTcpServer m_server;
 };
 
+class FakeDeviceAuthServer final : public QObject
+{
+public:
+    FakeDeviceAuthServer()
+    {
+        QObject::connect(&m_server, &QTcpServer::newConnection, this, [this] {
+            QTcpSocket *socket = m_server.nextPendingConnection();
+            socket->setParent(this);
+            auto request = std::make_shared<QByteArray>();
+            QObject::connect(socket, &QTcpSocket::readyRead, this, [this, socket, request] {
+                request->append(socket->readAll());
+                if (!request->contains(QByteArrayLiteral("\r\n\r\n")))
+                {
+                    return;
+                }
+                m_requests.push_back(*request);
+                const bool userCodeRequest = request->startsWith(QByteArrayLiteral("POST /device/usercode "));
+                const QByteArray body =
+                    userCodeRequest
+                        ? QByteArrayLiteral(R"({"device_auth_id":"device-1","user_code":"ABCD-1234","interval":"1"})")
+                        : QByteArrayLiteral(
+                              R"({"authorization_code":"code-1","code_challenge":"challenge-1","code_verifier":"verifier-1"})");
+                socket->write(QByteArrayLiteral("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: "
+                                                "close\r\nContent-Length: ")
+                              + QByteArray::number(body.size()) + QByteArrayLiteral("\r\n\r\n") + body);
+                socket->disconnectFromHost();
+            });
+        });
+        m_server.listen(QHostAddress::LocalHost, 0);
+    }
+
+    [[nodiscard]] QUrl userCodeUrl() const
+    {
+        return {QStringLiteral("http://127.0.0.1:%1/device/usercode").arg(m_server.serverPort())};
+    }
+
+    [[nodiscard]] QUrl tokenUrl() const
+    {
+        return {QStringLiteral("http://127.0.0.1:%1/device/token").arg(m_server.serverPort())};
+    }
+
+    [[nodiscard]] const std::vector<QByteArray> &requests() const noexcept { return m_requests; }
+
+private:
+    QTcpServer m_server;
+    std::vector<QByteArray> m_requests;
+};
+
 class OpenAiSubscriptionAuthProtocolTests final : public QObject
 {
     Q_OBJECT
@@ -135,6 +185,7 @@ private slots:
     void browserSessionCompletesThroughLoopback();
     void browserSessionRejectsMismatchedState();
     void browserSessionCanBeCancelled();
+    void deviceSessionCompletesThroughPolling();
     void refreshesAndRetainsUnrotatedRefreshToken();
     void classifiesRefreshRateLimits();
     void preparesAndParsesSubscriptionUsage();
@@ -307,6 +358,47 @@ void OpenAiSubscriptionAuthProtocolTests::browserSessionCanBeCancelled()
     auto &completed = requiredOptionalValue(result);
     QVERIFY(!completed.has_value());
     QCOMPARE(completed.error().code, ztermy::ai::OpenAiSubscriptionSessionErrorCode::cancelled);
+    QVERIFY(!session.active());
+}
+
+void OpenAiSubscriptionAuthProtocolTests::deviceSessionCompletesThroughPolling()
+{
+    FakeDeviceAuthServer deviceServer;
+    FakeTokenServer tokenServer;
+    QNetworkAccessManager network;
+    ztermy::ai::OpenAiSubscriptionAuthSession session(&network);
+    std::optional<ztermy::ai::OpenAiSubscriptionDeviceCode> deviceCode;
+    std::optional<ztermy::ai::OpenAiSubscriptionAuthSession::Result> result;
+    ztermy::ai::OpenAiSubscriptionAuthEndpoints endpoints;
+    endpoints.token = tokenServer.url();
+    endpoints.deviceUserCode = deviceServer.userCodeUrl();
+    endpoints.deviceToken = deviceServer.tokenUrl();
+    endpoints.deviceVerification = QUrl(QStringLiteral("https://auth.example.test/codex/device"));
+    endpoints.deviceRedirect = QUrl(QStringLiteral("https://auth.example.test/deviceauth/callback"));
+    const auto started = session.beginDeviceLogin(
+        [&deviceCode](const ztermy::ai::OpenAiSubscriptionDeviceCode &code) {
+            deviceCode = code;
+        },
+        [&result](ztermy::ai::OpenAiSubscriptionAuthSession::Result completed) {
+            result = std::move(completed);
+        },
+        endpoints);
+    QVERIFY(started.has_value());
+    QTRY_VERIFY_WITH_TIMEOUT(deviceCode.has_value(), 2000);
+    QCOMPARE(requiredOptionalValue(deviceCode).verificationUrl, endpoints.deviceVerification);
+    QCOMPARE(requiredOptionalValue(deviceCode).userCode, QStringLiteral("ABCD-1234"));
+    QTRY_VERIFY_WITH_TIMEOUT(result.has_value(), 3000);
+    auto &completed = requiredOptionalValue(result);
+    QVERIFY(completed.has_value());
+    QCOMPARE(bytes(completed.value().accessToken), QByteArrayLiteral("access"));
+    QCOMPARE(bytes(completed.value().refreshToken), QByteArrayLiteral("refresh"));
+    QCOMPARE(completed.value().accountId, QStringLiteral("account-1"));
+    QCOMPARE(deviceServer.requests().size(), std::size_t{2});
+    QVERIFY(deviceServer.requests().front().contains(QByteArrayLiteral("\"client_id\"")));
+    QVERIFY(deviceServer.requests().back().contains(QByteArrayLiteral("\"device_auth_id\":\"device-1\"")));
+    QVERIFY(tokenServer.request().contains(
+        QByteArrayLiteral("redirect_uri=https://auth.example.test/deviceauth/callback")));
+    QVERIFY(tokenServer.request().contains(QByteArrayLiteral("code_verifier=verifier-1")));
     QVERIFY(!session.active());
 }
 

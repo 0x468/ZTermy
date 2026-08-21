@@ -11,7 +11,7 @@ Identity:
 - codename: **糸**;
 - verse: **「剪不断，理还乱，是离愁」**;
 - supported release platform: Windows 11 x64;
-- candidate package source: `209073d`.
+- candidate package source: pending feature commit.
 
 This document records the final-source automated evidence for that exact
 package. It includes the mainstream Agent conversation, five-mode/rule model,
@@ -34,9 +34,9 @@ into a pass.
 The following gates completed with exit code zero:
 
 1. Dynamic Debug configure/build and 116/116 CTest tests. The final-source run
-   took 41 seconds.
+   took 105.39 seconds.
 2. Static Release configure/build and 116/116 CTest tests. The final-source run
-   took 41 seconds without test retry. Both configurations include the 32-cycle MCP process
+   took 96.85 seconds without test retry. Both configurations include the 32-cycle MCP process
    lifecycle stress and the deterministic local Agent scenario.
 3. C++ format, QML format, QML lint, translation, branding, executable metadata,
    and package contracts.
@@ -87,10 +87,13 @@ The following gates completed with exit code zero:
     Release repetitions after adding bounded Win32 clipboard contention retry.
     The same contract passed in the final Debug and Release 116-test suites.
 13. ChatGPT subscription tests cover PKCE, loopback callback success, state
-    rejection, cancellation, token refresh without rotation, typed 429 recovery,
-    model-catalog filtering, allowance parsing, credential persistence, and
-    provider error recovery. The background model-refresh controller test passed
-    20 consecutive Static Release repetitions before both final full suites.
+    rejection, cancellation, native device-code request/poll/token exchange,
+    token refresh without rotation, typed 429 recovery, model-catalog filtering,
+    allowance parsing, credential persistence, and provider error recovery. The
+    background model-refresh controller test passed 20 consecutive Static
+    Release repetitions before both final full suites. The signed-out ChatGPT
+    account row and its Chinese device-code entry were also inspected in the
+    exact Debug executable at full width and approximately 793 px window width.
 
 The formal soak reports are generated at
 `build/msvc-static-release/ai-concurrency-soak-2h-schema2.json` and
@@ -109,9 +112,9 @@ build/msvc-static-release/package/release/ztermy-0.3.0-windows-x64
 It contains exactly:
 
 - `ztermy-0.3.0-windows-x64-portable.zip` — SHA-256
-  `4f6572e1a0a10bc7d36f0be88f204480e8450b35ad404214511250a8fe6ddfac`;
+  `a7b71f44f2d108acb7fd52f2d1449b5d2df72609fb28d8512f87366e36493459`;
 - `ztermy-0.3.0-windows-x64.msi` — SHA-256
-  `ef53ca1f51e67334bcc082514ee9aebb0ca1a18e8200bb9554ce62cc689ba6fb`;
+  `2c53dc529236deae88274bf4e0a59f66b60b2371da2a01e39c32e61b98c49a5e`;
 - `SHA256SUMS.txt`;
 - `release-manifest.json`.
 
@@ -141,10 +144,12 @@ diagnostic export, or this document.
 4. Select ChatGPT, complete system-browser sign-in, and verify that model
    discovery and plan usage refresh automatically after restart, terminal
    creation, and first AI-panel open.
-5. Complete an ordinary subscription response and one harmless terminal tool
+5. Sign out, use the device-code fallback, and verify the visible short code,
+   copy/open actions, cancellation, and convergence on the same signed-in state.
+6. Complete an ordinary subscription response and one harmless terminal tool
    call, then exercise cancel, retry, revoked authorization, sign-in again, and
    sign-out.
-6. Exercise system, direct, custom HTTP, and custom SOCKS5 AI proxy modes while
+7. Exercise system, direct, custom HTTP, and custom SOCKS5 AI proxy modes while
    an SSH session remains connected. Export ordinary application diagnostics.
 
 Expected:

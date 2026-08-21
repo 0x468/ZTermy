@@ -199,6 +199,7 @@ class AppController final : public QObject
     Q_PROPERTY(QString aiChatGptAuthState READ aiChatGptAuthState NOTIFY aiSubscriptionAuthChanged)
     Q_PROPERTY(QString aiChatGptAccountId READ aiChatGptAccountId NOTIFY aiSubscriptionAuthChanged)
     Q_PROPERTY(QString aiChatGptAuthError READ aiChatGptAuthError NOTIFY aiSubscriptionAuthChanged)
+    Q_PROPERTY(QVariantMap aiChatGptDeviceCode READ aiChatGptDeviceCode NOTIFY aiSubscriptionAuthChanged)
     Q_PROPERTY(QVariantMap aiChatGptUsage READ aiChatGptUsage NOTIFY aiSubscriptionUsageChanged)
     Q_PROPERTY(QObject *aiActivity READ aiActivity CONSTANT)
     Q_PROPERTY(QObject *aiConversationHistory READ aiConversationHistory CONSTANT)
@@ -353,6 +354,7 @@ public:
     [[nodiscard]] QString aiChatGptAuthState() const;
     [[nodiscard]] QString aiChatGptAccountId() const;
     [[nodiscard]] QString aiChatGptAuthError() const;
+    [[nodiscard]] QVariantMap aiChatGptDeviceCode() const;
     [[nodiscard]] QVariantMap aiChatGptUsage() const;
     [[nodiscard]] QObject *aiActivity() noexcept;
     [[nodiscard]] QObject *aiConversationHistory() noexcept;
@@ -558,7 +560,10 @@ public:
                                          const QString &password);
     Q_INVOKABLE bool removeAiProxyPassword();
     Q_INVOKABLE bool beginAiChatGptSignIn();
+    Q_INVOKABLE bool beginAiChatGptDeviceSignIn();
     Q_INVOKABLE void cancelAiChatGptSignIn();
+    Q_INVOKABLE bool openAiChatGptDeviceVerification();
+    Q_INVOKABLE bool copyAiChatGptDeviceCode();
     Q_INVOKABLE bool signOutAiChatGpt();
     Q_INVOKABLE void refreshAiChatGptUsage();
     Q_INVOKABLE bool saveMcpServer(const QString &id, const QString &nameSpace, const QString &program,
@@ -929,6 +934,7 @@ private:
     using AiSubscriptionAccessHandler =
         std::function<void(std::expected<security::SensitiveByteArray, ai::AiProviderError>, QString)>;
     void withAiChatGptAccessToken(AiSubscriptionAccessHandler handler);
+    void completeAiChatGptSignIn(ai::OpenAiSubscriptionAuthSession::Result result);
     void startAiModelsRequest(const QNetworkRequest &request, quint64 generation, ai::AiProviderKind kind,
                               bool background, bool openAiSubscription);
     void refreshAiChatGptUsageInternal(bool background);
@@ -1076,6 +1082,8 @@ private:
     bool m_aiSubscriptionUsageLoading = false;
     QString m_aiChatGptAccountId;
     QString m_aiChatGptAuthError;
+    QUrl m_aiChatGptDeviceVerificationUrl;
+    QString m_aiChatGptDeviceUserCode;
     QString m_aiSubscriptionUsageError;
     std::optional<ai::OpenAiSubscriptionUsageSnapshot> m_aiSubscriptionUsage;
     std::size_t m_aiModelRefreshObservedTabCount = 0;

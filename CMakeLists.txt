@@ -1174,6 +1174,8 @@ qt_add_translations(ztermy
         ztermy_terminal_ui
         ztermy_application_actions
         ztermy_application_diagnostics
+        ztermy_ai_provider
+        ztermy_ai_provider
     TS_FILES ${ZTERMY_TRANSLATION_FILES}
     RESOURCE_PREFIX "/i18n"
     LUPDATE_OPTIONS -no-obsolete

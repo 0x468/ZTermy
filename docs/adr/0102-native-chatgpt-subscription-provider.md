@@ -94,9 +94,14 @@ schema, and unrelated-setting preservation tests under ADR 0101.
 
 ## Implementation status
 
-The native provider now includes browser PKCE authorization, refreshable
-credential persistence, account-bound model discovery and Responses transport,
-AI-only system/direct/custom proxy routing, and bounded Codex allowance lookup.
+The native provider now includes browser PKCE authorization plus a native
+device-code fallback, refreshable credential persistence, account-bound model
+discovery and Responses transport, AI-only system/direct/custom proxy routing,
+and bounded Codex allowance lookup. Device authorization requests a short user
+code, opens the ChatGPT verification page, polls asynchronously with the
+server-supplied bounded interval, and exchanges the resulting authorization
+code through the same credential path as browser login; it does not start or
+bridge Codex App Server.
 Settings and the assistant header expose the current plan and primary/secondary
 remaining percentages without describing them as API credit. Refresh and usage
 requests preserve typed authentication, quota, rate-limit, server, and network

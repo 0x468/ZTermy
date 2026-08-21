@@ -1596,7 +1596,7 @@ Rectangle {
 
                             Text {
                                 Layout.fillWidth: true
-                                text: pane.controller.aiChatGptAuthState === "signed-in" ? (pane.controller.aiChatGptAccountId.length > 0 ? qsTr("Connected · %1").arg(pane.controller.aiChatGptAccountId) : qsTr("Connected")) : pane.controller.aiChatGptAuthState === "signing-in" ? qsTr("Waiting for browser authorization…") : qsTr("Not connected")
+                                text: pane.controller.aiChatGptAuthState === "signed-in" ? (pane.controller.aiChatGptAccountId.length > 0 ? qsTr("Connected · %1").arg(pane.controller.aiChatGptAccountId) : qsTr("Connected")) : pane.controller.aiChatGptAuthState === "signing-in" ? qsTr("Waiting for browser authorization…") : pane.controller.aiChatGptAuthState === "device-code" ? qsTr("Waiting for device-code authorization…") : qsTr("Not connected")
                                 color: pane.controller.aiChatGptAuthState === "error" ? Theme.danger : Theme.textMuted
                                 elide: Text.ElideMiddle
                                 font.family: Theme.uiFont
@@ -1604,15 +1604,50 @@ Rectangle {
                             }
 
                             ActionButton {
-                                text: pane.controller.aiChatGptAuthState === "signing-in" ? qsTr("Cancel") : qsTr("Sign in")
+                                text: pane.controller.aiChatGptAuthState === "signing-in" || pane.controller.aiChatGptAuthState === "device-code" ? qsTr("Cancel") : qsTr("Sign in")
                                 visible: pane.controller.aiChatGptAuthState !== "signed-in"
-                                onClicked: pane.controller.aiChatGptAuthState === "signing-in" ? pane.controller.cancelAiChatGptSignIn() : pane.controller.beginAiChatGptSignIn()
+                                onClicked: pane.controller.aiChatGptAuthState === "signing-in" || pane.controller.aiChatGptAuthState === "device-code" ? pane.controller.cancelAiChatGptSignIn() : pane.controller.beginAiChatGptSignIn()
+                            }
+
+                            ActionButton {
+                                text: qsTr("Device code")
+                                visible: pane.controller.aiChatGptAuthState === "signed-out" || pane.controller.aiChatGptAuthState === "error"
+                                onClicked: pane.controller.beginAiChatGptDeviceSignIn()
                             }
 
                             ActionButton {
                                 text: qsTr("Sign out")
                                 visible: pane.controller.aiChatGptAuthState === "signed-in"
                                 onClicked: pane.controller.signOutAiChatGpt()
+                            }
+                        }
+
+                        Item {
+                            visible: pane.aiProviderToken() === "openai-chatgpt" && pane.controller.aiChatGptAuthState === "device-code"
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            spacing: 8
+                            visible: pane.aiProviderToken() === "openai-chatgpt" && pane.controller.aiChatGptAuthState === "device-code"
+
+                            Text {
+                                Layout.fillWidth: true
+                                text: qsTr("Enter code %1 on the ChatGPT device page.").arg(pane.controller.aiChatGptDeviceCode.userCode || "")
+                                color: Theme.text
+                                wrapMode: Text.WordWrap
+                                font.family: Theme.terminalFont
+                                font.pixelSize: Theme.textBody
+                            }
+
+                            ActionButton {
+                                text: qsTr("Copy code")
+                                onClicked: pane.controller.copyAiChatGptDeviceCode()
+                            }
+
+                            ActionButton {
+                                text: qsTr("Open page")
+                                onClicked: pane.controller.openAiChatGptDeviceVerification()
                             }
                         }
 

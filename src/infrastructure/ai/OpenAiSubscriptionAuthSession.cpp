@@ -1,16 +1,24 @@
 #include "infrastructure/ai/OpenAiSubscriptionAuthSession.h"
 
 #include <QHostAddress>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QNetworkRequest>
 #include <QPointer>
 #include <QTcpSocket>
 #include <QUrlQuery>
 
+#include <algorithm>
+
 namespace
 {
 
 constexpr qsizetype MaximumCallbackBytes = qsizetype{16} * 1024;
+constexpr qsizetype MaximumDeviceResponseBytes = qsizetype{256} * 1024;
 constexpr int AuthorizationTimeoutMilliseconds = 5 * 60 * 1000;
+constexpr int DeviceAuthorizationTimeoutMilliseconds = 15 * 60 * 1000;
+constexpr int MinimumDevicePollIntervalMilliseconds = 1'000;
+constexpr int MaximumDevicePollIntervalMilliseconds = 30'000;
 
 void replyToBrowser(QTcpSocket *socket, const int status, const QByteArrayView title, const QByteArrayView message)
 {
@@ -45,6 +53,9 @@ OpenAiSubscriptionAuthSession::OpenAiSubscriptionAuthSession(QObject *parent)
     QObject::connect(&m_callbackServer, &QTcpServer::newConnection, this,
                      &OpenAiSubscriptionAuthSession::acceptConnections);
     m_timeout.setSingleShot(true);
+    m_devicePollTimer.setSingleShot(true);
+    QObject::connect(&m_devicePollTimer, &QTimer::timeout, this,
+                     &OpenAiSubscriptionAuthSession::pollDeviceAuthorization);
     QObject::connect(&m_timeout, &QTimer::timeout, this, [this] {
         finish(std::unexpected(OpenAiSubscriptionSessionError{
             .code = OpenAiSubscriptionSessionErrorCode::timedOut,
@@ -60,6 +71,9 @@ OpenAiSubscriptionAuthSession::OpenAiSubscriptionAuthSession(QNetworkAccessManag
     QObject::connect(&m_callbackServer, &QTcpServer::newConnection, this,
                      &OpenAiSubscriptionAuthSession::acceptConnections);
     m_timeout.setSingleShot(true);
+    m_devicePollTimer.setSingleShot(true);
+    QObject::connect(&m_devicePollTimer, &QTimer::timeout, this,
+                     &OpenAiSubscriptionAuthSession::pollDeviceAuthorization);
     QObject::connect(&m_timeout, &QTimer::timeout, this, [this] {
         finish(std::unexpected(OpenAiSubscriptionSessionError{
             .code = OpenAiSubscriptionSessionErrorCode::timedOut,
@@ -102,6 +116,36 @@ OpenAiSubscriptionAuthSession::beginBrowserLogin(CompletionHandler completion,
     m_completion = std::move(completion);
     m_timeout.start(AuthorizationTimeoutMilliseconds);
     return OpenAiSubscriptionAuthProtocol::authorizationUrl(m_pkce, m_redirectUri, m_endpoints.authorization);
+}
+
+std::expected<void, OpenAiSubscriptionSessionError>
+OpenAiSubscriptionAuthSession::beginDeviceLogin(DeviceCodeHandler deviceCodeHandler, CompletionHandler completion,
+                                                OpenAiSubscriptionAuthEndpoints endpoints)
+{
+    if (active())
+    {
+        return std::unexpected(OpenAiSubscriptionSessionError{
+            .code = OpenAiSubscriptionSessionErrorCode::alreadyActive,
+            .message = tr("ChatGPT sign-in is already in progress."),
+        });
+    }
+    if (m_networkAccessManager == nullptr || !deviceCodeHandler || !completion || !endpoints.deviceUserCode.isValid()
+        || !endpoints.deviceToken.isValid() || !endpoints.deviceVerification.isValid()
+        || !endpoints.deviceRedirect.isValid() || !endpoints.token.isValid())
+    {
+        return std::unexpected(OpenAiSubscriptionSessionError{
+            .code = OpenAiSubscriptionSessionErrorCode::network,
+            .message = tr("Could not start ChatGPT device-code sign-in."),
+        });
+    }
+
+    m_endpoints = std::move(endpoints);
+    m_redirectUri = m_endpoints.deviceRedirect;
+    m_deviceCodeHandler = std::move(deviceCodeHandler);
+    m_completion = std::move(completion);
+    m_timeout.start(DeviceAuthorizationTimeoutMilliseconds);
+    requestDeviceCode();
+    return {};
 }
 
 bool OpenAiSubscriptionAuthSession::active() const noexcept
@@ -203,6 +247,150 @@ void OpenAiSubscriptionAuthSession::consumeCallback(QTcpSocket *socket)
     exchangeAuthorizationCode(code);
 }
 
+void OpenAiSubscriptionAuthSession::requestDeviceCode()
+{
+    if (!active())
+    {
+        return;
+    }
+    const QJsonObject payload{
+        {QStringLiteral("client_id"), QString::fromLatin1(OpenAiSubscriptionAuthProtocol::clientId())}};
+    QNetworkRequest request(m_endpoints.deviceUserCode);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    request.setRawHeader("Accept", "application/json");
+    request.setTransferTimeout(30'000);
+    m_tokenReply = m_networkAccessManager->post(request, QJsonDocument(payload).toJson(QJsonDocument::Compact));
+    QObject::connect(m_tokenReply, &QNetworkReply::finished, this, [this] {
+        QNetworkReply *reply = m_tokenReply;
+        m_tokenReply = nullptr;
+        if (reply == nullptr || !active())
+        {
+            if (reply != nullptr)
+            {
+                reply->deleteLater();
+            }
+            return;
+        }
+        QByteArray body = reply->read(MaximumDeviceResponseBytes + 1);
+        const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const bool successful = reply->error() == QNetworkReply::NoError && status / 100 == 2;
+        reply->deleteLater();
+        if (!successful)
+        {
+            finish(std::unexpected(OpenAiSubscriptionSessionError{
+                .code = OpenAiSubscriptionSessionErrorCode::network,
+                .message = status == 404 ? tr("ChatGPT device-code sign-in is not enabled for this account.")
+                                         : tr("Could not request a ChatGPT device code."),
+            }));
+            return;
+        }
+        if (body.size() > MaximumDeviceResponseBytes)
+        {
+            finish(std::unexpected(OpenAiSubscriptionSessionError{
+                .code = OpenAiSubscriptionSessionErrorCode::invalidResponse,
+                .message = tr("ChatGPT returned an invalid device-code response."),
+            }));
+            return;
+        }
+        const QJsonObject object = QJsonDocument::fromJson(body).object();
+        m_deviceAuthId = object.value(QStringLiteral("device_auth_id")).toString().toUtf8();
+        QString userCode = object.value(QStringLiteral("user_code")).toString();
+        if (userCode.isEmpty())
+        {
+            userCode = object.value(QStringLiteral("usercode")).toString();
+        }
+        m_deviceUserCode = userCode.toUtf8();
+        const QJsonValue intervalValue = object.value(QStringLiteral("interval"));
+        bool intervalOk = intervalValue.isDouble();
+        const int intervalSeconds =
+            intervalValue.isString() ? intervalValue.toString().toInt(&intervalOk) : intervalValue.toInt();
+        m_devicePollIntervalMilliseconds =
+            std::clamp((intervalOk ? intervalSeconds : 5) * 1'000, MinimumDevicePollIntervalMilliseconds,
+                       MaximumDevicePollIntervalMilliseconds);
+        if (m_deviceAuthId.isEmpty() || m_deviceUserCode.isEmpty())
+        {
+            finish(std::unexpected(OpenAiSubscriptionSessionError{
+                .code = OpenAiSubscriptionSessionErrorCode::invalidResponse,
+                .message = tr("ChatGPT returned an invalid device-code response."),
+            }));
+            return;
+        }
+        if (m_deviceCodeHandler)
+        {
+            m_deviceCodeHandler(OpenAiSubscriptionDeviceCode{
+                .verificationUrl = m_endpoints.deviceVerification,
+                .userCode = QString::fromUtf8(m_deviceUserCode),
+            });
+        }
+        pollDeviceAuthorization();
+    });
+}
+
+void OpenAiSubscriptionAuthSession::pollDeviceAuthorization()
+{
+    if (!active() || m_tokenReply != nullptr || m_deviceAuthId.isEmpty() || m_deviceUserCode.isEmpty())
+    {
+        return;
+    }
+    const QJsonObject payload{{QStringLiteral("device_auth_id"), QString::fromUtf8(m_deviceAuthId)},
+                              {QStringLiteral("user_code"), QString::fromUtf8(m_deviceUserCode)}};
+    QNetworkRequest request(m_endpoints.deviceToken);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    request.setRawHeader("Accept", "application/json");
+    request.setTransferTimeout(30'000);
+    m_tokenReply = m_networkAccessManager->post(request, QJsonDocument(payload).toJson(QJsonDocument::Compact));
+    QObject::connect(m_tokenReply, &QNetworkReply::finished, this, [this] {
+        QNetworkReply *reply = m_tokenReply;
+        m_tokenReply = nullptr;
+        if (reply == nullptr || !active())
+        {
+            if (reply != nullptr)
+            {
+                reply->deleteLater();
+            }
+            return;
+        }
+        QByteArray body = reply->read(MaximumDeviceResponseBytes + 1);
+        const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const bool successful = reply->error() == QNetworkReply::NoError && status / 100 == 2;
+        reply->deleteLater();
+        if (!successful && (status == 403 || status == 404))
+        {
+            m_devicePollTimer.start(m_devicePollIntervalMilliseconds);
+            return;
+        }
+        if (!successful)
+        {
+            finish(std::unexpected(OpenAiSubscriptionSessionError{
+                .code = OpenAiSubscriptionSessionErrorCode::network,
+                .message = tr("Could not complete ChatGPT device-code sign-in."),
+            }));
+            return;
+        }
+        if (body.size() > MaximumDeviceResponseBytes)
+        {
+            finish(std::unexpected(OpenAiSubscriptionSessionError{
+                .code = OpenAiSubscriptionSessionErrorCode::invalidResponse,
+                .message = tr("ChatGPT returned an invalid device-code response."),
+            }));
+            return;
+        }
+        const QJsonObject object = QJsonDocument::fromJson(body).object();
+        const QByteArray code = object.value(QStringLiteral("authorization_code")).toString().toUtf8();
+        m_pkce.verifier = object.value(QStringLiteral("code_verifier")).toString().toUtf8();
+        m_pkce.challenge = object.value(QStringLiteral("code_challenge")).toString().toUtf8();
+        if (code.isEmpty() || m_pkce.verifier.isEmpty())
+        {
+            finish(std::unexpected(OpenAiSubscriptionSessionError{
+                .code = OpenAiSubscriptionSessionErrorCode::invalidResponse,
+                .message = tr("ChatGPT returned an invalid device-code response."),
+            }));
+            return;
+        }
+        exchangeAuthorizationCode(code);
+    });
+}
+
 void OpenAiSubscriptionAuthSession::exchangeAuthorizationCode(const QByteArray &code)
 {
     QNetworkRequest request(m_endpoints.token);
@@ -254,6 +442,7 @@ void OpenAiSubscriptionAuthSession::finish(Result result)
 void OpenAiSubscriptionAuthSession::resetTransport() noexcept
 {
     m_timeout.stop();
+    m_devicePollTimer.stop();
     m_callbackServer.close();
     if (m_tokenReply != nullptr)
     {
@@ -263,6 +452,9 @@ void OpenAiSubscriptionAuthSession::resetTransport() noexcept
     }
     m_pkce = {};
     m_redirectUri = QUrl{};
+    m_deviceAuthId.clear();
+    m_deviceUserCode.clear();
+    m_deviceCodeHandler = {};
 }
 
 } // namespace ztermy::ai

@@ -879,6 +879,7 @@ void AppControllerTests::persistsApplicationSettings()
     QCOMPARE(controller.aiChatGptAuthState(), QStringLiteral("signed-out"));
     QVERIFY(controller.aiChatGptAccountId().isEmpty());
     QVERIFY(controller.aiChatGptAuthError().isEmpty());
+    QVERIFY(controller.aiChatGptDeviceCode().isEmpty());
     QCOMPARE(controller.aiBaseUrl(), QStringLiteral("https://api.openai.com/v1"));
     QVERIFY(controller.aiEndpointPath().isEmpty());
     QVERIFY(controller.aiModel().isEmpty());
@@ -919,6 +920,7 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(controller.aiWebSearchAvailable());
     QVERIFY(controller.signOutAiChatGpt());
     QCOMPARE(controller.aiChatGptAuthState(), QStringLiteral("signed-out"));
+    QVERIFY(controller.aiChatGptDeviceCode().isEmpty());
 
     QVERIFY(controller.saveAiProviderConfiguration(QStringLiteral("openai-compatible"),
                                                    QStringLiteral("https://gateway.example.test/v1"),

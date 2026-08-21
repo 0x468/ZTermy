@@ -3445,7 +3445,7 @@ QString AppController::aiChatGptAuthState() const
 {
     if (m_aiSubscriptionAuth && m_aiSubscriptionAuth->active())
     {
-        return QStringLiteral("signing-in");
+        return m_aiChatGptDeviceUserCode.isEmpty() ? QStringLiteral("signing-in") : QStringLiteral("device-code");
     }
     if (!m_aiChatGptAuthError.isEmpty())
     {
@@ -3470,6 +3470,16 @@ QString AppController::aiChatGptAccountId() const
 QString AppController::aiChatGptAuthError() const
 {
     return m_aiChatGptAuthError;
+}
+
+QVariantMap AppController::aiChatGptDeviceCode() const
+{
+    if (m_aiChatGptDeviceUserCode.isEmpty() || !m_aiChatGptDeviceVerificationUrl.isValid())
+    {
+        return {};
+    }
+    return {{QStringLiteral("verificationUrl"), m_aiChatGptDeviceVerificationUrl.toString(QUrl::FullyEncoded)},
+            {QStringLiteral("userCode"), m_aiChatGptDeviceUserCode}};
 }
 
 QVariantMap AppController::aiChatGptUsage() const
@@ -8613,32 +8623,10 @@ bool AppController::beginAiChatGptSignIn()
     m_aiChatGptAuthError.clear();
     emit aiSubscriptionAuthChanged();
 
+    m_aiChatGptDeviceVerificationUrl = QUrl{};
+    m_aiChatGptDeviceUserCode.clear();
     auto started = m_aiSubscriptionAuth->beginBrowserLogin([this](ai::OpenAiSubscriptionAuthSession::Result result) {
-        if (!result)
-        {
-            m_aiChatGptAuthError = result.error().code == ai::OpenAiSubscriptionSessionErrorCode::cancelled
-                                       ? QString{}
-                                       : result.error().message;
-            emit aiSubscriptionAuthChanged();
-            return;
-        }
-        ai::AiSecretStore store(m_credentialVaults->active());
-        const auto reference = aiCredentialReference(config::AiProviderPreference::openAiChatGpt).toStdString();
-        auto stored = store.storeOAuthTokens(reference, {.accessToken = std::move(result->accessToken),
-                                                         .refreshToken = std::move(result->refreshToken)});
-        if (!stored)
-        {
-            m_aiChatGptAuthError = credentialVaultErrorMessage(stored.error());
-            emit aiSubscriptionAuthChanged();
-            return;
-        }
-        m_aiChatGptAccountId = result->accountId;
-        m_aiChatGptAuthError.clear();
-        setCredentialOperationError({});
-        emit credentialVaultChanged();
-        emit aiSubscriptionAuthChanged();
-        refreshConfiguredAiModels();
-        refreshAiChatGptUsageInternal(true);
+        completeAiChatGptSignIn(std::move(result));
     });
     if (!started)
     {
@@ -8656,12 +8644,92 @@ bool AppController::beginAiChatGptSignIn()
     return true;
 }
 
+bool AppController::beginAiChatGptDeviceSignIn()
+{
+    if (!m_aiSubscriptionAuth)
+    {
+        m_aiSubscriptionAuth = std::make_unique<ai::OpenAiSubscriptionAuthSession>(&m_aiNetwork, this);
+    }
+    if (m_aiSubscriptionAuth->active())
+    {
+        return false;
+    }
+    m_aiChatGptAuthError.clear();
+    m_aiChatGptDeviceVerificationUrl = QUrl{};
+    m_aiChatGptDeviceUserCode.clear();
+    emit aiSubscriptionAuthChanged();
+    auto started = m_aiSubscriptionAuth->beginDeviceLogin(
+        [this](const ai::OpenAiSubscriptionDeviceCode &deviceCode) {
+            m_aiChatGptDeviceVerificationUrl = deviceCode.verificationUrl;
+            m_aiChatGptDeviceUserCode = deviceCode.userCode;
+            emit aiSubscriptionAuthChanged();
+            static_cast<void>(QDesktopServices::openUrl(deviceCode.verificationUrl));
+        },
+        [this](ai::OpenAiSubscriptionAuthSession::Result result) {
+            completeAiChatGptSignIn(std::move(result));
+        });
+    if (!started)
+    {
+        m_aiChatGptAuthError = started.error().message;
+        emit aiSubscriptionAuthChanged();
+        return false;
+    }
+    return true;
+}
+
+void AppController::completeAiChatGptSignIn(ai::OpenAiSubscriptionAuthSession::Result result)
+{
+    m_aiChatGptDeviceVerificationUrl = QUrl{};
+    m_aiChatGptDeviceUserCode.clear();
+    if (!result)
+    {
+        m_aiChatGptAuthError = result.error().code == ai::OpenAiSubscriptionSessionErrorCode::cancelled
+                                   ? QString{}
+                                   : result.error().message;
+        emit aiSubscriptionAuthChanged();
+        return;
+    }
+    ai::AiSecretStore store(m_credentialVaults->active());
+    const auto reference = aiCredentialReference(config::AiProviderPreference::openAiChatGpt).toStdString();
+    auto stored = store.storeOAuthTokens(
+        reference, {.accessToken = std::move(result->accessToken), .refreshToken = std::move(result->refreshToken)});
+    if (!stored)
+    {
+        m_aiChatGptAuthError = credentialVaultErrorMessage(stored.error());
+        emit aiSubscriptionAuthChanged();
+        return;
+    }
+    m_aiChatGptAccountId = result->accountId;
+    m_aiChatGptAuthError.clear();
+    setCredentialOperationError({});
+    emit credentialVaultChanged();
+    emit aiSubscriptionAuthChanged();
+    refreshConfiguredAiModels();
+    refreshAiChatGptUsageInternal(true);
+}
+
 void AppController::cancelAiChatGptSignIn()
 {
     if (m_aiSubscriptionAuth)
     {
         m_aiSubscriptionAuth->cancel();
     }
+}
+
+bool AppController::openAiChatGptDeviceVerification()
+{
+    return m_aiChatGptDeviceVerificationUrl.isValid() && QDesktopServices::openUrl(m_aiChatGptDeviceVerificationUrl);
+}
+
+bool AppController::copyAiChatGptDeviceCode()
+{
+    QClipboard *clipboard = QGuiApplication::clipboard();
+    if (clipboard == nullptr || m_aiChatGptDeviceUserCode.isEmpty())
+    {
+        return false;
+    }
+    clipboard->setText(m_aiChatGptDeviceUserCode);
+    return true;
 }
 
 bool AppController::signOutAiChatGpt()
@@ -8689,6 +8757,8 @@ bool AppController::signOutAiChatGpt()
     }
     m_aiChatGptAccountId.clear();
     m_aiChatGptAuthError.clear();
+    m_aiChatGptDeviceVerificationUrl = QUrl{};
+    m_aiChatGptDeviceUserCode.clear();
     m_aiSubscriptionUsage.reset();
     m_aiSubscriptionUsageError.clear();
     m_aiSubscriptionUsageLoading = false;
