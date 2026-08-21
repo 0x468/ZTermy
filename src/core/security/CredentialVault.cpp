@@ -31,6 +31,10 @@ std::string_view credentialKindToken(const CredentialKind kind) noexcept
             return "ai-api-key";
         case CredentialKind::AiConversationKey:
             return "ai-conversation-key";
+        case CredentialKind::AiOAuthAccessToken:
+            return "ai-oauth-access-token";
+        case CredentialKind::AiOAuthRefreshToken:
+            return "ai-oauth-refresh-token";
     }
     return {};
 }

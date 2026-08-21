@@ -18,6 +18,8 @@ enum class CredentialKind : std::uint8_t
     ProxyPassword = 3,
     AiApiKey = 4,
     AiConversationKey = 5,
+    AiOAuthAccessToken = 6,
+    AiOAuthRefreshToken = 7,
 };
 
 struct CredentialKey final

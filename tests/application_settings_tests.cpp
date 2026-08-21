@@ -108,6 +108,7 @@ void ApplicationSettingsTests::roundTripsEveryAiProviderPreference()
 
     const std::array providers{
         ztermy::config::AiProviderPreference::openAiResponses,
+        ztermy::config::AiProviderPreference::openAiChatGpt,
         ztermy::config::AiProviderPreference::anthropic,
         ztermy::config::AiProviderPreference::deepSeek,
         ztermy::config::AiProviderPreference::kimi,
@@ -161,7 +162,7 @@ void ApplicationSettingsTests::migratesLegacyWindowOpacityAndNoneBackdrop()
     QFile saved(path);
     QVERIFY(saved.open(QIODevice::ReadOnly));
     const QByteArray persisted = saved.readAll();
-    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 20")));
+    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 21")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdropOpacity\": 0.75")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdrop\": \"transparent\"")));
     QVERIFY(!persisted.contains(QByteArrayLiteral("windowOpacity")));
@@ -447,7 +448,7 @@ void ApplicationSettingsTests::migratesRecentPermissionSchemasAndAllowsResave()
 
         QVERIFY(file.open(QIODevice::ReadOnly));
         const auto persisted = QJsonDocument::fromJson(file.readAll()).object();
-        QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 20);
+        QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 21);
         QCOMPARE(persisted.value(QStringLiteral("aiPermission")).toString(), QStringLiteral("ask"));
         QCOMPARE(persisted.value(QStringLiteral("terminalFontSize")).toInt(), 16);
     }
@@ -484,7 +485,7 @@ void ApplicationSettingsTests::migratesRetiredExternalAgentSchemaWithoutLosingPr
     QVERIFY(store.save(*loaded));
     QVERIFY(file.open(QIODevice::ReadOnly));
     const auto persisted = QJsonDocument::fromJson(file.readAll()).object();
-    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 20);
+    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 21);
     QVERIFY(!persisted.contains(QStringLiteral("aiAgent")));
     QCOMPARE(persisted.value(QStringLiteral("aiBaseUrl")).toString(), expected.aiBaseUrl);
     QCOMPARE(persisted.value(QStringLiteral("aiModel")).toString(), expected.aiModel);
@@ -503,7 +504,7 @@ void ApplicationSettingsTests::rejectsMalformedUnsupportedAndIncompleteDocuments
     QVERIFY(!malformed);
     QCOMPARE(malformed.error(), ztermy::config::ApplicationSettingsStoreError::invalidFormat);
 
-    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":21})")));
+    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":22})")));
     const auto unsupported = store.load();
     QVERIFY(!unsupported);
     QCOMPARE(unsupported.error(), ztermy::config::ApplicationSettingsStoreError::unsupportedVersion);

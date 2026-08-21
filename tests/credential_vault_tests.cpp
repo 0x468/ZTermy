@@ -116,6 +116,8 @@ private slots:
     void portableVaultRejectsTampering();
     void windowsVaultRoundTripsGenericCredential();
     void aiSecretStoreUsesDedicatedCredentialKind();
+    void aiSecretStoreRoundTripsOAuthTokens();
+    void aiSecretStoreRollsBackPartialOAuthWrite();
     void coordinatorMigratesOnlyAfterPortableVaultUnlocks();
     void coordinatorCanLeaveAnUninitializedPortableVault();
     void coordinatorRollsBackPartiallyWrittenTarget();
@@ -379,6 +381,51 @@ void CredentialVaultTests::aiSecretStoreUsesDedicatedCredentialKind()
     const auto missing = store.readApiKey("provider-default");
     QVERIFY(!missing);
     QCOMPARE(missing.error(), ztermy::security::CredentialVaultError::NotFound);
+}
+
+void CredentialVaultTests::aiSecretStoreRoundTripsOAuthTokens()
+{
+    ztermy::security::InMemoryCredentialVault vault;
+    ztermy::ai::AiSecretStore store(vault);
+    QVERIFY(store.storeOAuthTokens(
+        "chatgpt-default", {.accessToken = sensitive("access-token"), .refreshToken = sensitive("refresh-token")}));
+
+    auto loaded = store.readOAuthTokens("chatgpt-default");
+    QVERIFY(loaded);
+    QCOMPARE(bytes(loaded->accessToken), QByteArrayLiteral("access-token"));
+    QCOMPARE(bytes(loaded->refreshToken), QByteArrayLiteral("refresh-token"));
+    auto keys = vault.listKeys();
+    QVERIFY(keys);
+    QCOMPARE(keys->size(), std::size_t{2});
+    QVERIFY(std::ranges::any_of(*keys, [](const ztermy::security::CredentialKey &key) {
+        return key.kind == ztermy::security::CredentialKind::AiOAuthAccessToken;
+    }));
+    QVERIFY(std::ranges::any_of(*keys, [](const ztermy::security::CredentialKey &key) {
+        return key.kind == ztermy::security::CredentialKind::AiOAuthRefreshToken;
+    }));
+
+    QVERIFY(store.removeOAuthTokens("chatgpt-default"));
+    const auto missing = store.readOAuthTokens("chatgpt-default");
+    QVERIFY(!missing);
+    QCOMPARE(missing.error(), ztermy::security::CredentialVaultError::NotFound);
+}
+
+void CredentialVaultTests::aiSecretStoreRollsBackPartialOAuthWrite()
+{
+    SingleStoreFailureVault vault;
+    ztermy::ai::AiSecretStore store(vault);
+    QVERIFY(store.storeOAuthTokens("chatgpt-default",
+                                   {.accessToken = sensitive("old-access"), .refreshToken = sensitive("old-refresh")}));
+    vault.failOnceAfter(1);
+
+    const auto failed = store.storeOAuthTokens(
+        "chatgpt-default", {.accessToken = sensitive("new-access"), .refreshToken = sensitive("new-refresh")});
+    QVERIFY(!failed);
+    QCOMPARE(failed.error(), ztermy::security::CredentialVaultError::IoError);
+    auto loaded = store.readOAuthTokens("chatgpt-default");
+    QVERIFY(loaded);
+    QCOMPARE(bytes(loaded->accessToken), QByteArrayLiteral("old-access"));
+    QCOMPARE(bytes(loaded->refreshToken), QByteArrayLiteral("old-refresh"));
 }
 
 void CredentialVaultTests::coordinatorMigratesOnlyAfterPortableVaultUnlocks()

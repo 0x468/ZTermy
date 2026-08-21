@@ -21,6 +21,8 @@ constexpr std::wstring_view PassphraseSuffix = L":key-passphrase";
 constexpr std::wstring_view ProxyPasswordSuffix = L":proxy-password";
 constexpr std::wstring_view AiApiKeySuffix = L":ai-api-key";
 constexpr std::wstring_view AiConversationKeySuffix = L":ai-conversation-key";
+constexpr std::wstring_view AiOAuthAccessTokenSuffix = L":ai-oauth-access-token";
+constexpr std::wstring_view AiOAuthRefreshTokenSuffix = L":ai-oauth-refresh-token";
 
 struct CredentialDeleter final
 {
@@ -82,6 +84,12 @@ using CredentialPointer = std::unique_ptr<CREDENTIALW, CredentialDeleter>;
         case ztermy::security::CredentialKind::AiConversationKey:
             target.append(AiConversationKeySuffix);
             break;
+        case ztermy::security::CredentialKind::AiOAuthAccessToken:
+            target.append(AiOAuthAccessTokenSuffix);
+            break;
+        case ztermy::security::CredentialKind::AiOAuthRefreshToken:
+            target.append(AiOAuthRefreshTokenSuffix);
+            break;
     }
     return target;
 }
@@ -119,6 +127,18 @@ using CredentialPointer = std::unique_ptr<CREDENTIALW, CredentialDeleter>;
         kind = ztermy::security::CredentialKind::AiConversationKey;
         profile =
             target.substr(TargetPrefix.size(), target.size() - TargetPrefix.size() - AiConversationKeySuffix.size());
+    }
+    else if (target.ends_with(AiOAuthAccessTokenSuffix))
+    {
+        kind = ztermy::security::CredentialKind::AiOAuthAccessToken;
+        profile =
+            target.substr(TargetPrefix.size(), target.size() - TargetPrefix.size() - AiOAuthAccessTokenSuffix.size());
+    }
+    else if (target.ends_with(AiOAuthRefreshTokenSuffix))
+    {
+        kind = ztermy::security::CredentialKind::AiOAuthRefreshToken;
+        profile =
+            target.substr(TargetPrefix.size(), target.size() - TargetPrefix.size() - AiOAuthRefreshTokenSuffix.size());
     }
     else
     {

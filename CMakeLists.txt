@@ -538,6 +538,8 @@ add_library(ztermy_ai_provider STATIC
     src/infrastructure/ai/ProviderRequestFactory.h
     src/infrastructure/ai/ProviderStreamMapper.cpp
     src/infrastructure/ai/ProviderStreamMapper.h
+    src/infrastructure/ai/OpenAiSubscriptionAuthProtocol.cpp
+    src/infrastructure/ai/OpenAiSubscriptionAuthProtocol.h
 )
 
 target_compile_features(ztermy_ai_provider PUBLIC cxx_std_23)
@@ -2932,6 +2934,28 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME provider-request-factory COMMAND ztermy_provider_request_factory_tests)
+
+    qt_add_executable(ztermy_openai_subscription_auth_protocol_tests
+        tests/openai_subscription_auth_protocol_tests.cpp
+    )
+
+    target_compile_features(ztermy_openai_subscription_auth_protocol_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_openai_subscription_auth_protocol_tests PRIVATE
+        ztermy_ai_provider
+        Qt6::Network
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_openai_subscription_auth_protocol_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME openai-subscription-auth-protocol COMMAND ztermy_openai_subscription_auth_protocol_tests)
 
     qt_add_executable(ztermy_ai_trace_sanitizer_tests
         tests/ai_trace_sanitizer_tests.cpp

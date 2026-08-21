@@ -39,7 +39,10 @@ constexpr qint64 aiPermissionContractSchemaVersion = 19;
 // must remain readable. Keep the schema number reserved and ignore the
 // removed `aiAgent` member when loading it.
 constexpr qint64 retiredExternalAgentSchemaVersion = 20;
-constexpr qint64 currentSchemaVersion = retiredExternalAgentSchemaVersion;
+// Version 21 adds the native ChatGPT subscription provider token. Older
+// schemas continue to load with their existing provider unchanged.
+constexpr qint64 nativeChatGptProviderSchemaVersion = 21;
+constexpr qint64 currentSchemaVersion = nativeChatGptProviderSchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::AiPermissionPreference;
@@ -182,6 +185,10 @@ template <>
     if (token == QStringLiteral("openai-responses"))
     {
         return AiProviderPreference::openAiResponses;
+    }
+    if (token == QStringLiteral("openai-chatgpt"))
+    {
+        return AiProviderPreference::openAiChatGpt;
     }
     if (token == QStringLiteral("ollama"))
     {
@@ -757,6 +764,8 @@ QString aiProviderPreferenceToken(const AiProviderPreference preference)
             return QStringLiteral("ollama");
         case AiProviderPreference::openAiCompatible:
             return QStringLiteral("openai-compatible");
+        case AiProviderPreference::openAiChatGpt:
+            return QStringLiteral("openai-chatgpt");
         case AiProviderPreference::openAiResponses:
         default:
             return QStringLiteral("openai-responses");
