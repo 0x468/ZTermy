@@ -159,6 +159,7 @@ private slots:
     void persistsApplicationSettings();
     void refreshesConfiguredAiModelsAtStartup();
     void refreshesConfiguredAiModelsInBackground();
+    void routesAiModelDiscoveryThroughCustomProxy();
     void managesMcpServerConfiguration();
     void managesActionShortcutsAndDispatchContext();
     void restoresCompleteAgentPresentationFromHistory();
@@ -1225,6 +1226,61 @@ void AppControllerTests::refreshesConfiguredAiModelsInBackground()
     QTRY_COMPARE_WITH_TIMEOUT(requestCount, 4, 5'000);
     QTest::qWait(50);
     QCOMPARE(controller.aiAvailableModels(), QStringList({QStringLiteral("model-a"), QStringLiteral("model-b")}));
+    QVERIFY(controller.aiModelsError().isEmpty());
+}
+
+void AppControllerTests::routesAiModelDiscoveryThroughCustomProxy()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    QTcpServer proxy;
+    QVERIFY(proxy.listen(QHostAddress::LocalHost, 0));
+    int requestCount = 0;
+    QByteArray receivedRequest;
+    connect(&proxy, &QTcpServer::newConnection, &proxy, [&] {
+        while (proxy.hasPendingConnections())
+        {
+            QTcpSocket *socket = proxy.nextPendingConnection();
+            QVERIFY(socket != nullptr);
+            auto request = std::make_shared<QByteArray>();
+            connect(socket, &QTcpSocket::readyRead, socket, [socket, request, &requestCount, &receivedRequest] {
+                request->append(socket->readAll());
+                if (!request->contains("\r\n\r\n"))
+                {
+                    return;
+                }
+                ++requestCount;
+                receivedRequest = *request;
+                const QByteArray body = QByteArrayLiteral(R"({"data":[{"id":"proxy-model"}]})");
+                QByteArray response = QByteArrayLiteral(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: ");
+                response += QByteArray::number(body.size());
+                response += QByteArrayLiteral("\r\n\r\n");
+                response += body;
+                socket->write(response);
+                socket->disconnectFromHost();
+            });
+        }
+    });
+
+    const QString profilesPath = directory.filePath(QStringLiteral("profiles.json"));
+    const QString knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json"));
+    const QString settingsPath = directory.filePath(QStringLiteral("settings.json"));
+    const auto sessionState = std::make_shared<FakeLocalSessionState>();
+    ztermy::AppController controller(profilesPath, knownHostsPath, settingsPath, [sessionState] {
+        return std::make_unique<FakeLocalTerminalSession>(sessionState);
+    });
+    const QString proxyUrl = QStringLiteral("http://127.0.0.1:%1").arg(proxy.serverPort());
+    QVERIFY(controller.saveAiProxySettings(QStringLiteral("custom"), proxyUrl, {}, {}));
+    QVERIFY(controller.saveAiProviderConfiguration(QStringLiteral("openai-compatible"),
+                                                   QStringLiteral("http://models.example.test/v1"),
+                                                   QStringLiteral("proxy-model"), false, QStringLiteral("auto"),
+                                                   QStringLiteral("test-api-key"), false, QStringLiteral("auto")));
+
+    QTRY_COMPARE_WITH_TIMEOUT(controller.aiAvailableModels(), QStringList({QStringLiteral("proxy-model")}), 5'000);
+    QCOMPARE(requestCount, 1);
+    QVERIFY(receivedRequest.startsWith("GET http://models.example.test/v1/models "));
+    QVERIFY(receivedRequest.toLower().contains("\r\nhost: models.example.test\r\n"));
     QVERIFY(controller.aiModelsError().isEmpty());
 }
 

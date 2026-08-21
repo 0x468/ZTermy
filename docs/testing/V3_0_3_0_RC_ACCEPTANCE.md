@@ -87,10 +87,12 @@ The following gates completed with exit code zero:
     Release repetitions after adding bounded Win32 clipboard contention retry.
     The same contract passed in the final Debug and Release 116-test suites.
 13. ChatGPT subscription tests cover PKCE, loopback callback success, state
-    rejection, cancellation, native device-code request/poll/token exchange,
-    token refresh without rotation, typed 429 recovery, model-catalog filtering,
-    allowance parsing, credential persistence, and provider error recovery. The
-    background model-refresh controller test passed 20 consecutive Static
+    rejection, cancellation, native device-code request/pending-poll/token
+    exchange, cancellation before polling, token refresh without rotation,
+    typed 429 recovery, model-catalog filtering, allowance parsing, credential
+    persistence, and provider error recovery. A controller-level fake HTTP proxy
+    also proves that model discovery uses the configured AI-only custom proxy.
+    The background model-refresh controller test passed 20 consecutive Static
     Release repetitions before both final full suites. The signed-out ChatGPT
     account row and its Chinese device-code entry were also inspected in the
     exact Debug executable at full width and approximately 793 px window width.

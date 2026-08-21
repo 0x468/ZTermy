@@ -126,7 +126,7 @@ private:
 class FakeDeviceAuthServer final : public QObject
 {
 public:
-    FakeDeviceAuthServer()
+    explicit FakeDeviceAuthServer(const int pendingPolls = 0) : m_pendingPolls(pendingPolls)
     {
         QObject::connect(&m_server, &QTcpServer::newConnection, this, [this] {
             QTcpSocket *socket = m_server.nextPendingConnection();
@@ -140,14 +140,19 @@ public:
                 }
                 m_requests.push_back(*request);
                 const bool userCodeRequest = request->startsWith(QByteArrayLiteral("POST /device/usercode "));
+                const bool pending = !userCodeRequest && m_tokenRequestCount++ < m_pendingPolls;
                 const QByteArray body =
                     userCodeRequest
                         ? QByteArrayLiteral(R"({"device_auth_id":"device-1","user_code":"ABCD-1234","interval":"1"})")
+                    : pending
+                        ? QByteArrayLiteral(R"({"error":"authorization_pending"})")
                         : QByteArrayLiteral(
                               R"({"authorization_code":"code-1","code_challenge":"challenge-1","code_verifier":"verifier-1"})");
-                socket->write(QByteArrayLiteral("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: "
-                                                "close\r\nContent-Length: ")
-                              + QByteArray::number(body.size()) + QByteArrayLiteral("\r\n\r\n") + body);
+                socket->write(
+                    (pending ? QByteArrayLiteral("HTTP/1.1 403 Forbidden\r\n")
+                             : QByteArrayLiteral("HTTP/1.1 200 OK\r\n"))
+                    + QByteArrayLiteral("Content-Type: application/json\r\nConnection: close\r\nContent-Length: ")
+                    + QByteArray::number(body.size()) + QByteArrayLiteral("\r\n\r\n") + body);
                 socket->disconnectFromHost();
             });
         });
@@ -169,6 +174,8 @@ public:
 private:
     QTcpServer m_server;
     std::vector<QByteArray> m_requests;
+    int m_pendingPolls = 0;
+    int m_tokenRequestCount = 0;
 };
 
 class OpenAiSubscriptionAuthProtocolTests final : public QObject
@@ -186,6 +193,8 @@ private slots:
     void browserSessionRejectsMismatchedState();
     void browserSessionCanBeCancelled();
     void deviceSessionCompletesThroughPolling();
+    void deviceSessionRetriesPendingAuthorization();
+    void deviceSessionCanBeCancelledBeforePolling();
     void refreshesAndRetainsUnrotatedRefreshToken();
     void classifiesRefreshRateLimits();
     void preparesAndParsesSubscriptionUsage();
@@ -399,6 +408,67 @@ void OpenAiSubscriptionAuthProtocolTests::deviceSessionCompletesThroughPolling()
     QVERIFY(tokenServer.request().contains(
         QByteArrayLiteral("redirect_uri=https://auth.example.test/deviceauth/callback")));
     QVERIFY(tokenServer.request().contains(QByteArrayLiteral("code_verifier=verifier-1")));
+    QVERIFY(!session.active());
+}
+
+void OpenAiSubscriptionAuthProtocolTests::deviceSessionRetriesPendingAuthorization()
+{
+    FakeDeviceAuthServer deviceServer(1);
+    FakeTokenServer tokenServer;
+    QNetworkAccessManager network;
+    ztermy::ai::OpenAiSubscriptionAuthSession session(&network);
+    std::optional<ztermy::ai::OpenAiSubscriptionAuthSession::Result> result;
+    ztermy::ai::OpenAiSubscriptionAuthEndpoints endpoints;
+    endpoints.token = tokenServer.url();
+    endpoints.deviceUserCode = deviceServer.userCodeUrl();
+    endpoints.deviceToken = deviceServer.tokenUrl();
+    endpoints.deviceVerification = QUrl(QStringLiteral("https://auth.example.test/codex/device"));
+    endpoints.deviceRedirect = QUrl(QStringLiteral("https://auth.example.test/deviceauth/callback"));
+
+    const auto started = session.beginDeviceLogin(
+        [](const ztermy::ai::OpenAiSubscriptionDeviceCode &) {
+        },
+        [&result](ztermy::ai::OpenAiSubscriptionAuthSession::Result completed) {
+            result = std::move(completed);
+        },
+        endpoints);
+
+    QVERIFY(started.has_value());
+    QTRY_VERIFY_WITH_TIMEOUT(result.has_value(), 4'000);
+    QVERIFY(requiredOptionalValue(result).has_value());
+    QCOMPARE(deviceServer.requests().size(), std::size_t{3});
+    QVERIFY(!session.active());
+}
+
+void OpenAiSubscriptionAuthProtocolTests::deviceSessionCanBeCancelledBeforePolling()
+{
+    FakeDeviceAuthServer deviceServer;
+    FakeTokenServer tokenServer;
+    QNetworkAccessManager network;
+    ztermy::ai::OpenAiSubscriptionAuthSession session(&network);
+    std::optional<ztermy::ai::OpenAiSubscriptionAuthSession::Result> result;
+    ztermy::ai::OpenAiSubscriptionAuthEndpoints endpoints;
+    endpoints.token = tokenServer.url();
+    endpoints.deviceUserCode = deviceServer.userCodeUrl();
+    endpoints.deviceToken = deviceServer.tokenUrl();
+    endpoints.deviceVerification = QUrl(QStringLiteral("https://auth.example.test/codex/device"));
+    endpoints.deviceRedirect = QUrl(QStringLiteral("https://auth.example.test/deviceauth/callback"));
+
+    const auto started = session.beginDeviceLogin(
+        [&session](const ztermy::ai::OpenAiSubscriptionDeviceCode &) {
+            session.cancel();
+        },
+        [&result](ztermy::ai::OpenAiSubscriptionAuthSession::Result completed) {
+            result = std::move(completed);
+        },
+        endpoints);
+
+    QVERIFY(started.has_value());
+    QTRY_VERIFY_WITH_TIMEOUT(result.has_value(), 2'000);
+    auto &completed = requiredOptionalValue(result);
+    QVERIFY(!completed.has_value());
+    QCOMPARE(completed.error().code, ztermy::ai::OpenAiSubscriptionSessionErrorCode::cancelled);
+    QCOMPARE(deviceServer.requests().size(), std::size_t{1});
     QVERIFY(!session.active());
 }
 
