@@ -1,11 +1,16 @@
 #include "infrastructure/ai/ProviderErrorParser.h"
 
+#include <QDateTime>
 #include <QJsonDocument>
 #include <QJsonValue>
+#include <QNetworkReply>
+#include <QNetworkRequest>
 #include <QString>
 
 #include <algorithm>
 #include <array>
+#include <charconv>
+#include <limits>
 #include <optional>
 #include <string>
 #include <utility>
@@ -156,6 +161,44 @@ template <std::size_t Size>
                                 metadata.value(QStringLiteral("requestId"))});
 }
 
+[[nodiscard]] std::optional<std::uint64_t> retryAfterMilliseconds(const QNetworkReply &reply)
+{
+    const QByteArray header = reply.rawHeader("Retry-After").trimmed();
+    if (header.isEmpty())
+    {
+        return std::nullopt;
+    }
+    std::uint64_t seconds = 0;
+    const auto parsed = std::from_chars(header.constData(), header.constData() + header.size(), seconds);
+    if (parsed.ec == std::errc{} && parsed.ptr == header.constData() + header.size())
+    {
+        constexpr std::uint64_t maximumSeconds = (std::numeric_limits<std::uint64_t>::max)() / 1000;
+        return (std::min)(seconds, maximumSeconds) * 1000;
+    }
+    const QDateTime date = QDateTime::fromString(QString::fromLatin1(header), Qt::RFC2822Date);
+    if (!date.isValid())
+    {
+        return std::nullopt;
+    }
+    const qint64 delay = date.toMSecsSinceEpoch() - QDateTime::currentMSecsSinceEpoch();
+    return delay > 0 ? std::optional<std::uint64_t>{static_cast<std::uint64_t>(delay)}
+                     : std::optional<std::uint64_t>{1};
+}
+
+[[nodiscard]] std::string requestIdHeader(const QNetworkReply &reply)
+{
+    constexpr std::array headers{"x-request-id", "request-id", "x-dashscope-request-id", "x-goog-request-id"};
+    for (const auto *header : headers)
+    {
+        const QByteArray value = reply.rawHeader(header).trimmed();
+        if (!value.isEmpty())
+        {
+            return {value.constData(), static_cast<std::size_t>(value.size())};
+        }
+    }
+    return {};
+}
+
 } // namespace
 
 AiProviderError parseProviderError(const QJsonObject &envelope, AiProviderError fallback)
@@ -218,6 +261,32 @@ AiProviderError parseProviderErrorBody(const QByteArray &body, AiProviderError f
         fallback.message = utf8(plainText);
     }
     return fallback;
+}
+
+AiProviderError parseProviderReplyError(const QNetworkReply &reply, const QByteArray &body, std::string fallbackMessage)
+{
+    const int rawStatus = reply.attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    const std::optional<std::uint16_t> status =
+        rawStatus > 0 ? std::optional<std::uint16_t>{static_cast<std::uint16_t>((std::min)(rawStatus, 65535))}
+                      : std::nullopt;
+    const AiProviderErrorCode code = classifiedCode(QString{}, status).value_or(AiProviderErrorCode::network);
+    if (fallbackMessage.empty())
+    {
+        fallbackMessage = status.has_value()
+                              ? "Provider HTTP request failed with status " + std::to_string(*status) + '.'
+                              : "Provider network request failed.";
+    }
+    bool mayRetry = retryable(code);
+    if (!status.has_value() && reply.error() == QNetworkReply::SslHandshakeFailedError)
+    {
+        mayRetry = false;
+    }
+    return parseProviderErrorBody(body, AiProviderError{.code = code,
+                                                        .message = std::move(fallbackMessage),
+                                                        .retryAfterMilliseconds = retryAfterMilliseconds(reply),
+                                                        .retryable = mayRetry,
+                                                        .httpStatus = status,
+                                                        .requestId = requestIdHeader(reply)});
 }
 
 } // namespace ztermy::ai

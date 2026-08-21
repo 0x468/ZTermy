@@ -777,6 +777,7 @@ private:
         QString aiState = QStringLiteral("idle");
         QString aiError;
         std::optional<ai::AiProviderErrorCode> aiProviderErrorCode;
+        std::optional<std::uint64_t> aiProviderRetryAfterMilliseconds;
         QString aiLastPrompt;
         QStringList aiLastSelectedSkillIds;
         QHash<QString, QString> aiWebSearchQueries;

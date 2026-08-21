@@ -8,9 +8,6 @@
 #include <QNetworkRequest>
 #include <QVariant>
 
-#include <algorithm>
-#include <array>
-#include <charconv>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -27,90 +24,14 @@ constexpr qsizetype maxErrorBodyBytes = qsizetype{64} * 1024;
     return reply.attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
 }
 
-[[nodiscard]] std::optional<std::uint64_t> retryAfter(const QNetworkReply &reply)
-{
-    const auto header = reply.rawHeader("Retry-After");
-    std::uint64_t seconds = 0;
-    const auto result = std::from_chars(header.constData(), header.constData() + header.size(), seconds);
-    if (result.ec == std::errc{} && result.ptr == header.constData() + header.size())
-    {
-        return seconds * 1000;
-    }
-    // RFC 9110 also allows an HTTP-date in Retry-After. Parse it defensively and
-    // fall back to "no instruction" (exponential backoff) when malformed.
-    const auto date = QDateTime::fromString(QString::fromLatin1(header), Qt::RFC2822Date);
-    if (date.isValid())
-    {
-        const auto delay = date.toMSecsSinceEpoch() - QDateTime::currentMSecsSinceEpoch();
-        return delay > 0 ? std::optional{static_cast<std::uint64_t>(delay)} : std::optional{std::uint64_t{1}};
-    }
-    return std::nullopt;
-}
-
-[[nodiscard]] std::string requestIdHeader(const QNetworkReply &reply)
-{
-    constexpr std::array headers{"x-request-id", "request-id", "x-dashscope-request-id", "x-goog-request-id"};
-    for (const auto *header : headers)
-    {
-        const QByteArray value = reply.rawHeader(header).trimmed();
-        if (!value.isEmpty())
-        {
-            return {value.constData(), static_cast<std::size_t>(value.size())};
-        }
-    }
-    return {};
-}
-
 [[nodiscard]] AiProviderError httpError(const QNetworkReply &reply, const QByteArray &body)
 {
-    const auto status = statusCode(reply);
-    auto code = AiProviderErrorCode::server;
-    auto retryable = false;
-    if (status == 401 || status == 403)
-    {
-        code = AiProviderErrorCode::authentication;
-    }
-    else if (status == 429)
-    {
-        code = AiProviderErrorCode::rateLimited;
-        retryable = true;
-    }
-    else if (status == 408)
-    {
-        code = AiProviderErrorCode::network;
-        retryable = true;
-    }
-    else if (status == 413)
-    {
-        code = AiProviderErrorCode::contextOverflow;
-        retryable = true;
-    }
-    else if (status == 402)
-    {
-        code = AiProviderErrorCode::quotaExceeded;
-    }
-    else if (status >= 400 && status < 500)
-    {
-        code = AiProviderErrorCode::invalidRequest;
-    }
-    else if (status >= 500)
-    {
-        retryable = true;
-    }
-    auto error = AiProviderError{.code = code,
-                                 .message = "Provider HTTP request failed with status " + std::to_string(status) + '.',
-                                 .retryAfterMilliseconds = retryAfter(reply),
-                                 .retryable = retryable,
-                                 .httpStatus = static_cast<std::uint16_t>(std::clamp(status, 0, 65535)),
-                                 .requestId = requestIdHeader(reply)};
-    return parseProviderErrorBody(body, std::move(error));
+    return parseProviderReplyError(reply, body);
 }
 
 [[nodiscard]] AiProviderError networkError(const QNetworkReply &reply)
 {
-    return AiProviderError{.code = AiProviderErrorCode::network,
-                           .message = "Provider network request failed.",
-                           .retryable = reply.error() != QNetworkReply::SslHandshakeFailedError};
+    return parseProviderReplyError(reply, {});
 }
 
 } // namespace

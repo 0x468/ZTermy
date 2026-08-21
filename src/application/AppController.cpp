@@ -13,6 +13,7 @@
 #include "domain/ssh/SshTarget.h"
 #include "infrastructure/ai/AiTraceSanitizer.h"
 #include "infrastructure/ai/ProviderEndpointResolver.h"
+#include "infrastructure/ai/ProviderErrorParser.h"
 #include "infrastructure/security/InMemoryCredentialVault.h"
 #include "infrastructure/workbench/QuickCommandStore.h"
 #include "platform/windows/WindowsProtectedClipboard.h"
@@ -3554,11 +3555,17 @@ QVariantMap AppController::activeAiErrorRecovery() const
             break;
         case ai::AiProviderErrorCode::authentication:
             codeToken = QStringLiteral("authentication");
-            hint = tr("Update the API key in AI settings, then retry this response.");
+            hint = m_settings.aiProvider == config::AiProviderPreference::openAiChatGpt
+                       ? tr("Sign in with ChatGPT again in AI settings, then retry this response.")
+                       : tr("Update the API key in AI settings, then retry this response.");
             break;
         case ai::AiProviderErrorCode::rateLimited:
             codeToken = QStringLiteral("rate_limited");
-            hint = tr("Wait a moment and retry, or switch the provider or model in AI settings.");
+            hint = tab->aiProviderRetryAfterMilliseconds.has_value()
+                       ? tr("The provider asked ztermy to wait about %1 seconds before retrying.")
+                             .arg((*tab->aiProviderRetryAfterMilliseconds / 1000)
+                                  + (*tab->aiProviderRetryAfterMilliseconds % 1000 != 0 ? 1 : 0))
+                       : tr("Wait a moment and retry, or switch the provider or model in AI settings.");
             break;
         case ai::AiProviderErrorCode::quotaExceeded:
             codeToken = QStringLiteral("quota_exceeded");
@@ -3588,6 +3595,8 @@ QVariantMap AppController::activeAiErrorRecovery() const
     return {{QStringLiteral("code"), codeToken},
             {QStringLiteral("hint"), hint},
             {QStringLiteral("messageAnchored"), tab->aiAssistantMessageId != 0},
+            {QStringLiteral("retryAfterMilliseconds"),
+             QVariant::fromValue<qulonglong>(tab->aiProviderRetryAfterMilliseconds.value_or(0))},
             {QStringLiteral("retryAvailable"), recovery.retryAvailable},
             {QStringLiteral("settingsAvailable"), recovery.settingsAvailable},
             {QStringLiteral("newConversationAvailable"), recovery.newConversationAvailable}};
@@ -8451,8 +8460,22 @@ void AppController::startAiModelsRequest(QNetworkRequest request, const quint64 
         const auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         if (reply->error() != QNetworkReply::NoError || status >= 400)
         {
-            error = status > 0 ? tr("Could not fetch models (HTTP %1).").arg(status)
-                               : tr("Could not reach the model provider.");
+            constexpr qsizetype maximumErrorBytes = qsizetype{64} * 1024;
+            QByteArray body = reply->read(maximumErrorBytes + 1);
+            if (body.size() > maximumErrorBytes)
+            {
+                body.truncate(maximumErrorBytes);
+            }
+            const ai::AiProviderError providerError =
+                ai::parseProviderReplyError(*reply, body,
+                                            status > 0 ? utf8String(tr("Could not fetch models (HTTP %1).").arg(status))
+                                                       : utf8String(tr("Could not reach the model provider.")));
+            error = utf8QString(providerError.message);
+            if (openAiSubscription && providerError.code == ai::AiProviderErrorCode::authentication)
+            {
+                m_aiChatGptAuthError = error;
+                emit aiSubscriptionAuthChanged();
+            }
         }
         else
         {
@@ -8484,6 +8507,11 @@ void AppController::startAiModelsRequest(QNetworkRequest request, const quint64 
         {
             m_aiAvailableModels = std::move(models);
             m_aiModelsError.clear();
+            if (openAiSubscription && !m_aiChatGptAuthError.isEmpty())
+            {
+                m_aiChatGptAuthError.clear();
+                emit aiSubscriptionAuthChanged();
+            }
         }
         else if (!background)
         {
@@ -8589,7 +8617,9 @@ bool AppController::beginAiChatGptSignIn()
     auto started = m_aiSubscriptionAuth->beginBrowserLogin([this](ai::OpenAiSubscriptionAuthSession::Result result) {
         if (!result)
         {
-            m_aiChatGptAuthError = result.error().message;
+            m_aiChatGptAuthError = result.error().code == ai::OpenAiSubscriptionSessionErrorCode::cancelled
+                                       ? QString{}
+                                       : result.error().message;
             emit aiSubscriptionAuthChanged();
             return;
         }
@@ -8749,10 +8779,19 @@ void AppController::refreshAiChatGptUsageInternal(const bool background)
             const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
             if (reply->error() != QNetworkReply::NoError || status >= 400)
             {
-                error = status == 401 || status == 403 ? tr("ChatGPT sign-in expired. Sign in again.")
-                        : status > 0                   ? tr("Could not fetch ChatGPT usage (HTTP %1).").arg(status)
-                                                       : tr("Could not reach ChatGPT usage.");
-                if (status == 401 || status == 403)
+                constexpr qsizetype maximumErrorBytes = qsizetype{64} * 1024;
+                QByteArray body = reply->read(maximumErrorBytes + 1);
+                if (body.size() > maximumErrorBytes)
+                {
+                    body.truncate(maximumErrorBytes);
+                }
+                const ai::AiProviderError providerError = ai::parseProviderReplyError(
+                    *reply, body,
+                    status == 401 || status == 403 ? std::string("ChatGPT sign-in expired. Sign in again.")
+                    : status > 0 ? utf8String(tr("Could not fetch ChatGPT usage (HTTP %1).").arg(status))
+                                 : utf8String(tr("Could not reach ChatGPT usage.")));
+                error = utf8QString(providerError.message);
+                if (providerError.code == ai::AiProviderErrorCode::authentication)
                 {
                     m_aiChatGptAuthError = error;
                     emit aiSubscriptionAuthChanged();
@@ -8773,6 +8812,11 @@ void AppController::refreshAiChatGptUsageInternal(const bool background)
                     {
                         m_aiSubscriptionUsage = std::move(*parsed);
                         m_aiSubscriptionUsageError.clear();
+                        if (!m_aiChatGptAuthError.isEmpty())
+                        {
+                            m_aiChatGptAuthError.clear();
+                            emit aiSubscriptionAuthChanged();
+                        }
                     }
                     else
                     {
@@ -9509,6 +9553,7 @@ void AppController::clearAiConversation()
     tab->aiState = QStringLiteral("idle");
     tab->aiError.clear();
     tab->aiProviderErrorCode.reset();
+    tab->aiProviderRetryAfterMilliseconds.reset();
     tab->aiLastPrompt.clear();
     tab->aiLastPreferFailure = false;
     tab->aiLastCommandRequest = false;
@@ -10490,12 +10535,14 @@ void AppController::handleAiStreamEvent(const QString &tabId, const std::uint64_
             target->aiState = QStringLiteral("complete");
             target->aiError.clear();
             target->aiProviderErrorCode.reset();
+            target->aiProviderRetryAfterMilliseconds.reset();
             break;
         case ai::AiStreamEventType::responseFailed:
             if (event.error.has_value() && event.error->code == ai::AiProviderErrorCode::cancelled)
             {
                 target->aiError.clear();
                 target->aiProviderErrorCode = ai::AiProviderErrorCode::cancelled;
+                target->aiProviderRetryAfterMilliseconds.reset();
                 static_cast<void>(target->aiConversation->cancelAssistantMessage(assistantMessageId));
                 target->aiState = QStringLiteral("cancelled");
             }
@@ -10504,6 +10551,7 @@ void AppController::handleAiStreamEvent(const QString &tabId, const std::uint64_
                 const auto providerError = event.error.value_or(ai::AiProviderError{});
                 target->aiError = utf8QString(providerError.message);
                 target->aiProviderErrorCode = providerError.code;
+                target->aiProviderRetryAfterMilliseconds = providerError.retryAfterMilliseconds;
                 QStringList details;
                 if (providerError.httpStatus.has_value())
                 {
@@ -10768,6 +10816,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
     tab.aiUsage.reset();
     tab.aiError.clear();
     tab.aiProviderErrorCode.reset();
+    tab.aiProviderRetryAfterMilliseconds.reset();
     tab.aiState = QStringLiteral("starting");
     tab.aiWebSearchQueries.clear();
     const QString tabId = tab.id;
@@ -11624,6 +11673,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
     {
         tab.aiError = utf8QString(started.error().message);
         tab.aiProviderErrorCode = started.error().code;
+        tab.aiProviderRetryAfterMilliseconds = started.error().retryAfterMilliseconds;
         static_cast<void>(tab.aiConversation->failAssistantMessage(assistantMessageId, tab.aiError));
         tab.aiState = QStringLiteral("error");
         emit aiConversationChanged();
