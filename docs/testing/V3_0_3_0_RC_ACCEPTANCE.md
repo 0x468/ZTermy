@@ -11,7 +11,7 @@ Identity:
 - codename: **糸**;
 - verse: **「剪不断，理还乱，是离愁」**;
 - supported release platform: Windows 11 x64;
-- candidate package source: `0fe9190`.
+- candidate package source: `3d00cb7`.
 
 This document records the final-source automated evidence for that exact
 package. It includes the mainstream Agent conversation, five-mode/rule model,
@@ -34,9 +34,9 @@ into a pass.
 The following gates completed with exit code zero:
 
 1. Dynamic Debug configure/build and 116/116 CTest tests. The final-source run
-   took 105.39 seconds.
+   took 131.94 seconds.
 2. Static Release configure/build and 116/116 CTest tests. The final-source run
-   took 96.85 seconds without test retry. Both configurations include the 32-cycle MCP process
+   took 155.42 seconds without test retry. Both configurations include the 32-cycle MCP process
    lifecycle stress and the deterministic local Agent scenario.
 3. C++ format, QML format, QML lint, translation, branding, executable metadata,
    and package contracts.
@@ -89,7 +89,8 @@ The following gates completed with exit code zero:
 13. ChatGPT subscription tests cover PKCE, loopback callback success, state
     rejection, cancellation, native device-code request/pending-poll/token
     exchange, cancellation before polling, token refresh without rotation,
-    typed 429 recovery, model-catalog filtering, allowance parsing, credential
+    concurrent refresh rejection, idempotent typed cancellation, typed 429
+    recovery, model-catalog filtering, allowance parsing, credential
     persistence, and provider error recovery. A controller-level fake HTTP proxy
     also proves that model discovery uses the configured AI-only custom proxy.
     The background model-refresh controller test passed 20 consecutive Static
@@ -114,9 +115,9 @@ build/msvc-static-release/package/release/ztermy-0.3.0-windows-x64
 It contains exactly:
 
 - `ztermy-0.3.0-windows-x64-portable.zip` — SHA-256
-  `a7b71f44f2d108acb7fd52f2d1449b5d2df72609fb28d8512f87366e36493459`;
+  `cf6ac3ed65ee5921c3e340c236214c596b0d1f365f872e019ee67e48faf1a743`;
 - `ztermy-0.3.0-windows-x64.msi` — SHA-256
-  `2c53dc529236deae88274bf4e0a59f66b60b2371da2a01e39c32e61b98c49a5e`;
+  `d9649a1fef237c5c3cf65b201bf615e8d20bb9b4f33e664bb6f5f4bcee331554`;
 - `SHA256SUMS.txt`;
 - `release-manifest.json`.
 

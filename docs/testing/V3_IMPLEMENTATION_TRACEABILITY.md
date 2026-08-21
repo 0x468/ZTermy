@@ -137,6 +137,7 @@ covered by `application-settings`, `ai-permission-policy`,
 | Typed request compaction and provider-overflow retry expose one non-blocking, current-terminal status without mutating stored conversation text | `src/domain/ai/AiContextCompactor.*`, `src/application/ai/AiTurnRunner.*`, `src/application/AppController.*`, `src/ui/qml/AiAssistantPane.qml` | `ai-context-compactor`, `ai-turn-runner`, `app-controller`, `ui-layout-runtime-smoke` | ADR 0078, 0093; Netcatty comparison 2026-08-21 |
 | Long command output uses a live current-terminal artifact separate from the head/tail preview, with explicit per-command/terminal caps, gaps, expiration, and pageable middle recovery | `src/domain/terminal/CommandBlockStore.*`, `SemanticTerminalObserver.*`, `src/domain/ai/AiReadTools.*`, `src/application/ai/AiReadToolDispatcher.*`, `src/application/AppController.*` | `command-block-store`, `ai-read-tools`, `ai-read-tool-dispatcher`, `app-controller`; owner long-output acceptance | ADR 0094 |
 | Mainstream provider presets retain editable endpoints/models and preserve required compatible-protocol state across tool continuations | `src/core/config/ApplicationSettings.*`, `src/infrastructure/ai/ProviderRequestFactory.*`, `ProviderStreamMapper.*`, `src/domain/ai/AiProviderReplayCodec.*`, `src/application/ai/AiTurnRunner.*`, `src/ui/qml/SettingsPane.qml` | `application-settings`, `provider-request-factory`, `provider-stream-mapper`, `ai-provider-replay-codec`, `ai-turn-runner`, `app-controller`; live-provider owner acceptance | ADR 0079, 0093 |
+| Native ChatGPT subscription sign-in remains an in-process provider adapter: browser PKCE/device code, vault-backed token restoration and refresh, account-bound models/usage, Responses transport, and the AI-only proxy share typed cancellation and retry contracts | `src/infrastructure/ai/OpenAiSubscriptionAuthProtocol.*`, `OpenAiSubscriptionAuthSession.*`, `OpenAiSubscriptionTokenRefresher.*`, `OpenAiSubscriptionUsage.*`, `ProviderModelCatalog.*`, `ProviderRequestFactory.*`, `src/application/AppController.*`, `src/ui/qml/SettingsPane.qml` | `openai-subscription-auth-protocol`, `application-settings`, `provider-request-factory`, `provider-http-client`, `app-controller`; live-account owner acceptance | ADR 0101, 0102 |
 
 ## Evidence classification
 
@@ -151,9 +152,9 @@ covered by `application-settings`, `ai-permission-policy`,
   The retained AI-idle terminal report covers 28800.1 seconds with zero
   failures. Both reports pass the unified RC verifier with the final rebuilt
   release bundle.
-- **Current developer evidence:** the post-`0.3.11` dynamic Debug and static
-  Release candidates each pass 115/115 tests; full clang-tidy covers 250
-  translation units; QML/C++ format and the 1782/1782 translation catalog pass;
+- **Current developer evidence:** the final dynamic Debug and static Release
+  candidates each pass 116/116 tests; full clang-tidy covers 255 translation
+  units; QML/C++ format and the translation catalog pass;
   focused provider contracts cover Gemini/OpenRouter/Qwen endpoint, reasoning,
   usage-only stream, exact Gemini tool metadata continuation behavior, and
   typed provider-failure recovery actions;
