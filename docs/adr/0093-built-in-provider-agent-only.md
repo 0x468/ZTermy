@@ -36,9 +36,13 @@ bound to the current terminal.
   execution remain native ztermy capabilities.
 - The assistant sidebar operates only on its owning terminal tab. It does not
   enumerate, select, or control other terminal sessions.
-- No compatibility migration is required for the removed experimental Agent
-  settings or external thread identifiers. Existing provider conversations
-  remain valid when their native transcript can be read without those fields.
+- Schema version 20 remains a readable compatibility tombstone because a
+  released development build wrote the removed `aiAgent` field beside valid
+  provider settings. ztermy ignores that field and rewrites the document
+  without it on the next save; it never interprets, migrates, or launches the
+  former external Agent selection. External thread identifiers require no
+  compatibility migration. Existing provider conversations remain valid when
+  their native transcript can be read without those fields.
 
 ## Permanent scope test
 
@@ -65,6 +69,9 @@ Agent product or its runtime.
 
 - Agent selectors, external CLI discovery, App Server/ACP processes, external
   thread identifiers, adapters, tests, and packaging rules are removed.
+- Removing an experimental setting must not invalidate unrelated provider,
+  appearance, terminal, or credential references already stored in the same
+  settings document.
 - The AI surface has fewer setup concepts and more room for provider, model,
   context, tool activity, response, and composer quality.
 - Tool definitions and prompts can assume the current terminal as their only

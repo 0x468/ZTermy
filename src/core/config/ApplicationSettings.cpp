@@ -34,7 +34,12 @@ constexpr qint64 aiReasoningSchemaVersion = 16;
 constexpr qint64 aiExplicitContextSchemaVersion = 17;
 constexpr qint64 aiConversationFirstSchemaVersion = 18;
 constexpr qint64 aiPermissionContractSchemaVersion = 19;
-constexpr qint64 currentSchemaVersion = aiPermissionContractSchemaVersion;
+// Version 20 was briefly written by builds that exposed an external-agent
+// selector. That product direction was retired, but existing user settings
+// must remain readable. Keep the schema number reserved and ignore the
+// removed `aiAgent` member when loading it.
+constexpr qint64 retiredExternalAgentSchemaVersion = 20;
+constexpr qint64 currentSchemaVersion = retiredExternalAgentSchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::AiPermissionPreference;
