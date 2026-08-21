@@ -11,7 +11,7 @@ Identity:
 - codename: **糸**;
 - verse: **「剪不断，理还乱，是离愁」**;
 - supported release platform: Windows 11 x64;
-- candidate package source: `db6265c`.
+- candidate package source: `209073d`.
 
 This document records the final-source automated evidence for that exact
 package. It includes the mainstream Agent conversation, five-mode/rule model,
@@ -109,9 +109,9 @@ build/msvc-static-release/package/release/ztermy-0.3.0-windows-x64
 It contains exactly:
 
 - `ztermy-0.3.0-windows-x64-portable.zip` — SHA-256
-  `41dba4cce03d23789da84a81fca839ca11bbc5f03863da6fa3a4c7982466f70f`;
+  `4f6572e1a0a10bc7d36f0be88f204480e8450b35ad404214511250a8fe6ddfac`;
 - `ztermy-0.3.0-windows-x64.msi` — SHA-256
-  `3e29a8fff43970b3f2f557d446cb4f452045160261e74801ba9bd281412422d7`;
+  `ef53ca1f51e67334bcc082514ee9aebb0ca1a18e8200bb9554ce62cc689ba6fb`;
 - `SHA256SUMS.txt`;
 - `release-manifest.json`.
 
