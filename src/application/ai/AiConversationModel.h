@@ -100,7 +100,7 @@ public:
     [[nodiscard]] bool streaming() const noexcept;
     [[nodiscard]] const AiConversationLimits &limits() const noexcept;
     [[nodiscard]] std::vector<AiChatMessage> providerMessages() const;
-    [[nodiscard]] std::vector<AiChatMessage> providerMessagesWithEvidence() const;
+    [[nodiscard]] std::vector<AiChatMessage> providerMessagesWithEvidence(bool retryContinuation = false) const;
     [[nodiscard]] std::vector<AiConversationTranscriptEntry> transcript() const;
     [[nodiscard]] bool restoreTranscript(const std::vector<AiConversationTranscriptEntry> &entries);
     [[nodiscard]] bool appendEvidenceMessage(QString text);

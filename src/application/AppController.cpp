@@ -10140,7 +10140,7 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
         tab.aiLastSelectedSkillIds = resolvedSkillIds;
         tab.aiLastWebSearchEnabled = webSearchEnabled;
     }
-    auto messages = tab.aiConversation->providerMessagesWithEvidence();
+    auto messages = tab.aiConversation->providerMessagesWithEvidence(!appendPrompt);
     if (messages.empty())
     {
         static_cast<void>(tab.aiConversation->appendUserMessage(normalizedPrompt));

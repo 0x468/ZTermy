@@ -14,6 +14,8 @@
 #include <QFile>
 #include <QHostAddress>
 #include <QImage>
+#include <QJsonArray>
+#include <QJsonDocument>
 #include <QSet>
 #include <QSignalSpy>
 #include <QTcpServer>
@@ -161,6 +163,7 @@ private slots:
     void managesActionShortcutsAndDispatchContext();
     void restoresCompleteAgentPresentationFromHistory();
     void exposesProviderFailureRecoveryActions();
+    void retriesProviderResponseWithoutRepeatingCompletedTool();
     void managesMultipleLocalTerminalTabs();
     void managesPersistentTerminalWorkspaceSplits();
     void restoresSavedSshWorkspaceWithoutConnecting();
@@ -1351,6 +1354,144 @@ void AppControllerTests::exposesProviderFailureRecoveryActions()
     controller.clearAiConversation();
     QCOMPARE(controller.activeAiState(), QStringLiteral("idle"));
     QVERIFY(controller.activeAiErrorRecovery().isEmpty());
+}
+
+void AppControllerTests::retriesProviderResponseWithoutRepeatingCompletedTool()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const auto sessionState = std::make_shared<FakeLocalSessionState>();
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
+                                     directory.filePath(QStringLiteral("known_hosts.json")),
+                                     directory.filePath(QStringLiteral("settings.json")), [sessionState] {
+                                         return std::make_unique<FakeLocalTerminalSession>(sessionState);
+                                     });
+    QVERIFY(!controller.startLocalTerminal().isEmpty());
+
+    QTcpServer provider;
+    QVERIFY(provider.listen(QHostAddress::LocalHost, 0));
+    QList<QByteArray> requestBodies;
+    QObject::connect(&provider, &QTcpServer::newConnection, &controller, [&provider, &requestBodies] {
+        while (QTcpSocket *socket = provider.nextPendingConnection())
+        {
+            QObject::connect(socket, &QTcpSocket::readyRead, socket, [socket, &requestBodies] {
+                QByteArray request = socket->property("requestBuffer").toByteArray();
+                request += socket->readAll();
+                socket->setProperty("requestBuffer", request);
+                if (socket->property("responseSent").toBool())
+                {
+                    return;
+                }
+                const qsizetype headerEnd = request.indexOf("\r\n\r\n");
+                if (headerEnd < 0)
+                {
+                    return;
+                }
+                qsizetype contentLength = 0;
+                const QList<QByteArray> headerLines = request.first(headerEnd).split('\n');
+                for (QByteArray line : headerLines)
+                {
+                    line = line.trimmed();
+                    if (line.toLower().startsWith("content-length:"))
+                    {
+                        contentLength = line.sliced(qsizetype{15}).trimmed().toLongLong();
+                        break;
+                    }
+                }
+                const qsizetype bodyOffset = headerEnd + qsizetype{4};
+                if (request.size() - bodyOffset < contentLength)
+                {
+                    return;
+                }
+
+                socket->setProperty("responseSent", true);
+                if (request.startsWith("GET "))
+                {
+                    const QByteArray body = R"({"models":[{"name":"qwen3"}]})";
+                    QByteArray response =
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: ";
+                    response += QByteArray::number(body.size());
+                    response += "\r\n\r\n";
+                    response += body;
+                    socket->write(response);
+                    socket->disconnectFromHost();
+                    return;
+                }
+                requestBodies.push_back(request.sliced(bodyOffset, contentLength));
+                QByteArray body;
+                if (requestBodies.size() == 1)
+                {
+                    body =
+                        R"({"message":{"content":"","tool_calls":[{"function":{"name":"run_command","arguments":{"command":"echo retry-once"}}}]},"done":true})"
+                        "\n";
+                }
+                else if (requestBodies.size() == 2)
+                {
+                    body = R"({"error":"temporary upstream failure"})"
+                           "\n";
+                }
+                else
+                {
+                    body =
+                        R"({"message":{"content":"continued without rerunning"},"done":true,"prompt_eval_count":9,"eval_count":3})"
+                        "\n";
+                }
+                QByteArray response = "HTTP/1.1 200 OK\r\nContent-Type: application/x-ndjson\r\nConnection: close\r\n"
+                                      "Content-Length: ";
+                response += QByteArray::number(body.size());
+                response += "\r\n\r\n";
+                response += body;
+                socket->write(response);
+                socket->disconnectFromHost();
+            });
+        }
+    });
+
+    const QString endpoint = QStringLiteral("http://127.0.0.1:%1").arg(provider.serverPort());
+    QVERIFY(controller.saveAiProviderSettings(QStringLiteral("ollama"), endpoint, QStringLiteral("/api/chat"),
+                                              QStringLiteral("qwen3"), false, QStringLiteral("yolo")));
+    const auto commandDispatchCount = [&sessionState] {
+        return std::ranges::count_if(sessionState->inputs, [](const QByteArray &input) {
+            return input.trimmed() == QByteArrayLiteral("echo retry-once");
+        });
+    };
+    QCOMPARE(commandDispatchCount(), 0);
+    QVERIFY(controller.sendAiMessage(QStringLiteral("Inspect disk usage")));
+    QTRY_COMPARE_WITH_TIMEOUT(controller.activeAiState(), QStringLiteral("error"), 5'000);
+    QCOMPARE(commandDispatchCount(), 1);
+
+    QVERIFY(controller.retryAiMessage());
+    QCOMPARE(commandDispatchCount(), 1);
+    QTRY_COMPARE_WITH_TIMEOUT(controller.activeAiState(), QStringLiteral("complete"), 5'000);
+    QCOMPARE(commandDispatchCount(), 1);
+    QCOMPARE(requestBodies.size(), 3);
+
+    const QJsonArray retryMessages =
+        QJsonDocument::fromJson(requestBodies.at(2)).object().value(QStringLiteral("messages")).toArray();
+    int originalPromptCount = 0;
+    bool foundToolEvidence = false;
+    bool foundRetryContinuation = false;
+    for (const QJsonValue &value : retryMessages)
+    {
+        const QString content = value.toObject().value(QStringLiteral("content")).toString();
+        originalPromptCount += content == QStringLiteral("Inspect disk usage") ? 1 : 0;
+        foundToolEvidence = foundToolEvidence || content.contains(QStringLiteral("echo retry-once"));
+        foundRetryContinuation =
+            foundRetryContinuation || content.contains(QStringLiteral("do not repeat side-effecting actions"));
+    }
+    QCOMPARE(originalPromptCount, 1);
+    QVERIFY(foundToolEvidence);
+    QVERIFY(foundRetryContinuation);
+
+    auto *conversation = qobject_cast<ztermy::ai::AiConversationModel *>(controller.activeAiConversation());
+    QVERIFY(conversation != nullptr);
+    QCOMPARE(conversation->rowCount(), 3);
+    QCOMPARE(conversation->data(conversation->index(0), ztermy::ai::AiConversationModel::MessageRole).toString(),
+             QStringLiteral("user"));
+    QCOMPARE(conversation->data(conversation->index(1), ztermy::ai::AiConversationModel::StateRole).toString(),
+             QStringLiteral("failed"));
+    QCOMPARE(conversation->data(conversation->index(2), ztermy::ai::AiConversationModel::TextRole).toString(),
+             QStringLiteral("continued without rerunning"));
 }
 
 void AppControllerTests::managesMultipleLocalTerminalTabs()

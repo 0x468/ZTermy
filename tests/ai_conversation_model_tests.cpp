@@ -38,6 +38,7 @@ private slots:
     void boundsMessagesAndUtf8Text();
     void exposesFailureWithoutLeakingIntoLogs();
     void exposesCancellationAsRetryableNeutralState();
+    void preservesCompletedToolEvidenceForResponseRetry();
     void exposesBoundedNativeToolActivities();
     void exposesOnlyOneBoundedShellCommandSuggestion();
     void restoresOnlyBoundedTranscriptEntries();
@@ -154,6 +155,39 @@ void AiConversationModelTests::exposesCancellationAsRetryableNeutralState()
     QVERIFY(model.data(model.index(1), AiConversationModel::ErrorRole).toString().isEmpty());
     QCOMPARE(model.providerMessages().size(), std::size_t{1});
     QVERIFY(!model.streaming());
+}
+
+void AiConversationModelTests::preservesCompletedToolEvidenceForResponseRetry()
+{
+    AiConversationModel model;
+    static_cast<void>(model.appendUserMessage(QStringLiteral("Inspect disk usage")));
+    const auto assistantId = model.beginAssistantMessage();
+    QVERIFY(model.appendAssistantDelta(assistantId, QStringLiteral("I will inspect it.")));
+    QVERIFY(model.appendEvidenceMessage(
+        QStringLiteral("[Assistant tool evidence]\nTool: run_command\nArguments: {\"command\":\"df -h\"}\n"
+                       "Result: {\"ok\":true}")));
+    QVERIFY(model.failAssistantMessage(assistantId, QStringLiteral("Provider disconnected")));
+
+    const auto ordinaryMessages = model.providerMessagesWithEvidence();
+    QCOMPARE(ordinaryMessages.size(), std::size_t{2});
+    QCOMPARE(ordinaryMessages.at(0).role, AiMessageRole::user);
+    QCOMPARE(ordinaryMessages.at(0).content, std::string("Inspect disk usage"));
+    QCOMPARE(ordinaryMessages.at(1).role, AiMessageRole::user);
+    QVERIFY(QString::fromUtf8(ordinaryMessages.at(1).content).contains(QStringLiteral("run_command")));
+
+    const auto retryMessages = model.providerMessagesWithEvidence(true);
+    QCOMPARE(retryMessages.size(), std::size_t{3});
+    QCOMPARE(retryMessages.at(0).content, std::string("Inspect disk usage"));
+    QVERIFY(QString::fromUtf8(retryMessages.at(1).content).contains(QStringLiteral("{\"ok\":true}")));
+    QVERIFY(QString::fromUtf8(retryMessages.at(2).content).contains(QStringLiteral("already executed")));
+    QVERIFY(QString::fromUtf8(retryMessages.at(2).content).contains(QStringLiteral("do not repeat")));
+
+    AiConversationModel restored;
+    QVERIFY(restored.restoreTranscript(model.transcript()));
+    const auto restoredMessages = restored.providerMessagesWithEvidence();
+    QCOMPARE(restoredMessages.size(), ordinaryMessages.size());
+    QCOMPARE(restoredMessages.at(0).content, ordinaryMessages.at(0).content);
+    QCOMPARE(restoredMessages.at(1).content, ordinaryMessages.at(1).content);
 }
 
 void AiConversationModelTests::exposesBoundedNativeToolActivities()

@@ -405,10 +405,10 @@ std::vector<AiConversationTranscriptEntry> AiConversationModel::transcript() con
     return entries;
 }
 
-std::vector<AiChatMessage> AiConversationModel::providerMessagesWithEvidence() const
+std::vector<AiChatMessage> AiConversationModel::providerMessagesWithEvidence(const bool retryContinuation) const
 {
     std::vector<AiChatMessage> messages;
-    messages.reserve(m_messages.size() + m_evidenceMessages.size());
+    messages.reserve(m_messages.size() + m_evidenceMessages.size() + (retryContinuation ? 1U : 0U));
     std::uint64_t latestUserMessageId = 0;
     for (const auto &message : std::views::reverse(m_messages))
     {
@@ -420,17 +420,17 @@ std::vector<AiChatMessage> AiConversationModel::providerMessagesWithEvidence() c
     }
     for (const auto &message : m_messages)
     {
-        if (message.state == MessageState::streaming || message.state == MessageState::failed
-            || message.state == MessageState::cancelled)
+        const bool replayMessage = message.state != MessageState::streaming && message.state != MessageState::failed
+                                   && message.state != MessageState::cancelled;
+        if (replayMessage)
         {
-            continue;
+            const bool includeImages = message.id == latestUserMessageId;
+            const QString content = includeImages ? message.text : replayText(message.text, message.images);
+            messages.push_back({.role = message.role,
+                                .content = content.toUtf8().toStdString(),
+                                .images = includeImages ? message.images : std::vector<AiImageAttachment>{},
+                                .providerReplayJson = message.providerReplayJson});
         }
-        const bool includeImages = message.id == latestUserMessageId;
-        const QString content = includeImages ? message.text : replayText(message.text, message.images);
-        messages.push_back({.role = message.role,
-                            .content = content.toUtf8().toStdString(),
-                            .images = includeImages ? message.images : std::vector<AiImageAttachment>{},
-                            .providerReplayJson = message.providerReplayJson});
         for (const auto &evidence : m_evidenceMessages)
         {
             if (evidence.afterMessageId == message.id)
@@ -438,6 +438,16 @@ std::vector<AiChatMessage> AiConversationModel::providerMessagesWithEvidence() c
                 messages.push_back({.role = AiMessageRole::user, .content = evidence.text.toUtf8().toStdString()});
             }
         }
+    }
+    if (retryContinuation)
+    {
+        messages.push_back(
+            {.role = AiMessageRole::user,
+             .content = "[Response retry continuation]\n"
+                        "The previous assistant response ended before a final answer. Tool evidence above belongs "
+                        "to that same request. Treat completed tool calls as already executed: continue from their "
+                        "results and do not repeat side-effecting actions. Use read-only tools if more observation "
+                        "is needed."});
     }
     return messages;
 }
