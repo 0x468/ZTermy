@@ -542,6 +542,8 @@ add_library(ztermy_ai_provider STATIC
     src/infrastructure/ai/OpenAiSubscriptionAuthProtocol.h
     src/infrastructure/ai/OpenAiSubscriptionAuthSession.cpp
     src/infrastructure/ai/OpenAiSubscriptionAuthSession.h
+    src/infrastructure/ai/OpenAiSubscriptionTokenRefresher.cpp
+    src/infrastructure/ai/OpenAiSubscriptionTokenRefresher.h
 )
 
 target_compile_features(ztermy_ai_provider PUBLIC cxx_std_23)

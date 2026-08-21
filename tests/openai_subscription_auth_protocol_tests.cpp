@@ -1,5 +1,6 @@
 #include "infrastructure/ai/OpenAiSubscriptionAuthProtocol.h"
 #include "infrastructure/ai/OpenAiSubscriptionAuthSession.h"
+#include "infrastructure/ai/OpenAiSubscriptionTokenRefresher.h"
 
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -36,7 +37,7 @@ namespace
 class FakeTokenServer final : public QObject
 {
 public:
-    FakeTokenServer()
+    explicit FakeTokenServer(const bool includeRefreshToken = true) : m_includeRefreshToken(includeRefreshToken)
     {
         QObject::connect(&m_server, &QTcpServer::newConnection, this, [this] {
             QTcpSocket *socket = m_server.nextPendingConnection();
@@ -48,13 +49,15 @@ public:
                 {
                     return;
                 }
-                const QByteArray body =
-                    QJsonDocument(QJsonObject{{QStringLiteral("access_token"), QStringLiteral("access")},
-                                              {QStringLiteral("refresh_token"), QStringLiteral("refresh")},
-                                              {QStringLiteral("id_token"),
-                                               QString::fromLatin1(jwtWithAccount(QStringLiteral("account-1")))},
-                                              {QStringLiteral("expires_in"), 3600}})
-                        .toJson(QJsonDocument::Compact);
+                QJsonObject response{
+                    {QStringLiteral("access_token"), QStringLiteral("access")},
+                    {QStringLiteral("id_token"), QString::fromLatin1(jwtWithAccount(QStringLiteral("account-1")))},
+                    {QStringLiteral("expires_in"), 3600}};
+                if (m_includeRefreshToken)
+                {
+                    response.insert(QStringLiteral("refresh_token"), QStringLiteral("refresh"));
+                }
+                const QByteArray body = QJsonDocument(response).toJson(QJsonDocument::Compact);
                 socket->write(QByteArrayLiteral("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: "
                                                 "close\r\nContent-Length: ")
                               + QByteArray::number(body.size()) + QByteArrayLiteral("\r\n\r\n") + body);
@@ -74,6 +77,7 @@ public:
 private:
     QTcpServer m_server;
     QByteArray m_request;
+    bool m_includeRefreshToken = true;
 };
 
 class OpenAiSubscriptionAuthProtocolTests final : public QObject
@@ -90,6 +94,7 @@ private slots:
     void browserSessionCompletesThroughLoopback();
     void browserSessionRejectsMismatchedState();
     void browserSessionCanBeCancelled();
+    void refreshesAndRetainsUnrotatedRefreshToken();
 };
 
 void OpenAiSubscriptionAuthProtocolTests::derivesRfc7636Challenge()
@@ -256,6 +261,28 @@ void OpenAiSubscriptionAuthProtocolTests::browserSessionCanBeCancelled()
     QVERIFY(!result->has_value());
     QCOMPARE(result->error().code, ztermy::ai::OpenAiSubscriptionSessionErrorCode::cancelled);
     QVERIFY(!session.active());
+}
+
+void OpenAiSubscriptionAuthProtocolTests::refreshesAndRetainsUnrotatedRefreshToken()
+{
+    FakeTokenServer tokenServer(false);
+    QNetworkAccessManager network;
+    ztermy::ai::OpenAiSubscriptionTokenRefresher refresher(&network);
+    std::optional<ztermy::ai::OpenAiSubscriptionTokenRefresher::Result> result;
+    const auto started = refresher.start(
+        ztermy::security::SensitiveByteArray(QByteArrayLiteral("old-refresh")),
+        [&result](ztermy::ai::OpenAiSubscriptionTokenRefresher::Result completed) {
+            result = std::move(completed);
+        },
+        tokenServer.url());
+    QVERIFY(started.has_value());
+    QTRY_VERIFY_WITH_TIMEOUT(result.has_value(), 3000);
+    QVERIFY(result->has_value());
+    QCOMPARE(bytes(result->value().accessToken), QByteArrayLiteral("access"));
+    QCOMPARE(bytes(result->value().refreshToken), QByteArrayLiteral("old-refresh"));
+    QVERIFY(tokenServer.request().contains(QByteArrayLiteral("grant_type=refresh_token")));
+    QVERIFY(tokenServer.request().contains(QByteArrayLiteral("refresh_token=old-refresh")));
+    QVERIFY(!refresher.active());
 }
 
 } // namespace

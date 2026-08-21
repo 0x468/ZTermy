@@ -33,6 +33,7 @@
 #include "infrastructure/ai/AiQuickMessageStore.h"
 #include "infrastructure/ai/AiUserSkillCatalog.h"
 #include "infrastructure/ai/OpenAiSubscriptionAuthSession.h"
+#include "infrastructure/ai/OpenAiSubscriptionTokenRefresher.h"
 #include "infrastructure/ai/ProviderModelCatalog.h"
 #include "infrastructure/forwarding/PortForwardingRuleStore.h"
 #include "infrastructure/logging/SessionLogWriter.h"
@@ -907,6 +908,11 @@ private:
     void refreshConfiguredAiModels();
     void refreshAiModelsInternal(const QString &provider, const QString &baseUrl, const QString &apiKey,
                                  bool background);
+    using AiSubscriptionAccessHandler =
+        std::function<void(std::expected<security::SensitiveByteArray, ai::AiProviderError>, QString)>;
+    void withAiChatGptAccessToken(AiSubscriptionAccessHandler handler);
+    void startAiModelsRequest(QNetworkRequest request, quint64 generation, ai::AiProviderKind kind, bool background,
+                              bool openAiSubscription);
     void loadAiQuickMessages();
     void loadQuickCommands();
     void loadWorkspaceState();
@@ -1031,6 +1037,8 @@ private:
     QString m_aiDebugTracePath;
     QNetworkAccessManager m_aiModelNetwork;
     std::unique_ptr<ai::OpenAiSubscriptionAuthSession> m_aiSubscriptionAuth;
+    std::unique_ptr<ai::OpenAiSubscriptionTokenRefresher> m_aiSubscriptionTokenRefresher;
+    std::vector<AiSubscriptionAccessHandler> m_aiSubscriptionAccessHandlers;
     QPointer<QNetworkReply> m_aiModelsReply;
     QStringList m_aiAvailableModels;
     QString m_aiModelsError;

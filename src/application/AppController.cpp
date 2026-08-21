@@ -459,6 +459,13 @@ aiReasoningEffort(const ztermy::config::AiReasoningPreference preference) noexce
     return QStringLiteral("ai-") + ztermy::config::aiProviderPreferenceToken(provider);
 }
 
+[[nodiscard]] ztermy::security::SensitiveByteArray
+cloneSensitiveSecret(const ztermy::security::SensitiveByteArray &secret)
+{
+    const std::string_view value = secret.view();
+    return ztermy::security::SensitiveByteArray(QByteArray(value.data(), static_cast<qsizetype>(value.size())));
+}
+
 [[nodiscard]] ztermy::ai::AiPermissionMode
 aiPermissionMode(const ztermy::config::AiPermissionPreference preference) noexcept
 {
@@ -3391,7 +3398,15 @@ QString AppController::aiChatGptAuthState() const
 
 QString AppController::aiChatGptAccountId() const
 {
-    return m_aiChatGptAccountId;
+    if (!m_aiChatGptAccountId.isEmpty())
+    {
+        return m_aiChatGptAccountId;
+    }
+    const ai::AiSecretStore store(m_credentialVaults->active());
+    auto tokens =
+        store.readOAuthTokens(aiCredentialReference(config::AiProviderPreference::openAiChatGpt).toStdString());
+    return tokens.has_value() ? ai::OpenAiSubscriptionAuthProtocol::accountIdFromAccessToken(tokens->accessToken.view())
+                              : QString{};
 }
 
 QString AppController::aiChatGptAuthError() const
@@ -8092,6 +8107,10 @@ QString AppController::aiProviderEndpointPreview(const QString &provider, const 
     {
         return tr("Invalid API address");
     }
+    if (*parsedProvider == config::AiProviderPreference::openAiChatGpt)
+    {
+        return ai::OpenAiSubscriptionAuthProtocol::inferenceUrl().toString(QUrl::FullyEncoded);
+    }
     const ai::AiProviderConfiguration configuration{.kind = aiProviderKind(*parsedProvider),
                                                     .flavor = aiProviderFlavor(*parsedProvider),
                                                     .baseUrl = utf8String(baseUrl)};
@@ -8102,6 +8121,119 @@ QString AppController::aiProviderEndpointPreview(const QString &provider, const 
 void AppController::refreshAiModels(const QString &provider, const QString &baseUrl, const QString &apiKey)
 {
     refreshAiModelsInternal(provider, baseUrl, apiKey, false);
+}
+
+void AppController::withAiChatGptAccessToken(AiSubscriptionAccessHandler handler)
+{
+    if (!handler)
+    {
+        return;
+    }
+    ai::AiSecretStore store(m_credentialVaults->active());
+    const std::string reference = aiCredentialReference(config::AiProviderPreference::openAiChatGpt).toStdString();
+    auto tokens = store.readOAuthTokens(reference);
+    if (!tokens.has_value())
+    {
+        handler(std::unexpected(ai::AiProviderError{.code = ai::AiProviderErrorCode::authentication,
+                                                    .message = "Sign in with ChatGPT first.",
+                                                    .retryable = false}),
+                {});
+        return;
+    }
+
+    const auto expiration = ai::OpenAiSubscriptionAuthProtocol::expirationUtcSeconds(tokens->accessToken.view());
+    constexpr qint64 refreshSkewSeconds = 120;
+    if (!expiration.has_value()
+        || *expiration > QDateTime::currentDateTimeUtc().toSecsSinceEpoch() + refreshSkewSeconds)
+    {
+        const QString accountId =
+            ai::OpenAiSubscriptionAuthProtocol::accountIdFromAccessToken(tokens->accessToken.view());
+        if (accountId.isEmpty())
+        {
+            handler(std::unexpected(ai::AiProviderError{.code = ai::AiProviderErrorCode::authentication,
+                                                        .message = "The ChatGPT account identity is unavailable.",
+                                                        .retryable = false}),
+                    {});
+            return;
+        }
+        if (m_aiChatGptAccountId != accountId)
+        {
+            m_aiChatGptAccountId = accountId;
+            emit aiSubscriptionAuthChanged();
+        }
+        handler(std::move(tokens->accessToken), accountId);
+        return;
+    }
+
+    m_aiSubscriptionAccessHandlers.push_back(std::move(handler));
+    if (!m_aiSubscriptionTokenRefresher)
+    {
+        m_aiSubscriptionTokenRefresher =
+            std::make_unique<ai::OpenAiSubscriptionTokenRefresher>(&m_aiModelNetwork, this);
+    }
+    if (m_aiSubscriptionTokenRefresher->active())
+    {
+        return;
+    }
+    auto started = m_aiSubscriptionTokenRefresher->start(
+        std::move(tokens->refreshToken), [this, reference](ai::OpenAiSubscriptionTokenRefresher::Result result) {
+            auto handlers = std::exchange(m_aiSubscriptionAccessHandlers, {});
+            if (!result.has_value())
+            {
+                for (auto &pending : handlers)
+                {
+                    pending(std::unexpected(result.error()), {});
+                }
+                return;
+            }
+            ai::AiSecretStore currentStore(m_credentialVaults->active());
+            QString accountId = result->accountId;
+            if (accountId.isEmpty())
+            {
+                accountId = ai::OpenAiSubscriptionAuthProtocol::accountIdFromAccessToken(result->accessToken.view());
+            }
+            if (accountId.isEmpty())
+            {
+                const ai::AiProviderError error{.code = ai::AiProviderErrorCode::authentication,
+                                                .message = "The refreshed ChatGPT account identity is unavailable.",
+                                                .retryable = false};
+                for (auto &pending : handlers)
+                {
+                    pending(std::unexpected(error), {});
+                }
+                return;
+            }
+            auto stored =
+                currentStore.storeOAuthTokens(reference, {.accessToken = cloneSensitiveSecret(result->accessToken),
+                                                          .refreshToken = std::move(result->refreshToken)});
+            if (!stored.has_value())
+            {
+                const ai::AiProviderError error{.code = ai::AiProviderErrorCode::authentication,
+                                                .message = "The refreshed ChatGPT sign-in could not be saved.",
+                                                .retryable = false};
+                for (auto &pending : handlers)
+                {
+                    pending(std::unexpected(error), {});
+                }
+                return;
+            }
+            m_aiChatGptAccountId = accountId;
+            m_aiChatGptAuthError.clear();
+            emit credentialVaultChanged();
+            emit aiSubscriptionAuthChanged();
+            for (auto &pending : handlers)
+            {
+                pending(cloneSensitiveSecret(result->accessToken), accountId);
+            }
+        });
+    if (!started.has_value())
+    {
+        auto handlers = std::exchange(m_aiSubscriptionAccessHandlers, {});
+        for (auto &pending : handlers)
+        {
+            pending(std::unexpected(started.error()), {});
+        }
+    }
 }
 
 void AppController::refreshAiModelsInternal(const QString &provider, const QString &baseUrl, const QString &apiKey,
@@ -8128,6 +8260,47 @@ void AppController::refreshAiModelsInternal(const QString &provider, const QStri
         m_aiModelsReply->abort();
         m_aiModelsReply->deleteLater();
         m_aiModelsReply = nullptr;
+    }
+
+    if (*parsedProvider == config::AiProviderPreference::openAiChatGpt)
+    {
+        if (!background)
+        {
+            m_aiModelsLoading = true;
+            m_aiModelsError.clear();
+            emit aiModelsChanged();
+        }
+        withAiChatGptAccessToken([this, generation, background](auto accessToken, const QString &accountId) mutable {
+            if (generation != m_aiModelsRequestGeneration)
+            {
+                return;
+            }
+            if (!accessToken.has_value())
+            {
+                m_aiModelsLoading = false;
+                if (!background)
+                {
+                    m_aiModelsError = QString::fromStdString(accessToken.error().message);
+                    emit aiModelsChanged();
+                }
+                return;
+            }
+            auto request = ai::ProviderModelCatalog::prepareOpenAiSubscriptionRequest(
+                std::move(*accessToken), accountId, QCoreApplication::applicationVersion());
+            if (!request.has_value())
+            {
+                m_aiModelsLoading = false;
+                if (!background)
+                {
+                    m_aiModelsError = QString::fromStdString(request.error().message);
+                    emit aiModelsChanged();
+                }
+                return;
+            }
+            startAiModelsRequest(std::move(*request), generation, ai::AiProviderKind::openAiResponses, background,
+                                 true);
+        });
+        return;
     }
 
     security::SensitiveByteArray secret;
@@ -8167,9 +8340,16 @@ void AppController::refreshAiModelsInternal(const QString &provider, const QStri
         m_aiModelsError.clear();
         emit aiModelsChanged();
     }
-    auto *reply = m_aiModelNetwork.get(*request);
+    startAiModelsRequest(std::move(*request), generation, configuration.kind, background, false);
+}
+
+void AppController::startAiModelsRequest(QNetworkRequest request, const quint64 generation,
+                                         const ai::AiProviderKind kind, const bool background,
+                                         const bool openAiSubscription)
+{
+    auto *reply = m_aiModelNetwork.get(request);
     m_aiModelsReply = reply;
-    connect(reply, &QNetworkReply::finished, this, [this, reply, generation, kind = configuration.kind, background] {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, generation, kind, background, openAiSubscription] {
         if (generation != m_aiModelsRequestGeneration || m_aiModelsReply != reply)
         {
             reply->deleteLater();
@@ -8195,7 +8375,8 @@ void AppController::refreshAiModelsInternal(const QString &provider, const QStri
             }
             else
             {
-                const auto parsed = ai::ProviderModelCatalog::parse(kind, body);
+                const auto parsed = openAiSubscription ? ai::ProviderModelCatalog::parseOpenAiSubscription(body)
+                                                       : ai::ProviderModelCatalog::parse(kind, body);
                 if (parsed.has_value())
                 {
                     models = *parsed;
@@ -8320,6 +8501,10 @@ void AppController::cancelAiChatGptSignIn()
 bool AppController::signOutAiChatGpt()
 {
     cancelAiChatGptSignIn();
+    if (m_aiSubscriptionTokenRefresher && m_aiSubscriptionTokenRefresher->active())
+    {
+        m_aiSubscriptionTokenRefresher->cancel();
+    }
     ai::AiSecretStore store(m_credentialVaults->active());
     const auto removed =
         store.removeOAuthTokens(aiCredentialReference(config::AiProviderPreference::openAiChatGpt).toStdString());
@@ -10195,11 +10380,57 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
     {
         return false;
     }
-    if (m_settings.aiModel.trimmed().isEmpty() || m_settings.aiBaseUrl.trimmed().isEmpty())
+    const bool chatGptSubscription = m_settings.aiProvider == config::AiProviderPreference::openAiChatGpt;
+    if (m_settings.aiModel.trimmed().isEmpty() || (!chatGptSubscription && m_settings.aiBaseUrl.trimmed().isEmpty()))
     {
         tab.aiError = tr("Configure an AI provider URL and model before starting a conversation.");
         emit aiConversationChanged();
         return false;
+    }
+    if (chatGptSubscription)
+    {
+        const ai::AiSecretStore store(m_credentialVaults->active());
+        auto tokens =
+            store.readOAuthTokens(aiCredentialReference(config::AiProviderPreference::openAiChatGpt).toStdString());
+        if (!tokens.has_value())
+        {
+            tab.aiError = tr("Sign in with ChatGPT before starting a conversation.");
+            emit aiConversationChanged();
+            return false;
+        }
+        const auto expiration = ai::OpenAiSubscriptionAuthProtocol::expirationUtcSeconds(tokens->accessToken.view());
+        constexpr qint64 refreshSkewSeconds = 120;
+        if (expiration.has_value()
+            && *expiration <= QDateTime::currentDateTimeUtc().toSecsSinceEpoch() + refreshSkewSeconds)
+        {
+            if (tab.aiState == QStringLiteral("authorizing"))
+            {
+                return false;
+            }
+            const QString tabId = tab.id;
+            tab.aiState = QStringLiteral("authorizing");
+            tab.aiError.clear();
+            emit aiConversationChanged();
+            withAiChatGptAccessToken([this, tabId, prompt, preferLastFailure, appendPrompt, commandRequest,
+                                      selectedSkillIds, webSearchEnabled](auto accessToken, const QString &) {
+                TerminalTab *target = findTab(tabId);
+                if (target == nullptr || target->aiState != QStringLiteral("authorizing"))
+                {
+                    return;
+                }
+                if (!accessToken.has_value())
+                {
+                    target->aiState = QStringLiteral("error");
+                    target->aiError = QString::fromStdString(accessToken.error().message);
+                    emit aiConversationChanged();
+                    return;
+                }
+                target->aiState = QStringLiteral("idle");
+                static_cast<void>(sendAiMessage(*target, prompt, preferLastFailure, appendPrompt, commandRequest,
+                                                selectedSkillIds, webSearchEnabled));
+            });
+            return true;
+        }
     }
     if (webSearchEnabled && !aiWebSearchAvailable())
     {
@@ -10273,11 +10504,20 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
     const QString tabId = tab.id;
     const auto assistantMessageId = tab.aiAssistantMessageId;
     const auto provider = m_settings.aiProvider;
-    const auto configuration = ai::AiProviderConfiguration{.kind = aiProviderKind(provider),
-                                                           .flavor = aiProviderFlavor(provider),
-                                                           .baseUrl = utf8String(m_settings.aiBaseUrl),
-                                                           .endpointPath = utf8String(m_settings.aiEndpointPath),
-                                                           .model = utf8String(m_settings.aiModel)};
+    QString effectiveBaseUrl = m_settings.aiBaseUrl;
+    if (chatGptSubscription)
+    {
+        effectiveBaseUrl =
+            ai::OpenAiSubscriptionAuthProtocol::inferenceUrl().toString(QUrl::FullyEncoded) + QLatin1Char('#');
+    }
+    const auto configuration =
+        ai::AiProviderConfiguration{.kind = aiProviderKind(provider),
+                                    .flavor = aiProviderFlavor(provider),
+                                    .baseUrl = utf8String(effectiveBaseUrl),
+                                    .endpointPath = utf8String(m_settings.aiEndpointPath),
+                                    .model = utf8String(m_settings.aiModel),
+                                    .accountId = chatGptSubscription ? utf8String(aiChatGptAccountId()) : std::string{},
+                                    .chatGptSubscription = chatGptSubscription};
     const QUrl providerUrl(m_settings.aiBaseUrl);
     const bool officialOpenAiEndpoint =
         configuration.kind == ai::AiProviderKind::openAiResponses
@@ -10355,6 +10595,18 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                 return security::SensitiveByteArray{};
             }
             const ai::AiSecretStore store(m_credentialVaults->active());
+            if (provider == config::AiProviderPreference::openAiChatGpt)
+            {
+                auto tokens = store.readOAuthTokens(
+                    aiCredentialReference(config::AiProviderPreference::openAiChatGpt).toStdString());
+                if (!tokens.has_value())
+                {
+                    return std::unexpected(ai::AiProviderError{.code = ai::AiProviderErrorCode::authentication,
+                                                               .message = "The ChatGPT sign-in is unavailable.",
+                                                               .retryable = false});
+                }
+                return std::move(tokens->accessToken);
+            }
             auto secret = store.readApiKey(m_settings.aiCredentialReference.toStdString());
             if (!secret.has_value())
             {
@@ -13943,11 +14195,13 @@ void AppController::initializeAiModelCatalogRefresh()
 
 void AppController::refreshConfiguredAiModels()
 {
-    if (m_settings.aiBaseUrl.trimmed().isEmpty())
+    const bool chatGptSubscription = m_settings.aiProvider == config::AiProviderPreference::openAiChatGpt;
+    if (!chatGptSubscription && m_settings.aiBaseUrl.trimmed().isEmpty())
     {
         return;
     }
-    if (m_settings.aiProvider != config::AiProviderPreference::ollama && !aiApiKeyConfigured())
+    if (chatGptSubscription ? !aiChatGptConfigured()
+                            : m_settings.aiProvider != config::AiProviderPreference::ollama && !aiApiKeyConfigured())
     {
         return;
     }

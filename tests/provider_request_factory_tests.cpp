@@ -452,6 +452,21 @@ void ProviderRequestFactoryTests::resolvesFriendlyApiAddressesAndModels()
         configuration, ztermy::security::SensitiveByteArray(QByteArray("key")));
     QVERIFY(!unavailableCatalog.has_value());
 
+    const AiProviderConfiguration subscriptionConfiguration{.kind = AiProviderKind::openAiResponses,
+                                                            .baseUrl =
+                                                                "https://chatgpt.com/backend-api/codex/responses#",
+                                                            .model = "gpt-5.3-codex",
+                                                            .accountId = "account-1",
+                                                            .chatGptSubscription = true};
+    const auto subscriptionRequest =
+        ProviderRequestFactory::prepare(subscriptionConfiguration, AiGenerationRequest{}, "access-token");
+    QVERIFY(subscriptionRequest.has_value());
+    QCOMPARE(subscriptionRequest->request.url().toString(),
+             QStringLiteral("https://chatgpt.com/backend-api/codex/responses"));
+    QCOMPARE(subscriptionRequest->request.rawHeader("Authorization"), QByteArrayLiteral("Bearer access-token"));
+    QCOMPARE(subscriptionRequest->request.rawHeader("ChatGPT-Account-Id"), QByteArrayLiteral("account-1"));
+    QCOMPARE(subscriptionRequest->request.rawHeader("originator"), QByteArrayLiteral("ztermy"));
+
     configuration.baseUrl = "https://gateway.example.test";
     auto catalogRequest = ztermy::ai::ProviderModelCatalog::prepareRequest(
         configuration, ztermy::security::SensitiveByteArray(QByteArray("key")));

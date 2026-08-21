@@ -712,6 +712,12 @@ ProviderRequestFactory::prepare(const AiProviderConfiguration &configuration, co
                                                .message = "Provider model is required.",
                                                .retryable = false});
     }
+    if (configuration.chatGptSubscription && configuration.accountId.empty())
+    {
+        return std::unexpected(AiProviderError{.code = AiProviderErrorCode::authentication,
+                                               .message = "The ChatGPT account identity is unavailable.",
+                                               .retryable = false});
+    }
     if (const auto imageError = validateImages(generation); imageError.has_value())
     {
         return std::unexpected(*imageError);
@@ -784,6 +790,12 @@ ProviderRequestFactory::prepare(const AiProviderConfiguration &configuration, co
         authorization.append(apiKey.data(), static_cast<qsizetype>(apiKey.size()));
         request.setRawHeader("Authorization", authorization);
         authorization.fill('\0');
+    }
+    if (configuration.chatGptSubscription)
+    {
+        request.setRawHeader("ChatGPT-Account-Id", fromUtf8(configuration.accountId).toUtf8());
+        request.setRawHeader("originator", "ztermy");
+        request.setRawHeader("User-Agent", "ztermy/0.3.0");
     }
     return PreparedProviderRequest{.request = request,
                                    .body = QJsonDocument(body).toJson(QJsonDocument::Compact),

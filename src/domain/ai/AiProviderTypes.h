@@ -92,6 +92,8 @@ struct AiProviderConfiguration final
     std::string baseUrl;
     std::string endpointPath;
     std::string model;
+    std::string accountId;
+    bool chatGptSubscription = false;
 };
 
 struct AiToolDefinition final
