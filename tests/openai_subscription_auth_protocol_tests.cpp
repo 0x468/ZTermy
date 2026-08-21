@@ -20,13 +20,14 @@ namespace
     return {view.data(), static_cast<qsizetype>(view.size())};
 }
 
-[[nodiscard]] QByteArray jwtWithAccount(const QString &accountId)
+[[nodiscard]] QByteArray jwtWithAccount(const QString &accountId, const qint64 expiration = 2'000'000'000)
 {
     const QByteArray header =
         QByteArrayLiteral(R"({"alg":"none"})").toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
     const QByteArray payload =
         QJsonDocument(QJsonObject{{QStringLiteral("https://api.openai.com/auth"),
-                                   QJsonObject{{QStringLiteral("chatgpt_account_id"), accountId}}}})
+                                   QJsonObject{{QStringLiteral("chatgpt_account_id"), accountId}}},
+                                  {QStringLiteral("exp"), expiration}})
             .toJson(QJsonDocument::Compact)
             .toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
     return header + '.' + payload + '.';
@@ -84,6 +85,7 @@ private slots:
     void createsBoundedPkceAndAuthorizationUrl();
     void createsEncodedTokenForms();
     void parsesTokensAndAccountIdentity();
+    void readsPersistedAccessTokenClaims();
     void rejectsIncompleteTokenResponses();
     void browserSessionCompletesThroughLoopback();
     void browserSessionRejectsMismatchedState();
@@ -149,6 +151,19 @@ void OpenAiSubscriptionAuthProtocolTests::parsesTokensAndAccountIdentity()
     QCOMPARE(bytes(parsed->refreshToken), QByteArrayLiteral("refresh"));
     QCOMPARE(parsed->accountId, QStringLiteral("account-1"));
     QCOMPARE(parsed->expiresInSeconds, std::uint32_t{7200});
+}
+
+void OpenAiSubscriptionAuthProtocolTests::readsPersistedAccessTokenClaims()
+{
+    const QByteArray token = jwtWithAccount(QStringLiteral("account-2"), 2'100'000'000);
+    QCOMPARE(ztermy::ai::OpenAiSubscriptionAuthProtocol::accountIdFromAccessToken(token), QStringLiteral("account-2"));
+    QCOMPARE(ztermy::ai::OpenAiSubscriptionAuthProtocol::expirationUtcSeconds(token),
+             std::optional<qint64>{2'100'000'000});
+    QVERIFY(
+        !ztermy::ai::OpenAiSubscriptionAuthProtocol::expirationUtcSeconds(QByteArrayLiteral("not-a-jwt")).has_value());
+
+    const QUrl models = ztermy::ai::OpenAiSubscriptionAuthProtocol::modelsUrl(QStringLiteral("0.3.0"));
+    QCOMPARE(models.toString(), QStringLiteral("https://chatgpt.com/backend-api/codex/models?client_version=0.3.0"));
 }
 
 void OpenAiSubscriptionAuthProtocolTests::rejectsIncompleteTokenResponses()

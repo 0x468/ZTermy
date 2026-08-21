@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <expected>
+#include <optional>
 
 namespace ztermy::ai
 {
@@ -47,10 +48,13 @@ public:
     [[nodiscard]] static QByteArray refreshTokenForm(QByteArrayView refreshToken);
     [[nodiscard]] static std::expected<OpenAiSubscriptionTokenResponse, OpenAiSubscriptionAuthError>
     parseTokenResponse(QByteArrayView body, bool requireRefreshToken);
+    [[nodiscard]] static QString accountIdFromAccessToken(QByteArrayView accessToken);
+    [[nodiscard]] static std::optional<qint64> expirationUtcSeconds(QByteArrayView accessToken);
 
     [[nodiscard]] static QUrl issuerUrl();
     [[nodiscard]] static QUrl tokenUrl();
     [[nodiscard]] static QUrl inferenceUrl();
+    [[nodiscard]] static QUrl modelsUrl(const QString &clientVersion);
     [[nodiscard]] static QByteArray clientId();
 };
 

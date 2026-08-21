@@ -462,6 +462,19 @@ void ProviderRequestFactoryTests::resolvesFriendlyApiAddressesAndModels()
     QVERIFY(models.has_value());
     QCOMPARE(*models, QStringList({QStringLiteral("alpha"), QStringLiteral("zeta")}));
 
+    auto subscriptionCatalog = ztermy::ai::ProviderModelCatalog::prepareOpenAiSubscriptionRequest(
+        ztermy::security::SensitiveByteArray(QByteArray("access-token")), QStringLiteral("account-1"),
+        QStringLiteral("0.3.0"));
+    QVERIFY(subscriptionCatalog.has_value());
+    QCOMPARE(subscriptionCatalog->url().toString(),
+             QStringLiteral("https://chatgpt.com/backend-api/codex/models?client_version=0.3.0"));
+    QCOMPARE(subscriptionCatalog->rawHeader("Authorization"), QByteArrayLiteral("Bearer access-token"));
+    QCOMPARE(subscriptionCatalog->rawHeader("ChatGPT-Account-Id"), QByteArrayLiteral("account-1"));
+    const auto subscriptionModels = ztermy::ai::ProviderModelCatalog::parseOpenAiSubscription(
+        R"({"models":[{"slug":"hidden","supported_in_api":false,"priority":0},{"slug":"gpt-5.2","supported_in_api":true,"priority":2},{"slug":"gpt-5.3-codex","supported_in_api":true,"priority":1},{"slug":"gpt-5.2","supported_in_api":true,"priority":3}]})");
+    QVERIFY(subscriptionModels.has_value());
+    QCOMPARE(*subscriptionModels, QStringList({QStringLiteral("gpt-5.3-codex"), QStringLiteral("gpt-5.2")}));
+
     configuration.baseUrl = "https://generativelanguage.googleapis.com/v1beta/openai/";
     prepared = ProviderRequestFactory::prepare(configuration, AiGenerationRequest{}, "key");
     QVERIFY(prepared.has_value());

@@ -17,6 +17,7 @@ namespace
 constexpr auto ClientId = "app_EMoamEEZ73f0CkXaXp7hrann";
 constexpr auto Issuer = "https://auth.openai.com";
 constexpr auto InferenceEndpoint = "https://chatgpt.com/backend-api/codex/responses";
+constexpr auto ModelsEndpoint = "https://chatgpt.com/backend-api/codex/models";
 
 [[nodiscard]] QByteArray base64Url(const QByteArrayView bytes)
 {
@@ -37,7 +38,7 @@ constexpr auto InferenceEndpoint = "https://chatgpt.com/backend-api/codex/respon
     return bytes;
 }
 
-[[nodiscard]] QString accountIdFromToken(const QByteArrayView token)
+[[nodiscard]] QJsonObject claimsFromToken(const QByteArrayView token)
 {
     const QList<QByteArray> segments = QByteArray(token.data(), token.size()).split('.');
     if (segments.size() != 3)
@@ -50,7 +51,12 @@ constexpr auto InferenceEndpoint = "https://chatgpt.com/backend-api/codex/respon
     {
         return {};
     }
-    const QJsonObject claims = document.object();
+    return document.object();
+}
+
+[[nodiscard]] QString accountIdFromToken(const QByteArrayView token)
+{
+    const QJsonObject claims = claimsFromToken(token);
     QString accountId = claims.value(QStringLiteral("chatgpt_account_id")).toString();
     if (!accountId.isEmpty())
     {
@@ -169,6 +175,22 @@ OpenAiSubscriptionAuthProtocol::parseTokenResponse(const QByteArrayView body, co
     };
 }
 
+QString OpenAiSubscriptionAuthProtocol::accountIdFromAccessToken(const QByteArrayView accessToken)
+{
+    return accountIdFromToken(accessToken);
+}
+
+std::optional<qint64> OpenAiSubscriptionAuthProtocol::expirationUtcSeconds(const QByteArrayView accessToken)
+{
+    const QJsonValue expiration = claimsFromToken(accessToken).value(QStringLiteral("exp"));
+    if (!expiration.isDouble())
+    {
+        return std::nullopt;
+    }
+    const qint64 value = expiration.toInteger(-1);
+    return value > 0 ? std::optional<qint64>{value} : std::nullopt;
+}
+
 QUrl OpenAiSubscriptionAuthProtocol::issuerUrl()
 {
     return QUrl(QString::fromLatin1(Issuer));
@@ -182,6 +204,18 @@ QUrl OpenAiSubscriptionAuthProtocol::tokenUrl()
 QUrl OpenAiSubscriptionAuthProtocol::inferenceUrl()
 {
     return QUrl(QString::fromLatin1(InferenceEndpoint));
+}
+
+QUrl OpenAiSubscriptionAuthProtocol::modelsUrl(const QString &clientVersion)
+{
+    QUrl url(QString::fromLatin1(ModelsEndpoint));
+    QUrlQuery query;
+    if (!clientVersion.trimmed().isEmpty())
+    {
+        query.addQueryItem(QStringLiteral("client_version"), clientVersion.trimmed());
+    }
+    url.setQuery(query);
+    return url;
 }
 
 QByteArray OpenAiSubscriptionAuthProtocol::clientId()

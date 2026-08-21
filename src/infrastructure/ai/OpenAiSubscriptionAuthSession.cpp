@@ -96,7 +96,9 @@ OpenAiSubscriptionAuthSession::beginBrowserLogin(CompletionHandler completion,
 
     m_pkce = OpenAiSubscriptionAuthProtocol::createPkce();
     m_endpoints = std::move(endpoints);
-    m_redirectUri = QUrl(QStringLiteral("http://127.0.0.1:%1/auth/callback").arg(m_callbackServer.serverPort()));
+    // Keep the registered ecosystem callback spelling. The listener remains
+    // loopback-only; "localhost" is part of the OAuth redirect identity.
+    m_redirectUri = QUrl(QStringLiteral("http://localhost:%1/auth/callback").arg(m_callbackServer.serverPort()));
     m_completion = std::move(completion);
     m_timeout.start(AuthorizationTimeoutMilliseconds);
     return OpenAiSubscriptionAuthProtocol::authorizationUrl(m_pkce, m_redirectUri, m_endpoints.authorization);
