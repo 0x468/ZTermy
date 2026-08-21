@@ -884,6 +884,10 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(controller.aiModel().isEmpty());
     QVERIFY(!controller.aiAutomaticContext());
     QCOMPARE(controller.aiPermissionPreference(), QStringLiteral("ask"));
+    QCOMPARE(controller.aiProxyPreference(), QStringLiteral("system"));
+    QVERIFY(controller.aiProxyUrl().isEmpty());
+    QVERIFY(controller.aiProxyUsername().isEmpty());
+    QVERIFY(!controller.aiProxyPasswordConfigured());
     QCOMPARE(controller.aiProviderEndpointPreview(
                  QStringLiteral("gemini"), QStringLiteral("https://generativelanguage.googleapis.com/v1beta/openai/")),
              QStringLiteral("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"));
@@ -939,6 +943,13 @@ void AppControllerTests::persistsApplicationSettings()
                                                QStringLiteral("model"), true, QStringLiteral("read-only")));
     QVERIFY(!controller.saveAiProviderSettings(QStringLiteral("ollama"), QStringLiteral("file:///tmp/model"), {},
                                                QStringLiteral("model"), true, QStringLiteral("read-only")));
+    QVERIFY(controller.saveAiProxySettings(QStringLiteral("custom"), QStringLiteral("http://127.0.0.1:7890"),
+                                           QStringLiteral("proxy-user"), {}));
+    QCOMPARE(controller.aiProxyPreference(), QStringLiteral("custom"));
+    QCOMPARE(controller.aiProxyUrl(), QStringLiteral("http://127.0.0.1:7890"));
+    QCOMPARE(controller.aiProxyUsername(), QStringLiteral("proxy-user"));
+    QVERIFY(!controller.aiProxyPasswordConfigured());
+    QVERIFY(!controller.saveAiProxySettings(QStringLiteral("invalid"), {}, {}, {}));
     settingsChanged.clear();
 
     QVERIFY(controller.saveApplicationSettings(
@@ -1001,6 +1012,9 @@ void AppControllerTests::persistsApplicationSettings()
     QCOMPARE(reloaded.aiBaseUrl(), QStringLiteral("http://127.0.0.1:11434"));
     QCOMPARE(reloaded.aiModel(), QStringLiteral("qwen3"));
     QVERIFY(!reloaded.aiAutomaticContext());
+    QCOMPARE(reloaded.aiProxyPreference(), QStringLiteral("custom"));
+    QCOMPARE(reloaded.aiProxyUrl(), QStringLiteral("http://127.0.0.1:7890"));
+    QCOMPARE(reloaded.aiProxyUsername(), QStringLiteral("proxy-user"));
 
     QVERIFY(reloaded.resetApplicationSettings());
     QCOMPARE(reloaded.themePreference(), QStringLiteral("dark"));

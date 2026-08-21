@@ -88,6 +88,13 @@ enum class AiReasoningPreference : std::uint8_t
     maximum,
 };
 
+enum class AiProxyPreference : std::uint8_t
+{
+    system,
+    direct,
+    custom,
+};
+
 struct ApplicationSettings final
 {
     ThemePreference theme = ThemePreference::dark;
@@ -120,6 +127,9 @@ struct ApplicationSettings final
     bool aiConversationHistoryEnabled = true;
     bool aiDebugTraceEnabled = false;
     AiReasoningPreference aiReasoning = AiReasoningPreference::automatic;
+    AiProxyPreference aiProxy = AiProxyPreference::system;
+    QString aiProxyUrl;
+    QString aiProxyUsername;
 
     [[nodiscard]] friend bool operator==(const ApplicationSettings &, const ApplicationSettings &) = default;
 };
@@ -156,6 +166,7 @@ private:
 [[nodiscard]] QString aiProviderPreferenceToken(AiProviderPreference preference);
 [[nodiscard]] QString aiPermissionPreferenceToken(AiPermissionPreference preference);
 [[nodiscard]] QString aiReasoningPreferenceToken(AiReasoningPreference preference);
+[[nodiscard]] QString aiProxyPreferenceToken(AiProxyPreference preference);
 [[nodiscard]] std::optional<ThemePreference> parseThemePreference(const QString &token);
 [[nodiscard]] std::optional<BackdropPreference> parseBackdropPreference(const QString &token);
 [[nodiscard]] std::optional<AccentPreference> parseAccentPreference(const QString &token);
@@ -165,5 +176,6 @@ private:
 [[nodiscard]] std::optional<AiProviderPreference> parseAiProviderPreference(const QString &token);
 [[nodiscard]] std::optional<AiPermissionPreference> parseAiPermissionPreference(const QString &token);
 [[nodiscard]] std::optional<AiReasoningPreference> parseAiReasoningPreference(const QString &token);
+[[nodiscard]] std::optional<AiProxyPreference> parseAiProxyPreference(const QString &token);
 
 } // namespace ztermy::config

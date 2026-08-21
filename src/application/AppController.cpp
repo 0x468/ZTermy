@@ -37,6 +37,8 @@
 #include <QJsonObject>
 #include <QLoggingCategory>
 #include <QMimeData>
+#include <QNetworkProxy>
+#include <QNetworkProxyFactory>
 #include <QPointer>
 #include <QSaveFile>
 #include <QSet>
@@ -66,6 +68,17 @@ Q_LOGGING_CATEGORY(appControllerLog, "ztermy.application.controller")
 
 namespace
 {
+
+constexpr auto AiProxyCredentialReference = "ai-proxy";
+
+class AiSystemProxyFactory final : public QNetworkProxyFactory
+{
+public:
+    [[nodiscard]] QList<QNetworkProxy> queryProxy(const QNetworkProxyQuery &query) override
+    {
+        return systemProxyForQuery(query);
+    }
+};
 
 constexpr std::size_t maximumRecentHostProfiles = 6;
 constexpr quint64 aiSftpListRequestFlag = quint64{1} << 63U;
@@ -3306,6 +3319,27 @@ QString AppController::aiProviderPreference() const
 QString AppController::aiReasoningPreference() const
 {
     return config::aiReasoningPreferenceToken(m_settings.aiReasoning);
+}
+
+QString AppController::aiProxyPreference() const
+{
+    return config::aiProxyPreferenceToken(m_settings.aiProxy);
+}
+
+QString AppController::aiProxyUrl() const
+{
+    return m_settings.aiProxyUrl;
+}
+
+QString AppController::aiProxyUsername() const
+{
+    return m_settings.aiProxyUsername;
+}
+
+bool AppController::aiProxyPasswordConfigured() const
+{
+    const ai::AiSecretStore store(m_credentialVaults->active());
+    return store.readApiKey(AiProxyCredentialReference).has_value();
 }
 
 QString AppController::aiBaseUrl() const
@@ -7991,6 +8025,9 @@ bool AppController::saveApplicationSettings(const QString &theme, const qreal ba
         .aiConversationHistoryEnabled = m_settings.aiConversationHistoryEnabled,
         .aiDebugTraceEnabled = m_settings.aiDebugTraceEnabled,
         .aiReasoning = m_settings.aiReasoning,
+        .aiProxy = m_settings.aiProxy,
+        .aiProxyUrl = m_settings.aiProxyUrl,
+        .aiProxyUsername = m_settings.aiProxyUsername,
     });
 }
 
@@ -8168,8 +8205,7 @@ void AppController::withAiChatGptAccessToken(AiSubscriptionAccessHandler handler
     m_aiSubscriptionAccessHandlers.push_back(std::move(handler));
     if (!m_aiSubscriptionTokenRefresher)
     {
-        m_aiSubscriptionTokenRefresher =
-            std::make_unique<ai::OpenAiSubscriptionTokenRefresher>(&m_aiModelNetwork, this);
+        m_aiSubscriptionTokenRefresher = std::make_unique<ai::OpenAiSubscriptionTokenRefresher>(&m_aiNetwork, this);
     }
     if (m_aiSubscriptionTokenRefresher->active())
     {
@@ -8347,7 +8383,7 @@ void AppController::startAiModelsRequest(QNetworkRequest request, const quint64 
                                          const ai::AiProviderKind kind, const bool background,
                                          const bool openAiSubscription)
 {
-    auto *reply = m_aiModelNetwork.get(request);
+    auto *reply = m_aiNetwork.get(request);
     m_aiModelsReply = reply;
     connect(reply, &QNetworkReply::finished, this, [this, reply, generation, kind, background, openAiSubscription] {
         if (generation != m_aiModelsRequestGeneration || m_aiModelsReply != reply)
@@ -8437,11 +8473,58 @@ bool AppController::removeAiApiKey()
     return true;
 }
 
+bool AppController::saveAiProxySettings(const QString &mode, const QString &url, const QString &username,
+                                        const QString &password)
+{
+    const auto parsedMode = config::parseAiProxyPreference(mode);
+    if (!parsedMode.has_value())
+    {
+        return false;
+    }
+    auto candidate = m_settings;
+    candidate.aiProxy = *parsedMode;
+    candidate.aiProxyUrl = url.trimmed();
+    candidate.aiProxyUsername = username.trimmed();
+    if (!persistApplicationSettings(candidate))
+    {
+        return false;
+    }
+    if (!password.isEmpty())
+    {
+        ai::AiSecretStore store(m_credentialVaults->active());
+        auto stored = store.storeApiKey(AiProxyCredentialReference, security::SensitiveByteArray(password.toUtf8()));
+        if (!stored.has_value())
+        {
+            setCredentialOperationError(credentialVaultErrorMessage(stored.error()));
+            return false;
+        }
+        setCredentialOperationError({});
+        emit credentialVaultChanged();
+        applyAiNetworkProxy();
+    }
+    return true;
+}
+
+bool AppController::removeAiProxyPassword()
+{
+    ai::AiSecretStore store(m_credentialVaults->active());
+    const auto removed = store.removeApiKey(AiProxyCredentialReference);
+    if (!removed.has_value() && removed.error() != security::CredentialVaultError::NotFound)
+    {
+        setCredentialOperationError(credentialVaultErrorMessage(removed.error()));
+        return false;
+    }
+    setCredentialOperationError({});
+    emit credentialVaultChanged();
+    applyAiNetworkProxy();
+    return true;
+}
+
 bool AppController::beginAiChatGptSignIn()
 {
     if (!m_aiSubscriptionAuth)
     {
-        m_aiSubscriptionAuth = std::make_unique<ai::OpenAiSubscriptionAuthSession>(&m_aiModelNetwork, this);
+        m_aiSubscriptionAuth = std::make_unique<ai::OpenAiSubscriptionAuthSession>(&m_aiNetwork, this);
     }
     if (m_aiSubscriptionAuth->active())
     {
@@ -12030,6 +12113,7 @@ bool AppController::initializePortableCredentialVault(const QString &masterPassw
     setCredentialOperationError({});
     emit hostProfilesChanged();
     emit credentialVaultChanged();
+    applyAiNetworkProxy();
     if (m_aiConversationHistory && m_settings.aiConversationHistoryEnabled
         && m_credentialVaults->storage() == security::CredentialStorage::Portable)
     {
@@ -12057,6 +12141,7 @@ bool AppController::unlockPortableCredentialVault(const QString &masterPassword)
     setCredentialOperationError({});
     emit hostProfilesChanged();
     emit credentialVaultChanged();
+    applyAiNetworkProxy();
     if (m_aiConversationHistory && m_settings.aiConversationHistoryEnabled
         && m_credentialVaults->storage() == security::CredentialStorage::Portable)
     {
@@ -12095,6 +12180,7 @@ void AppController::lockPortableCredentialVault()
         m_aiConversationHistory->forgetLoaded();
     }
     m_credentialVaults->lockPortable();
+    applyAiNetworkProxy();
     setCredentialOperationError({});
     emit hostProfilesChanged();
     emit credentialVaultChanged();
@@ -12141,6 +12227,7 @@ bool AppController::migrateCredentialStorage(const QString &target, const bool r
     if (!persistApplicationSettings(updatedSettings))
     {
         m_credentialVaults->select(previousStorage);
+        applyAiNetworkProxy();
         if (m_aiConversationHistory)
         {
             m_aiConversationHistory->setVault(m_credentialVaults->active());
@@ -12151,6 +12238,7 @@ bool AppController::migrateCredentialStorage(const QString &target, const bool r
         return false;
     }
     emit hostProfilesChanged();
+    applyAiNetworkProxy();
     if (m_aiConversationHistory)
     {
         m_aiConversationHistory->setVault(m_credentialVaults->active());
@@ -14175,6 +14263,36 @@ void AppController::loadApplicationSettings()
             break;
     }
     m_credentialVaults->select(selected);
+    applyAiNetworkProxy();
+}
+
+void AppController::applyAiNetworkProxy()
+{
+    switch (m_settings.aiProxy)
+    {
+        case config::AiProxyPreference::system:
+            m_aiNetwork.setProxyFactory(new AiSystemProxyFactory());
+            return;
+        case config::AiProxyPreference::direct:
+            m_aiNetwork.setProxy(QNetworkProxy::NoProxy);
+            return;
+        case config::AiProxyPreference::custom:
+            break;
+    }
+
+    const QUrl url(m_settings.aiProxyUrl);
+    const auto type = url.scheme() == QStringLiteral("socks5") ? QNetworkProxy::Socks5Proxy : QNetworkProxy::HttpProxy;
+    const quint16 defaultPort = type == QNetworkProxy::Socks5Proxy ? quint16{1080} : quint16{8080};
+    QString password;
+    const ai::AiSecretStore store(m_credentialVaults->active());
+    auto secret = store.readApiKey(AiProxyCredentialReference);
+    if (secret.has_value())
+    {
+        const std::string_view value = secret->view();
+        password = QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size()));
+    }
+    m_aiNetwork.setProxy(QNetworkProxy(type, url.host(), static_cast<quint16>(url.port(defaultPort)),
+                                       m_settings.aiProxyUsername, password));
 }
 
 void AppController::initializeAiModelCatalogRefresh()
@@ -14516,10 +14634,16 @@ bool AppController::persistApplicationSettings(const config::ApplicationSettings
         return true;
     }
     const bool aiDebugTraceChanged = m_settings.aiDebugTraceEnabled != settings.aiDebugTraceEnabled;
+    const bool aiProxyChanged = m_settings.aiProxy != settings.aiProxy || m_settings.aiProxyUrl != settings.aiProxyUrl
+                                || m_settings.aiProxyUsername != settings.aiProxyUsername;
     m_settings = settings;
     if (aiDebugTraceChanged)
     {
         configureAiDebugTrace();
+    }
+    if (aiProxyChanged)
+    {
+        applyAiNetworkProxy();
     }
     for (const auto &tab : m_tabs)
     {

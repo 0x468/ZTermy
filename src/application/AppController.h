@@ -177,6 +177,10 @@ class AppController final : public QObject
     Q_PROPERTY(QString languagePreference READ languagePreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString aiProviderPreference READ aiProviderPreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString aiReasoningPreference READ aiReasoningPreference NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(QString aiProxyPreference READ aiProxyPreference NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(QString aiProxyUrl READ aiProxyUrl NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(QString aiProxyUsername READ aiProxyUsername NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(bool aiProxyPasswordConfigured READ aiProxyPasswordConfigured NOTIFY credentialVaultChanged)
     Q_PROPERTY(QString aiBaseUrl READ aiBaseUrl NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString aiEndpointPath READ aiEndpointPath NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString aiModel READ aiModel NOTIFY applicationSettingsChanged)
@@ -326,6 +330,10 @@ public:
     [[nodiscard]] QString languagePreference() const;
     [[nodiscard]] QString aiProviderPreference() const;
     [[nodiscard]] QString aiReasoningPreference() const;
+    [[nodiscard]] QString aiProxyPreference() const;
+    [[nodiscard]] QString aiProxyUrl() const;
+    [[nodiscard]] QString aiProxyUsername() const;
+    [[nodiscard]] bool aiProxyPasswordConfigured() const;
     [[nodiscard]] QString aiBaseUrl() const;
     [[nodiscard]] QString aiEndpointPath() const;
     [[nodiscard]] QString aiModel() const;
@@ -543,6 +551,9 @@ public:
     [[nodiscard]] Q_INVOKABLE QString aiProviderEndpointPreview(const QString &provider, const QString &baseUrl) const;
     Q_INVOKABLE bool saveAiApiKey(const QString &apiKey);
     Q_INVOKABLE bool removeAiApiKey();
+    Q_INVOKABLE bool saveAiProxySettings(const QString &mode, const QString &url, const QString &username,
+                                         const QString &password);
+    Q_INVOKABLE bool removeAiProxyPassword();
     Q_INVOKABLE bool beginAiChatGptSignIn();
     Q_INVOKABLE void cancelAiChatGptSignIn();
     Q_INVOKABLE bool signOutAiChatGpt();
@@ -904,6 +915,7 @@ private:
     void resolvePortForwardingHostKey(PortForwardingRuntime &runtime, ssh::UnknownHostKeyDecision decision) noexcept;
     void stopAllPortForwardingRules() noexcept;
     void loadApplicationSettings();
+    void applyAiNetworkProxy();
     void initializeAiModelCatalogRefresh();
     void refreshConfiguredAiModels();
     void refreshAiModelsInternal(const QString &provider, const QString &baseUrl, const QString &apiKey,
@@ -1032,10 +1044,10 @@ private:
     std::vector<forwarding::PortForwardingRule> m_portForwardingRules;
     std::vector<std::unique_ptr<PortForwardingRuntime>> m_portForwardingRuntimes;
     QString m_portForwardingOperationError;
-    ai::ProviderHttpClient m_aiProviderClient;
+    QNetworkAccessManager m_aiNetwork;
+    ai::ProviderHttpClient m_aiProviderClient{&m_aiNetwork};
     std::shared_ptr<logging::SessionLogWriter> m_aiDebugTrace;
     QString m_aiDebugTracePath;
-    QNetworkAccessManager m_aiModelNetwork;
     std::unique_ptr<ai::OpenAiSubscriptionAuthSession> m_aiSubscriptionAuth;
     std::unique_ptr<ai::OpenAiSubscriptionTokenRefresher> m_aiSubscriptionTokenRefresher;
     std::vector<AiSubscriptionAccessHandler> m_aiSubscriptionAccessHandlers;

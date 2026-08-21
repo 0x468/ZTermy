@@ -42,11 +42,15 @@ constexpr qint64 retiredExternalAgentSchemaVersion = 20;
 // Version 21 adds the native ChatGPT subscription provider token. Older
 // schemas continue to load with their existing provider unchanged.
 constexpr qint64 nativeChatGptProviderSchemaVersion = 21;
-constexpr qint64 currentSchemaVersion = nativeChatGptProviderSchemaVersion;
+// Version 22 adds an AI-only proxy policy. It is intentionally separate from
+// SSH proxy chains and defaults to the operating-system proxy configuration.
+constexpr qint64 aiProxySchemaVersion = 22;
+constexpr qint64 currentSchemaVersion = aiProxySchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::AiPermissionPreference;
 using ztermy::config::AiProviderPreference;
+using ztermy::config::AiProxyPreference;
 using ztermy::config::AiReasoningPreference;
 using ztermy::config::ApplicationSettings;
 using ztermy::config::ApplicationSettingsStoreError;
@@ -281,6 +285,24 @@ template <>
     return std::nullopt;
 }
 
+template <>
+[[nodiscard]] std::optional<AiProxyPreference> parsePreference(const QString &token)
+{
+    if (token == QStringLiteral("system"))
+    {
+        return AiProxyPreference::system;
+    }
+    if (token == QStringLiteral("direct"))
+    {
+        return AiProxyPreference::direct;
+    }
+    if (token == QStringLiteral("custom"))
+    {
+        return AiProxyPreference::custom;
+    }
+    return std::nullopt;
+}
+
 [[nodiscard]] bool validSettings(const ApplicationSettings &settings)
 {
     const QString fontFamily = settings.terminalFontFamily.trimmed();
@@ -308,12 +330,18 @@ template <>
         && std::ranges::all_of(credentialReference, [](const QChar character) {
                return character.isLetterOrNumber() || character == QLatin1Char('-') || character == QLatin1Char('_');
            });
+    const QUrl aiProxyUrl(settings.aiProxyUrl.trimmed());
+    const bool validAiProxy =
+        settings.aiProxy != AiProxyPreference::custom
+        || (aiProxyUrl.isValid() && !aiProxyUrl.host().isEmpty() && aiProxyUrl.userInfo().isEmpty()
+            && (aiProxyUrl.scheme() == QStringLiteral("http") || aiProxyUrl.scheme() == QStringLiteral("socks5")));
     return settings.backdropOpacity >= 0.0 && settings.backdropOpacity <= 1.0
            && settings.terminalBackgroundOpacity >= 0.0 && settings.terminalBackgroundOpacity <= 1.0
            && uiFontFamily.size() <= 128 && !fontFamily.isEmpty() && fontFamily.size() <= 128
            && settings.terminalFontSize >= 8 && settings.terminalFontSize <= 32 && validCustomAccent && validShortcuts
            && validAiBaseUrl && settings.aiBaseUrl.size() <= 2048 && settings.aiEndpointPath.size() <= 512
-           && settings.aiModel.size() <= 256 && validCredentialReference;
+           && settings.aiModel.size() <= 256 && validCredentialReference && validAiProxy
+           && settings.aiProxyUrl.size() <= 2048 && settings.aiProxyUsername.size() <= 256;
 }
 
 [[nodiscard]] std::expected<ApplicationSettings, ApplicationSettingsStoreError> parseSettings(const QJsonObject &root)
@@ -360,6 +388,9 @@ template <>
     const QJsonValue aiConversationHistoryEnabledValue = root.value(QStringLiteral("aiConversationHistoryEnabled"));
     const QJsonValue aiDebugTraceEnabledValue = root.value(QStringLiteral("aiDebugTraceEnabled"));
     const QJsonValue aiReasoningValue = root.value(QStringLiteral("aiReasoning"));
+    const QJsonValue aiProxyValue = root.value(QStringLiteral("aiProxy"));
+    const QJsonValue aiProxyUrlValue = root.value(QStringLiteral("aiProxyUrl"));
+    const QJsonValue aiProxyUsernameValue = root.value(QStringLiteral("aiProxyUsername"));
 
     if (!themeValue.isString() || !opacityValue.isDouble() || !backdropValue.isString() || !fontFamilyValue.isString()
         || !fontSizeValue.isDouble() || !cursorValue.isString() || !cursorBlinkValue.isBool()
@@ -418,6 +449,11 @@ template <>
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
+    if (version >= aiProxySchemaVersion
+        && (!aiProxyValue.isString() || !aiProxyUrlValue.isString() || !aiProxyUsernameValue.isString()))
+    {
+        return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
+    }
     const auto theme = parsePreference<ThemePreference>(themeValue.toString());
     const auto backdrop = parsePreference<BackdropPreference>(backdropValue.toString());
     const auto accent = version >= accentSchemaVersion ? parsePreference<AccentPreference>(accentValue.toString())
@@ -441,9 +477,11 @@ template <>
     const auto aiReasoning = version >= aiReasoningSchemaVersion
                                  ? parsePreference<AiReasoningPreference>(aiReasoningValue.toString())
                                  : std::optional{AiReasoningPreference::automatic};
+    const auto aiProxy = version >= aiProxySchemaVersion ? parsePreference<AiProxyPreference>(aiProxyValue.toString())
+                                                         : std::optional{AiProxyPreference::system};
     const qint64 fontSize = fontSizeValue.toInteger(-1);
     if (!theme || !backdrop || !accent || !cursor || !credentialStorage || !language || !aiProvider || !aiPermission
-        || !aiReasoning || fontSizeValue.toDouble() != static_cast<double>(fontSize))
+        || !aiReasoning || !aiProxy || fontSizeValue.toDouble() != static_cast<double>(fontSize))
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
@@ -501,6 +539,9 @@ template <>
             version < aiConversationFirstSchemaVersion || aiConversationHistoryEnabledValue.toBool(),
         .aiDebugTraceEnabled = version >= aiDebugTraceSchemaVersion && aiDebugTraceEnabledValue.toBool(),
         .aiReasoning = *aiReasoning,
+        .aiProxy = *aiProxy,
+        .aiProxyUrl = version >= aiProxySchemaVersion ? aiProxyUrlValue.toString() : QString{},
+        .aiProxyUsername = version >= aiProxySchemaVersion ? aiProxyUsernameValue.toString() : QString{},
     };
     if (!validSettings(settings))
     {
@@ -513,6 +554,8 @@ template <>
     settings.aiEndpointPath = settings.aiEndpointPath.trimmed();
     settings.aiModel = settings.aiModel.trimmed();
     settings.aiCredentialReference = settings.aiCredentialReference.trimmed();
+    settings.aiProxyUrl = settings.aiProxyUrl.trimmed();
+    settings.aiProxyUsername = settings.aiProxyUsername.trimmed();
     return settings;
 }
 
@@ -639,6 +682,9 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
         {QStringLiteral("aiConversationHistoryEnabled"), settings.aiConversationHistoryEnabled},
         {QStringLiteral("aiDebugTraceEnabled"), settings.aiDebugTraceEnabled},
         {QStringLiteral("aiReasoning"), aiReasoningPreferenceToken(settings.aiReasoning)},
+        {QStringLiteral("aiProxy"), aiProxyPreferenceToken(settings.aiProxy)},
+        {QStringLiteral("aiProxyUrl"), settings.aiProxyUrl.trimmed()},
+        {QStringLiteral("aiProxyUsername"), settings.aiProxyUsername.trimmed()},
     };
 
     const QByteArray data = QJsonDocument(root).toJson(QJsonDocument::Indented);
@@ -808,6 +854,20 @@ QString aiReasoningPreferenceToken(const AiReasoningPreference preference)
     }
 }
 
+QString aiProxyPreferenceToken(const AiProxyPreference preference)
+{
+    switch (preference)
+    {
+        case AiProxyPreference::direct:
+            return QStringLiteral("direct");
+        case AiProxyPreference::custom:
+            return QStringLiteral("custom");
+        case AiProxyPreference::system:
+        default:
+            return QStringLiteral("system");
+    }
+}
+
 std::optional<ThemePreference> parseThemePreference(const QString &token)
 {
     return parsePreference<ThemePreference>(token);
@@ -851,6 +911,11 @@ std::optional<AiPermissionPreference> parseAiPermissionPreference(const QString 
 std::optional<AiReasoningPreference> parseAiReasoningPreference(const QString &token)
 {
     return parsePreference<AiReasoningPreference>(token);
+}
+
+std::optional<AiProxyPreference> parseAiProxyPreference(const QString &token)
+{
+    return parsePreference<AiProxyPreference>(token);
 }
 
 } // namespace ztermy::config

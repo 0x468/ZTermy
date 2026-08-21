@@ -24,6 +24,9 @@ Rectangle {
     property string aiModelDraft: ""
     property string aiSelectedProviderToken: "openai-responses"
     property string aiReasoningDraft: "auto"
+    property string aiProxyModeDraft: "system"
+    property string aiProxyUrlDraft: ""
+    property string aiProxyUsernameDraft: ""
     property string aiQuickMessageEditingId: ""
     property string aiQuickMessageNameDraft: ""
     property string aiQuickMessageSlugDraft: ""
@@ -220,6 +223,14 @@ Rectangle {
     function aiReasoningToken() {
         const tokens = aiReasoningOptions.tokens;
         return tokens.length > 0 ? tokens[Math.max(0, aiReasoningBox.currentIndex)] : "auto";
+    }
+
+    function aiProxyIndex(token) {
+        return token === "direct" ? 1 : token === "custom" ? 2 : 0;
+    }
+
+    function aiProxyToken() {
+        return ["system", "direct", "custom"][aiProxyBox.currentIndex];
     }
 
     function aiRuleMatcherIndex(token) {
@@ -472,6 +483,11 @@ Rectangle {
         aiModelDraft = controller.aiModel;
         aiReasoningDraft = controller.aiReasoningPreference;
         aiReasoningBox.currentIndex = aiReasoningIndex(aiReasoningDraft);
+        aiProxyModeDraft = controller.aiProxyPreference;
+        aiProxyBox.currentIndex = aiProxyIndex(aiProxyModeDraft);
+        aiProxyUrlDraft = controller.aiProxyUrl;
+        aiProxyUsernameDraft = controller.aiProxyUsername;
+        aiProxyPasswordField.text = "";
         aiAutomaticContextSwitch.checked = controller.aiAutomaticContext;
         aiDebugTraceSwitch.checked = controller.aiDebugTraceEnabled;
         aiConversationHistorySwitch.checked = controller.aiConversationHistoryEnabled;
@@ -1761,6 +1777,135 @@ Rectangle {
                                 pane.presentStatus(saved ? qsTr("AI provider saved.") : qsTr("The provider settings or API key could not be saved."), !saved, saved);
                                 if (saved)
                                     aiApiKeyField.text = "";
+                            }
+                        }
+                    }
+                }
+            }
+
+            SectionCard {
+                Layout.fillWidth: true
+                visible: pane.currentCategory === "ai"
+                compact: true
+                heading: qsTr("AI network")
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacingControl
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("Choose how model discovery, sign-in, and assistant requests reach the network. SSH, SFTP, and port forwarding are unaffected.")
+                        color: Theme.textMuted
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
+                    }
+
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: pane.compactLayout ? 1 : 2
+                        columnSpacing: 18
+                        rowSpacing: 10
+
+                        Label {
+                            text: qsTr("Proxy")
+                            color: Theme.text
+                        }
+                        AppComboBox {
+                            id: aiProxyBox
+
+                            objectName: "settingsAiProxyMode"
+                            Layout.fillWidth: true
+                            model: ["system", "direct", "custom"]
+                            displayTextModel: [qsTr("Use system proxy"), qsTr("Direct connection"), qsTr("Custom proxy")]
+                            accessibleName: qsTr("AI network proxy mode")
+                            onActivated: index => pane.aiProxyModeDraft = model[index]
+                        }
+
+                        Label {
+                            text: qsTr("Proxy address")
+                            color: Theme.text
+                            visible: pane.aiProxyToken() === "custom"
+                        }
+                        AppTextField {
+                            objectName: "settingsAiProxyUrl"
+                            Layout.fillWidth: true
+                            text: pane.aiProxyUrlDraft
+                            visible: pane.aiProxyToken() === "custom"
+                            placeholderText: qsTr("http://127.0.0.1:7890 or socks5://127.0.0.1:1080")
+                            accessibleName: qsTr("AI proxy address")
+                            onTextEdited: pane.aiProxyUrlDraft = text
+                        }
+
+                        Label {
+                            text: qsTr("Username")
+                            color: Theme.text
+                            visible: pane.aiProxyToken() === "custom"
+                        }
+                        AppTextField {
+                            Layout.fillWidth: true
+                            text: pane.aiProxyUsernameDraft
+                            visible: pane.aiProxyToken() === "custom"
+                            placeholderText: qsTr("Optional")
+                            accessibleName: qsTr("AI proxy username")
+                            onTextEdited: pane.aiProxyUsernameDraft = text
+                        }
+
+                        Label {
+                            text: qsTr("Password")
+                            color: Theme.text
+                            visible: pane.aiProxyToken() === "custom"
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: 0
+                            spacing: 8
+                            visible: pane.aiProxyToken() === "custom"
+
+                            AppTextField {
+                                id: aiProxyPasswordField
+
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 0
+                                passwordRevealable: true
+                                placeholderText: pane.controller.aiProxyPasswordConfigured ? qsTr("Saved · enter only to replace") : qsTr("Optional")
+                                accessibleName: qsTr("AI proxy password")
+                            }
+
+                            ActionButton {
+                                text: qsTr("Remove")
+                                visible: pane.controller.aiProxyPasswordConfigured
+                                onClicked: {
+                                    const removed = pane.controller.removeAiProxyPassword();
+                                    pane.presentStatus(removed ? qsTr("Proxy password removed.") : qsTr("The proxy password could not be removed."), !removed, removed);
+                                }
+                            }
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: pane.aiProxyToken() === "system" ? qsTr("Uses the Windows proxy configuration for AI traffic.") : pane.aiProxyToken() === "direct" ? qsTr("AI traffic bypasses configured proxies.") : qsTr("HTTP and SOCKS5 proxies are supported.")
+                            color: Theme.textMuted
+                            wrapMode: Text.WordWrap
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.textCompact
+                        }
+
+                        ActionButton {
+                            objectName: "settingsAiProxyApply"
+                            text: qsTr("Save")
+                            variant: "primary"
+                            enabled: pane.aiProxyToken() !== "custom" || pane.aiProxyUrlDraft.trim().length > 0
+                            onClicked: {
+                                const saved = pane.controller.saveAiProxySettings(pane.aiProxyToken(), pane.aiProxyUrlDraft, pane.aiProxyUsernameDraft, aiProxyPasswordField.text);
+                                pane.presentStatus(saved ? qsTr("AI network settings saved.") : qsTr("The AI network settings could not be saved."), !saved, saved);
+                                if (saved)
+                                    aiProxyPasswordField.text = "";
                             }
                         }
                     }

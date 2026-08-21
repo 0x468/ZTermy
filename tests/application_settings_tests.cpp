@@ -37,6 +37,7 @@ private slots:
     void migratesAiProviderSchemaWithPermissionDefault();
     void migratesRecentPermissionSchemasAndAllowsResave();
     void migratesRetiredExternalAgentSchemaWithoutLosingProvider();
+    void migratesNativeChatGptSchemaWithSystemAiProxy();
     void rejectsMalformedUnsupportedAndIncompleteDocuments();
     void rejectsOutOfRangeValues();
     void recoversLastKnownGoodSettings();
@@ -91,6 +92,9 @@ void ApplicationSettingsTests::savesAndLoadsEveryPreference()
         .aiConversationHistoryEnabled = true,
         .aiDebugTraceEnabled = true,
         .aiReasoning = ztermy::config::AiReasoningPreference::maximum,
+        .aiProxy = ztermy::config::AiProxyPreference::custom,
+        .aiProxyUrl = QStringLiteral("socks5://127.0.0.1:1080"),
+        .aiProxyUsername = QStringLiteral("proxy-user"),
     };
     const ztermy::config::ApplicationSettingsStore store(directory.filePath(QStringLiteral("settings.json")));
 
@@ -162,7 +166,7 @@ void ApplicationSettingsTests::migratesLegacyWindowOpacityAndNoneBackdrop()
     QFile saved(path);
     QVERIFY(saved.open(QIODevice::ReadOnly));
     const QByteArray persisted = saved.readAll();
-    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 21")));
+    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 22")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdropOpacity\": 0.75")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdrop\": \"transparent\"")));
     QVERIFY(!persisted.contains(QByteArrayLiteral("windowOpacity")));
@@ -448,7 +452,7 @@ void ApplicationSettingsTests::migratesRecentPermissionSchemasAndAllowsResave()
 
         QVERIFY(file.open(QIODevice::ReadOnly));
         const auto persisted = QJsonDocument::fromJson(file.readAll()).object();
-        QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 21);
+        QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 22);
         QCOMPARE(persisted.value(QStringLiteral("aiPermission")).toString(), QStringLiteral("ask"));
         QCOMPARE(persisted.value(QStringLiteral("terminalFontSize")).toInt(), 16);
     }
@@ -485,11 +489,48 @@ void ApplicationSettingsTests::migratesRetiredExternalAgentSchemaWithoutLosingPr
     QVERIFY(store.save(*loaded));
     QVERIFY(file.open(QIODevice::ReadOnly));
     const auto persisted = QJsonDocument::fromJson(file.readAll()).object();
-    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 21);
+    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 22);
     QVERIFY(!persisted.contains(QStringLiteral("aiAgent")));
     QCOMPARE(persisted.value(QStringLiteral("aiBaseUrl")).toString(), expected.aiBaseUrl);
     QCOMPARE(persisted.value(QStringLiteral("aiModel")).toString(), expected.aiModel);
     QCOMPARE(persisted.value(QStringLiteral("aiCredentialReference")).toString(), expected.aiCredentialReference);
+}
+
+void ApplicationSettingsTests::migratesNativeChatGptSchemaWithSystemAiProxy()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("settings.json"));
+    const ztermy::config::ApplicationSettingsStore store(path);
+
+    auto expected = ztermy::config::ApplicationSettings{};
+    expected.aiProvider = ztermy::config::AiProviderPreference::openAiChatGpt;
+    expected.aiModel = QStringLiteral("gpt-5.2-codex");
+    QVERIFY(store.save(expected));
+
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    auto root = QJsonDocument::fromJson(file.readAll()).object();
+    file.close();
+    root.insert(QStringLiteral("version"), 21);
+    root.remove(QStringLiteral("aiProxy"));
+    root.remove(QStringLiteral("aiProxyUrl"));
+    root.remove(QStringLiteral("aiProxyUsername"));
+    QVERIFY(writeFile(path, QJsonDocument(root).toJson(QJsonDocument::Compact)));
+
+    const auto loaded = store.load();
+    QVERIFY(loaded);
+    QCOMPARE(loaded->aiProvider, ztermy::config::AiProviderPreference::openAiChatGpt);
+    QCOMPARE(loaded->aiModel, QStringLiteral("gpt-5.2-codex"));
+    QCOMPARE(loaded->aiProxy, ztermy::config::AiProxyPreference::system);
+    QVERIFY(loaded->aiProxyUrl.isEmpty());
+    QVERIFY(loaded->aiProxyUsername.isEmpty());
+
+    QVERIFY(store.save(*loaded));
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    const auto persisted = QJsonDocument::fromJson(file.readAll()).object();
+    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 22);
+    QCOMPARE(persisted.value(QStringLiteral("aiProxy")).toString(), QStringLiteral("system"));
 }
 
 void ApplicationSettingsTests::rejectsMalformedUnsupportedAndIncompleteDocuments()
@@ -504,7 +545,7 @@ void ApplicationSettingsTests::rejectsMalformedUnsupportedAndIncompleteDocuments
     QVERIFY(!malformed);
     QCOMPARE(malformed.error(), ztermy::config::ApplicationSettingsStoreError::invalidFormat);
 
-    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":22})")));
+    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":23})")));
     const auto unsupported = store.load();
     QVERIFY(!unsupported);
     QCOMPARE(unsupported.error(), ztermy::config::ApplicationSettingsStoreError::unsupportedVersion);
