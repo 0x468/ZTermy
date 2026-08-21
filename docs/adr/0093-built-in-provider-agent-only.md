@@ -34,6 +34,10 @@ bound to the current terminal.
 - Provider selection, credentials, model discovery, reasoning support,
   conversation history, streaming, cancellation, Markdown rendering, and tool
   execution remain native ztermy capabilities.
+- Provider authentication may include an API key or a provider-supported
+  subscription/account flow. Such authentication belongs to ztermy's native
+  provider adapter and must not discover, install, start, or control the
+  provider's Agent runtime.
 - The assistant sidebar operates only on its owning terminal tab. It does not
   enumerate, select, or control other terminal sessions.
 - Schema version 20 remains a readable compatibility tombstone because a
@@ -49,7 +53,8 @@ bound to the current terminal.
 A proposal is rejected without prototyping when it would require any of the
 following for Codex, OpenCode, Claude Code, or another external Agent/harness:
 
-- executable discovery, installation, launch, supervision, or authentication;
+- executable discovery, installation, launch, supervision, or authentication
+  on behalf of an external Agent runtime;
 - App Server, ACP, CLI, SDK, RPC, event-stream, thread, or session bridging;
 - an Agent selector, external conversation browser, compatibility mode, plugin
   contract, dormant adapter, feature flag, or migration path;
@@ -60,10 +65,12 @@ Public UX comparison remains research only. Any useful behavior must be
 reimplemented as a native capability of ztermy's built-in assistant without an
 external Agent dependency.
 
-Supporting an ordinary model/provider API does not weaken this boundary. For
-example, OpenAI API models may be used through ztermy's provider adapter, but
-ztermy must not discover, authenticate, launch, bridge, or emulate the Codex
-Agent product or its runtime.
+Supporting an ordinary or subscription-backed model/provider interface does
+not weaken this boundary. For example, OpenAI API models and a native ChatGPT
+subscription provider may be used through ztermy's own provider adapters, but
+ztermy must not discover, launch, bridge, or emulate the Codex Agent product or
+its runtime. ztermy owns the conversation, tool loop, permissions, persistence,
+and terminal-session binding in every case.
 
 ## Consequences
 

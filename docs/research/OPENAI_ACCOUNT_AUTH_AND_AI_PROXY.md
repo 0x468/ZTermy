@@ -4,43 +4,49 @@ Date: 2026-08-21
 
 ## OpenAI account sign-in
 
-OpenAI currently documents ChatGPT-plan access for its Codex clients: the
-Codex app, CLI, IDE extension, and web product. OpenAI also documents ChatGPT
-and API Platform billing as separate systems. The public documentation does
-not define a general third-party OAuth contract that lets an unrelated native
-terminal exchange a ChatGPT subscription for ordinary model API access.
+OpenAI documents ChatGPT-plan access for Codex and now explicitly documents
+Codex App Server as the integration surface for rich clients embedded in other
+products. Its account protocol supports managed browser login, managed
+device-code login, account/plan inspection, logout, token refresh, model
+discovery, and Codex usage-limit reporting. OpenAI also documents ChatGPT and
+API Platform billing as separate systems: a ChatGPT subscription does not
+become ordinary OpenAI API credit.
 
 References:
 
 - <https://help.openai.com/en/articles/11369540-using-codex-with-your-chatgpt-plan>
 - <https://help.openai.com/en/articles/9039756-billing-settings-in-chatgpt-vs-platform>
 - <https://learn.chatgpt.com/docs/auth>
+- <https://learn.chatgpt.com/docs/app-server>
 
-Hermes Agent implements a different, product-specific path. Its public source
-hard-codes the Codex OAuth client identifier, obtains ChatGPT tokens, and sends
-inference traffic to `https://chatgpt.com/backend-api/codex`:
+OpenCode, Hermes Agent, and Pi also expose ChatGPT subscription authentication
+as a provider distinct from the ordinary OpenAI API. Their public
+implementations use refreshable OAuth credentials, the ChatGPT account id, and
+a dedicated Codex Responses transport:
 
+- <https://github.com/anomalyco/opencode/blob/dev/packages/opencode/src/plugin/openai/codex.ts>
 - <https://github.com/NousResearch/hermes-agent/blob/main/hermes_cli/auth.py>
 - <https://github.com/NousResearch/hermes-agent/blob/main/website/docs/integrations/providers.md>
+- <https://github.com/earendil-works/pi/blob/main/packages/ai/README.md>
 
-That proves technical feasibility but not a stable or supported third-party
-provider contract. It also consumes Codex product allowance rather than making
-a ChatGPT subscription behave like normal OpenAI API credit.
+This establishes both feasibility and a mainstream ecosystem pattern. The
+direct inference endpoint used by those projects is not separately documented
+as a stable public OpenAI API, however. The officially maintained embedding
+surface is App Server, which includes the complete Codex harness and therefore
+does not fit ztermy's permanent native-assistant boundary.
 
 ### Recommendation
 
-Do not present the Hermes-style path as official OpenAI account login and do
-not ship it as a default provider. Continue using the documented OpenAI API-key
-path. Re-evaluate account sign-in when OpenAI publishes a third-party client
-registration, OAuth scopes, inference endpoint, model-discovery contract, and
-usage terms for this purpose.
+Implement **OpenAI (ChatGPT subscription)** as a native ztermy provider under
+ADR 0102. Browser PKCE is the primary desktop flow and device code is the
+fallback. Keep OAuth, refresh, account metadata, model filtering, usage limits,
+headers, and Codex Responses replay isolated behind one compatibility adapter.
+Do not launch or bridge App Server or any other Agent runtime.
 
-Implementing the current Codex-specific private path would additionally require
-an explicit owner decision to narrow ADR 0093: provider authentication would
-need to be permitted while external Agent runtime integration remained banned.
-Until both the product boundary and provider support contract are resolved,
-account sign-in is a researched blocker rather than an implementation backlog
-item.
+The product must describe this as Codex allowance included with the user's
+ChatGPT plan, never as OpenAI API balance. If the compatibility contract stops
+working, display a provider-specific actionable error while leaving the API-key
+provider and its credentials untouched.
 
 ## AI-only proxy
 
