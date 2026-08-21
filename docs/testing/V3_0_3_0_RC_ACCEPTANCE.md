@@ -11,7 +11,7 @@ Identity:
 - codename: **糸**;
 - verse: **「剪不断，理还乱，是离愁」**;
 - supported release platform: Windows 11 x64;
-- candidate package source: `3d00cb7`.
+- candidate executable source: `1e12968`.
 
 This document records the final-source automated evidence for that exact
 package. It includes the mainstream Agent conversation, five-mode/rule model,
@@ -90,13 +90,19 @@ The following gates completed with exit code zero:
     rejection, cancellation, native device-code request/pending-poll/token
     exchange, cancellation before polling, token refresh without rotation,
     concurrent refresh rejection, idempotent typed cancellation, typed 429
-    recovery, model-catalog filtering, allowance parsing, credential
+    recovery, auth-aware model visibility and capability parsing, allowance parsing, credential
     persistence, and provider error recovery. A controller-level fake HTTP proxy
     also proves that model discovery uses the configured AI-only custom proxy.
     The background model-refresh controller test passed 20 consecutive Static
     Release repetitions before both final full suites. The signed-out ChatGPT
     account row and its Chinese device-code entry were also inspected in the
     exact Debug executable at full width and approximately 793 px window width.
+    The final static Release then discovered the ChatGPT-only
+    `gpt-5.3-codex-spark` entry (while excluding the hidden `gpt-reserve`
+    entry), accepted optional/defaulted terminal tool schemas, completed a
+    `read_terminal` call, replayed its typed result without
+    `previous_response_id`, and returned `PowerShell`. The same executable
+    passed all 116 static Release tests after this repair.
 
 The formal soak reports are generated at
 `build/msvc-static-release/ai-concurrency-soak-2h-schema2.json` and

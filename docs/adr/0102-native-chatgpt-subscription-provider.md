@@ -70,9 +70,14 @@ Subscription allowance is never described as OpenAI API credit.
 The model catalog's `client_version` is a backend protocol-compatibility
 filter, not ztermy's product semantic version. Catalog discovery therefore
 uses the compatibility marker `99.99.99` to request the complete current
-catalog, while the real ztermy version remains in the user agent and all
-returned entries are still filtered by the service's `supported_in_api`
-capability. This marker is confined to catalog discovery and does not imply an
+catalog, while the real ztermy version remains in the user agent. ChatGPT
+authentication follows the catalog's `visibility` contract: entries explicitly
+marked `list` (or legacy entries without a visibility field) remain selectable,
+including ChatGPT-only models whose `supported_in_api` value is false, while
+entries explicitly marked `hide` do not appear. API-key filtering must not be
+reused for the subscription catalog. Model capability metadata such as
+`supports_reasoning_summary_parameter` is retained for request shaping. This
+marker and metadata are confined to provider discovery and do not imply an
 external Codex runtime integration.
 
 ## Settings and migration
@@ -115,3 +120,14 @@ remaining percentages without describing them as API credit. Refresh and usage
 requests preserve typed authentication, quota, rate-limit, server, and network
 errors, including `Retry-After`, while all UI-facing network work remains
 asynchronous and cancellable.
+
+The authenticated Responses endpoint is treated as a stateless private
+transport rather than the public Responses conversation store. ztermy does not
+forward `previous_response_id`; tool continuations replay the bounded typed
+function-call/output history in `input`. Function schemas opt into OpenAI
+`strict` mode only when every declared property is required and the complete
+nested schema satisfies the strict subset. Optional/defaulted tools remain
+non-strict instead of being rejected before inference. Per-model reasoning
+metadata also suppresses unsupported summary parameters. A live static-Release
+check with `gpt-5.3-codex-spark` completed a terminal read and continuation to a
+final answer without an external Agent runtime.

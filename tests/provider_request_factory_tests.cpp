@@ -119,19 +119,29 @@ void ProviderRequestFactoryTests::adaptsOpenAiToolStrictnessAndCapabilities()
         configuration,
         AiGenerationRequest{
             .messages = {AiChatMessage{.role = AiMessageRole::user, .content = "Inspect the terminal."}},
-            .toolHistory = {AiToolExchange{
-                .calls = {AiToolCall{.id = "call-1", .name = "read_terminal", .argumentsJson = R"({"line_count":20})"}},
-                .outputs =
-                    {AiToolOutput{.callId = "call-1", .name = "read_terminal", .outputJson = R"({"ok":true})"}}}},
+            .toolHistory = {AiToolExchange{.calls = {AiToolCall{.id = "call-1",
+                                                                .name = "read_terminal",
+                                                                .argumentsJson = R"({"line_count":20})"}},
+                                           .outputs = {AiToolOutput{.callId = "call-1",
+                                                                    .name = "read_terminal",
+                                                                    .outputJson = R"({"ok":true})"}}},
+                            AiToolExchange{.calls = {AiToolCall{.id = "call-2",
+                                                                .name = "read_session_info",
+                                                                .argumentsJson = "{}"}},
+                                           .outputs = {AiToolOutput{.callId = "call-2",
+                                                                    .name = "read_session_info",
+                                                                    .outputJson = R"({"shell":"PowerShell"})"}}}},
             .previousResponseId = "resp-private"},
         "access-token");
     QVERIFY(continuation.has_value());
     const auto continuationBody = QJsonDocument::fromJson(continuation->body).object();
     QVERIFY(!continuationBody.contains("previous_response_id"));
     const auto continuationInput = continuationBody.value("input").toArray();
-    QCOMPARE(continuationInput.size(), 3);
+    QCOMPARE(continuationInput.size(), 5);
     QCOMPARE(continuationInput.at(1).toObject().value("type").toString(), QStringLiteral("function_call"));
     QCOMPARE(continuationInput.at(2).toObject().value("type").toString(), QStringLiteral("function_call_output"));
+    QCOMPARE(continuationInput.at(3).toObject().value("call_id").toString(), QStringLiteral("call-2"));
+    QCOMPARE(continuationInput.at(4).toObject().value("call_id").toString(), QStringLiteral("call-2"));
 }
 
 void ProviderRequestFactoryTests::preparesOllamaRequest()
