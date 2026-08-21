@@ -165,7 +165,11 @@ Expected:
 ICE validation calls the Windows Installer service. Run the target from a
 normal user PowerShell or Visual Studio developer shell; heavily restricted
 automation tokens can block that service even though structural decompilation
-would still be possible.
+would still be possible. For an owner-approved RC exception limited to the
+exact `WIX0217`/exit 217 service-access failure, reconfigure with
+`-DZTERMY_SKIP_ICE_VALIDATION=ON` and rerun the target. ICE remains enabled by
+default; the exception path still performs MSI decompilation and every
+structural contract above, and the release handoff must record the skipped gate.
 
 ## Assemble the release handoff
 

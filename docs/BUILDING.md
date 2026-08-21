@@ -148,9 +148,12 @@ development machine a non-elevated WiX process can report `WIX0217` and exit
 217 even while `msiserver` is Running. Run the static preflight from an
 elevated x64 MSVC environment when that exact service-access error occurs.
 This elevation is a development-time validation requirement only; the
-generated per-user MSI remains installable without elevation. Do not suppress
-ICE validation or treat the repeated service-access text as hundreds of MSI
-schema failures.
+generated per-user MSI remains installable without elevation. If the owner
+explicitly accepts that exact environment exception for an RC, configure with
+`-DZTERMY_SKIP_ICE_VALIDATION=ON`; `ztermy_installer_contract_smoke` and
+`ztermy_release_bundle` then skip only ICE while retaining WiX decompilation and
+all structural MSI checks. The option defaults to `OFF`, must not hide a real
+ICE schema failure, and requires the exception to be recorded in the RC handoff.
 
 ## libghostty-vt
 

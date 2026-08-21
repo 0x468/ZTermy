@@ -4025,6 +4025,11 @@ if(ZTERMY_STATIC_BUILD)
         CACHE PATH
         "Directory containing the WiX 4 wix.exe used for installer packaging and verification"
     )
+    option(
+        ZTERMY_SKIP_ICE_VALIDATION
+        "Skip WiX ICE validation while retaining MSI decompilation and structural contract checks"
+        OFF
+    )
     unset(ZTERMY_WIX_DEFAULT_ROOT)
 
     add_custom_target(ztermy_installer
@@ -4044,6 +4049,7 @@ if(ZTERMY_STATIC_BUILD)
                 "-DZTERMY_WIX_EXECUTABLE=${ZTERMY_WIX_ROOT}/wix.exe"
                 "-DZTERMY_INSTALLER=${CMAKE_BINARY_DIR}/ztermy-${PROJECT_VERSION}-windows-x64.msi"
                 "-DZTERMY_INSTALLER_INSPECTION_ROOT=${CMAKE_BINARY_DIR}/test-data/installer-contract"
+                "-DZTERMY_SKIP_ICE_VALIDATION:BOOL=${ZTERMY_SKIP_ICE_VALIDATION}"
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyWixInstaller.cmake"
         DEPENDS ztermy_installer
         COMMENT "Validating and inspecting the per-user ztermy MSI contract"
