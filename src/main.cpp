@@ -598,6 +598,8 @@ struct ResizeHitRuntimeCase
     const bool settingsCaptured = captureLayout(window, outputDirectory, capturePrefix + QStringLiteral("-settings"));
     bool applicationCaptured = false;
     bool applicationMatches = false;
+    bool aboutCaptured = false;
+    bool aboutMatches = false;
     bool securityCaptured = false;
     bool securityMatches = false;
     bool shortcutsCaptured = false;
@@ -610,21 +612,34 @@ struct ResizeHitRuntimeCase
     {
         settingsPane->setProperty("currentCategory", QStringLiteral("application"));
         processWindowEventsFor(std::chrono::milliseconds{500});
+        auto *windowBehavior = rootObject->findChild<QObject *>(QStringLiteral("settingsWindowBehaviorCard"));
+        auto *closeToTray = rootObject->findChild<QObject *>(QStringLiteral("settingsCloseToTraySwitch"));
+        auto *settingsReset = rootObject->findChild<QObject *>(QStringLiteral("settingsReset"));
+        auto *settingsDiscard = rootObject->findChild<QObject *>(QStringLiteral("settingsDiscard"));
+        auto *settingsApply = rootObject->findChild<QObject *>(QStringLiteral("settingsApply"));
+        applicationCaptured = captureLayout(window, outputDirectory, capturePrefix + QStringLiteral("-application"));
+        applicationMatches = windowBehavior != nullptr && windowBehavior->property("visible").toBool()
+                             && closeToTray != nullptr && closeToTray->property("visible").toBool()
+                             && settingsReset != nullptr && settingsReset->property("visible").toBool()
+                             && settingsDiscard != nullptr && settingsDiscard->property("visible").toBool()
+                             && settingsApply != nullptr && settingsApply->property("visible").toBool();
+        settingsPane->setProperty("currentCategory", QStringLiteral("about"));
+        processWindowEventsFor(std::chrono::milliseconds{500});
         auto *brandLockup = rootObject->findChild<QObject *>(QStringLiteral("settingsApplicationBrandLockup"));
         auto *releaseIdentity = rootObject->findChild<QObject *>(QStringLiteral("settingsReleaseIdentityCard"));
         auto *diagnosticsCard = rootObject->findChild<QObject *>(QStringLiteral("settingsDiagnosticsCard"));
         auto *buildInfo = rootObject->findChild<QObject *>(QStringLiteral("settingsApplicationBuildInfo"));
-        applicationCaptured = captureLayout(window, outputDirectory, capturePrefix + QStringLiteral("-application"));
-        applicationMatches =
-            brandLockup != nullptr && brandLockup->property("visible").toBool()
-            && brandLockup->property("width").toReal() > 0.0 && brandLockup->property("height").toReal() > 0.0
-            && releaseIdentity != nullptr && releaseIdentity->property("visible").toBool()
-            && releaseIdentity->property("codename").toString() == QStringLiteral("糸")
-            && releaseIdentity->property("verse").toString() == QStringLiteral("剪不断，理还乱，是离愁")
-            && diagnosticsCard != nullptr && diagnosticsCard->property("visible").toBool()
-            && diagnosticsCard->property("width").toReal() > 0.0 && buildInfo != nullptr
-            && buildInfo->property("visible").toBool()
-            && buildInfo->property("text").toString().contains(QCoreApplication::applicationVersion());
+        aboutCaptured = captureLayout(window, outputDirectory, capturePrefix + QStringLiteral("-about"));
+        aboutMatches = brandLockup != nullptr && brandLockup->property("visible").toBool()
+                       && brandLockup->property("width").toReal() > 0.0
+                       && brandLockup->property("height").toReal() > 0.0 && releaseIdentity != nullptr
+                       && releaseIdentity->property("visible").toBool()
+                       && releaseIdentity->property("codename").toString() == QStringLiteral("糸")
+                       && releaseIdentity->property("verse").toString() == QStringLiteral("剪不断，理还乱，是离愁")
+                       && diagnosticsCard != nullptr && diagnosticsCard->property("visible").toBool()
+                       && diagnosticsCard->property("width").toReal() > 0.0 && buildInfo != nullptr
+                       && buildInfo->property("visible").toBool()
+                       && buildInfo->property("text").toString().contains(QCoreApplication::applicationVersion());
         settingsPane->setProperty("currentCategory", QStringLiteral("security"));
         processWindowEventsFor(std::chrono::milliseconds{200});
         auto *credentialStorage = rootObject->findChild<QObject *>(QStringLiteral("settingsCredentialStorage"));
@@ -685,12 +700,12 @@ struct ResizeHitRuntimeCase
                            << "theme=" << themeName << "size=" << size << "compact=" << compact
                            << "hostPaneWidth=" << hostPaneWidth << "hostContentWidth=" << hostContentWidth
                            << "hostMatches=" << hostMatches << "settingsMatch=" << settingsMatch
-                           << "applicationMatches=" << applicationMatches << "securityMatches=" << securityMatches
-                           << "shortcutsMatch=" << shortcutsMatch << "sftpMatches=" << sftpMatches
-                           << "aiSettingsMatch=" << aiSettingsMatch;
-    return hostMatches && settingsMatch && applicationMatches && securityMatches && shortcutsMatch && sftpMatches
-           && aiSettingsMatch && hostCaptured && settingsCaptured && applicationCaptured && securityCaptured
-           && shortcutsCaptured && sftpCaptured && aiSettingsCaptured;
+                           << "applicationMatches=" << applicationMatches << "aboutMatches=" << aboutMatches
+                           << "securityMatches=" << securityMatches << "shortcutsMatch=" << shortcutsMatch
+                           << "sftpMatches=" << sftpMatches << "aiSettingsMatch=" << aiSettingsMatch;
+    return hostMatches && settingsMatch && applicationMatches && aboutMatches && securityMatches && shortcutsMatch
+           && sftpMatches && aiSettingsMatch && hostCaptured && settingsCaptured && applicationCaptured && aboutCaptured
+           && securityCaptured && shortcutsCaptured && sftpCaptured && aiSettingsCaptured;
 }
 
 [[nodiscard]] QQuickItem *quickItem(QQuickItem *rootObject, const char *objectName);
@@ -1840,7 +1855,8 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
         || !verifyAccessibleButton(rootObject, "settingsAppearanceCategory", "Appearance settings")
         || !verifyAccessibleButton(rootObject, "settingsTerminalCategory", "Terminal settings")
         || !verifyAccessibleButton(rootObject, "settingsShortcutsCategory", "Shortcuts settings")
-        || !verifyAccessibleButton(rootObject, "settingsSftpCategory", "SFTP settings"))
+        || !verifyAccessibleButton(rootObject, "settingsSftpCategory", "SFTP settings")
+        || !verifyAccessibleButton(rootObject, "settingsAboutCategory", "About settings"))
     {
         qCWarning(applicationLog) << "Space did not open the singleton Settings work tab";
         return false;
@@ -3655,8 +3671,11 @@ int main(int argc, char *argv[])
     {
         return EXIT_FAILURE;
     }
+    const bool closeToTrayAllowed = !QCoreApplication::arguments().contains(QStringLiteral("--smoke-test"));
+    window.setCloseToTrayEnabled(closeToTrayAllowed && appController.closeToTray());
     QObject::connect(&appController, &ztermy::AppController::applicationSettingsChanged, &window,
-                     [&appController, &fontCatalog, &localizationManager, &window] {
+                     [&appController, &fontCatalog, &localizationManager, &window, closeToTrayAllowed] {
+                         window.setCloseToTrayEnabled(closeToTrayAllowed && appController.closeToTray());
                          fontCatalog.applyUiFont(appController.uiFontFamily());
                          const auto language =
                              ztermy::config::parseLanguagePreference(appController.languagePreference());

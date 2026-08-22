@@ -19,6 +19,8 @@ constexpr std::size_t maximumCommandBytes = std::size_t{16} * 1024;
 constexpr std::size_t maximumCommandIdBytes = 256;
 constexpr std::size_t maximumPtyInputBytes = std::size_t{4} * 1024;
 constexpr std::size_t maximumArgumentsBytes = std::size_t{20} * 1024;
+constexpr std::uint64_t defaultCommandTimeoutMilliseconds = 30'000;
+constexpr std::uint64_t maximumCommandTimeoutMilliseconds = 600'000;
 
 [[nodiscard]] QString text(const std::string_view value)
 {
@@ -134,10 +136,11 @@ std::vector<AiToolDefinition> AiActionToolDispatcher::definitions()
 {
     return {
         {.name = "run_command",
-         .description = "Queue one command in the current terminal. Returns after input is accepted, not "
-                        "after the command finishes.",
+         .description = "Run one command in the current terminal and wait asynchronously for completion. Returns "
+                        "the command output and exit status, or bounded partial output when the requested timeout "
+                        "expires. The default timeout is 30000 ms.",
          .parametersJson =
-             R"({"type":"object","properties":{"command":{"type":"string","minLength":1,"maxLength":16384}},"required":["command"],"additionalProperties":false})"},
+             R"({"type":"object","properties":{"command":{"type":"string","minLength":1,"maxLength":16384},"timeout_ms":{"type":"integer","minimum":1,"maximum":600000,"default":30000}},"required":["command"],"additionalProperties":false})"},
         {.name = "interrupt_command",
          .description = "Request a soft interrupt for a tracked command in the current terminal by "
                         "writing Ctrl+C. The command outcome remains unknown until observed.",
@@ -182,6 +185,7 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
     const auto document = QJsonDocument::fromJson(QByteArray::fromStdString(call.argumentsJson), &parseError);
     const auto object = document.object();
     const auto requestedCommand = object.value(QStringLiteral("command"));
+    const auto requestedTimeout = object.value(QStringLiteral("timeout_ms"));
     const auto requestedCommandId = object.value(QStringLiteral("command_id"));
     const auto requestedMode = object.value(QStringLiteral("mode"));
     const auto requestedPtyData = object.value(QStringLiteral("data"));
@@ -192,10 +196,15 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
     const auto requestedRemotePath = object.value(QStringLiteral("remote_path"));
     const bool commonSchemaValid = call.argumentsJson.size() <= maximumArgumentsBytes && document.isObject()
                                    && parseError.error == QJsonParseError::NoError;
-    const bool runSchemaValid = runCommand && commonSchemaValid && hasOnlyKeys(object, {QStringLiteral("command")})
+    const auto commandTimeout = requestedTimeout.isUndefined()
+                                    ? std::optional<std::uint64_t>{defaultCommandTimeoutMilliseconds}
+                                    : generation(requestedTimeout);
+    const bool runSchemaValid = runCommand && commonSchemaValid
+                                && hasOnlyKeys(object, {QStringLiteral("command"), QStringLiteral("timeout_ms")})
                                 && requestedCommand.isString() && !requestedCommand.toString().trimmed().isEmpty()
                                 && std::cmp_less_equal(requestedCommand.toString().toUtf8().size(), maximumCommandBytes)
-                                && !requestedCommand.toString().contains(QChar::Null);
+                                && !requestedCommand.toString().contains(QChar::Null) && commandTimeout.has_value()
+                                && *commandTimeout > 0 && *commandTimeout <= maximumCommandTimeoutMilliseconds;
     const bool interruptSchemaValid =
         interruptCommand && commonSchemaValid
         && hasOnlyKeys(object, {QStringLiteral("command_id"), QStringLiteral("mode")}) && requestedCommandId.isString()
@@ -268,6 +277,7 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
     if (runCommand)
     {
         canonical.insert(QStringLiteral("command"), requestedCommand);
+        canonical.insert(QStringLiteral("timeout_ms"), static_cast<qint64>(commandTimeout.value_or(0)));
     }
     else if (interruptCommand)
     {
@@ -428,6 +438,7 @@ AiActionToolPlan AiActionToolDispatcher::prepare(const AiToolCall &call, const A
                             .ptyData = ptyData,
                             .permissionSubject = std::string(permissionSubject),
                             .permissionCapability = capability,
+                            .timeoutMilliseconds = static_cast<std::uint32_t>(commandTimeout.value_or(0)),
                             .appendEnter = appendEnter,
                             .risk = risk};
     if (decision.disposition == AiPermissionDisposition::deny)

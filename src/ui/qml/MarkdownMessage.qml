@@ -8,6 +8,7 @@ Item {
     id: markdown
 
     property string source: ""
+    property bool streaming: false
     property color color: Theme.text
     property font font: Qt.font({
         family: Theme.uiFont,
@@ -15,29 +16,99 @@ Item {
     })
     property int textFormat: TextEdit.MarkdownText
     property string renderedSource: ""
+    property bool selectionHold: false
 
     readonly property var blocks: splitBlocks(renderedSource, textFormat)
+    readonly property bool useStreamingRenderer: streaming || selectionHold
 
     signal copyRequested(string text)
+    signal verticalScrollRequested(real delta)
 
-    implicitHeight: contentColumn.implicitHeight
+    implicitHeight: useStreamingRenderer ? streamingText.implicitHeight : contentColumn.implicitHeight
     clip: true
     Accessible.role: Accessible.StaticText
     Accessible.name: qsTr("Rendered Markdown message")
 
-    Component.onCompleted: renderedSource = source
+    Component.onCompleted: {
+        renderedSource = source;
+        streamingText.text = source;
+    }
 
     onSourceChanged: {
-        if (!renderTimer.running)
+        if (!streaming) {
+            renderTimer.stop();
+            renderedSource = source;
+        } else if (!renderTimer.running) {
             renderTimer.start();
+        }
+    }
+
+    onStreamingChanged: {
+        if (streaming) {
+            selectionHold = false;
+            updateStreamingText();
+        } else {
+            selectionHold = streamingText.selectionStart !== streamingText.selectionEnd;
+            if (renderedSource !== source) {
+                renderTimer.stop();
+                renderedSource = source;
+            }
+        }
+    }
+
+    function updateStreamingText() {
+        const selectionStart = streamingText.selectionStart;
+        const selectionEnd = streamingText.selectionEnd;
+        const cursorPosition = streamingText.cursorPosition;
+        streamingText.text = source;
+        if (selectionStart !== selectionEnd) {
+            streamingText.select(Math.min(selectionStart, streamingText.length), Math.min(selectionEnd, streamingText.length));
+        } else {
+            streamingText.cursorPosition = Math.min(cursorPosition, streamingText.length);
+        }
     }
 
     Timer {
         id: renderTimer
 
-        interval: 24
+        interval: 50
         repeat: false
-        onTriggered: markdown.renderedSource = markdown.source
+        onTriggered: markdown.updateStreamingText()
+    }
+
+    HoverHandler {
+        cursorShape: Qt.IBeamCursor
+    }
+
+    TextEdit {
+        id: streamingText
+
+        anchors.left: parent.left
+        anchors.right: parent.right
+        visible: markdown.useStreamingRenderer
+        readOnly: true
+        selectByMouse: true
+        persistentSelection: true
+        wrapMode: TextEdit.WrapAnywhere
+        textFormat: markdown.textFormat
+        color: markdown.color
+        selectionColor: Theme.accent
+        selectedTextColor: Theme.accentText
+        font: markdown.font
+        renderType: Text.QtRendering
+        onLinkActivated: link => Qt.openUrlExternally(link)
+        onSelectedTextChanged: {
+            if (markdown.selectionHold && selectedText.length === 0)
+                markdown.selectionHold = false;
+        }
+        onActiveFocusChanged: {
+            if (markdown.selectionHold && !activeFocus)
+                markdown.selectionHold = false;
+        }
+
+        HoverHandler {
+            cursorShape: parent.hoveredLink.length > 0 ? Qt.PointingHandCursor : Qt.IBeamCursor
+        }
     }
 
     function tableCells(line) {
@@ -144,6 +215,7 @@ Item {
 
         anchors.left: parent.left
         anchors.right: parent.right
+        visible: !markdown.useStreamingRenderer
         spacing: 6
 
         Repeater {
@@ -295,6 +367,17 @@ Item {
                     boundsBehavior: Flickable.StopAtBounds
                     flickableDirection: Flickable.HorizontalFlick
 
+                    WheelHandler {
+                        target: null
+                        onWheel: event => {
+                            const delta = event.pixelDelta.y !== 0 ? event.pixelDelta.y : event.angleDelta.y / 2;
+                            if (delta !== 0) {
+                                markdown.verticalScrollRequested(delta);
+                                event.accepted = true;
+                            }
+                        }
+                    }
+
                     TextEdit {
                         id: codeText
 
@@ -348,6 +431,17 @@ Item {
                 contentHeight: tableRows.implicitHeight
                 boundsBehavior: Flickable.StopAtBounds
                 flickableDirection: Flickable.HorizontalFlick
+
+                WheelHandler {
+                    target: null
+                    onWheel: event => {
+                        const delta = event.pixelDelta.y !== 0 ? event.pixelDelta.y : event.angleDelta.y / 2;
+                        if (delta !== 0) {
+                            markdown.verticalScrollRequested(delta);
+                            event.accepted = true;
+                        }
+                    }
+                }
 
                 Column {
                     id: tableRows

@@ -2,6 +2,7 @@
 
 #include "platform/windows/WindowHitTest.h"
 
+#include <QCoreApplication>
 #include <QEvent>
 #include <QGuiApplication>
 #include <QLoggingCategory>
@@ -12,9 +13,11 @@
 
 #include <Windows.h>
 #include <dwmapi.h>
+#include <shellapi.h>
 #include <windowsx.h>
 
 #include <algorithm>
+#include <string>
 
 namespace
 {
@@ -34,6 +37,12 @@ constexpr int kDwmSystemBackdropTabbedWindow = 4;
 constexpr auto kNativeWindowProperty = L"ztermy.NativeWindow";
 constexpr UINT kNcUahDrawCaption = 0x00AE;
 constexpr UINT kNcUahDrawFrame = 0x00AF;
+constexpr UINT kTrayCallbackMessage = WM_APP + 0x51;
+constexpr UINT kTrayIconId = 1;
+constexpr UINT kTrayShowCommand = 0x3101;
+constexpr UINT kTrayHideCommand = 0x3102;
+constexpr UINT kTrayExitCommand = 0x3103;
+constexpr WORD kApplicationIconResource = 101;
 
 [[nodiscard]] LRESULT toNativeHitArea(const ztermy::windowing::HitArea area) noexcept
 {
@@ -99,6 +108,7 @@ NativeWindow::NativeWindow(QWindow *parent) : QQuickView(parent)
 
 NativeWindow::~NativeWindow()
 {
+    removeTrayIcon();
     uninstallWindowProcedure();
 }
 
@@ -150,6 +160,16 @@ bool NativeWindow::animationsEnabled() const noexcept
 bool NativeWindow::highContrast() const noexcept
 {
     return m_highContrastState.enabled;
+}
+
+bool NativeWindow::closeToTrayEnabled() const noexcept
+{
+    return m_closeToTrayEnabled;
+}
+
+bool NativeWindow::trayIconVisible() const noexcept
+{
+    return m_trayIconVisible;
 }
 
 QColor NativeWindow::highContrastBackground() const noexcept
@@ -221,6 +241,23 @@ void NativeWindow::closeWindow()
     close();
 }
 
+void NativeWindow::setCloseToTrayEnabled(const bool enabled)
+{
+    if (m_closeToTrayEnabled == enabled)
+    {
+        return;
+    }
+    m_closeToTrayEnabled = enabled;
+    if (enabled)
+    {
+        updateTrayIcon();
+    }
+    else
+    {
+        removeTrayIcon();
+    }
+}
+
 bool NativeWindow::applyAppearance(const QString &backdropPreference, const bool darkMode)
 {
     if (backdropPreference != QStringLiteral("acrylic") && backdropPreference != QStringLiteral("transparent")
@@ -251,6 +288,14 @@ void NativeWindow::setTitleBarMetrics(const qreal titleHeight, const qreal capti
 
 bool NativeWindow::event(QEvent *event)
 {
+    if (event->type() == QEvent::Close && m_closeToTrayEnabled && !m_exitingFromTray)
+    {
+        updateTrayIcon();
+        hide();
+        event->ignore();
+        return true;
+    }
+
     const bool handled = QQuickView::event(event);
 
     if (event->type() == QEvent::WindowStateChange)
@@ -532,6 +577,26 @@ LRESULT NativeWindow::nativeHitTest(const HWND windowHandle, const LPARAM lParam
 bool NativeWindow::handleWindowProcedureMessage(const HWND windowHandle, const UINT message, const WPARAM wParam,
                                                 const LPARAM lParam, LRESULT *result)
 {
+    if (message == kTrayCallbackMessage && static_cast<UINT>(HIWORD(lParam)) == kTrayIconId)
+    {
+        switch (LOWORD(lParam))
+        {
+            case NIN_SELECT:
+            case NIN_KEYSELECT:
+            case WM_LBUTTONUP:
+                restoreFromTray();
+                break;
+            case WM_CONTEXTMENU:
+            case WM_RBUTTONUP:
+                showTrayMenu();
+                break;
+            default:
+                break;
+        }
+        *result = 0;
+        return true;
+    }
+
     switch (message)
     {
         case kNcUahDrawCaption:
@@ -672,6 +737,103 @@ void NativeWindow::configureNativeWindow()
 
     setOpacity(1.0);
     (void)applyBackdrop();
+}
+
+void NativeWindow::updateTrayIcon()
+{
+    if (!m_closeToTrayEnabled || m_windowHandle == nullptr)
+    {
+        return;
+    }
+
+    NOTIFYICONDATAW iconData{};
+    iconData.cbSize = sizeof(iconData);
+    iconData.hWnd = m_windowHandle;
+    iconData.uID = kTrayIconId;
+    iconData.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_SHOWTIP;
+    iconData.uCallbackMessage = kTrayCallbackMessage;
+    iconData.hIcon = LoadIconW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(kApplicationIconResource));
+    lstrcpynW(iconData.szTip, L"ztermy", static_cast<int>(std::size(iconData.szTip)));
+
+    const DWORD action = m_trayIconVisible ? NIM_MODIFY : NIM_ADD;
+    if (Shell_NotifyIconW(action, &iconData) == FALSE)
+    {
+        qCWarning(windowLog) << "Unable to publish the notification-area icon" << "error=" << GetLastError();
+        return;
+    }
+    if (!m_trayIconVisible)
+    {
+        iconData.uVersion = NOTIFYICON_VERSION_4;
+        static_cast<void>(Shell_NotifyIconW(NIM_SETVERSION, &iconData));
+    }
+    m_trayIconVisible = true;
+}
+
+void NativeWindow::removeTrayIcon() noexcept
+{
+    if (!m_trayIconVisible || m_windowHandle == nullptr)
+    {
+        return;
+    }
+    NOTIFYICONDATAW iconData{};
+    iconData.cbSize = sizeof(iconData);
+    iconData.hWnd = m_windowHandle;
+    iconData.uID = kTrayIconId;
+    static_cast<void>(Shell_NotifyIconW(NIM_DELETE, &iconData));
+    m_trayIconVisible = false;
+}
+
+void NativeWindow::showTrayMenu()
+{
+    if (m_windowHandle == nullptr)
+    {
+        return;
+    }
+    const HMENU menu = CreatePopupMenu();
+    if (menu == nullptr)
+    {
+        return;
+    }
+    const std::wstring visibilityLabel = (isVisible() ? tr("Hide ztermy") : tr("Show ztermy")).toStdWString();
+    const std::wstring exitLabel = tr("Exit ztermy").toStdWString();
+    AppendMenuW(menu, MF_STRING | MF_DEFAULT, isVisible() ? kTrayHideCommand : kTrayShowCommand,
+                visibilityLabel.c_str());
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING, kTrayExitCommand, exitLabel.c_str());
+
+    POINT cursor{};
+    GetCursorPos(&cursor);
+    SetForegroundWindow(m_windowHandle);
+    const UINT command = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NONOTIFY, cursor.x, cursor.y, 0,
+                                        m_windowHandle, nullptr);
+    DestroyMenu(menu);
+    if (command == kTrayShowCommand)
+    {
+        restoreFromTray();
+    }
+    else if (command == kTrayHideCommand)
+    {
+        hide();
+    }
+    else if (command == kTrayExitCommand)
+    {
+        exitFromTray();
+    }
+}
+
+void NativeWindow::restoreFromTray()
+{
+    show();
+    raise();
+    requestActivate();
+}
+
+void NativeWindow::exitFromTray()
+{
+    m_exitingFromTray = true;
+    removeTrayIcon();
+    close();
+    QCoreApplication::quit();
 }
 
 bool NativeWindow::applyBackdrop()

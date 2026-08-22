@@ -114,6 +114,7 @@ struct ApplicationSettings final
     bool confirmMultilinePaste = true;
     bool sftpShowHiddenFiles = false;
     bool sftpConfirmDelete = true;
+    bool closeToTray = false;
     CredentialStoragePreference credentialStorage = CredentialStoragePreference::automatic;
     LanguagePreference language = LanguagePreference::system;
     QMap<QString, QString> shortcutOverrides;

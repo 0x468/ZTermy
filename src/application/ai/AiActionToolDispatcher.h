@@ -51,6 +51,7 @@ struct AiTerminalAction final
     std::string payloadJson;
     std::string permissionSubject;
     AiPermissionCapability permissionCapability = AiPermissionCapability::terminalCommand;
+    std::uint32_t timeoutMilliseconds = 30'000;
     bool appendEnter = false;
     AiCommandRiskReport risk;
 };

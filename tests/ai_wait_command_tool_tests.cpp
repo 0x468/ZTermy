@@ -59,7 +59,7 @@ void AiWaitCommandToolTests::publishesAndParsesStrictContract()
     QCOMPARE(parsed->target.sessionGeneration, std::uint64_t{3});
     QCOMPARE(parsed->timeoutMilliseconds, std::uint32_t{2500});
 
-    QVERIFY(!AiWaitCommandTool::parse(R"({"command_id":"9:call-1","timeout_ms":120001})", target()).has_value());
+    QVERIFY(!AiWaitCommandTool::parse(R"({"command_id":"9:call-1","timeout_ms":600001})", target()).has_value());
     QVERIFY(
         !AiWaitCommandTool::parse(R"({"command_id":"9:call-1","timeout_ms":1,"extra":true})", target()).has_value());
 
@@ -75,6 +75,10 @@ void AiWaitCommandToolTests::guidesUnavailableLifecycleToFrameWait()
     const auto unavailable =
         object(AiWaitCommandTool::accepted("command-1", true, TerminalSemanticCapability::none, std::uint64_t{17}));
     QVERIFY(unavailable.value(QStringLiteral("tracking_registered")).toBool());
+    QVERIFY(unavailable.value(QStringLiteral("tool_ok")).toBool());
+    QVERIFY(unavailable.value(QStringLiteral("command_started")).toBool());
+    QVERIFY(!unavailable.value(QStringLiteral("command_completed")).toBool(true));
+    QVERIFY(unavailable.value(QStringLiteral("command_succeeded")).isNull());
     QVERIFY(!unavailable.value(QStringLiteral("lifecycle_tracked")).toBool(true));
     QCOMPARE(unavailable.value(QStringLiteral("lifecycle_quality")).toString(), QStringLiteral("unavailable"));
     QCOMPARE(unavailable.value(QStringLiteral("recommended_wait_tool")).toString(),
@@ -93,16 +97,31 @@ void AiWaitCommandToolTests::serializesLifecycleTimeoutAndUnknownOutcome()
 {
     auto finished = object(AiWaitCommandTool::result(command(AiTrackedCommandState::finished)));
     QVERIFY(finished.value(QStringLiteral("ok")).toBool());
+    QVERIFY(finished.value(QStringLiteral("tool_ok")).toBool());
+    QVERIFY(finished.value(QStringLiteral("command_completed")).toBool());
+    QVERIFY(finished.value(QStringLiteral("command_succeeded")).toBool());
     QCOMPARE(finished.value(QStringLiteral("command")).toObject().value(QStringLiteral("block_id")).toInt(), 12);
     QCOMPARE(finished.value(QStringLiteral("command")).toObject().value(QStringLiteral("exit_status")).toInt(), 0);
 
-    const auto timedOut = object(AiWaitCommandTool::timeout(command(AiTrackedCommandState::running)));
+    auto running = command(AiTrackedCommandState::running);
+    running.output = "partial output\r\n";
+    const auto timedOut = object(AiWaitCommandTool::timeout(running));
     QVERIFY(!timedOut.value(QStringLiteral("ok")).toBool(true));
+    QVERIFY(timedOut.value(QStringLiteral("tool_ok")).toBool());
+    QVERIFY(!timedOut.value(QStringLiteral("command_completed")).toBool(true));
+    QVERIFY(timedOut.value(QStringLiteral("command_succeeded")).isNull());
+    QCOMPARE(timedOut.value(QStringLiteral("status")).toString(), QStringLiteral("timeout"));
+    QVERIFY(!timedOut.value(QStringLiteral("completion_confirmed")).toBool(true));
     QCOMPARE(timedOut.value(QStringLiteral("error")).toObject().value(QStringLiteral("code")).toString(),
              QStringLiteral("timeout"));
+    QCOMPARE(timedOut.value(QStringLiteral("command")).toObject().value(QStringLiteral("output")).toString(),
+             QStringLiteral("partial output\n"));
+    QVERIFY(!timedOut.value(QStringLiteral("command")).toObject().value(QStringLiteral("output_complete")).toBool());
 
     const auto unknown = object(AiWaitCommandTool::result(command(AiTrackedCommandState::outcomeUnknown)));
     QVERIFY(!unknown.value(QStringLiteral("ok")).toBool(true));
+    QVERIFY(unknown.value(QStringLiteral("tool_ok")).toBool());
+    QVERIFY(!unknown.value(QStringLiteral("command_completed")).toBool(true));
     QCOMPARE(unknown.value(QStringLiteral("error")).toObject().value(QStringLiteral("code")).toString(),
              QStringLiteral("outcome_unknown"));
 }

@@ -32,7 +32,9 @@ void AiSystemPromptBuilderTests::buildsLayeredPrompt()
 
     // Command protocol.
     QVERIFY(prompt.contains(QStringLiteral("run_command")));
-    QVERIFY(prompt.contains(QStringLiteral("recommended_wait_tool")));
+    QVERIFY(prompt.contains(QStringLiteral("timeout_ms")));
+    QVERIFY(prompt.contains(QStringLiteral("wait_command")));
+    QVERIFY(prompt.contains(QStringLiteral("partial")));
     QVERIFY(prompt.contains(QStringLiteral("interrupt_command")));
     QVERIFY(prompt.contains(QStringLiteral("user_input_pending")));
 

@@ -50,6 +50,11 @@ Rectangle {
             "description": qsTr("Open saved AI conversations")
         },
         {
+            "command": "/context",
+            "title": qsTr("Request context"),
+            "description": qsTr("Inspect context attached to the next request")
+        },
+        {
             "command": "/explain",
             "title": qsTr("Explain last failure"),
             "description": qsTr("Explain the most recent failed command")
@@ -106,6 +111,7 @@ Rectangle {
         required property string label
         required property string value
         signal copyRequested(string text)
+        signal verticalScrollRequested(real delta)
         visible: value.length > 0
         spacing: 3
 
@@ -147,6 +153,22 @@ Rectangle {
             contentHeight: detailText.contentHeight + 12
             boundsBehavior: Flickable.StopAtBounds
             clip: true
+
+            WheelHandler {
+                target: null
+                onWheel: event => {
+                    const delta = event.pixelDelta.y !== 0 ? event.pixelDelta.y : event.angleDelta.y / 2;
+                    if (delta === 0)
+                        return;
+                    const maximumY = Math.max(0, detailViewport.contentHeight - detailViewport.height);
+                    const canScrollHere = (delta > 0 && detailViewport.contentY > 0) || (delta < 0 && detailViewport.contentY < maximumY);
+                    if (canScrollHere)
+                        detailViewport.contentY = Math.max(0, Math.min(maximumY, detailViewport.contentY - delta));
+                    else
+                        detailSection.verticalScrollRequested(delta);
+                    event.accepted = true;
+                }
+            }
 
             Rectangle {
                 anchors.fill: parent
@@ -318,6 +340,10 @@ Rectangle {
 
     function permissionModeIndex(token) {
         return token === "read-only" ? 0 : token === "auto" ? 2 : token === "yolo" ? 3 : 1;
+    }
+
+    function permissionModeDescriptions() {
+        return [qsTr("Read tools only; action and MCP tools are hidden"), qsTr("Ask in the approval card before every side effect"), qsTr("Run ordinary actions automatically; ask for high-risk commands and MCP tools"), qsTr("Run without approval prompts; explicit deny rules and safety boundaries still apply")];
     }
 
     function modelOptions() {
@@ -525,6 +551,11 @@ Rectangle {
             pane.historyExpanded = true;
             pane.activityExpanded = false;
             pane.controller.aiConversationHistory.reload();
+            return true;
+        case "/context":
+            pane.historyExpanded = false;
+            pane.activityExpanded = false;
+            pane.contextExpanded = !pane.contextExpanded;
             return true;
         case "/explain":
             return pane.controller.explainAiLastFailure();
@@ -835,8 +866,8 @@ Rectangle {
             Layout.fillWidth: true
             Layout.leftMargin: 10
             Layout.rightMargin: 10
-            Layout.preferredHeight: pane.contextExpanded ? Math.min(170, contextColumn.implicitHeight + 16) : 0
-            visible: !pane.historyExpanded && pane.contextExpanded && pane.controller.activeAiContextItems.length > 0
+            Layout.preferredHeight: pane.contextExpanded ? Math.min(190, contextColumn.implicitHeight + 16) : 0
+            visible: !pane.historyExpanded && pane.contextExpanded
             clip: true
             radius: Theme.radiusControl
             color: Theme.raisedBackground
@@ -863,6 +894,61 @@ Rectangle {
 
                     width: contextScroll.availableWidth
                     spacing: 6
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: qsTr("Request context")
+                            color: Theme.textSoft
+                            font.family: Theme.uiFont
+                            font.pixelSize: Theme.textBody
+                            font.weight: Font.DemiBold
+                        }
+
+                        ContextToolButton {
+                            Accessible.name: qsTr("Hide request context details")
+                            onClicked: pane.contextExpanded = false
+                            contentItem: AppIcon {
+                                name: "close"
+                                color: Theme.textMuted
+                            }
+
+                            AppToolTip {
+                                text: qsTr("Close")
+                            }
+                        }
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: pane.controller.activeAiContextItems.length > 0 ? qsTr("%n item(s) attached to the next request", "", pane.controller.activeAiContextItems.length) : qsTr("No terminal context is attached to the next request.")
+                        color: Theme.textMuted
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textCompact
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        visible: pane.contextCompaction.estimatedInputTokens !== undefined
+                        text: qsTr("Last request estimate: %1 tokens").arg(Number(pane.contextCompaction.estimatedInputTokens || 0).toLocaleString(Qt.locale(), "f", 0))
+                        color: Theme.textSubtle
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textCompact
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: pane.controller.aiAutomaticContext ? qsTr("Automatic recent-terminal context is enabled.") : qsTr("Automatic recent-terminal context is disabled.")
+                        color: Theme.textSubtle
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textCompact
+                    }
 
                     Repeater {
                         model: pane.controller.activeAiContextItems
@@ -1547,6 +1633,38 @@ Rectangle {
                 spacing: 8
                 model: pane.conversation
                 boundsBehavior: Flickable.StopAtBounds
+                cacheBuffer: Math.max(height, 800)
+
+                Timer {
+                    id: followTailTimer
+
+                    interval: 16
+                    repeat: false
+                    onTriggered: {
+                        if (conversationList.stickToBottom)
+                            conversationList.positionViewAtEnd();
+                    }
+                }
+
+                WheelHandler {
+                    target: null
+                    blocking: false
+                    onWheel: event => {
+                        const delta = event.pixelDelta.y !== 0 ? event.pixelDelta.y : event.angleDelta.y;
+                        if (delta > 0)
+                            conversationList.stickToBottom = false;
+                        event.accepted = false;
+                    }
+                }
+
+                ScrollBar.vertical: ScrollBar {
+                    id: conversationScrollBar
+
+                    policy: conversationList.contentHeight > conversationList.height + 1 ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff
+                    interactive: true
+                    Accessible.name: qsTr("AI conversation scrollbar")
+                }
+
                 onCountChanged: scrollToBottomIfNeeded()
                 onContentHeightChanged: scrollToBottomIfNeeded()
                 onContentYChanged: {
@@ -1558,10 +1676,20 @@ Rectangle {
                 function scrollToBottomIfNeeded() {
                     if (!stickToBottom)
                         return;
-                    Qt.callLater(() => {
-                        if (conversationList.stickToBottom)
-                            conversationList.positionViewAtEnd();
-                    });
+                    if (!followTailTimer.running)
+                        followTailTimer.start();
+                }
+
+                function scrollByWheel(delta) {
+                    if (delta === 0)
+                        return;
+                    cancelFlick();
+                    if (delta > 0)
+                        stickToBottom = false;
+                    const maximumY = Math.max(0, contentHeight - height);
+                    contentY = Math.max(0, Math.min(maximumY, contentY - delta));
+                    if (delta < 0 && contentY >= maximumY - 1)
+                        stickToBottom = true;
                 }
 
                 delegate: Item {
@@ -1665,12 +1793,13 @@ Rectangle {
 
                             MarkdownMessage {
                                 Layout.fillWidth: true
-                                Layout.maximumHeight: 180
                                 visible: reasoningToggle.visible && reasoningToggle.expanded
                                 source: messageItem.reasoning
+                                streaming: messageItem.state === "streaming"
                                 color: Theme.textMuted
                                 font.pixelSize: Theme.textCompact
                                 onCopyRequested: text => pane.controller.copyAiText(text)
+                                onVerticalScrollRequested: delta => conversationList.scrollByWheel(delta)
                             }
 
                             ColumnLayout {
@@ -1868,6 +1997,7 @@ Rectangle {
                                                         label: qsTr("Arguments")
                                                         value: typeof toolCard.modelData.argumentsJson === "string" ? toolCard.modelData.argumentsJson : ""
                                                         onCopyRequested: text => pane.controller.copyAiText(text)
+                                                        onVerticalScrollRequested: delta => conversationList.scrollByWheel(delta)
                                                     }
 
                                                     ToolDetailSection {
@@ -1875,6 +2005,7 @@ Rectangle {
                                                         label: qsTr("Result")
                                                         value: typeof toolCard.modelData.resultJson === "string" ? toolCard.modelData.resultJson : ""
                                                         onCopyRequested: text => pane.controller.copyAiText(text)
+                                                        onVerticalScrollRequested: delta => conversationList.scrollByWheel(delta)
                                                     }
                                                 }
                                             }
@@ -2024,10 +2155,12 @@ Rectangle {
 
                                 Layout.fillWidth: true
                                 source: messageItem.text.length > 0 ? messageItem.text : messageItem.state === "streaming" ? qsTr("Thinking…") : ""
+                                streaming: messageItem.state === "streaming"
                                 color: Theme.text
                                 textFormat: messageItem.messageRole === "assistant" ? TextEdit.MarkdownText : TextEdit.PlainText
                                 font.pixelSize: Theme.textBody
                                 onCopyRequested: text => pane.controller.copyAiText(text)
+                                onVerticalScrollRequested: delta => conversationList.scrollByWheel(delta)
                             }
 
                             Button {
@@ -2988,14 +3121,11 @@ Rectangle {
                         visible: pane.width >= 430
                         Layout.preferredWidth: pane.width < 500 ? 104 : 124
                         model: pane.modelOptions()
+                        toolTipText: qsTr("Model · %1").arg(pane.controller.aiModel)
                         currentIndex: Math.max(0, model.indexOf(pane.controller.aiModel))
                         accessibleName: qsTr("AI model")
                         enabled: pane.assistantConfigured && !pane.busy && model.length > 0
                         onActivated: index => pane.selectModel(model[index])
-
-                        AppToolTip {
-                            text: qsTr("Model · %1").arg(pane.controller.aiModel)
-                        }
                     }
 
                     AppComboBox {
@@ -3005,14 +3135,12 @@ Rectangle {
                         Layout.preferredWidth: pane.width < 380 ? 82 : 96
                         model: ["read-only", "ask", "auto", "yolo"]
                         displayTextModel: [qsTr("Read-only"), qsTr("Ask"), qsTr("Auto"), qsTr("YOLO")]
+                        toolTipModel: pane.permissionModeDescriptions()
+                        toolTipText: toolTipModel[currentIndex] || ""
                         currentIndex: pane.permissionModeIndex(pane.controller.aiPermissionPreference)
                         accessibleName: qsTr("Assistant execution mode")
                         enabled: pane.assistantConfigured && !pane.busy
                         onActivated: index => pane.controller.setAiPermissionMode(model[index])
-
-                        AppToolTip {
-                            text: agentModeBox.currentValue === "read-only" ? qsTr("Read tools only; action and MCP tools are hidden") : agentModeBox.currentValue === "ask" ? qsTr("Ask in the approval card before every side effect") : agentModeBox.currentValue === "auto" ? qsTr("Run ordinary actions automatically; ask for high-risk commands and MCP tools") : qsTr("Run without approval prompts; explicit deny rules and safety boundaries still apply")
-                        }
                     }
 
                     ActionButton {

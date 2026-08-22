@@ -462,6 +462,8 @@ Rectangle {
     function focusCurrentCategory() {
         if (currentCategory === "application") {
             applicationCategory.focusAction();
+        } else if (currentCategory === "about") {
+            aboutCategory.focusAction();
         } else if (currentCategory === "terminal") {
             terminalCategory.focusAction();
         } else if (currentCategory === "shortcuts") {
@@ -496,6 +498,7 @@ Rectangle {
         multilinePasteSwitch.checked = controller.confirmMultilinePaste;
         sftpShowHiddenSwitch.checked = controller.sftpShowHiddenFiles;
         sftpConfirmDeleteSwitch.checked = controller.sftpConfirmDelete;
+        closeToTraySwitch.checked = controller.closeToTray;
         languageDraft = controller.languagePreference;
         credentialStorageBox.currentIndex = credentialStorageIndex(controller.effectiveCredentialStorage);
         credentialCleanupStorageBox.currentIndex = credentialStorageIndex(controller.effectiveCredentialStorage);
@@ -524,7 +527,7 @@ Rectangle {
             presentStatus(qsTr("Custom accent must use the #RRGGBB format."), true, false);
             return;
         }
-        const saved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), accentToken(), customAccentField.text, uiFontDraft, terminalFontDraft, fontSizeBox.value, showAllFontsSwitch.checked, ligatureSwitch.checked, terminalOpacitySlider.value, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, multilinePasteSwitch.checked, languageDraft, sftpShowHiddenSwitch.checked, sftpConfirmDeleteSwitch.checked);
+        const saved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), accentToken(), customAccentField.text, uiFontDraft, terminalFontDraft, fontSizeBox.value, showAllFontsSwitch.checked, ligatureSwitch.checked, terminalOpacitySlider.value, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, multilinePasteSwitch.checked, languageDraft, sftpShowHiddenSwitch.checked, sftpConfirmDeleteSwitch.checked, closeToTraySwitch.checked);
         presentStatus(saved ? qsTr("Settings saved and applied.") : qsTr("These settings could not be saved. Check the font and numeric ranges."), !saved, saved);
         if (!saved) {
             loadDraft();
@@ -627,7 +630,7 @@ Rectangle {
 
                 Layout.fillWidth: true
                 title: qsTr("Application")
-                iconName: "application"
+                iconName: "settings"
                 actionObjectName: "settingsApplicationCategory"
                 selected: pane.currentCategory === "application"
                 onActivated: pane.selectCategory("application")
@@ -699,6 +702,17 @@ Rectangle {
                 onActivated: pane.selectCategory("security")
             }
 
+            CategoryButton {
+                id: aboutCategory
+
+                Layout.fillWidth: true
+                title: qsTr("About")
+                iconName: "application"
+                actionObjectName: "settingsAboutCategory"
+                selected: pane.currentCategory === "about"
+                onActivated: pane.selectCategory("about")
+            }
+
             Item {
                 Layout.fillHeight: true
             }
@@ -736,7 +750,7 @@ Rectangle {
             opacity: pane.contentReveal
 
             Text {
-                text: pane.currentCategory === "application" ? qsTr("Application") : pane.currentCategory === "appearance" ? qsTr("Appearance") : pane.currentCategory === "terminal" ? qsTr("Terminal") : pane.currentCategory === "shortcuts" ? qsTr("Shortcuts") : pane.currentCategory === "sftp" ? qsTr("SFTP") : pane.currentCategory === "ai" ? qsTr("AI") : qsTr("Security")
+                text: pane.currentCategory === "application" ? qsTr("Application") : pane.currentCategory === "appearance" ? qsTr("Appearance") : pane.currentCategory === "terminal" ? qsTr("Terminal") : pane.currentCategory === "shortcuts" ? qsTr("Shortcuts") : pane.currentCategory === "sftp" ? qsTr("SFTP") : pane.currentCategory === "ai" ? qsTr("AI") : pane.currentCategory === "about" ? qsTr("About") : qsTr("Security")
                 color: Theme.text
                 font.family: Theme.uiFont
                 font.pixelSize: 18
@@ -745,8 +759,8 @@ Rectangle {
 
             Text {
                 Layout.fillWidth: true
-                visible: pane.currentCategory !== "application"
-                text: pane.currentCategory === "appearance" ? qsTr("Choose the language, interface font, theme, and Windows backdrop used across ztermy.") : pane.currentCategory === "terminal" ? qsTr("Configure the global terminal font, background, cursor, selection, and paste behavior.") : pane.currentCategory === "shortcuts" ? qsTr("Search, record, unbind, and reset keyboard shortcuts for registered ztermy actions.") : pane.currentCategory === "sftp" ? qsTr("Choose the defaults applied when an SSH session opens its integrated file browser.") : pane.currentCategory === "ai" ? qsTr("Configure the model provider and the local privacy boundary used by the terminal assistant.") : qsTr("Choose where SSH passwords and key passphrases are stored, unlock the portable vault, or migrate credentials safely.")
+                visible: true
+                text: pane.currentCategory === "application" ? qsTr("Choose how the ztermy window behaves when you close it.") : pane.currentCategory === "appearance" ? qsTr("Choose the language, interface font, theme, and Windows backdrop used across ztermy.") : pane.currentCategory === "terminal" ? qsTr("Configure the global terminal font, background, cursor, selection, and paste behavior.") : pane.currentCategory === "shortcuts" ? qsTr("Search, record, unbind, and reset keyboard shortcuts for registered ztermy actions.") : pane.currentCategory === "sftp" ? qsTr("Choose the defaults applied when an SSH session opens its integrated file browser.") : pane.currentCategory === "ai" ? qsTr("Configure the model provider and the local privacy boundary used by the terminal assistant.") : pane.currentCategory === "about" ? qsTr("View ztermy identity, release information, and diagnostics.") : qsTr("Choose where SSH passwords and key passphrases are stored, unlock the portable vault, or migrate credentials safely.")
                 color: Theme.textMuted
                 wrapMode: Text.WordWrap
                 font.family: Theme.uiFont
@@ -768,7 +782,7 @@ Rectangle {
 
             SectionCard {
                 Layout.fillWidth: true
-                visible: pane.currentCategory === "application"
+                visible: pane.currentCategory === "about"
 
                 RowLayout {
                     objectName: "settingsApplicationBrandLockup"
@@ -841,7 +855,7 @@ Rectangle {
             ReleaseIdentityCard {
                 objectName: "settingsReleaseIdentityCard"
                 Layout.fillWidth: true
-                visible: pane.currentCategory === "application"
+                visible: pane.currentCategory === "about"
                 compact: pane.compactLayout
                 codename: "糸"
                 version: Qt.application.version
@@ -849,9 +863,40 @@ Rectangle {
             }
 
             SectionCard {
-                objectName: "settingsDiagnosticsCard"
+                objectName: "settingsWindowBehaviorCard"
                 Layout.fillWidth: true
                 visible: pane.currentCategory === "application"
+                heading: qsTr("Window behavior")
+                compact: true
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacingControl
+
+                    AppSwitch {
+                        id: closeToTraySwitch
+
+                        objectName: "settingsCloseToTraySwitch"
+                        Layout.fillWidth: true
+                        text: qsTr("Keep ztermy running in the notification area when the window is closed")
+                        accessibleName: text
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("The tray menu can show or hide the window and exit ztermy completely.")
+                        color: Theme.textMuted
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
+                    }
+                }
+            }
+
+            SectionCard {
+                objectName: "settingsDiagnosticsCard"
+                Layout.fillWidth: true
+                visible: pane.currentCategory === "about"
                 heading: qsTr("Diagnostics")
 
                 ColumnLayout {
@@ -1754,11 +1799,9 @@ Rectangle {
                             Layout.fillWidth: true
                             model: ["read-only", "ask", "auto", "yolo"]
                             displayTextModel: [qsTr("Read-only"), qsTr("Ask before changes"), qsTr("Auto except high risk"), qsTr("YOLO")]
+                            toolTipModel: [qsTr("Read tools only; action and MCP tools are hidden"), qsTr("Ask in the approval card before every side effect"), qsTr("Run ordinary actions automatically; ask for high-risk commands and MCP tools"), qsTr("Run without approval prompts; explicit deny rules and safety boundaries still apply")]
+                            toolTipText: toolTipModel[currentIndex] || ""
                             accessibleName: qsTr("AI terminal action permission mode")
-
-                            AppToolTip {
-                                text: aiPermissionBox.currentValue === "read-only" ? qsTr("Read tools only; action and MCP tools are hidden") : aiPermissionBox.currentValue === "ask" ? qsTr("Ask in the approval card before every side effect") : aiPermissionBox.currentValue === "auto" ? qsTr("Run ordinary actions automatically; ask for high-risk commands and MCP tools") : qsTr("Run without approval prompts; explicit deny rules and safety boundaries still apply")
-                            }
                         }
 
                         Item {
@@ -3063,7 +3106,7 @@ Rectangle {
 
             GridLayout {
                 Layout.fillWidth: true
-                visible: pane.currentCategory === "appearance" || pane.currentCategory === "terminal" || pane.currentCategory === "sftp"
+                visible: pane.currentCategory === "application" || pane.currentCategory === "appearance" || pane.currentCategory === "terminal" || pane.currentCategory === "sftp"
                 columns: pane.compactLayout ? 1 : 4
                 columnSpacing: Theme.spacingControl
                 rowSpacing: Theme.spacingControl

@@ -1256,6 +1256,7 @@ target_link_libraries(ztermy PRIVATE
     Qt6::Svg
     dbghelp
     dwmapi
+    shell32
 )
 
 add_custom_target(ztermy_window_runtime_smoke

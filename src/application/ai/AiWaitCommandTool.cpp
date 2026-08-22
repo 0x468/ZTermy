@@ -16,7 +16,7 @@ namespace
 {
 
 constexpr std::size_t maximumArgumentsBytes = std::size_t{16} * 1024;
-constexpr std::uint32_t maximumTimeoutMilliseconds = 120'000;
+constexpr std::uint32_t maximumTimeoutMilliseconds = 600'000;
 
 [[nodiscard]] std::string json(const QJsonObject &value)
 {
@@ -74,7 +74,7 @@ constexpr std::uint32_t maximumTimeoutMilliseconds = 120'000;
     return QStringLiteral("outcome_unknown");
 }
 
-[[nodiscard]] QJsonObject commandValue(const AiTrackedCommand &command)
+[[nodiscard]] QJsonObject commandValue(const AiTrackedCommand &command, const bool includeOutput)
 {
     QJsonObject value{{QStringLiteral("command_id"), text(command.id)},
                       {QStringLiteral("state"), state(command.state)},
@@ -95,7 +95,7 @@ constexpr std::uint32_t maximumTimeoutMilliseconds = 120'000;
     {
         value.insert(QStringLiteral("exit_status"), QJsonValue::Null);
     }
-    if (command.state == AiTrackedCommandState::finished)
+    if (includeOutput)
     {
         // Cap the embedded output so the serialized result stays below the
         // AiTurnRunner tool-output bound (64 KiB after JSON escaping). Without
@@ -115,12 +115,22 @@ constexpr std::uint32_t maximumTimeoutMilliseconds = 120'000;
         }
         value.insert(QStringLiteral("output"), text(normalized));
         value.insert(QStringLiteral("output_complete"),
-                     !outputTruncated && command.outputCoverage == terminal::CommandOutputCoverage::complete
+                     command.state == AiTrackedCommandState::finished && !outputTruncated
+                         && command.outputCoverage == terminal::CommandOutputCoverage::complete
                          && command.omittedOutputBytes == 0);
         value.insert(QStringLiteral("output_truncated"), outputTruncated);
         value.insert(QStringLiteral("omitted_output_bytes"), static_cast<qint64>(command.omittedOutputBytes));
     }
     return value;
+}
+
+[[nodiscard]] QJsonValue commandSucceeded(const AiTrackedCommand &command)
+{
+    if (command.state != AiTrackedCommandState::finished || !command.exitStatus.has_value())
+    {
+        return QJsonValue::Null;
+    }
+    return *command.exitStatus == 0;
 }
 
 } // namespace
@@ -132,7 +142,7 @@ AiToolDefinition AiWaitCommandTool::definition()
         .description = "Wait for a semantic command lifecycle change. Use only when run_command reports "
                        "lifecycle_tracked=true; otherwise use wait_terminal_frame and read_terminal_frame.",
         .parametersJson =
-            R"({"type":"object","properties":{"command_id":{"type":"string","minLength":1},"timeout_ms":{"type":"integer","minimum":1,"maximum":120000,"default":30000}},"required":["command_id"],"additionalProperties":false})"};
+            R"({"type":"object","properties":{"command_id":{"type":"string","minLength":1},"timeout_ms":{"type":"integer","minimum":1,"maximum":600000,"default":30000}},"required":["command_id"],"additionalProperties":false})"};
 }
 
 bool AiWaitCommandTool::supportsLifecycleWait(const terminal::TerminalSemanticCapability capability) noexcept
@@ -155,8 +165,12 @@ std::string AiWaitCommandTool::accepted(const std::string_view commandId, const 
     }
     const bool lifecycleTracked = trackingRegistered && supportsLifecycleWait(capability);
     QJsonObject value{{QStringLiteral("ok"), true},
+                      {QStringLiteral("tool_ok"), true},
                       {QStringLiteral("status"), QStringLiteral("accepted")},
                       {QStringLiteral("command_id"), text(commandId)},
+                      {QStringLiteral("command_started"), true},
+                      {QStringLiteral("command_completed"), false},
+                      {QStringLiteral("command_succeeded"), QJsonValue::Null},
                       {QStringLiteral("tracking_registered"), trackingRegistered},
                       {QStringLiteral("lifecycle_tracked"), lifecycleTracked},
                       {QStringLiteral("lifecycle_quality"), quality},
@@ -205,26 +219,46 @@ std::string AiWaitCommandTool::result(const AiTrackedCommand &command)
     {
         return json(QJsonObject{
             {QStringLiteral("ok"), false},
+            {QStringLiteral("tool_ok"), true},
             {QStringLiteral("error"),
              QJsonObject{{QStringLiteral("code"), QStringLiteral("outcome_unknown")},
                          {QStringLiteral("message"), QStringLiteral("The command outcome cannot be confirmed.")}}},
-            {QStringLiteral("command"), commandValue(command)}});
+            {QStringLiteral("status"), QStringLiteral("outcome_unknown")},
+            {QStringLiteral("completion_confirmed"), false},
+            {QStringLiteral("command_started"), true},
+            {QStringLiteral("command_completed"), false},
+            {QStringLiteral("command_succeeded"), QJsonValue::Null},
+            {QStringLiteral("command"), commandValue(command, true)}});
     }
-    return json(QJsonObject{{QStringLiteral("ok"), true}, {QStringLiteral("command"), commandValue(command)}});
+    return json(QJsonObject{{QStringLiteral("ok"), true},
+                            {QStringLiteral("tool_ok"), true},
+                            {QStringLiteral("status"), QStringLiteral("completed")},
+                            {QStringLiteral("completion_confirmed"), true},
+                            {QStringLiteral("command_started"), true},
+                            {QStringLiteral("command_completed"), true},
+                            {QStringLiteral("command_succeeded"), commandSucceeded(command)},
+                            {QStringLiteral("command"), commandValue(command, true)}});
 }
 
 std::string AiWaitCommandTool::timeout(const AiTrackedCommand &command)
 {
     return json(QJsonObject{{QStringLiteral("ok"), false},
+                            {QStringLiteral("tool_ok"), true},
                             {QStringLiteral("error"),
                              QJsonObject{{QStringLiteral("code"), QStringLiteral("timeout")},
                                          {QStringLiteral("message"), QStringLiteral("The command wait timed out.")}}},
-                            {QStringLiteral("command"), commandValue(command)}});
+                            {QStringLiteral("status"), QStringLiteral("timeout")},
+                            {QStringLiteral("completion_confirmed"), false},
+                            {QStringLiteral("command_started"), true},
+                            {QStringLiteral("command_completed"), false},
+                            {QStringLiteral("command_succeeded"), QJsonValue::Null},
+                            {QStringLiteral("command"), commandValue(command, true)}});
 }
 
 std::string AiWaitCommandTool::failure(const std::string_view code, const std::string_view message)
 {
     return json(QJsonObject{{QStringLiteral("ok"), false},
+                            {QStringLiteral("tool_ok"), false},
                             {QStringLiteral("error"), QJsonObject{{QStringLiteral("code"), text(code)},
                                                                   {QStringLiteral("message"), text(message)}}}});
 }

@@ -959,7 +959,7 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(controller.saveApplicationSettings(
         QStringLiteral("light"), 0.8, QStringLiteral("micaAlt"), QStringLiteral("custom"), QStringLiteral("#3366cc"),
         QStringLiteral("Microsoft YaHei UI"), QStringLiteral("Cascadia Code"), 18, true, false, 0.45,
-        QStringLiteral("bar"), false, true, false, QStringLiteral("zh_CN"), true, false));
+        QStringLiteral("bar"), false, true, false, QStringLiteral("zh_CN"), true, false, true));
     QCOMPARE(settingsChanged.count(), 1);
     QCOMPARE(controller.themePreference(), QStringLiteral("light"));
     QCOMPARE(controller.backdropOpacity(), 0.8);
@@ -978,6 +978,7 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(!controller.confirmMultilinePaste());
     QVERIFY(controller.sftpShowHiddenFiles());
     QVERIFY(!controller.sftpConfirmDelete());
+    QVERIFY(controller.closeToTray());
     QCOMPARE(controller.languagePreference(), QStringLiteral("zh_CN"));
     QCOMPARE(controller.aiProviderPreference(), QStringLiteral("ollama"));
     QCOMPARE(controller.aiModel(), QStringLiteral("qwen3"));
@@ -1010,6 +1011,7 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(reloaded.copyOnSelect());
     QVERIFY(reloaded.sftpShowHiddenFiles());
     QVERIFY(!reloaded.sftpConfirmDelete());
+    QVERIFY(reloaded.closeToTray());
     QCOMPARE(reloaded.languagePreference(), QStringLiteral("zh_CN"));
     QCOMPARE(reloaded.aiProviderPreference(), QStringLiteral("ollama"));
     QVERIFY(!reloaded.aiWebSearchAvailable());
@@ -1029,6 +1031,7 @@ void AppControllerTests::persistsApplicationSettings()
     QCOMPARE(reloaded.terminalFontFamily(), QStringLiteral("Cascadia Mono"));
     QCOMPARE(reloaded.terminalBackgroundOpacity(), 1.0);
     QCOMPARE(reloaded.languagePreference(), QStringLiteral("system"));
+    QVERIFY(!reloaded.closeToTray());
     QVERIFY(reloaded.aiWebSearchAvailable());
 }
 
@@ -1568,7 +1571,7 @@ void AppControllerTests::retriesProviderResponseWithoutRepeatingCompletedTool()
                 if (requestBodies.size() == 1)
                 {
                     body =
-                        R"({"message":{"content":"","tool_calls":[{"function":{"name":"run_command","arguments":{"command":"echo retry-once"}}}]},"done":true})"
+                        R"({"message":{"content":"","tool_calls":[{"function":{"name":"run_command","arguments":{"command":"echo retry-once","timeout_ms":1}}}]},"done":true})"
                         "\n";
                 }
                 else if (requestBodies.size() == 2)

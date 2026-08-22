@@ -45,7 +45,9 @@ constexpr qint64 nativeChatGptProviderSchemaVersion = 21;
 // Version 22 adds an AI-only proxy policy. It is intentionally separate from
 // SSH proxy chains and defaults to the operating-system proxy configuration.
 constexpr qint64 aiProxySchemaVersion = 22;
-constexpr qint64 currentSchemaVersion = aiProxySchemaVersion;
+// Version 23 adds the optional Windows close-to-tray application behavior.
+constexpr qint64 closeToTraySchemaVersion = 23;
+constexpr qint64 currentSchemaVersion = closeToTraySchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::AiPermissionPreference;
@@ -375,6 +377,7 @@ template <>
     const QJsonValue confirmMultilinePasteValue = root.value(QStringLiteral("confirmMultilinePaste"));
     const QJsonValue sftpShowHiddenFilesValue = root.value(QStringLiteral("sftpShowHiddenFiles"));
     const QJsonValue sftpConfirmDeleteValue = root.value(QStringLiteral("sftpConfirmDelete"));
+    const QJsonValue closeToTrayValue = root.value(QStringLiteral("closeToTray"));
     const QJsonValue credentialStorageValue = root.value(QStringLiteral("credentialStorage"));
     const QJsonValue languageValue = root.value(QStringLiteral("language"));
     const QJsonValue shortcutOverridesValue = root.value(QStringLiteral("shortcutOverrides"));
@@ -424,6 +427,10 @@ template <>
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
     if (version >= sftpSchemaVersion && (!sftpShowHiddenFilesValue.isBool() || !sftpConfirmDeleteValue.isBool()))
+    {
+        return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
+    }
+    if (version >= closeToTraySchemaVersion && !closeToTrayValue.isBool())
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
@@ -523,6 +530,7 @@ template <>
         .confirmMultilinePaste = confirmMultilinePasteValue.toBool(),
         .sftpShowHiddenFiles = version >= sftpSchemaVersion && sftpShowHiddenFilesValue.toBool(),
         .sftpConfirmDelete = version < sftpSchemaVersion || sftpConfirmDeleteValue.toBool(),
+        .closeToTray = version >= closeToTraySchemaVersion && closeToTrayValue.toBool(),
         .credentialStorage = *credentialStorage,
         .language = *language,
         .shortcutOverrides = std::move(shortcutOverrides),
@@ -669,6 +677,7 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
         {QStringLiteral("confirmMultilinePaste"), settings.confirmMultilinePaste},
         {QStringLiteral("sftpShowHiddenFiles"), settings.sftpShowHiddenFiles},
         {QStringLiteral("sftpConfirmDelete"), settings.sftpConfirmDelete},
+        {QStringLiteral("closeToTray"), settings.closeToTray},
         {QStringLiteral("credentialStorage"), credentialStoragePreferenceToken(settings.credentialStorage)},
         {QStringLiteral("language"), languagePreferenceToken(settings.language)},
         {QStringLiteral("shortcutOverrides"), shortcutOverrides},

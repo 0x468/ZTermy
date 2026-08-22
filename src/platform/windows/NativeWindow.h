@@ -37,6 +37,8 @@ public:
     [[nodiscard]] QColor systemAccentColor() const noexcept;
     [[nodiscard]] bool animationsEnabled() const noexcept;
     [[nodiscard]] bool highContrast() const noexcept;
+    [[nodiscard]] bool closeToTrayEnabled() const noexcept;
+    [[nodiscard]] bool trayIconVisible() const noexcept;
     [[nodiscard]] QColor highContrastBackground() const noexcept;
     [[nodiscard]] QColor highContrastText() const noexcept;
     [[nodiscard]] QColor highContrastHighlight() const noexcept;
@@ -46,6 +48,7 @@ public:
     Q_INVOKABLE void minimizeWindow();
     Q_INVOKABLE void toggleMaximize();
     Q_INVOKABLE void closeWindow();
+    void setCloseToTrayEnabled(bool enabled);
     Q_INVOKABLE bool applyAppearance(const QString &backdropPreference, bool darkMode);
     Q_INVOKABLE void setTitleBarMetrics(qreal titleHeight, qreal captionLeft, qreal controlsLeft, qreal maximizeLeft,
                                         qreal maximizeWidth);
@@ -73,6 +76,11 @@ private:
     void uninstallWindowProcedure();
     void configureNativeWindow();
     [[nodiscard]] bool applyBackdrop();
+    void updateTrayIcon();
+    void removeTrayIcon() noexcept;
+    void showTrayMenu();
+    void restoreFromTray();
+    void exitFromTray();
     void refreshAnimationsEnabled();
     void refreshHighContrast();
     void updateSystemAccentColor(windowing::RgbColor color);
@@ -88,6 +96,9 @@ private:
     bool m_maximizeButtonPressed = false;
     QString m_backdropPreference = QStringLiteral("acrylic");
     bool m_darkMode = true;
+    bool m_closeToTrayEnabled = false;
+    bool m_trayIconVisible = false;
+    bool m_exitingFromTray = false;
     QColor m_systemAccentColor = QColor(QStringLiteral("#0078D4"));
     windowing::ClientAreaAnimationPreference m_animationPreference{true};
     windowing::HighContrastState m_highContrastState;

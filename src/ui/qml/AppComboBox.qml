@@ -8,10 +8,18 @@ ComboBox {
 
     property string accessibleName: ""
     property var displayTextModel: []
+    property var toolTipModel: []
+    property string toolTipText: ""
     readonly property string effectiveDisplayText: textForIndex(currentIndex, currentText)
 
     function textForIndex(index, fallback) {
         return index >= 0 && index < displayTextModel.length ? displayTextModel[index] : fallback;
+    }
+
+    function toolTipForIndex(index, fallback, truncated) {
+        if (index >= 0 && index < toolTipModel.length && String(toolTipModel[index]).length > 0)
+            return String(toolTipModel[index]);
+        return truncated ? String(fallback) : "";
     }
 
     hoverEnabled: true
@@ -31,6 +39,8 @@ ComboBox {
     }
 
     contentItem: Text {
+        id: selectedText
+
         text: control.effectiveDisplayText
         color: control.enabled ? Theme.text : Theme.textSubtle
         verticalAlignment: Text.AlignVCenter
@@ -63,10 +73,13 @@ ComboBox {
 
         width: control.width
         implicitHeight: 34
+        hoverEnabled: true
         text: control.textForIndex(index, modelData)
         highlighted: control.highlightedIndex === index
 
         contentItem: Text {
+            id: optionText
+
             text: option.text
             color: Theme.text
             verticalAlignment: Text.AlignVCenter
@@ -78,6 +91,12 @@ ComboBox {
         background: Rectangle {
             radius: Theme.radiusSmall
             color: option.highlighted ? Theme.selectedHover : Theme.floatingBackground
+        }
+
+        AppToolTip {
+            hoverTarget: option
+            text: control.toolTipForIndex(option.index, option.text, optionText.truncated)
+            visible: text.length > 0 && option.hovered
         }
     }
 
@@ -150,5 +169,11 @@ ComboBox {
 
     HoverHandler {
         cursorShape: control.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+    }
+
+    AppToolTip {
+        hoverTarget: control
+        text: control.toolTipText.length > 0 ? control.toolTipText : selectedText.truncated ? control.effectiveDisplayText : ""
+        visible: text.length > 0 && control.hovered && !control.popup.visible
     }
 }

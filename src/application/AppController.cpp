@@ -912,6 +912,40 @@ semanticCapability(const ztermy::terminal::SemanticTerminalSnapshot &snapshot) n
         {QStringLiteral("error"), QJsonObject{{QStringLiteral("code"), code}, {QStringLiteral("message"), message}}}});
 }
 
+[[nodiscard]] std::string aiRunCommandFrameResult(const QJsonObject &accepted, const std::string &frameJson,
+                                                  const bool timedOut)
+{
+    QJsonParseError parseError;
+    const QJsonDocument frameDocument =
+        QJsonDocument::fromJson(QByteArray(frameJson.data(), static_cast<qsizetype>(frameJson.size())), &parseError);
+    QJsonObject result = accepted;
+    result.remove(QStringLiteral("recommended_wait_tool"));
+    result.remove(QStringLiteral("frame_wait_strategy"));
+    result.remove(QStringLiteral("recommended_idle_ms"));
+    result.insert(QStringLiteral("ok"), !timedOut);
+    result.insert(QStringLiteral("tool_ok"), true);
+    result.insert(QStringLiteral("status"), timedOut ? QStringLiteral("timeout") : QStringLiteral("idle_unverified"));
+    result.insert(QStringLiteral("completion_confirmed"), false);
+    result.insert(QStringLiteral("command_started"), true);
+    result.insert(QStringLiteral("command_completed"), false);
+    result.insert(QStringLiteral("command_succeeded"), QJsonValue::Null);
+    result.insert(QStringLiteral("lifecycle_quality"), QStringLiteral("frame_idle_unverified"));
+    if (parseError.error == QJsonParseError::NoError && frameDocument.isObject())
+    {
+        result.insert(QStringLiteral("frame"), frameDocument.object().value(QStringLiteral("frame")));
+    }
+    if (timedOut)
+    {
+        result.insert(
+            QStringLiteral("error"),
+            QJsonObject{{QStringLiteral("code"), QStringLiteral("timeout")},
+                        {QStringLiteral("message"),
+                         QCoreApplication::translate(
+                             "AppController", "The command wait timed out; the returned frame may be partial.")}});
+    }
+    return compactJson(result);
+}
+
 [[nodiscard]] QString aiActivityResultCode(const std::string &outputJson)
 {
     QJsonParseError error;
@@ -3328,6 +3362,11 @@ bool AppController::sftpShowHiddenFiles() const noexcept
 bool AppController::sftpConfirmDelete() const noexcept
 {
     return m_settings.sftpConfirmDelete;
+}
+
+bool AppController::closeToTray() const noexcept
+{
+    return m_settings.closeToTray;
 }
 
 QString AppController::languagePreference() const
@@ -8050,7 +8089,8 @@ bool AppController::saveApplicationSettings(const QString &theme, const qreal ba
                                             const qreal terminalBackgroundOpacity, const QString &cursor,
                                             const bool cursorShouldBlink, const bool shouldCopyOnSelect,
                                             const bool shouldConfirmMultilinePaste, const QString &language,
-                                            const bool shouldShowHiddenSftpFiles, const bool shouldConfirmSftpDelete)
+                                            const bool shouldShowHiddenSftpFiles, const bool shouldConfirmSftpDelete,
+                                            const bool shouldCloseToTray)
 {
     const auto parsedTheme = config::parseThemePreference(theme);
     const auto parsedBackdrop = config::parseBackdropPreference(backdrop);
@@ -8080,6 +8120,7 @@ bool AppController::saveApplicationSettings(const QString &theme, const qreal ba
         .confirmMultilinePaste = shouldConfirmMultilinePaste,
         .sftpShowHiddenFiles = shouldShowHiddenSftpFiles,
         .sftpConfirmDelete = shouldConfirmSftpDelete,
+        .closeToTray = shouldCloseToTray,
         .credentialStorage = m_settings.credentialStorage,
         .language = *parsedLanguage,
         .shortcutOverrides = m_settings.shortcutOverrides,
@@ -9507,8 +9548,34 @@ bool AppController::approveAiTool()
     }
     else
     {
-        output = executeAiTerminalAction(*tab, action);
-        static_cast<void>(m_aiActionToolDispatcher.complete(action, ai::AiToolDispatchState::succeeded, output));
+        if (action.kind == ai::AiTerminalActionKind::runCommand)
+        {
+            const auto handled = handleAiRunCommand(*tab, tab->id, *pendingCall, action);
+            if (!handled.output.has_value())
+            {
+                emit aiConversationChanged();
+                return true;
+            }
+            output = handled.output->outputJson;
+        }
+        else
+        {
+            output = executeAiTerminalAction(*tab, action);
+            static_cast<void>(m_aiActionToolDispatcher.complete(action, ai::AiToolDispatchState::succeeded, output));
+        }
+    }
+    if (action.kind == ai::AiTerminalActionKind::runCommand)
+    {
+        const bool resumed = completePendingAiTool(
+            *tab,
+            ai::AiToolOutput{.callId = pendingCall->id, .name = pendingCall->name, .outputJson = std::move(output)});
+        if (!resumed)
+        {
+            tab->aiError = tr("The command result could not resume the AI turn.");
+            tab->aiState = QStringLiteral("error");
+        }
+        emit aiConversationChanged();
+        return resumed;
     }
     const QString activityResult = aiActivityResultCode(output);
     recordAiActivity(*tab, *pendingCall,
@@ -11691,6 +11758,10 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
                 {
                     recordAiActivity(*target, call, QStringLiteral("executing"), QStringLiteral("pending"), true,
                                      action.risk.highRisk());
+                    if (action.kind == ai::AiTerminalActionKind::runCommand)
+                    {
+                        return handleAiRunCommand(*target, tabId, call, action);
+                    }
                     const auto output = executeAiTerminalAction(*target, action);
                     static_cast<void>(
                         m_aiActionToolDispatcher.complete(action, ai::AiToolDispatchState::succeeded, output));
@@ -12000,6 +12071,247 @@ AppController::handleAiTerminalFrameTool(TerminalTab &owner, const QString &owne
             timerGuard->deleteLater();
         }
     }};
+}
+
+ai::AiTurnRunner::ToolHandlingResult AppController::handleAiRunCommand(TerminalTab &tab, const QString &tabId,
+                                                                       const ai::AiToolCall &call,
+                                                                       const ai::AiTerminalAction &action)
+{
+    const std::string acceptedJson = executeAiRunCommand(tab, action);
+    QJsonParseError parseError;
+    const QJsonDocument acceptedDocument = QJsonDocument::fromJson(
+        QByteArray(acceptedJson.data(), static_cast<qsizetype>(acceptedJson.size())), &parseError);
+    const QJsonObject accepted = acceptedDocument.object();
+    if (parseError.error != QJsonParseError::NoError || !acceptedDocument.isObject()
+        || !accepted.value(QStringLiteral("ok")).toBool())
+    {
+        static_cast<void>(m_aiActionToolDispatcher.complete(action, ai::AiToolDispatchState::failed, acceptedJson));
+        recordAiActivity(tab, call, QStringLiteral("failed"), aiActivityResultCode(acceptedJson), true,
+                         action.risk.highRisk());
+        return {.output = ai::AiToolOutput{.callId = call.id, .name = call.name, .outputJson = acceptedJson},
+                .sideEffecting = true};
+    }
+
+    const std::string commandId = utf8String(accepted.value(QStringLiteral("command_id")).toString());
+    const bool lifecycleTracked = accepted.value(QStringLiteral("lifecycle_tracked")).toBool();
+    const auto finishImmediately = [this, &tab, &call, &action](std::string output, const bool succeeded) {
+        static_cast<void>(m_aiActionToolDispatcher.complete(
+            action, succeeded ? ai::AiToolDispatchState::succeeded : ai::AiToolDispatchState::failed, output));
+        recordAiActivity(tab, call, succeeded ? QStringLiteral("succeeded") : QStringLiteral("failed"),
+                         aiActivityResultCode(output), true, action.risk.highRisk());
+        return ai::AiTurnRunner::ToolHandlingResult{
+            .output = ai::AiToolOutput{.callId = call.id, .name = call.name, .outputJson = std::move(output)},
+            .sideEffecting = true};
+    };
+
+    if (commandId.empty())
+    {
+        return finishImmediately(aiToolFailureJson(QStringLiteral("protocol_error"),
+                                                   tr("The command dispatch did not return an identifier.")),
+                                 false);
+    }
+
+    terminal::SemanticTerminalSnapshot semantic;
+    if (tab.semanticObserver)
+    {
+        semantic = tab.semanticObserver->snapshot();
+    }
+    if (lifecycleTracked)
+    {
+        auto observed = m_aiCommandTracker.observe(commandId, semantic.commandBlocks, tab.running);
+        if (!observed.has_value())
+        {
+            return finishImmediately(ai::AiWaitCommandTool::failure("command_not_found", "The command id is unknown."),
+                                     false);
+        }
+        const bool completed = observed->state == ai::AiTrackedCommandState::finished
+                               || observed->state == ai::AiTrackedCommandState::disconnected
+                               || observed->state == ai::AiTrackedCommandState::outcomeUnknown;
+        if (completed)
+        {
+            const auto output = ai::AiWaitCommandTool::result(*observed);
+            return finishImmediately(output, aiActivityResultCode(output) == QStringLiteral("ok"));
+        }
+    }
+    else if (!tab.aiFrameTracker)
+    {
+        QJsonObject unavailable = accepted;
+        unavailable.insert(QStringLiteral("ok"), false);
+        unavailable.insert(QStringLiteral("status"), QStringLiteral("outcome_unknown"));
+        unavailable.insert(QStringLiteral("completion_confirmed"), false);
+        unavailable.insert(QStringLiteral("error"),
+                           QJsonObject{{QStringLiteral("code"), QStringLiteral("tracking_unavailable")},
+                                       {QStringLiteral("message"),
+                                        tr("The command was dispatched but no completion observer is available.")}});
+        return finishImmediately(compactJson(unavailable), false);
+    }
+
+    auto *timer = new QTimer(this);
+    timer->setInterval(lifecycleTracked ? 100 : 50);
+    timer->setTimerType(lifecycleTracked ? Qt::CoarseTimer : Qt::PreciseTimer);
+    timer->setProperty("ztermyAiRemainingMs", static_cast<qint64>(action.timeoutMilliseconds));
+    timer->setProperty("ztermyAiFrameChanged", false);
+    const QPointer<QTimer> timerGuard(timer);
+    const auto callGuard = std::make_shared<const ai::AiToolCall>(call);
+    const auto actionGuard = std::make_shared<const ai::AiTerminalAction>(action);
+    const auto acceptedGuard = std::make_shared<const QJsonObject>(accepted);
+    const auto commandIdGuard = std::make_shared<const std::string>(commandId);
+    const auto turnSnapshot = aiReadSnapshot(tab);
+    const auto shellGuard = std::make_shared<const std::string>(turnSnapshot.shell);
+    const auto semanticCapability = turnSnapshot.capability;
+    const std::uint64_t baselineRevision =
+        static_cast<std::uint64_t>(accepted.value(QStringLiteral("frame_revision_before_dispatch")).toInteger());
+    QObject::connect(
+        timer, &QTimer::timeout, this,
+        [this, timerGuard, callGuard, actionGuard, acceptedGuard, commandIdGuard, shellGuard, semanticCapability,
+         baselineRevision, tabId, lifecycleTracked] noexcept {
+            try
+            {
+                if (!timerGuard)
+                {
+                    return;
+                }
+                TerminalTab *target = findTab(tabId);
+                if (target == nullptr || !aiTurnActive(*target))
+                {
+                    timerGuard->stop();
+                    timerGuard->deleteLater();
+                    return;
+                }
+                const qint64 remaining = std::max<qint64>(0, timerGuard->property("ztermyAiRemainingMs").toLongLong()
+                                                                 - timerGuard->interval());
+                timerGuard->setProperty("ztermyAiRemainingMs", remaining);
+
+                std::string output;
+                bool finished = false;
+                bool succeeded = false;
+                if (lifecycleTracked)
+                {
+                    terminal::SemanticTerminalSnapshot current;
+                    if (target->semanticObserver)
+                    {
+                        current = target->semanticObserver->snapshot();
+                    }
+                    const auto observed =
+                        m_aiCommandTracker.observe(*commandIdGuard, current.commandBlocks, target->running);
+                    if (!observed.has_value())
+                    {
+                        output = ai::AiWaitCommandTool::failure("command_not_found", "The command id is unknown.");
+                        finished = true;
+                    }
+                    else
+                    {
+                        const bool terminalState = observed->state == ai::AiTrackedCommandState::finished
+                                                   || observed->state == ai::AiTrackedCommandState::disconnected
+                                                   || observed->state == ai::AiTrackedCommandState::outcomeUnknown;
+                        if (terminalState)
+                        {
+                            output = ai::AiWaitCommandTool::result(*observed);
+                            finished = true;
+                            succeeded = aiActivityResultCode(output) == QStringLiteral("ok");
+                        }
+                        else if (remaining == 0)
+                        {
+                            output = ai::AiWaitCommandTool::timeout(*observed);
+                            finished = true;
+                        }
+                    }
+                }
+                else
+                {
+                    if (!target->aiFrameTracker)
+                    {
+                        output = aiToolFailureJson(QStringLiteral("scope_changed"),
+                                                   tr("The terminal frame observer is unavailable."));
+                        finished = true;
+                    }
+                    else
+                    {
+                        const ai::AiTerminalFrameDelta frame = target->aiFrameTracker->snapshot(baselineRevision);
+                        const bool changed =
+                            timerGuard->property("ztermyAiFrameChanged").toBool() || frame.revision > baselineRevision;
+                        timerGuard->setProperty("ztermyAiFrameChanged", changed);
+                        const bool idle = changed && frame.idleMilliseconds >= 750;
+                        if (idle || remaining == 0)
+                        {
+                            const ai::AiSessionTarget currentTarget{.sessionId = utf8String(target->id),
+                                                                    .sessionGeneration = target->reconnectGeneration};
+                            const std::string conversationId = utf8String(target->aiConversationId);
+                            const std::string_view controlOwner =
+                                m_aiActionToolDispatcher.agentHasControl(currentTarget, conversationId)
+                                    ? std::string_view{"current_agent"}
+                                    : std::string_view{"unclaimed_or_other_agent"};
+                            const auto capability = ai::AiTerminalCapabilityAdapter::describe(
+                                *shellGuard, semanticCapability, frame.alternateScreen);
+                            const auto frameJson =
+                                idle ? ai::AiTerminalFrameTool::result(frame, controlOwner, capability)
+                                     : ai::AiTerminalFrameTool::timeout(frame, controlOwner, capability);
+                            output = aiRunCommandFrameResult(*acceptedGuard, frameJson, !idle);
+                            finished = true;
+                            succeeded = idle;
+                        }
+                    }
+                }
+                if (!finished)
+                {
+                    return;
+                }
+
+                timerGuard->stop();
+                timerGuard->deleteLater();
+                static_cast<void>(m_aiActionToolDispatcher.complete(
+                    *actionGuard, succeeded ? ai::AiToolDispatchState::succeeded : ai::AiToolDispatchState::failed,
+                    output));
+                recordAiActivity(*target, *callGuard,
+                                 succeeded ? QStringLiteral("succeeded") : QStringLiteral("failed"),
+                                 aiActivityResultCode(output), true, actionGuard->risk.highRisk());
+                if (!completePendingAiTool(
+                        *target,
+                        ai::AiToolOutput{.callId = callGuard->id, .name = callGuard->name, .outputJson = output}))
+                {
+                    target->aiError = tr("The command result could not resume the AI turn.");
+                    target->aiState = QStringLiteral("error");
+                    if (m_activeTabId == tabId || m_focusedTabId == tabId)
+                    {
+                        emit aiConversationChanged();
+                    }
+                }
+            }
+            catch (...)
+            {
+                if (timerGuard)
+                {
+                    timerGuard->stop();
+                    timerGuard->deleteLater();
+                }
+                qCCritical(appControllerLog) << "AI command execution wait suppressed an exception";
+            }
+        });
+    timer->start();
+    return {.cancel =
+                [this, timerGuard, tabId, callGuard, actionGuard] noexcept {
+                    if (timerGuard)
+                    {
+                        timerGuard->stop();
+                        timerGuard->deleteLater();
+                    }
+                    try
+                    {
+                        static_cast<void>(m_aiActionToolDispatcher.complete(
+                            *actionGuard, ai::AiToolDispatchState::cancelled,
+                            aiToolFailureJson(QStringLiteral("cancelled"), tr("The command wait was cancelled."))));
+                        if (TerminalTab *target = findTab(tabId); target != nullptr)
+                        {
+                            recordAiActivity(*target, *callGuard, QStringLiteral("cancelled"),
+                                             QStringLiteral("cancelled"), true, actionGuard->risk.highRisk());
+                        }
+                    }
+                    catch (...)
+                    {
+                        qCCritical(appControllerLog) << "AI command execution cancellation suppressed an exception";
+                    }
+                },
+            .sideEffecting = true};
 }
 
 ai::AiTurnRunner::ToolHandlingResult AppController::handleAiWaitCommand(TerminalTab &tab, const QString &tabId,

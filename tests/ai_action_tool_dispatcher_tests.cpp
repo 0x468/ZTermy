@@ -112,6 +112,12 @@ void AiActionToolDispatcherTests::publishesStrictRunCommandDefinition()
         QVERIFY(!definitions[index].parametersJson.contains("session_id"));
         QVERIFY(!definitions[index].parametersJson.contains("session_generation"));
     }
+    const auto runSchema =
+        QJsonDocument::fromJson(QByteArray::fromStdString(definitions.front().parametersJson)).object();
+    const auto timeoutSchema =
+        runSchema.value(QStringLiteral("properties")).toObject().value(QStringLiteral("timeout_ms")).toObject();
+    QCOMPARE(timeoutSchema.value(QStringLiteral("default")).toInt(), 30'000);
+    QCOMPARE(timeoutSchema.value(QStringLiteral("maximum")).toInt(), 600'000);
 }
 
 void AiActionToolDispatcherTests::requiresExplicitApprovalForSftpMutations()
@@ -248,6 +254,7 @@ void AiActionToolDispatcherTests::waitsForApprovalAndCachesCompletion()
     QVERIFY(plan.sideEffecting);
     const auto action = plan.action.value_or(AiTerminalAction{});
     QCOMPARE(action.command, std::string("pwd"));
+    QCOMPARE(action.timeoutMilliseconds, std::uint32_t{30'000});
     QVERIFY(dispatcher.approve(action));
     const std::string completed = R"({"ok":true,"command_id":"command-1"})";
     QVERIFY(dispatcher.complete(action, AiToolDispatchState::succeeded, completed));
@@ -257,6 +264,25 @@ void AiActionToolDispatcherTests::waitsForApprovalAndCachesCompletion()
     QCOMPARE(replay.disposition, AiActionToolDisposition::respond);
     QCOMPARE(replay.outputJson, completed);
     QCOMPARE(replayBudget.toolCalls(), std::uint32_t{0});
+
+    AiActionToolDispatcher timeoutDispatcher;
+    AiAgentTurnBudget timeoutBudget;
+    auto timedCall = commandCall("timed-call", "sleep 1");
+    timedCall.argumentsJson = R"({"command":"sleep 1","timeout_ms":45000})";
+    const auto timedPlan =
+        timeoutDispatcher.prepare(timedCall, context("timed", AiPermissionMode::automatic), timeoutBudget);
+    QCOMPARE(timedPlan.action.value_or(AiTerminalAction{}).timeoutMilliseconds, std::uint32_t{45'000});
+
+    AiAgentTurnBudget invalidTimeoutBudget;
+    timedCall.id = "invalid-timeout";
+    timedCall.argumentsJson = R"({"command":"sleep 1","timeout_ms":600001})";
+    const auto invalidTimeout = timeoutDispatcher.prepare(timedCall, context("invalid-timeout"), invalidTimeoutBudget);
+    QCOMPARE(object(invalidTimeout.outputJson)
+                 .value(QStringLiteral("error"))
+                 .toObject()
+                 .value(QStringLiteral("code"))
+                 .toString(),
+             QStringLiteral("invalid_arguments"));
 }
 
 void AiActionToolDispatcherTests::rejectsScopeReplayAndObserverWrites()
