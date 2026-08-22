@@ -223,6 +223,7 @@ TerminalItem::TerminalItem(QQuickItem *parent) : QQuickItem(parent)
             return;
         }
         m_cursorBlinkPhase = !m_cursorBlinkPhase;
+        m_renderMetrics.recordCursorInvalidation();
         ++m_revision;
         update();
     });
@@ -325,6 +326,21 @@ QColor TerminalItem::backgroundOverride() const
     return m_backgroundOverride;
 }
 
+void TerminalItem::setPerformanceMetricsEnabled(const bool enabled) noexcept
+{
+    m_renderMetrics.setEnabled(enabled);
+}
+
+void TerminalItem::resetPerformanceMetrics() noexcept
+{
+    m_renderMetrics.reset();
+}
+
+TerminalRenderMetricsSnapshot TerminalItem::performanceMetrics() const noexcept
+{
+    return m_renderMetrics.snapshot();
+}
+
 void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
 {
     if (!snapshot)
@@ -337,6 +353,7 @@ void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
         emit scrollbarChanged();
         return;
     }
+    m_renderMetrics.recordSnapshot(snapshot->damage, snapshot->damagedRows.size());
     m_snapshot = std::move(snapshot);
     ++m_revision;
     update();
@@ -613,10 +630,17 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         return node;
     }
 
-#if !defined(NDEBUG)
     QElapsedTimer frameTimer;
-    frameTimer.start();
+#if !defined(NDEBUG)
+    constexpr bool debugTimingEnabled = true;
+#else
+    constexpr bool debugTimingEnabled = false;
 #endif
+    const bool timingEnabled = debugTimingEnabled || m_renderMetrics.enabled();
+    if (timingEnabled)
+    {
+        frameTimer.start();
+    }
 
     const terminal::TerminalColor fallbackForeground{.red = 248, .green = 250, .blue = 252};
     const terminal::TerminalColor fallbackBackground{.red = 11, .green = 16, .blue = 23};
@@ -827,15 +851,20 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         }
     }
 
-#if !defined(NDEBUG)
-    const qint64 paintNanoseconds = frameTimer.nsecsElapsed();
-#endif
+    const qint64 paintNanoseconds = timingEnabled ? frameTimer.nsecsElapsed() : 0;
     QSGTexture *newTexture = window()->createTextureFromImage(image);
+    const qint64 textureNanoseconds = timingEnabled ? frameTimer.nsecsElapsed() - paintNanoseconds : 0;
+    const terminal::TerminalDamageKind damage = m_snapshot ? m_snapshot->damage : terminal::TerminalDamageKind::full;
+    const std::size_t damagedRowCount = m_snapshot ? m_snapshot->damagedRows.size() : std::size_t{0};
+    if (m_renderMetrics.enabled())
+    {
+        const auto pixelCount =
+            static_cast<std::uint64_t>(pixelSize.width()) * static_cast<std::uint64_t>(pixelSize.height());
+        m_renderMetrics.recordFrame(std::chrono::nanoseconds{paintNanoseconds},
+                                    std::chrono::nanoseconds{textureNanoseconds}, pixelCount, damage, damagedRowCount);
+    }
 #if !defined(NDEBUG)
-    const qint64 textureNanoseconds = frameTimer.nsecsElapsed() - paintNanoseconds;
-    node->recordTiming(paintNanoseconds, textureNanoseconds, pixelSize,
-                       m_snapshot ? m_snapshot->damage : terminal::TerminalDamageKind::full,
-                       m_snapshot ? m_snapshot->damagedRows.size() : std::size_t{0});
+    node->recordTiming(paintNanoseconds, textureNanoseconds, pixelSize, damage, damagedRowCount);
 #endif
     node->setTexture(newTexture);
     node->setRect(boundingRect());

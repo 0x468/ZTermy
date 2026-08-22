@@ -2,6 +2,7 @@
 
 #include "domain/terminal/TerminalEngine.h"
 #include "ui/terminal/TerminalKeywordHighlighter.h"
+#include "ui/terminal/TerminalRenderMetrics.h"
 
 #include <QByteArray>
 #include <QColor>
@@ -71,6 +72,9 @@ public:
     [[nodiscard]] QVariantList keywordHighlightRules() const;
     [[nodiscard]] QColor foregroundOverride() const;
     [[nodiscard]] QColor backgroundOverride() const;
+    void setPerformanceMetricsEnabled(bool enabled) noexcept;
+    void resetPerformanceMetrics() noexcept;
+    [[nodiscard]] TerminalRenderMetricsSnapshot performanceMetrics() const noexcept;
 
 public slots:
     void setSnapshot(ztermy::terminal::TerminalSnapshotPtr snapshot);
@@ -162,6 +166,7 @@ private:
     std::vector<TerminalKeywordRule> m_keywordHighlightRules;
     QColor m_foregroundOverride;
     QColor m_backgroundOverride;
+    TerminalRenderMetrics m_renderMetrics;
     int m_wheelRemainder = 0;
 };
 

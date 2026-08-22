@@ -756,6 +756,8 @@ add_library(ztermy_terminal_ui STATIC
     src/ui/terminal/TerminalItem.h
     src/ui/terminal/TerminalKeywordHighlighter.cpp
     src/ui/terminal/TerminalKeywordHighlighter.h
+    src/ui/terminal/TerminalRenderMetrics.cpp
+    src/ui/terminal/TerminalRenderMetrics.h
     src/ui/terminal/TerminalTextLayout.cpp
     src/ui/terminal/TerminalTextLayout.h
 )
@@ -784,6 +786,7 @@ target_compile_features(ztermy_terminal_ui PUBLIC cxx_std_23)
 target_include_directories(ztermy_terminal_ui PUBLIC src)
 target_link_libraries(ztermy_terminal_ui
     PUBLIC
+        ztermy_core_diagnostics
         ztermy_terminal_engine
         Qt6::Core
         Qt6::Gui
@@ -1340,6 +1343,20 @@ add_custom_target(ztermy_terminal_render_runtime_smoke
             --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/terminal-render-smoke"
     DEPENDS ztermy
     COMMENT "Checking terminal rendering and GUI responsiveness under large output"
+    USES_TERMINAL
+    VERBATIM
+)
+
+add_custom_target(ztermy_performance_baseline
+    COMMAND "${CMAKE_COMMAND}" -E rm -rf
+            "${CMAKE_CURRENT_BINARY_DIR}/test-data/performance-baseline"
+    COMMAND "${CMAKE_COMMAND}" -E env
+            "QSG_INFO=1"
+            "$<TARGET_FILE:ztermy>"
+            --performance-benchmark
+            --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/performance-baseline"
+    DEPENDS ztermy
+    COMMENT "Capturing reproducible terminal render performance evidence"
     USES_TERMINAL
     VERBATIM
 )

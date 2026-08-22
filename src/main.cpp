@@ -15,6 +15,7 @@
 #include <QAccessible>
 #include <QClipboard>
 #include <QColor>
+#include <QDateTime>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QEventLoop>
@@ -24,6 +25,7 @@
 #include <QHostAddress>
 #include <QIcon>
 #include <QImage>
+#include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
 #include <QMetaType>
@@ -32,8 +34,11 @@
 #include <QQuickItem>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <QSGRendererInterface>
+#include <QSaveFile>
 #include <QSet>
 #include <QStandardPaths>
+#include <QSysInfo>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTextStream>
@@ -3377,12 +3382,39 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
 }
 
 [[nodiscard]] bool runTerminalRenderRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller,
-                                                 const QString &outputDirectory)
+                                                 const QString &outputDirectory, const bool exerciseSplitWorkspace)
 {
     window.resize(QSize{1120, 800});
     window.show();
     window.requestActivate();
-    processWindowEventsFor(std::chrono::milliseconds{250});
+    if (exerciseSplitWorkspace)
+    {
+        processWindowEventsFor(std::chrono::milliseconds{250});
+    }
+    else
+    {
+        if (!processWindowEventsUntil(
+                [&window] {
+                    return window.isExposed();
+                },
+                std::chrono::seconds{5}))
+        {
+            qCWarning(applicationLog) << "Performance benchmark requires an interactive desktop with an exposed window";
+            return false;
+        }
+        const QImage warmupFrame = window.grabWindow();
+        if (warmupFrame.isNull()
+            || !processWindowEventsUntil(
+                [&window] {
+                    return window.isSceneGraphInitialized();
+                },
+                std::chrono::seconds{10}))
+        {
+            qCWarning(applicationLog) << "Performance benchmark could not initialize its rendering surface";
+            return false;
+        }
+        processWindowEventsFor(std::chrono::milliseconds{250});
+    }
 
     if (controller.startLocalTerminal().isEmpty())
     {
@@ -3416,6 +3448,8 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
         qCWarning(applicationLog) << "Terminal render smoke could not find the active terminal viewport";
         return false;
     }
+    terminalItem->resetPerformanceMetrics();
+    terminalItem->setPerformanceMetricsEnabled(true);
 
     std::uint64_t frameSwaps = 0;
     const QMetaObject::Connection frameConnection =
@@ -3509,7 +3543,11 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
                                 && terminalRendered && scrollbarPassed;
     bool splitWorkspacePassed = false;
     QString splitCapturePath;
-    if (baselinePassed && controller.splitActiveTerminal(QStringLiteral("horizontal"), false))
+    if (!exerciseSplitWorkspace)
+    {
+        splitWorkspacePassed = true;
+    }
+    else if (baselinePassed && controller.splitActiveTerminal(QStringLiteral("horizontal"), false))
     {
         const bool secondPaneRunning = processWindowEventsUntil(
             [&controller] {
@@ -3563,7 +3601,110 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
                                << "focusMoved=" << focusMoved << "paneClosed=" << paneClosed
                                << "capture=" << splitCapturePath;
     }
-    return baselinePassed && splitWorkspacePassed;
+
+    const auto latencyJson = [](const ztermy::diagnostics::LatencySummary &summary) {
+        return QJsonObject{
+            {QStringLiteral("samples"), static_cast<qint64>(summary.count)},
+            {QStringLiteral("p50UpperBoundUs"), static_cast<qint64>(summary.p50UpperBoundMicroseconds)},
+            {QStringLiteral("p95UpperBoundUs"), static_cast<qint64>(summary.p95UpperBoundMicroseconds)},
+            {QStringLiteral("p99UpperBoundUs"), static_cast<qint64>(summary.p99UpperBoundMicroseconds)},
+            {QStringLiteral("maxUs"), static_cast<qint64>(summary.maxMicroseconds)},
+        };
+    };
+    const auto graphicsApiName = [](const QSGRendererInterface::GraphicsApi api) {
+        switch (api)
+        {
+            case QSGRendererInterface::Software:
+                return QStringLiteral("software");
+            case QSGRendererInterface::OpenVG:
+                return QStringLiteral("openvg");
+            case QSGRendererInterface::OpenGL:
+                return QStringLiteral("opengl");
+            case QSGRendererInterface::Direct3D11:
+                return QStringLiteral("direct3d11");
+            case QSGRendererInterface::Vulkan:
+                return QStringLiteral("vulkan");
+            case QSGRendererInterface::Metal:
+                return QStringLiteral("metal");
+            case QSGRendererInterface::Null:
+                return QStringLiteral("null");
+            case QSGRendererInterface::Direct3D12:
+                return QStringLiteral("direct3d12");
+            case QSGRendererInterface::Unknown:
+                return QStringLiteral("unknown");
+        }
+        return QStringLiteral("unknown");
+    };
+    const ztermy::ui::TerminalRenderMetricsSnapshot renderMetrics = terminalItem->performanceMetrics();
+    terminalItem->setPerformanceMetricsEnabled(false);
+    const QSGRendererInterface *rendererInterface = window.rendererInterface();
+    const QJsonObject report{
+        {QStringLiteral("schemaVersion"), 1},
+        {QStringLiteral("generatedAtUtc"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
+        {QStringLiteral("environment"),
+         QJsonObject{
+             {QStringLiteral("applicationVersion"), QCoreApplication::applicationVersion()},
+             {QStringLiteral("qtVersion"), QString::fromLatin1(qVersion())},
+             {QStringLiteral("os"), QSysInfo::prettyProductName()},
+             {QStringLiteral("cpuArchitecture"), QSysInfo::currentCpuArchitecture()},
+#if defined(NDEBUG)
+             {QStringLiteral("buildType"), QStringLiteral("release")},
+#else
+             {QStringLiteral("buildType"), QStringLiteral("debug")},
+#endif
+             {QStringLiteral("graphicsApi"),
+              graphicsApiName(rendererInterface == nullptr ? QSGRendererInterface::Unknown
+                                                           : rendererInterface->graphicsApi())},
+             {QStringLiteral("requestedRhiBackend"), qEnvironmentVariable("QSG_RHI_BACKEND")},
+             {QStringLiteral("preferSoftwareRenderer"),
+              qEnvironmentVariableIntValue("QSG_RHI_PREFER_SOFTWARE_RENDERER") != 0},
+             {QStringLiteral("devicePixelRatio"), window.effectiveDevicePixelRatio()},
+             {QStringLiteral("logicalWidth"), window.width()},
+             {QStringLiteral("logicalHeight"), window.height()},
+             {QStringLiteral("alphaBufferBits"), window.format().alphaBufferSize()},
+             {QStringLiteral("backdrop"), controller.backdropPreference()},
+             {QStringLiteral("terminalBackgroundOpacity"), controller.terminalBackgroundOpacity()},
+         }},
+        {QStringLiteral("scenario"),
+         QJsonObject{
+             {QStringLiteral("outputLines"), 20'000},
+             {QStringLiteral("completionMs"), completionMilliseconds},
+             {QStringLiteral("heartbeatTicks"), static_cast<qint64>(heartbeatTicks)},
+             {QStringLiteral("maximumHeartbeatGapMs"), maximumHeartbeatGapMilliseconds},
+             {QStringLiteral("frameSwaps"), static_cast<qint64>(frameSwaps)},
+             {QStringLiteral("resizeCompleted"), resizeCompleted},
+             {QStringLiteral("splitWorkspacePassed"), splitWorkspacePassed},
+         }},
+        {QStringLiteral("terminalRenderer"),
+         QJsonObject{
+             {QStringLiteral("paint"), latencyJson(renderMetrics.paintLatency)},
+             {QStringLiteral("textureCreate"), latencyJson(renderMetrics.textureLatency)},
+             {QStringLiteral("renderedFrames"), static_cast<qint64>(renderMetrics.renderedFrames)},
+             {QStringLiteral("fullFrames"), static_cast<qint64>(renderMetrics.fullFrames)},
+             {QStringLiteral("partialFrames"), static_cast<qint64>(renderMetrics.partialFrames)},
+             {QStringLiteral("cleanFrames"), static_cast<qint64>(renderMetrics.cleanFrames)},
+             {QStringLiteral("renderedDamagedRows"), static_cast<qint64>(renderMetrics.renderedDamagedRows)},
+             {QStringLiteral("snapshotUpdates"), static_cast<qint64>(renderMetrics.snapshotUpdates)},
+             {QStringLiteral("fullSnapshotUpdates"), static_cast<qint64>(renderMetrics.fullSnapshotUpdates)},
+             {QStringLiteral("partialSnapshotUpdates"), static_cast<qint64>(renderMetrics.partialSnapshotUpdates)},
+             {QStringLiteral("cleanSnapshotUpdates"), static_cast<qint64>(renderMetrics.cleanSnapshotUpdates)},
+             {QStringLiteral("snapshotDamagedRows"), static_cast<qint64>(renderMetrics.snapshotDamagedRows)},
+             {QStringLiteral("cursorInvalidations"), static_cast<qint64>(renderMetrics.cursorInvalidations)},
+             {QStringLiteral("uploadedBytes"), static_cast<qint64>(renderMetrics.uploadedBytes)},
+             {QStringLiteral("maximumFramePixels"), static_cast<qint64>(renderMetrics.maximumFramePixels)},
+         }},
+    };
+    const QString reportPath = QDir(outputDirectory).filePath(QStringLiteral("terminal-performance.json"));
+    QSaveFile reportFile(reportPath);
+    const QByteArray reportBytes = QJsonDocument(report).toJson(QJsonDocument::Indented);
+    const bool reportSaved = reportFile.open(QIODevice::WriteOnly | QIODevice::Truncate)
+                             && reportFile.write(reportBytes) == reportBytes.size() && reportFile.commit();
+    qCInfo(applicationLog) << "Terminal performance evidence"
+                           << "saved=" << reportSaved << "path=" << reportPath
+                           << "paintP95Us=" << renderMetrics.paintLatency.p95UpperBoundMicroseconds
+                           << "textureP95Us=" << renderMetrics.textureLatency.p95UpperBoundMicroseconds
+                           << "uploadedBytes=" << renderMetrics.uploadedBytes;
+    return baselinePassed && splitWorkspacePassed && reportSaved;
 }
 
 } // namespace
@@ -3625,7 +3766,10 @@ int main(int argc, char *argv[])
     const bool uiLayoutSmoke = QCoreApplication::arguments().contains(QStringLiteral("--ui-layout-smoke"));
     const bool uiKeyboardSmoke = QCoreApplication::arguments().contains(QStringLiteral("--ui-keyboard-smoke"));
     const bool realHostUiSmoke = QCoreApplication::arguments().contains(QStringLiteral("--real-host-ui-smoke"));
-    const bool terminalRenderSmoke = QCoreApplication::arguments().contains(QStringLiteral("--terminal-render-smoke"));
+    const bool terminalPerformanceBenchmark =
+        QCoreApplication::arguments().contains(QStringLiteral("--performance-benchmark"));
+    const bool terminalRenderSmoke = QCoreApplication::arguments().contains(QStringLiteral("--terminal-render-smoke"))
+                                     || terminalPerformanceBenchmark;
     const bool lifecycleRuntimeSmoke =
         QCoreApplication::arguments().contains(QStringLiteral("--lifecycle-runtime-smoke"));
     const bool windowAppearanceSmoke =
@@ -3816,7 +3960,8 @@ int main(int argc, char *argv[])
     }
     if (terminalRenderSmoke)
     {
-        const bool passed = runTerminalRenderRuntimeSmoke(window, appController, paths->dataDirectory);
+        const bool passed =
+            runTerminalRenderRuntimeSmoke(window, appController, paths->dataDirectory, !terminalPerformanceBenchmark);
         appController.shutdown();
         window.releaseResources();
         if (!passed)

@@ -1,5 +1,6 @@
 #include "ui/terminal/TerminalItem.h"
 #include "ui/terminal/TerminalKeywordHighlighter.h"
+#include "ui/terminal/TerminalRenderMetrics.h"
 #include "ui/terminal/TerminalTextLayout.h"
 
 #include <QColor>
@@ -13,6 +14,7 @@
 #include <QTest>
 #include <QWheelEvent>
 
+#include <chrono>
 #include <memory>
 
 namespace
@@ -69,7 +71,38 @@ private slots:
     void rendersStyledWideCellsAndCursorPixels();
     void rendersImeAcrossResizeAndShutdown();
     void highlightsWideAndCaseInsensitiveKeywords();
+    void recordsOptInRenderMetrics();
 };
+
+void TerminalItemTests::recordsOptInRenderMetrics()
+{
+    ztermy::ui::TerminalRenderMetrics metrics;
+    metrics.recordFrame(std::chrono::microseconds{1500}, std::chrono::microseconds{2500}, 100,
+                        ztermy::terminal::TerminalDamageKind::partial, 3);
+    QCOMPARE(metrics.snapshot().renderedFrames, std::uint64_t{0});
+
+    metrics.setEnabled(true);
+    metrics.recordSnapshot(ztermy::terminal::TerminalDamageKind::partial, 2);
+    metrics.recordCursorInvalidation();
+    metrics.recordFrame(std::chrono::microseconds{1500}, std::chrono::microseconds{2500}, 100,
+                        ztermy::terminal::TerminalDamageKind::partial, 3);
+    const ztermy::ui::TerminalRenderMetricsSnapshot snapshot = metrics.snapshot();
+    QCOMPARE(snapshot.paintLatency.count, std::uint64_t{1});
+    QCOMPARE(snapshot.paintLatency.p95UpperBoundMicroseconds, std::uint64_t{2000});
+    QCOMPARE(snapshot.textureLatency.p95UpperBoundMicroseconds, std::uint64_t{4000});
+    QCOMPARE(snapshot.renderedFrames, std::uint64_t{1});
+    QCOMPARE(snapshot.partialFrames, std::uint64_t{1});
+    QCOMPARE(snapshot.renderedDamagedRows, std::uint64_t{3});
+    QCOMPARE(snapshot.snapshotUpdates, std::uint64_t{1});
+    QCOMPARE(snapshot.partialSnapshotUpdates, std::uint64_t{1});
+    QCOMPARE(snapshot.snapshotDamagedRows, std::uint64_t{2});
+    QCOMPARE(snapshot.cursorInvalidations, std::uint64_t{1});
+    QCOMPARE(snapshot.uploadedBytes, std::uint64_t{400});
+    QCOMPARE(snapshot.maximumFramePixels, std::uint64_t{100});
+
+    metrics.reset();
+    QCOMPARE(metrics.snapshot().renderedFrames, std::uint64_t{0});
+}
 
 void TerminalItemTests::highlightsWideAndCaseInsensitiveKeywords()
 {
