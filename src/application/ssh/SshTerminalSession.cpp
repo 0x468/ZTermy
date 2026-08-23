@@ -165,6 +165,9 @@ SshTerminalSession::SshTerminalSession(QObject *parent) : QObject(parent)
     qRegisterMetaType<SshConnectionPhase>();
     qRegisterMetaType<SshFailureKind>();
     qRegisterMetaType<telemetry::Sample>();
+    m_snapshotDeliveryTimer.setInterval(8);
+    m_snapshotDeliveryTimer.setSingleShot(true);
+    QObject::connect(&m_snapshotDeliveryTimer, &QTimer::timeout, this, &SshTerminalSession::deliverLatestSnapshot);
 }
 
 SshTerminalSession::~SshTerminalSession()
@@ -1173,7 +1176,15 @@ void SshTerminalSession::publishSnapshot()
     }
     if (!m_snapshotDeliveryScheduled.exchange(true))
     {
-        (void)QMetaObject::invokeMethod(this, "deliverLatestSnapshot", Qt::QueuedConnection);
+        (void)QMetaObject::invokeMethod(this, "scheduleLatestSnapshotDelivery", Qt::QueuedConnection);
+    }
+}
+
+void SshTerminalSession::scheduleLatestSnapshotDelivery()
+{
+    if (!m_snapshotDeliveryTimer.isActive())
+    {
+        m_snapshotDeliveryTimer.start();
     }
 }
 
@@ -1197,7 +1208,7 @@ void SshTerminalSession::deliverLatestSnapshot()
             return;
         }
     }
-    (void)QMetaObject::invokeMethod(this, "deliverLatestSnapshot", Qt::QueuedConnection);
+    scheduleLatestSnapshotDelivery();
 }
 
 void SshTerminalSession::postStatus(const QString &status)

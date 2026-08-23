@@ -62,7 +62,23 @@ geometry without repainting or replacing the base texture.
 
 ## Remaining hotspot
 
-The high-throughput phase still performs mostly full damage: the accepted run rendered 257 frames and replaced roughly
-739 MiB of terminal texture data while processing 20,000 lines. This is now isolated from idle performance and remains a
-future optimization candidate. Any change must preserve terminal rendering, resize, scrollback, IME, selection, and
-transparency behavior and must beat the same Release workload.
+The high-throughput phase still performs mostly full damage: after delivery pacing, the median run rendered 162 frames and
+replaced roughly 455 MiB of terminal texture data while processing 20,000 lines. This is now isolated from idle performance
+and remains a future optimization candidate. Any change must preserve terminal rendering, resize, scrollback, IME,
+selection, and transparency behavior and must beat the same Release workload.
+
+## Experiment 4: pace latest snapshot delivery
+
+Result: accepted after five warm baseline and five warm candidate runs.
+
+| Median metric | Immediate delivery | 8 ms latest delivery | Change |
+|---|---:|---:|---:|
+| Completion | 1,728 ms | 1,729 ms | +0.1% |
+| Paint P95 | 4,000 us | 4,000 us | 0% |
+| Paint maximum | 7,701 us | 7,356 us | -4.5% |
+| GUI snapshot updates | 1,647 | 159 | -90.3% |
+| Rendered frames | 250 | 162 | -35.2% |
+| Estimated texture upload | 752,572,864 bytes | 476,669,312 bytes | -36.7% |
+
+The worker still parses all bytes and keeps replacing the pending snapshot. The GUI receives only the newest state once per
+8 ms interval, which removes work that could not become a distinct displayed frame.

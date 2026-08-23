@@ -22,7 +22,12 @@ Q_LOGGING_CATEGORY(terminalSessionLog, "ztermy.terminal.session")
 namespace ztermy::terminal
 {
 
-LocalTerminalSession::LocalTerminalSession(QObject *parent) : LocalTerminalSessionBackend(parent) {}
+LocalTerminalSession::LocalTerminalSession(QObject *parent) : LocalTerminalSessionBackend(parent)
+{
+    m_snapshotDeliveryTimer.setInterval(8);
+    m_snapshotDeliveryTimer.setSingleShot(true);
+    QObject::connect(&m_snapshotDeliveryTimer, &QTimer::timeout, this, &LocalTerminalSession::deliverLatestSnapshot);
+}
 
 LocalTerminalSession::~LocalTerminalSession()
 {
@@ -663,7 +668,15 @@ void LocalTerminalSession::publishSnapshot()
 
     if (!m_snapshotDeliveryScheduled.exchange(true))
     {
-        (void)QMetaObject::invokeMethod(this, "deliverLatestSnapshot", Qt::QueuedConnection);
+        (void)QMetaObject::invokeMethod(this, "scheduleLatestSnapshotDelivery", Qt::QueuedConnection);
+    }
+}
+
+void LocalTerminalSession::scheduleLatestSnapshotDelivery()
+{
+    if (!m_snapshotDeliveryTimer.isActive())
+    {
+        m_snapshotDeliveryTimer.start();
     }
 }
 
@@ -688,7 +701,7 @@ void LocalTerminalSession::deliverLatestSnapshot()
             return;
         }
     }
-    (void)QMetaObject::invokeMethod(this, "deliverLatestSnapshot", Qt::QueuedConnection);
+    scheduleLatestSnapshotDelivery();
 }
 
 void LocalTerminalSession::postStatus(const QString &status)

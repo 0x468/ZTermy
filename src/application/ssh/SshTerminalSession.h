@@ -13,6 +13,7 @@
 #include <QByteArray>
 #include <QObject>
 #include <QString>
+#include <QTimer>
 
 #include <atomic>
 #include <chrono>
@@ -87,6 +88,7 @@ signals:
     void remoteTelemetryStateChanged(const QString &state);
 
 private slots:
+    void scheduleLatestSnapshotDelivery();
     void deliverLatestSnapshot();
     void deliverStatus(const QString &status);
     void deliverPhase(ztermy::ssh::SshConnectionPhase phase);
@@ -192,6 +194,7 @@ private:
 
     std::mutex m_snapshotMutex;
     terminal::TerminalSnapshotPtr m_pendingSnapshot;
+    QTimer m_snapshotDeliveryTimer;
     std::atomic_bool m_snapshotDeliveryScheduled = false;
     std::atomic_bool m_running = false;
     std::atomic_bool m_telemetryRequestedVisible = false;

@@ -7,6 +7,7 @@
 #include <QByteArray>
 #include <QObject>
 #include <QString>
+#include <QTimer>
 
 #include <atomic>
 #include <chrono>
@@ -101,6 +102,7 @@ public slots:
     scrollbackPage(ztermy::terminal::TerminalScrollbackRequest request) const override;
 
 private slots:
+    void scheduleLatestSnapshotDelivery();
     void deliverLatestSnapshot();
 
 private:
@@ -165,6 +167,7 @@ private:
 
     std::mutex m_snapshotMutex;
     TerminalSnapshotPtr m_pendingSnapshot;
+    QTimer m_snapshotDeliveryTimer;
     std::atomic_bool m_snapshotDeliveryScheduled = false;
     std::atomic_bool m_running = false;
     std::atomic_uint64_t m_readBytes = 0;

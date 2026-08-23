@@ -365,6 +365,10 @@ void LocalTerminalSessionTests::processesLargeOutputWithoutStarvingEventLoop()
 
         QVERIFY2(eventLoopTicks >= 5, "The Qt event loop was starved during large terminal output");
         QVERIFY2(deliveredSnapshots >= 5, "Large terminal output did not deliver progressive snapshots");
+        const auto maximumUsefulDeliveries =
+            static_cast<std::uint64_t>((std::max<qint64>)(completionMilliseconds / 4, 10));
+        QVERIFY2(deliveredSnapshots <= maximumUsefulDeliveries,
+                 "Large terminal output flooded the GUI with undisplayable snapshots");
 
         elapsed.restart();
         session.stop();
