@@ -3,6 +3,25 @@
 This checklist is the human-evidence gate for the first data-driven performance pass. Use the static Release executable,
 not Debug. Keep the display refresh rate and Windows power mode unchanged for the whole comparison.
 
+## Evidence collector
+
+On the physical low-end Windows 11 machine, run the collector from an unlocked interactive desktop:
+
+```powershell
+pwsh -ExecutionPolicy Bypass -File .\scripts\collect_performance_acceptance.ps1 `
+  -IncludeCompositionMatrix
+```
+
+It records the Windows build, CPU, memory, GPU and driver, current resolution and refresh rate, power scheme, and Windows
+transparency setting. It then runs and validates the static Release terminal/UI benchmarks, optionally performs the full
+five-material matrix, and writes an immutable-style bundle with SHA-256 hashes beneath
+`build/msvc-static-release/test-data/performance-acceptance/`. Fill in the generated `manual-observations.md`; the JSON and
+screenshots prove automated behavior, while the observation sheet records the physical interaction evidence they cannot.
+For final acceptance, `environment.json` must record the intended commit and `source.dirty` must be `false`.
+
+Use `-CollectOnly` to verify hardware collection without opening benchmark windows. A collect-only bundle does not satisfy
+the performance gate.
+
 ## 1. Startup and first workbench use
 
 1. Start ztermy on the Hosts page and do not open a terminal workbench.
