@@ -3739,6 +3739,280 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     return baselinePassed && splitWorkspacePassed && reportSaved;
 }
 
+[[nodiscard]] bool runUiPerformanceBenchmark(ztermy::NativeWindow &window, ztermy::AppController &controller,
+                                             const QString &outputDirectory, const qint64 qmlLoadMilliseconds)
+{
+    window.resize(QSize{1120, 800});
+    window.show();
+    window.requestActivate();
+    if (!processWindowEventsUntil(
+            [&window] {
+                return window.isExposed() && window.isSceneGraphInitialized();
+            },
+            std::chrono::seconds{30}))
+    {
+        qCWarning(applicationLog) << "UI performance benchmark requires an interactive rendering surface";
+        return false;
+    }
+    processWindowEventsFor(std::chrono::milliseconds{250});
+
+    QQuickItem *rootObject = window.rootObject();
+    if (rootObject == nullptr)
+    {
+        return false;
+    }
+    const auto objectCount = [rootObject] {
+        return rootObject->findChildren<QObject *>().size() + 1;
+    };
+    const auto quickItemCount = [rootObject] {
+        return rootObject->findChildren<QQuickItem *>().size() + 1;
+    };
+    const qsizetype initialObjectCount = objectCount();
+    const qsizetype initialQuickItemCount = quickItemCount();
+
+    QElapsedTimer terminalStartup;
+    terminalStartup.start();
+    if (controller.startLocalTerminal().isEmpty())
+    {
+        qCWarning(applicationLog) << "UI performance benchmark could not start the local terminal";
+        return false;
+    }
+    rootObject->setProperty("currentPage", QStringLiteral("terminal"));
+    const bool terminalReady = processWindowEventsUntil(
+        [&controller] {
+            return !controller.terminalTabs().isEmpty()
+                   && controller.terminalTabs().front().toMap().value(QStringLiteral("running")).toBool();
+        },
+        std::chrono::seconds{10});
+    const qint64 terminalStartupMilliseconds = terminalStartup.elapsed();
+    processWindowEventsFor(std::chrono::milliseconds{250});
+    const qsizetype closedWorkbenchObjectCount = objectCount();
+    const qsizetype closedWorkbenchQuickItemCount = quickItemCount();
+
+    const QString requestedWorkbenchPage = qEnvironmentVariable("ZTERMY_UI_BENCHMARK_PAGE").trimmed();
+    const QString workbenchPage = requestedWorkbenchPage.isEmpty() ? QStringLiteral("ai") : requestedWorkbenchPage;
+    const bool aiWorkbench = workbenchPage == QStringLiteral("ai");
+    QElapsedTimer workbenchOpen;
+    workbenchOpen.start();
+    const bool workbenchRequested = controller.toggleTerminalWorkbench(workbenchPage);
+    const bool workbenchVisible =
+        workbenchRequested
+        && processWindowEventsUntil(
+            [rootObject, aiWorkbench] {
+                auto *workbench = rootObject->findChild<QQuickItem *>(QStringLiteral("terminalWorkbench"));
+                auto *assistant = rootObject->findChild<QQuickItem *>(QStringLiteral("aiAssistantPane"));
+                return workbench != nullptr && workbench->isVisible()
+                       && (!aiWorkbench
+                           || (assistant != nullptr && assistant->isVisible() && assistant->width() > 0
+                               && assistant->height() > 0));
+            },
+            std::chrono::seconds{10});
+    const qint64 workbenchOpenMilliseconds = workbenchOpen.elapsed();
+    processWindowEventsFor(std::chrono::milliseconds{250});
+    const qsizetype openWorkbenchObjectCount = objectCount();
+    const qsizetype openWorkbenchQuickItemCount = quickItemCount();
+
+    auto *conversation =
+        aiWorkbench ? qobject_cast<ztermy::ai::AiConversationModel *>(controller.activeAiConversation()) : nullptr;
+    if (!terminalReady || !workbenchVisible || (aiWorkbench && conversation == nullptr))
+    {
+        qCWarning(applicationLog) << "UI performance benchmark could not prepare the AI workbench";
+        return false;
+    }
+    bool streamChunkOverrideValid = false;
+    const int requestedStreamChunkCount =
+        qEnvironmentVariableIntValue("ZTERMY_UI_BENCHMARK_CHUNKS", &streamChunkOverrideValid);
+    const int streamChunkCount = streamChunkOverrideValid ? std::clamp(requestedStreamChunkCount, 0, 2'000) : 240;
+    std::uint64_t assistantMessageId = 0;
+    if (streamChunkCount > 0 && conversation != nullptr)
+    {
+        conversation->clear();
+        static_cast<void>(
+            conversation->appendUserMessage(QStringLiteral("Summarize a representative terminal workload.")));
+        assistantMessageId = conversation->beginAssistantMessage();
+    }
+    constexpr int streamIntervalMilliseconds = 8;
+    const QString streamChunk = QStringLiteral(
+        "- Inspect **service health**, compare `current` with `expected`, and preserve the diagnostic evidence.\n");
+    int chunksDelivered = 0;
+    QTimer streamTimer;
+    streamTimer.setInterval(streamIntervalMilliseconds);
+    streamTimer.setTimerType(Qt::PreciseTimer);
+    QObject::connect(&streamTimer, &QTimer::timeout, &window, [&] {
+        if (chunksDelivered >= streamChunkCount)
+        {
+            streamTimer.stop();
+            return;
+        }
+        static_cast<void>(conversation->appendAssistantDelta(assistantMessageId, streamChunk));
+        ++chunksDelivered;
+    });
+
+    std::uint64_t frameSwaps = 0;
+    const QMetaObject::Connection frameConnection =
+        QObject::connect(&window, &QQuickWindow::frameSwapped, &window, [&frameSwaps] {
+            ++frameSwaps;
+        });
+    std::uint64_t heartbeatTicks = 0;
+    qint64 maximumHeartbeatGapMilliseconds = 0;
+    QElapsedTimer heartbeatGap;
+    heartbeatGap.start();
+    QTimer heartbeat;
+    heartbeat.setInterval(10);
+    heartbeat.setTimerType(Qt::PreciseTimer);
+    QObject::connect(&heartbeat, &QTimer::timeout, &window, [&] {
+        maximumHeartbeatGapMilliseconds = std::max(maximumHeartbeatGapMilliseconds, heartbeatGap.restart());
+        ++heartbeatTicks;
+    });
+
+    QElapsedTimer streamElapsed;
+    streamElapsed.start();
+    heartbeat.start();
+    if (streamChunkCount > 0)
+    {
+        streamTimer.start();
+    }
+    const bool streamCompleted = streamChunkCount == 0
+                                 || processWindowEventsUntil(
+                                     [&] {
+                                         return chunksDelivered == streamChunkCount;
+                                     },
+                                     std::chrono::seconds{15});
+    streamTimer.stop();
+    if (streamCompleted && streamChunkCount > 0)
+    {
+        static_cast<void>(conversation->completeAssistantMessage(assistantMessageId));
+    }
+    processWindowEventsFor(std::chrono::milliseconds{350});
+    const qint64 streamMilliseconds = streamElapsed.elapsed();
+    heartbeat.stop();
+    QObject::disconnect(frameConnection);
+
+    const bool workbenchClosed = controller.toggleTerminalWorkbench(workbenchPage)
+                                 && processWindowEventsUntil(
+                                     [rootObject] {
+                                         auto *workbench =
+                                             rootObject->findChild<QQuickItem *>(QStringLiteral("terminalWorkbench"));
+                                         return workbench == nullptr || !workbench->isVisible();
+                                     },
+                                     std::chrono::seconds{5});
+    const qsizetype retainedWorkbenchObjectCount = objectCount();
+    const qsizetype retainedWorkbenchQuickItemCount = quickItemCount();
+    QElapsedTimer workbenchReopen;
+    workbenchReopen.start();
+    const bool workbenchReopened =
+        controller.toggleTerminalWorkbench(workbenchPage)
+        && processWindowEventsUntil(
+            [rootObject, aiWorkbench] {
+                auto *workbench = rootObject->findChild<QQuickItem *>(QStringLiteral("terminalWorkbench"));
+                auto *assistant = rootObject->findChild<QQuickItem *>(QStringLiteral("aiAssistantPane"));
+                return workbench != nullptr && workbench->isVisible()
+                       && (!aiWorkbench
+                           || (assistant != nullptr && assistant->isVisible() && assistant->width() > 0
+                               && assistant->height() > 0));
+            },
+            std::chrono::seconds{5});
+    const qint64 workbenchReopenMilliseconds = workbenchReopen.elapsed();
+
+    QDir().mkpath(outputDirectory);
+    const QString capturePath = QDir(outputDirectory).filePath(QStringLiteral("ui-performance-complete.png"));
+    const bool captureEnabled = qEnvironmentVariable("ZTERMY_UI_BENCHMARK_CAPTURE") != QStringLiteral("0");
+    const bool captureSaved = !captureEnabled || window.grabWindow().save(capturePath);
+    const QSGRendererInterface *rendererInterface = window.rendererInterface();
+    const auto graphicsApiName = [](const QSGRendererInterface::GraphicsApi api) {
+        switch (api)
+        {
+            case QSGRendererInterface::Software:
+                return QStringLiteral("software");
+            case QSGRendererInterface::OpenGL:
+                return QStringLiteral("opengl");
+            case QSGRendererInterface::Direct3D11:
+                return QStringLiteral("direct3d11");
+            case QSGRendererInterface::Direct3D12:
+                return QStringLiteral("direct3d12");
+            case QSGRendererInterface::Vulkan:
+                return QStringLiteral("vulkan");
+            case QSGRendererInterface::Metal:
+                return QStringLiteral("metal");
+            case QSGRendererInterface::OpenVG:
+                return QStringLiteral("openvg");
+            case QSGRendererInterface::Null:
+                return QStringLiteral("null");
+            case QSGRendererInterface::Unknown:
+                return QStringLiteral("unknown");
+        }
+        return QStringLiteral("unknown");
+    };
+    const QJsonObject report{
+        {QStringLiteral("schemaVersion"), 1},
+        {QStringLiteral("generatedAtUtc"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
+        {QStringLiteral("environment"),
+         QJsonObject{
+             {QStringLiteral("applicationVersion"), QCoreApplication::applicationVersion()},
+             {QStringLiteral("qtVersion"), QString::fromLatin1(qVersion())},
+             {QStringLiteral("os"), QSysInfo::prettyProductName()},
+#if defined(NDEBUG)
+             {QStringLiteral("buildType"), QStringLiteral("release")},
+#else
+             {QStringLiteral("buildType"), QStringLiteral("debug")},
+#endif
+             {QStringLiteral("graphicsApi"),
+              graphicsApiName(rendererInterface == nullptr ? QSGRendererInterface::Unknown
+                                                           : rendererInterface->graphicsApi())},
+             {QStringLiteral("devicePixelRatio"), window.effectiveDevicePixelRatio()},
+             {QStringLiteral("logicalWidth"), window.width()},
+             {QStringLiteral("logicalHeight"), window.height()},
+             {QStringLiteral("backdrop"), controller.backdropPreference()},
+         }},
+        {QStringLiteral("startup"),
+         QJsonObject{
+             {QStringLiteral("qmlLoadMs"), qmlLoadMilliseconds},
+             {QStringLiteral("terminalReadyMs"), terminalStartupMilliseconds},
+             {QStringLiteral("initialObjects"), static_cast<qint64>(initialObjectCount)},
+             {QStringLiteral("initialQuickItems"), static_cast<qint64>(initialQuickItemCount)},
+             {QStringLiteral("closedWorkbenchObjects"), static_cast<qint64>(closedWorkbenchObjectCount)},
+             {QStringLiteral("closedWorkbenchQuickItems"), static_cast<qint64>(closedWorkbenchQuickItemCount)},
+         }},
+        {QStringLiteral("workbench"),
+         QJsonObject{
+             {QStringLiteral("openMs"), workbenchOpenMilliseconds},
+             {QStringLiteral("visible"), workbenchVisible},
+             {QStringLiteral("openObjects"), static_cast<qint64>(openWorkbenchObjectCount)},
+             {QStringLiteral("openQuickItems"), static_cast<qint64>(openWorkbenchQuickItemCount)},
+             {QStringLiteral("closed"), workbenchClosed},
+             {QStringLiteral("retainedObjects"), static_cast<qint64>(retainedWorkbenchObjectCount)},
+             {QStringLiteral("retainedQuickItems"), static_cast<qint64>(retainedWorkbenchQuickItemCount)},
+             {QStringLiteral("reopened"), workbenchReopened},
+             {QStringLiteral("reopenMs"), workbenchReopenMilliseconds},
+         }},
+        {QStringLiteral("stream"),
+         QJsonObject{
+             {QStringLiteral("chunkCount"), chunksDelivered},
+             {QStringLiteral("chunkIntervalMs"), streamIntervalMilliseconds},
+             {QStringLiteral("durationMs"), streamMilliseconds},
+             {QStringLiteral("heartbeatTicks"), static_cast<qint64>(heartbeatTicks)},
+             {QStringLiteral("maximumHeartbeatGapMs"), maximumHeartbeatGapMilliseconds},
+             {QStringLiteral("frameSwaps"), static_cast<qint64>(frameSwaps)},
+             {QStringLiteral("completed"), streamCompleted},
+         }},
+    };
+    const QString reportPath = QDir(outputDirectory).filePath(QStringLiteral("ui-performance.json"));
+    QSaveFile reportFile(reportPath);
+    const QByteArray reportBytes = QJsonDocument(report).toJson(QJsonDocument::Indented);
+    const bool reportSaved = reportFile.open(QIODevice::WriteOnly | QIODevice::Truncate)
+                             && reportFile.write(reportBytes) == reportBytes.size() && reportFile.commit();
+    qCInfo(applicationLog) << "UI performance evidence"
+                           << "saved=" << reportSaved << "path=" << reportPath << "qmlLoadMs=" << qmlLoadMilliseconds
+                           << "terminalReadyMs=" << terminalStartupMilliseconds
+                           << "closedObjects=" << closedWorkbenchObjectCount
+                           << "openObjects=" << openWorkbenchObjectCount
+                           << "workbenchOpenMs=" << workbenchOpenMilliseconds
+                           << "workbenchReopenMs=" << workbenchReopenMilliseconds << "streamMs=" << streamMilliseconds
+                           << "maxHeartbeatGapMs=" << maximumHeartbeatGapMilliseconds << "frameSwaps=" << frameSwaps;
+    return terminalReady && workbenchVisible && workbenchClosed && workbenchReopened && streamCompleted && captureSaved
+           && reportSaved && heartbeatTicks >= 20 && maximumHeartbeatGapMilliseconds <= 250;
+}
+
 } // namespace
 
 // Qt framework entry points are exception-opaque. Let unexpected failures reach
@@ -3800,6 +4074,8 @@ int main(int argc, char *argv[])
     const bool realHostUiSmoke = QCoreApplication::arguments().contains(QStringLiteral("--real-host-ui-smoke"));
     const bool terminalPerformanceBenchmark =
         QCoreApplication::arguments().contains(QStringLiteral("--performance-benchmark"));
+    const bool uiPerformanceBenchmark =
+        QCoreApplication::arguments().contains(QStringLiteral("--ui-performance-benchmark"));
     const bool terminalRenderSmoke = QCoreApplication::arguments().contains(QStringLiteral("--terminal-render-smoke"))
                                      || terminalPerformanceBenchmark;
     const bool lifecycleRuntimeSmoke =
@@ -3809,7 +4085,7 @@ int main(int argc, char *argv[])
     const bool windowResizeSmoke = QCoreApplication::arguments().contains(QStringLiteral("--window-resize-smoke"));
     const bool windowDpiSmoke = QCoreApplication::arguments().contains(QStringLiteral("--window-dpi-smoke"));
     ztermy::LocalizationManager localizationManager;
-    const auto initialLanguage = uiLayoutSmoke || uiKeyboardSmoke || realHostUiSmoke
+    const auto initialLanguage = uiLayoutSmoke || uiKeyboardSmoke || realHostUiSmoke || uiPerformanceBenchmark
                                      ? std::optional{ztermy::config::LanguagePreference::english}
                                      : ztermy::config::parseLanguagePreference(appController.languagePreference());
     if (!initialLanguage || !localizationManager.apply(*initialLanguage))
@@ -3817,7 +4093,7 @@ int main(int argc, char *argv[])
         qCCritical(applicationLog) << "Could not apply the configured UI language";
         return EXIT_FAILURE;
     }
-    if ((uiLayoutSmoke || uiKeyboardSmoke || realHostUiSmoke)
+    if ((uiLayoutSmoke || uiKeyboardSmoke || realHostUiSmoke || uiPerformanceBenchmark)
         && !applyUiLayoutSmokeTheme(appController, QStringLiteral("dark"), QStringLiteral("en")))
     {
         qCCritical(applicationLog) << "Could not prepare the UI runtime smoke settings";
@@ -3843,10 +4119,13 @@ int main(int argc, char *argv[])
     initialProperties.insert(QStringLiteral("fontCatalog"), QVariant::fromValue(static_cast<QObject *>(&fontCatalog)));
     initialProperties.insert(QStringLiteral("diagnostics"),
                              QVariant::fromValue(static_cast<QObject *>(&diagnosticReporter)));
+    QElapsedTimer qmlLoadTimer;
+    qmlLoadTimer.start();
     if (!window.load(initialProperties))
     {
         return EXIT_FAILURE;
     }
+    const qint64 qmlLoadMilliseconds = qmlLoadTimer.elapsed();
     const bool closeToTrayAllowed = !QCoreApplication::arguments().contains(QStringLiteral("--smoke-test"));
     window.setCloseToTrayEnabled(closeToTrayAllowed && appController.closeToTray());
     QObject::connect(&appController, &ztermy::AppController::applicationSettingsChanged, &window,
@@ -4002,6 +4281,22 @@ int main(int argc, char *argv[])
             return EXIT_FAILURE;
         }
         qCInfo(applicationLog) << "Terminal render runtime smoke test completed";
+        return EXIT_SUCCESS;
+    }
+    if (uiPerformanceBenchmark)
+    {
+        const bool passed = runUiPerformanceBenchmark(window, appController, paths->dataDirectory, qmlLoadMilliseconds);
+        window.setCloseToTrayEnabled(false);
+        QTimer::singleShot(0, &window, &QWindow::close);
+        const int benchmarkExitCode = application.exec();
+        appController.shutdown();
+        window.releaseResources();
+        if (!passed || benchmarkExitCode != EXIT_SUCCESS)
+        {
+            qCCritical(applicationLog) << "UI performance benchmark failed";
+            return EXIT_FAILURE;
+        }
+        qCInfo(applicationLog) << "UI performance benchmark completed";
         return EXIT_SUCCESS;
     }
 

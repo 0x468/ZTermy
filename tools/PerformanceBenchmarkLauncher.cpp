@@ -29,11 +29,14 @@ namespace
 
 } // namespace
 
-int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
+int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR arguments, int)
 {
     const std::filesystem::path directory = executableDirectory();
     const std::filesystem::path applicationPath = directory / L"ztermy.exe";
-    const std::filesystem::path dataDirectory = directory / L"test-data" / L"performance-baseline";
+    const bool uiBenchmark =
+        arguments != nullptr && std::wstring_view(arguments).find(L"--ui") != std::wstring_view::npos;
+    const std::filesystem::path dataDirectory =
+        directory / L"test-data" / (uiBenchmark ? L"performance-ui-baseline" : L"performance-baseline");
     if (directory.empty() || !std::filesystem::is_regular_file(applicationPath))
     {
         return ERROR_FILE_NOT_FOUND;
@@ -46,7 +49,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
         return static_cast<int>(cleanupError.value());
     }
 
-    std::wstring commandLine = L"\"" + applicationPath.wstring() + L"\" --performance-benchmark --data-dir \""
+    const std::wstring benchmarkArgument = uiBenchmark ? L"--ui-performance-benchmark" : L"--performance-benchmark";
+    std::wstring commandLine = L"\"" + applicationPath.wstring() + L"\" " + benchmarkArgument + L" --data-dir \""
                                + dataDirectory.wstring() + L"\"";
     STARTUPINFOW startupInfo{};
     startupInfo.cb = sizeof(startupInfo);

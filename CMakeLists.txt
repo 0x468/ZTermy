@@ -1397,6 +1397,19 @@ add_custom_target(ztermy_performance_baseline
     VERBATIM
 )
 
+add_custom_target(ztermy_ui_performance_baseline
+    COMMAND "${CMAKE_COMMAND}" -E env
+            "QSG_INFO=1"
+            "QSG_RENDER_TIMING=1"
+            "$<TARGET_FILE:ztermy_performance_launcher>" --ui
+    DEPENDS
+        ztermy
+        ztermy_performance_launcher
+    COMMENT "Capturing reproducible QML and AI interaction performance evidence"
+    USES_TERMINAL
+    VERBATIM
+)
+
 add_custom_target(ztermy_lifecycle_runtime_smoke
     COMMAND "${CMAKE_COMMAND}" -E rm -rf
             "${CMAKE_CURRENT_BINARY_DIR}/test-data/lifecycle-runtime-smoke"

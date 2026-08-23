@@ -2047,33 +2047,47 @@ Rectangle {
                             }
                         }
 
-                        TerminalWorkbench {
-                            id: terminalWorkbench
+                        Loader {
+                            id: terminalWorkbenchLoader
 
-                            objectName: "terminalWorkbench"
+                            readonly property bool requested: root.activeTerminalTab !== null && root.activeTerminalTab.workbenchOpen
+                            property bool retained: false
+
                             anchors.top: parent.top
                             anchors.bottom: parent.bottom
                             width: root.activeTerminalWorkbenchWidth
                             x: root.activeTerminalWorkbenchSide === "left" ? 0 : parent.width - width
-                            visible: root.activeTerminalTab !== null && root.activeTerminalTab.workbenchOpen
+                            active: requested || retained
+                            visible: requested
                             z: 15
-                            controller: root.controller
-                            activeTab: root.activeTerminalTab
-                            panelSide: root.activeTerminalWorkbenchSide
-                            panelWidth: root.activeTerminalTab !== null ? root.activeTerminalTab.workbenchWidth : 520
-                            onPanelWidthRequested: width => root.controller.setTerminalWorkbenchWidth(width)
-                            onInsertRequested: command => {
-                                if (root.controller.insertTerminalCommand(command)) {
-                                    terminalViewport.forceActiveFocus();
+                            onRequestedChanged: {
+                                if (requested) {
+                                    retained = true;
                                 }
                             }
-                            onRunRequested: command => root.requestTerminalCommandRun(command)
-                            onImportLibraryRequested: scriptImportDialog.open()
-                            onExportLibraryRequested: scriptExportDialog.open()
-                            onAiSettingsRequested: root.openAiSettingsTab()
-                            onCloseRequested: {
-                                root.controller.closeTerminalWorkbench();
-                                terminalViewport.forceActiveFocus();
+
+                            sourceComponent: TerminalWorkbench {
+                                objectName: "terminalWorkbench"
+                                width: terminalWorkbenchLoader.width
+                                height: terminalWorkbenchLoader.height
+                                controller: root.controller
+                                activeTab: root.activeTerminalTab
+                                panelSide: root.activeTerminalWorkbenchSide
+                                panelWidth: root.activeTerminalTab !== null ? root.activeTerminalTab.workbenchWidth : 520
+                                onPanelWidthRequested: width => root.controller.setTerminalWorkbenchWidth(width)
+                                onInsertRequested: command => {
+                                    if (root.controller.insertTerminalCommand(command)) {
+                                        terminalViewport.forceActiveFocus();
+                                    }
+                                }
+                                onRunRequested: command => root.requestTerminalCommandRun(command)
+                                onImportLibraryRequested: scriptImportDialog.open()
+                                onExportLibraryRequested: scriptExportDialog.open()
+                                onAiSettingsRequested: root.openAiSettingsTab()
+                                onCloseRequested: {
+                                    root.controller.closeTerminalWorkbench();
+                                    terminalViewport.forceActiveFocus();
+                                }
                             }
                         }
 

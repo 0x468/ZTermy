@@ -43,6 +43,17 @@ The program is based on primary documentation and public upstream implementation
 | H4 | QML relayout and delegate churn dominate Hosts, Settings, and AI workloads. | QML Profiler traces plus GUI event-loop and frame pacing histograms. | Profile representative large-data scenarios before lazy loading/virtualization. |
 | H5 | Backend or driver selection explains machine-specific regressions. | Actual RHI backend, adapter log, WARP flag, OS, DPI. | Capture `QSG_INFO=1`; compare D3D11 hardware and requested WARP. |
 
+## Current measured status
+
+| Area | Status | Evidence |
+|---|---|---|
+| Idle cursor repaint | Accepted | Separate cursor node removed 100% of idle terminal texture upload in the fixed workload. |
+| Snapshot overproduction | Accepted | 8 ms latest-state delivery removed 90.3% of GUI snapshot updates and 36.7% of estimated upload volume with unchanged completion time. |
+| Unopened workbench construction | Accepted | Lazy-retained creation reduced closed-state QML objects by 29.8% and median QML load by 10.9%; first use costs an additional 45 ms and retained reopen is about 20 ms. |
+| Active full terminal damage | Open | The current run still uploads roughly 455–490 MiB for the 20,000-line workload. Damage-aware backing storage needs its own fidelity and latency A/B. |
+| Material/compositor cost | Open | Acrylic/Mica/opaque comparison requires the owner's low-end machine matrix; do not infer it from the desktop baseline. |
+| Hosts/Settings/SFTP virtualization | Not yet evidenced | No change until page-specific profiling shows delegate churn or binding cost. |
+
 ## Measurement layers
 
 1. **Environment**: version, build type, Qt version, OS, CPU architecture, RHI backend, adapter log, WARP request, DPI,
@@ -100,3 +111,6 @@ These are investigation thresholds, not release gates until the first low-end ba
 - Low-end fallback: maintain at least a stable 30 Hz interaction path without silently using an invalid benchmark result.
 
 Budgets will be revised from captured desktop and low-end evidence, with the revision recorded in this document.
+
+The required owner-side checks and expected observations are listed in
+`docs/testing/PERFORMANCE_MANUAL_ACCEPTANCE.md`.

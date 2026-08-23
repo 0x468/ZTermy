@@ -34,6 +34,38 @@ in timing collection.
 4. Compare medians; inspect P95/P99/max for stutter and outliers.
 5. Do not compare Debug and Release results.
 
+## QML and AI workbench scenario
+
+Use the companion UI benchmark to measure startup object creation, first-open cost, retained workbench cost, AI Markdown
+streaming responsiveness, and reopen latency:
+
+```powershell
+cmake --build --preset msvc-static-release --target ztermy_ui_performance_baseline
+```
+
+It opens a visible 1120 x 800 D3D11 window, starts a local terminal, opens the AI workbench, streams 240 representative
+Markdown chunks at 8 ms intervals, closes and reopens the workbench, and writes:
+
+```text
+build/msvc-static-release/test-data/performance-ui-baseline/ui-performance.json
+build/msvc-static-release/test-data/performance-ui-baseline/logs/ztermy.log
+build/msvc-static-release/test-data/performance-ui-baseline/ui-performance.png
+```
+
+The JSON records QML load and local-terminal-ready latency; `QObject` and `QQuickItem` counts before first workbench use
+and after creation; first-open and reopen latency; stream duration; GUI heartbeat gaps; and presented frame count. Treat
+frame count as diagnostic evidence rather than a score: more frames can mean smoother progressive presentation, but can
+also mean more render work.
+
+For focused diagnostics only, set `ZTERMY_UI_BENCHMARK_PAGE` to another workbench page, set
+`ZTERMY_UI_BENCHMARK_CHUNKS` to `0` through `2000`, or set `ZTERMY_UI_BENCHMARK_CAPTURE=0` to omit the screenshot. Do not
+mix different values in a before/after comparison.
+
+The benchmark enables `QSG_INFO=1` and `QSG_RENDER_TIMING=1`. Qt documents the latter as a scene-graph bottleneck aid and
+recommends checking that rendering is actually the bottleneck before changing renderer architecture. For deeper
+diagnosis, use `QSG_RENDERER_DEBUG=render`, `QSG_VISUALIZE=batches`, `QSG_VISUALIZE=changes`, or
+`QSG_VISUALIZE=overdraw` one at a time; these visualization modes are not timing-comparable product runs.
+
 ## Required configurations
 
 | Configuration | Purpose |
@@ -95,3 +127,16 @@ completion, upload-volume, frame, snapshot, and cursor-invalidation deltas.
 During the same run, observe per-engine GPU graphs and per-core CPU usage rather than aggregate CPU alone. Record whether
 stutter occurs during output, cursor-only idle, resize, window movement, AI streaming, or material changes; these symptoms
 route to different hypotheses in `docs/PERFORMANCE_PROGRAM.md`.
+
+Also test the same workflow once with Mica and once with Acrylic. Microsoft describes Mica as a wallpaper-sampled,
+performance-oriented foundation material, while Acrylic performs live translucent composition and is more GPU-intensive.
+Material cost therefore remains a separate variable; it is not evidence that QML itself is slow.
+
+## Primary references
+
+- [Qt Quick performance considerations](https://doc.qt.io/qt-6/qtquick-performance.html)
+- [Qt 6.8 Loader](https://doc.qt.io/qt-6.8/qml-qtquick-loader.html)
+- [Qt Quick scene graph default renderer](https://doc.qt.io/qt-6.8/qtquick-visualcanvas-scenegraph-renderer.html)
+- [Qt 6.8 command-line QML profiler](https://doc.qt.io/qt-6.8/qtqml-tooling-qmlprofiler.html)
+- [Windows system backdrops](https://learn.microsoft.com/en-us/windows/apps/develop/ui/system-backdrops)
+- [Windows Acrylic guidance](https://learn.microsoft.com/en-us/windows/apps/design/style/acrylic)
