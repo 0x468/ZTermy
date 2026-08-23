@@ -163,10 +163,12 @@ void LocalTerminalSessionTests::runsPowerShellAndStopsPromptly()
         const auto output = std::make_shared<MemoryOutputSink>();
         session.setOutputSink(output);
         QSignalSpy selectedTextSpy(&session, &ztermy::terminal::LocalTerminalSession::selectedTextReady);
+        qsizetype snapshotCount = 0;
         ztermy::terminal::TerminalSnapshotPtr latestSnapshot;
         connect(&session, &ztermy::terminal::LocalTerminalSession::snapshotReady, this,
-                [&latestSnapshot](ztermy::terminal::TerminalSnapshotPtr snapshot) {
+                [&latestSnapshot, &snapshotCount](ztermy::terminal::TerminalSnapshotPtr snapshot) {
                     latestSnapshot = std::move(snapshot);
+                    ++snapshotCount;
                 });
 
         const std::error_code startError = session.start({.columns = 80, .rows = 24});
@@ -191,6 +193,9 @@ void LocalTerminalSessionTests::runsPowerShellAndStopsPromptly()
         timer.start();
         session.stop();
         QVERIFY2(timer.elapsed() < 2000, "Stopping the local terminal session took too long");
+        const qsizetype snapshotsAtStop = snapshotCount;
+        QTest::qWait(32);
+        QCOMPARE(snapshotCount, snapshotsAtStop);
     }
     catch (const std::exception &exception)
     {

@@ -245,6 +245,7 @@ void SshTerminalSession::stop() noexcept
         std::scoped_lock lock(m_snapshotMutex);
         m_pendingSnapshot.reset();
     }
+    m_snapshotDeliveryTimer.stop();
     m_snapshotDeliveryScheduled.store(false);
     m_engine.reset();
 
@@ -1182,6 +1183,11 @@ void SshTerminalSession::publishSnapshot()
 
 void SshTerminalSession::scheduleLatestSnapshotDelivery()
 {
+    if (!m_running.load())
+    {
+        m_snapshotDeliveryScheduled.store(false);
+        return;
+    }
     if (!m_snapshotDeliveryTimer.isActive())
     {
         m_snapshotDeliveryTimer.start();
@@ -1190,6 +1196,13 @@ void SshTerminalSession::scheduleLatestSnapshotDelivery()
 
 void SshTerminalSession::deliverLatestSnapshot()
 {
+    if (!m_running.load())
+    {
+        std::scoped_lock lock(m_snapshotMutex);
+        m_pendingSnapshot.reset();
+        m_snapshotDeliveryScheduled.store(false);
+        return;
+    }
     terminal::TerminalSnapshotPtr snapshot;
     {
         std::scoped_lock lock(m_snapshotMutex);

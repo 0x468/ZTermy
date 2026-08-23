@@ -153,6 +153,7 @@ void LocalTerminalSession::stop() noexcept
         std::scoped_lock lock(m_snapshotMutex);
         m_pendingSnapshot.reset();
     }
+    m_snapshotDeliveryTimer.stop();
     m_snapshotDeliveryScheduled.store(false);
 
     if (m_running.exchange(false))
@@ -674,6 +675,11 @@ void LocalTerminalSession::publishSnapshot()
 
 void LocalTerminalSession::scheduleLatestSnapshotDelivery()
 {
+    if (!m_running.load())
+    {
+        m_snapshotDeliveryScheduled.store(false);
+        return;
+    }
     if (!m_snapshotDeliveryTimer.isActive())
     {
         m_snapshotDeliveryTimer.start();
@@ -682,6 +688,13 @@ void LocalTerminalSession::scheduleLatestSnapshotDelivery()
 
 void LocalTerminalSession::deliverLatestSnapshot()
 {
+    if (!m_running.load())
+    {
+        std::scoped_lock lock(m_snapshotMutex);
+        m_pendingSnapshot.reset();
+        m_snapshotDeliveryScheduled.store(false);
+        return;
+    }
     TerminalSnapshotPtr snapshot;
     {
         std::scoped_lock lock(m_snapshotMutex);
