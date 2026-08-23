@@ -60,6 +60,7 @@ The program is based on primary documentation and public upstream implementation
 
 - Release-capable opt-in terminal metrics.
 - `ztermy_performance_baseline` target and versioned JSON schema.
+- Strict evidence validation and like-for-like before/after report generation.
 - Reject hidden/headless runs rather than accepting misleading frame counts.
 - Document the desktop, low-end, high-DPI, and WARP matrix.
 
@@ -99,4 +100,3 @@ These are investigation thresholds, not release gates until the first low-end ba
 - Low-end fallback: maintain at least a stable 30 Hz interaction path without silently using an invalid benchmark result.
 
 Budgets will be revised from captured desktop and low-end evidence, with the revision recorded in this document.
-

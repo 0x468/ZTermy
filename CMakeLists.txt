@@ -190,6 +190,8 @@ add_library(ztermy_core_diagnostics STATIC
 add_library(ztermy_application_diagnostics STATIC
     src/application/diagnostics/DiagnosticReporter.cpp
     src/application/diagnostics/DiagnosticReporter.h
+    src/application/diagnostics/PerformanceEvidence.cpp
+    src/application/diagnostics/PerformanceEvidence.h
 )
 target_compile_features(ztermy_application_diagnostics PUBLIC cxx_std_23)
 target_include_directories(ztermy_application_diagnostics PUBLIC src)
@@ -1366,6 +1368,23 @@ if(MSVC)
     )
 endif()
 
+add_executable(ztermy_performance_report
+    tools/PerformanceReport.cpp
+)
+target_compile_features(ztermy_performance_report PRIVATE cxx_std_23)
+target_link_libraries(ztermy_performance_report PRIVATE
+    ztermy_application_diagnostics
+    Qt6::Core
+)
+if(MSVC)
+    target_compile_options(ztermy_performance_report PRIVATE
+        /permissive-
+        /utf-8
+        /W4
+        /Zc:__cplusplus
+    )
+endif()
+
 add_custom_target(ztermy_performance_baseline
     COMMAND "${CMAKE_COMMAND}" -E env
             "QSG_INFO=1"
@@ -1638,6 +1657,24 @@ if(BUILD_TESTING)
         )
     endif()
     add_test(NAME diagnostic-reporter COMMAND ztermy_diagnostic_reporter_tests)
+
+    qt_add_executable(ztermy_performance_evidence_tests
+        tests/performance_evidence_tests.cpp
+    )
+    target_compile_features(ztermy_performance_evidence_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_performance_evidence_tests PRIVATE
+        ztermy_application_diagnostics
+        Qt6::Test
+    )
+    if(MSVC)
+        target_compile_options(ztermy_performance_evidence_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+    add_test(NAME performance-evidence COMMAND ztermy_performance_evidence_tests)
 
     qt_add_executable(ztermy_application_paths_tests
         tests/application_paths_tests.cpp
@@ -4133,6 +4170,7 @@ if(BUILD_TESTING)
             ztermy_remote_telemetry_tests
             ztermy_action_registry_tests
             ztermy_diagnostic_reporter_tests
+            ztermy_performance_evidence_tests
             ztermy_application_paths_tests
             ztermy_application_settings_tests
             ztermy_last_known_good_file_tests

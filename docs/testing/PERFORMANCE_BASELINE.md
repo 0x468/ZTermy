@@ -64,6 +64,31 @@ Remove-Item Env:QSG_RHI_PREFER_SOFTWARE_RENDERER
 
 If a check fails, label the run invalid and fix the measurement environment before drawing conclusions.
 
+The build includes a strict validator that applies these checks:
+
+```powershell
+./build/msvc-static-release/ztermy_performance_report.exe --validate `
+  ./build/msvc-static-release/test-data/performance-baseline/terminal-performance.json
+```
+
+It returns a non-zero exit code for Debug reports, incomplete scenarios, fewer than 30 frame/timing samples, or an unusable
+graphics backend.
+
+## Before/after comparison
+
+Archive a valid baseline before making an optimization, capture the candidate with identical settings, then run:
+
+```powershell
+./build/msvc-static-release/ztermy_performance_report.exe --compare `
+  ./evidence/baseline.json `
+  ./evidence/candidate.json `
+  --output ./evidence/comparison.md
+```
+
+The comparator refuses different build types, Qt versions, graphics backends, DPI values, window sizes, backdrops,
+terminal opacity, or software-renderer preferences. Its Markdown table reports paint, texture creation, GUI heartbeat,
+completion, upload-volume, frame, snapshot, and cursor-invalidation deltas.
+
 ## Manual low-end observation
 
 During the same run, observe per-engine GPU graphs and per-core CPU usage rather than aggregate CPU alone. Record whether

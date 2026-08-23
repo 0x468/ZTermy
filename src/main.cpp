@@ -3668,6 +3668,11 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
         {QStringLiteral("scenario"),
          QJsonObject{
              {QStringLiteral("outputLines"), 20'000},
+             {QStringLiteral("completed"), completed},
+             {QStringLiteral("responsive"), responsive},
+             {QStringLiteral("progressiveFrames"), progressiveFrames},
+             {QStringLiteral("terminalRendered"), terminalRendered},
+             {QStringLiteral("scrollbarPassed"), scrollbarPassed},
              {QStringLiteral("completionMs"), completionMilliseconds},
              {QStringLiteral("heartbeatTicks"), static_cast<qint64>(heartbeatTicks)},
              {QStringLiteral("maximumHeartbeatGapMs"), maximumHeartbeatGapMilliseconds},
