@@ -48,26 +48,38 @@ namespace
 
 [[nodiscard]] std::wstring performanceLabel()
 {
-    std::wstring backdrop = environmentValue(L"ZTERMY_PERFORMANCE_BACKDROP");
-    if (backdrop != L"acrylic" && backdrop != L"mica" && backdrop != L"micaAlt" && backdrop != L"transparent"
-        && backdrop != L"opaque")
+    std::wstring label = environmentValue(L"ZTERMY_PERFORMANCE_BACKDROP");
+    if (label != L"acrylic" && label != L"mica" && label != L"micaAlt" && label != L"transparent" && label != L"opaque")
     {
-        backdrop.clear();
+        label.clear();
     }
     const bool softwareRenderer = environmentValue(L"QSG_RHI_PREFER_SOFTWARE_RENDERER") == L"1";
-    if (backdrop.empty() && !softwareRenderer)
+    const bool rowReuseDiagnostic = environmentValue(L"ZTERMY_PERFORMANCE_ROW_REUSE_DIAGNOSTIC") == L"1";
+    const bool paintPhaseDiagnostic = environmentValue(L"ZTERMY_PERFORMANCE_PAINT_PHASE_DIAGNOSTIC") == L"1";
+    if (label.empty() && softwareRenderer)
     {
-        return L"baseline";
+        label = L"acrylic";
     }
-    if (backdrop.empty())
-    {
-        backdrop = L"acrylic";
-    }
+    const auto appendLabel = [&label](const std::wstring_view suffix) {
+        if (!label.empty())
+        {
+            label += L'-';
+        }
+        label += suffix;
+    };
     if (softwareRenderer)
     {
-        backdrop += L"-warp";
+        appendLabel(L"warp");
     }
-    return backdrop;
+    if (rowReuseDiagnostic)
+    {
+        appendLabel(L"row-reuse");
+    }
+    if (paintPhaseDiagnostic)
+    {
+        appendLabel(L"paint-phases");
+    }
+    return label.empty() ? L"baseline" : label;
 }
 
 [[nodiscard]] std::wstring performanceRunId()

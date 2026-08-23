@@ -1,5 +1,6 @@
 #include "ui/terminal/TerminalItem.h"
 
+#include "ui/terminal/TerminalRowReuseAnalysis.h"
 #include "ui/terminal/TerminalTextLayout.h"
 
 #include <QClipboard>
@@ -79,6 +80,7 @@ public:
     std::uint64_t revision = 0;
     QSize pixelSize;
     QImage image;
+    ztermy::terminal::TerminalSnapshotPtr previousDiagnosticSnapshot;
     std::vector<ztermy::ui::TerminalKeywordCellStyle> keywordStyles;
     QSGSimpleTextureNode *cursorNode = nullptr;
     QRectF cursorRect;
@@ -664,11 +666,35 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         m_fullInvalidationPending = false;
         return node;
     }
+    static const bool paintPhaseDiagnosticEnabled =
+        qEnvironmentVariableIntValue("ZTERMY_PERFORMANCE_PAINT_PHASE_DIAGNOSTIC") == 1;
+    const bool collectPaintPhases = paintPhaseDiagnosticEnabled && m_renderMetrics.enabled() && !cursorOnlyPaint;
+    qint64 phaseMarkNanoseconds = collectPaintPhases ? frameTimer.nsecsElapsed() : 0;
+    qint64 imagePreparationNanoseconds = 0;
+    qint64 snapshotPreparationNanoseconds = 0;
+    qint64 backgroundPaintNanoseconds = 0;
+    qint64 textPaintNanoseconds = 0;
+    qint64 overlayPaintNanoseconds = 0;
     if (!cursorOnlyPaint)
     {
+        static const bool rowReuseDiagnosticEnabled =
+            qEnvironmentVariableIntValue("ZTERMY_PERFORMANCE_ROW_REUSE_DIAGNOSTIC") == 1;
+        if (rowReuseDiagnosticEnabled && m_renderMetrics.enabled() && m_snapshot && node->previousDiagnosticSnapshot)
+        {
+            const TerminalRowReuseAnalysis analysis =
+                analyzeTerminalRowReuse(*node->previousDiagnosticSnapshot, *m_snapshot);
+            m_renderMetrics.recordRowReuse(analysis.totalRows, analysis.reusableRows, analysis.shifted());
+        }
+        node->previousDiagnosticSnapshot = rowReuseDiagnosticEnabled ? m_snapshot : nullptr;
         node->image = QImage(pixelSize, QImage::Format_ARGB32_Premultiplied);
         node->image.setDevicePixelRatio(devicePixelRatio);
         node->image.fill(defaultBackgroundColor);
+    }
+    if (collectPaintPhases)
+    {
+        const qint64 now = frameTimer.nsecsElapsed();
+        imagePreparationNanoseconds = now - phaseMarkNanoseconds;
+        phaseMarkNanoseconds = now;
     }
     QImage &image = node->image;
 
@@ -692,6 +718,12 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         const std::vector<TerminalKeywordCellStyle> &keywordStyles = node->keywordStyles;
         const quint16 firstRow = cursorOnlyPaint ? m_snapshot->cursor.row : 0;
         const quint16 lastRow = cursorOnlyPaint ? static_cast<quint16>(firstRow + 1) : m_snapshot->rows;
+        if (collectPaintPhases)
+        {
+            const qint64 now = frameTimer.nsecsElapsed();
+            snapshotPreparationNanoseconds = now - phaseMarkNanoseconds;
+            phaseMarkNanoseconds = now;
+        }
         if (cursorOnlyPaint)
         {
             painter.fillRect(QRectF{0.0, verticalPadding + (firstRow * cellHeightValue), width(), cellHeightValue},
@@ -732,6 +764,12 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                     painter.fillRect(cellRect, color(cell.background));
                 }
             }
+        }
+        if (collectPaintPhases)
+        {
+            const qint64 now = frameTimer.nsecsElapsed();
+            backgroundPaintNanoseconds = now - phaseMarkNanoseconds;
+            phaseMarkNanoseconds = now;
         }
 
         for (quint16 row = firstRow; row < lastRow; ++row)
@@ -801,6 +839,12 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                 painter.drawText(baseline, grapheme);
                 column = runEnd;
             }
+        }
+        if (collectPaintPhases)
+        {
+            const qint64 now = frameTimer.nsecsElapsed();
+            textPaintNanoseconds = now - phaseMarkNanoseconds;
+            phaseMarkNanoseconds = now;
         }
 
         if (!preeditClusters.empty() && m_snapshot->cursor.column < m_snapshot->columns
@@ -900,13 +944,31 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
             node->cursorNode->setRect(terminalCursorPresent && (!m_cursorBlink || m_cursorBlinkPhase) ? node->cursorRect
                                                                                                       : QRectF{});
         }
+        if (collectPaintPhases)
+        {
+            overlayPaintNanoseconds = frameTimer.nsecsElapsed() - phaseMarkNanoseconds;
+        }
     }
     else if (node->cursorNode != nullptr)
     {
         node->cursorNode->setRect({});
+        if (collectPaintPhases)
+        {
+            overlayPaintNanoseconds = frameTimer.nsecsElapsed() - phaseMarkNanoseconds;
+        }
     }
 
     const qint64 paintNanoseconds = timingEnabled ? frameTimer.nsecsElapsed() : 0;
+    if (collectPaintPhases)
+    {
+        m_renderMetrics.recordPaintPhases({
+            .imagePreparation = std::chrono::nanoseconds{imagePreparationNanoseconds},
+            .snapshotPreparation = std::chrono::nanoseconds{snapshotPreparationNanoseconds},
+            .backgroundPaint = std::chrono::nanoseconds{backgroundPaintNanoseconds},
+            .textPaint = std::chrono::nanoseconds{textPaintNanoseconds},
+            .overlayPaint = std::chrono::nanoseconds{overlayPaintNanoseconds},
+        });
+    }
     QSGTexture *newTexture = window()->createTextureFromImage(image);
     const qint64 textureNanoseconds = timingEnabled ? frameTimer.nsecsElapsed() - paintNanoseconds : 0;
     const terminal::TerminalDamageKind damage = cursorOnlyPaint ? terminal::TerminalDamageKind::partial

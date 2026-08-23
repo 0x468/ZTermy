@@ -88,6 +88,21 @@ The opaque case disables the window alpha buffer before `QGuiApplication` constr
 it is therefore an actual composition diagnostic rather than a transparent surface painted with opaque content. This
 mode is benchmark-only and does not change the product's appearance choices.
 
+## Focused terminal diagnostics
+
+Two opt-in targets explain active terminal paint without changing normal product behavior:
+
+```powershell
+cmake --build --preset msvc-static-release --target ztermy_terminal_row_reuse_diagnostic
+cmake --build --preset msvc-static-release --target ztermy_terminal_paint_phase_diagnostic
+```
+
+The first writes `test-data/performance-row-reuse/terminal-performance.json` and reports exact rows that a hypothetical CPU
+backing store could preserve. The second writes `test-data/performance-paint-phases/terminal-performance.json` and splits
+paint time into image preparation, snapshot/keyword preparation, background cells, text, and cursor/IME overlay. Both are
+diagnostics: run five warm samples before making a product decision, and do not compare their completion time directly
+against a baseline that did not pay the diagnostic bookkeeping cost.
+
 ## Required configurations
 
 | Configuration | Purpose |

@@ -760,6 +760,8 @@ add_library(ztermy_terminal_ui STATIC
     src/ui/terminal/TerminalKeywordHighlighter.h
     src/ui/terminal/TerminalRenderMetrics.cpp
     src/ui/terminal/TerminalRenderMetrics.h
+    src/ui/terminal/TerminalRowReuseAnalysis.cpp
+    src/ui/terminal/TerminalRowReuseAnalysis.h
     src/ui/terminal/TerminalTextLayout.cpp
     src/ui/terminal/TerminalTextLayout.h
 )
@@ -1394,6 +1396,34 @@ add_custom_target(ztermy_performance_baseline
         ztermy
         ztermy_performance_launcher
     COMMENT "Capturing reproducible terminal render performance evidence"
+    USES_TERMINAL
+    VERBATIM
+)
+
+add_custom_target(ztermy_terminal_row_reuse_diagnostic
+    COMMAND "${CMAKE_COMMAND}" -E env
+            "ZTERMY_PERFORMANCE_ROW_REUSE_DIAGNOSTIC=1"
+            "QSG_INFO=1"
+            "QT_DISABLE_SHADER_DISK_CACHE=1"
+            "$<TARGET_FILE:ztermy_performance_launcher>"
+    DEPENDS
+        ztermy
+        ztermy_performance_launcher
+    COMMENT "Measuring the snapshot-only upper bound for terminal row reuse"
+    USES_TERMINAL
+    VERBATIM
+)
+
+add_custom_target(ztermy_terminal_paint_phase_diagnostic
+    COMMAND "${CMAKE_COMMAND}" -E env
+            "ZTERMY_PERFORMANCE_PAINT_PHASE_DIAGNOSTIC=1"
+            "QSG_INFO=1"
+            "QT_DISABLE_SHADER_DISK_CACHE=1"
+            "$<TARGET_FILE:ztermy_performance_launcher>"
+    DEPENDS
+        ztermy
+        ztermy_performance_launcher
+    COMMENT "Measuring terminal CPU paint phases under large output"
     USES_TERMINAL
     VERBATIM
 )

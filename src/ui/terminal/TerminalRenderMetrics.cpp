@@ -1,5 +1,6 @@
 #include "ui/terminal/TerminalRenderMetrics.h"
 
+#include <algorithm>
 #include <limits>
 
 namespace ztermy::ui
@@ -55,6 +56,16 @@ void TerminalRenderMetrics::reset() noexcept
     m_cursorInvalidations.store(0, std::memory_order_relaxed);
     m_uploadedBytes.store(0, std::memory_order_relaxed);
     m_maximumFramePixels.store(0, std::memory_order_relaxed);
+    m_rowReuseAnalysisFrames.store(0, std::memory_order_relaxed);
+    m_rowReuseCandidateRows.store(0, std::memory_order_relaxed);
+    m_rowReuseReusableRows.store(0, std::memory_order_relaxed);
+    m_rowReuseRepaintRows.store(0, std::memory_order_relaxed);
+    m_rowReuseShiftedFrames.store(0, std::memory_order_relaxed);
+    m_imagePreparationLatency.reset();
+    m_snapshotPreparationLatency.reset();
+    m_backgroundPaintLatency.reset();
+    m_textPaintLatency.reset();
+    m_overlayPaintLatency.reset();
 }
 
 void TerminalRenderMetrics::recordSnapshot(const terminal::TerminalDamageKind damage,
@@ -75,6 +86,37 @@ void TerminalRenderMetrics::recordCursorInvalidation() noexcept
     {
         m_cursorInvalidations.fetch_add(1, std::memory_order_relaxed);
     }
+}
+
+void TerminalRenderMetrics::recordRowReuse(const std::size_t candidateRows, const std::size_t reusableRows,
+                                           const bool shifted) noexcept
+{
+    if (!enabled())
+    {
+        return;
+    }
+    const std::size_t boundedReusableRows = std::min(candidateRows, reusableRows);
+    m_rowReuseAnalysisFrames.fetch_add(1, std::memory_order_relaxed);
+    m_rowReuseCandidateRows.fetch_add(candidateRows, std::memory_order_relaxed);
+    m_rowReuseReusableRows.fetch_add(boundedReusableRows, std::memory_order_relaxed);
+    m_rowReuseRepaintRows.fetch_add(candidateRows - boundedReusableRows, std::memory_order_relaxed);
+    if (shifted)
+    {
+        m_rowReuseShiftedFrames.fetch_add(1, std::memory_order_relaxed);
+    }
+}
+
+void TerminalRenderMetrics::recordPaintPhases(const TerminalPaintPhaseDurations &durations) noexcept
+{
+    if (!enabled())
+    {
+        return;
+    }
+    m_imagePreparationLatency.record(durations.imagePreparation);
+    m_snapshotPreparationLatency.record(durations.snapshotPreparation);
+    m_backgroundPaintLatency.record(durations.backgroundPaint);
+    m_textPaintLatency.record(durations.textPaint);
+    m_overlayPaintLatency.record(durations.overlayPaint);
 }
 
 void TerminalRenderMetrics::recordFrame(const std::chrono::steady_clock::duration paintLatency,
@@ -116,6 +158,16 @@ TerminalRenderMetricsSnapshot TerminalRenderMetrics::snapshot() const noexcept
         .cursorInvalidations = m_cursorInvalidations.load(std::memory_order_relaxed),
         .uploadedBytes = m_uploadedBytes.load(std::memory_order_relaxed),
         .maximumFramePixels = m_maximumFramePixels.load(std::memory_order_relaxed),
+        .rowReuseAnalysisFrames = m_rowReuseAnalysisFrames.load(std::memory_order_relaxed),
+        .rowReuseCandidateRows = m_rowReuseCandidateRows.load(std::memory_order_relaxed),
+        .rowReuseReusableRows = m_rowReuseReusableRows.load(std::memory_order_relaxed),
+        .rowReuseRepaintRows = m_rowReuseRepaintRows.load(std::memory_order_relaxed),
+        .rowReuseShiftedFrames = m_rowReuseShiftedFrames.load(std::memory_order_relaxed),
+        .imagePreparationLatency = m_imagePreparationLatency.summary(),
+        .snapshotPreparationLatency = m_snapshotPreparationLatency.summary(),
+        .backgroundPaintLatency = m_backgroundPaintLatency.summary(),
+        .textPaintLatency = m_textPaintLatency.summary(),
+        .overlayPaintLatency = m_overlayPaintLatency.summary(),
     };
 }
 

@@ -140,6 +140,37 @@ cursor upload remained zero. The UI workload loaded in 393 ms, first-opened in 8
 140 ms maximum gap. This single run demonstrates functional software-renderer degradation; it is not used as a hardware
 performance comparison.
 
+## Experiment 7: active terminal paint diagnostics
+
+Result: diagnostic infrastructure accepted; CPU backing-store and text-style-cache candidates rejected.
+
+`QSG_RENDER_TIMING` first localized hardware-renderer cost to the scene-graph sync phase: render and swap P95 were below
+the histogram's 1 ms resolution while sync P95 was about 5 ms. Requested WARP moved more time into swap instead. This does
+not justify a Qt GuiPrivate/QRhi partial-upload renderer on the reference machine.
+
+A snapshot-only row-reuse diagnostic then compared exact cell rows between successive frames. Five warm runs produced a
+median of 6,434 candidate rows and only 275 reusable rows (3.98%); just one median frame had a useful vertical shift. The
+8 ms latest-state pacing often skips more output than remains in the visible viewport, so a scroll/memmove backing image
+would still repaint about 96% of rows in this workload. The candidate was rejected before adding renderer state.
+
+The full CPU paint was then split into image allocation/fill, snapshot and keyword preparation, background cells, text,
+and cursor/IME overlay. Representative P95 values were 1,000 us, 100 us, 50 us, 2,000 us, and 50 us respectively, against
+a 4,000 us full-paint P95. Text drawing is the largest measured phase, while texture object creation remains about 50 us.
+
+A cached-font/pen candidate was tested because the text phase was largest. Five interleaved runs gave these medians:
+
+| Metric | Existing path | Cached styles | Change |
+|---|---:|---:|---:|
+| Completion | 1,738 ms | 1,826 ms | +5.1% |
+| Maximum heartbeat gap | 16 ms | 18 ms | +12.5% |
+| Full paint P50 | 4,000 us | 2,000 us | -50% histogram bucket |
+| Full paint P95 | 4,000 us | 4,000 us | 0% |
+| Text paint P50/P95 | 2,000/2,000 us | 2,000/2,000 us | 0% |
+
+The isolated text metric did not improve and responsiveness regressed, so the candidate and its switch were removed. The
+remaining 4 ms paint P95 is already below the provisional 8 ms desktop budget. Further renderer work now requires evidence
+from physical low-end hardware or a different representative workload, not extrapolation from estimated upload volume.
+
 ## Diagnostic incident: stale incremental object layout
 
 During the UI benchmark, an existing static Release build intermittently exited with heap corruption. Full PageHeap
@@ -161,7 +192,10 @@ The first performance pass found two independent, measured costs rather than a s
 2. the unopened workbench eagerly created about 30% of the startup QML object tree; lazy retention removes that startup
    work at a measured 45 ms one-time first-open cost;
 3. desktop composition material is not a measurable bottleneck in the controlled matrix, while explicitly requested WARP
-   remains functional with modest degradation.
+   remains functional with modest degradation;
+4. active terminal frames spend most measured CPU paint time in text rasterization, but exact row reuse is only about 4%
+   and a font/pen cache failed the five-run A/B gate, so neither speculative backing storage nor private QRhi integration is
+   justified on the reference desktop.
 
-Low-end physical composition, resizing, complex Markdown, and full terminal damage remain separate diagnostic axes.
+Low-end physical composition, resizing, complex Markdown, and full terminal damage remain separate validation axes.
 Further changes require a new comparable baseline rather than extrapolating from these results.

@@ -47,6 +47,8 @@ struct TerminalCell
     bool invisible = false;
     bool selected = false;
     std::uint8_t displayWidth = 1;
+
+    friend bool operator==(const TerminalCell &, const TerminalCell &) = default;
 };
 
 struct TerminalPoint

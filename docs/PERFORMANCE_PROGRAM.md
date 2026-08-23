@@ -27,6 +27,9 @@ The program is based on primary documentation and public upstream implementation
 - Qt documents `QSG_INFO`, `QSG_RENDER_TIMING`, batching diagnostics, D3D11 as the Windows default, and possible WARP
   fallback in its [default renderer](https://doc.qt.io/qt-6.8/qtquick-visualcanvas-scenegraph-renderer.html) and
   [Windows graphics](https://doc.qt.io/qt-6.8/windows-graphics.html) references.
+- Qt's [`QQuickWindow`](https://doc.qt.io/qt-6.8/qquickwindow.html) documents the render lifecycle and `frameSwapped`;
+  [`QSGDynamicTexture`](https://doc.qt.io/qt-6.8/qsgdynamictexture.html) is public, while direct QRhi partial uploads in
+  Qt 6.8 require private API. A private renderer is therefore an evidence-gated architecture decision, not a shortcut.
 - Ghostty's public [`RenderState`](https://github.com/ghostty-org/ghostty/blob/main/src/terminal/render.zig) retains memory,
   consumes dirty state, and separates the terminal-locked update phase from deferred renderer work.
 - Windows Terminal separates terminal buffer interpretation from renderer engines in its
@@ -37,7 +40,7 @@ The program is based on primary documentation and public upstream implementation
 
 | ID | Hypothesis | Evidence required | First experiment |
 |---|---|---|---|
-| H1 | Full `QImage` rasterization and texture recreation dominate active terminal frames. | Paint and texture P95/P99, uploaded bytes, rendered frames. | Current renderer baseline; then persistent backing store/row damage A/B. |
+| H1 | Full `QImage` rasterization dominates active terminal frames. | Per-phase paint P95/P99, exact reusable rows, texture timing, rendered frames. | Phase diagnostics before any backing-store or private-renderer prototype. |
 | H2 | Cursor blink causes avoidable full-surface uploads while idle. | Cursor invalidations and uploaded bytes during an idle interval. | Separate cursor node A/B after baseline. |
 | H3 | Alpha-window composition and Acrylic amplify resize/move stalls on integrated GPUs. | Identical workload across solid, Mica, Acrylic, and transparent modes. | Add a genuine opaque diagnostic path before changing defaults. |
 | H4 | QML relayout and delegate churn dominate Hosts, Settings, and AI workloads. | QML Profiler traces plus GUI event-loop and frame pacing histograms. | Profile representative large-data scenarios before lazy loading/virtualization. |
@@ -50,7 +53,7 @@ The program is based on primary documentation and public upstream implementation
 | Idle cursor repaint | Accepted | Separate cursor node removed 100% of idle terminal texture upload in the fixed workload. |
 | Snapshot overproduction | Accepted | 8 ms latest-state delivery removed 90.3% of GUI snapshot updates and 36.7% of estimated upload volume with unchanged completion time. |
 | Unopened workbench construction | Accepted | Lazy-retained creation reduced closed-state QML objects by 29.8% and median QML load by 10.9%; first use costs an additional 45 ms and retained reopen is about 20 ms. |
-| Active full terminal damage | Open | The current run still uploads roughly 455–490 MiB for the 20,000-line workload. Damage-aware backing storage needs its own fidelity and latency A/B. |
+| Active full terminal damage | Desktop diagnosed; low-end open | Five runs found only 3.98% exact row reuse. Paint P95 is 4 ms, led by 2 ms text and 1 ms image preparation; cached text styles failed A/B. Do not add backing storage or private QRhi without new evidence. |
 | Material/compositor cost | Desktop measured; low-end open | A five-run, cache-isolated Acrylic/Mica/Mica Alt/transparent/true-opaque matrix found no stable desktop difference. Do not change product defaults without physical low-end evidence. |
 | Software D3D11 fallback | Diagnostic passed | Explicit WARP selected Microsoft Basic Render Driver and completed both terminal and UI workloads with modest degradation. |
 | Hosts/Settings/SFTP virtualization | Not yet evidenced | No change until page-specific profiling shows delegate churn or binding cost. |
@@ -60,8 +63,9 @@ The program is based on primary documentation and public upstream implementation
 1. **Environment**: version, build type, Qt version, OS, CPU architecture, RHI backend, adapter log, WARP request, DPI,
    window size, alpha buffer, backdrop, and terminal opacity.
 2. **Terminal producer**: bytes read, snapshots produced/delivered/coalesced, full/partial/clean damage, snapshot build time.
-3. **Terminal renderer**: paint and texture-creation latency histograms, rendered damage, snapshot updates, cursor
-   invalidations, maximum pixels, and estimated upload bytes.
+3. **Terminal renderer**: paint and texture-creation latency histograms; optional image/snapshot/background/text/overlay
+   phase histograms; exact snapshot-row reuse; rendered damage, snapshot updates, cursor invalidations, maximum pixels,
+   and estimated upload bytes.
 4. **UI responsiveness**: frame swaps, completion time, event-loop heartbeat gaps, resize completion, and functional checks.
 5. **System observation**: GPU engine, dedicated/shared memory, CPU per core, working set, and power behavior, captured with
    Windows tooling when investigating a specific machine.
@@ -84,9 +88,10 @@ The program is based on primary documentation and public upstream implementation
 
 ### P2 — damage-aware rendering
 
-- Retain a backing image/texture across frames.
-- Redraw only changed rows plus selection/cursor invalidation regions.
-- Verify scroll, resize, IME, wide text, ligatures, and transparency against the full-redraw reference.
+- The desktop burst diagnostic rejected a backing image: only 3.98% of rows were reusable.
+- Reopen this stage only when another workload or physical low-end trace proves substantial reusable damage.
+- Any future candidate must verify scroll, resize, IME, wide text, ligatures, and transparency against the full-redraw
+  reference.
 
 ### P3 — native retained renderer decision
 

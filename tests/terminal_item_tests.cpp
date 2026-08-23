@@ -1,6 +1,7 @@
 #include "ui/terminal/TerminalItem.h"
 #include "ui/terminal/TerminalKeywordHighlighter.h"
 #include "ui/terminal/TerminalRenderMetrics.h"
+#include "ui/terminal/TerminalRowReuseAnalysis.h"
 #include "ui/terminal/TerminalTextLayout.h"
 
 #include <QColor>
@@ -73,7 +74,52 @@ private slots:
     void rendersImeAcrossResizeAndShutdown();
     void highlightsWideAndCaseInsensitiveKeywords();
     void recordsOptInRenderMetrics();
+    void analyzesTerminalRowReuse();
 };
+
+void TerminalItemTests::analyzesTerminalRowReuse()
+{
+    auto previous = snapshotAt(0, 0);
+    previous->columns = 3;
+    previous->rows = 4;
+    previous->cells.assign(12, {});
+    for (quint16 row = 0; row < previous->rows; ++row)
+    {
+        previous->cell(0, row).grapheme = {static_cast<char32_t>(U'A' + row)};
+    }
+
+    const auto &identical = *previous;
+    auto analysis = ztermy::ui::analyzeTerminalRowReuse(*previous, identical);
+    QCOMPARE(analysis.rowShift, 0);
+    QCOMPARE(analysis.reusableRows, std::size_t{4});
+    QCOMPARE(analysis.repaintRows(), std::size_t{0});
+
+    auto scrolled = *previous;
+    for (quint16 row = 0; row + 1 < scrolled.rows; ++row)
+    {
+        for (quint16 column = 0; column < scrolled.columns; ++column)
+        {
+            scrolled.cell(column, row) = previous->cell(column, row + 1);
+        }
+    }
+    scrolled.cell(0, 3).grapheme = {U'Z'};
+    analysis = ztermy::ui::analyzeTerminalRowReuse(*previous, scrolled);
+    QCOMPARE(analysis.rowShift, 1);
+    QCOMPARE(analysis.reusableRows, std::size_t{3});
+    QCOMPARE(analysis.repaintRows(), std::size_t{1});
+    QVERIFY(analysis.shifted());
+
+    auto changed = *previous;
+    changed.cell(0, 2).bold = true;
+    analysis = ztermy::ui::analyzeTerminalRowReuse(*previous, changed);
+    QCOMPARE(analysis.rowShift, 0);
+    QCOMPARE(analysis.reusableRows, std::size_t{3});
+
+    changed.defaultBackground.red = 1;
+    analysis = ztermy::ui::analyzeTerminalRowReuse(*previous, changed);
+    QCOMPARE(analysis.reusableRows, std::size_t{0});
+    QCOMPARE(analysis.repaintRows(), std::size_t{4});
+}
 
 void TerminalItemTests::recordsOptInRenderMetrics()
 {
@@ -85,6 +131,14 @@ void TerminalItemTests::recordsOptInRenderMetrics()
     metrics.setEnabled(true);
     metrics.recordSnapshot(ztermy::terminal::TerminalDamageKind::partial, 2);
     metrics.recordCursorInvalidation();
+    metrics.recordRowReuse(24, 20, true);
+    metrics.recordPaintPhases({
+        .imagePreparation = std::chrono::microseconds{100},
+        .snapshotPreparation = std::chrono::microseconds{200},
+        .backgroundPaint = std::chrono::microseconds{300},
+        .textPaint = std::chrono::microseconds{700},
+        .overlayPaint = std::chrono::microseconds{50},
+    });
     metrics.recordFrame(std::chrono::microseconds{1500}, std::chrono::microseconds{2500}, 100,
                         ztermy::terminal::TerminalDamageKind::partial, 3);
     const ztermy::ui::TerminalRenderMetricsSnapshot snapshot = metrics.snapshot();
@@ -100,6 +154,16 @@ void TerminalItemTests::recordsOptInRenderMetrics()
     QCOMPARE(snapshot.cursorInvalidations, std::uint64_t{1});
     QCOMPARE(snapshot.uploadedBytes, std::uint64_t{400});
     QCOMPARE(snapshot.maximumFramePixels, std::uint64_t{100});
+    QCOMPARE(snapshot.rowReuseAnalysisFrames, std::uint64_t{1});
+    QCOMPARE(snapshot.rowReuseCandidateRows, std::uint64_t{24});
+    QCOMPARE(snapshot.rowReuseReusableRows, std::uint64_t{20});
+    QCOMPARE(snapshot.rowReuseRepaintRows, std::uint64_t{4});
+    QCOMPARE(snapshot.rowReuseShiftedFrames, std::uint64_t{1});
+    QCOMPARE(snapshot.imagePreparationLatency.count, std::uint64_t{1});
+    QCOMPARE(snapshot.snapshotPreparationLatency.count, std::uint64_t{1});
+    QCOMPARE(snapshot.backgroundPaintLatency.count, std::uint64_t{1});
+    QCOMPARE(snapshot.textPaintLatency.count, std::uint64_t{1});
+    QCOMPARE(snapshot.overlayPaintLatency.count, std::uint64_t{1});
 
     metrics.reset();
     QCOMPARE(metrics.snapshot().renderedFrames, std::uint64_t{0});
