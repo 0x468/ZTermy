@@ -21,6 +21,7 @@ QtObject {
     readonly property bool micaAltBackdrop: backdropPreference === "micaAlt"
     readonly property bool acrylicBackdrop: backdropPreference === "acrylic"
     readonly property bool transparentBackdrop: backdropPreference === "transparent"
+    readonly property bool solidBackdrop: backdropPreference === "solid"
     readonly property bool backdropActive: !highContrast && (micaBackdrop || micaAltBackdrop || acrylicBackdrop || transparentBackdrop)
     readonly property bool adjustableBackdrop: acrylicBackdrop || transparentBackdrop
     readonly property real normalizedBackdropOpacity: Math.max(0.0, Math.min(1.0, backdropOpacity))

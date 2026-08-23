@@ -959,7 +959,7 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(controller.saveApplicationSettings(
         QStringLiteral("light"), 0.8, QStringLiteral("micaAlt"), QStringLiteral("custom"), QStringLiteral("#3366cc"),
         QStringLiteral("Microsoft YaHei UI"), QStringLiteral("Cascadia Code"), 18, true, false, 0.45,
-        QStringLiteral("bar"), false, true, false, QStringLiteral("zh_CN"), true, false, true));
+        QStringLiteral("bar"), false, true, false, QStringLiteral("zh_CN"), true, false, true, true));
     QCOMPARE(settingsChanged.count(), 1);
     QCOMPARE(controller.themePreference(), QStringLiteral("light"));
     QCOMPARE(controller.backdropOpacity(), 0.8);
@@ -979,6 +979,7 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(controller.sftpShowHiddenFiles());
     QVERIFY(!controller.sftpConfirmDelete());
     QVERIFY(controller.closeToTray());
+    QVERIFY(controller.performanceMode());
     QCOMPARE(controller.languagePreference(), QStringLiteral("zh_CN"));
     QCOMPARE(controller.aiProviderPreference(), QStringLiteral("ollama"));
     QCOMPARE(controller.aiModel(), QStringLiteral("qwen3"));
@@ -1012,6 +1013,7 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(reloaded.sftpShowHiddenFiles());
     QVERIFY(!reloaded.sftpConfirmDelete());
     QVERIFY(reloaded.closeToTray());
+    QVERIFY(reloaded.performanceMode());
     QCOMPARE(reloaded.languagePreference(), QStringLiteral("zh_CN"));
     QCOMPARE(reloaded.aiProviderPreference(), QStringLiteral("ollama"));
     QVERIFY(!reloaded.aiWebSearchAvailable());
@@ -1026,6 +1028,7 @@ void AppControllerTests::persistsApplicationSettings()
     QCOMPARE(reloaded.themePreference(), QStringLiteral("dark"));
     QCOMPARE(reloaded.backdropOpacity(), 1.0);
     QCOMPARE(reloaded.backdropPreference(), QStringLiteral("acrylic"));
+    QVERIFY(!reloaded.performanceMode());
     QCOMPARE(reloaded.accentPreference(), QStringLiteral("ztermy"));
     QCOMPARE(reloaded.customAccent(), QStringLiteral("#22C55E"));
     QCOMPARE(reloaded.terminalFontFamily(), QStringLiteral("Cascadia Mono"));

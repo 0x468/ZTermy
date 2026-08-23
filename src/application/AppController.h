@@ -176,6 +176,7 @@ class AppController final : public QObject
     Q_PROPERTY(bool sftpShowHiddenFiles READ sftpShowHiddenFiles NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool sftpConfirmDelete READ sftpConfirmDelete NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool closeToTray READ closeToTray NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(bool performanceMode READ performanceMode NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString languagePreference READ languagePreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString aiProviderPreference READ aiProviderPreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString aiReasoningPreference READ aiReasoningPreference NOTIFY applicationSettingsChanged)
@@ -332,6 +333,7 @@ public:
     [[nodiscard]] bool sftpShowHiddenFiles() const noexcept;
     [[nodiscard]] bool sftpConfirmDelete() const noexcept;
     [[nodiscard]] bool closeToTray() const noexcept;
+    [[nodiscard]] bool performanceMode() const noexcept;
     [[nodiscard]] QString languagePreference() const;
     [[nodiscard]] QString aiProviderPreference() const;
     [[nodiscard]] QString aiReasoningPreference() const;
@@ -546,7 +548,7 @@ public:
                                              const QString &cursor, bool cursorShouldBlink, bool shouldCopyOnSelect,
                                              bool shouldConfirmMultilinePaste, const QString &language,
                                              bool shouldShowHiddenSftpFiles, bool shouldConfirmSftpDelete,
-                                             bool shouldCloseToTray = false);
+                                             bool shouldCloseToTray = false, bool shouldPreferPerformance = false);
     Q_INVOKABLE bool saveAiProviderSettings(const QString &provider, const QString &baseUrl,
                                             const QString &endpointPath, const QString &model, bool automaticContext,
                                             const QString &permissionMode);

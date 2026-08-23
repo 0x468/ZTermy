@@ -81,7 +81,8 @@ constexpr WORD kApplicationIconResource = 101;
 namespace ztermy
 {
 
-NativeWindow::NativeWindow(QWindow *parent) : QQuickView(parent)
+NativeWindow::NativeWindow(const bool performanceMode, const bool opaqueSurface, QWindow *parent)
+    : QQuickView(parent), m_performanceMode(performanceMode), m_opaqueSurface(opaqueSurface || performanceMode)
 {
     (void)m_animationPreference.update(windowing::queryClientAreaAnimationsEnabled());
     if (const auto highContrast = windowing::queryHighContrastState())
@@ -154,7 +155,17 @@ QColor NativeWindow::systemAccentColor() const noexcept
 
 bool NativeWindow::animationsEnabled() const noexcept
 {
-    return m_animationPreference.enabled() && !m_highContrastState.enabled;
+    return !m_performanceMode && m_animationPreference.enabled() && !m_highContrastState.enabled;
+}
+
+bool NativeWindow::performanceModeActive() const noexcept
+{
+    return m_performanceMode;
+}
+
+bool NativeWindow::opaqueSurface() const noexcept
+{
+    return m_opaqueSurface;
 }
 
 bool NativeWindow::highContrast() const noexcept
@@ -261,12 +272,13 @@ void NativeWindow::setCloseToTrayEnabled(const bool enabled)
 bool NativeWindow::applyAppearance(const QString &backdropPreference, const bool darkMode)
 {
     if (backdropPreference != QStringLiteral("acrylic") && backdropPreference != QStringLiteral("transparent")
-        && backdropPreference != QStringLiteral("mica") && backdropPreference != QStringLiteral("micaAlt"))
+        && backdropPreference != QStringLiteral("mica") && backdropPreference != QStringLiteral("micaAlt")
+        && backdropPreference != QStringLiteral("solid"))
     {
         return false;
     }
 
-    m_backdropPreference = backdropPreference;
+    m_backdropPreference = m_performanceMode ? QStringLiteral("solid") : backdropPreference;
     m_darkMode = darkMode;
     setOpacity(1.0);
     return applyBackdrop();
@@ -841,25 +853,24 @@ bool NativeWindow::applyBackdrop()
     const auto windowHandle = reinterpret_cast<HWND>(winId()); // NOLINT(performance-no-int-to-ptr)
     const BOOL darkMode = m_darkMode ? TRUE : FALSE;
     const int cornerPreference = kDwmWindowCornerRound;
+    const bool solidSurface = m_opaqueSurface || m_backdropPreference == QStringLiteral("solid");
+    setColor(solidSurface ? (m_darkMode ? QColor(QStringLiteral("#0B0F14")) : QColor(QStringLiteral("#F8FAFC")))
+                          : QColor(Qt::transparent));
     int backdropType = kDwmSystemBackdropNone;
-    if (!m_highContrastState.enabled && m_backdropPreference == QStringLiteral("mica"))
+    if (!solidSurface && !m_highContrastState.enabled && m_backdropPreference == QStringLiteral("mica"))
     {
         backdropType = kDwmSystemBackdropMainWindow;
     }
-    else if (!m_highContrastState.enabled && m_backdropPreference == QStringLiteral("acrylic"))
+    else if (!solidSurface && !m_highContrastState.enabled && m_backdropPreference == QStringLiteral("acrylic"))
     {
         backdropType = kDwmSystemBackdropTransientWindow;
     }
-    else if (!m_highContrastState.enabled && m_backdropPreference == QStringLiteral("micaAlt"))
+    else if (!solidSurface && !m_highContrastState.enabled && m_backdropPreference == QStringLiteral("micaAlt"))
     {
         backdropType = kDwmSystemBackdropTabbedWindow;
     }
-    const MARGINS frameMargins{
-        .cxLeftWidth = 1,
-        .cxRightWidth = 1,
-        .cyTopHeight = 1,
-        .cyBottomHeight = 1,
-    };
+    const MARGINS frameMargins =
+        solidSurface ? MARGINS{} : MARGINS{.cxLeftWidth = 1, .cxRightWidth = 1, .cyTopHeight = 1, .cyBottomHeight = 1};
 
     const HRESULT darkResult =
         DwmSetWindowAttribute(windowHandle, kDwmUseImmersiveDarkMode, &darkMode, sizeof(darkMode));
@@ -869,7 +880,7 @@ bool NativeWindow::applyBackdrop()
         DwmSetWindowAttribute(windowHandle, kDwmSystemBackdropType, &backdropType, sizeof(backdropType));
     const bool redirectionAlphaSupported =
         QOperatingSystemVersion::current().microVersion() >= kRedirectionBitmapAlphaMinimumBuild;
-    const BOOL redirectionAlpha = TRUE;
+    const BOOL redirectionAlpha = solidSurface ? FALSE : TRUE;
     const HRESULT redirectionAlphaResult = redirectionAlphaSupported
                                                ? DwmSetWindowAttribute(windowHandle, kDwmRedirectionBitmapAlpha,
                                                                        &redirectionAlpha, sizeof(redirectionAlpha))
@@ -880,7 +891,8 @@ bool NativeWindow::applyBackdrop()
     qCInfo(windowLog) << "applied DWM appearance"
                       << "backdropType=" << backdropType << "redirectionAlphaSupported=" << redirectionAlphaSupported
                       << "redirectionAlpha=" << static_cast<bool>(redirectionAlpha)
-                      << "surfaceAlphaBits=" << format().alphaBufferSize() << "result=" << applied;
+                      << "surfaceAlphaBits=" << format().alphaBufferSize() << "opaqueSurface=" << solidSurface
+                      << "performanceMode=" << m_performanceMode << "result=" << applied;
     if (!applied)
     {
         qCWarning(windowLog) << "Some requested DWM appearance attributes are unavailable";

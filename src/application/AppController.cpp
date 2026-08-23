@@ -3369,6 +3369,11 @@ bool AppController::closeToTray() const noexcept
     return m_settings.closeToTray;
 }
 
+bool AppController::performanceMode() const noexcept
+{
+    return m_settings.performanceMode;
+}
+
 QString AppController::languagePreference() const
 {
     return config::languagePreferenceToken(m_settings.language);
@@ -8090,7 +8095,7 @@ bool AppController::saveApplicationSettings(const QString &theme, const qreal ba
                                             const bool cursorShouldBlink, const bool shouldCopyOnSelect,
                                             const bool shouldConfirmMultilinePaste, const QString &language,
                                             const bool shouldShowHiddenSftpFiles, const bool shouldConfirmSftpDelete,
-                                            const bool shouldCloseToTray)
+                                            const bool shouldCloseToTray, const bool shouldPreferPerformance)
 {
     const auto parsedTheme = config::parseThemePreference(theme);
     const auto parsedBackdrop = config::parseBackdropPreference(backdrop);
@@ -8121,6 +8126,7 @@ bool AppController::saveApplicationSettings(const QString &theme, const qreal ba
         .sftpShowHiddenFiles = shouldShowHiddenSftpFiles,
         .sftpConfirmDelete = shouldConfirmSftpDelete,
         .closeToTray = shouldCloseToTray,
+        .performanceMode = shouldPreferPerformance,
         .credentialStorage = m_settings.credentialStorage,
         .language = *parsedLanguage,
         .shortcutOverrides = m_settings.shortcutOverrides,

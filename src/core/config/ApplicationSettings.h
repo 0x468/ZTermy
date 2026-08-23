@@ -23,6 +23,7 @@ enum class BackdropPreference : std::uint8_t
     transparent,
     mica,
     micaAlt,
+    solid,
 };
 
 enum class AccentPreference : std::uint8_t
@@ -115,6 +116,7 @@ struct ApplicationSettings final
     bool sftpShowHiddenFiles = false;
     bool sftpConfirmDelete = true;
     bool closeToTray = false;
+    bool performanceMode = false;
     CredentialStoragePreference credentialStorage = CredentialStoragePreference::automatic;
     LanguagePreference language = LanguagePreference::system;
     QMap<QString, QString> shortcutOverrides;

@@ -532,49 +532,53 @@ struct ResizeHitRuntimeCase
     const bool adjustableSurfacesConsistent =
         acrylicContentAlpha == transparentContentAlpha && acrylicChromeAlpha == transparentContentAlpha;
 
+    const bool solidSaved = saveAppearance(QStringLiteral("dark"), 1.0, QStringLiteral("solid"));
+    processWindowEventsFor(std::chrono::milliseconds{150});
+    const bool solid = verifyWindowAppearance(window, QStringLiteral("solid"), true, transparentBackdrop);
+    const bool solidSurfaceContract = window.color().alpha() == 255 && surfaceAlpha("backgroundColor") == 255
+                                      && surfaceAlpha("contentColor") == 255 && surfaceAlpha("chromeColor") == 255
+                                      && surfaceAlpha("panelColor") == 255 && surfaceAlpha("workspaceColor") == 255;
+
     const bool restoredSaved = saveAppearance(QStringLiteral("dark"), 1.0, QStringLiteral("acrylic"));
     processWindowEventsFor(std::chrono::milliseconds{150});
     const bool restored = verifyWindowAppearance(window, QStringLiteral("acrylic"), true, acrylicBackdrop);
 
-    qCInfo(applicationLog) << "Window appearance runtime summary"
-                           << "defaultAlphaBuffer=" << defaultAlphaBuffer << "surfaceAlphaBits=" << surfaceAlphaBits
-                           << "transparentClearColor=" << (window.color().alpha() == 0)
-                           << "translucentSurfaceCapable=" << translucentSurfaceCapable
-                           << "darkAcrylicSaved=" << darkAcrylicSaved << "darkAcrylic=" << darkAcrylic
-                           << "acrylicRootAlpha=" << acrylicRootAlpha << "acrylicContentAlpha=" << acrylicContentAlpha
-                           << "acrylicChromeAlpha=" << acrylicChromeAlpha
-                           << "acrylicElevatedAlpha=" << acrylicElevatedAlpha
-                           << "acrylicControlAlpha=" << acrylicControlAlpha << "acrylicFieldAlpha=" << acrylicFieldAlpha
-                           << "acrylicSurfaceContract=" << acrylicSurfaceContract
-                           << "invalidBackdropRejected=" << invalidBackdropRejected
-                           << "invalidBackdropOpacityRejected=" << invalidBackdropOpacityRejected
-                           << "transparentSaved=" << transparentSaved << "transparent=" << transparent
-                           << "transparentContentAlpha=" << transparentContentAlpha
-                           << "transparentSurfaceContract=" << transparentSurfaceContract
-                           << "transparentOpaqueSaved=" << transparentOpaqueSaved
-                           << "transparentOpaque=" << transparentOpaque
-                           << "transparentOpaqueSurfaceContract=" << transparentOpaqueSurfaceContract
-                           << "transparentClearSaved=" << transparentClearSaved
-                           << "transparentClear=" << transparentClear
-                           << "transparentClearElevatedAlpha=" << transparentClearElevatedAlpha
-                           << "transparentClearControlAlpha=" << transparentClearControlAlpha
-                           << "transparentClearFieldAlpha=" << transparentClearFieldAlpha
-                           << "transparentClearSurfaceContract=" << transparentClearSurfaceContract
-                           << "lightMica=" << lightMica << "lightMicaSaved=" << lightMicaSaved
-                           << "micaRootAlpha=" << micaRootAlpha << "micaContentAlpha=" << micaContentAlpha
-                           << "micaChromeAlpha=" << micaChromeAlpha << "micaSurfaceContract=" << micaSurfaceContract
-                           << "darkMicaAltSaved=" << darkMicaAltSaved << "darkMicaAlt=" << darkMicaAlt
-                           << "micaAltContentAlpha=" << micaAltContentAlpha
-                           << "micaAltChromeAlpha=" << micaAltChromeAlpha
-                           << "micaAltSurfaceContract=" << micaAltSurfaceContract
-                           << "adjustableSurfacesConsistent=" << adjustableSurfacesConsistent
-                           << "restoredSaved=" << restoredSaved << "restored=" << restored;
+    qCInfo(applicationLog)
+        << "Window appearance runtime summary"
+        << "defaultAlphaBuffer=" << defaultAlphaBuffer << "surfaceAlphaBits=" << surfaceAlphaBits
+        << "transparentClearColor=" << (window.color().alpha() == 0)
+        << "translucentSurfaceCapable=" << translucentSurfaceCapable << "darkAcrylicSaved=" << darkAcrylicSaved
+        << "darkAcrylic=" << darkAcrylic << "acrylicRootAlpha=" << acrylicRootAlpha
+        << "acrylicContentAlpha=" << acrylicContentAlpha << "acrylicChromeAlpha=" << acrylicChromeAlpha
+        << "acrylicElevatedAlpha=" << acrylicElevatedAlpha << "acrylicControlAlpha=" << acrylicControlAlpha
+        << "acrylicFieldAlpha=" << acrylicFieldAlpha << "acrylicSurfaceContract=" << acrylicSurfaceContract
+        << "invalidBackdropRejected=" << invalidBackdropRejected
+        << "invalidBackdropOpacityRejected=" << invalidBackdropOpacityRejected
+        << "transparentSaved=" << transparentSaved << "transparent=" << transparent
+        << "transparentContentAlpha=" << transparentContentAlpha
+        << "transparentSurfaceContract=" << transparentSurfaceContract
+        << "transparentOpaqueSaved=" << transparentOpaqueSaved << "transparentOpaque=" << transparentOpaque
+        << "transparentOpaqueSurfaceContract=" << transparentOpaqueSurfaceContract
+        << "transparentClearSaved=" << transparentClearSaved << "transparentClear=" << transparentClear
+        << "transparentClearElevatedAlpha=" << transparentClearElevatedAlpha
+        << "transparentClearControlAlpha=" << transparentClearControlAlpha
+        << "transparentClearFieldAlpha=" << transparentClearFieldAlpha
+        << "transparentClearSurfaceContract=" << transparentClearSurfaceContract << "lightMica=" << lightMica
+        << "lightMicaSaved=" << lightMicaSaved << "micaRootAlpha=" << micaRootAlpha
+        << "micaContentAlpha=" << micaContentAlpha << "micaChromeAlpha=" << micaChromeAlpha
+        << "micaSurfaceContract=" << micaSurfaceContract << "darkMicaAltSaved=" << darkMicaAltSaved
+        << "darkMicaAlt=" << darkMicaAlt << "micaAltContentAlpha=" << micaAltContentAlpha
+        << "micaAltChromeAlpha=" << micaAltChromeAlpha << "micaAltSurfaceContract=" << micaAltSurfaceContract
+        << "adjustableSurfacesConsistent=" << adjustableSurfacesConsistent << "solidSaved=" << solidSaved
+        << "solid=" << solid << "solidSurfaceContract=" << solidSurfaceContract << "restoredSaved=" << restoredSaved
+        << "restored=" << restored;
     return translucentSurfaceCapable && darkAcrylicSaved && darkAcrylic && acrylicSurfaceContract
            && invalidBackdropRejected && invalidBackdropOpacityRejected && transparentSaved && transparent
            && transparentSurfaceContract && transparentOpaqueSaved && transparentOpaque
            && transparentOpaqueSurfaceContract && transparentClearSaved && transparentClear
            && transparentClearSurfaceContract && lightMicaSaved && lightMica && micaSurfaceContract && darkMicaAltSaved
-           && darkMicaAlt && micaAltSurfaceContract && adjustableSurfacesConsistent && restoredSaved && restored;
+           && darkMicaAlt && micaAltSurfaceContract && adjustableSurfacesConsistent && solidSaved && solid
+           && solidSurfaceContract && restoredSaved && restored;
 }
 
 [[nodiscard]] bool captureLayout(ztermy::NativeWindow &window, const QString &outputDirectory, const QString &name)
@@ -4079,7 +4083,6 @@ int main(int argc, char *argv[])
                                          || rawArgumentPresent(argc, argv, "--ui-performance-benchmark");
     const bool opaquePerformanceSurface =
         rawPerformanceBenchmark && requestedPerformanceBackdrop() == QStringLiteral("opaque");
-    QQuickWindow::setDefaultAlphaBuffer(!opaquePerformanceSurface);
     QGuiApplication application(argc, argv);
     QGuiApplication::setApplicationDisplayName(QStringLiteral("ztermy"));
     QGuiApplication::setApplicationName(QStringLiteral("ztermy"));
@@ -4180,7 +4183,11 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    ztermy::NativeWindow window;
+    const bool performanceModeActive = !performanceBenchmark && appController.performanceMode();
+    const bool opaqueSurface = opaquePerformanceSurface || performanceModeActive
+                               || appController.backdropPreference() == QStringLiteral("solid");
+    QQuickWindow::setDefaultAlphaBuffer(!opaqueSurface);
+    ztermy::NativeWindow window(performanceModeActive, opaqueSurface);
     auto iconImageProvider = std::make_unique<ztermy::ui::SvgIconImageProvider>();
     window.engine()->addImageProvider(QStringLiteral("ztermy-icons"), iconImageProvider.release());
     auto brandImageProvider = std::make_unique<ztermy::ui::SvgIconImageProvider>(QStringLiteral(":/ztermy/branding"));

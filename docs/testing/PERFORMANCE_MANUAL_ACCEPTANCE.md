@@ -89,6 +89,25 @@ The terminal and UI benchmark reports record Qt Quick's selected graphics API. `
 software rendering is a diagnostic failure; Direct3D 11 backed by a virtual adapter may still be substantially slower
 than a physical GPU and must be identified from `graphicsAdapters`.
 
+### GPU-less or cloud-desktop isolation
+
+When Mica, Acrylic, and a visually opaque Transparent setting all feel similarly slow, enable **Settings > Application >
+Prioritize performance on software-rendered or low-power machines**, apply, and restart ztermy. This is materially
+different from setting transparency to 100 percent: it requests a native opaque surface, removes the DWM backdrop and
+extended frame, disables redirection alpha, and stops decorative animation.
+
+Expected:
+
+- the selected backdrop is preserved and returns after disabling the mode and restarting;
+- terminal text, input, SSH, SFTP, and retained workbench behavior are unchanged;
+- the About release animation is stationary by design;
+- a clear improvement identifies composition or decorative motion as a contributor;
+- no clear improvement is valid evidence that the dominant cost lies in software rendering, virtual-GPU/remote
+  presentation, or another measured layer.
+
+Use **No material (solid)** in Appearance when only the truly opaque surface is desired without forcing the broader
+performance preference. Entering or leaving either opaque-surface state requires a restart.
+
 ## 5. Required evidence to report
 
 For each machine, report:

@@ -19,6 +19,8 @@ class NativeWindow final : public QQuickView
     Q_PROPERTY(bool systemDarkMode READ systemDarkMode NOTIFY systemDarkModeChanged)
     Q_PROPERTY(QColor systemAccentColor READ systemAccentColor NOTIFY systemAccentColorChanged)
     Q_PROPERTY(bool animationsEnabled READ animationsEnabled NOTIFY animationsEnabledChanged)
+    Q_PROPERTY(bool performanceModeActive READ performanceModeActive CONSTANT)
+    Q_PROPERTY(bool opaqueSurface READ opaqueSurface CONSTANT)
     Q_PROPERTY(bool highContrast READ highContrast NOTIFY highContrastChanged)
     Q_PROPERTY(QColor highContrastBackground READ highContrastBackground NOTIFY highContrastChanged)
     Q_PROPERTY(QColor highContrastText READ highContrastText NOTIFY highContrastChanged)
@@ -26,7 +28,7 @@ class NativeWindow final : public QQuickView
     Q_PROPERTY(QColor highContrastHighlightText READ highContrastHighlightText NOTIFY highContrastChanged)
 
 public:
-    explicit NativeWindow(QWindow *parent = nullptr);
+    explicit NativeWindow(bool performanceMode = false, bool opaqueSurface = false, QWindow *parent = nullptr);
     ~NativeWindow() override;
 
     [[nodiscard]] bool load(QVariantMap initialProperties = {});
@@ -36,6 +38,8 @@ public:
     [[nodiscard]] bool systemDarkMode() const noexcept;
     [[nodiscard]] QColor systemAccentColor() const noexcept;
     [[nodiscard]] bool animationsEnabled() const noexcept;
+    [[nodiscard]] bool performanceModeActive() const noexcept;
+    [[nodiscard]] bool opaqueSurface() const noexcept;
     [[nodiscard]] bool highContrast() const noexcept;
     [[nodiscard]] bool closeToTrayEnabled() const noexcept;
     [[nodiscard]] bool trayIconVisible() const noexcept;
@@ -99,6 +103,8 @@ private:
     bool m_closeToTrayEnabled = false;
     bool m_trayIconVisible = false;
     bool m_exitingFromTray = false;
+    bool m_performanceMode = false;
+    bool m_opaqueSurface = false;
     QColor m_systemAccentColor = QColor(QStringLiteral("#0078D4"));
     windowing::ClientAreaAnimationPreference m_animationPreference{true};
     windowing::HighContrastState m_highContrastState;

@@ -47,7 +47,11 @@ constexpr qint64 nativeChatGptProviderSchemaVersion = 21;
 constexpr qint64 aiProxySchemaVersion = 22;
 // Version 23 adds the optional Windows close-to-tray application behavior.
 constexpr qint64 closeToTraySchemaVersion = 23;
-constexpr qint64 currentSchemaVersion = closeToTraySchemaVersion;
+// Version 24 adds a restart-scoped performance mode. The mode preserves the
+// selected visual backdrop while launching the window on an opaque surface
+// with reduced motion.
+constexpr qint64 performanceModeSchemaVersion = 24;
+constexpr qint64 currentSchemaVersion = performanceModeSchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::AiPermissionPreference;
@@ -101,6 +105,10 @@ template <>
     if (token == QStringLiteral("micaAlt"))
     {
         return BackdropPreference::micaAlt;
+    }
+    if (token == QStringLiteral("solid"))
+    {
+        return BackdropPreference::solid;
     }
     return std::nullopt;
 }
@@ -378,6 +386,7 @@ template <>
     const QJsonValue sftpShowHiddenFilesValue = root.value(QStringLiteral("sftpShowHiddenFiles"));
     const QJsonValue sftpConfirmDeleteValue = root.value(QStringLiteral("sftpConfirmDelete"));
     const QJsonValue closeToTrayValue = root.value(QStringLiteral("closeToTray"));
+    const QJsonValue performanceModeValue = root.value(QStringLiteral("performanceMode"));
     const QJsonValue credentialStorageValue = root.value(QStringLiteral("credentialStorage"));
     const QJsonValue languageValue = root.value(QStringLiteral("language"));
     const QJsonValue shortcutOverridesValue = root.value(QStringLiteral("shortcutOverrides"));
@@ -431,6 +440,10 @@ template <>
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
     if (version >= closeToTraySchemaVersion && !closeToTrayValue.isBool())
+    {
+        return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
+    }
+    if (version >= performanceModeSchemaVersion && !performanceModeValue.isBool())
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
@@ -531,6 +544,7 @@ template <>
         .sftpShowHiddenFiles = version >= sftpSchemaVersion && sftpShowHiddenFilesValue.toBool(),
         .sftpConfirmDelete = version < sftpSchemaVersion || sftpConfirmDeleteValue.toBool(),
         .closeToTray = version >= closeToTraySchemaVersion && closeToTrayValue.toBool(),
+        .performanceMode = version >= performanceModeSchemaVersion && performanceModeValue.toBool(),
         .credentialStorage = *credentialStorage,
         .language = *language,
         .shortcutOverrides = std::move(shortcutOverrides),
@@ -678,6 +692,7 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
         {QStringLiteral("sftpShowHiddenFiles"), settings.sftpShowHiddenFiles},
         {QStringLiteral("sftpConfirmDelete"), settings.sftpConfirmDelete},
         {QStringLiteral("closeToTray"), settings.closeToTray},
+        {QStringLiteral("performanceMode"), settings.performanceMode},
         {QStringLiteral("credentialStorage"), credentialStoragePreferenceToken(settings.credentialStorage)},
         {QStringLiteral("language"), languagePreferenceToken(settings.language)},
         {QStringLiteral("shortcutOverrides"), shortcutOverrides},
@@ -732,6 +747,8 @@ QString backdropPreferenceToken(const BackdropPreference preference)
             return QStringLiteral("mica");
         case BackdropPreference::micaAlt:
             return QStringLiteral("micaAlt");
+        case BackdropPreference::solid:
+            return QStringLiteral("solid");
         default:
             return QStringLiteral("acrylic");
     }

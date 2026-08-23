@@ -12,6 +12,7 @@ Rectangle {
     required property var controller
     required property var diagnostics
     required property var fontCatalog
+    required property var windowChrome
     property bool loadingDraft: false
     property string statusMessage: ""
     property bool statusIsError: false
@@ -33,6 +34,7 @@ Rectangle {
     property string aiQuickMessageDescriptionDraft: ""
     property string aiQuickMessageContentDraft: ""
     property bool aiQuickMessageSlugManual: false
+    property bool performanceModeDraft: false
     readonly property var aiProviderTokens: ["openai-responses", "openai-chatgpt", "anthropic", "gemini", "openrouter", "deepseek", "kimi", "qwen", "zai", "ollama", "openai-compatible"]
     readonly property var aiReasoningOptions: controller.aiReasoningCapabilities(aiProviderToken(), aiModelDraft)
     property string mcpOriginalId: ""
@@ -46,6 +48,7 @@ Rectangle {
     readonly property bool shortcutRecording: shortcutSettings.recording
     readonly property bool draftDark: themeBox.currentIndex === 1 || (themeBox.currentIndex === 0 && Theme.systemDark)
     readonly property bool adjustableBackdrop: backdropBox.currentIndex === 0 || backdropBox.currentIndex === 1
+    readonly property bool solidBackdrop: backdropBox.currentIndex === 4
     readonly property bool customAccentSelected: accentBox.currentIndex === 2
     readonly property bool compactLayout: width < Theme.narrowWindowWidth
     readonly property int contentInset: compactLayout ? 10 : 16
@@ -141,7 +144,7 @@ Rectangle {
     }
 
     function backdropIndex(token) {
-        return token === "transparent" ? 1 : token === "mica" ? 2 : token === "micaAlt" ? 3 : 0;
+        return token === "transparent" ? 1 : token === "mica" ? 2 : token === "micaAlt" ? 3 : token === "solid" ? 4 : 0;
     }
 
     function cursorIndex(token) {
@@ -421,7 +424,7 @@ Rectangle {
     }
 
     function backdropToken() {
-        return backdropBox.currentIndex === 1 ? "transparent" : backdropBox.currentIndex === 2 ? "mica" : backdropBox.currentIndex === 3 ? "micaAlt" : "acrylic";
+        return backdropBox.currentIndex === 1 ? "transparent" : backdropBox.currentIndex === 2 ? "mica" : backdropBox.currentIndex === 3 ? "micaAlt" : backdropBox.currentIndex === 4 ? "solid" : "acrylic";
     }
 
     function cursorToken() {
@@ -499,6 +502,8 @@ Rectangle {
         sftpShowHiddenSwitch.checked = controller.sftpShowHiddenFiles;
         sftpConfirmDeleteSwitch.checked = controller.sftpConfirmDelete;
         closeToTraySwitch.checked = controller.closeToTray;
+        performanceModeDraft = controller.performanceMode;
+        performanceModeSwitch.checked = performanceModeDraft;
         languageDraft = controller.languagePreference;
         credentialStorageBox.currentIndex = credentialStorageIndex(controller.effectiveCredentialStorage);
         credentialCleanupStorageBox.currentIndex = credentialStorageIndex(controller.effectiveCredentialStorage);
@@ -527,8 +532,10 @@ Rectangle {
             presentStatus(qsTr("Custom accent must use the #RRGGBB format."), true, false);
             return;
         }
-        const saved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), accentToken(), customAccentField.text, uiFontDraft, terminalFontDraft, fontSizeBox.value, showAllFontsSwitch.checked, ligatureSwitch.checked, terminalOpacitySlider.value, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, multilinePasteSwitch.checked, languageDraft, sftpShowHiddenSwitch.checked, sftpConfirmDeleteSwitch.checked, closeToTraySwitch.checked);
-        presentStatus(saved ? qsTr("Settings saved and applied.") : qsTr("These settings could not be saved. Check the font and numeric ranges."), !saved, saved);
+        const wantsOpaqueSurface = performanceModeDraft || backdropToken() === "solid";
+        const restartRequired = wantsOpaqueSurface !== windowChrome.opaqueSurface || performanceModeDraft !== windowChrome.performanceModeActive;
+        const saved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), accentToken(), customAccentField.text, uiFontDraft, terminalFontDraft, fontSizeBox.value, showAllFontsSwitch.checked, ligatureSwitch.checked, terminalOpacitySlider.value, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, multilinePasteSwitch.checked, languageDraft, sftpShowHiddenSwitch.checked, sftpConfirmDeleteSwitch.checked, closeToTraySwitch.checked, performanceModeDraft);
+        presentStatus(saved ? restartRequired ? qsTr("Settings saved. Restart ztermy to apply the rendering mode.") : qsTr("Settings saved and applied.") : qsTr("These settings could not be saved. Check the font and numeric ranges."), !saved, saved);
         if (!saved) {
             loadDraft();
         }
@@ -890,6 +897,25 @@ Rectangle {
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.textLabel
                     }
+
+                    AppSwitch {
+                        id: performanceModeSwitch
+
+                        objectName: "settingsPerformanceModeSwitch"
+                        Layout.fillWidth: true
+                        text: qsTr("Prioritize performance on software-rendered or low-power machines")
+                        accessibleName: text
+                        onToggled: pane.performanceModeDraft = checked
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("Uses a truly opaque window, disables Windows backdrop materials, and reduces decorative motion. Your selected material is restored when this mode is turned off. Restart required.")
+                        color: Theme.textMuted
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
+                    }
                 }
             }
 
@@ -1102,8 +1128,8 @@ Rectangle {
                         id: backdropBox
                         objectName: "settingsBackdrop"
                         Layout.fillWidth: true
-                        model: ["acrylic", "transparent", "mica", "micaAlt"]
-                        displayTextModel: [qsTr("Acrylic"), qsTr("Transparent"), "Mica", "Mica Alt"]
+                        model: ["acrylic", "transparent", "mica", "micaAlt", "solid"]
+                        displayTextModel: [qsTr("Acrylic"), qsTr("Transparent"), "Mica", "Mica Alt", qsTr("No material (solid)")]
                         accessibleName: qsTr("Windows backdrop material")
                         onCurrentIndexChanged: pane.previewDraft()
                     }
@@ -1147,7 +1173,7 @@ Rectangle {
                             anchors.fill: parent
                             radius: Theme.radiusControl
                             color: {
-                                const alpha = pane.adjustableBackdrop ? opacitySlider.value : backdropBox.currentIndex === 2 ? 0.82 : 0.88;
+                                const alpha = pane.adjustableBackdrop ? opacitySlider.value : pane.solidBackdrop ? 1.0 : backdropBox.currentIndex === 2 ? 0.82 : 0.88;
                                 return pane.draftDark ? Qt.rgba(0.067, 0.094, 0.153, alpha) : Qt.rgba(1.0, 1.0, 1.0, alpha);
                             }
                             border.color: pane.draftDark ? "#334155" : "#94A3B8"
@@ -1165,7 +1191,7 @@ Rectangle {
                                 }
                                 Text {
                                     Layout.alignment: Qt.AlignVCenter
-                                    text: pane.adjustableBackdrop ? qsTr("%1 · %2 · %3 · %4%").arg(themeBox.effectiveDisplayText).arg(accentBox.effectiveDisplayText).arg(backdropBox.effectiveDisplayText).arg(Math.round(opacitySlider.value * 100)) : qsTr("%1 · %2 · %3 · system controlled").arg(themeBox.effectiveDisplayText).arg(accentBox.effectiveDisplayText).arg(backdropBox.effectiveDisplayText)
+                                    text: pane.adjustableBackdrop ? qsTr("%1 · %2 · %3 · %4%").arg(themeBox.effectiveDisplayText).arg(accentBox.effectiveDisplayText).arg(backdropBox.effectiveDisplayText).arg(Math.round(opacitySlider.value * 100)) : pane.solidBackdrop ? qsTr("%1 · %2 · %3 · opaque").arg(themeBox.effectiveDisplayText).arg(accentBox.effectiveDisplayText).arg(backdropBox.effectiveDisplayText) : qsTr("%1 · %2 · %3 · system controlled").arg(themeBox.effectiveDisplayText).arg(accentBox.effectiveDisplayText).arg(backdropBox.effectiveDisplayText)
                                     color: pane.draftDark ? "#F8FAFC" : "#0F172A"
                                     font.family: Theme.uiFont
                                     font.pixelSize: Theme.textBody

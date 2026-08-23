@@ -213,18 +213,18 @@ Rectangle {
     }
 
     function applyWindowAppearance() {
-        root.windowChrome.applyAppearance(controller.backdropPreference, Theme.dark);
+        root.windowChrome.applyAppearance(Theme.backdropPreference, Theme.dark);
     }
 
     function previewWindowAppearance(theme, opacity, backdrop, accent, customAccent) {
         previewThemePreference = theme;
-        previewBackdropPreference = backdrop;
+        previewBackdropPreference = root.windowChrome.opaqueSurface ? "solid" : backdrop;
         previewBackdropOpacity = opacity;
         previewAccentPreference = accent;
         previewCustomAccent = customAccent;
         appearancePreviewActive = true;
         const previewDark = theme === "dark" || (theme === "system" && root.windowChrome.systemDarkMode);
-        root.windowChrome.applyAppearance(backdrop, previewDark);
+        root.windowChrome.applyAppearance(previewBackdropPreference, previewDark);
     }
 
     function endWindowAppearancePreview() {
@@ -435,7 +435,7 @@ Rectangle {
     Binding {
         target: Theme
         property: "backdropPreference"
-        value: root.appearancePreviewActive ? root.previewBackdropPreference : root.controller.backdropPreference
+        value: root.appearancePreviewActive ? root.previewBackdropPreference : root.windowChrome.opaqueSurface ? "solid" : root.controller.backdropPreference
     }
 
     Binding {
@@ -2159,6 +2159,7 @@ Rectangle {
                 controller: root.controller
                 diagnostics: root.diagnostics
                 fontCatalog: root.fontCatalog
+                windowChrome: root.windowChrome
                 onAppearancePreviewEnded: root.endWindowAppearancePreview()
                 onAppearancePreviewRequested: (theme, opacity, backdrop, accent, customAccent) => {
                     root.previewWindowAppearance(theme, opacity, backdrop, accent, customAccent);
