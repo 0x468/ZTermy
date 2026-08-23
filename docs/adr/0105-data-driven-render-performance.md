@@ -34,7 +34,8 @@ identity is represented by fixed scenario metadata rather than captured output.
 - Runtime benchmarks require a real interactive desktop; CI unit tests validate the recorder but cannot claim GPU frame
   performance.
 - Performance artifacts live under the build tree and are not source-controlled.
+- A build-only GUI launcher starts the measured executable in the caller's interactive desktop; it is excluded from product
+  packaging and measurement intervals.
 - Optimizations may be rejected even when they look architecturally attractive if they do not improve the agreed metrics.
 - A future QRhi renderer remains possible, but it requires an explicit measured decision rather than an assumption that GPU
   code is automatically faster.
-

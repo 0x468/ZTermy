@@ -22,6 +22,10 @@ Run it from an unlocked interactive Windows desktop. A service session, hidden d
 without GPU presentation, or an occluded automation environment is not valid evidence. The command intentionally fails if
 the window is not exposed.
 
+The target uses `ztermy_performance_launcher.exe`, a build-only Windows GUI launcher that supplies the fixed benchmark
+arguments from the same interactive desktop. It is not installed or included in release packages and does not participate
+in timing collection.
+
 ## Repetition
 
 1. Close unrelated high-load applications and keep the power plan unchanged.
@@ -65,4 +69,3 @@ If a check fails, label the run invalid and fix the measurement environment befo
 During the same run, observe per-engine GPU graphs and per-core CPU usage rather than aggregate CPU alone. Record whether
 stutter occurs during output, cursor-only idle, resize, window movement, AI streaming, or material changes; these symptoms
 route to different hypotheses in `docs/PERFORMANCE_PROGRAM.md`.
-

@@ -3397,7 +3397,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
                 [&window] {
                     return window.isExposed();
                 },
-                std::chrono::seconds{5}))
+                std::chrono::seconds{30}))
         {
             qCWarning(applicationLog) << "Performance benchmark requires an interactive desktop with an exposed window";
             return false;

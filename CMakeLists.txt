@@ -1347,15 +1347,32 @@ add_custom_target(ztermy_terminal_render_runtime_smoke
     VERBATIM
 )
 
+add_executable(ztermy_performance_launcher WIN32
+    tools/PerformanceBenchmarkLauncher.cpp
+)
+target_compile_features(ztermy_performance_launcher PRIVATE cxx_std_23)
+target_compile_definitions(ztermy_performance_launcher PRIVATE
+    NOMINMAX
+    UNICODE
+    WIN32_LEAN_AND_MEAN
+    _UNICODE
+)
+if(MSVC)
+    target_compile_options(ztermy_performance_launcher PRIVATE
+        /permissive-
+        /utf-8
+        /W4
+        /Zc:__cplusplus
+    )
+endif()
+
 add_custom_target(ztermy_performance_baseline
-    COMMAND "${CMAKE_COMMAND}" -E rm -rf
-            "${CMAKE_CURRENT_BINARY_DIR}/test-data/performance-baseline"
     COMMAND "${CMAKE_COMMAND}" -E env
             "QSG_INFO=1"
-            "$<TARGET_FILE:ztermy>"
-            --performance-benchmark
-            --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/performance-baseline"
-    DEPENDS ztermy
+            "$<TARGET_FILE:ztermy_performance_launcher>"
+    DEPENDS
+        ztermy
+        ztermy_performance_launcher
     COMMENT "Capturing reproducible terminal render performance evidence"
     USES_TERMINAL
     VERBATIM
