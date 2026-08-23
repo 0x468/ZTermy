@@ -21,7 +21,7 @@ namespace
 {
     return QJsonDocument(
                QJsonObject{
-                   {QStringLiteral("schemaVersion"), 1},
+                   {QStringLiteral("schemaVersion"), 2},
                    {QStringLiteral("environment"),
                     QJsonObject{{QStringLiteral("applicationVersion"), QStringLiteral("0.3.0")},
                                 {QStringLiteral("qtVersion"), QStringLiteral("6.8.3")},
@@ -43,13 +43,20 @@ namespace
                                                             {QStringLiteral("completionMs"), 2000},
                                                             {QStringLiteral("heartbeatTicks"), 200},
                                                             {QStringLiteral("maximumHeartbeatGapMs"), 20},
-                                                            {QStringLiteral("frameSwaps"), 60}}},
+                                                            {QStringLiteral("frameSwaps"), 60},
+                                                            {QStringLiteral("idleDurationMs"), 2200},
+                                                            {QStringLiteral("idleFrameSwaps"), 4}}},
                    {QStringLiteral("terminalRenderer"), QJsonObject{{QStringLiteral("paint"), latency(paintP95)},
                                                                     {QStringLiteral("textureCreate"), latency(2000)},
                                                                     {QStringLiteral("renderedFrames"), 60},
                                                                     {QStringLiteral("uploadedBytes"), 120'000'000},
                                                                     {QStringLiteral("cursorInvalidations"), 4},
                                                                     {QStringLiteral("snapshotUpdates"), 240}}},
+                   {QStringLiteral("idleTerminalRenderer"), QJsonObject{{QStringLiteral("paint"), latency(1000)},
+                                                                        {QStringLiteral("textureCreate"), latency(500)},
+                                                                        {QStringLiteral("renderedFrames"), 4},
+                                                                        {QStringLiteral("uploadedBytes"), 12'000'000},
+                                                                        {QStringLiteral("cursorInvalidations"), 4}}},
                })
         .toJson(QJsonDocument::Compact);
 }

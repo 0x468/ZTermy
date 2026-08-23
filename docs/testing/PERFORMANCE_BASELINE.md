@@ -71,8 +71,9 @@ The build includes a strict validator that applies these checks:
   ./build/msvc-static-release/test-data/performance-baseline/terminal-performance.json
 ```
 
-It returns a non-zero exit code for Debug reports, incomplete scenarios, fewer than 30 frame/timing samples, or an unusable
-graphics backend.
+It returns a non-zero exit code for Debug reports, incomplete scenarios, fewer than 30 active frame/timing samples, fewer
+than three idle cursor samples, or an unusable graphics backend. The report schema includes a 2.2-second idle cursor phase
+so terminal output performance and idle repaint cost can be compared independently.
 
 ## Before/after comparison
 

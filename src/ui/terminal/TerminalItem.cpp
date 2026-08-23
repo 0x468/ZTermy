@@ -78,6 +78,10 @@ public:
 
     std::uint64_t revision = 0;
     QSize pixelSize;
+    QImage image;
+    std::vector<ztermy::ui::TerminalKeywordCellStyle> keywordStyles;
+    QSGSimpleTextureNode *cursorNode = nullptr;
+    QRectF cursorRect;
 
 private:
 #if !defined(NDEBUG)
@@ -224,8 +228,7 @@ TerminalItem::TerminalItem(QQuickItem *parent) : QQuickItem(parent)
         }
         m_cursorBlinkPhase = !m_cursorBlinkPhase;
         m_renderMetrics.recordCursorInvalidation();
-        ++m_revision;
-        update();
+        invalidateRenderer(false);
     });
     m_cursorBlinkTimer.start();
 }
@@ -347,16 +350,14 @@ void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
     {
         dismissSelectionAction();
         m_snapshot.reset();
-        ++m_revision;
-        update();
+        invalidateRenderer(true);
         notifyInputMethod();
         emit scrollbarChanged();
         return;
     }
     m_renderMetrics.recordSnapshot(snapshot->damage, snapshot->damagedRows.size());
     m_snapshot = std::move(snapshot);
-    ++m_revision;
-    update();
+    invalidateRenderer(true);
     notifyInputMethod();
     emit scrollbarChanged();
 }
@@ -393,9 +394,8 @@ void TerminalItem::setFontFamily(const QString &family)
     m_font.setFamilies({normalized, QStringLiteral("Consolas")});
     m_reportedColumns = 0;
     m_reportedRows = 0;
-    ++m_revision;
+    invalidateRenderer(true);
     reportTerminalSize();
-    update();
     notifyInputMethod();
     emit fontChanged();
 }
@@ -409,9 +409,8 @@ void TerminalItem::setFontPixelSize(const int pixelSize)
     m_font.setPixelSize(pixelSize);
     m_reportedColumns = 0;
     m_reportedRows = 0;
-    ++m_revision;
+    invalidateRenderer(true);
     reportTerminalSize();
-    update();
     notifyInputMethod();
     emit fontChanged();
 }
@@ -424,8 +423,7 @@ void TerminalItem::setLigaturesEnabled(const bool enabled)
     }
     m_ligaturesEnabled = enabled;
     configureLigatures(m_font, enabled);
-    ++m_revision;
-    update();
+    invalidateRenderer(true);
     emit fontChanged();
 }
 
@@ -437,8 +435,7 @@ void TerminalItem::setBackgroundOpacity(const qreal opacity)
         return;
     }
     m_backgroundOpacity = normalized;
-    ++m_revision;
-    update();
+    invalidateRenderer(true);
     emit backgroundOpacityChanged();
 }
 
@@ -451,8 +448,7 @@ void TerminalItem::setCursorPreference(const QString &preference)
         return;
     }
     m_cursorPreference = preference;
-    ++m_revision;
-    update();
+    invalidateRenderer(true);
     emit cursorAppearanceChanged();
 }
 
@@ -465,8 +461,7 @@ void TerminalItem::setCursorBlink(const bool enabled)
     m_cursorBlink = enabled;
     m_cursorBlinkPhase = true;
     enabled ? m_cursorBlinkTimer.start() : m_cursorBlinkTimer.stop();
-    ++m_revision;
-    update();
+    invalidateRenderer(true);
     emit cursorAppearanceChanged();
 }
 
@@ -530,8 +525,7 @@ void TerminalItem::setKeywordHighlightRules(const QVariantList &rules)
             .caseSensitive = map.value(QStringLiteral("caseSensitive"), false).toBool(),
         });
     }
-    ++m_revision;
-    update();
+    invalidateRenderer(true);
     emit keywordHighlightRulesChanged();
 }
 
@@ -542,8 +536,7 @@ void TerminalItem::setForegroundOverride(const QColor &value)
         return;
     }
     m_foregroundOverride = value;
-    ++m_revision;
-    update();
+    invalidateRenderer(true);
     emit paletteOverrideChanged();
 }
 
@@ -554,8 +547,7 @@ void TerminalItem::setBackgroundOverride(const QColor &value)
         return;
     }
     m_backgroundOverride = value;
-    ++m_revision;
-    update();
+    invalidateRenderer(true);
     emit paletteOverrideChanged();
 }
 
@@ -649,11 +641,36 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
     const terminal::TerminalColor defaultForeground = m_snapshot ? m_snapshot->defaultForeground : fallbackForeground;
     const terminal::TerminalColor defaultBackground = m_snapshot ? m_snapshot->defaultBackground : fallbackBackground;
 
-    QImage image(pixelSize, QImage::Format_ARGB32_Premultiplied);
-    image.setDevicePixelRatio(devicePixelRatio);
     QColor defaultBackgroundColor = m_backgroundOverride.isValid() ? m_backgroundOverride : color(defaultBackground);
     defaultBackgroundColor.setAlphaF(static_cast<float>(m_backgroundOpacity));
-    image.fill(defaultBackgroundColor);
+    const bool cursorOnlyPaint = !m_fullInvalidationPending && !node->image.isNull() && node->pixelSize == pixelSize
+                                 && m_snapshot && m_snapshot->cursor.row < m_snapshot->rows;
+    if (cursorOnlyPaint && m_preeditText.isEmpty())
+    {
+        if (node->cursorNode != nullptr)
+        {
+            node->cursorNode->setRect((!m_cursorBlink || m_cursorBlinkPhase) ? node->cursorRect : QRectF{});
+        }
+        const qint64 paintNanoseconds = timingEnabled ? frameTimer.nsecsElapsed() : 0;
+        if (m_renderMetrics.enabled())
+        {
+            m_renderMetrics.recordFrame(std::chrono::nanoseconds{paintNanoseconds}, std::chrono::nanoseconds{0}, 0,
+                                        terminal::TerminalDamageKind::partial, 1);
+        }
+#if !defined(NDEBUG)
+        node->recordTiming(paintNanoseconds, 0, pixelSize, terminal::TerminalDamageKind::partial, 1);
+#endif
+        node->revision = m_revision;
+        m_fullInvalidationPending = false;
+        return node;
+    }
+    if (!cursorOnlyPaint)
+    {
+        node->image = QImage(pixelSize, QImage::Format_ARGB32_Premultiplied);
+        node->image.setDevicePixelRatio(devicePixelRatio);
+        node->image.fill(defaultBackgroundColor);
+    }
+    QImage &image = node->image;
 
     if (m_snapshot)
     {
@@ -665,13 +682,23 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         const std::vector<PreeditCluster> preeditClusters = layoutPreeditText(m_preeditText, m_font, cellWidthValue);
         const int insertedColumns = preeditColumnCount(preeditClusters);
         const int snapshotColumns = static_cast<int>(m_snapshot->columns);
-        const bool terminalCursorVisible =
-            preeditClusters.empty() && m_snapshot->cursor.visible && (!m_cursorBlink || m_cursorBlinkPhase)
-            && m_snapshot->cursor.column < m_snapshot->columns && m_snapshot->cursor.row < m_snapshot->rows;
-        const std::vector<TerminalKeywordCellStyle> keywordStyles =
-            highlightTerminalKeywords(*m_snapshot, m_keywordHighlightRules);
+        const bool terminalCursorPresent = preeditClusters.empty() && m_snapshot->cursor.visible
+                                           && m_snapshot->cursor.column < m_snapshot->columns
+                                           && m_snapshot->cursor.row < m_snapshot->rows;
+        if (!cursorOnlyPaint)
+        {
+            node->keywordStyles = highlightTerminalKeywords(*m_snapshot, m_keywordHighlightRules);
+        }
+        const std::vector<TerminalKeywordCellStyle> &keywordStyles = node->keywordStyles;
+        const quint16 firstRow = cursorOnlyPaint ? m_snapshot->cursor.row : 0;
+        const quint16 lastRow = cursorOnlyPaint ? static_cast<quint16>(firstRow + 1) : m_snapshot->rows;
+        if (cursorOnlyPaint)
+        {
+            painter.fillRect(QRectF{0.0, verticalPadding + (firstRow * cellHeightValue), width(), cellHeightValue},
+                             defaultBackgroundColor);
+        }
 
-        for (quint16 row = 0; row < m_snapshot->rows; ++row)
+        for (quint16 row = firstRow; row < lastRow; ++row)
         {
             for (quint16 column = 0; column < m_snapshot->columns; ++column)
             {
@@ -707,7 +734,7 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
             }
         }
 
-        for (quint16 row = 0; row < m_snapshot->rows; ++row)
+        for (quint16 row = firstRow; row < lastRow; ++row)
         {
             for (quint16 column = 0; column < m_snapshot->columns; ++column)
             {
@@ -747,13 +774,13 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                 quint16 runEnd = column;
                 int previousDisplayColumn = displayColumn;
                 const bool currentCellHasCursor =
-                    terminalCursorVisible && row == m_snapshot->cursor.row && column == m_snapshot->cursor.column;
+                    terminalCursorPresent && row == m_snapshot->cursor.row && column == m_snapshot->cursor.column;
                 if (m_ligaturesEnabled && ligatureRunCell(cell) && !currentCellHasCursor)
                 {
                     while (runEnd + 1 < m_snapshot->columns)
                     {
                         const terminal::TerminalCell &next = m_snapshot->cell(runEnd + 1, row);
-                        const bool nextCellHasCursor = terminalCursorVisible && row == m_snapshot->cursor.row
+                        const bool nextCellHasCursor = terminalCursorPresent && row == m_snapshot->cursor.row
                                                        && runEnd + 1 == m_snapshot->cursor.column;
                         const int nextDisplayColumn =
                             !preeditClusters.empty() && row == m_snapshot->cursor.row
@@ -804,29 +831,39 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                                  QColor(255, 255, 255));
             }
         }
-        else if (m_snapshot->cursor.visible && (!m_cursorBlink || m_cursorBlinkPhase)
-                 && m_snapshot->cursor.column < m_snapshot->columns && m_snapshot->cursor.row < m_snapshot->rows)
+        else if (terminalCursorPresent && !cursorOnlyPaint)
         {
-            const QRectF cursorCell{horizontalPadding + (m_snapshot->cursor.column * cellWidthValue),
-                                    verticalPadding + (m_snapshot->cursor.row * cellHeightValue),
-                                    m_snapshot->cursor.width * cellWidthValue, cellHeightValue};
-            painter.setPen(QPen(color(m_snapshot->cursor.color), 1.0));
+            node->cursorRect = QRectF{horizontalPadding + (m_snapshot->cursor.column * cellWidthValue),
+                                      verticalPadding + (m_snapshot->cursor.row * cellHeightValue),
+                                      m_snapshot->cursor.width * cellWidthValue, cellHeightValue};
+            const QSize cursorPixelSize{
+                std::max(1, qRound(node->cursorRect.width() * devicePixelRatio)),
+                std::max(1, qRound(node->cursorRect.height() * devicePixelRatio)),
+            };
+            QImage cursorImage(cursorPixelSize, QImage::Format_ARGB32_Premultiplied);
+            cursorImage.setDevicePixelRatio(devicePixelRatio);
+            cursorImage.fill(Qt::transparent);
+            QPainter cursorPainter(&cursorImage);
+            cursorPainter.setRenderHint(QPainter::TextAntialiasing);
+            const QRectF cursorCell{0.0, 0.0, node->cursorRect.width(), node->cursorRect.height()};
+            cursorPainter.setPen(QPen(color(m_snapshot->cursor.color), 1.0));
             switch (effectiveCursorStyle())
             {
                 case terminal::TerminalCursorStyle::bar:
-                    painter.fillRect(QRectF(cursorCell.left(), cursorCell.top(), 2.0, cursorCell.height()),
-                                     color(m_snapshot->cursor.color));
+                    cursorPainter.fillRect(QRectF(cursorCell.left(), cursorCell.top(), 2.0, cursorCell.height()),
+                                           color(m_snapshot->cursor.color));
                     break;
                 case terminal::TerminalCursorStyle::underline:
-                    painter.fillRect(QRectF(cursorCell.left(), cursorCell.bottom() - 2.0, cursorCell.width(), 2.0),
-                                     color(m_snapshot->cursor.color));
+                    cursorPainter.fillRect(
+                        QRectF(cursorCell.left(), cursorCell.bottom() - 2.0, cursorCell.width(), 2.0),
+                        color(m_snapshot->cursor.color));
                     break;
                 case terminal::TerminalCursorStyle::hollowBlock:
-                    painter.drawRect(cursorCell.adjusted(0.5, 0.5, -0.5, -0.5));
+                    cursorPainter.drawRect(cursorCell.adjusted(0.5, 0.5, -0.5, -0.5));
                     break;
                 case terminal::TerminalCursorStyle::block:
                 {
-                    painter.fillRect(cursorCell, color(m_snapshot->cursor.color));
+                    cursorPainter.fillRect(cursorCell, color(m_snapshot->cursor.color));
                     const terminal::TerminalCell &cell =
                         m_snapshot->cell(m_snapshot->cursor.column, m_snapshot->cursor.row);
                     if (!cell.grapheme.empty() && !cell.invisible)
@@ -837,25 +874,47 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                         cursorFont.setUnderline(cell.underline);
                         cursorFont.setStrikeOut(cell.strikethrough);
                         cursorFont.setOverline(cell.overline);
-                        painter.setFont(cursorFont);
-                        painter.setPen(m_backgroundOverride.isValid() && sameColor(cell.background, defaultBackground)
-                                           ? m_backgroundOverride
-                                           : color(cell.background));
-                        painter.drawText(
-                            QPointF(cursorCell.left(), cursorCell.top() + metrics.ascent()),
+                        cursorPainter.setFont(cursorFont);
+                        cursorPainter.setPen(m_backgroundOverride.isValid()
+                                                     && sameColor(cell.background, defaultBackground)
+                                                 ? m_backgroundOverride
+                                                 : color(cell.background));
+                        cursorPainter.drawText(
+                            QPointF(cursorCell.left(), metrics.ascent()),
                             QString::fromUcs4(cell.grapheme.data(), static_cast<qsizetype>(cell.grapheme.size())));
                     }
                     break;
                 }
             }
+            if (node->cursorNode == nullptr)
+            {
+                node->cursorNode = new QSGSimpleTextureNode;
+                node->cursorNode->setOwnsTexture(true);
+                node->cursorNode->setFiltering(QSGTexture::Linear);
+                node->appendChildNode(node->cursorNode);
+            }
+            node->cursorNode->setTexture(window()->createTextureFromImage(cursorImage));
         }
+        if (node->cursorNode != nullptr)
+        {
+            node->cursorNode->setRect(terminalCursorPresent && (!m_cursorBlink || m_cursorBlinkPhase) ? node->cursorRect
+                                                                                                      : QRectF{});
+        }
+    }
+    else if (node->cursorNode != nullptr)
+    {
+        node->cursorNode->setRect({});
     }
 
     const qint64 paintNanoseconds = timingEnabled ? frameTimer.nsecsElapsed() : 0;
     QSGTexture *newTexture = window()->createTextureFromImage(image);
     const qint64 textureNanoseconds = timingEnabled ? frameTimer.nsecsElapsed() - paintNanoseconds : 0;
-    const terminal::TerminalDamageKind damage = m_snapshot ? m_snapshot->damage : terminal::TerminalDamageKind::full;
-    const std::size_t damagedRowCount = m_snapshot ? m_snapshot->damagedRows.size() : std::size_t{0};
+    const terminal::TerminalDamageKind damage = cursorOnlyPaint ? terminal::TerminalDamageKind::partial
+                                                : m_snapshot    ? m_snapshot->damage
+                                                                : terminal::TerminalDamageKind::full;
+    const std::size_t damagedRowCount = cursorOnlyPaint ? std::size_t{1}
+                                        : m_snapshot    ? m_snapshot->damagedRows.size()
+                                                        : std::size_t{0};
     if (m_renderMetrics.enabled())
     {
         const auto pixelCount =
@@ -871,6 +930,7 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
     node->setFiltering(QSGTexture::Linear);
     node->revision = m_revision;
     node->pixelSize = pixelSize;
+    m_fullInvalidationPending = false;
     return node;
 }
 
@@ -951,8 +1011,7 @@ void TerminalItem::inputMethodEvent(QInputMethodEvent *event)
         emit inputGenerated(event->commitString().toUtf8());
     }
 
-    ++m_revision;
-    update();
+    invalidateRenderer(true);
     notifyInputMethod();
     event->accept();
 }
@@ -1122,6 +1181,12 @@ void TerminalItem::clearPreedit()
     m_preeditText.clear();
     m_preeditCursorPosition = 0;
     m_preeditCursorVisible = true;
+    invalidateRenderer(true);
+}
+
+void TerminalItem::invalidateRenderer(const bool full)
+{
+    m_fullInvalidationPending = m_fullInvalidationPending || full;
     ++m_revision;
     update();
 }

@@ -136,15 +136,24 @@ std::expected<PerformanceEvidence, QString> PerformanceEvidence::parse(const QBy
     const auto environment = requiredObject(root, QStringLiteral("environment"));
     const auto scenario = requiredObject(root, QStringLiteral("scenario"));
     const auto renderer = requiredObject(root, QStringLiteral("terminalRenderer"));
-    if (!environment || !scenario || !renderer)
+    const auto idleRenderer = requiredObject(root, QStringLiteral("idleTerminalRenderer"));
+    if (!environment || !scenario || !renderer || !idleRenderer)
     {
-        return std::unexpected(!environment ? environment.error() : !scenario ? scenario.error() : renderer.error());
+        return std::unexpected(!environment ? environment.error()
+                               : !scenario  ? scenario.error()
+                               : !renderer  ? renderer.error()
+                                            : idleRenderer.error());
     }
     const auto paintObject = requiredObject(*renderer, QStringLiteral("paint"));
     const auto textureObject = requiredObject(*renderer, QStringLiteral("textureCreate"));
-    if (!paintObject || !textureObject)
+    const auto idlePaintObject = requiredObject(*idleRenderer, QStringLiteral("paint"));
+    const auto idleTextureObject = requiredObject(*idleRenderer, QStringLiteral("textureCreate"));
+    if (!paintObject || !textureObject || !idlePaintObject || !idleTextureObject)
     {
-        return std::unexpected(!paintObject ? paintObject.error() : textureObject.error());
+        return std::unexpected(!paintObject       ? paintObject.error()
+                               : !textureObject   ? textureObject.error()
+                               : !idlePaintObject ? idlePaintObject.error()
+                                                  : idleTextureObject.error());
     }
 
     const auto schemaVersionValue = integer(root, QStringLiteral("schemaVersion"));
@@ -169,12 +178,19 @@ std::expected<PerformanceEvidence, QString> PerformanceEvidence::parse(const QBy
     const auto heartbeatTicksValue = unsignedInteger(*scenario, QStringLiteral("heartbeatTicks"));
     const auto heartbeatGapValue = unsignedInteger(*scenario, QStringLiteral("maximumHeartbeatGapMs"));
     const auto frameSwapsValue = unsignedInteger(*scenario, QStringLiteral("frameSwaps"));
+    const auto idleDurationValue = unsignedInteger(*scenario, QStringLiteral("idleDurationMs"));
+    const auto idleFrameSwapsValue = unsignedInteger(*scenario, QStringLiteral("idleFrameSwaps"));
     const auto paintValue = latency(*paintObject);
     const auto textureValue = latency(*textureObject);
     const auto renderedFramesValue = unsignedInteger(*renderer, QStringLiteral("renderedFrames"));
     const auto uploadedBytesValue = unsignedInteger(*renderer, QStringLiteral("uploadedBytes"));
     const auto cursorInvalidationsValue = unsignedInteger(*renderer, QStringLiteral("cursorInvalidations"));
     const auto snapshotUpdatesValue = unsignedInteger(*renderer, QStringLiteral("snapshotUpdates"));
+    const auto idlePaintValue = latency(*idlePaintObject);
+    const auto idleTextureValue = latency(*idleTextureObject);
+    const auto idleRenderedFramesValue = unsignedInteger(*idleRenderer, QStringLiteral("renderedFrames"));
+    const auto idleUploadedBytesValue = unsignedInteger(*idleRenderer, QStringLiteral("uploadedBytes"));
+    const auto idleCursorInvalidationsValue = unsignedInteger(*idleRenderer, QStringLiteral("cursorInvalidations"));
 
     QString firstError;
     const auto captureFirstError = [&firstError](const auto &value) {
@@ -205,12 +221,19 @@ std::expected<PerformanceEvidence, QString> PerformanceEvidence::parse(const QBy
     captureFirstError(heartbeatTicksValue);
     captureFirstError(heartbeatGapValue);
     captureFirstError(frameSwapsValue);
+    captureFirstError(idleDurationValue);
+    captureFirstError(idleFrameSwapsValue);
     captureFirstError(paintValue);
     captureFirstError(textureValue);
     captureFirstError(renderedFramesValue);
     captureFirstError(uploadedBytesValue);
     captureFirstError(cursorInvalidationsValue);
     captureFirstError(snapshotUpdatesValue);
+    captureFirstError(idlePaintValue);
+    captureFirstError(idleTextureValue);
+    captureFirstError(idleRenderedFramesValue);
+    captureFirstError(idleUploadedBytesValue);
+    captureFirstError(idleCursorInvalidationsValue);
     if (!firstError.isEmpty())
     {
         return std::unexpected(firstError);
@@ -239,19 +262,26 @@ std::expected<PerformanceEvidence, QString> PerformanceEvidence::parse(const QBy
         .heartbeatTicks = *heartbeatTicksValue,
         .maximumHeartbeatGapMilliseconds = *heartbeatGapValue,
         .frameSwaps = *frameSwapsValue,
+        .idleDurationMilliseconds = *idleDurationValue,
+        .idleFrameSwaps = *idleFrameSwapsValue,
         .paint = *paintValue,
         .textureCreate = *textureValue,
         .renderedFrames = *renderedFramesValue,
         .uploadedBytes = *uploadedBytesValue,
         .cursorInvalidations = *cursorInvalidationsValue,
         .snapshotUpdates = *snapshotUpdatesValue,
+        .idlePaint = *idlePaintValue,
+        .idleTextureCreate = *idleTextureValue,
+        .idleRenderedFrames = *idleRenderedFramesValue,
+        .idleUploadedBytes = *idleUploadedBytesValue,
+        .idleCursorInvalidations = *idleCursorInvalidationsValue,
     };
 }
 
 QStringList PerformanceEvidence::validationIssues() const
 {
     QStringList issues;
-    if (schemaVersion != 1)
+    if (schemaVersion != 2)
     {
         issues.push_back(QStringLiteral("Unsupported schema version."));
     }
@@ -282,6 +312,11 @@ QStringList PerformanceEvidence::validationIssues() const
     if (paint.samples < 30 || textureCreate.samples < 30 || renderedFrames < 30)
     {
         issues.push_back(QStringLiteral("The terminal renderer has fewer than 30 timing samples."));
+    }
+    if (idleDurationMilliseconds < 2000 || idlePaint.samples < 3 || idleTextureCreate.samples < 3
+        || idleRenderedFrames < 3 || idleCursorInvalidations < 3 || idleFrameSwaps < 3)
+    {
+        issues.push_back(QStringLiteral("The idle cursor phase has insufficient samples."));
     }
     return issues;
 }
@@ -332,6 +367,16 @@ QString PerformanceEvidence::comparisonMarkdown(const PerformanceEvidence &candi
                         QStringLiteral("updates"));
     appendComparisonRow(markdown, QStringLiteral("Cursor invalidations"), cursorInvalidations,
                         candidate.cursorInvalidations, QStringLiteral("updates"));
+    appendComparisonRow(markdown, QStringLiteral("Idle paint P95"), idlePaint.p95Microseconds,
+                        candidate.idlePaint.p95Microseconds, QStringLiteral("us"));
+    appendComparisonRow(markdown, QStringLiteral("Idle paint maximum"), idlePaint.maximumMicroseconds,
+                        candidate.idlePaint.maximumMicroseconds, QStringLiteral("us"));
+    appendComparisonRow(markdown, QStringLiteral("Idle texture creation P95"), idleTextureCreate.p95Microseconds,
+                        candidate.idleTextureCreate.p95Microseconds, QStringLiteral("us"));
+    appendComparisonRow(markdown, QStringLiteral("Idle estimated texture upload"), idleUploadedBytes,
+                        candidate.idleUploadedBytes, QStringLiteral("bytes"));
+    appendComparisonRow(markdown, QStringLiteral("Idle rendered frames"), idleRenderedFrames,
+                        candidate.idleRenderedFrames, QStringLiteral("frames"));
     return markdown;
 }
 

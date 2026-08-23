@@ -45,6 +45,8 @@ struct PerformanceEvidence final
     std::uint64_t heartbeatTicks = 0;
     std::uint64_t maximumHeartbeatGapMilliseconds = 0;
     std::uint64_t frameSwaps = 0;
+    std::uint64_t idleDurationMilliseconds = 0;
+    std::uint64_t idleFrameSwaps = 0;
 
     PerformanceLatencyEvidence paint;
     PerformanceLatencyEvidence textureCreate;
@@ -52,6 +54,12 @@ struct PerformanceEvidence final
     std::uint64_t uploadedBytes = 0;
     std::uint64_t cursorInvalidations = 0;
     std::uint64_t snapshotUpdates = 0;
+
+    PerformanceLatencyEvidence idlePaint;
+    PerformanceLatencyEvidence idleTextureCreate;
+    std::uint64_t idleRenderedFrames = 0;
+    std::uint64_t idleUploadedBytes = 0;
+    std::uint64_t idleCursorInvalidations = 0;
 
     [[nodiscard]] static std::expected<PerformanceEvidence, QString> parse(const QByteArray &json);
     [[nodiscard]] QStringList validationIssues() const;

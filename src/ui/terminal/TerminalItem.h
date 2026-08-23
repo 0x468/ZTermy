@@ -130,6 +130,7 @@ protected:
     [[nodiscard]] virtual QString readClipboardText() const;
 
 private:
+    void invalidateRenderer(bool full);
     void reportTerminalSize();
     [[nodiscard]] std::optional<ztermy::terminal::TerminalPoint> terminalPoint(const QPointF &position) const;
     [[nodiscard]] QRectF inputCursorRectangle() const;
@@ -162,6 +163,7 @@ private:
     bool m_ligaturesEnabled = true;
     bool m_copyOnSelect = false;
     bool m_confirmMultilinePaste = true;
+    bool m_fullInvalidationPending = true;
     QVariantList m_keywordHighlightRuleValues;
     std::vector<TerminalKeywordRule> m_keywordHighlightRules;
     QColor m_foregroundOverride;

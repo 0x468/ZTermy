@@ -3522,6 +3522,19 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     heartbeat.stop();
     QObject::disconnect(frameConnection);
 
+    const ztermy::ui::TerminalRenderMetricsSnapshot renderMetrics = terminalItem->performanceMetrics();
+    terminalItem->resetPerformanceMetrics();
+    std::uint64_t idleFrameSwaps = 0;
+    const QMetaObject::Connection idleFrameConnection =
+        QObject::connect(&window, &QQuickWindow::frameSwapped, &window, [&idleFrameSwaps] {
+            ++idleFrameSwaps;
+        });
+    constexpr auto idleDuration = std::chrono::milliseconds{2200};
+    processWindowEventsFor(idleDuration);
+    QObject::disconnect(idleFrameConnection);
+    const ztermy::ui::TerminalRenderMetricsSnapshot idleRenderMetrics = terminalItem->performanceMetrics();
+    terminalItem->setPerformanceMetricsEnabled(false);
+
     QDir().mkpath(outputDirectory);
     const QString capturePath = QDir(outputDirectory).filePath(QStringLiteral("terminal-render-complete.png"));
     const QImage capture = window.grabWindow();
@@ -3635,11 +3648,9 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
         }
         return QStringLiteral("unknown");
     };
-    const ztermy::ui::TerminalRenderMetricsSnapshot renderMetrics = terminalItem->performanceMetrics();
-    terminalItem->setPerformanceMetricsEnabled(false);
     const QSGRendererInterface *rendererInterface = window.rendererInterface();
     const QJsonObject report{
-        {QStringLiteral("schemaVersion"), 1},
+        {QStringLiteral("schemaVersion"), 2},
         {QStringLiteral("generatedAtUtc"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
         {QStringLiteral("environment"),
          QJsonObject{
@@ -3677,6 +3688,8 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
              {QStringLiteral("heartbeatTicks"), static_cast<qint64>(heartbeatTicks)},
              {QStringLiteral("maximumHeartbeatGapMs"), maximumHeartbeatGapMilliseconds},
              {QStringLiteral("frameSwaps"), static_cast<qint64>(frameSwaps)},
+             {QStringLiteral("idleDurationMs"), static_cast<qint64>(idleDuration.count())},
+             {QStringLiteral("idleFrameSwaps"), static_cast<qint64>(idleFrameSwaps)},
              {QStringLiteral("resizeCompleted"), resizeCompleted},
              {QStringLiteral("splitWorkspacePassed"), splitWorkspacePassed},
          }},
@@ -3697,6 +3710,20 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
              {QStringLiteral("cursorInvalidations"), static_cast<qint64>(renderMetrics.cursorInvalidations)},
              {QStringLiteral("uploadedBytes"), static_cast<qint64>(renderMetrics.uploadedBytes)},
              {QStringLiteral("maximumFramePixels"), static_cast<qint64>(renderMetrics.maximumFramePixels)},
+         }},
+        {QStringLiteral("idleTerminalRenderer"),
+         QJsonObject{
+             {QStringLiteral("paint"), latencyJson(idleRenderMetrics.paintLatency)},
+             {QStringLiteral("textureCreate"), latencyJson(idleRenderMetrics.textureLatency)},
+             {QStringLiteral("renderedFrames"), static_cast<qint64>(idleRenderMetrics.renderedFrames)},
+             {QStringLiteral("fullFrames"), static_cast<qint64>(idleRenderMetrics.fullFrames)},
+             {QStringLiteral("partialFrames"), static_cast<qint64>(idleRenderMetrics.partialFrames)},
+             {QStringLiteral("cleanFrames"), static_cast<qint64>(idleRenderMetrics.cleanFrames)},
+             {QStringLiteral("renderedDamagedRows"), static_cast<qint64>(idleRenderMetrics.renderedDamagedRows)},
+             {QStringLiteral("snapshotUpdates"), static_cast<qint64>(idleRenderMetrics.snapshotUpdates)},
+             {QStringLiteral("cursorInvalidations"), static_cast<qint64>(idleRenderMetrics.cursorInvalidations)},
+             {QStringLiteral("uploadedBytes"), static_cast<qint64>(idleRenderMetrics.uploadedBytes)},
+             {QStringLiteral("maximumFramePixels"), static_cast<qint64>(idleRenderMetrics.maximumFramePixels)},
          }},
     };
     const QString reportPath = QDir(outputDirectory).filePath(QStringLiteral("terminal-performance.json"));

@@ -69,6 +69,7 @@ private slots:
     void accumulatesWheelDeltasIntoScrollRows();
     void exposesScrollbarAndRequestsAbsoluteScroll();
     void rendersStyledWideCellsAndCursorPixels();
+    void keepsBaseTextureDuringCursorBlink();
     void rendersImeAcrossResizeAndShutdown();
     void highlightsWideAndCaseInsensitiveKeywords();
     void recordsOptInRenderMetrics();
@@ -554,6 +555,29 @@ void TerminalItemTests::rendersImeAcrossResizeAndShutdown()
         item->inputMethodEvent(&preedit);
         QCoreApplication::processEvents();
     }
+
+    window.close();
+    QCoreApplication::processEvents();
+}
+
+void TerminalItemTests::keepsBaseTextureDuringCursorBlink()
+{
+    QQuickWindow window;
+    auto *item = new TestableTerminalItem(window.contentItem());
+    item->setPerformanceMetricsEnabled(true);
+    item->setSnapshot(snapshotAt(2, 2));
+    window.resize(640, 220);
+    item->setSize(window.size());
+    window.show();
+    QTest::qWait(100);
+    QVERIFY(!window.grabWindow().isNull());
+
+    item->resetPerformanceMetrics();
+    QTRY_VERIFY_WITH_TIMEOUT(item->performanceMetrics().cursorInvalidations >= 1, 1000);
+    QTRY_VERIFY_WITH_TIMEOUT(item->performanceMetrics().renderedFrames >= 1, 1000);
+    const ztermy::ui::TerminalRenderMetricsSnapshot metrics = item->performanceMetrics();
+    QCOMPARE(metrics.uploadedBytes, std::uint64_t{0});
+    QVERIFY(metrics.partialFrames >= 1);
 
     window.close();
     QCoreApplication::processEvents();
