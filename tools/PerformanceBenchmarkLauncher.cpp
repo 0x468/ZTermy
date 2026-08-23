@@ -1,8 +1,10 @@
 #include <windows.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <vector>
 
@@ -27,6 +29,59 @@ namespace
     }
 }
 
+[[nodiscard]] std::wstring environmentValue(const wchar_t *name)
+{
+    const DWORD required = GetEnvironmentVariableW(name, nullptr, 0);
+    if (required == 0)
+    {
+        return {};
+    }
+    std::wstring value(required, L'\0');
+    const DWORD written = GetEnvironmentVariableW(name, value.data(), required);
+    if (written == 0 || written >= required)
+    {
+        return {};
+    }
+    value.resize(written);
+    return value;
+}
+
+[[nodiscard]] std::wstring performanceLabel()
+{
+    std::wstring backdrop = environmentValue(L"ZTERMY_PERFORMANCE_BACKDROP");
+    if (backdrop != L"acrylic" && backdrop != L"mica" && backdrop != L"micaAlt" && backdrop != L"transparent"
+        && backdrop != L"opaque")
+    {
+        backdrop.clear();
+    }
+    const bool softwareRenderer = environmentValue(L"QSG_RHI_PREFER_SOFTWARE_RENDERER") == L"1";
+    if (backdrop.empty() && !softwareRenderer)
+    {
+        return L"baseline";
+    }
+    if (backdrop.empty())
+    {
+        backdrop = L"acrylic";
+    }
+    if (softwareRenderer)
+    {
+        backdrop += L"-warp";
+    }
+    return backdrop;
+}
+
+[[nodiscard]] std::wstring performanceRunId()
+{
+    const std::wstring value = environmentValue(L"ZTERMY_PERFORMANCE_RUN_ID");
+    if (value.empty() || !std::ranges::all_of(value, [](const wchar_t character) {
+            return character >= L'0' && character <= L'9';
+        }))
+    {
+        return {};
+    }
+    return L"run-" + value;
+}
+
 } // namespace
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR arguments, int)
@@ -35,8 +90,14 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR arguments, int)
     const std::filesystem::path applicationPath = directory / L"ztermy.exe";
     const bool uiBenchmark =
         arguments != nullptr && std::wstring_view(arguments).find(L"--ui") != std::wstring_view::npos;
-    const std::filesystem::path dataDirectory =
-        directory / L"test-data" / (uiBenchmark ? L"performance-ui-baseline" : L"performance-baseline");
+    const std::wstring label = performanceLabel();
+    std::filesystem::path dataDirectory =
+        directory / L"test-data" / ((uiBenchmark ? L"performance-ui-" : L"performance-") + label);
+    const std::wstring runId = performanceRunId();
+    if (!runId.empty())
+    {
+        dataDirectory /= runId;
+    }
     if (directory.empty() || !std::filesystem::is_regular_file(applicationPath))
     {
         return ERROR_FILE_NOT_FOUND;

@@ -24,7 +24,9 @@ the window is not exposed.
 
 The target uses `ztermy_performance_launcher.exe`, a build-only Windows GUI launcher that supplies the fixed benchmark
 arguments from the same interactive desktop. It is not installed or included in release packages and does not participate
-in timing collection.
+in timing collection. The CMake targets disable Qt's shader disk cache so unrelated user-profile cache state cannot
+contaminate a comparison or cause concurrent cache lock warnings. The reference workload reports zero milliseconds of
+runtime pipeline creation, so a synthetic warm-cache pass would add noise without warming anything.
 
 ## Repetition
 
@@ -66,6 +68,26 @@ recommends checking that rendering is actually the bottleneck before changing re
 diagnosis, use `QSG_RENDERER_DEBUG=render`, `QSG_VISUALIZE=batches`, `QSG_VISUALIZE=changes`, or
 `QSG_VISUALIZE=overdraw` one at a time; these visualization modes are not timing-comparable product runs.
 
+## Composition matrix
+
+Run the fixed terminal and UI workloads five times for Acrylic, Mica, Mica Alt, transparent, and a genuine opaque
+diagnostic surface:
+
+```powershell
+cmake --build --preset msvc-static-release --target ztermy_composition_performance_matrix
+```
+
+The target disables the shader disk cache, collects the configurations in interleaved order, validates the requested DWM
+backdrop and alpha-buffer state, then writes the median table and raw-run appendix to:
+
+```text
+build/msvc-static-release/test-data/composition-performance-matrix.md
+```
+
+The opaque case disables the window alpha buffer before `QGuiApplication` construction and requests no system backdrop;
+it is therefore an actual composition diagnostic rather than a transparent surface painted with opaque content. This
+mode is benchmark-only and does not change the product's appearance choices.
+
 ## Required configurations
 
 | Configuration | Purpose |
@@ -77,13 +99,15 @@ diagnosis, use `QSG_RENDERER_DEBUG=render`, `QSG_VISUALIZE=batches`, `QSG_VISUAL
 | Requested WARP | Expose software-renderer failure behavior; not a product target. |
 | DPR 1.0 and 1.5/2.0 where available | Quantify physical-pixel scaling. |
 
-Request WARP only for the diagnostic comparison:
+Request WARP only for the diagnostic comparison. The dedicated target disables the shared shader disk cache and runs
+both workloads with the software-renderer preference:
 
 ```powershell
-$env:QSG_RHI_PREFER_SOFTWARE_RENDERER = "1"
-cmake --build --preset msvc-static-release --target ztermy_performance_baseline
-Remove-Item Env:QSG_RHI_PREFER_SOFTWARE_RENDERER
+cmake --build --preset msvc-static-release --target ztermy_warp_performance_diagnostic
 ```
+
+The run is valid only when `QSG_INFO` identifies Microsoft Basic Render Driver; WARP is a correctness and responsiveness
+fallback diagnostic, not a product performance target.
 
 ## Validity checks
 
@@ -137,6 +161,7 @@ Material cost therefore remains a separate variable; it is not evidence that QML
 - [Qt Quick performance considerations](https://doc.qt.io/qt-6/qtquick-performance.html)
 - [Qt 6.8 Loader](https://doc.qt.io/qt-6.8/qml-qtquick-loader.html)
 - [Qt Quick scene graph default renderer](https://doc.qt.io/qt-6.8/qtquick-visualcanvas-scenegraph-renderer.html)
+- [Qt Quick graphics configuration and pipeline cache](https://doc.qt.io/qt-6/qquickgraphicsconfiguration.html)
 - [Qt 6.8 command-line QML profiler](https://doc.qt.io/qt-6.8/qtqml-tooling-qmlprofiler.html)
 - [Windows system backdrops](https://learn.microsoft.com/en-us/windows/apps/develop/ui/system-backdrops)
 - [Windows Acrylic guidance](https://learn.microsoft.com/en-us/windows/apps/design/style/acrylic)

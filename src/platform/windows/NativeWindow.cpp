@@ -99,7 +99,7 @@ NativeWindow::NativeWindow(QWindow *parent) : QQuickView(parent)
     setResizeMode(QQuickView::SizeRootObjectToView);
     setMinimumSize(QSize(500, 360));
     resize(1180, 760);
-    setColor(Qt::transparent);
+    setColor(QQuickWindow::hasDefaultAlphaBuffer() ? Qt::transparent : QColor(QStringLiteral("#0B0F14")));
 
     QObject::connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged, this, [this] {
         emit systemDarkModeChanged();

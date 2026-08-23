@@ -111,6 +111,35 @@ An unload-on-close variant reduced the same startup object count and opened in r
 every reopen. It was rejected because the retained variant better matches repeated terminal-tool use while keeping the
 startup gain.
 
+## Experiment 6: window composition matrix and WARP fallback
+
+Result: measurement infrastructure accepted; no product material change justified on the reference desktop.
+
+The same terminal and UI workloads were run five times in interleaved order with Qt's shader disk cache disabled. The
+reference workload reports zero milliseconds of runtime pipeline creation, so disabling the unused cache provides cleaner
+isolation than attempting to warm a file Qt does not generate. The report validated the actual DWM backdrop and
+alpha-buffer state before accepting a sample. Values below are medians; upload volume is the renderer's estimated
+full-surface texture traffic.
+
+| Composition path | Alpha bits | DWM type | Terminal completion | Terminal max gap | Upload | QML load | First AI open | AI stream | UI max gap |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Acrylic | 8 | 3 | 1,831 ms | 17 ms | 480 MiB | 406 ms | 82 ms | 2,638 ms | 142 ms |
+| Mica | 8 | 2 | 1,737 ms | 16 ms | 459 MiB | 409 ms | 82 ms | 2,621 ms | 142 ms |
+| Mica Alt | 8 | 4 | 1,820 ms | 17 ms | 475 MiB | 404 ms | 87 ms | 2,706 ms | 150 ms |
+| Transparent | 8 | 1 | 1,836 ms | 16 ms | 492 MiB | 408 ms | 87 ms | 2,618 ms | 142 ms |
+| True opaque diagnostic | none | 1 | 1,733 ms | 17 ms | 469 MiB | 408 ms | 88 ms | 2,641 ms | 141 ms |
+
+No composition path has a consistent cross-metric advantage: the true opaque surface has the shortest terminal median in
+this run, but its first-workbench-open median is slower than Acrylic and its upload and heartbeat metrics remain in the
+same range. The variation is comparable to the spread between raw runs, so the data rejects an automatic backdrop
+downgrade or a new opaque product mode. Low-end physical hardware remains a separate validation axis.
+
+An explicitly requested D3D11 WARP run selected Microsoft Basic Render Driver and completed both scenarios. The terminal
+workload completed in 2,027 ms with a 21 ms maximum gap, 266 frames, 4 ms paint P95, and 543 MiB estimated upload; idle
+cursor upload remained zero. The UI workload loaded in 393 ms, first-opened in 88 ms, streamed in 2,715 ms, and recorded a
+140 ms maximum gap. This single run demonstrates functional software-renderer degradation; it is not used as a hardware
+performance comparison.
+
 ## Diagnostic incident: stale incremental object layout
 
 During the UI benchmark, an existing static Release build intermittently exited with heap corruption. Full PageHeap
@@ -130,7 +159,9 @@ The first performance pass found two independent, measured costs rather than a s
 1. terminal output generated GUI snapshots and full texture uploads faster than the display could present them; pacing
    removed 90.3% of GUI snapshot deliveries and 36.7% of estimated upload volume without changing completion time;
 2. the unopened workbench eagerly created about 30% of the startup QML object tree; lazy retention removes that startup
-   work at a measured 45 ms one-time first-open cost.
+   work at a measured 45 ms one-time first-open cost;
+3. desktop composition material is not a measurable bottleneck in the controlled matrix, while explicitly requested WARP
+   remains functional with modest degradation.
 
-Acrylic, resizing, complex Markdown, and full terminal damage remain separate diagnostic axes. Further changes require a
-new comparable baseline rather than extrapolating from these results.
+Low-end physical composition, resizing, complex Markdown, and full terminal damage remain separate diagnostic axes.
+Further changes require a new comparable baseline rather than extrapolating from these results.

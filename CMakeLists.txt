@@ -1388,6 +1388,7 @@ endif()
 add_custom_target(ztermy_performance_baseline
     COMMAND "${CMAKE_COMMAND}" -E env
             "QSG_INFO=1"
+            "QT_DISABLE_SHADER_DISK_CACHE=1"
             "$<TARGET_FILE:ztermy_performance_launcher>"
     DEPENDS
         ztermy
@@ -1401,11 +1402,48 @@ add_custom_target(ztermy_ui_performance_baseline
     COMMAND "${CMAKE_COMMAND}" -E env
             "QSG_INFO=1"
             "QSG_RENDER_TIMING=1"
+            "QT_DISABLE_SHADER_DISK_CACHE=1"
             "$<TARGET_FILE:ztermy_performance_launcher>" --ui
     DEPENDS
         ztermy
         ztermy_performance_launcher
     COMMENT "Capturing reproducible QML and AI interaction performance evidence"
+    USES_TERMINAL
+    VERBATIM
+)
+
+add_custom_target(ztermy_composition_performance_matrix
+    COMMAND "${CMAKE_COMMAND}"
+            "-DLAUNCHER=$<TARGET_FILE:ztermy_performance_launcher>"
+            "-DOUTPUT_ROOT=${CMAKE_CURRENT_BINARY_DIR}/test-data"
+            "-DRUN_COUNT=5"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunPerformanceCompositionMatrix.cmake"
+    DEPENDS
+        ztermy
+        ztermy_performance_launcher
+    COMMENT "Comparing Acrylic, Mica, transparent, and opaque composition with identical workloads"
+    USES_TERMINAL
+    VERBATIM
+)
+
+add_custom_target(ztermy_warp_performance_diagnostic
+    COMMAND "${CMAKE_COMMAND}" -E env
+            "ZTERMY_PERFORMANCE_BACKDROP=opaque"
+            "QSG_INFO=1"
+            "QSG_RHI_PREFER_SOFTWARE_RENDERER=1"
+            "QT_DISABLE_SHADER_DISK_CACHE=1"
+            "$<TARGET_FILE:ztermy_performance_launcher>"
+    COMMAND "${CMAKE_COMMAND}" -E env
+            "ZTERMY_PERFORMANCE_BACKDROP=opaque"
+            "QSG_INFO=1"
+            "QSG_RENDER_TIMING=1"
+            "QSG_RHI_PREFER_SOFTWARE_RENDERER=1"
+            "QT_DISABLE_SHADER_DISK_CACHE=1"
+            "$<TARGET_FILE:ztermy_performance_launcher>" --ui
+    DEPENDS
+        ztermy
+        ztermy_performance_launcher
+    COMMENT "Checking the terminal and UI benchmarks on explicitly requested D3D11 WARP"
     USES_TERMINAL
     VERBATIM
 )

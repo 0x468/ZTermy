@@ -56,6 +56,7 @@
 #include <cstdlib>
 #include <memory>
 #include <ranges>
+#include <string_view>
 #include <utility>
 
 Q_LOGGING_CATEGORY(applicationLog, "ztermy.application")
@@ -70,6 +71,38 @@ QT_END_NAMESPACE
 
 namespace
 {
+
+constexpr auto kPerformanceBackdropEnvironment = "ZTERMY_PERFORMANCE_BACKDROP";
+constexpr DWORD kSystemBackdropTypeAttribute = 38;
+
+[[nodiscard]] bool rawArgumentPresent(const int argc, char *const *argv, const std::string_view expected) noexcept
+{
+    for (int index = 1; index < argc; ++index)
+    {
+        if (argv[index] != nullptr && std::string_view{argv[index]} == expected)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+[[nodiscard]] bool validPerformanceBackdrop(const QString &value)
+{
+    return value == QStringLiteral("acrylic") || value == QStringLiteral("mica") || value == QStringLiteral("micaAlt")
+           || value == QStringLiteral("transparent") || value == QStringLiteral("opaque");
+}
+
+[[nodiscard]] QString requestedPerformanceBackdrop()
+{
+    const QString requested = qEnvironmentVariable(kPerformanceBackdropEnvironment).trimmed();
+    return requested.isEmpty() ? QStringLiteral("acrylic") : requested;
+}
+
+[[nodiscard]] QString settingsBackdropForPerformance(const QString &requested)
+{
+    return requested == QStringLiteral("opaque") ? QStringLiteral("transparent") : requested;
+}
 
 void processWindowEventsFor(const std::chrono::milliseconds duration)
 {
@@ -382,11 +415,10 @@ struct ResizeHitRuntimeCase
     int appliedBackdrop = -1;
     constexpr DWORD useImmersiveDarkModeAttribute = 20;
     constexpr DWORD windowCornerPreferenceAttribute = 33;
-    constexpr DWORD systemBackdropTypeAttribute = 38;
     const bool darkModeRead = queryDwmIntAttribute(windowHandle, useImmersiveDarkModeAttribute, &appliedDarkMode);
     const bool cornerPreferenceRead =
         queryDwmIntAttribute(windowHandle, windowCornerPreferenceAttribute, &appliedCornerPreference);
-    const bool backdropRead = queryDwmIntAttribute(windowHandle, systemBackdropTypeAttribute, &appliedBackdrop);
+    const bool backdropRead = queryDwmIntAttribute(windowHandle, kSystemBackdropTypeAttribute, &appliedBackdrop);
     const bool windowRemainsOpaque = qAbs(window.opacity() - 1.0) < 0.001;
     const bool darkModeMatches = darkModeRead && appliedDarkMode == static_cast<int>(darkMode);
     constexpr int roundCornerPreference = 2;
@@ -719,12 +751,11 @@ struct ResizeHitRuntimeCase
 [[nodiscard]] bool verifyAccessibleToggle(QQuickItem *rootObject, const char *objectName, const char *expectedName);
 
 [[nodiscard]] bool applyUiLayoutSmokeTheme(ztermy::AppController &controller, const QString &theme,
-                                           const QString &language)
+                                           const QString &language, const QString &backdrop = QStringLiteral("acrylic"))
 {
-    return controller.saveApplicationSettings(theme, 1.0, QStringLiteral("acrylic"), QStringLiteral("ztermy"),
-                                              QStringLiteral("#22C55E"), {}, QStringLiteral("Cascadia Mono"), 14, false,
-                                              true, 1.0, QStringLiteral("terminal"), true, false, true, language, false,
-                                              true);
+    return controller.saveApplicationSettings(theme, 1.0, backdrop, QStringLiteral("ztermy"), QStringLiteral("#22C55E"),
+                                              {}, QStringLiteral("Cascadia Mono"), 14, false, true, 1.0,
+                                              QStringLiteral("terminal"), true, false, true, language, false, true);
 }
 
 [[nodiscard]] bool runUiLayoutRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller,
@@ -3649,6 +3680,9 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
         return QStringLiteral("unknown");
     };
     const QSGRendererInterface *rendererInterface = window.rendererInterface();
+    int appliedDwmBackdrop = -1;
+    const auto benchmarkWindowHandle = reinterpret_cast<HWND>(window.winId()); // NOLINT(performance-no-int-to-ptr)
+    static_cast<void>(queryDwmIntAttribute(benchmarkWindowHandle, kSystemBackdropTypeAttribute, &appliedDwmBackdrop));
     const QJsonObject report{
         {QStringLiteral("schemaVersion"), 2},
         {QStringLiteral("generatedAtUtc"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
@@ -3673,7 +3707,9 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
              {QStringLiteral("logicalWidth"), window.width()},
              {QStringLiteral("logicalHeight"), window.height()},
              {QStringLiteral("alphaBufferBits"), window.format().alphaBufferSize()},
-             {QStringLiteral("backdrop"), controller.backdropPreference()},
+             {QStringLiteral("windowColorAlpha"), window.color().alpha()},
+             {QStringLiteral("dwmBackdropType"), appliedDwmBackdrop},
+             {QStringLiteral("backdrop"), requestedPerformanceBackdrop()},
              {QStringLiteral("terminalBackgroundOpacity"), controller.terminalBackgroundOpacity()},
          }},
         {QStringLiteral("scenario"),
@@ -3943,8 +3979,11 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
         }
         return QStringLiteral("unknown");
     };
+    int appliedDwmBackdrop = -1;
+    const auto benchmarkWindowHandle = reinterpret_cast<HWND>(window.winId()); // NOLINT(performance-no-int-to-ptr)
+    static_cast<void>(queryDwmIntAttribute(benchmarkWindowHandle, kSystemBackdropTypeAttribute, &appliedDwmBackdrop));
     const QJsonObject report{
-        {QStringLiteral("schemaVersion"), 1},
+        {QStringLiteral("schemaVersion"), 2},
         {QStringLiteral("generatedAtUtc"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
         {QStringLiteral("environment"),
          QJsonObject{
@@ -3959,10 +3998,16 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
              {QStringLiteral("graphicsApi"),
               graphicsApiName(rendererInterface == nullptr ? QSGRendererInterface::Unknown
                                                            : rendererInterface->graphicsApi())},
+             {QStringLiteral("requestedRhiBackend"), qEnvironmentVariable("QSG_RHI_BACKEND")},
+             {QStringLiteral("preferSoftwareRenderer"),
+              qEnvironmentVariableIntValue("QSG_RHI_PREFER_SOFTWARE_RENDERER") != 0},
              {QStringLiteral("devicePixelRatio"), window.effectiveDevicePixelRatio()},
              {QStringLiteral("logicalWidth"), window.width()},
              {QStringLiteral("logicalHeight"), window.height()},
-             {QStringLiteral("backdrop"), controller.backdropPreference()},
+             {QStringLiteral("alphaBufferBits"), window.format().alphaBufferSize()},
+             {QStringLiteral("windowColorAlpha"), window.color().alpha()},
+             {QStringLiteral("dwmBackdropType"), appliedDwmBackdrop},
+             {QStringLiteral("backdrop"), requestedPerformanceBackdrop()},
          }},
         {QStringLiteral("startup"),
          QJsonObject{
@@ -4020,7 +4065,11 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
 // NOLINTNEXTLINE(bugprone-exception-escape)
 int main(int argc, char *argv[])
 {
-    QQuickWindow::setDefaultAlphaBuffer(true);
+    const bool rawPerformanceBenchmark = rawArgumentPresent(argc, argv, "--performance-benchmark")
+                                         || rawArgumentPresent(argc, argv, "--ui-performance-benchmark");
+    const bool opaquePerformanceSurface =
+        rawPerformanceBenchmark && requestedPerformanceBackdrop() == QStringLiteral("opaque");
+    QQuickWindow::setDefaultAlphaBuffer(!opaquePerformanceSurface);
     QGuiApplication application(argc, argv);
     QGuiApplication::setApplicationDisplayName(QStringLiteral("ztermy"));
     QGuiApplication::setApplicationName(QStringLiteral("ztermy"));
@@ -4076,6 +4125,13 @@ int main(int argc, char *argv[])
         QCoreApplication::arguments().contains(QStringLiteral("--performance-benchmark"));
     const bool uiPerformanceBenchmark =
         QCoreApplication::arguments().contains(QStringLiteral("--ui-performance-benchmark"));
+    const bool performanceBenchmark = terminalPerformanceBenchmark || uiPerformanceBenchmark;
+    const QString performanceBackdrop = requestedPerformanceBackdrop();
+    if (performanceBenchmark && !validPerformanceBackdrop(performanceBackdrop))
+    {
+        qCCritical(applicationLog) << "Unsupported performance backdrop" << performanceBackdrop;
+        return EXIT_FAILURE;
+    }
     const bool terminalRenderSmoke = QCoreApplication::arguments().contains(QStringLiteral("--terminal-render-smoke"))
                                      || terminalPerformanceBenchmark;
     const bool lifecycleRuntimeSmoke =
@@ -4085,7 +4141,7 @@ int main(int argc, char *argv[])
     const bool windowResizeSmoke = QCoreApplication::arguments().contains(QStringLiteral("--window-resize-smoke"));
     const bool windowDpiSmoke = QCoreApplication::arguments().contains(QStringLiteral("--window-dpi-smoke"));
     ztermy::LocalizationManager localizationManager;
-    const auto initialLanguage = uiLayoutSmoke || uiKeyboardSmoke || realHostUiSmoke || uiPerformanceBenchmark
+    const auto initialLanguage = uiLayoutSmoke || uiKeyboardSmoke || realHostUiSmoke || performanceBenchmark
                                      ? std::optional{ztermy::config::LanguagePreference::english}
                                      : ztermy::config::parseLanguagePreference(appController.languagePreference());
     if (!initialLanguage || !localizationManager.apply(*initialLanguage))
@@ -4093,8 +4149,13 @@ int main(int argc, char *argv[])
         qCCritical(applicationLog) << "Could not apply the configured UI language";
         return EXIT_FAILURE;
     }
-    if ((uiLayoutSmoke || uiKeyboardSmoke || realHostUiSmoke || uiPerformanceBenchmark)
-        && !applyUiLayoutSmokeTheme(appController, QStringLiteral("dark"), QStringLiteral("en")))
+    const bool automatedSettingsSaved =
+        performanceBenchmark
+            ? applyUiLayoutSmokeTheme(appController, QStringLiteral("dark"), QStringLiteral("en"),
+                                      settingsBackdropForPerformance(performanceBackdrop))
+            : (!(uiLayoutSmoke || uiKeyboardSmoke || realHostUiSmoke)
+               || applyUiLayoutSmokeTheme(appController, QStringLiteral("dark"), QStringLiteral("en")));
+    if (!automatedSettingsSaved)
     {
         qCCritical(applicationLog) << "Could not prepare the UI runtime smoke settings";
         return EXIT_FAILURE;

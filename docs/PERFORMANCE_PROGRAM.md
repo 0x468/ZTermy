@@ -51,7 +51,8 @@ The program is based on primary documentation and public upstream implementation
 | Snapshot overproduction | Accepted | 8 ms latest-state delivery removed 90.3% of GUI snapshot updates and 36.7% of estimated upload volume with unchanged completion time. |
 | Unopened workbench construction | Accepted | Lazy-retained creation reduced closed-state QML objects by 29.8% and median QML load by 10.9%; first use costs an additional 45 ms and retained reopen is about 20 ms. |
 | Active full terminal damage | Open | The current run still uploads roughly 455–490 MiB for the 20,000-line workload. Damage-aware backing storage needs its own fidelity and latency A/B. |
-| Material/compositor cost | Open | Acrylic/Mica/opaque comparison requires the owner's low-end machine matrix; do not infer it from the desktop baseline. |
+| Material/compositor cost | Desktop measured; low-end open | A five-run, cache-isolated Acrylic/Mica/Mica Alt/transparent/true-opaque matrix found no stable desktop difference. Do not change product defaults without physical low-end evidence. |
+| Software D3D11 fallback | Diagnostic passed | Explicit WARP selected Microsoft Basic Render Driver and completed both terminal and UI workloads with modest degradation. |
 | Hosts/Settings/SFTP virtualization | Not yet evidenced | No change until page-specific profiling shows delegate churn or binding cost. |
 
 ## Measurement layers
