@@ -62,6 +62,103 @@ function OptionalRegistryValue {
     }
 }
 
+function Get-WindowsVisualEnvironment {
+    try {
+        if ($null -eq ("ZtermyPerformance.NativeVisualEnvironment" -as [type])) {
+            Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+
+namespace ZtermyPerformance
+{
+    public static class NativeVisualEnvironment
+    {
+        private const uint SpiGetClientAreaAnimation = 0x1042;
+        private const int SmRemoteSession = 0x1000;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct SystemPowerStatus
+        {
+            public byte AcLineStatus;
+            public byte BatteryFlag;
+            public byte BatteryLifePercent;
+            public byte SystemStatusFlag;
+            public uint BatteryLifeTime;
+            public uint BatteryFullLifeTime;
+        }
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool SystemParametersInfo(
+            uint action, uint parameter, out int value, uint updateProfile);
+
+        [DllImport("user32.dll")]
+        private static extern int GetSystemMetrics(int index);
+
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmIsCompositionEnabled(
+            [MarshalAs(UnmanagedType.Bool)] out bool enabled);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool GetSystemPowerStatus(out SystemPowerStatus status);
+
+        public static bool TryGetClientAreaAnimationsEnabled(out bool enabled)
+        {
+            int value;
+            bool succeeded = SystemParametersInfo(SpiGetClientAreaAnimation, 0, out value, 0);
+            enabled = value != 0;
+            return succeeded;
+        }
+
+        public static bool TryGetDwmCompositionEnabled(out bool enabled)
+        {
+            return DwmIsCompositionEnabled(out enabled) >= 0;
+        }
+
+        public static bool IsRemoteSession()
+        {
+            return GetSystemMetrics(SmRemoteSession) != 0;
+        }
+
+        public static bool TryGetBatterySaverEnabled(out bool enabled)
+        {
+            SystemPowerStatus status;
+            bool succeeded = GetSystemPowerStatus(out status);
+            enabled = succeeded && status.SystemStatusFlag != 0;
+            return succeeded;
+        }
+    }
+}
+"@
+        }
+
+        $clientAreaAnimationsEnabled = $false
+        $clientAreaAnimationsKnown = [ZtermyPerformance.NativeVisualEnvironment]::TryGetClientAreaAnimationsEnabled(
+            [ref]$clientAreaAnimationsEnabled)
+        $dwmCompositionEnabled = $false
+        $dwmCompositionKnown = [ZtermyPerformance.NativeVisualEnvironment]::TryGetDwmCompositionEnabled(
+            [ref]$dwmCompositionEnabled)
+        $batterySaverEnabled = $false
+        $batterySaverKnown = [ZtermyPerformance.NativeVisualEnvironment]::TryGetBatterySaverEnabled(
+            [ref]$batterySaverEnabled)
+
+        return [ordered]@{
+            clientAreaAnimationsEnabled = if ($clientAreaAnimationsKnown) { $clientAreaAnimationsEnabled } else { $null }
+            dwmCompositionEnabled = if ($dwmCompositionKnown) { $dwmCompositionEnabled } else { $null }
+            remoteSession = [ZtermyPerformance.NativeVisualEnvironment]::IsRemoteSession()
+            batterySaverEnabled = if ($batterySaverKnown) { $batterySaverEnabled } else { $null }
+            queryError = $null
+        }
+    } catch {
+        return [ordered]@{
+            clientAreaAnimationsEnabled = $null
+            dwmCompositionEnabled = $null
+            remoteSession = $null
+            batterySaverEnabled = $null
+            queryError = $_.Exception.Message
+        }
+    }
+}
+
 $operatingSystem = Get-CimInstance -ClassName Win32_OperatingSystem
 $computerSystem = Get-CimInstance -ClassName Win32_ComputerSystem
 $processors = @(Get-CimInstance -ClassName Win32_Processor | ForEach-Object {
@@ -96,13 +193,18 @@ if (-not [string]::IsNullOrWhiteSpace($sourceStatus)) {
     Write-Warning "The source worktree is dirty; the bundle records this and is not final release evidence."
 }
 $powerScheme = (& powercfg.exe /getactivescheme | Out-String).Trim()
+$visualEnvironment = Get-WindowsVisualEnvironment
+$visualEnvironment.windowsTransparencyEnabled = OptionalRegistryValue `
+    -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" `
+    -Name "EnableTransparency"
 $environmentEvidence = [ordered]@{
-    schemaVersion = 1
+    schemaVersion = 2
     capturedAtUtc = $capturedAt.ToString("o")
     machine = [ordered]@{
         manufacturer = $computerSystem.Manufacturer
         model = $computerSystem.Model
         totalPhysicalMemoryBytes = $computerSystem.TotalPhysicalMemory
+        hypervisorPresent = $computerSystem.HypervisorPresent
     }
     windows = [ordered]@{
         caption = $operatingSystem.Caption
@@ -113,9 +215,7 @@ $environmentEvidence = [ordered]@{
     processors = $processors
     graphicsAdapters = $graphicsAdapters
     activePowerScheme = $powerScheme
-    windowsTransparencyEnabled = OptionalRegistryValue `
-        -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" `
-        -Name "EnableTransparency"
+    visualEnvironment = $visualEnvironment
     benchmarkPreset = $Preset
     source = [ordered]@{
         commit = $sourceCommit
@@ -192,7 +292,8 @@ $observationTemplate = @"
 - Static Release commit: $sourceCommit
 - Display DPI/scaling:
 - Windows power mode:
-- Windows transparency/battery saver:
+- Windows transparency/client-area animations/battery saver:
+- DWM composition/remote-session state:
 
 ## Terminal burst and resize
 
@@ -212,6 +313,12 @@ $observationTemplate = @"
 
 - Preferred material on this machine:
 - Material-specific stall, GPU, or power observation:
+- Acrylic visual result (blurred backdrop, solid fallback, corruption, or other):
+
+## About-page motion
+
+- Codename orbit and sweep visible:
+- If motion is disabled, does `environment.json` report `clientAreaAnimationsEnabled: false`:
 
 ## Overall result
 
