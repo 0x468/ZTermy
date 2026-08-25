@@ -156,7 +156,10 @@ the same machine and shell:
 ## 0.4.3 - links and keyboard-first productivity
 
 The third milestone builds higher-level workflows on the stable selection and
-input contracts.
+input contracts. Link recognition, selection identity, clipboard effects, and
+tab recovery remain distinct layers: semantic metadata is produced off the
+render thread, transient overlays are painted by the existing terminal custom
+item, and application workflows are enabled through capability facts.
 
 ### Required behavior
 
@@ -172,9 +175,11 @@ input contracts.
   page, top, and bottom; it supports rectangular selection and switching the
   active endpoint.
 - Command-oriented actions reuse `SemanticTerminalObserver` and
-  `CommandBlockStore`: previous/next prompt, select/copy command, and select/copy
-  output retain rich/basic/none capability and partial/truncated/interleaved
-  evidence.
+  `CommandBlockStore`: the latest command can be copied with its exact or
+  approximate confidence identified, while output can be copied only when the
+  retained block is complete. Prompt navigation and selecting semantic blocks
+  are deferred until stream offsets have a stable mapping back to tracked grid
+  identities; painted coordinates are never guessed.
 - OSC 52 is delivered only to the extent supported by the pinned public API:
   write-to-system-clipboard is supported; read is not advertised.
 - Local drag/drop inserts shell-quoted paths. SSH drag/drop uses SFTP and a known
@@ -182,6 +187,79 @@ input contracts.
 - Tabs support reorder, title, duplicate, reopen-last-closed, close-other/right,
   and reconnect workflows. Reopening SSH creates a fresh connection from a
   declarative session spec; it does not claim to preserve a dead process.
+
+### Architecture decision
+
+- OSC 8 URI text lives in a snapshot-local intern table. Cells do not own
+  strings; compact spans refer to the table and may cross wrapped rows.
+- Bounded detection on changed logical lines adds typed spans. Explicit OSC 8
+  spans claim their cells and always take priority over detected links.
+- Pointer routing is deterministic: Shift selection first, Ctrl+click link
+  activation second, active TUI mouse reporting third, then local pointer
+  behavior. A link opens only on release below the platform drag threshold.
+- Quick Select considers the current viewport and self-renders prefix-free
+  labels inside `TerminalItem`; it never creates one QML object per cell or
+  label.
+- Copy Mode keeps its anchor and endpoint as libghostty tracked references on
+  the worker. Visible row indexes are never treated as stable identities.
+- OSC 52 is write-only. The synchronous libghostty callback copies one bounded
+  payload, sessions drain it after releasing the engine lock, and the GUI
+  thread performs the clipboard mutation.
+- Local file drops insert shell-quoted paths without executing. SSH file drops
+  upload through the tab's SFTP capability to a known remote directory; an
+  unknown destination is requested explicitly. Text drops use normal paste.
+- Duplicate and reopen create fresh sessions from declarative descriptions.
+  Reconnect replaces a disconnected session behind the same tab identity.
+- The controller exposes typed-link, selection, session, SFTP, reconnect, modal
+  mode, and semantic-command capability facts. QML menus consume those facts
+  rather than inferring terminal state from presentation details.
+
+The complete contract, including performance and lifetime constraints, is
+recorded in `docs/adr/0111-semantic-terminal-workflows.md`.
+
+### Implementation order
+
+Each slice is researched, tested, and kept independently reviewable before the
+next begins:
+
+1. extend snapshots with wrapped-row metadata, interned OSC 8 link tables, and
+   compact typed spans; add the bounded logical-line detector and precedence
+   tests;
+2. implement themed hover, Ctrl+click release activation, context actions, and
+   `ActionContext` link/SFTP capabilities;
+3. add current-viewport Quick Select with terminal-node rendering and
+   deterministic copy/insert/open keyboard actions;
+4. add worker-owned tracked-reference Copy Mode and bounded latest-command/
+   output actions, preserving rich/basic/none and
+   partial/truncated/interleaved evidence;
+5. register and drain bounded OSC 52 write effects outside the engine lock, then
+   marshal clipboard writes to the GUI thread;
+6. route text/local-file/SSH-file drops through paste, shell quoting, or SFTP
+   without implicit execution;
+7. add tab reorder/title/duplicate/reopen-last-closed/close-other/right and make
+   reconnect discoverable while preserving fresh-session semantics;
+8. finish translations, focused runtime evidence, full Debug and static Release
+   gates, package generation, and owner acceptance notes.
+
+### 0.4.3 owner acceptance matrix
+
+Run the static Release build. Use local PowerShell, the saved SSH password and
+key profiles, and a remote mouse-aware TUI where the case asks for one.
+
+| Area | Manual test | Expected result |
+| --- | --- | --- |
+| OSC 8 precedence | Print an OSC 8 link whose visible text also contains a URL, then hover and Ctrl+click it. | The explicit OSC 8 target is shown/opened once; the detected URL never replaces it. Wrapped text remains one target. |
+| Detected targets | Print HTTP/HTTPS URLs, email, Windows/POSIX paths, `path:line:column`, IPv4/IPv6, `host:port`, and a Git hash in light and dark themes. | Each supported type receives one stable hover treatment and only applicable Open/Copy/Insert/Locate-in-SFTP actions. Remote paths are never opened as local files. |
+| Pointer precedence | Enable mouse reporting in `hx`, Vim, or tmux. Click normally, Shift-drag, and Ctrl+click a visible link; toggle Ctrl without moving the mouse and try a small drag. | Normal input reaches the TUI, Shift always selects locally, stationary Ctrl updates the link cursor/tooltip, and a drag never accidentally opens the link. |
+| Quick Select | Press Ctrl+Shift+Space with many mixed targets visible, type labels, then repeat after scrolling/resizing. Exercise plain, Shift, Ctrl, Enter, and Escape actions. | Labels are deterministic, collision-free, confined to the viewport, remain responsive, recompute after viewport changes, and perform Copy/Insert/Open/Cancel exactly once. |
+| Copy Mode | Enter Ctrl+Shift+X after creating long wrapped scrollback. Navigate by cell/word/line/page/top/bottom, switch endpoints, and select rectangle/wide Unicode while output continues. | The anchor does not drift; wide/combining characters are never split; `y`/Enter copies and exits, Escape cancels, and no key leaks to the shell. |
+| Command blocks | In rich shell integration and then basic/no-integration modes, open the terminal context menu after a completed command, an approximate command, and a long truncated or interleaved block. | Copy Last Command identifies approximate evidence; Copy Last Command Output is enabled only for complete retained output, and no omitted output is presented as complete. |
+| OSC 52 | Run a trusted local and remote command that writes a small OSC 52 text payload, then try repeated and oversized payloads. | The latest valid payload reaches the Windows clipboard without a modal prompt; reads are not offered; oversize data is rejected/bounded and UI responsiveness/memory stay stable. |
+| Local drop | Drop one and multiple files, including names with spaces and shell metacharacters, into local PowerShell. Drop plain multiline text separately. | File paths are correctly quoted and inserted but not executed; text follows normal paste and multiline confirmation/bracketed-paste behavior. |
+| SSH drop | Drop a local file onto an SSH tab with a known remote CWD, then with only an SFTP/home directory, and finally with no known destination. | Upload uses the documented fallback order and exposes transfer progress/cancellation; an unknown destination is requested, no meaningless local path is typed, and nothing executes implicitly. |
+| Tab workflows | Reorder tabs; set a title; duplicate local and saved SSH tabs; close other/right; close and reopen up to ten tabs. | Layout and titles persist as specified. Duplicate/reopen starts a new process/connection from the stored description and never claims to restore a dead process or old scrollback. |
+| Reconnect/lifetime | Disconnect SSH, use the visible reconnect action, then rapidly close/reopen/switch tabs while links, Quick Select, Copy Mode, OSC 52, or upload work is pending. | Reconnect retains the tab identity and valid UI state. Late worker/effect results are discarded, transient modes cancel, no stale popup/action survives, and the process does not crash or hang. |
+| Performance | Fill 10,000+ lines containing link-like text, resize and scroll rapidly, enter/exit Quick Select repeatedly, and monitor CPU/memory. | Painting does not run detection, no per-cell QML tree appears, interaction remains responsive, queues stay bounded, and idle CPU returns near baseline. |
 
 ## Defaults and product decisions
 

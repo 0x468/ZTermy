@@ -392,6 +392,19 @@ void LocalTerminalSession::requestSelectionGesture(const TerminalSelectionGestur
     m_commandAvailable.notify_one();
 }
 
+void LocalTerminalSession::requestCopyModeAction(const TerminalCopyModeAction &action)
+{
+    if (!m_running.load())
+    {
+        return;
+    }
+    {
+        std::scoped_lock lock(m_commandMutex);
+        m_commands.emplace_back(CopyModeCommand{.action = action});
+    }
+    m_commandAvailable.notify_one();
+}
+
 void LocalTerminalSession::selectAll()
 {
     if (!m_running.load())
@@ -511,6 +524,7 @@ void LocalTerminalSession::readLoop(const std::stop_token &stopToken)
             m_outputSink->append(std::span(buffer).first(*readResult));
         }
 
+        std::optional<std::string> clipboardWrite;
         {
             std::scoped_lock lock(m_engineMutex);
             const std::error_code feedError = m_engine->feed(std::span(buffer).first(*readResult));
@@ -519,6 +533,11 @@ void LocalTerminalSession::readLoop(const std::stop_token &stopToken)
                 postStatus(tr("Terminal parser failed: %1").arg(QString::fromStdString(feedError.message())));
                 break;
             }
+            clipboardWrite = m_engine->takeClipboardWrite();
+        }
+        if (clipboardWrite)
+        {
+            emit clipboardTextReady(QString::fromUtf8(*clipboardWrite));
         }
         publishSnapshot();
     }
@@ -737,6 +756,25 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
             {
                 postStatus(
                     tr("Terminal selection gesture failed: %1").arg(QString::fromStdString(changed.error().message())));
+                continue;
+            }
+            if (*changed)
+            {
+                publishSnapshot();
+            }
+            continue;
+        }
+
+        if (const auto *copyMode = std::get_if<CopyModeCommand>(&command))
+        {
+            std::expected<bool, std::error_code> changed;
+            {
+                std::scoped_lock lock(m_engineMutex);
+                changed = m_engine->applyCopyModeAction(copyMode->action);
+            }
+            if (!changed)
+            {
+                postStatus(tr("Terminal Copy Mode failed: %1").arg(QString::fromStdString(changed.error().message())));
                 continue;
             }
             if (*changed)

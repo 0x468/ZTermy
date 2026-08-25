@@ -11,6 +11,7 @@
 #include "domain/ai/AiContextSerializer.h"
 #include "domain/ai/AiProviderRecoveryPolicy.h"
 #include "domain/ssh/SshTarget.h"
+#include "domain/terminal/ShellPathQuoter.h"
 #include "infrastructure/ai/AiTraceSanitizer.h"
 #include "infrastructure/ai/ProviderEndpointResolver.h"
 #include "infrastructure/ai/ProviderErrorParser.h"
@@ -2668,8 +2669,9 @@ QVariantList AppController::terminalTabs() const
 {
     QVariantList result;
     result.reserve(static_cast<qsizetype>(m_workspaceState.terminalWorkspaces.size()));
-    for (const workbench::TerminalWorkspaceLayout &workspace : m_workspaceState.terminalWorkspaces)
+    for (std::size_t index = 0; index < m_workspaceState.terminalWorkspaces.size(); ++index)
     {
+        const workbench::TerminalWorkspaceLayout &workspace = m_workspaceState.terminalWorkspaces[index];
         const QString representativeId =
             workspace.id == utf8String(m_activeTabId) ? m_focusedTabId : firstTabIdForWorkspace(workspace);
         const TerminalTab *tab = findTab(representativeId);
@@ -2678,10 +2680,22 @@ QVariantList AppController::terminalTabs() const
             QVariantMap value = terminalTabValue(*tab, utf8QString(workspace.id));
             value.insert(QStringLiteral("title"), utf8QString(workspace.title));
             value.insert(QStringLiteral("paneCount"), static_cast<int>(workspace.restoreIntents.size()));
+            value.insert(QStringLiteral("tabIndex"), static_cast<int>(index));
+            value.insert(QStringLiteral("canDuplicate"),
+                         tab->kind == TerminalTabKind::Local || !tab->sourceProfileId.isEmpty());
+            value.insert(QStringLiteral("canCloseOthers"), m_workspaceState.terminalWorkspaces.size() > 1U);
+            value.insert(QStringLiteral("canCloseToRight"), index + 1U < m_workspaceState.terminalWorkspaces.size());
+            value.insert(QStringLiteral("canMoveLeft"), index > 0U);
+            value.insert(QStringLiteral("canMoveRight"), index + 1U < m_workspaceState.terminalWorkspaces.size());
             result.append(value);
         }
     }
     return result;
+}
+
+bool AppController::canReopenClosedTerminalTab() const noexcept
+{
+    return !m_closedTerminalTabs.empty();
 }
 
 QVariantMap AppController::terminalTabValue(const TerminalTab &tab, const QString &publicId) const
@@ -4175,6 +4189,11 @@ QString AppController::portForwardingOperationError() const
 
 QString AppController::startLocalTerminal()
 {
+    return startLocalTerminalAt({});
+}
+
+QString AppController::startLocalTerminalAt(const QString &workingDirectory, const QString &preferredTitle)
+{
     if (m_tabs.size() >= maximumTerminalTabs)
     {
         if (m_terminal != nullptr)
@@ -4189,7 +4208,8 @@ QString AppController::startLocalTerminal()
     tab->id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     tab->workspaceId = tab->id;
     tab->paneId = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    tab->title = tr("PowerShell %1").arg(m_nextLocalTabNumber++);
+    const QString defaultTitle = tr("PowerShell %1").arg(m_nextLocalTabNumber++);
+    tab->title = preferredTitle.trimmed().isEmpty() ? defaultTitle : preferredTitle.trimmed();
     tab->status = tr("Starting local terminal...");
     tab->kind = TerminalTabKind::Local;
     tab->local = m_localSessionFactory();
@@ -4229,6 +4249,14 @@ QString AppController::startLocalTerminal()
         created->status = tr("Unable to start local terminal: %1").arg(QString::fromStdString(error.message()));
         showActiveTab();
         emit terminalTabsChanged();
+    }
+    else if (!workingDirectory.trimmed().isEmpty())
+    {
+        const QString command = QLatin1StringView("Set-Location -LiteralPath ")
+                                + utf8QString(terminal::quoteShellPath(utf8String(workingDirectory.trimmed()),
+                                                                       terminal::ShellDialect::PowerShell))
+                                + QLatin1Char('\r');
+        created->local->queuePaste(command.toUtf8());
     }
     if (m_terminal != nullptr)
     {
@@ -4270,6 +4298,39 @@ bool AppController::activateTerminalTab(const QString &id)
 
 bool AppController::closeTerminalTab(const QString &id)
 {
+    return closeTerminalTabInternal(id, true);
+}
+
+void AppController::recordClosedTerminal(const QString &workspaceId)
+{
+    const workbench::TerminalWorkspaceLayout *workspace = findTerminalWorkspace(workspaceId);
+    if (workspace == nullptr)
+    {
+        return;
+    }
+    const TerminalTab *tab = findTabForPane(utf8QString(workspace->activePaneId));
+    if (tab == nullptr)
+    {
+        const QString firstId = firstTabIdForWorkspace(*workspace);
+        tab = findTab(firstId);
+    }
+    if (tab == nullptr || (tab->kind == TerminalTabKind::Ssh && tab->sourceProfileId.isEmpty()))
+    {
+        return;
+    }
+    m_closedTerminalTabs.push_front({.kind = tab->kind,
+                                     .sourceProfileId = tab->sourceProfileId,
+                                     .title = utf8QString(workspace->title),
+                                     .workingDirectory = tab->terminalWorkingDirectory});
+    constexpr std::size_t maximumClosedTerminalDescriptions = 10;
+    if (m_closedTerminalTabs.size() > maximumClosedTerminalDescriptions)
+    {
+        m_closedTerminalTabs.pop_back();
+    }
+}
+
+bool AppController::closeTerminalTabInternal(const QString &id, const bool recordClosed)
+{
     QString workspaceId = id;
     if (const TerminalTab *session = findTab(id); session != nullptr)
     {
@@ -4280,6 +4341,10 @@ bool AppController::closeTerminalTab(const QString &id)
     if (workspacePosition == m_workspaceState.terminalWorkspaces.end())
     {
         return false;
+    }
+    if (recordClosed && !m_shutdownStarted)
+    {
+        recordClosedTerminal(workspaceId);
     }
     const bool closingActive = workspaceId == m_activeTabId;
     const auto workspaceIndex =
@@ -4338,6 +4403,279 @@ bool AppController::closeTerminalTab(const QString &id)
         }
     }
     static_cast<void>(persistTerminalWorkspaces());
+    return true;
+}
+
+bool AppController::duplicateTerminalTab(const QString &id)
+{
+    QString workspaceId = id;
+    if (const TerminalTab *session = findTab(id); session != nullptr)
+    {
+        workspaceId = session->workspaceId;
+    }
+    const workbench::TerminalWorkspaceLayout *workspace = findTerminalWorkspace(workspaceId);
+    if (workspace == nullptr)
+    {
+        return false;
+    }
+    const TerminalTab *source = findTabForPane(utf8QString(workspace->activePaneId));
+    if (source == nullptr)
+    {
+        source = findTab(firstTabIdForWorkspace(*workspace));
+    }
+    if (source == nullptr)
+    {
+        return false;
+    }
+    if (source->kind == TerminalTabKind::Local)
+    {
+        return !startLocalTerminalAt(source->terminalWorkingDirectory, utf8QString(workspace->title)).isEmpty();
+    }
+    if (source->sourceProfileId.isEmpty() || !connectHostProfile(source->sourceProfileId, {}))
+    {
+        return false;
+    }
+    return setTerminalTabTitle(m_activeTabId, utf8QString(workspace->title));
+}
+
+bool AppController::reopenLastClosedTerminalTab()
+{
+    if (m_closedTerminalTabs.empty())
+    {
+        return false;
+    }
+    const ClosedTerminalDescription description = m_closedTerminalTabs.front();
+    m_closedTerminalTabs.pop_front();
+    bool reopened = false;
+    if (description.kind == TerminalTabKind::Local)
+    {
+        reopened = !startLocalTerminalAt(description.workingDirectory, description.title).isEmpty();
+    }
+    else if (!description.sourceProfileId.isEmpty())
+    {
+        reopened = connectHostProfile(description.sourceProfileId, {});
+        if (reopened)
+        {
+            reopened = setTerminalTabTitle(m_activeTabId, description.title);
+        }
+    }
+    if (!reopened)
+    {
+        m_closedTerminalTabs.push_front(description);
+    }
+    emit terminalTabsChanged();
+    return reopened;
+}
+
+bool AppController::closeOtherTerminalTabs(const QString &id)
+{
+    QString workspaceId = id;
+    if (const TerminalTab *session = findTab(id); session != nullptr)
+    {
+        workspaceId = session->workspaceId;
+    }
+    if (findTerminalWorkspace(workspaceId) == nullptr)
+    {
+        return false;
+    }
+    std::vector<QString> toClose;
+    for (auto position = m_workspaceState.terminalWorkspaces.rbegin();
+         position != m_workspaceState.terminalWorkspaces.rend(); ++position)
+    {
+        if (position->id != utf8String(workspaceId))
+        {
+            toClose.push_back(utf8QString(position->id));
+        }
+    }
+    for (const QString &candidate : toClose)
+    {
+        static_cast<void>(closeTerminalTab(candidate));
+    }
+    return !toClose.empty();
+}
+
+bool AppController::closeTerminalTabsToRight(const QString &id)
+{
+    QString workspaceId = id;
+    if (const TerminalTab *session = findTab(id); session != nullptr)
+    {
+        workspaceId = session->workspaceId;
+    }
+    const auto position = std::ranges::find(m_workspaceState.terminalWorkspaces, utf8String(workspaceId),
+                                            &workbench::TerminalWorkspaceLayout::id);
+    if (position == m_workspaceState.terminalWorkspaces.end())
+    {
+        return false;
+    }
+    std::vector<QString> toClose;
+    for (auto candidate = m_workspaceState.terminalWorkspaces.rbegin(); candidate.base() != std::next(position);
+         ++candidate)
+    {
+        toClose.push_back(utf8QString(candidate->id));
+    }
+    for (const QString &candidate : toClose)
+    {
+        static_cast<void>(closeTerminalTab(candidate));
+    }
+    return !toClose.empty();
+}
+
+bool AppController::moveTerminalTab(const QString &id, const int targetIndex)
+{
+    QString workspaceId = id;
+    if (const TerminalTab *session = findTab(id); session != nullptr)
+    {
+        workspaceId = session->workspaceId;
+    }
+    workbench::WorkspaceState candidate = m_workspaceState;
+    auto position = std::ranges::find(candidate.terminalWorkspaces, utf8String(workspaceId),
+                                      &workbench::TerminalWorkspaceLayout::id);
+    if (position == candidate.terminalWorkspaces.end() || targetIndex < 0
+        || static_cast<std::size_t>(targetIndex) >= candidate.terminalWorkspaces.size())
+    {
+        return false;
+    }
+    const auto currentIndex = static_cast<int>(std::distance(candidate.terminalWorkspaces.begin(), position));
+    if (currentIndex == targetIndex)
+    {
+        return true;
+    }
+    workbench::TerminalWorkspaceLayout moved = std::move(*position);
+    candidate.terminalWorkspaces.erase(position);
+    candidate.terminalWorkspaces.insert(candidate.terminalWorkspaces.begin() + targetIndex, std::move(moved));
+    if (!saveWorkspaceStateCandidate(candidate))
+    {
+        return false;
+    }
+    m_workspaceState = std::move(candidate);
+    emit terminalTabsChanged();
+    return true;
+}
+
+bool AppController::setTerminalTabTitle(const QString &id, const QString &title)
+{
+    const QString normalized = title.trimmed();
+    if (normalized.isEmpty() || normalized.size() > 256)
+    {
+        return false;
+    }
+    QString workspaceId = id;
+    if (const TerminalTab *session = findTab(id); session != nullptr)
+    {
+        workspaceId = session->workspaceId;
+    }
+    workbench::TerminalWorkspaceLayout *workspace = findTerminalWorkspace(workspaceId);
+    if (workspace == nullptr)
+    {
+        return false;
+    }
+    const std::string previousWorkspaceTitle = workspace->title;
+    std::vector<std::string> previousIntentTitles;
+    previousIntentTitles.reserve(workspace->restoreIntents.size());
+    for (const workbench::TerminalRestoreIntent &intent : workspace->restoreIntents)
+    {
+        previousIntentTitles.push_back(intent.title);
+    }
+    std::vector<QString> previousTabTitles;
+    previousTabTitles.reserve(m_tabs.size());
+    for (const auto &tab : m_tabs)
+    {
+        previousTabTitles.push_back(tab->title);
+    }
+    workspace->title = utf8String(normalized);
+    for (workbench::TerminalRestoreIntent &intent : workspace->restoreIntents)
+    {
+        intent.title = utf8String(normalized);
+    }
+    for (const auto &tab : m_tabs)
+    {
+        if (tab->workspaceId == workspaceId)
+        {
+            tab->title = normalized;
+        }
+    }
+    if (!persistTerminalWorkspaces())
+    {
+        workspace->title = previousWorkspaceTitle;
+        for (std::size_t index = 0; index < workspace->restoreIntents.size(); ++index)
+        {
+            workspace->restoreIntents[index].title = previousIntentTitles[index];
+        }
+        for (std::size_t index = 0; index < m_tabs.size(); ++index)
+        {
+            m_tabs[index]->title = previousTabTitles[index];
+        }
+        return false;
+    }
+    emit terminalTabsChanged();
+    return true;
+}
+
+QVariantMap AppController::activeCommandBlockActions() const
+{
+    const TerminalTab *tab = activeTab();
+    if (tab == nullptr || !tab->semanticObserver)
+    {
+        return {{QStringLiteral("commandAvailable"), false}, {QStringLiteral("outputAvailable"), false}};
+    }
+    const terminal::SemanticTerminalSnapshot snapshot = tab->semanticObserver->snapshot();
+    const auto block = std::ranges::find_if(snapshot.commandBlocks.rbegin(), snapshot.commandBlocks.rend(),
+                                            [](const terminal::CommandBlock &candidate) {
+                                                return !candidate.command.empty();
+                                            });
+    if (block == snapshot.commandBlocks.rend())
+    {
+        return {{QStringLiteral("commandAvailable"), false}, {QStringLiteral("outputAvailable"), false}};
+    }
+    return {
+        {QStringLiteral("commandAvailable"), true},
+        {QStringLiteral("commandApproximate"),
+         block->capability != terminal::TerminalSemanticCapability::rich
+             || block->boundaryConfidence != terminal::CommandBoundaryConfidence::exact},
+        {QStringLiteral("outputAvailable"), block->hasCompleteOutput() && !block->retainedOutput.empty()},
+        {QStringLiteral("outputPartial"), !block->hasCompleteOutput()},
+    };
+}
+
+bool AppController::copyLastTerminalCommand()
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || !tab->semanticObserver || QGuiApplication::clipboard() == nullptr)
+    {
+        return false;
+    }
+    const terminal::SemanticTerminalSnapshot snapshot = tab->semanticObserver->snapshot();
+    const auto block = std::ranges::find_if(snapshot.commandBlocks.rbegin(), snapshot.commandBlocks.rend(),
+                                            [](const terminal::CommandBlock &candidate) {
+                                                return !candidate.command.empty();
+                                            });
+    if (block == snapshot.commandBlocks.rend())
+    {
+        return false;
+    }
+    QGuiApplication::clipboard()->setText(utf8QString(block->command));
+    return true;
+}
+
+bool AppController::copyLastTerminalCommandOutput()
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || !tab->semanticObserver || QGuiApplication::clipboard() == nullptr)
+    {
+        return false;
+    }
+    const terminal::SemanticTerminalSnapshot snapshot = tab->semanticObserver->snapshot();
+    const auto block = std::ranges::find_if(snapshot.commandBlocks.rbegin(), snapshot.commandBlocks.rend(),
+                                            [](const terminal::CommandBlock &candidate) {
+                                                return !candidate.command.empty();
+                                            });
+    if (block == snapshot.commandBlocks.rend() || !block->hasCompleteOutput() || block->retainedOutput.empty())
+    {
+        return false;
+    }
+    const QByteArray output(reinterpret_cast<const char *>(block->retainedOutput.data()),
+                            static_cast<qsizetype>(block->retainedOutput.size()));
+    QGuiApplication::clipboard()->setText(QString::fromUtf8(output));
     return true;
 }
 
@@ -4842,6 +5180,17 @@ bool AppController::insertTerminalCommand(const QString &command)
     }
     queuePaste(normalizedQuickCommandText(command).toUtf8());
     return true;
+}
+
+bool AppController::openTerminalLink(const QString &uri)
+{
+    const QUrl url = QUrl::fromUserInput(uri);
+    const QString scheme = url.scheme().toLower();
+    if (!url.isValid() || (scheme != QStringLiteral("http") && scheme != QStringLiteral("https")))
+    {
+        return false;
+    }
+    return QDesktopServices::openUrl(url);
 }
 
 bool AppController::runTerminalCommand(const QString &command)
@@ -6232,8 +6581,15 @@ bool AppController::enqueueSftpUpload(const QString &localFileUrl)
 bool AppController::enqueueSftpUploadBatch(const QStringList &localFileUrls)
 {
     const TerminalTab *tab = activeTab();
-    if (tab == nullptr || tab->kind != TerminalTabKind::Ssh || tab->sourceProfileId.isEmpty()
-        || m_transferBatchCoordinator == nullptr || localFileUrls.isEmpty()
+    return tab != nullptr && enqueueSftpUploadBatchForTab(*tab, localFileUrls, tab->sftpPath);
+}
+
+bool AppController::enqueueSftpUploadBatchForTab(const TerminalTab &tab, const QStringList &localFileUrls,
+                                                 const QString &destinationRoot)
+{
+    const auto normalizedDestination = sftp::normalizeRemotePath(utf8String(destinationRoot));
+    if (tab.kind != TerminalTabKind::Ssh || tab.sourceProfileId.isEmpty() || m_transferBatchCoordinator == nullptr
+        || !normalizedDestination || localFileUrls.isEmpty()
         || localFileUrls.size() > static_cast<qsizetype>(sftp::maximumTransferSourceRoots))
     {
         return false;
@@ -6255,15 +6611,15 @@ bool AppController::enqueueSftpUploadBatch(const QStringList &localFileUrls)
                                                   : tr("Upload %1 items").arg(static_cast<qulonglong>(roots.size()));
     sftp::TransferPlanRequest request{
         .batchId = utf8String(QUuid::createUuid().toString(QUuid::WithoutBraces)),
-        .endpointId = utf8String(tab->sourceProfileId),
+        .endpointId = utf8String(tab.sourceProfileId),
         .displayName = utf8String(displayName),
-        .destinationRoot = utf8String(tab->sftpPath),
+        .destinationRoot = *normalizedDestination,
         .sourceRoots = std::move(roots),
         .direction = sftp::TransferBatchDirection::Upload,
     };
     return m_transferBatchCoordinator
-        ->enqueue(std::move(request), transferRequestProvider(tab->sourceProfileId),
-                  utf8String(tab->sftpFilenameEncoding))
+        ->enqueue(std::move(request), transferRequestProvider(tab.sourceProfileId),
+                  utf8String(tab.sftpFilenameEncoding))
         .has_value();
 }
 
@@ -6781,7 +7137,7 @@ bool AppController::startSshConnection(ssh::SshConnectionRequest request, QStrin
     const std::error_code error = created->ssh->start(std::move(request), {.columns = 100, .rows = 30});
     if (error)
     {
-        closeTerminalTab(tabId);
+        static_cast<void>(closeTerminalTabInternal(tabId, false));
         return false;
     }
     if (m_terminal != nullptr)
@@ -13984,6 +14340,20 @@ void AppController::connectSftpTabSignals(TerminalTab &tab)
                 return;
             }
             updated->sftpHomePath = homePath;
+            if (!updated->pendingDropLocalFiles.isEmpty())
+            {
+                const QStringList pending = std::exchange(updated->pendingDropLocalFiles, {});
+                QString destination = updated->terminalWorkingDirectory;
+                if (!sftp::normalizeRemotePath(utf8String(destination)))
+                {
+                    destination = homePath;
+                }
+                if (!enqueueSftpUploadBatchForTab(*updated, pending, destination))
+                {
+                    updated->status = tr("The dropped files could not be queued for upload.");
+                    emit terminalTabsChanged();
+                }
+            }
             const QString requestedPath =
                 !updated->sftpHasListing && updated->sftpPath == QStringLiteral("/") ? homePath : updated->sftpPath;
             requestSftpDirectory(*updated, requestedPath);
@@ -14330,6 +14700,66 @@ void AppController::connectTerminalSignals(ui::TerminalItem &terminal, const QSt
             queuePaste(bytes);
         }
     });
+    QObject::connect(&terminal, &ui::TerminalItem::localFilesDropped, this, [this, paneId](const QStringList &paths) {
+        if (paths.isEmpty() || !activateTerminalPane(paneId))
+        {
+            return;
+        }
+        TerminalTab *tab = findTabForPane(paneId);
+        if (tab == nullptr)
+        {
+            return;
+        }
+        if (tab->kind == TerminalTabKind::Local)
+        {
+            std::vector<std::string> absolutePaths;
+            absolutePaths.reserve(static_cast<std::size_t>(paths.size()));
+            for (const QString &path : paths)
+            {
+                const QFileInfo source(path);
+                if (!source.exists())
+                {
+                    return;
+                }
+                absolutePaths.push_back(utf8String(source.absoluteFilePath()));
+            }
+            const std::string quoted = terminal::quoteShellPaths(absolutePaths, terminal::ShellDialect::PowerShell);
+            queuePaste(QByteArray(quoted.data(), static_cast<qsizetype>(quoted.size())));
+            return;
+        }
+
+        QString destination = tab->terminalWorkingDirectory;
+        if (!sftp::normalizeRemotePath(utf8String(destination)))
+        {
+            destination.clear();
+        }
+        if (destination.isEmpty() && tab->sftpHasListing)
+        {
+            destination = tab->sftpPath;
+        }
+        if (destination.isEmpty())
+        {
+            destination = tab->sftpHomePath;
+        }
+        if (!destination.isEmpty())
+        {
+            if (!enqueueSftpUploadBatchForTab(*tab, paths, destination))
+            {
+                tab->status = tr("The dropped files could not be queued for upload.");
+                emit terminalTabsChanged();
+            }
+            return;
+        }
+
+        tab->pendingDropLocalFiles = paths;
+        tab->status = tr("Preparing the remote home directory for upload...");
+        if (tab->sftpSession == nullptr && !startSftpSession(*tab))
+        {
+            tab->pendingDropLocalFiles.clear();
+            tab->status = tr("Open SFTP before dropping files on this terminal.");
+        }
+        emit terminalTabsChanged();
+    });
     QObject::connect(&terminal, &ui::TerminalItem::sizeRequested, this,
                      [this, paneId](const quint16 columns, const quint16 rows, const quint32 cellWidthPixels,
                                     const quint32 cellHeightPixels) {
@@ -14377,6 +14807,18 @@ void AppController::connectTerminalSignals(ui::TerminalItem &terminal, const QSt
                          else if (tab != nullptr && tab->local)
                          {
                              tab->local->requestSelectionGesture(gesture);
+                         }
+                     });
+    QObject::connect(&terminal, &ui::TerminalItem::copyModeActionRequested, this,
+                     [this, paneId](const terminal::TerminalCopyModeAction &action) {
+                         TerminalTab *tab = findTabForPane(paneId);
+                         if (tab != nullptr && tab->ssh)
+                         {
+                             tab->ssh->requestCopyModeAction(action);
+                         }
+                         else if (tab != nullptr && tab->local)
+                         {
+                             tab->local->requestCopyModeAction(action);
                          }
                      });
     QObject::connect(&terminal, &ui::TerminalItem::selectAllRequested, this, [this, paneId] {

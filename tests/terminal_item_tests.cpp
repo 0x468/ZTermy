@@ -6,10 +6,13 @@
 #include "ui/terminal/TerminalTextLayout.h"
 
 #include <QColor>
+#include <QDropEvent>
 #include <QGuiApplication>
+#include <QHoverEvent>
 #include <QImage>
 #include <QInputMethodEvent>
 #include <QKeyEvent>
+#include <QMimeData>
 #include <QMouseEvent>
 #include <QQuickWindow>
 #include <QSignalSpy>
@@ -28,6 +31,9 @@ namespace
 class TestableTerminalItem final : public ztermy::ui::TerminalItem
 {
 public:
+    using TerminalItem::dropEvent;
+    using TerminalItem::hoverLeaveEvent;
+    using TerminalItem::hoverMoveEvent;
     using TerminalItem::inputMethodEvent;
     using TerminalItem::inputMethodQuery;
     using TerminalItem::keyPressEvent;
@@ -80,6 +86,11 @@ private slots:
     void autoscrollsSelectionNearViewportEdges();
     void cancelsTrackedSelectionWhenMouseGrabIsLost();
     void reflectsSelectionStateFromSnapshots();
+    void hoversAndActivatesLinksAheadOfMouseTracking();
+    void labelsQuickSelectTargetsWithoutPrefixes();
+    void quickSelectInsertsOrOpensExactlyOnce();
+    void routesCopyModeKeysWithoutSendingTerminalInput();
+    void routesDroppedFilesWithoutPastingLocalPaths();
     void accumulatesWheelDeltasIntoScrollRows();
     void routesTrackedMouseAndWheelToTerminal();
     void exposesScrollbarAndRequestsAbsoluteScroll();
@@ -90,6 +101,148 @@ private slots:
     void recordsOptInRenderMetrics();
     void analyzesTerminalRowReuse();
 };
+
+void TerminalItemTests::labelsQuickSelectTargetsWithoutPrefixes()
+{
+    auto snapshot = snapshotAt(0, 0);
+    snapshot->columns = 80;
+    snapshot->rows = 2;
+    snapshot->cells.assign(160, {});
+    for (quint16 column = 0; column < 30; ++column)
+    {
+        snapshot->hyperlinks.push_back({.uri = "https://example.test/" + std::to_string(column),
+                                        .kind = ztermy::terminal::TerminalHyperlinkKind::explicitOsc8});
+        snapshot->cell(static_cast<quint16>(column * 2), 0).grapheme = U"x";
+        snapshot->cell(static_cast<quint16>(column * 2), 0).hyperlinkId = column + 1;
+    }
+    const auto targets = ztermy::ui::quickSelectTargets(*snapshot);
+    QCOMPARE(targets.size(), std::size_t{30});
+    for (const auto &target : targets)
+    {
+        QCOMPARE(target.label.size(), qsizetype{2});
+        for (const auto &other : targets)
+        {
+            if (&target != &other)
+            {
+                QVERIFY(!other.label.startsWith(target.label));
+            }
+        }
+    }
+}
+
+void TerminalItemTests::quickSelectInsertsOrOpensExactlyOnce()
+{
+    TestableTerminalItem item;
+    auto snapshot = snapshotAt(0, 0);
+    snapshot->hyperlinks.push_back(
+        {.uri = "https://example.test", .kind = ztermy::terminal::TerminalHyperlinkKind::explicitOsc8});
+    snapshot->cell(0, 0).grapheme = U"x";
+    snapshot->cell(0, 0).hyperlinkId = 1;
+    item.setSnapshot(snapshot);
+
+    QSignalSpy paste(&item, &ztermy::ui::TerminalItem::pasteRequested);
+    item.startQuickSelect();
+    QVERIFY(item.quickSelectActive());
+    QKeyEvent shiftLabel(QEvent::KeyPress, Qt::Key_A, Qt::ShiftModifier, QStringLiteral("A"));
+    item.keyPressEvent(&shiftLabel);
+    QVERIFY(!item.quickSelectActive());
+    QCOMPARE(paste.count(), 1);
+    QCOMPARE(paste.takeFirst().at(0).toByteArray(), QByteArray("x"));
+
+    QSignalSpy opened(&item, &ztermy::ui::TerminalItem::linkActivated);
+    item.startQuickSelect();
+    QKeyEvent controlLabel(QEvent::KeyPress, Qt::Key_A, Qt::ControlModifier);
+    item.keyPressEvent(&controlLabel);
+    QCOMPARE(opened.count(), 1);
+    QCOMPARE(opened.takeFirst().at(0).toString(), QStringLiteral("https://example.test"));
+}
+
+void TerminalItemTests::routesCopyModeKeysWithoutSendingTerminalInput()
+{
+    TestableTerminalItem item;
+    item.setSnapshot(snapshotAt(5, 2));
+    std::vector<ztermy::terminal::TerminalCopyModeAction> actions;
+    QObject::connect(&item, &ztermy::ui::TerminalItem::copyModeActionRequested, &item,
+                     [&actions](const ztermy::terminal::TerminalCopyModeAction &action) {
+                         actions.push_back(action);
+                     });
+    QSignalSpy terminalInput(&item, &ztermy::ui::TerminalItem::keyEventGenerated);
+    QSignalSpy copy(&item, &ztermy::ui::TerminalItem::copyRequested);
+
+    item.startCopyMode();
+    QVERIFY(item.copyModeActive());
+    QCOMPARE(actions.size(), std::size_t{1});
+    QCOMPARE(actions.back().type, ztermy::terminal::TerminalCopyModeActionType::begin);
+
+    QKeyEvent extendLeft(QEvent::KeyPress, Qt::Key_Left, Qt::ShiftModifier);
+    item.keyPressEvent(&extendLeft);
+    QCOMPARE(actions.back().type, ztermy::terminal::TerminalCopyModeActionType::move);
+    QCOMPARE(actions.back().motion, ztermy::terminal::TerminalCopyModeMotion::left);
+    QVERIFY(actions.back().extend);
+
+    QKeyEvent rectangle(QEvent::KeyPress, Qt::Key_V, Qt::ControlModifier);
+    item.keyPressEvent(&rectangle);
+    QCOMPARE(actions.back().type, ztermy::terminal::TerminalCopyModeActionType::selectRectangle);
+
+    QKeyEvent yank(QEvent::KeyPress, Qt::Key_Y, Qt::NoModifier, QStringLiteral("y"));
+    item.keyPressEvent(&yank);
+    QVERIFY(!item.copyModeActive());
+    QCOMPARE(copy.count(), 1);
+    QCOMPARE(actions.back().type, ztermy::terminal::TerminalCopyModeActionType::cancel);
+    QCOMPARE(terminalInput.count(), 0);
+}
+
+void TerminalItemTests::routesDroppedFilesWithoutPastingLocalPaths()
+{
+    TestableTerminalItem item;
+    QSignalSpy files(&item, &ztermy::ui::TerminalItem::localFilesDropped);
+    QSignalSpy paste(&item, &ztermy::ui::TerminalItem::pasteRequested);
+    QMimeData mime;
+    mime.setUrls({QUrl::fromLocalFile(QStringLiteral("C:/Temp/one file.txt")),
+                  QUrl::fromLocalFile(QStringLiteral("D:/two.txt"))});
+    QDropEvent event({10.0, 10.0}, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+    item.dropEvent(&event);
+
+    QCOMPARE(files.count(), 1);
+    QCOMPARE(files.takeFirst().at(0).toStringList(),
+             QStringList({QStringLiteral("C:/Temp/one file.txt"), QStringLiteral("D:/two.txt")}));
+    QCOMPARE(paste.count(), 0);
+    QVERIFY(event.isAccepted());
+}
+
+void TerminalItemTests::hoversAndActivatesLinksAheadOfMouseTracking()
+{
+    TestableTerminalItem item;
+    item.setSize({800, 480});
+    auto snapshot = snapshotAt(0, 0);
+    snapshot->mouseTrackingActive = true;
+    snapshot->hyperlinks.push_back(
+        {.uri = "https://example.test", .kind = ztermy::terminal::TerminalHyperlinkKind::explicitOsc8});
+    snapshot->cell(0, 0).grapheme = U"x";
+    snapshot->cell(0, 0).hyperlinkId = 1;
+    item.setSnapshot(snapshot);
+
+    const QPointF point{17.0, 15.0};
+    QHoverEvent hover(QEvent::HoverMove, point, point, point, Qt::NoModifier);
+    item.hoverMoveEvent(&hover);
+    QCOMPARE(item.hoveredLink(), QStringLiteral("https://example.test"));
+
+    QSignalSpy activated(&item, &ztermy::ui::TerminalItem::linkActivated);
+    QSignalSpy mouseEvents(&item, &ztermy::ui::TerminalItem::mouseEventGenerated);
+    QMouseEvent press(QEvent::MouseButtonPress, point, point, point, Qt::LeftButton, Qt::LeftButton,
+                      Qt::ControlModifier);
+    item.mousePressEvent(&press);
+    QMouseEvent release(QEvent::MouseButtonRelease, point, point, point, Qt::LeftButton, Qt::NoButton,
+                        Qt::ControlModifier);
+    item.mouseReleaseEvent(&release);
+    QCOMPARE(activated.count(), 1);
+    QCOMPARE(activated.takeFirst().at(0).toString(), QStringLiteral("https://example.test"));
+    QCOMPARE(mouseEvents.count(), 0);
+
+    QHoverEvent leave(QEvent::HoverLeave, point, point, point, Qt::NoModifier);
+    item.hoverLeaveEvent(&leave);
+    QVERIFY(item.hoveredLink().isEmpty());
+}
 
 void TerminalItemTests::analyzesTerminalRowReuse()
 {

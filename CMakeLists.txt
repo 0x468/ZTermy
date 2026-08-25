@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 
 project(
     ztermy
-VERSION 0.4.2
+    VERSION 0.4.3
     DESCRIPTION "A native Windows SSH terminal"
     LANGUAGES C CXX RC
 )
@@ -421,6 +421,10 @@ add_library(ztermy_terminal_engine STATIC
     src/domain/terminal/CommandBlockStore.h
     src/domain/terminal/GhosttyTerminalEngine.cpp
     src/domain/terminal/GhosttyTerminalEngine.h
+    src/domain/terminal/TerminalLinkDetector.cpp
+    src/domain/terminal/TerminalLinkDetector.h
+    src/domain/terminal/ShellPathQuoter.cpp
+    src/domain/terminal/ShellPathQuoter.h
     src/domain/terminal/TerminalEngine.h
     src/domain/terminal/TerminalOutputSink.h
     src/domain/terminal/ShellIntegrationDecoder.cpp
@@ -760,6 +764,8 @@ add_library(ztermy_terminal_ui STATIC
     src/ui/terminal/TerminalItem.h
     src/ui/terminal/TerminalKeywordHighlighter.cpp
     src/ui/terminal/TerminalKeywordHighlighter.h
+    src/ui/terminal/TerminalQuickSelect.cpp
+    src/ui/terminal/TerminalQuickSelect.h
     src/ui/terminal/TerminalRenderMetrics.cpp
     src/ui/terminal/TerminalRenderMetrics.h
     src/ui/terminal/TerminalRowReuseAnalysis.cpp

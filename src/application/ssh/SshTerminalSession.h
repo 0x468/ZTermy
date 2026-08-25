@@ -64,6 +64,7 @@ public slots:
     void requestScroll(int rows);
     void requestSelection(quint16 startColumn, quint16 startRow, quint16 endColumn, quint16 endRow, bool rectangular);
     void requestSelectionGesture(const ztermy::terminal::TerminalSelectionGesture &gesture);
+    void requestCopyModeAction(const ztermy::terminal::TerminalCopyModeAction &action);
     void selectAll();
     void clearSelection();
     void copySelection();
@@ -143,6 +144,10 @@ private:
     {
         terminal::TerminalSelectionGesture gesture;
     };
+    struct CopyModeCommand final
+    {
+        terminal::TerminalCopyModeAction action;
+    };
     struct SelectAllCommand final
     {
     };
@@ -177,10 +182,11 @@ private:
     {
     };
 
-    using Command = std::variant<InputCommand, PasteCommand, KeyCommand, MouseCommand, FocusCommand,
-                                 terminal::TerminalGeometry, ScrollCommand, SelectionCommand, SelectionGestureCommand,
-                                 SelectAllCommand, CopyCommand, SelectedTextCommand, SearchCommand, ClearSearchCommand,
-                                 EncodingCommand, HistoryCommand, TelemetryVisibilityCommand, TelemetryRefreshCommand>;
+    using Command =
+        std::variant<InputCommand, PasteCommand, KeyCommand, MouseCommand, FocusCommand, terminal::TerminalGeometry,
+                     ScrollCommand, SelectionCommand, SelectionGestureCommand, CopyModeCommand, SelectAllCommand,
+                     CopyCommand, SelectedTextCommand, SearchCommand, ClearSearchCommand, EncodingCommand,
+                     HistoryCommand, TelemetryVisibilityCommand, TelemetryRefreshCommand>;
 
     void queueByteCommand(Command command, std::size_t byteCount);
     void run(SshConnectionRequest &request, terminal::TerminalGeometry geometry, const std::stop_token &stopToken);

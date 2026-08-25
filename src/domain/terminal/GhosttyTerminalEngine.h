@@ -21,6 +21,8 @@ public:
     [[nodiscard]] std::error_code setSelection(std::optional<TerminalSelection> selection) override;
     [[nodiscard]] std::expected<bool, std::error_code>
     applySelectionGesture(const TerminalSelectionGesture &gesture) override;
+    [[nodiscard]] std::expected<bool, std::error_code>
+    applyCopyModeAction(const TerminalCopyModeAction &action) override;
     [[nodiscard]] std::error_code selectAll() override;
     [[nodiscard]] std::expected<std::optional<std::string>, std::error_code> selectedText() const override;
     void scrollViewport(int rows) override;
@@ -35,6 +37,7 @@ public:
     [[nodiscard]] std::expected<std::vector<std::byte>, std::error_code>
     encodeMouse(const TerminalMouseEvent &event) override;
     [[nodiscard]] std::expected<std::vector<std::byte>, std::error_code> encodeFocus(bool focused) const override;
+    [[nodiscard]] std::optional<std::string> takeClipboardWrite() override;
     [[nodiscard]] std::expected<std::string, std::error_code> plainText() const override;
     [[nodiscard]] std::expected<TerminalScrollbackPage, std::error_code>
     scrollbackPage(TerminalScrollbackRequest request) const override;

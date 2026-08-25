@@ -1,4 +1,5 @@
 #include "domain/terminal/GhosttyTerminalEngine.h"
+#include "domain/terminal/ShellPathQuoter.h"
 
 #include <QTest>
 
@@ -27,6 +28,7 @@ private slots:
     void exposesCombiningAndEmojiGraphemes();
     void reportsAndResetsRenderDamage();
     void selectsAndFormatsViewportText();
+    void navigatesCopyModeWithTerminalOwnedSelection();
     void appliesTrackedWordSelectionGestures();
     void autoscrollsTrackedSelectionWithoutDoubleScrolling();
     void selectsCompleteScrollback();
@@ -37,8 +39,92 @@ private slots:
     void encodesMouseAndFocusEventsFromLiveTerminalModes();
     void reportsAlternateScrollMode();
     void exposesShellWorkingDirectorySequences();
+    void exposesExplicitOsc8Hyperlinks();
+    void detectsAutomaticHttpLinksWithoutOverridingOsc8();
+    void drainsBoundedOsc52ClipboardWrites();
     void pagesThroughScrollback();
+    void quotesDroppedPathsForShellDialects();
 };
+
+void TerminalEngineTests::quotesDroppedPathsForShellDialects()
+{
+    using ztermy::terminal::ShellDialect;
+    QCOMPARE(ztermy::terminal::quoteShellPath(R"(C:\A B\o'ne.txt)", ShellDialect::PowerShell),
+             std::string("'C:\\A B\\o''ne.txt'"));
+    QCOMPARE(ztermy::terminal::quoteShellPath("/tmp/a'b", ShellDialect::Posix), std::string("'/tmp/a'\\''b'"));
+    const std::array paths = {std::string{"C:\\one"}, std::string{"D:\\two words"}};
+    QCOMPARE(ztermy::terminal::quoteShellPaths(paths, ShellDialect::Cmd), std::string("\"C:\\one\" \"D:\\two words\""));
+}
+
+void TerminalEngineTests::drainsBoundedOsc52ClipboardWrites()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 20, .rows = 3});
+    QVERIFY(result.has_value());
+    auto &engine = **result;
+
+    constexpr std::string_view first = "\x1b]52;c;SGVs";
+    constexpr std::string_view second = "bG8=\x07";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(first))));
+    QVERIFY(!engine.takeClipboardWrite().has_value());
+    QVERIFY(!engine.feed(std::as_bytes(std::span(second))));
+    QCOMPARE(engine.takeClipboardWrite(), std::optional<std::string>{"Hello"});
+    QVERIFY(!engine.takeClipboardWrite().has_value());
+
+    constexpr std::string_view query = "\x1b]52;c;?\x07";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(query))));
+    QVERIFY(!engine.takeClipboardWrite().has_value());
+
+    constexpr std::string_view superseded = "\x1b]52;c;V29ybGQ=\x07\x1b]52;c;IQ==\x07";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(superseded))));
+    QCOMPARE(engine.takeClipboardWrite(), std::optional<std::string>{"!"});
+}
+
+void TerminalEngineTests::exposesExplicitOsc8Hyperlinks()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 32, .rows = 3});
+    QVERIFY(result.has_value());
+    auto &engine = **result;
+
+    constexpr std::string_view content = "\x1b]8;;https://target.example/path\x1b\\label\x1b]8;;\x1b\\";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(content))));
+    const auto snapshot = engine.snapshot();
+    QVERIFY(snapshot.has_value());
+    QVERIFY(snapshot->cell(0, 0).hyperlinkId != 0);
+    const auto *link = snapshot->hyperlink(snapshot->cell(0, 0).hyperlinkId);
+    QVERIFY(link != nullptr);
+    QCOMPARE(link->uri, std::string("https://target.example/path"));
+    QCOMPARE(link->kind, ztermy::terminal::TerminalHyperlinkKind::explicitOsc8);
+    QCOMPARE(snapshot->cell(4, 0).hyperlinkId, snapshot->cell(0, 0).hyperlinkId);
+    QCOMPARE(snapshot->cell(5, 0).hyperlinkId, std::uint32_t{0});
+}
+
+void TerminalEngineTests::detectsAutomaticHttpLinksWithoutOverridingOsc8()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 48, .rows = 3});
+    QVERIFY(result.has_value());
+    auto &engine = **result;
+
+    constexpr std::string_view content =
+        "See https://example.test/path.\r\n\x1b]8;;https://explicit.test\x1b\\https://shown.test\x1b]8;;\x1b\\";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(content))));
+    const auto snapshot = engine.snapshot();
+    QVERIFY(snapshot.has_value());
+
+    const auto automaticId = snapshot->cell(4, 0).hyperlinkId;
+    QVERIFY(automaticId != 0);
+    const auto *automatic = snapshot->hyperlink(automaticId);
+    QVERIFY(automatic != nullptr);
+    QCOMPARE(automatic->uri, std::string("https://example.test/path"));
+    QCOMPARE(automatic->kind, ztermy::terminal::TerminalHyperlinkKind::automaticUrl);
+    QCOMPARE(snapshot->cell(29, 0).hyperlinkId, std::uint32_t{0});
+
+    const auto explicitId = snapshot->cell(0, 1).hyperlinkId;
+    QVERIFY(explicitId != 0);
+    const auto *explicitLink = snapshot->hyperlink(explicitId);
+    QVERIFY(explicitLink != nullptr);
+    QCOMPARE(explicitLink->uri, std::string("https://explicit.test"));
+    QCOMPARE(explicitLink->kind, ztermy::terminal::TerminalHyperlinkKind::explicitOsc8);
+}
 
 void TerminalEngineTests::exposesShellWorkingDirectorySequences()
 {
@@ -372,6 +458,50 @@ void TerminalEngineTests::selectsAndFormatsViewportText()
     const auto clearedText = engine.selectedText();
     QVERIFY(clearedText);
     QVERIFY(!clearedText->has_value());
+}
+
+void TerminalEngineTests::navigatesCopyModeWithTerminalOwnedSelection()
+{
+    using Action = ztermy::terminal::TerminalCopyModeAction;
+    using ActionType = ztermy::terminal::TerminalCopyModeActionType;
+    using Motion = ztermy::terminal::TerminalCopyModeMotion;
+
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 20, .rows = 3});
+    QVERIFY(result);
+    auto &engine = **result;
+    constexpr std::string_view content = "alpha beta";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(content))));
+
+    auto changed = engine.applyCopyModeAction(Action{.type = ActionType::begin});
+    QVERIFY(changed);
+    QVERIFY(*changed);
+    changed = engine.applyCopyModeAction(Action{.type = ActionType::move, .motion = Motion::left});
+    QVERIFY(changed);
+    auto selected = engine.selectedText();
+    QVERIFY(selected);
+    QVERIFY(selected->has_value());
+    QCOMPARE(**selected, "a");
+
+    changed = engine.applyCopyModeAction(Action{.type = ActionType::selectCharacter});
+    QVERIFY(changed);
+    changed = engine.applyCopyModeAction(Action{.type = ActionType::move, .motion = Motion::wordLeft});
+    QVERIFY(changed);
+    selected = engine.selectedText();
+    QVERIFY(selected);
+    QVERIFY(selected->has_value());
+    QCOMPARE(**selected, "beta");
+
+    QVERIFY(!engine.resize({.columns = 10, .rows = 4}));
+    selected = engine.selectedText();
+    QVERIFY(selected);
+    QVERIFY(selected->has_value());
+    QCOMPARE(**selected, "beta");
+
+    changed = engine.applyCopyModeAction(Action{.type = ActionType::cancel});
+    QVERIFY(changed);
+    selected = engine.selectedText();
+    QVERIFY(selected);
+    QVERIFY(!selected->has_value());
 }
 
 void TerminalEngineTests::autoscrollsTrackedSelectionWithoutDoubleScrolling()

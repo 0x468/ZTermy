@@ -116,6 +116,7 @@ class AppController final : public QObject
     Q_PROPERTY(QStringList hostProfileGroups READ hostProfileGroups NOTIFY hostProfilesChanged)
     Q_PROPERTY(QStringList collapsedHostSections READ collapsedHostSections NOTIFY hostWorkspaceChanged)
     Q_PROPERTY(QVariantList terminalTabs READ terminalTabs NOTIFY terminalTabsChanged)
+    Q_PROPERTY(bool canReopenClosedTerminalTab READ canReopenClosedTerminalTab NOTIFY terminalTabsChanged)
     Q_PROPERTY(QVariantList quickCommands READ quickCommands NOTIFY quickCommandsChanged)
     Q_PROPERTY(QString quickCommandOperationError READ quickCommandOperationError NOTIFY quickCommandsChanged)
     Q_PROPERTY(QVariantList notes READ notes NOTIFY notesChanged)
@@ -277,6 +278,7 @@ public:
     [[nodiscard]] QStringList hostProfileGroups() const;
     [[nodiscard]] QStringList collapsedHostSections() const;
     [[nodiscard]] QVariantList terminalTabs() const;
+    [[nodiscard]] bool canReopenClosedTerminalTab() const noexcept;
     [[nodiscard]] QVariantList quickCommands() const;
     [[nodiscard]] QString quickCommandOperationError() const;
     [[nodiscard]] QVariantList notes() const;
@@ -402,6 +404,15 @@ public:
     Q_INVOKABLE QString startLocalTerminal();
     Q_INVOKABLE bool activateTerminalTab(const QString &id);
     Q_INVOKABLE bool closeTerminalTab(const QString &id);
+    Q_INVOKABLE bool duplicateTerminalTab(const QString &id);
+    Q_INVOKABLE bool reopenLastClosedTerminalTab();
+    Q_INVOKABLE bool closeOtherTerminalTabs(const QString &id);
+    Q_INVOKABLE bool closeTerminalTabsToRight(const QString &id);
+    Q_INVOKABLE bool moveTerminalTab(const QString &id, int targetIndex);
+    Q_INVOKABLE bool setTerminalTabTitle(const QString &id, const QString &title);
+    [[nodiscard]] Q_INVOKABLE QVariantMap activeCommandBlockActions() const;
+    Q_INVOKABLE bool copyLastTerminalCommand();
+    Q_INVOKABLE bool copyLastTerminalCommandOutput();
     Q_INVOKABLE bool activateTerminalPane(const QString &paneId);
     Q_INVOKABLE bool splitActiveTerminal(const QString &orientation, bool duplicateActive = false);
     Q_INVOKABLE bool closeActiveTerminalPane();
@@ -420,6 +431,7 @@ public:
     Q_INVOKABLE bool copyActiveTerminalAddress();
     Q_INVOKABLE bool copyActiveSftpPath();
     Q_INVOKABLE bool insertTerminalCommand(const QString &command);
+    Q_INVOKABLE bool openTerminalLink(const QString &uri);
     Q_INVOKABLE bool runTerminalCommand(const QString &command);
     Q_INVOKABLE bool startTerminalLog(const QString &localFileUrl);
     Q_INVOKABLE void stopTerminalLog();
@@ -793,6 +805,7 @@ private:
         QString sftpSortColumn = QStringLiteral("name");
         QString sftpFilenameEncoding = QStringLiteral("utf-8");
         QString terminalWorkingDirectory;
+        QStringList pendingDropLocalFiles;
         QByteArray inputHistoryBuffer;
         QString telemetryState = QStringLiteral("paused");
         QString aiState = QStringLiteral("idle");
@@ -846,6 +859,14 @@ private:
         bool recentConnectionRecorded = false;
         bool reconnectPending = false;
         std::optional<ssh::SshFailureKind> sshFailure;
+    };
+
+    struct ClosedTerminalDescription final
+    {
+        TerminalTabKind kind = TerminalTabKind::Local;
+        QString sourceProfileId;
+        QString title;
+        QString workingDirectory;
     };
 
     struct PortForwardingRuntime final
@@ -988,6 +1009,9 @@ private:
                                                bool rememberProxyCredential = false, bool manageProxyCredential = false,
                                                const QVariantMap &routeOptions = {});
     void setCredentialOperationError(QString message);
+    [[nodiscard]] QString startLocalTerminalAt(const QString &workingDirectory, const QString &preferredTitle = {});
+    [[nodiscard]] bool closeTerminalTabInternal(const QString &id, bool recordClosed);
+    void recordClosedTerminal(const QString &workspaceId);
     [[nodiscard]] bool startSshConnection(ssh::SshConnectionRequest request, QString sourceProfileId = {});
     [[nodiscard]] std::optional<ssh::SshConnectionRequest> connectionRequestForProfile(const ssh::SshProfile &profile,
                                                                                        const QString &secret = {},
@@ -998,6 +1022,8 @@ private:
     [[nodiscard]] std::expected<ssh::SshConnectionRequest, sftp::TransferCredentialError>
     sftpConnectionRequest(const TerminalTab &tab);
     [[nodiscard]] sftp::TransferRequestProvider transferRequestProvider(const QString &profileId);
+    [[nodiscard]] bool enqueueSftpUploadBatchForTab(const TerminalTab &tab, const QStringList &localFileUrls,
+                                                    const QString &destinationRoot);
     void initializeTransferManager();
     void applyTransferSnapshot(const sftp::TransferTasksPtr &tasks);
     void applyTransferBatchSnapshot(const sftp::TransferBatchesPtr &batches);
@@ -1114,6 +1140,7 @@ private:
     ai::AiReadToolDispatcher m_aiReadToolDispatcher;
     ai::AiToolDispatchLedger m_mcpDispatchLedger;
     std::vector<std::unique_ptr<TerminalTab>> m_tabs;
+    std::deque<ClosedTerminalDescription> m_closedTerminalTabs;
     std::vector<std::unique_ptr<sftp::SftpSession>> m_stoppingSftpSessions;
     QString m_activeTabId;
     QString m_focusedTabId;

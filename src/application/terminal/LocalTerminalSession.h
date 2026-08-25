@@ -55,6 +55,7 @@ public slots:
     virtual void requestSelection(quint16 startColumn, quint16 startRow, quint16 endColumn, quint16 endRow,
                                   bool rectangular) = 0;
     virtual void requestSelectionGesture(const ztermy::terminal::TerminalSelectionGesture &gesture) = 0;
+    virtual void requestCopyModeAction(const ztermy::terminal::TerminalCopyModeAction &action) = 0;
     virtual void selectAll() = 0;
     virtual void clearSelection() = 0;
     virtual void copySelection() = 0;
@@ -102,6 +103,7 @@ public slots:
     void requestSelection(quint16 startColumn, quint16 startRow, quint16 endColumn, quint16 endRow,
                           bool rectangular) override;
     void requestSelectionGesture(const ztermy::terminal::TerminalSelectionGesture &gesture) override;
+    void requestCopyModeAction(const ztermy::terminal::TerminalCopyModeAction &action) override;
     void selectAll() override;
     void clearSelection() override;
     void copySelection() override;
@@ -150,6 +152,10 @@ private:
     {
         TerminalSelectionGesture gesture;
     };
+    struct CopyModeCommand
+    {
+        TerminalCopyModeAction action;
+    };
     struct SelectAllCommand
     {
     };
@@ -170,8 +176,8 @@ private:
     };
 
     using Command = std::variant<InputCommand, PasteCommand, KeyCommand, MouseCommand, FocusCommand, TerminalGeometry,
-                                 ScrollCommand, SelectionCommand, SelectionGestureCommand, SelectAllCommand,
-                                 CopyCommand, SelectedTextCommand, SearchCommand, ClearSearchCommand>;
+                                 ScrollCommand, SelectionCommand, SelectionGestureCommand, CopyModeCommand,
+                                 SelectAllCommand, CopyCommand, SelectedTextCommand, SearchCommand, ClearSearchCommand>;
 
     void queueByteCommand(Command command, std::size_t byteCount);
     void readLoop(const std::stop_token &stopToken);

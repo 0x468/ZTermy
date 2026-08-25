@@ -507,6 +507,19 @@ void SshTerminalSession::requestSelectionGesture(const terminal::TerminalSelecti
     signalCommandWake();
 }
 
+void SshTerminalSession::requestCopyModeAction(const terminal::TerminalCopyModeAction &action)
+{
+    if (!m_running.load())
+    {
+        return;
+    }
+    {
+        std::scoped_lock lock(m_commandMutex);
+        m_commands.emplace_back(CopyModeCommand{.action = action});
+    }
+    signalCommandWake();
+}
+
 void SshTerminalSession::selectAll()
 {
     if (!m_running.load())
@@ -1016,6 +1029,22 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                 continue;
             }
 
+            if (const auto *copyMode = std::get_if<CopyModeCommand>(&command))
+            {
+                const auto changed = m_engine->applyCopyModeAction(copyMode->action);
+                if (!changed)
+                {
+                    postStatus(
+                        tr("SSH terminal Copy Mode failed: %1").arg(QString::fromStdString(changed.error().message())));
+                    continue;
+                }
+                if (*changed)
+                {
+                    publishSnapshot();
+                }
+                continue;
+            }
+
             if (std::holds_alternative<SelectAllCommand>(command))
             {
                 if (const std::error_code error = m_engine->selectAll())
@@ -1383,6 +1412,10 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
         {
             finishFailure(SshFailureKind::ProtocolError, tr("SSH terminal parser failed"));
             return;
+        }
+        if (std::optional<std::string> clipboardWrite = m_engine->takeClipboardWrite())
+        {
+            emit clipboardTextReady(QString::fromUtf8(*clipboardWrite));
         }
         publishSnapshot();
     }

@@ -47,8 +47,26 @@ struct TerminalCell
     bool invisible = false;
     bool selected = false;
     std::uint8_t displayWidth = 1;
+    // Zero means no hyperlink. Non-zero values are one-based indexes into
+    // TerminalSnapshot::hyperlinks so cells stay compact and URI storage is
+    // shared by an immutable snapshot.
+    std::uint32_t hyperlinkId = 0;
 
     friend bool operator==(const TerminalCell &, const TerminalCell &) = default;
+};
+
+enum class TerminalHyperlinkKind : std::uint8_t
+{
+    explicitOsc8,
+    automaticUrl,
+};
+
+struct TerminalHyperlink final
+{
+    std::string uri;
+    TerminalHyperlinkKind kind = TerminalHyperlinkKind::explicitOsc8;
+
+    friend bool operator==(const TerminalHyperlink &, const TerminalHyperlink &) = default;
 };
 
 struct TerminalPoint
@@ -95,6 +113,43 @@ struct TerminalSelectionGesture final
     bool hasPoint = true;
     bool rectangular = false;
     std::u32string wordBoundaryCodepoints;
+};
+
+enum class TerminalCopyModeActionType : std::uint8_t
+{
+    begin,
+    move,
+    switchEndpoint,
+    selectCharacter,
+    selectLine,
+    selectRectangle,
+    cancel,
+};
+
+enum class TerminalCopyModeMotion : std::uint8_t
+{
+    left,
+    right,
+    up,
+    down,
+    wordLeft,
+    wordRight,
+    lineStart,
+    lineEnd,
+    pageUp,
+    pageDown,
+    top,
+    bottom,
+};
+
+// Keyboard Copy Mode commands are interpreted by the terminal worker. The
+// installed terminal selection owns tracked grid references, so output,
+// scrollback pruning, and reflow cannot make a QML-side row index authoritative.
+struct TerminalCopyModeAction final
+{
+    TerminalCopyModeActionType type = TerminalCopyModeActionType::begin;
+    TerminalCopyModeMotion motion = TerminalCopyModeMotion::right;
+    bool extend = false;
 };
 
 enum class TerminalKeyAction : std::uint8_t
@@ -372,6 +427,7 @@ struct TerminalSnapshot
     TerminalDamageKind damage = TerminalDamageKind::full;
     std::vector<std::uint16_t> damagedRows;
     std::vector<TerminalCell> cells;
+    std::vector<TerminalHyperlink> hyperlinks;
     // Raw value emitted by OSC 7 / OSC 9 / OSC 1337. Consumers must
     // validate and normalize it before treating it as a filesystem path.
     std::string workingDirectory;
@@ -384,6 +440,11 @@ struct TerminalSnapshot
     [[nodiscard]] TerminalCell &cell(const std::uint16_t column, const std::uint16_t row)
     {
         return cells.at((static_cast<std::size_t>(row) * columns) + column);
+    }
+
+    [[nodiscard]] const TerminalHyperlink *hyperlink(const std::uint32_t id) const noexcept
+    {
+        return id == 0 || id > hyperlinks.size() ? nullptr : &hyperlinks[id - 1];
     }
 };
 
@@ -439,6 +500,8 @@ public:
     // autoscroll ticks already held at a scrollback boundary.
     [[nodiscard]] virtual std::expected<bool, std::error_code>
     applySelectionGesture(const TerminalSelectionGesture &gesture) = 0;
+    [[nodiscard]] virtual std::expected<bool, std::error_code>
+    applyCopyModeAction(const TerminalCopyModeAction &action) = 0;
     [[nodiscard]] virtual std::error_code selectAll() = 0;
     [[nodiscard]] virtual std::expected<std::optional<std::string>, std::error_code> selectedText() const = 0;
     virtual void scrollViewport(int rows) = 0;
@@ -453,6 +516,9 @@ public:
     [[nodiscard]] virtual std::expected<std::vector<std::byte>, std::error_code>
     encodeMouse(const TerminalMouseEvent &event) = 0;
     [[nodiscard]] virtual std::expected<std::vector<std::byte>, std::error_code> encodeFocus(bool focused) const = 0;
+    // Returns and clears the newest terminal-originated clipboard write.
+    // Callers drain this after feed() and after releasing their engine lock.
+    [[nodiscard]] virtual std::optional<std::string> takeClipboardWrite() = 0;
 
     // Read a bounded page of scrollback text (including the active screen at
     // the tail). firstLine is zero-based from the top of the retained

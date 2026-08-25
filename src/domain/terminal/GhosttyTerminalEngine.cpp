@@ -1,4 +1,5 @@
 #include "domain/terminal/GhosttyTerminalEngine.h"
+#include "domain/terminal/TerminalLinkDetector.h"
 
 #include <ghostty/vt.h>
 
@@ -463,6 +464,64 @@ void appendUtf8(std::string &destination, const std::uint32_t codepoint)
     return value;
 }
 
+[[nodiscard]] bool validUtf8(const std::string_view value) noexcept
+{
+    std::size_t offset = 0;
+    while (offset < value.size())
+    {
+        const auto lead = static_cast<std::uint8_t>(value[offset]);
+        if (lead < 0x80U)
+        {
+            ++offset;
+            continue;
+        }
+        std::size_t continuationCount = 0;
+        std::uint32_t codepoint = 0;
+        std::uint32_t minimum = 0;
+        if ((lead & 0xE0U) == 0xC0U)
+        {
+            continuationCount = 1;
+            codepoint = lead & 0x1FU;
+            minimum = 0x80U;
+        }
+        else if ((lead & 0xF0U) == 0xE0U)
+        {
+            continuationCount = 2;
+            codepoint = lead & 0x0FU;
+            minimum = 0x800U;
+        }
+        else if ((lead & 0xF8U) == 0xF0U)
+        {
+            continuationCount = 3;
+            codepoint = lead & 0x07U;
+            minimum = 0x10000U;
+        }
+        else
+        {
+            return false;
+        }
+        if (offset + continuationCount >= value.size())
+        {
+            return false;
+        }
+        for (std::size_t index = 1; index <= continuationCount; ++index)
+        {
+            const auto byte = static_cast<std::uint8_t>(value[offset + index]);
+            if ((byte & 0xC0U) != 0x80U)
+            {
+                return false;
+            }
+            codepoint = (codepoint << 6U) | (byte & 0x3FU);
+        }
+        if (codepoint < minimum || codepoint > 0x10FFFFU || (codepoint >= 0xD800U && codepoint <= 0xDFFFU))
+        {
+            return false;
+        }
+        offset += continuationCount + 1;
+    }
+    return true;
+}
+
 } // namespace
 
 namespace ztermy::terminal
@@ -470,6 +529,15 @@ namespace ztermy::terminal
 
 struct GhosttyTerminalEngine::Impl
 {
+    enum class CopyModeGranularity : std::uint8_t
+    {
+        character,
+        line,
+        rectangle,
+    };
+
+    static constexpr std::size_t maximumClipboardWriteBytes = std::size_t{8} * 1024U * 1024U;
+
     Impl(const GhosttyTerminal terminalHandle, const GhosttyRenderState renderStateHandle,
          const GhosttyRenderStateRowIterator rowIteratorHandle,
          const GhosttyRenderStateRowCells rowCellsHandle) noexcept
@@ -509,6 +577,43 @@ struct GhosttyTerminalEngine::Impl
         }
     }
 
+    static GhosttyClipboardWriteResult clipboardWrite(GhosttyTerminal, void *userdata,
+                                                      const GhosttyClipboardWrite *write)
+    {
+        auto *self = static_cast<Impl *>(userdata);
+        if (self == nullptr || write == nullptr || write->size < sizeof(GhosttyClipboardWrite)
+            || write->location != GHOSTTY_CLIPBOARD_LOCATION_STANDARD)
+        {
+            return GHOSTTY_CLIPBOARD_WRITE_RESULT_UNSUPPORTED;
+        }
+        if (write->contents_len == 0)
+        {
+            self->pendingClipboardWrite = std::string{};
+            return GHOSTTY_CLIPBOARD_WRITE_RESULT_SUCCESS;
+        }
+        for (std::size_t index = 0; index < write->contents_len; ++index)
+        {
+            const GhosttyClipboardContent &content = write->contents[index];
+            const std::string_view mime(reinterpret_cast<const char *>(content.mime.ptr), content.mime.len);
+            if (!mime.starts_with("text/plain"))
+            {
+                continue;
+            }
+            if (content.data.len > maximumClipboardWriteBytes)
+            {
+                return GHOSTTY_CLIPBOARD_WRITE_RESULT_INVALID_DATA;
+            }
+            const std::string_view text(reinterpret_cast<const char *>(content.data.ptr), content.data.len);
+            if (!validUtf8(text))
+            {
+                return GHOSTTY_CLIPBOARD_WRITE_RESULT_INVALID_DATA;
+            }
+            self->pendingClipboardWrite = std::string(text);
+            return GHOSTTY_CLIPBOARD_WRITE_RESULT_SUCCESS;
+        }
+        return GHOSTTY_CLIPBOARD_WRITE_RESULT_UNSUPPORTED;
+    }
+
     GhosttyTerminal terminal = nullptr;
     GhosttyRenderState renderState = nullptr;
     GhosttyRenderStateRowIterator rowIterator = nullptr;
@@ -523,6 +628,10 @@ struct GhosttyTerminalEngine::Impl
     GhosttyMouseEncoder mouseEncoder = nullptr;
     GhosttyMouseEvent mouseEvent = nullptr;
     std::string lastSearchQuery;
+    std::optional<std::string> pendingClipboardWrite;
+    CopyModeGranularity copyModeGranularity = CopyModeGranularity::character;
+    bool copyModeActive = false;
+    bool copyModeSelecting = false;
     bool lastSearchCaseSensitive = false;
 };
 
@@ -574,6 +683,19 @@ GhosttyTerminalEngine::create(const TerminalGeometry geometry)
     rowIteratorOwner.release();
     rowCellsOwner.release();
     auto engine = std::unique_ptr<GhosttyTerminalEngine>(new GhosttyTerminalEngine(std::move(impl)));
+    if (const GhosttyResult userdataResult =
+            ghostty_terminal_set(engine->m_impl->terminal, GHOSTTY_TERMINAL_OPT_USERDATA, engine->m_impl.get());
+        userdataResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(userdataResult));
+    }
+    if (const GhosttyResult clipboardResult =
+            ghostty_terminal_set(engine->m_impl->terminal, GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE,
+                                 reinterpret_cast<const void *>(&GhosttyTerminalEngine::Impl::clipboardWrite));
+        clipboardResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(clipboardResult));
+    }
     if (const GhosttyResult gestureResult = ghostty_selection_gesture_new(nullptr, &engine->m_impl->selectionGesture);
         gestureResult != GHOSTTY_SUCCESS)
     {
@@ -923,6 +1045,286 @@ GhosttyTerminalEngine::applySelectionGesture(const TerminalSelectionGesture &ges
         return std::unexpected(ghosttyError(installResult));
     }
     return gesture.type != TerminalSelectionGestureType::release;
+}
+
+std::expected<bool, std::error_code> GhosttyTerminalEngine::applyCopyModeAction(const TerminalCopyModeAction &action)
+{
+    const auto install = [this](const GhosttySelection *selection) -> std::expected<bool, std::error_code> {
+        const GhosttyResult result = ghostty_terminal_set(m_impl->terminal, GHOSTTY_TERMINAL_OPT_SELECTION, selection);
+        if (result != GHOSTTY_SUCCESS)
+        {
+            return std::unexpected(ghosttyError(result));
+        }
+        return true;
+    };
+    const auto currentSelection = [this]() -> std::expected<GhosttySelection, std::error_code> {
+        GhosttySelection selection{};
+        selection.size = sizeof(selection);
+        const GhosttyResult result =
+            ghostty_terminal_get(m_impl->terminal, GHOSTTY_TERMINAL_DATA_SELECTION, &selection);
+        if (result != GHOSTTY_SUCCESS)
+        {
+            return std::unexpected(ghosttyError(result));
+        }
+        return selection;
+    };
+    const auto begin = [this, &install]() -> std::expected<bool, std::error_code> {
+        std::uint16_t column = 0;
+        std::uint16_t row = 0;
+        const std::array keys = {GHOSTTY_TERMINAL_DATA_CURSOR_X, GHOSTTY_TERMINAL_DATA_CURSOR_Y};
+        std::array<void *, 2> values = {&column, &row};
+        if (const GhosttyResult result =
+                ghostty_terminal_get_multi(m_impl->terminal, keys.size(), keys.data(), values.data(), nullptr);
+            result != GHOSTTY_SUCCESS)
+        {
+            return std::unexpected(ghosttyError(result));
+        }
+        GhosttyPoint point{};
+        point.tag = GHOSTTY_POINT_TAG_ACTIVE;
+        point.value.coordinate = {.x = column, .y = row};
+        GhosttyGridRef ref{};
+        if (const GhosttyResult result = ghostty_terminal_grid_ref(m_impl->terminal, point, &ref);
+            result != GHOSTTY_SUCCESS)
+        {
+            return std::unexpected(ghosttyError(result));
+        }
+        GhosttySelection selection{};
+        selection.size = sizeof(selection);
+        selection.start = ref;
+        selection.end = ref;
+        selection.rectangle = false;
+        m_impl->copyModeActive = true;
+        m_impl->copyModeSelecting = false;
+        m_impl->copyModeGranularity = Impl::CopyModeGranularity::character;
+        return install(&selection);
+    };
+
+    ghostty_selection_gesture_reset(m_impl->selectionGesture, m_impl->terminal);
+    m_impl->lastSearchQuery.clear();
+
+    if (action.type == TerminalCopyModeActionType::cancel)
+    {
+        m_impl->copyModeActive = false;
+        m_impl->copyModeSelecting = false;
+        return install(nullptr);
+    }
+    if (action.type == TerminalCopyModeActionType::begin || !m_impl->copyModeActive)
+    {
+        return begin();
+    }
+
+    auto selected = currentSelection();
+    if (!selected)
+    {
+        return begin();
+    }
+    GhosttySelection selection = *selected;
+
+    if (action.type == TerminalCopyModeActionType::switchEndpoint)
+    {
+        std::swap(selection.start, selection.end);
+        return install(&selection);
+    }
+    if (action.type == TerminalCopyModeActionType::selectCharacter)
+    {
+        selection.rectangle = false;
+        m_impl->copyModeSelecting = true;
+        m_impl->copyModeGranularity = Impl::CopyModeGranularity::character;
+        return install(&selection);
+    }
+    if (action.type == TerminalCopyModeActionType::selectRectangle)
+    {
+        selection.rectangle = true;
+        m_impl->copyModeSelecting = true;
+        m_impl->copyModeGranularity = Impl::CopyModeGranularity::rectangle;
+        return install(&selection);
+    }
+    if (action.type == TerminalCopyModeActionType::selectLine)
+    {
+        GhosttyTerminalSelectLineOptions options{};
+        options.size = sizeof(options);
+        options.ref = selection.end;
+        GhosttySelection line{};
+        line.size = sizeof(line);
+        const GhosttyResult result = ghostty_terminal_select_line(m_impl->terminal, &options, &line);
+        if (result != GHOSTTY_SUCCESS)
+        {
+            return std::unexpected(ghosttyError(result));
+        }
+        m_impl->copyModeSelecting = true;
+        m_impl->copyModeGranularity = Impl::CopyModeGranularity::line;
+        return install(&line);
+    }
+    if (action.type != TerminalCopyModeActionType::move)
+    {
+        return false;
+    }
+
+    const bool extending = action.extend || m_impl->copyModeSelecting;
+    if (!extending)
+    {
+        selection.start = selection.end;
+    }
+    const auto adjust = [this](GhosttySelection &value, const GhosttySelectionAdjust adjustment) -> std::error_code {
+        const GhosttyResult result = ghostty_terminal_selection_adjust(m_impl->terminal, &value, adjustment);
+        return result == GHOSTTY_SUCCESS ? std::error_code{} : ghosttyError(result);
+    };
+    const auto adjustment = [](const TerminalCopyModeMotion motion) -> std::optional<GhosttySelectionAdjust> {
+        switch (motion)
+        {
+            case TerminalCopyModeMotion::left:
+                return GHOSTTY_SELECTION_ADJUST_LEFT;
+            case TerminalCopyModeMotion::right:
+                return GHOSTTY_SELECTION_ADJUST_RIGHT;
+            case TerminalCopyModeMotion::up:
+                return GHOSTTY_SELECTION_ADJUST_UP;
+            case TerminalCopyModeMotion::down:
+                return GHOSTTY_SELECTION_ADJUST_DOWN;
+            case TerminalCopyModeMotion::lineStart:
+                return GHOSTTY_SELECTION_ADJUST_BEGINNING_OF_LINE;
+            case TerminalCopyModeMotion::lineEnd:
+                return GHOSTTY_SELECTION_ADJUST_END_OF_LINE;
+            case TerminalCopyModeMotion::pageUp:
+                return GHOSTTY_SELECTION_ADJUST_PAGE_UP;
+            case TerminalCopyModeMotion::pageDown:
+                return GHOSTTY_SELECTION_ADJUST_PAGE_DOWN;
+            case TerminalCopyModeMotion::top:
+                return GHOSTTY_SELECTION_ADJUST_HOME;
+            case TerminalCopyModeMotion::bottom:
+                return GHOSTTY_SELECTION_ADJUST_END;
+            case TerminalCopyModeMotion::wordLeft:
+            case TerminalCopyModeMotion::wordRight:
+                return std::nullopt;
+        }
+        return std::nullopt;
+    };
+    if (const auto direct = adjustment(action.motion))
+    {
+        if (const std::error_code error = adjust(selection, *direct))
+        {
+            return std::unexpected(error);
+        }
+    }
+    else
+    {
+        // Word navigation is deliberately bounded. The public libghostty API
+        // exposes semantic cell adjustment but no direct word-motion command,
+        // so probe one cell at a time and classify the collapsed cell text.
+        GhosttySelection probe = selection;
+        probe.start = probe.end;
+        const auto isWhitespace = [this](const GhosttySelection &value) {
+            GhosttySelection cell = value;
+            cell.start = cell.end;
+            std::array<std::uint8_t, 64> storage{};
+            std::size_t written = 0;
+            GhosttyTerminalSelectionFormatOptions options{};
+            options.size = sizeof(options);
+            options.emit = GHOSTTY_FORMATTER_FORMAT_PLAIN;
+            options.selection = &cell;
+            const GhosttyResult result = ghostty_terminal_selection_format_buf(
+                m_impl->terminal, options, storage.data(), storage.size(), &written);
+            if (result != GHOSTTY_SUCCESS || written == 0)
+            {
+                return true;
+            }
+            return std::all_of(storage.begin(), storage.begin() + static_cast<std::ptrdiff_t>(written),
+                               [](const std::uint8_t byte) {
+                                   return byte <= 0x20U;
+                               });
+        };
+        const auto direction = action.motion == TerminalCopyModeMotion::wordLeft ? GHOSTTY_SELECTION_ADJUST_LEFT
+                                                                                 : GHOSTTY_SELECTION_ADJUST_RIGHT;
+        bool seenWord = false;
+        bool seekingSeparator = action.motion == TerminalCopyModeMotion::wordRight && !isWhitespace(probe);
+        constexpr int maximumWordMotionCells = 4096;
+        for (int step = 0; step < maximumWordMotionCells; ++step)
+        {
+            GhosttyPointCoordinate before{};
+            const bool hadBefore =
+                ghostty_terminal_point_from_grid_ref(m_impl->terminal, &probe.end, GHOSTTY_POINT_TAG_SCREEN, &before)
+                == GHOSTTY_SUCCESS;
+            if (const std::error_code error = adjust(probe, direction))
+            {
+                return std::unexpected(error);
+            }
+            const bool whitespace = isWhitespace(probe);
+            bool finished = false;
+            if (action.motion == TerminalCopyModeMotion::wordLeft)
+            {
+                if (!whitespace)
+                {
+                    seenWord = true;
+                }
+                else if (seenWord)
+                {
+                    if (const std::error_code error = adjust(probe, GHOSTTY_SELECTION_ADJUST_RIGHT))
+                    {
+                        return std::unexpected(error);
+                    }
+                    finished = true;
+                }
+            }
+            else if (seekingSeparator)
+            {
+                seekingSeparator = !whitespace;
+            }
+            else if (!whitespace)
+            {
+                finished = true;
+            }
+            GhosttyPointCoordinate after{};
+            const bool hasAfter =
+                ghostty_terminal_point_from_grid_ref(m_impl->terminal, &probe.end, GHOSTTY_POINT_TAG_SCREEN, &after)
+                == GHOSTTY_SUCCESS;
+            if (finished || (hadBefore && hasAfter && before.x == after.x && before.y == after.y))
+            {
+                break;
+            }
+        }
+        selection.end = probe.end;
+    }
+
+    if (m_impl->copyModeGranularity == Impl::CopyModeGranularity::line && extending)
+    {
+        if (const std::error_code error = adjust(selection, GHOSTTY_SELECTION_ADJUST_END_OF_LINE))
+        {
+            return std::unexpected(error);
+        }
+    }
+    selection.rectangle = m_impl->copyModeGranularity == Impl::CopyModeGranularity::rectangle;
+    if (!extending)
+    {
+        selection.start = selection.end;
+    }
+
+    GhosttyPointCoordinate endpoint{};
+    if (ghostty_terminal_point_from_grid_ref(m_impl->terminal, &selection.end, GHOSTTY_POINT_TAG_SCREEN, &endpoint)
+        == GHOSTTY_SUCCESS)
+    {
+        GhosttyTerminalScrollbar scrollbar{};
+        std::uint16_t rows = 0;
+        if (ghostty_terminal_get(m_impl->terminal, GHOSTTY_TERMINAL_DATA_SCROLLBAR, &scrollbar) == GHOSTTY_SUCCESS
+            && ghostty_terminal_get(m_impl->terminal, GHOSTTY_TERMINAL_DATA_ROWS, &rows) == GHOSTTY_SUCCESS && rows > 0)
+        {
+            std::size_t target = scrollbar.offset;
+            if (endpoint.y < scrollbar.offset)
+            {
+                target = endpoint.y;
+            }
+            else if (endpoint.y >= scrollbar.offset + rows)
+            {
+                target = endpoint.y - rows + 1U;
+            }
+            if (target != scrollbar.offset)
+            {
+                GhosttyTerminalScrollViewport viewport{};
+                viewport.tag = GHOSTTY_SCROLL_VIEWPORT_ROW;
+                viewport.value.row = target;
+                ghostty_terminal_scroll_viewport(m_impl->terminal, viewport);
+            }
+        }
+    }
+    return install(&selection);
 }
 
 std::error_code GhosttyTerminalEngine::selectAll()
@@ -1353,6 +1755,11 @@ std::expected<std::vector<std::byte>, std::error_code> GhosttyTerminalEngine::en
     });
 }
 
+std::optional<std::string> GhosttyTerminalEngine::takeClipboardWrite()
+{
+    return std::exchange(m_impl->pendingClipboardWrite, std::nullopt);
+}
+
 std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot()
 {
     if (const GhosttyResult updateResult = ghostty_render_state_update(m_impl->renderState, m_impl->terminal);
@@ -1578,6 +1985,46 @@ std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot
             {
                 return std::unexpected(ghosttyError(rawResult));
             }
+            bool hasHyperlink = false;
+            if (const GhosttyResult hyperlinkResult =
+                    ghostty_cell_get(rawCell, GHOSTTY_CELL_DATA_HAS_HYPERLINK, &hasHyperlink);
+                hyperlinkResult != GHOSTTY_SUCCESS)
+            {
+                return std::unexpected(ghosttyError(hyperlinkResult));
+            }
+            if (hasHyperlink)
+            {
+                GhosttyPoint point{};
+                point.tag = GHOSTTY_POINT_TAG_VIEWPORT;
+                point.value.coordinate = {.x = column, .y = row};
+                GhosttyGridRef ref{};
+                if (const GhosttyResult refResult = ghostty_terminal_grid_ref(m_impl->terminal, point, &ref);
+                    refResult != GHOSTTY_SUCCESS)
+                {
+                    return std::unexpected(ghosttyError(refResult));
+                }
+
+                std::size_t required = 0;
+                const GhosttyResult sizeResult = ghostty_grid_ref_hyperlink_uri(&ref, nullptr, 0, &required);
+                if (sizeResult != GHOSTTY_SUCCESS && sizeResult != GHOSTTY_OUT_OF_SPACE)
+                {
+                    return std::unexpected(ghosttyError(sizeResult));
+                }
+                if (required > 0 && required <= ztermy::terminal::maximumTerminalHyperlinkUriBytes)
+                {
+                    std::string uri(required, '\0');
+                    std::size_t written = 0;
+                    if (const GhosttyResult uriResult = ghostty_grid_ref_hyperlink_uri(
+                            &ref, reinterpret_cast<std::uint8_t *>(uri.data()), uri.size(), &written);
+                        uriResult != GHOSTTY_SUCCESS)
+                    {
+                        return std::unexpected(ghosttyError(uriResult));
+                    }
+                    uri.resize(written);
+                    cell.hyperlinkId = ztermy::terminal::internTerminalHyperlink(
+                        result, std::move(uri), ztermy::terminal::TerminalHyperlinkKind::explicitOsc8);
+                }
+            }
             GhosttyCellWide wide = GHOSTTY_CELL_WIDE_NARROW;
             if (const GhosttyResult wideResult = ghostty_cell_get(rawCell, GHOSTTY_CELL_DATA_WIDE, &wide);
                 wideResult != GHOSTTY_SUCCESS)
@@ -1683,8 +2130,17 @@ std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot
                 head.selected = true;
                 tail.selected = true;
             }
+            if (head.displayWidth == 2 && tail.displayWidth == 0)
+            {
+                if (head.hyperlinkId == 0)
+                {
+                    head.hyperlinkId = tail.hyperlinkId;
+                }
+                tail.hyperlinkId = head.hyperlinkId;
+            }
         }
     }
+    ztermy::terminal::detectAutomaticTerminalLinks(result);
     if (result.cursor.width == 1 && result.cursor.column < result.columns && result.cursor.row < result.rows)
     {
         result.cursor.width =

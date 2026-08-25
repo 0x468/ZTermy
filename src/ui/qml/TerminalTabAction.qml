@@ -9,6 +9,11 @@ Rectangle {
     property bool selected: false
     property bool running: false
     property bool canReconnect: false
+    property bool canDuplicate: false
+    property bool canCloseOthers: false
+    property bool canCloseToRight: false
+    property bool canMoveLeft: false
+    property bool canMoveRight: false
     property string iconName: ""
     property string actionObjectName: ""
     property string closeActionObjectName: ""
@@ -18,6 +23,12 @@ Rectangle {
     signal activated
     signal closeRequested
     signal reconnectRequested
+    signal duplicateRequested
+    signal renameRequested
+    signal closeOthersRequested
+    signal closeToRightRequested
+    signal moveLeftRequested
+    signal moveRightRequested
 
     implicitWidth: Math.min(184, Math.max(112, titleText.implicitWidth + 54))
     implicitHeight: Theme.titleBarHeight
@@ -138,8 +149,39 @@ Rectangle {
             visible: control.canReconnect
         }
         AppMenuItem {
+            text: qsTr("Duplicate tab")
+            enabled: control.canDuplicate
+            onTriggered: control.duplicateRequested()
+        }
+        AppMenuItem {
+            text: qsTr("Rename tab")
+            onTriggered: control.renameRequested()
+        }
+        AppMenuSeparator {}
+        AppMenuItem {
+            text: qsTr("Move tab left")
+            enabled: control.canMoveLeft
+            onTriggered: control.moveLeftRequested()
+        }
+        AppMenuItem {
+            text: qsTr("Move tab right")
+            enabled: control.canMoveRight
+            onTriggered: control.moveRightRequested()
+        }
+        AppMenuSeparator {}
+        AppMenuItem {
             text: qsTr("Close tab")
             onTriggered: control.closeRequested()
+        }
+        AppMenuItem {
+            text: qsTr("Close other tabs")
+            enabled: control.canCloseOthers
+            onTriggered: control.closeOthersRequested()
+        }
+        AppMenuItem {
+            text: qsTr("Close tabs to the right")
+            enabled: control.canCloseToRight
+            onTriggered: control.closeToRightRequested()
         }
     }
 

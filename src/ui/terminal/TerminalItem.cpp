@@ -1,11 +1,16 @@
 #include "ui/terminal/TerminalItem.h"
 
 #include "platform/windows/WindowsTerminalInput.h"
+#include "ui/terminal/TerminalQuickSelect.h"
 #include "ui/terminal/TerminalRowReuseAnalysis.h"
 #include "ui/terminal/TerminalTextLayout.h"
 
 #include <QClipboard>
 #include <QColor>
+#include <QDragEnterEvent>
+#include <QDragLeaveEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
 #include <QElapsedTimer>
 #include <QFocusEvent>
 #include <QFontMetricsF>
@@ -16,6 +21,7 @@
 #include <QInputMethodEvent>
 #include <QKeyEvent>
 #include <QLoggingCategory>
+#include <QMimeData>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QQuickWindow>
@@ -146,7 +152,8 @@ void configureLigatures(QFont &font, const bool enabled)
 {
     return first.selected == second.selected && first.bold == second.bold && first.italic == second.italic
            && first.underline == second.underline && first.strikethrough == second.strikethrough
-           && first.overline == second.overline && color(first.foreground) == color(second.foreground);
+           && first.overline == second.overline && first.hyperlinkId == second.hyperlinkId
+           && color(first.foreground) == color(second.foreground);
 }
 
 [[nodiscard]] ztermy::terminal::TerminalMouseButton terminalMouseButton(const Qt::MouseButton button) noexcept
@@ -186,6 +193,7 @@ TerminalItem::TerminalItem(QQuickItem *parent) : QQuickItem(parent)
     setAcceptedMouseButtons(Qt::LeftButton | Qt::MiddleButton | Qt::RightButton | Qt::BackButton | Qt::ForwardButton
                             | Qt::ExtraButton4 | Qt::ExtraButton5);
     setAcceptHoverEvents(true);
+    setFlag(ItemAcceptsDrops, true);
     setActiveFocusOnTab(true);
 
     m_font.setFamilies({QStringLiteral("Cascadia Mono"), QStringLiteral("Consolas")});
@@ -382,12 +390,17 @@ TerminalRenderMetricsSnapshot TerminalItem::performanceMetrics() const noexcept
 
 void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
 {
+    if (m_quickSelectActive)
+    {
+        cancelQuickSelect();
+    }
     if (!snapshot)
     {
         cancelSelectionGesture();
         dismissSelectionAction();
         setHasSelection(false);
         m_snapshot.reset();
+        clearHoveredLink();
         invalidateRenderer(true);
         notifyInputMethod();
         emit scrollbarChanged();
@@ -409,6 +422,10 @@ void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
         emit selectionActionChanged();
     }
     m_snapshot = std::move(snapshot);
+    if (m_hoverInside)
+    {
+        updateHoveredLink(m_hoverPosition, QGuiApplication::keyboardModifiers());
+    }
     if (focusReportingBecameActive)
     {
         m_lastReportedFocus.reset();
@@ -417,6 +434,26 @@ void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
     invalidateRenderer(true);
     notifyInputMethod();
     emit scrollbarChanged();
+}
+
+QString TerminalItem::hoveredLink() const
+{
+    if (!m_snapshot)
+    {
+        return {};
+    }
+    const terminal::TerminalHyperlink *link = m_snapshot->hyperlink(m_hoveredLinkId);
+    return link == nullptr ? QString{} : QString::fromUtf8(link->uri);
+}
+
+bool TerminalItem::quickSelectActive() const noexcept
+{
+    return m_quickSelectActive;
+}
+
+bool TerminalItem::copyModeActive() const noexcept
+{
+    return m_copyModeActive;
 }
 
 void TerminalItem::setStatusText(const QString &status)
@@ -731,7 +768,11 @@ void TerminalItem::copySelection()
 
 void TerminalItem::pasteClipboard()
 {
-    const QByteArray bytes = readClipboardText().toUtf8();
+    requestPasteBytes(readClipboardText().toUtf8());
+}
+
+void TerminalItem::requestPasteBytes(const QByteArray &bytes)
+{
     if (bytes.isEmpty())
     {
         return;
@@ -778,6 +819,80 @@ void TerminalItem::requestContextMenu()
 {
     const QRectF cursor = inputCursorRectangle();
     emit contextMenuRequested(cursor.left(), cursor.bottom());
+}
+
+void TerminalItem::copyHoveredLink()
+{
+    const QString link = hoveredLink();
+    if (!link.isEmpty())
+    {
+        QGuiApplication::clipboard()->setText(link);
+    }
+}
+
+void TerminalItem::startQuickSelect()
+{
+    if (!m_snapshot)
+    {
+        return;
+    }
+    std::vector<TerminalQuickSelectTarget> targets = quickSelectTargets(*m_snapshot);
+    if (targets.empty())
+    {
+        return;
+    }
+    clearPreedit();
+    if (m_copyModeActive)
+    {
+        cancelCopyMode();
+    }
+    m_quickSelectTargets = std::move(targets);
+    m_quickSelectInput.clear();
+    m_quickSelectActive = true;
+    emit quickSelectChanged();
+    invalidateRenderer(true);
+    forceActiveFocus(Qt::ShortcutFocusReason);
+}
+
+void TerminalItem::cancelQuickSelect()
+{
+    if (!m_quickSelectActive)
+    {
+        return;
+    }
+    m_quickSelectActive = false;
+    m_quickSelectTargets.clear();
+    m_quickSelectInput.clear();
+    emit quickSelectChanged();
+    invalidateRenderer(true);
+}
+
+void TerminalItem::startCopyMode()
+{
+    if (!m_snapshot || m_copyModeActive)
+    {
+        return;
+    }
+    cancelQuickSelect();
+    clearPreedit();
+    m_copyModeActive = true;
+    emit copyModeActionRequested(terminal::TerminalCopyModeAction{.type = terminal::TerminalCopyModeActionType::begin});
+    emit copyModeChanged();
+    invalidateRenderer(true);
+    forceActiveFocus(Qt::ShortcutFocusReason);
+}
+
+void TerminalItem::cancelCopyMode()
+{
+    if (!m_copyModeActive)
+    {
+        return;
+    }
+    m_copyModeActive = false;
+    emit copyModeActionRequested(
+        terminal::TerminalCopyModeAction{.type = terminal::TerminalCopyModeActionType::cancel});
+    emit copyModeChanged();
+    invalidateRenderer(true);
 }
 
 QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
@@ -972,7 +1087,7 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                 QFont cellFont = m_font;
                 cellFont.setBold(cell.bold);
                 cellFont.setItalic(cell.italic);
-                cellFont.setUnderline(cell.underline);
+                cellFont.setUnderline(cell.underline || (cell.hyperlinkId != 0 && cell.hyperlinkId == m_hoveredLinkId));
                 cellFont.setStrikeOut(cell.strikethrough);
                 cellFont.setOverline(cell.overline);
                 painter.setFont(cellFont);
@@ -1018,6 +1133,50 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                 painter.drawText(baseline, grapheme);
                 column = runEnd;
             }
+        }
+        if (!cursorOnlyPaint && m_quickSelectActive)
+        {
+            QFont labelFont = m_font;
+            labelFont.setBold(true);
+            labelFont.setPixelSize(std::max(10, m_font.pixelSize() - 1));
+            painter.setFont(labelFont);
+            const QFontMetricsF labelMetrics(labelFont);
+            for (const TerminalQuickSelectTarget &target : m_quickSelectTargets)
+            {
+                if (!target.label.startsWith(m_quickSelectInput, Qt::CaseInsensitive))
+                {
+                    continue;
+                }
+                const QRectF targetRect{
+                    horizontalPadding + (target.startColumn * cellWidthValue),
+                    verticalPadding + (target.row * cellHeightValue),
+                    std::max<qreal>(cellWidthValue, (target.endColumn - target.startColumn) * cellWidthValue),
+                    cellHeightValue,
+                };
+                painter.fillRect(targetRect, QColor(34, 197, 94, 52));
+                const qreal labelWidth = labelMetrics.horizontalAdvance(target.label) + 8.0;
+                const QRectF labelRect{targetRect.left(), targetRect.top(), labelWidth, cellHeightValue};
+                painter.fillRect(labelRect, QColor(15, 23, 42, 235));
+                painter.setPen(QColor(248, 250, 252));
+                painter.drawText(QPointF(labelRect.left() + 4.0, labelRect.top() + labelMetrics.ascent()),
+                                 target.label);
+            }
+        }
+        if (!cursorOnlyPaint && m_copyModeActive)
+        {
+            QFont modeFont = m_font;
+            modeFont.setBold(true);
+            modeFont.setPixelSize(std::max(10, m_font.pixelSize() - 2));
+            painter.setFont(modeFont);
+            const QString label = tr("COPY MODE  ·  Esc cancel  ·  Y copy");
+            const QFontMetricsF modeMetrics(modeFont);
+            const QSizeF labelSize{modeMetrics.horizontalAdvance(label) + 18.0, modeMetrics.height() + 8.0};
+            const QRectF labelRect{std::max<qreal>(horizontalPadding, width() - horizontalPadding - labelSize.width()),
+                                   verticalPadding, labelSize.width(), labelSize.height()};
+            painter.setPen(QColor(74, 222, 128));
+            painter.setBrush(QColor(15, 23, 42, 230));
+            painter.drawRoundedRect(labelRect, 6.0, 6.0);
+            painter.drawText(QPointF(labelRect.left() + 9.0, labelRect.top() + 4.0 + modeMetrics.ascent()), label);
         }
         if (collectPaintPhases)
         {
@@ -1187,6 +1346,20 @@ void TerminalItem::geometryChange(const QRectF &newGeometry, const QRectF &oldGe
 void TerminalItem::keyPressEvent(QKeyEvent *event)
 {
     dismissSelectionAction();
+    if (m_copyModeActive && handleCopyModeKey(event))
+    {
+        event->accept();
+        return;
+    }
+    if (m_quickSelectActive && handleQuickSelectKey(event))
+    {
+        event->accept();
+        return;
+    }
+    if (event->key() == Qt::Key_Control && m_hoverInside)
+    {
+        updateHoveredLink(m_hoverPosition, event->modifiers() | Qt::ControlModifier);
+    }
     const bool control = event->modifiers().testFlag(Qt::ControlModifier);
     const bool shift = event->modifiers().testFlag(Qt::ShiftModifier);
     if ((event->key() == Qt::Key_Menu) || (shift && event->key() == Qt::Key_F10))
@@ -1228,6 +1401,15 @@ void TerminalItem::keyPressEvent(QKeyEvent *event)
 
 void TerminalItem::keyReleaseEvent(QKeyEvent *event)
 {
+    if (m_copyModeActive)
+    {
+        event->accept();
+        return;
+    }
+    if (event->key() == Qt::Key_Control && m_hoverInside)
+    {
+        updateHoveredLink(m_hoverPosition, event->modifiers() & ~Qt::ControlModifier);
+    }
     if (event->isAutoRepeat())
     {
         event->accept();
@@ -1279,7 +1461,7 @@ QVariant TerminalItem::inputMethodQuery(const Qt::InputMethodQuery query) const
 {
     if (query == Qt::ImEnabled)
     {
-        return true;
+        return !m_copyModeActive && !m_quickSelectActive;
     }
     if (query == Qt::ImCursorRectangle)
     {
@@ -1313,6 +1495,9 @@ void TerminalItem::focusOutEvent(QFocusEvent *event)
 
 void TerminalItem::hoverMoveEvent(QHoverEvent *event)
 {
+    m_hoverInside = true;
+    m_hoverPosition = event->position();
+    updateHoveredLink(event->position(), event->modifiers());
     if (terminalOwnsMouse(event->modifiers()))
     {
         emit mouseEventGenerated(mouseEvent(terminal::TerminalMouseAction::motion, terminal::TerminalMouseButton::none,
@@ -1323,10 +1508,25 @@ void TerminalItem::hoverMoveEvent(QHoverEvent *event)
     QQuickItem::hoverMoveEvent(event);
 }
 
+void TerminalItem::hoverLeaveEvent(QHoverEvent *event)
+{
+    m_hoverInside = false;
+    clearHoveredLink();
+    QQuickItem::hoverLeaveEvent(event);
+}
+
 void TerminalItem::mousePressEvent(QMouseEvent *event)
 {
     forceActiveFocus(Qt::MouseFocusReason);
     dismissSelectionAction();
+    const std::uint32_t pressedLink = hyperlinkAt(event->position());
+    if (event->button() == Qt::LeftButton && pressedLink != 0 && event->modifiers().testFlag(Qt::ControlModifier))
+    {
+        m_pressedLinkId = pressedLink;
+        m_linkPressPosition = event->position();
+        event->accept();
+        return;
+    }
     if (terminalOwnsMouse(event->modifiers()))
     {
         emit mouseEventGenerated(mouseEvent(terminal::TerminalMouseAction::press, terminalMouseButton(event->button()),
@@ -1483,6 +1683,21 @@ void TerminalItem::mouseMoveEvent(QMouseEvent *event)
 
 void TerminalItem::mouseReleaseEvent(QMouseEvent *event)
 {
+    if (event->button() == Qt::LeftButton && m_pressedLinkId != 0)
+    {
+        const std::uint32_t pressedLink = std::exchange(m_pressedLinkId, 0);
+        const qreal distance = (event->position() - m_linkPressPosition).manhattanLength();
+        if (distance <= QGuiApplication::styleHints()->startDragDistance()
+            && hyperlinkAt(event->position()) == pressedLink && m_snapshot)
+        {
+            if (const terminal::TerminalHyperlink *link = m_snapshot->hyperlink(pressedLink); link != nullptr)
+            {
+                emit linkActivated(QString::fromUtf8(link->uri));
+            }
+        }
+        event->accept();
+        return;
+    }
     if (terminalOwnsMouse(event->modifiers()))
     {
         emit mouseEventGenerated(mouseEvent(terminal::TerminalMouseAction::release,
@@ -1840,6 +2055,64 @@ void TerminalItem::wheelEvent(QWheelEvent *event)
     event->accept();
 }
 
+void TerminalItem::dragEnterEvent(QDragEnterEvent *event)
+{
+    if (event->mimeData() != nullptr && (event->mimeData()->hasUrls() || event->mimeData()->hasText()))
+    {
+        event->acceptProposedAction();
+        return;
+    }
+    event->ignore();
+}
+
+void TerminalItem::dragMoveEvent(QDragMoveEvent *event)
+{
+    if (event->mimeData() != nullptr && (event->mimeData()->hasUrls() || event->mimeData()->hasText()))
+    {
+        event->acceptProposedAction();
+        return;
+    }
+    event->ignore();
+}
+
+void TerminalItem::dragLeaveEvent(QDragLeaveEvent *event)
+{
+    event->accept();
+}
+
+void TerminalItem::dropEvent(QDropEvent *event)
+{
+    if (event->mimeData() == nullptr)
+    {
+        event->ignore();
+        return;
+    }
+    QStringList localPaths;
+    if (event->mimeData()->hasUrls())
+    {
+        for (const QUrl &url : event->mimeData()->urls())
+        {
+            if (url.isLocalFile())
+            {
+                localPaths.push_back(url.toLocalFile());
+            }
+        }
+    }
+    if (!localPaths.isEmpty())
+    {
+        emit localFilesDropped(localPaths);
+        event->acceptProposedAction();
+        return;
+    }
+    if (event->mimeData()->hasText())
+    {
+        requestPasteBytes(event->mimeData()->text().toUtf8());
+        event->acceptProposedAction();
+        return;
+    }
+    event->ignore();
+}
+
 void TerminalItem::reportTerminalSize()
 {
     const qreal availableWidth = std::max(0.0, width() - (horizontalPadding * 2.0));
@@ -1871,6 +2144,200 @@ std::optional<terminal::TerminalPoint> TerminalItem::terminalPoint(const QPointF
     return terminal::TerminalPoint{
         .column = static_cast<quint16>(std::clamp(columnValue, 0.0, static_cast<qreal>(m_snapshot->columns - 1))),
         .row = static_cast<quint16>(std::clamp(rowValue, 0.0, static_cast<qreal>(m_snapshot->rows - 1)))};
+}
+
+std::uint32_t TerminalItem::hyperlinkAt(const QPointF &position) const
+{
+    const auto point = terminalPoint(position);
+    return !point || !m_snapshot ? 0 : m_snapshot->cell(point->column, point->row).hyperlinkId;
+}
+
+void TerminalItem::updateHoveredLink(const QPointF &position, const Qt::KeyboardModifiers modifiers)
+{
+    const std::uint32_t id = hyperlinkAt(position);
+    if (id != m_hoveredLinkId)
+    {
+        m_hoveredLinkId = id;
+        emit hoveredLinkChanged();
+        invalidateRenderer(true);
+    }
+    if (id != 0 && modifiers.testFlag(Qt::ControlModifier))
+    {
+        setCursor(Qt::PointingHandCursor);
+    }
+    else
+    {
+        unsetCursor();
+    }
+}
+
+void TerminalItem::clearHoveredLink()
+{
+    unsetCursor();
+    m_pressedLinkId = 0;
+    if (m_hoveredLinkId == 0)
+    {
+        return;
+    }
+    m_hoveredLinkId = 0;
+    emit hoveredLinkChanged();
+    invalidateRenderer(true);
+}
+
+bool TerminalItem::handleQuickSelectKey(QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_Escape)
+    {
+        cancelQuickSelect();
+        return true;
+    }
+    if (event->key() == Qt::Key_Backspace)
+    {
+        if (!m_quickSelectInput.isEmpty())
+        {
+            m_quickSelectInput.chop(1);
+            invalidateRenderer(true);
+        }
+        return true;
+    }
+
+    const TerminalQuickSelectTarget *target = nullptr;
+    if (event->key() == Qt::Key_Enter || event->key() == Qt::Key_Return)
+    {
+        const auto found = std::ranges::find_if(m_quickSelectTargets, [this](const TerminalQuickSelectTarget &value) {
+            return value.label.startsWith(m_quickSelectInput, Qt::CaseInsensitive);
+        });
+        if (found != m_quickSelectTargets.end())
+        {
+            const auto another = std::ranges::find_if(
+                std::next(found), m_quickSelectTargets.end(), [this](const TerminalQuickSelectTarget &value) {
+                    return value.label.startsWith(m_quickSelectInput, Qt::CaseInsensitive);
+                });
+            if (another == m_quickSelectTargets.end())
+            {
+                target = &*found;
+            }
+        }
+    }
+    else if (event->key() >= Qt::Key_A && event->key() <= Qt::Key_Z)
+    {
+        m_quickSelectInput.append(QChar(static_cast<char16_t>('a' + event->key() - Qt::Key_A)));
+        const auto found = std::ranges::find_if(m_quickSelectTargets, [this](const TerminalQuickSelectTarget &value) {
+            return value.label.compare(m_quickSelectInput, Qt::CaseInsensitive) == 0;
+        });
+        if (found != m_quickSelectTargets.end())
+        {
+            target = &*found;
+        }
+        else if (!std::ranges::any_of(m_quickSelectTargets, [this](const TerminalQuickSelectTarget &value) {
+                     return value.label.startsWith(m_quickSelectInput, Qt::CaseInsensitive);
+                 }))
+        {
+            m_quickSelectInput.chop(1);
+        }
+        invalidateRenderer(true);
+    }
+    else
+    {
+        return true;
+    }
+
+    if (target != nullptr)
+    {
+        const TerminalQuickSelectTarget selected = *target;
+        cancelQuickSelect();
+        activateQuickSelectTarget(selected, event->modifiers());
+    }
+    return true;
+}
+
+bool TerminalItem::handleCopyModeKey(QKeyEvent *event)
+{
+    using Action = terminal::TerminalCopyModeAction;
+    using ActionType = terminal::TerminalCopyModeActionType;
+    using Motion = terminal::TerminalCopyModeMotion;
+
+    if (event->key() == Qt::Key_Escape)
+    {
+        cancelCopyMode();
+        return true;
+    }
+    if (event->key() == Qt::Key_Enter || event->key() == Qt::Key_Return || event->key() == Qt::Key_Y)
+    {
+        copySelection();
+        cancelCopyMode();
+        return true;
+    }
+    if (event->key() == Qt::Key_O)
+    {
+        emit copyModeActionRequested(Action{.type = ActionType::switchEndpoint});
+        return true;
+    }
+    if (event->key() == Qt::Key_V)
+    {
+        ActionType type = ActionType::selectCharacter;
+        if (event->modifiers().testFlag(Qt::ControlModifier))
+        {
+            type = ActionType::selectRectangle;
+        }
+        else if (event->modifiers().testFlag(Qt::ShiftModifier))
+        {
+            type = ActionType::selectLine;
+        }
+        emit copyModeActionRequested(Action{.type = type});
+        return true;
+    }
+
+    std::optional<Motion> motion;
+    const bool control = event->modifiers().testFlag(Qt::ControlModifier);
+    switch (event->key())
+    {
+        case Qt::Key_Left:
+            motion = control ? Motion::wordLeft : Motion::left;
+            break;
+        case Qt::Key_Right:
+            motion = control ? Motion::wordRight : Motion::right;
+            break;
+        case Qt::Key_Up:
+            motion = Motion::up;
+            break;
+        case Qt::Key_Down:
+            motion = Motion::down;
+            break;
+        case Qt::Key_Home:
+            motion = control ? Motion::top : Motion::lineStart;
+            break;
+        case Qt::Key_End:
+            motion = control ? Motion::bottom : Motion::lineEnd;
+            break;
+        case Qt::Key_PageUp:
+            motion = Motion::pageUp;
+            break;
+        case Qt::Key_PageDown:
+            motion = Motion::pageDown;
+            break;
+        default:
+            return true;
+    }
+    emit copyModeActionRequested(
+        Action{.type = ActionType::move, .motion = *motion, .extend = event->modifiers().testFlag(Qt::ShiftModifier)});
+    return true;
+}
+
+void TerminalItem::activateQuickSelectTarget(const TerminalQuickSelectTarget &target,
+                                             const Qt::KeyboardModifiers modifiers)
+{
+    if (modifiers.testFlag(Qt::ControlModifier) && !target.uri.isEmpty())
+    {
+        emit linkActivated(target.uri);
+        return;
+    }
+    if (modifiers.testFlag(Qt::ShiftModifier))
+    {
+        emit pasteRequested(target.value.toUtf8());
+        return;
+    }
+    QGuiApplication::clipboard()->setText(target.uri.isEmpty() ? target.value : target.uri);
 }
 
 QRectF TerminalItem::inputCursorRectangle() const

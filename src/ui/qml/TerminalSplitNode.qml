@@ -197,6 +197,7 @@ Item {
                     terminalContextMenu.y = viewport.y + Math.max(0, Math.min(menuY, viewport.height - terminalContextMenu.height));
                     terminalContextMenu.open();
                 }
+                onLinkActivated: uri => root.controller.openTerminalLink(uri)
 
                 Connections {
                     target: root
@@ -214,7 +215,31 @@ Item {
             AppMenu {
                 id: terminalContextMenu
 
+                property var commandActions: ({})
+
                 modal: false
+                onAboutToShow: {
+                    root.controller.activateTerminalPane(leaf.node.id);
+                    commandActions = root.controller.activeCommandBlockActions();
+                }
+
+                AppMenuItem {
+                    text: qsTr("Open link")
+                    iconName: "external-link"
+                    visible: viewport.hoveredLink.length > 0
+                    onTriggered: root.controller.openTerminalLink(viewport.hoveredLink)
+                }
+
+                AppMenuItem {
+                    text: qsTr("Copy link")
+                    iconName: "copy"
+                    visible: viewport.hoveredLink.length > 0
+                    onTriggered: viewport.copyHoveredLink()
+                }
+
+                AppMenuSeparator {
+                    visible: viewport.hoveredLink.length > 0
+                }
 
                 AppMenuItem {
                     text: qsTr("Copy")
@@ -229,6 +254,25 @@ Item {
                     iconName: "paste"
                     shortcutText: root.actionShortcut("terminal.paste")
                     onTriggered: viewport.pasteClipboard()
+                }
+
+                AppMenuSeparator {
+                    visible: terminalContextMenu.commandActions.commandAvailable === true
+                }
+
+                AppMenuItem {
+                    text: terminalContextMenu.commandActions.commandApproximate === true ? qsTr("Copy last command (approximate)") : qsTr("Copy last command")
+                    iconName: "copy"
+                    visible: terminalContextMenu.commandActions.commandAvailable === true
+                    onTriggered: root.controller.copyLastTerminalCommand()
+                }
+
+                AppMenuItem {
+                    text: terminalContextMenu.commandActions.outputPartial === true ? qsTr("Last command output is partial") : qsTr("Copy last command output")
+                    iconName: "copy"
+                    visible: terminalContextMenu.commandActions.commandAvailable === true
+                    enabled: terminalContextMenu.commandActions.outputAvailable === true
+                    onTriggered: root.controller.copyLastTerminalCommandOutput()
                 }
 
                 AppMenuSeparator {}

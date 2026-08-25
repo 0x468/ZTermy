@@ -2,6 +2,7 @@
 
 #include "domain/terminal/TerminalEngine.h"
 #include "ui/terminal/TerminalKeywordHighlighter.h"
+#include "ui/terminal/TerminalQuickSelect.h"
 #include "ui/terminal/TerminalRenderMetrics.h"
 
 #include <QByteArray>
@@ -23,6 +24,10 @@ class QHoverEvent;
 class QMouseEvent;
 class QWheelEvent;
 class QFocusEvent;
+class QDragEnterEvent;
+class QDragMoveEvent;
+class QDragLeaveEvent;
+class QDropEvent;
 
 namespace ztermy::ui
 {
@@ -55,6 +60,9 @@ class TerminalItem : public QQuickItem
     Q_PROPERTY(qreal scrollbarPageRatio READ scrollbarPageRatio NOTIFY scrollbarChanged)
     Q_PROPERTY(bool selectionActionVisible READ selectionActionVisible NOTIFY selectionActionChanged)
     Q_PROPERTY(QPointF selectionActionPosition READ selectionActionPosition NOTIFY selectionActionChanged)
+    Q_PROPERTY(QString hoveredLink READ hoveredLink NOTIFY hoveredLinkChanged)
+    Q_PROPERTY(bool quickSelectActive READ quickSelectActive NOTIFY quickSelectChanged)
+    Q_PROPERTY(bool copyModeActive READ copyModeActive NOTIFY copyModeChanged)
     Q_PROPERTY(QVariantList keywordHighlightRules READ keywordHighlightRules WRITE setKeywordHighlightRules NOTIFY
                    keywordHighlightRulesChanged)
     Q_PROPERTY(
@@ -84,6 +92,9 @@ public:
     [[nodiscard]] qreal scrollbarPageRatio() const noexcept;
     [[nodiscard]] bool selectionActionVisible() const noexcept;
     [[nodiscard]] QPointF selectionActionPosition() const noexcept;
+    [[nodiscard]] QString hoveredLink() const;
+    [[nodiscard]] bool quickSelectActive() const noexcept;
+    [[nodiscard]] bool copyModeActive() const noexcept;
     [[nodiscard]] QVariantList keywordHighlightRules() const;
     [[nodiscard]] QColor foregroundOverride() const;
     [[nodiscard]] QColor backgroundOverride() const;
@@ -122,6 +133,11 @@ public slots:
     Q_INVOKABLE void selectAllTerminal();
     Q_INVOKABLE void clearSelection();
     Q_INVOKABLE void requestContextMenu();
+    Q_INVOKABLE void copyHoveredLink();
+    Q_INVOKABLE void startQuickSelect();
+    Q_INVOKABLE void cancelQuickSelect();
+    Q_INVOKABLE void startCopyMode();
+    Q_INVOKABLE void cancelCopyMode();
 
 signals:
     void inputGenerated(const QByteArray &bytes);
@@ -129,9 +145,11 @@ signals:
     void mouseEventGenerated(const ztermy::terminal::TerminalMouseEvent &event);
     void focusEventGenerated(bool focused);
     void pasteRequested(const QByteArray &bytes);
+    void localFilesDropped(const QStringList &paths);
     void scrollRequested(int rows);
     void selectionRequested(quint16 startColumn, quint16 startRow, quint16 endColumn, quint16 endRow, bool rectangular);
     void selectionGestureRequested(const ztermy::terminal::TerminalSelectionGesture &gesture);
+    void copyModeActionRequested(const ztermy::terminal::TerminalCopyModeAction &action);
     void selectAllRequested();
     void clearSelectionRequested();
     void copyRequested();
@@ -151,6 +169,10 @@ signals:
     void selectionActionChanged();
     void keywordHighlightRulesChanged();
     void paletteOverrideChanged();
+    void hoveredLinkChanged();
+    void linkActivated(const QString &uri);
+    void quickSelectChanged();
+    void copyModeChanged();
     void multilinePasteConfirmationRequested(int lineCount);
     void contextMenuRequested(qreal x, qreal y);
 
@@ -164,18 +186,29 @@ protected:
     void focusInEvent(QFocusEvent *event) override;
     void focusOutEvent(QFocusEvent *event) override;
     void hoverMoveEvent(QHoverEvent *event) override;
+    void hoverLeaveEvent(QHoverEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
     void mouseDoubleClickEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
     void mouseUngrabEvent() override;
     void wheelEvent(QWheelEvent *event) override;
+    void dragEnterEvent(QDragEnterEvent *event) override;
+    void dragMoveEvent(QDragMoveEvent *event) override;
+    void dragLeaveEvent(QDragLeaveEvent *event) override;
+    void dropEvent(QDropEvent *event) override;
     [[nodiscard]] virtual QString readClipboardText() const;
 
 private:
     void invalidateRenderer(bool full);
     void reportTerminalSize();
     [[nodiscard]] std::optional<ztermy::terminal::TerminalPoint> terminalPoint(const QPointF &position) const;
+    [[nodiscard]] std::uint32_t hyperlinkAt(const QPointF &position) const;
+    void updateHoveredLink(const QPointF &position, Qt::KeyboardModifiers modifiers);
+    void clearHoveredLink();
+    [[nodiscard]] bool handleQuickSelectKey(QKeyEvent *event);
+    [[nodiscard]] bool handleCopyModeKey(QKeyEvent *event);
+    void activateQuickSelectTarget(const TerminalQuickSelectTarget &target, Qt::KeyboardModifiers modifiers);
     [[nodiscard]] QRectF inputCursorRectangle() const;
     void clearPreedit();
     void notifyInputMethod() const;
@@ -196,6 +229,7 @@ private:
     mouseEvent(ztermy::terminal::TerminalMouseAction action, ztermy::terminal::TerminalMouseButton button,
                const QPointF &position, Qt::KeyboardModifiers modifiers, Qt::MouseButtons buttons) const;
     void reportFocus(bool focused);
+    void requestPasteBytes(const QByteArray &bytes);
 
     ztermy::terminal::TerminalSnapshotPtr m_snapshot;
     QFont m_font;
@@ -216,13 +250,19 @@ private:
     ztermy::terminal::TerminalPoint m_selectionAnchor;
     QPointF m_selectionActionPosition;
     QPointF m_selectionPointerPosition;
+    QPointF m_hoverPosition;
+    QPointF m_linkPressPosition;
     QString m_preeditText;
+    QString m_quickSelectInput;
     qsizetype m_preeditCursorPosition = 0;
     bool m_preeditCursorVisible = true;
     bool m_selecting = false;
     bool m_selectionMoved = false;
     bool m_selectionClickSelected = false;
     bool m_selectionActionVisible = false;
+    bool m_hoverInside = false;
+    bool m_quickSelectActive = false;
+    bool m_copyModeActive = false;
     bool m_hasSelection = false;
     bool m_cursorBlink = true;
     bool m_cursorBlinkPhase = true;
@@ -241,6 +281,9 @@ private:
     qreal m_pixelWheelRemainder = 0.0;
     int m_selectionAutoscrollDirection = 0;
     quint64 m_lastDoubleClickTimestamp = 0;
+    std::uint32_t m_hoveredLinkId = 0;
+    std::uint32_t m_pressedLinkId = 0;
+    std::vector<TerminalQuickSelectTarget> m_quickSelectTargets;
     QPointF m_lastDoubleClickPosition;
 };
 

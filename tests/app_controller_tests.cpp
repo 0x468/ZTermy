@@ -93,6 +93,7 @@ public:
     void requestScroll(int) override {}
     void requestSelection(quint16, quint16, quint16, quint16, bool) override {}
     void requestSelectionGesture(const ztermy::terminal::TerminalSelectionGesture &) override {}
+    void requestCopyModeAction(const ztermy::terminal::TerminalCopyModeAction &) override {}
     void selectAll() override {}
     void clearSelection() override {}
     void copySelection() override {}
@@ -181,6 +182,7 @@ private slots:
     void exposesProviderFailureRecoveryActions();
     void retriesProviderResponseWithoutRepeatingCompletedTool();
     void managesMultipleLocalTerminalTabs();
+    void managesFreshTerminalTabWorkflows();
     void managesPersistentTerminalWorkspaceSplits();
     void restoresSavedSshWorkspaceWithoutConnecting();
     void managesSessionAppearanceAndStructuredRecording();
@@ -1868,6 +1870,57 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
     QCOMPARE(sessionState->stops, 2);
     QVERIFY(tabsChanged.count() >= 4);
     QVERIFY(activeChanged.count() >= 4);
+}
+
+void AppControllerTests::managesFreshTerminalTabWorkflows()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const auto sessionState = std::make_shared<FakeLocalSessionState>();
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
+                                     directory.filePath(QStringLiteral("known_hosts.json")), [sessionState] {
+                                         return std::make_unique<FakeLocalTerminalSession>(sessionState);
+                                     });
+
+    const QString first = controller.startLocalTerminal();
+    const QString second = controller.startLocalTerminal();
+    QVERIFY(!first.isEmpty());
+    QVERIFY(!second.isEmpty());
+    QCOMPARE(controller.terminalTabs().size(), 2);
+    QVERIFY(controller.setTerminalTabTitle(second, QStringLiteral("Build shell")));
+    QCOMPARE(controller.terminalTabs().at(1).toMap().value(QStringLiteral("title")).toString(),
+             QStringLiteral("Build shell"));
+
+    QVERIFY(controller.moveTerminalTab(second, 0));
+    QCOMPARE(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("id")).toString(), second);
+    QCOMPARE(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("canMoveLeft")).toBool(), false);
+    QVERIFY(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("canMoveRight")).toBool());
+
+    QVERIFY(controller.duplicateTerminalTab(second));
+    QCOMPARE(controller.terminalTabs().size(), 3);
+    const QString duplicate = controller.activeTerminalTabId();
+    QVERIFY(duplicate != second);
+    QCOMPARE(controller.terminalTabs().constLast().toMap().value(QStringLiteral("title")).toString(),
+             QStringLiteral("Build shell"));
+
+    QVERIFY(controller.closeTerminalTabsToRight(first));
+    QCOMPARE(controller.terminalTabs().size(), 2);
+    QVERIFY(controller.canReopenClosedTerminalTab());
+    QVERIFY(controller.reopenLastClosedTerminalTab());
+    QCOMPARE(controller.terminalTabs().size(), 3);
+    QCOMPARE(controller.terminalTabs().constLast().toMap().value(QStringLiteral("title")).toString(),
+             QStringLiteral("Build shell"));
+
+    QVERIFY(controller.closeOtherTerminalTabs(second));
+    QCOMPARE(controller.terminalTabs().size(), 1);
+    QCOMPARE(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("id")).toString(), second);
+    QVERIFY(controller.closeTerminalTab(second));
+    QVERIFY(controller.terminalTabs().isEmpty());
+    QVERIFY(controller.reopenLastClosedTerminalTab());
+    QCOMPARE(controller.terminalTabs().size(), 1);
+    QCOMPARE(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("title")).toString(),
+             QStringLiteral("Build shell"));
+    QCOMPARE(sessionState->starts, 5);
 }
 
 void AppControllerTests::managesPersistentTerminalWorkspaceSplits()

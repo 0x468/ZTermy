@@ -34,6 +34,7 @@ Rectangle {
     readonly property color accentColor: Theme.accent
     property string currentPage: "hosts"
     property bool settingsTabOpen: false
+    property string renameTerminalTabId: ""
     property string settingsReturnPage: "hosts"
     property bool startupVaultPromptPresented: false
     property real hostsPageReveal: 1.0
@@ -248,6 +249,12 @@ Rectangle {
         controller.closeTerminalTab(controller.activeTerminalTabId);
     }
 
+    function openTerminalRename(tabId, title) {
+        renameTerminalTabId = tabId;
+        renameTerminalTitleField.text = title;
+        renameTerminalDialog.open();
+    }
+
     function activateRelativeTerminalTab(offset) {
         const tabs = controller.terminalTabs;
         if (tabs.length < 2) {
@@ -301,6 +308,13 @@ Rectangle {
         case "tabs.close":
             controller.closeActiveTerminalPane();
             break;
+        case "tabs.duplicate":
+            controller.duplicateTerminalTab(controller.activeTerminalTabId);
+            break;
+        case "tabs.reopenClosed":
+            controller.reopenLastClosedTerminalTab();
+            currentPage = "terminal";
+            break;
         case "tabs.next":
             activateRelativeTerminalTab(1);
             break;
@@ -350,6 +364,14 @@ Rectangle {
         case "terminal.sftp":
             currentPage = "terminal";
             controller.toggleTerminalWorkbench("sftp");
+            break;
+        case "terminal.quickSelect":
+            currentPage = "terminal";
+            terminalViewport.startQuickSelect();
+            break;
+        case "terminal.copyMode":
+            currentPage = "terminal";
+            terminalViewport.startCopyMode();
             break;
         case "terminal.composer":
             currentPage = "terminal";
@@ -791,6 +813,11 @@ Rectangle {
                     selected: root.currentPage === "terminal" && root.controller.activeTerminalTabId === modelData.id
                     running: modelData.running
                     canReconnect: modelData.canReconnect
+                    canDuplicate: modelData.canDuplicate
+                    canCloseOthers: modelData.canCloseOthers
+                    canCloseToRight: modelData.canCloseToRight
+                    canMoveLeft: modelData.canMoveLeft
+                    canMoveRight: modelData.canMoveRight
                     width: implicitWidth
                     height: titleTerminalTabs.height
                     onActivated: {
@@ -799,6 +826,12 @@ Rectangle {
                         terminalViewport.forceActiveFocus();
                     }
                     onCloseRequested: root.controller.closeTerminalTab(modelData.id)
+                    onDuplicateRequested: root.controller.duplicateTerminalTab(modelData.id)
+                    onRenameRequested: root.openTerminalRename(modelData.id, modelData.title)
+                    onCloseOthersRequested: root.controller.closeOtherTerminalTabs(modelData.id)
+                    onCloseToRightRequested: root.controller.closeTerminalTabsToRight(modelData.id)
+                    onMoveLeftRequested: root.controller.moveTerminalTab(modelData.id, modelData.tabIndex - 1)
+                    onMoveRightRequested: root.controller.moveTerminalTab(modelData.id, modelData.tabIndex + 1)
                     onReconnectRequested: {
                         root.controller.activateTerminalTab(modelData.id);
                         root.currentPage = "terminal";
@@ -864,6 +897,21 @@ Rectangle {
                         onTriggered: {
                             root.currentPage = "hosts";
                             Qt.callLater(hostsTitleAction.forceActiveFocus);
+                        }
+                    }
+
+                    AppMenuSeparator {
+                        visible: root.controller.canReopenClosedTerminalTab
+                    }
+
+                    AppMenuItem {
+                        visible: root.controller.canReopenClosedTerminalTab
+                        text: qsTr("Reopen closed terminal")
+                        onTriggered: {
+                            if (root.controller.reopenLastClosedTerminalTab()) {
+                                root.currentPage = "terminal";
+                                Qt.callLater(terminalViewport.forceActiveFocus);
+                            }
                         }
                     }
                 }
@@ -1208,6 +1256,81 @@ Rectangle {
         nameFilters: [qsTr("ztermy script libraries (*.json)"), qsTr("All files (*)")]
         defaultSuffix: "json"
         onAccepted: root.controller.exportQuickCommands(selectedFile.toString())
+    }
+
+    Dialog {
+        id: renameTerminalDialog
+
+        anchors.centerIn: parent
+        width: Math.min(420, Math.max(0, root.width - 48))
+        modal: true
+        dim: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape
+        padding: 20
+        onAboutToShow: Qt.callLater(renameTerminalTitleField.selectAll)
+        onClosed: root.renameTerminalTabId = ""
+
+        Overlay.modal: Rectangle {
+            color: Theme.modalScrim
+        }
+
+        background: Rectangle {
+            radius: Theme.radiusPanel
+            color: Theme.elevatedBackground
+            border.color: Theme.borderStrong
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 14
+
+            Text {
+                Layout.fillWidth: true
+                text: qsTr("Rename terminal tab")
+                color: Theme.text
+                font.family: Theme.uiFont
+                font.pixelSize: 18
+                font.weight: Font.DemiBold
+            }
+
+            AppTextField {
+                id: renameTerminalTitleField
+
+                objectName: "renameTerminalTitleField"
+                Layout.fillWidth: true
+                accessibleName: qsTr("Terminal tab title")
+                maximumLength: 256
+                onAccepted: renameTerminalAccept.clicked()
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+
+                Item {
+                    Layout.fillWidth: true
+                }
+
+                ActionButton {
+                    text: qsTr("Cancel")
+                    accessibleName: text
+                    onClicked: renameTerminalDialog.close()
+                }
+
+                ActionButton {
+                    id: renameTerminalAccept
+
+                    text: qsTr("Rename")
+                    accessibleName: text
+                    variant: "primary"
+                    enabled: renameTerminalTitleField.text.trim().length > 0
+                    onClicked: {
+                        if (root.controller.setTerminalTabTitle(root.renameTerminalTabId, renameTerminalTitleField.text)) {
+                            renameTerminalDialog.close();
+                        }
+                    }
+                }
+            }
+        }
     }
 
     RowLayout {
