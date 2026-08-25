@@ -51,7 +51,8 @@ constexpr qint64 closeToTraySchemaVersion = 23;
 // selected visual backdrop while launching the window on an opaque surface
 // with reduced motion.
 constexpr qint64 performanceModeSchemaVersion = 24;
-constexpr qint64 currentSchemaVersion = performanceModeSchemaVersion;
+constexpr qint64 terminalInteractionSchemaVersion = 25;
+constexpr qint64 currentSchemaVersion = terminalInteractionSchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::AiPermissionPreference;
@@ -64,6 +65,7 @@ using ztermy::config::BackdropPreference;
 using ztermy::config::CredentialStoragePreference;
 using ztermy::config::CursorPreference;
 using ztermy::config::LanguagePreference;
+using ztermy::config::TerminalRightClickPreference;
 using ztermy::config::ThemePreference;
 
 template <typename Preference>
@@ -149,6 +151,28 @@ template <>
     if (token == QStringLiteral("underline"))
     {
         return CursorPreference::underline;
+    }
+    return std::nullopt;
+}
+
+template <>
+[[nodiscard]] std::optional<TerminalRightClickPreference> parsePreference(const QString &token)
+{
+    if (token == QStringLiteral("context-menu"))
+    {
+        return TerminalRightClickPreference::contextMenu;
+    }
+    if (token == QStringLiteral("copy-paste"))
+    {
+        return TerminalRightClickPreference::copyPaste;
+    }
+    if (token == QStringLiteral("paste"))
+    {
+        return TerminalRightClickPreference::paste;
+    }
+    if (token == QStringLiteral("select-word"))
+    {
+        return TerminalRightClickPreference::selectWord;
     }
     return std::nullopt;
 }
@@ -383,6 +407,7 @@ template <>
     const QJsonValue cursorBlinkValue = root.value(QStringLiteral("cursorBlink"));
     const QJsonValue copyOnSelectValue = root.value(QStringLiteral("copyOnSelect"));
     const QJsonValue confirmMultilinePasteValue = root.value(QStringLiteral("confirmMultilinePaste"));
+    const QJsonValue terminalRightClickValue = root.value(QStringLiteral("terminalRightClick"));
     const QJsonValue sftpShowHiddenFilesValue = root.value(QStringLiteral("sftpShowHiddenFiles"));
     const QJsonValue sftpConfirmDeleteValue = root.value(QStringLiteral("sftpConfirmDelete"));
     const QJsonValue closeToTrayValue = root.value(QStringLiteral("closeToTray"));
@@ -447,6 +472,10 @@ template <>
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
+    if (version >= terminalInteractionSchemaVersion && !terminalRightClickValue.isString())
+    {
+        return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
+    }
     if (version >= aiProviderSchemaVersion
         && (!aiProviderValue.isString() || !aiBaseUrlValue.isString() || !aiEndpointPathValue.isString()
             || !aiModelValue.isString() || !aiCredentialReferenceValue.isString() || !aiAutomaticContextValue.isBool()))
@@ -479,6 +508,10 @@ template <>
     const auto accent = version >= accentSchemaVersion ? parsePreference<AccentPreference>(accentValue.toString())
                                                        : std::optional{AccentPreference::ztermy};
     const auto cursor = parsePreference<CursorPreference>(cursorValue.toString());
+    const auto terminalRightClick =
+        version >= terminalInteractionSchemaVersion
+            ? parsePreference<TerminalRightClickPreference>(terminalRightClickValue.toString())
+            : std::optional{TerminalRightClickPreference::contextMenu};
     const auto credentialStorage = version >= credentialStorageSchemaVersion
                                        ? parsePreference<CredentialStoragePreference>(credentialStorageValue.toString())
                                        : std::optional{CredentialStoragePreference::automatic};
@@ -500,8 +533,9 @@ template <>
     const auto aiProxy = version >= aiProxySchemaVersion ? parsePreference<AiProxyPreference>(aiProxyValue.toString())
                                                          : std::optional{AiProxyPreference::system};
     const qint64 fontSize = fontSizeValue.toInteger(-1);
-    if (!theme || !backdrop || !accent || !cursor || !credentialStorage || !language || !aiProvider || !aiPermission
-        || !aiReasoning || !aiProxy || fontSizeValue.toDouble() != static_cast<double>(fontSize))
+    if (!theme || !backdrop || !accent || !cursor || !terminalRightClick || !credentialStorage || !language
+        || !aiProvider || !aiPermission || !aiReasoning || !aiProxy
+        || fontSizeValue.toDouble() != static_cast<double>(fontSize))
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
@@ -541,6 +575,7 @@ template <>
         .cursorBlink = cursorBlinkValue.toBool(),
         .copyOnSelect = copyOnSelectValue.toBool(),
         .confirmMultilinePaste = confirmMultilinePasteValue.toBool(),
+        .terminalRightClick = *terminalRightClick,
         .sftpShowHiddenFiles = version >= sftpSchemaVersion && sftpShowHiddenFilesValue.toBool(),
         .sftpConfirmDelete = version < sftpSchemaVersion || sftpConfirmDeleteValue.toBool(),
         .closeToTray = version >= closeToTraySchemaVersion && closeToTrayValue.toBool(),
@@ -689,6 +724,7 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
         {QStringLiteral("cursorBlink"), settings.cursorBlink},
         {QStringLiteral("copyOnSelect"), settings.copyOnSelect},
         {QStringLiteral("confirmMultilinePaste"), settings.confirmMultilinePaste},
+        {QStringLiteral("terminalRightClick"), terminalRightClickPreferenceToken(settings.terminalRightClick)},
         {QStringLiteral("sftpShowHiddenFiles"), settings.sftpShowHiddenFiles},
         {QStringLiteral("sftpConfirmDelete"), settings.sftpConfirmDelete},
         {QStringLiteral("closeToTray"), settings.closeToTray},
@@ -781,6 +817,22 @@ QString cursorPreferenceToken(const CursorPreference preference)
         case CursorPreference::terminal:
         default:
             return QStringLiteral("terminal");
+    }
+}
+
+QString terminalRightClickPreferenceToken(const TerminalRightClickPreference preference)
+{
+    switch (preference)
+    {
+        case TerminalRightClickPreference::copyPaste:
+            return QStringLiteral("copy-paste");
+        case TerminalRightClickPreference::paste:
+            return QStringLiteral("paste");
+        case TerminalRightClickPreference::selectWord:
+            return QStringLiteral("select-word");
+        case TerminalRightClickPreference::contextMenu:
+        default:
+            return QStringLiteral("context-menu");
     }
 }
 
@@ -912,6 +964,11 @@ std::optional<AccentPreference> parseAccentPreference(const QString &token)
 std::optional<CursorPreference> parseCursorPreference(const QString &token)
 {
     return parsePreference<CursorPreference>(token);
+}
+
+std::optional<TerminalRightClickPreference> parseTerminalRightClickPreference(const QString &token)
+{
+    return parsePreference<TerminalRightClickPreference>(token);
 }
 
 std::optional<CredentialStoragePreference> parseCredentialStoragePreference(const QString &token)

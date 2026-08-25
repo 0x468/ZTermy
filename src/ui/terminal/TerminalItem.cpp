@@ -19,12 +19,14 @@
 #include <QQuickWindow>
 #include <QSGSimpleTextureNode>
 #include <QSGTexture>
+#include <QStyleHints>
 #include <QWheelEvent>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <limits>
+#include <string_view>
 #include <utility>
 
 namespace
@@ -214,7 +216,7 @@ TerminalItem::TerminalItem(QQuickItem *parent) : QQuickItem(parent)
     m_statusText = tr("Starting local terminal...");
     setFlag(ItemHasContents, true);
     setFlag(ItemAcceptsInputMethod, true);
-    setAcceptedMouseButtons(Qt::LeftButton);
+    setAcceptedMouseButtons(Qt::LeftButton | Qt::RightButton);
     setActiveFocusOnTab(true);
 
     m_font.setFamilies({QStringLiteral("Cascadia Mono"), QStringLiteral("Consolas")});
@@ -278,6 +280,16 @@ bool TerminalItem::copyOnSelect() const noexcept
 bool TerminalItem::confirmMultilinePaste() const noexcept
 {
     return m_confirmMultilinePaste;
+}
+
+QString TerminalItem::rightClickBehavior() const
+{
+    return m_rightClickBehavior;
+}
+
+bool TerminalItem::hasSelection() const noexcept
+{
+    return m_hasSelection;
 }
 
 bool TerminalItem::scrollbarVisible() const noexcept
@@ -351,6 +363,7 @@ void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
     if (!snapshot)
     {
         dismissSelectionAction();
+        setHasSelection(false);
         m_snapshot.reset();
         invalidateRenderer(true);
         notifyInputMethod();
@@ -491,6 +504,19 @@ void TerminalItem::setConfirmMultilinePaste(const bool enabled)
     emit confirmMultilinePasteChanged();
 }
 
+void TerminalItem::setRightClickBehavior(const QString &behavior)
+{
+    static constexpr std::array<std::string_view, 4> supported{"context-menu", "copy-paste", "paste", "select-word"};
+    const QByteArray encodedBehavior = behavior.toUtf8();
+    const std::string_view value{encodedBehavior.constData(), static_cast<std::size_t>(encodedBehavior.size())};
+    if (!std::ranges::contains(supported, value) || m_rightClickBehavior == behavior)
+    {
+        return;
+    }
+    m_rightClickBehavior = behavior;
+    emit rightClickBehaviorChanged();
+}
+
 void TerminalItem::setKeywordHighlightRules(const QVariantList &rules)
 {
     if (m_keywordHighlightRuleValues == rules)
@@ -599,6 +625,53 @@ void TerminalItem::dismissSelectionAction()
     }
     m_selectionActionVisible = false;
     emit selectionActionChanged();
+}
+
+void TerminalItem::copySelection()
+{
+    emit copyRequested();
+}
+
+void TerminalItem::pasteClipboard()
+{
+    const QByteArray bytes = readClipboardText().toUtf8();
+    if (bytes.isEmpty())
+    {
+        return;
+    }
+    const qsizetype lineBreaks = bytes.count('\n') > 0 ? bytes.count('\n') : bytes.count('\r');
+    if (m_confirmMultilinePaste && lineBreaks > 0)
+    {
+        m_pendingMultilinePaste = bytes;
+        const qsizetype maximumLineCount = std::numeric_limits<int>::max();
+        emit multilinePasteConfirmationRequested(static_cast<int>(std::min(lineBreaks + 1, maximumLineCount)));
+        return;
+    }
+    emit pasteRequested(bytes);
+}
+
+void TerminalItem::selectVisibleTerminal()
+{
+    if (!m_snapshot || m_snapshot->columns == 0 || m_snapshot->rows == 0)
+    {
+        return;
+    }
+    emit selectionRequested(0, 0, static_cast<quint16>(m_snapshot->columns - 1),
+                            static_cast<quint16>(m_snapshot->rows - 1), false);
+    setHasSelection(true);
+}
+
+void TerminalItem::clearSelection()
+{
+    emit clearSelectionRequested();
+    setHasSelection(false);
+    dismissSelectionAction();
+}
+
+void TerminalItem::requestContextMenu()
+{
+    const QRectF cursor = inputCursorRectangle();
+    emit contextMenuRequested(cursor.left(), cursor.bottom());
 }
 
 QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
@@ -1009,29 +1082,22 @@ void TerminalItem::keyPressEvent(QKeyEvent *event)
     dismissSelectionAction();
     const bool control = event->modifiers().testFlag(Qt::ControlModifier);
     const bool shift = event->modifiers().testFlag(Qt::ShiftModifier);
-    if (control && shift && event->key() == Qt::Key_C)
+    if ((event->key() == Qt::Key_Menu) || (shift && event->key() == Qt::Key_F10))
     {
-        emit copyRequested();
+        requestContextMenu();
         event->accept();
         return;
     }
-    if (control && shift && event->key() == Qt::Key_V)
+    if ((control && event->key() == Qt::Key_Insert)
+        || (control && !shift && event->key() == Qt::Key_C && m_hasSelection))
     {
-        const QByteArray bytes = readClipboardText().toUtf8();
-        if (!bytes.isEmpty())
-        {
-            const qsizetype lineBreaks = bytes.count('\n') > 0 ? bytes.count('\n') : bytes.count('\r');
-            if (m_confirmMultilinePaste && lineBreaks > 0)
-            {
-                m_pendingMultilinePaste = bytes;
-                const qsizetype maximumLineCount = std::numeric_limits<int>::max();
-                emit multilinePasteConfirmationRequested(static_cast<int>(std::min(lineBreaks + 1, maximumLineCount)));
-            }
-            else
-            {
-                emit pasteRequested(bytes);
-            }
-        }
+        copySelection();
+        event->accept();
+        return;
+    }
+    if (shift && !control && event->key() == Qt::Key_Insert)
+    {
+        pasteClipboard();
         event->accept();
         return;
     }
@@ -1043,6 +1109,10 @@ void TerminalItem::keyPressEvent(QKeyEvent *event)
         return;
     }
 
+    if (m_hasSelection)
+    {
+        clearSelection();
+    }
     emit inputGenerated(bytes);
     event->accept();
 }
@@ -1110,17 +1180,95 @@ void TerminalItem::mousePressEvent(QMouseEvent *event)
     forceActiveFocus(Qt::MouseFocusReason);
     dismissSelectionAction();
     const auto point = terminalPoint(event->position());
-    if (event->button() != Qt::LeftButton || !point)
+    if (!point)
     {
         QQuickItem::mousePressEvent(event);
+        return;
+    }
+
+    if (event->button() == Qt::RightButton)
+    {
+        if (event->modifiers().testFlag(Qt::ShiftModifier) || m_rightClickBehavior == QStringLiteral("context-menu"))
+        {
+            emit contextMenuRequested(event->position().x(), event->position().y());
+        }
+        else if (m_rightClickBehavior == QStringLiteral("copy-paste"))
+        {
+            if (m_hasSelection)
+            {
+                copySelection();
+                clearSelection();
+            }
+            else
+            {
+                pasteClipboard();
+            }
+        }
+        else if (m_rightClickBehavior == QStringLiteral("paste"))
+        {
+            pasteClipboard();
+        }
+        else
+        {
+            selectWordAt(*point, event->position());
+            emit contextMenuRequested(event->position().x(), event->position().y());
+        }
+        event->accept();
+        return;
+    }
+
+    if (event->button() != Qt::LeftButton)
+    {
+        QQuickItem::mousePressEvent(event);
+        return;
+    }
+
+    const auto clickInterval = static_cast<quint64>(QGuiApplication::styleHints()->mouseDoubleClickInterval());
+    const bool tripleClick = m_lastDoubleClickTimestamp > 0 && event->timestamp() >= m_lastDoubleClickTimestamp
+                             && event->timestamp() - m_lastDoubleClickTimestamp <= clickInterval
+                             && (event->position() - m_lastDoubleClickPosition).manhattanLength()
+                                    <= QGuiApplication::styleHints()->startDragDistance();
+    if (tripleClick)
+    {
+        m_lastDoubleClickTimestamp = 0;
+        selectLineAt(point->row, event->position());
+        event->accept();
+        return;
+    }
+    m_lastDoubleClickTimestamp = 0;
+
+    if (event->modifiers().testFlag(Qt::ShiftModifier) && m_hasSelection)
+    {
+        emit selectionRequested(m_selectionAnchor.column, m_selectionAnchor.row, point->column, point->row, false);
+        m_selectionActionPosition = event->position();
+        m_selectionActionVisible = true;
+        emit selectionActionChanged();
+        event->accept();
         return;
     }
 
     m_selectionAnchor = *point;
     m_selecting = true;
     m_selectionMoved = false;
-    emit clearSelectionRequested();
+    clearSelection();
     event->accept();
+}
+
+void TerminalItem::mouseDoubleClickEvent(QMouseEvent *event)
+{
+    forceActiveFocus(Qt::MouseFocusReason);
+    if (event->button() == Qt::LeftButton)
+    {
+        if (const auto point = terminalPoint(event->position()))
+        {
+            selectWordAt(*point, event->position());
+            m_lastDoubleClickTimestamp = event->timestamp();
+            m_lastDoubleClickPosition = event->position();
+            event->accept();
+            return;
+        }
+    }
+    QQuickItem::mouseDoubleClickEvent(event);
 }
 
 void TerminalItem::mouseMoveEvent(QMouseEvent *event)
@@ -1155,6 +1303,7 @@ void TerminalItem::mouseReleaseEvent(QMouseEvent *event)
             const bool nonEmpty = point->column != m_selectionAnchor.column || point->row != m_selectionAnchor.row;
             if (nonEmpty)
             {
+                setHasSelection(true);
                 m_selectionActionPosition = event->position();
                 m_selectionActionVisible = true;
                 emit selectionActionChanged();
@@ -1167,6 +1316,101 @@ void TerminalItem::mouseReleaseEvent(QMouseEvent *event)
     }
     m_selecting = false;
     event->accept();
+}
+
+void TerminalItem::setHasSelection(const bool selected)
+{
+    if (m_hasSelection == selected)
+    {
+        return;
+    }
+    m_hasSelection = selected;
+    emit hasSelectionChanged();
+}
+
+void TerminalItem::selectWordAt(const terminal::TerminalPoint &point, const QPointF &position)
+{
+    if (!m_snapshot || point.row >= m_snapshot->rows || point.column >= m_snapshot->columns)
+    {
+        return;
+    }
+
+    quint16 column = point.column;
+    while (column > 0 && m_snapshot->cell(column, point.row).displayWidth == 0)
+    {
+        --column;
+    }
+    const auto wordClass = [](const terminal::TerminalCell &cell) {
+        if (cell.grapheme.empty())
+        {
+            return 0;
+        }
+        const QString text = QString::fromUcs4(cell.grapheme.data(), static_cast<qsizetype>(cell.grapheme.size()));
+        if (text.trimmed().isEmpty())
+        {
+            return 0;
+        }
+        return std::ranges::all_of(text,
+                                   [](const QChar character) {
+                                       return character.isLetterOrNumber() || character == QLatin1Char('_');
+                                   })
+                   ? 1
+                   : 2;
+    };
+    const int selectedClass = wordClass(m_snapshot->cell(column, point.row));
+    quint16 first = column;
+    while (first > 0)
+    {
+        auto previous = static_cast<quint16>(first - 1);
+        while (previous > 0 && m_snapshot->cell(previous, point.row).displayWidth == 0)
+        {
+            --previous;
+        }
+        if (wordClass(m_snapshot->cell(previous, point.row)) != selectedClass)
+        {
+            break;
+        }
+        first = previous;
+    }
+    quint16 last = column;
+    while (last + 1 < m_snapshot->columns)
+    {
+        quint16 next = static_cast<quint16>(last + std::max<int>(1, m_snapshot->cell(last, point.row).displayWidth));
+        if (next >= m_snapshot->columns || wordClass(m_snapshot->cell(next, point.row)) != selectedClass)
+        {
+            break;
+        }
+        last = next;
+    }
+    const auto lastWidth = static_cast<quint16>(std::max<int>(1, m_snapshot->cell(last, point.row).displayWidth));
+    const quint16 finalColumn = static_cast<quint16>(std::min<int>(m_snapshot->columns - 1, last + lastWidth - 1));
+    emit selectionRequested(first, point.row, finalColumn, point.row, false);
+    setHasSelection(true);
+    m_selectionActionPosition = position;
+    m_selectionActionVisible = true;
+    emit selectionActionChanged();
+    if (m_copyOnSelect)
+    {
+        emit copyRequested();
+    }
+}
+
+void TerminalItem::selectLineAt(const quint16 row, const QPointF &position)
+{
+    if (!m_snapshot || row >= m_snapshot->rows || m_snapshot->columns == 0)
+    {
+        return;
+    }
+    m_selectionAnchor = {.column = 0, .row = row};
+    emit selectionRequested(0, row, static_cast<quint16>(m_snapshot->columns - 1), row, false);
+    setHasSelection(true);
+    m_selectionActionPosition = position;
+    m_selectionActionVisible = true;
+    emit selectionActionChanged();
+    if (m_copyOnSelect)
+    {
+        emit copyRequested();
+    }
 }
 
 void TerminalItem::wheelEvent(QWheelEvent *event)

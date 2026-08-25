@@ -27,6 +27,7 @@ public:
     using TerminalItem::inputMethodEvent;
     using TerminalItem::inputMethodQuery;
     using TerminalItem::keyPressEvent;
+    using TerminalItem::mouseDoubleClickEvent;
     using TerminalItem::mouseMoveEvent;
     using TerminalItem::mousePressEvent;
     using TerminalItem::mouseReleaseEvent;
@@ -67,6 +68,9 @@ private slots:
     void routesCopyPasteAndTextKeys();
     void confirmsMultilinePaste();
     void selectsCellsAndCopiesOnMouseRelease();
+    void supportsClassicClipboardAliasesAndContextActions();
+    void selectsWordsOnDoubleClick();
+    void selectsLinesOnTripleClickAndExtendsWithShift();
     void accumulatesWheelDeltasIntoScrollRows();
     void exposesScrollbarAndRequestsAbsoluteScroll();
     void rendersStyledWideCellsAndCursorPixels();
@@ -339,13 +343,13 @@ void TerminalItemTests::routesCopyPasteAndTextKeys()
     QSignalSpy inputSpy(&item, &ztermy::ui::TerminalItem::inputGenerated);
     item.clipboardTextFixture = QStringLiteral("single-line paste");
 
-    QKeyEvent copyEvent(QEvent::KeyPress, Qt::Key_C, Qt::ControlModifier | Qt::ShiftModifier);
+    QKeyEvent copyEvent(QEvent::KeyPress, Qt::Key_Insert, Qt::ControlModifier);
     item.keyPressEvent(&copyEvent);
     QCOMPARE(copySpy.count(), 1);
     QCOMPARE(inputSpy.count(), 0);
     QVERIFY(copyEvent.isAccepted());
 
-    QKeyEvent pasteEvent(QEvent::KeyPress, Qt::Key_V, Qt::ControlModifier | Qt::ShiftModifier);
+    QKeyEvent pasteEvent(QEvent::KeyPress, Qt::Key_Insert, Qt::ShiftModifier);
     item.keyPressEvent(&pasteEvent);
     QCOMPARE(pasteSpy.count(), 1);
     QCOMPARE(pasteSpy.at(0).at(0).toByteArray(), QByteArrayLiteral("single-line paste"));
@@ -360,6 +364,123 @@ void TerminalItemTests::routesCopyPasteAndTextKeys()
     QVERIFY(textEvent.isAccepted());
 }
 
+void TerminalItemTests::supportsClassicClipboardAliasesAndContextActions()
+{
+    TestableTerminalItem item;
+    item.setSnapshot(snapshotAt(0, 0));
+    item.setSize(QSizeF{800, 480});
+    item.clipboardTextFixture = QStringLiteral("classic paste");
+    QSignalSpy copySpy(&item, &ztermy::ui::TerminalItem::copyRequested);
+    QSignalSpy pasteSpy(&item, &ztermy::ui::TerminalItem::pasteRequested);
+    QSignalSpy inputSpy(&item, &ztermy::ui::TerminalItem::inputGenerated);
+    QSignalSpy contextSpy(&item, &ztermy::ui::TerminalItem::contextMenuRequested);
+
+    item.selectVisibleTerminal();
+    QVERIFY(item.hasSelection());
+    QKeyEvent ctrlInsert(QEvent::KeyPress, Qt::Key_Insert, Qt::ControlModifier);
+    item.keyPressEvent(&ctrlInsert);
+    QCOMPARE(copySpy.count(), 1);
+
+    QKeyEvent conditionalCopy(QEvent::KeyPress, Qt::Key_C, Qt::ControlModifier);
+    item.keyPressEvent(&conditionalCopy);
+    QCOMPARE(copySpy.count(), 2);
+    QCOMPARE(inputSpy.count(), 0);
+
+    item.clearSelection();
+    QKeyEvent interrupt(QEvent::KeyPress, Qt::Key_C, Qt::ControlModifier);
+    item.keyPressEvent(&interrupt);
+    QCOMPARE(inputSpy.count(), 1);
+    QCOMPARE(inputSpy.at(0).at(0).toByteArray(), QByteArray(1, '\x03'));
+
+    QKeyEvent shiftInsert(QEvent::KeyPress, Qt::Key_Insert, Qt::ShiftModifier);
+    item.keyPressEvent(&shiftInsert);
+    QCOMPARE(pasteSpy.count(), 1);
+    QCOMPARE(pasteSpy.at(0).at(0).toByteArray(), QByteArrayLiteral("classic paste"));
+
+    const QPointF point{40, 40};
+    QMouseEvent menuEvent(QEvent::MouseButtonPress, point, point, point, Qt::RightButton, Qt::RightButton,
+                          Qt::NoModifier);
+    item.mousePressEvent(&menuEvent);
+    QCOMPARE(contextSpy.count(), 1);
+
+    item.setRightClickBehavior(QStringLiteral("paste"));
+    QMouseEvent pasteEvent(QEvent::MouseButtonPress, point, point, point, Qt::RightButton, Qt::RightButton,
+                           Qt::NoModifier);
+    item.mousePressEvent(&pasteEvent);
+    QCOMPARE(pasteSpy.count(), 2);
+
+    QMouseEvent forcedMenu(QEvent::MouseButtonPress, point, point, point, Qt::RightButton, Qt::RightButton,
+                           Qt::ShiftModifier);
+    item.mousePressEvent(&forcedMenu);
+    QCOMPARE(contextSpy.count(), 2);
+}
+
+void TerminalItemTests::selectsWordsOnDoubleClick()
+{
+    TestableTerminalItem item;
+    auto snapshot = snapshotAt(0, 0);
+    const QString word = QStringLiteral("hello");
+    for (qsizetype index = 0; index < word.size(); ++index)
+    {
+        snapshot->cell(static_cast<quint16>(index + 2), 1).grapheme = {word.at(index).unicode()};
+    }
+    item.setSnapshot(snapshot);
+    item.setSize(QSizeF{800, 480});
+    const QRectF origin = item.inputMethodQuery(Qt::ImCursorRectangle).toRectF();
+    const QPointF point{origin.x() + (4.5 * origin.width()), origin.y() + (1.5 * origin.height())};
+    QSignalSpy selectionSpy(&item, &ztermy::ui::TerminalItem::selectionRequested);
+
+    QMouseEvent event(QEvent::MouseButtonDblClick, point, point, point, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    item.mouseDoubleClickEvent(&event);
+
+    QCOMPARE(selectionSpy.count(), 1);
+    QCOMPARE(selectionSpy.at(0).at(0).toUInt(), 2U);
+    QCOMPARE(selectionSpy.at(0).at(1).toUInt(), 1U);
+    QCOMPARE(selectionSpy.at(0).at(2).toUInt(), 6U);
+    QCOMPARE(selectionSpy.at(0).at(3).toUInt(), 1U);
+    QVERIFY(item.hasSelection());
+}
+
+void TerminalItemTests::selectsLinesOnTripleClickAndExtendsWithShift()
+{
+    TestableTerminalItem item;
+    item.setSnapshot(snapshotAt(0, 0));
+    item.setSize(QSizeF{800, 480});
+    const QRectF origin = item.inputMethodQuery(Qt::ImCursorRectangle).toRectF();
+    const auto cellCenter = [&origin](const int column, const int row) {
+        return QPointF{origin.x() + ((static_cast<qreal>(column) + 0.5) * origin.width()),
+                       origin.y() + ((static_cast<qreal>(row) + 0.5) * origin.height())};
+    };
+    const QPointF wordPoint = cellCenter(4, 1);
+    QSignalSpy selectionSpy(&item, &ztermy::ui::TerminalItem::selectionRequested);
+
+    QMouseEvent doubleClick(QEvent::MouseButtonDblClick, wordPoint, wordPoint, wordPoint, Qt::LeftButton,
+                            Qt::LeftButton, Qt::NoModifier);
+    doubleClick.setTimestamp(100);
+    item.mouseDoubleClickEvent(&doubleClick);
+
+    QMouseEvent thirdClick(QEvent::MouseButtonPress, wordPoint, wordPoint, wordPoint, Qt::LeftButton, Qt::LeftButton,
+                           Qt::NoModifier);
+    thirdClick.setTimestamp(200);
+    item.mousePressEvent(&thirdClick);
+    QCOMPARE(selectionSpy.count(), 2);
+    QCOMPARE(selectionSpy.at(1).at(0).toUInt(), 0U);
+    QCOMPARE(selectionSpy.at(1).at(1).toUInt(), 1U);
+    QCOMPARE(selectionSpy.at(1).at(2).toUInt(), 79U);
+    QCOMPARE(selectionSpy.at(1).at(3).toUInt(), 1U);
+
+    const QPointF extensionPoint = cellCenter(10, 3);
+    QMouseEvent shiftClick(QEvent::MouseButtonPress, extensionPoint, extensionPoint, extensionPoint, Qt::LeftButton,
+                           Qt::LeftButton, Qt::ShiftModifier);
+    shiftClick.setTimestamp(1000);
+    item.mousePressEvent(&shiftClick);
+    QCOMPARE(selectionSpy.count(), 3);
+    QCOMPARE(selectionSpy.at(2).at(0).toUInt(), 0U);
+    QCOMPARE(selectionSpy.at(2).at(1).toUInt(), 1U);
+    QCOMPARE(selectionSpy.at(2).at(2).toUInt(), 10U);
+    QCOMPARE(selectionSpy.at(2).at(3).toUInt(), 3U);
+}
+
 void TerminalItemTests::confirmsMultilinePaste()
 {
     TestableTerminalItem item;
@@ -367,7 +488,7 @@ void TerminalItemTests::confirmsMultilinePaste()
     QSignalSpy pasteSpy(&item, &ztermy::ui::TerminalItem::pasteRequested);
     item.clipboardTextFixture = QStringLiteral("first\nsecond");
 
-    QKeyEvent pasteEvent(QEvent::KeyPress, Qt::Key_V, Qt::ControlModifier | Qt::ShiftModifier);
+    QKeyEvent pasteEvent(QEvent::KeyPress, Qt::Key_Insert, Qt::ShiftModifier);
     item.keyPressEvent(&pasteEvent);
 
     QCOMPARE(confirmationSpy.count(), 1);

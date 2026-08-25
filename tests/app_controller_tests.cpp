@@ -959,7 +959,8 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(controller.saveApplicationSettings(
         QStringLiteral("light"), 0.8, QStringLiteral("micaAlt"), QStringLiteral("custom"), QStringLiteral("#3366cc"),
         QStringLiteral("Microsoft YaHei UI"), QStringLiteral("Cascadia Code"), 18, true, false, 0.45,
-        QStringLiteral("bar"), false, true, false, QStringLiteral("zh_CN"), true, false, true, true));
+        QStringLiteral("bar"), false, true, false, QStringLiteral("zh_CN"), true, false, true, true,
+        QStringLiteral("copy-paste")));
     QCOMPARE(settingsChanged.count(), 1);
     QCOMPARE(controller.themePreference(), QStringLiteral("light"));
     QCOMPARE(controller.backdropOpacity(), 0.8);
@@ -976,6 +977,7 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(!controller.cursorBlink());
     QVERIFY(controller.copyOnSelect());
     QVERIFY(!controller.confirmMultilinePaste());
+    QCOMPARE(controller.terminalRightClickBehavior(), QStringLiteral("copy-paste"));
     QVERIFY(controller.sftpShowHiddenFiles());
     QVERIFY(!controller.sftpConfirmDelete());
     QVERIFY(controller.closeToTray());
@@ -988,6 +990,10 @@ void AppControllerTests::persistsApplicationSettings()
         QStringLiteral("unknown"), 0.8, QStringLiteral("mica"), QStringLiteral("system"), QStringLiteral("#3366CC"), {},
         QStringLiteral("Cascadia Code"), 18, false, true, 0.45, QStringLiteral("bar"), false, true, false,
         QStringLiteral("zh_CN"), false, true));
+    QVERIFY(!controller.saveApplicationSettings(
+        QStringLiteral("light"), 0.8, QStringLiteral("mica"), QStringLiteral("system"), QStringLiteral("#3366CC"), {},
+        QStringLiteral("Cascadia Code"), 18, false, true, 0.45, QStringLiteral("bar"), false, true, false,
+        QStringLiteral("zh_CN"), false, true, false, false, QStringLiteral("unsupported")));
     QVERIFY(!controller.saveApplicationSettings(
         QStringLiteral("light"), 0.8, QStringLiteral("mica"), QStringLiteral("system"), QStringLiteral("#3366CC"), {},
         QStringLiteral("Cascadia Code"), 18, false, true, 0.45, QStringLiteral("bar"), false, true, false,
@@ -1010,6 +1016,7 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(!reloaded.terminalLigatures());
     QCOMPARE(reloaded.terminalBackgroundOpacity(), 0.45);
     QVERIFY(reloaded.copyOnSelect());
+    QCOMPARE(reloaded.terminalRightClickBehavior(), QStringLiteral("copy-paste"));
     QVERIFY(reloaded.sftpShowHiddenFiles());
     QVERIFY(!reloaded.sftpConfirmDelete());
     QVERIFY(reloaded.closeToTray());

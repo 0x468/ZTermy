@@ -53,6 +53,14 @@ void ActionRegistryTests::exposesStableMetadataAndContext()
     QVERIFY(!terminalFind.value(QStringLiteral("enabled")).toBool());
     QVERIFY(
         actionById(registry.actions(true), QStringLiteral("terminal.find")).value(QStringLiteral("enabled")).toBool());
+    QCOMPARE(actionById(registry.actions(true), QStringLiteral("terminal.copy"))
+                 .value(QStringLiteral("shortcut"))
+                 .toString(),
+             QStringLiteral("Ctrl+Shift+C"));
+    QCOMPARE(actionById(registry.actions(true), QStringLiteral("terminal.paste"))
+                 .value(QStringLiteral("shortcut"))
+                 .toString(),
+             QStringLiteral("Ctrl+Shift+V"));
 
     const QVariantMap sftp = actionById(registry.actions(true), QStringLiteral("terminal.sftp"));
     QCOMPARE(sftp.value(QStringLiteral("category")).toString(), QStringLiteral("terminal"));

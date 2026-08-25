@@ -3354,6 +3354,11 @@ bool AppController::confirmMultilinePaste() const noexcept
     return m_settings.confirmMultilinePaste;
 }
 
+QString AppController::terminalRightClickBehavior() const
+{
+    return config::terminalRightClickPreferenceToken(m_settings.terminalRightClick);
+}
+
 bool AppController::sftpShowHiddenFiles() const noexcept
 {
     return m_settings.sftpShowHiddenFiles;
@@ -8087,22 +8092,23 @@ bool AppController::connectQuick(const QString &target, const QString &authentic
     return startSshConnection(std::move(request));
 }
 
-bool AppController::saveApplicationSettings(const QString &theme, const qreal backdropOpacity, const QString &backdrop,
-                                            const QString &accent, const QString &customAccent,
-                                            const QString &uiFontFamily, const QString &fontFamily, const int fontSize,
-                                            const bool showAllFonts, const bool ligatures,
-                                            const qreal terminalBackgroundOpacity, const QString &cursor,
-                                            const bool cursorShouldBlink, const bool shouldCopyOnSelect,
-                                            const bool shouldConfirmMultilinePaste, const QString &language,
-                                            const bool shouldShowHiddenSftpFiles, const bool shouldConfirmSftpDelete,
-                                            const bool shouldCloseToTray, const bool shouldPreferPerformance)
+bool AppController::saveApplicationSettings(
+    const QString &theme, const qreal backdropOpacity, const QString &backdrop, const QString &accent,
+    const QString &customAccent, const QString &uiFontFamily, const QString &fontFamily, const int fontSize,
+    const bool showAllFonts, const bool ligatures, const qreal terminalBackgroundOpacity, const QString &cursor,
+    const bool cursorShouldBlink, const bool shouldCopyOnSelect, const bool shouldConfirmMultilinePaste,
+    const QString &language, const bool shouldShowHiddenSftpFiles, const bool shouldConfirmSftpDelete,
+    const bool shouldCloseToTray, const bool shouldPreferPerformance, const QString &terminalRightClickBehavior)
 {
     const auto parsedTheme = config::parseThemePreference(theme);
     const auto parsedBackdrop = config::parseBackdropPreference(backdrop);
     const auto parsedAccent = config::parseAccentPreference(accent);
     const auto parsedCursor = config::parseCursorPreference(cursor);
     const auto parsedLanguage = config::parseLanguagePreference(language);
-    if (!parsedTheme || !parsedBackdrop || !parsedAccent || !parsedCursor || !parsedLanguage)
+    const auto parsedRightClick = terminalRightClickBehavior.isEmpty()
+                                      ? std::optional{m_settings.terminalRightClick}
+                                      : config::parseTerminalRightClickPreference(terminalRightClickBehavior);
+    if (!parsedTheme || !parsedBackdrop || !parsedAccent || !parsedCursor || !parsedLanguage || !parsedRightClick)
     {
         return false;
     }
@@ -8123,6 +8129,7 @@ bool AppController::saveApplicationSettings(const QString &theme, const qreal ba
         .cursorBlink = cursorShouldBlink,
         .copyOnSelect = shouldCopyOnSelect,
         .confirmMultilinePaste = shouldConfirmMultilinePaste,
+        .terminalRightClick = *parsedRightClick,
         .sftpShowHiddenFiles = shouldShowHiddenSftpFiles,
         .sftpConfirmDelete = shouldConfirmSftpDelete,
         .closeToTray = shouldCloseToTray,

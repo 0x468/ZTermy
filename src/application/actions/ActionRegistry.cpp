@@ -306,6 +306,36 @@ constexpr std::array actions{
         .paletteVisible = true,
         .autoRepeat = false,
     },
+    ActionDescriptor{
+        .id = "terminal.copy",
+        .category = "terminal",
+        .label = QT_TRANSLATE_NOOP("ActionRegistry", "Copy terminal selection"),
+        .description = QT_TRANSLATE_NOOP("ActionRegistry", "Copy the active terminal selection to the clipboard."),
+        .defaultShortcut = "Ctrl+Shift+C",
+        .terminalRequired = true,
+        .paletteVisible = true,
+        .autoRepeat = false,
+    },
+    ActionDescriptor{
+        .id = "terminal.paste",
+        .category = "terminal",
+        .label = QT_TRANSLATE_NOOP("ActionRegistry", "Paste into terminal"),
+        .description = QT_TRANSLATE_NOOP("ActionRegistry", "Paste clipboard text into the active terminal."),
+        .defaultShortcut = "Ctrl+Shift+V",
+        .terminalRequired = true,
+        .paletteVisible = true,
+        .autoRepeat = false,
+    },
+    ActionDescriptor{
+        .id = "terminal.selectVisible",
+        .category = "terminal",
+        .label = QT_TRANSLATE_NOOP("ActionRegistry", "Select visible terminal"),
+        .description = QT_TRANSLATE_NOOP("ActionRegistry", "Select the visible terminal viewport."),
+        .defaultShortcut = "",
+        .terminalRequired = true,
+        .paletteVisible = true,
+        .autoRepeat = false,
+    },
 };
 
 [[nodiscard]] const ActionDescriptor *findDescriptor(const QString &id) noexcept

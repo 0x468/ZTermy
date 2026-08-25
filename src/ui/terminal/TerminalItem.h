@@ -40,6 +40,9 @@ class TerminalItem : public QQuickItem
     Q_PROPERTY(bool copyOnSelect READ copyOnSelect WRITE setCopyOnSelect NOTIFY copyOnSelectChanged)
     Q_PROPERTY(bool confirmMultilinePaste READ confirmMultilinePaste WRITE setConfirmMultilinePaste NOTIFY
                    confirmMultilinePasteChanged)
+    Q_PROPERTY(
+        QString rightClickBehavior READ rightClickBehavior WRITE setRightClickBehavior NOTIFY rightClickBehaviorChanged)
+    Q_PROPERTY(bool hasSelection READ hasSelection NOTIFY hasSelectionChanged)
     Q_PROPERTY(bool scrollbarVisible READ scrollbarVisible NOTIFY scrollbarChanged)
     Q_PROPERTY(qreal scrollbarPosition READ scrollbarPosition NOTIFY scrollbarChanged)
     Q_PROPERTY(qreal scrollbarPageRatio READ scrollbarPageRatio NOTIFY scrollbarChanged)
@@ -64,6 +67,8 @@ public:
     [[nodiscard]] bool cursorBlink() const noexcept;
     [[nodiscard]] bool copyOnSelect() const noexcept;
     [[nodiscard]] bool confirmMultilinePaste() const noexcept;
+    [[nodiscard]] QString rightClickBehavior() const;
+    [[nodiscard]] bool hasSelection() const noexcept;
     [[nodiscard]] bool scrollbarVisible() const noexcept;
     [[nodiscard]] qreal scrollbarPosition() const noexcept;
     [[nodiscard]] qreal scrollbarPageRatio() const noexcept;
@@ -89,12 +94,18 @@ public slots:
     void setCursorBlink(bool enabled);
     void setCopyOnSelect(bool enabled);
     void setConfirmMultilinePaste(bool enabled);
+    void setRightClickBehavior(const QString &behavior);
     void setKeywordHighlightRules(const QVariantList &rules);
     void setForegroundOverride(const QColor &color);
     void setBackgroundOverride(const QColor &color);
     Q_INVOKABLE void resolveMultilinePaste(bool accepted);
     Q_INVOKABLE void scrollToFraction(qreal fraction);
     Q_INVOKABLE void dismissSelectionAction();
+    Q_INVOKABLE void copySelection();
+    Q_INVOKABLE void pasteClipboard();
+    Q_INVOKABLE void selectVisibleTerminal();
+    Q_INVOKABLE void clearSelection();
+    Q_INVOKABLE void requestContextMenu();
 
 signals:
     void inputGenerated(const QByteArray &bytes);
@@ -110,11 +121,14 @@ signals:
     void cursorAppearanceChanged();
     void copyOnSelectChanged();
     void confirmMultilinePasteChanged();
+    void rightClickBehaviorChanged();
+    void hasSelectionChanged();
     void scrollbarChanged();
     void selectionActionChanged();
     void keywordHighlightRulesChanged();
     void paletteOverrideChanged();
     void multilinePasteConfirmationRequested(int lineCount);
+    void contextMenuRequested(qreal x, qreal y);
 
 protected:
     QSGNode *updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *data) override;
@@ -124,6 +138,7 @@ protected:
     [[nodiscard]] QVariant inputMethodQuery(Qt::InputMethodQuery query) const override;
     void focusOutEvent(QFocusEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
+    void mouseDoubleClickEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
     void wheelEvent(QWheelEvent *event) override;
@@ -139,12 +154,16 @@ private:
     [[nodiscard]] qreal cellWidth() const;
     [[nodiscard]] qreal cellHeight() const;
     [[nodiscard]] ztermy::terminal::TerminalCursorStyle effectiveCursorStyle() const noexcept;
+    void setHasSelection(bool selected);
+    void selectWordAt(const ztermy::terminal::TerminalPoint &point, const QPointF &position);
+    void selectLineAt(quint16 row, const QPointF &position);
 
     ztermy::terminal::TerminalSnapshotPtr m_snapshot;
     QFont m_font;
     QTimer m_cursorBlinkTimer;
     QString m_statusText;
     QString m_cursorPreference = QStringLiteral("terminal");
+    QString m_rightClickBehavior = QStringLiteral("context-menu");
     QByteArray m_pendingMultilinePaste;
     std::uint64_t m_revision = 0;
     qreal m_backgroundOpacity = 1.0;
@@ -158,6 +177,7 @@ private:
     bool m_selecting = false;
     bool m_selectionMoved = false;
     bool m_selectionActionVisible = false;
+    bool m_hasSelection = false;
     bool m_cursorBlink = true;
     bool m_cursorBlinkPhase = true;
     bool m_ligaturesEnabled = true;
@@ -170,6 +190,8 @@ private:
     QColor m_backgroundOverride;
     TerminalRenderMetrics m_renderMetrics;
     int m_wheelRemainder = 0;
+    quint64 m_lastDoubleClickTimestamp = 0;
+    QPointF m_lastDoubleClickPosition;
 };
 
 } // namespace ztermy::ui

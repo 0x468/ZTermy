@@ -10,6 +10,9 @@ Item {
     required property string version
     required property string verse
     property bool compact: false
+    readonly property color releaseAccent: Theme.dark ? "#A78BFA" : "#7C3AED"
+    readonly property color releaseAccentSoft: Theme.dark ? "#C4B5FD" : "#8B5CF6"
+    readonly property color releaseHighlight: Theme.dark ? "#DDD6FE" : "#A78BFA"
 
     implicitHeight: compact ? 176 : 210
     Accessible.role: Accessible.Graphic
@@ -22,23 +25,23 @@ Item {
         clip: true
         radius: Theme.radiusPanel
         border.width: 1
-        border.color: Theme.dark ? Qt.rgba(0.30, 0.68, 1.0, 0.30) : Qt.rgba(0.10, 0.43, 0.78, 0.24)
+        border.color: Theme.dark ? Qt.rgba(0.65, 0.55, 0.98, 0.34) : Qt.rgba(0.49, 0.23, 0.93, 0.26)
         gradient: Gradient {
             orientation: Gradient.Horizontal
 
             GradientStop {
                 position: 0
-                color: Theme.dark ? "#101D31" : "#EDF6FF"
+                color: Theme.dark ? "#17152B" : "#F5F1FF"
             }
 
             GradientStop {
                 position: 0.58
-                color: Theme.dark ? "#142238" : "#F7FAFF"
+                color: Theme.dark ? "#1C1932" : "#FBF9FF"
             }
 
             GradientStop {
                 position: 1
-                color: Theme.dark ? "#111A2A" : "#EEF3FA"
+                color: Theme.dark ? "#151525" : "#F1EEFA"
             }
         }
 
@@ -48,7 +51,7 @@ Item {
             x: -width * 0.42
             y: (parent.height - height) / 2
             radius: width / 2
-            color: Qt.rgba(0.16, 0.66, 1.0, Theme.dark ? 0.09 : 0.12)
+            color: Qt.rgba(0.55, 0.36, 0.96, Theme.dark ? 0.11 : 0.13)
         }
 
         Text {
@@ -56,7 +59,7 @@ Item {
             anchors.rightMargin: card.compact ? 10 : 28
             anchors.verticalCenter: parent.verticalCenter
             text: card.codename
-            color: Theme.accent
+            color: card.releaseAccent
             opacity: Theme.dark ? 0.055 : 0.075
             font.family: Theme.uiFont
             font.pixelSize: card.compact ? 124 : 176
@@ -79,7 +82,7 @@ Item {
 
                 GradientStop {
                     position: 0.5
-                    color: Theme.accent
+                    color: card.releaseAccent
                 }
 
                 GradientStop {
@@ -113,12 +116,12 @@ Item {
 
                 GradientStop {
                     position: 0.25
-                    color: Theme.accent
+                    color: card.releaseAccent
                 }
 
                 GradientStop {
                     position: 0.72
-                    color: "#7DE7FF"
+                    color: card.releaseAccentSoft
                 }
 
                 GradientStop {
@@ -145,7 +148,7 @@ Item {
                     radius: width / 2
                     color: "transparent"
                     border.width: 1
-                    border.color: Qt.rgba(0.49, 0.91, 1.0, Theme.dark ? 0.32 : 0.44)
+                    border.color: Qt.rgba(0.76, 0.71, 0.98, Theme.dark ? 0.38 : 0.50)
                 }
 
                 Item {
@@ -159,7 +162,7 @@ Item {
                         width: card.compact ? 6 : 8
                         height: width
                         radius: width / 2
-                        color: "#7DE7FF"
+                        color: card.releaseHighlight
                     }
 
                     NumberAnimation on rotation {
@@ -177,23 +180,23 @@ Item {
                     height: width
                     radius: card.compact ? 20 : 28
                     border.width: 1
-                    border.color: Qt.rgba(0.49, 0.91, 1.0, Theme.dark ? 0.42 : 0.54)
+                    border.color: Qt.rgba(0.76, 0.71, 0.98, Theme.dark ? 0.48 : 0.58)
                     gradient: Gradient {
                         GradientStop {
                             position: 0
-                            color: Theme.dark ? "#173B68" : "#D9EEFF"
+                            color: Theme.dark ? "#32245B" : "#EDE9FE"
                         }
 
                         GradientStop {
                             position: 1
-                            color: Theme.dark ? "#102544" : "#BBDFFF"
+                            color: Theme.dark ? "#21173F" : "#D8B4FE"
                         }
                     }
 
                     Text {
                         anchors.centerIn: parent
                         text: card.codename
-                        color: Theme.dark ? "#E9F7FF" : "#0F315C"
+                        color: Theme.dark ? "#F5F3FF" : "#3B176B"
                         font.family: Theme.uiFont
                         font.pixelSize: card.compact ? 44 : 64
                         font.weight: Font.DemiBold
@@ -225,9 +228,9 @@ Item {
                         Layout.preferredWidth: versionText.implicitWidth + (card.compact ? 16 : 22)
                         Layout.preferredHeight: card.compact ? 25 : 30
                         radius: height / 2
-                        color: Qt.rgba(0.16, 0.66, 1.0, Theme.dark ? 0.15 : 0.12)
+                        color: Qt.rgba(0.55, 0.36, 0.96, Theme.dark ? 0.17 : 0.13)
                         border.width: 1
-                        border.color: Qt.rgba(0.16, 0.66, 1.0, Theme.dark ? 0.42 : 0.34)
+                        border.color: Qt.rgba(0.55, 0.36, 0.96, Theme.dark ? 0.46 : 0.38)
 
                         Text {
                             id: versionText
@@ -235,7 +238,7 @@ Item {
                             objectName: "settingsApplicationBuildInfo"
                             anchors.centerIn: parent
                             text: card.version
-                            color: Theme.dark ? "#A7DBFF" : "#155A98"
+                            color: Theme.dark ? "#DDD6FE" : "#6D28D9"
                             font.family: Theme.terminalFont
                             font.pixelSize: card.compact ? Theme.textCompact : Theme.textLabel
                             font.weight: Font.DemiBold
@@ -256,7 +259,7 @@ Item {
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 1
-                    color: Qt.rgba(0.49, 0.91, 1.0, Theme.dark ? 0.20 : 0.30)
+                    color: Qt.rgba(0.76, 0.71, 0.98, Theme.dark ? 0.24 : 0.34)
                 }
 
                 Text {

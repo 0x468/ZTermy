@@ -41,6 +41,14 @@ enum class CursorPreference : std::uint8_t
     underline,
 };
 
+enum class TerminalRightClickPreference : std::uint8_t
+{
+    contextMenu,
+    copyPaste,
+    paste,
+    selectWord,
+};
+
 enum class CredentialStoragePreference : std::uint8_t
 {
     automatic,
@@ -113,6 +121,7 @@ struct ApplicationSettings final
     bool cursorBlink = true;
     bool copyOnSelect = false;
     bool confirmMultilinePaste = true;
+    TerminalRightClickPreference terminalRightClick = TerminalRightClickPreference::contextMenu;
     bool sftpShowHiddenFiles = false;
     bool sftpConfirmDelete = true;
     bool closeToTray = false;
@@ -164,6 +173,7 @@ private:
 [[nodiscard]] QString backdropPreferenceToken(BackdropPreference preference);
 [[nodiscard]] QString accentPreferenceToken(AccentPreference preference);
 [[nodiscard]] QString cursorPreferenceToken(CursorPreference preference);
+[[nodiscard]] QString terminalRightClickPreferenceToken(TerminalRightClickPreference preference);
 [[nodiscard]] QString credentialStoragePreferenceToken(CredentialStoragePreference preference);
 [[nodiscard]] QString languagePreferenceToken(LanguagePreference preference);
 [[nodiscard]] QString aiProviderPreferenceToken(AiProviderPreference preference);
@@ -174,6 +184,7 @@ private:
 [[nodiscard]] std::optional<BackdropPreference> parseBackdropPreference(const QString &token);
 [[nodiscard]] std::optional<AccentPreference> parseAccentPreference(const QString &token);
 [[nodiscard]] std::optional<CursorPreference> parseCursorPreference(const QString &token);
+[[nodiscard]] std::optional<TerminalRightClickPreference> parseTerminalRightClickPreference(const QString &token);
 [[nodiscard]] std::optional<CredentialStoragePreference> parseCredentialStoragePreference(const QString &token);
 [[nodiscard]] std::optional<LanguagePreference> parseLanguagePreference(const QString &token);
 [[nodiscard]] std::optional<AiProviderPreference> parseAiProviderPreference(const QString &token);

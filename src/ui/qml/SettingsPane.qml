@@ -431,6 +431,14 @@ Rectangle {
         return cursorBox.currentIndex === 1 ? "block" : cursorBox.currentIndex === 2 ? "bar" : cursorBox.currentIndex === 3 ? "underline" : "terminal";
     }
 
+    function rightClickIndex(token) {
+        return token === "copy-paste" ? 1 : token === "paste" ? 2 : token === "select-word" ? 3 : 0;
+    }
+
+    function rightClickToken() {
+        return rightClickBox.currentIndex === 1 ? "copy-paste" : rightClickBox.currentIndex === 2 ? "paste" : rightClickBox.currentIndex === 3 ? "select-word" : "context-menu";
+    }
+
     function accentToken() {
         return accentBox.currentIndex === 1 ? "system" : accentBox.currentIndex === 2 ? "custom" : "ztermy";
     }
@@ -499,6 +507,7 @@ Rectangle {
         cursorBlinkSwitch.checked = controller.cursorBlink;
         copyOnSelectSwitch.checked = controller.copyOnSelect;
         multilinePasteSwitch.checked = controller.confirmMultilinePaste;
+        rightClickBox.currentIndex = rightClickIndex(controller.terminalRightClickBehavior);
         sftpShowHiddenSwitch.checked = controller.sftpShowHiddenFiles;
         sftpConfirmDeleteSwitch.checked = controller.sftpConfirmDelete;
         closeToTraySwitch.checked = controller.closeToTray;
@@ -534,7 +543,7 @@ Rectangle {
         }
         const wantsOpaqueSurface = performanceModeDraft || backdropToken() === "solid";
         const restartRequired = wantsOpaqueSurface !== windowChrome.opaqueSurface || performanceModeDraft !== windowChrome.performanceModeActive;
-        const saved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), accentToken(), customAccentField.text, uiFontDraft, terminalFontDraft, fontSizeBox.value, showAllFontsSwitch.checked, ligatureSwitch.checked, terminalOpacitySlider.value, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, multilinePasteSwitch.checked, languageDraft, sftpShowHiddenSwitch.checked, sftpConfirmDeleteSwitch.checked, closeToTraySwitch.checked, performanceModeDraft);
+        const saved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), accentToken(), customAccentField.text, uiFontDraft, terminalFontDraft, fontSizeBox.value, showAllFontsSwitch.checked, ligatureSwitch.checked, terminalOpacitySlider.value, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, multilinePasteSwitch.checked, languageDraft, sftpShowHiddenSwitch.checked, sftpConfirmDeleteSwitch.checked, closeToTraySwitch.checked, performanceModeDraft, rightClickToken());
         presentStatus(saved ? restartRequired ? qsTr("Settings saved. Restart ztermy to apply the rendering mode.") : qsTr("Settings saved and applied.") : qsTr("These settings could not be saved. Check the font and numeric ranges."), !saved, saved);
         if (!saved) {
             loadDraft();
@@ -864,9 +873,9 @@ Rectangle {
                 Layout.fillWidth: true
                 visible: pane.currentCategory === "about"
                 compact: pane.compactLayout
-                codename: "糸"
+                codename: "紫"
                 version: Qt.application.version
-                verse: "剪不断，理还乱，是离愁"
+                verse: "紫衣惊鸿影"
             }
 
             SectionCard {
@@ -1373,6 +1382,20 @@ Rectangle {
                         Layout.fillWidth: true
                         text: qsTr("Confirm before pasting multiple lines")
                         accessibleName: qsTr("Confirm multiline terminal paste")
+                    }
+
+                    Label {
+                        text: qsTr("Right-click")
+                        color: Theme.text
+                    }
+                    AppComboBox {
+                        id: rightClickBox
+                        objectName: "settingsTerminalRightClick"
+                        Layout.fillWidth: true
+                        model: ["context-menu", "copy-paste", "paste", "select-word"]
+                        displayTextModel: [qsTr("Show context menu"), qsTr("Copy selection or paste"), qsTr("Paste"), qsTr("Select word and show menu")]
+                        accessibleName: qsTr("Terminal right-click behavior")
+                        toolTipText: qsTr("Shift+right-click always opens the context menu.")
                     }
                 }
             }

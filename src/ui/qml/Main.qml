@@ -368,6 +368,15 @@ Rectangle {
         case "terminal.copyAddress":
             controller.copyActiveTerminalAddress();
             break;
+        case "terminal.copy":
+            terminalViewport.copySelection();
+            break;
+        case "terminal.paste":
+            terminalViewport.pasteClipboard();
+            break;
+        case "terminal.selectVisible":
+            terminalViewport.selectVisibleTerminal();
+            break;
         }
     }
 
@@ -1779,6 +1788,7 @@ Rectangle {
                             cursorBlink: root.controller.cursorBlink
                             copyOnSelect: root.controller.copyOnSelect
                             confirmMultilinePaste: root.controller.confirmMultilinePaste
+                            rightClickBehavior: root.controller.terminalRightClickBehavior
 
                             Component.onCompleted: forceActiveFocus()
                             onMultilinePasteConfirmationRequested: (viewport, lineCount) => {

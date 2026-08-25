@@ -1,8 +1,12 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 
 MenuItem {
     id: control
+
+    property string iconName: ""
+    property string shortcutText: ""
 
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset, implicitContentWidth + leftPadding + rightPadding)
     implicitHeight: Math.max(34, implicitContentHeight + topPadding + bottomPadding, implicitIndicatorHeight + topPadding + bottomPadding)
@@ -14,15 +18,42 @@ MenuItem {
     spacing: 8
     hoverEnabled: true
 
-    contentItem: Text {
-        leftPadding: control.checkable ? 22 : 0
-        rightPadding: control.subMenu ? 18 : 0
-        text: control.text
-        color: control.enabled ? Theme.text : Theme.textSubtle
-        elide: Text.ElideRight
-        verticalAlignment: Text.AlignVCenter
-        font.family: Theme.uiFont
-        font.pixelSize: Theme.textBody
+    contentItem: RowLayout {
+        spacing: 9
+
+        Item {
+            Layout.preferredWidth: control.checkable || control.iconName.length > 0 ? 16 : 0
+            Layout.preferredHeight: 16
+
+            AppIcon {
+                anchors.fill: parent
+                visible: control.iconName.length > 0 && !(control.checkable && control.checked)
+                name: control.iconName
+                color: control.enabled ? Theme.textSoft : Theme.textSubtle
+            }
+        }
+
+        Text {
+            Layout.fillWidth: true
+            text: control.text
+            color: control.enabled ? Theme.text : Theme.textSubtle
+            elide: Text.ElideRight
+            verticalAlignment: Text.AlignVCenter
+            font.family: Theme.uiFont
+            font.pixelSize: Theme.textBody
+        }
+
+        Text {
+            visible: control.shortcutText.length > 0
+            text: control.shortcutText
+            color: Theme.textMuted
+            font.family: Theme.uiFont
+            font.pixelSize: Theme.textLabel
+        }
+
+        Item {
+            Layout.preferredWidth: control.subMenu ? 14 : 0
+        }
     }
 
     indicator: AppIcon {

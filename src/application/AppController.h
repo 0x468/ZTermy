@@ -173,6 +173,7 @@ class AppController final : public QObject
     Q_PROPERTY(bool cursorBlink READ cursorBlink NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool copyOnSelect READ copyOnSelect NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool confirmMultilinePaste READ confirmMultilinePaste NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(QString terminalRightClickBehavior READ terminalRightClickBehavior NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool sftpShowHiddenFiles READ sftpShowHiddenFiles NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool sftpConfirmDelete READ sftpConfirmDelete NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool closeToTray READ closeToTray NOTIFY applicationSettingsChanged)
@@ -330,6 +331,7 @@ public:
     [[nodiscard]] bool cursorBlink() const noexcept;
     [[nodiscard]] bool copyOnSelect() const noexcept;
     [[nodiscard]] bool confirmMultilinePaste() const noexcept;
+    [[nodiscard]] QString terminalRightClickBehavior() const;
     [[nodiscard]] bool sftpShowHiddenFiles() const noexcept;
     [[nodiscard]] bool sftpConfirmDelete() const noexcept;
     [[nodiscard]] bool closeToTray() const noexcept;
@@ -548,7 +550,8 @@ public:
                                              const QString &cursor, bool cursorShouldBlink, bool shouldCopyOnSelect,
                                              bool shouldConfirmMultilinePaste, const QString &language,
                                              bool shouldShowHiddenSftpFiles, bool shouldConfirmSftpDelete,
-                                             bool shouldCloseToTray = false, bool shouldPreferPerformance = false);
+                                             bool shouldCloseToTray = false, bool shouldPreferPerformance = false,
+                                             const QString &terminalRightClickBehavior = {});
     Q_INVOKABLE bool saveAiProviderSettings(const QString &provider, const QString &baseUrl,
                                             const QString &endpointPath, const QString &model, bool automaticContext,
                                             const QString &permissionMode);

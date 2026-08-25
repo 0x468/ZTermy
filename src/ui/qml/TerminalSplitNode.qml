@@ -12,6 +12,7 @@ Item {
     property bool cursorBlink: true
     property bool copyOnSelect: false
     property bool confirmMultilinePaste: true
+    property string rightClickBehavior: "context-menu"
     property string defaultFontFamily: "Cascadia Mono"
     property int defaultFontSize: 14
     property bool defaultLigatures: true
@@ -47,6 +48,36 @@ Item {
         if (activeViewport) {
             activeViewport.scrollToFraction(position);
         }
+    }
+
+    function copySelection() {
+        if (activeViewport) {
+            activeViewport.copySelection();
+        }
+    }
+
+    function pasteClipboard() {
+        if (activeViewport) {
+            activeViewport.pasteClipboard();
+        }
+    }
+
+    function selectVisibleTerminal() {
+        if (activeViewport) {
+            activeViewport.selectVisibleTerminal();
+        }
+    }
+
+    function actionShortcut(actionId) {
+        if (!controller) {
+            return "";
+        }
+        for (let index = 0; index < controller.actions.length; ++index) {
+            if (controller.actions[index].id === actionId) {
+                return controller.actions[index].shortcut;
+            }
+        }
+        return "";
     }
 
     Loader {
@@ -123,6 +154,7 @@ Item {
                 cursorBlink: root.cursorBlink
                 copyOnSelect: root.copyOnSelect
                 confirmMultilinePaste: root.confirmMultilinePaste
+                rightClickBehavior: root.rightClickBehavior
 
                 Component.onCompleted: Qt.callLater(attachToController)
                 Component.onDestruction: {
@@ -136,6 +168,11 @@ Item {
                     }
                 }
                 onMultilinePasteConfirmationRequested: lineCount => root.multilinePasteConfirmationRequested(viewport, lineCount)
+                onContextMenuRequested: (menuX, menuY) => {
+                    terminalContextMenu.x = viewport.x + Math.max(0, Math.min(menuX, viewport.width - terminalContextMenu.width));
+                    terminalContextMenu.y = viewport.y + Math.max(0, Math.min(menuY, viewport.height - terminalContextMenu.height));
+                    terminalContextMenu.open();
+                }
 
                 Connections {
                     target: root
@@ -148,6 +185,52 @@ Item {
                         Qt.callLater(viewport.attachToController);
                     }
                 }
+            }
+
+            AppMenu {
+                id: terminalContextMenu
+
+                modal: false
+
+                AppMenuItem {
+                    text: qsTr("Copy")
+                    iconName: "copy"
+                    shortcutText: root.actionShortcut("terminal.copy")
+                    enabled: viewport.hasSelection
+                    onTriggered: viewport.copySelection()
+                }
+
+                AppMenuItem {
+                    text: qsTr("Paste")
+                    iconName: "paste"
+                    shortcutText: root.actionShortcut("terminal.paste")
+                    onTriggered: viewport.pasteClipboard()
+                }
+
+                AppMenuSeparator {}
+
+                AppMenuItem {
+                    text: qsTr("Select visible terminal")
+                    iconName: "select-visible"
+                    onTriggered: viewport.selectVisibleTerminal()
+                }
+
+                AppMenuItem {
+                    text: qsTr("Attach selection to AI")
+                    iconName: "ai"
+                    enabled: viewport.hasSelection && !!root.controller
+                    onTriggered: {
+                        if (!root.controller.activateTerminalPane(leaf.node.id) || !root.controller.attachAiSelection()) {
+                            return;
+                        }
+                        if (!leaf.tab.workbenchOpen || leaf.tab.workbenchPage !== "ai") {
+                            root.controller.toggleTerminalWorkbench("ai");
+                        }
+                        viewport.dismissSelectionAction();
+                    }
+                }
+
+                onClosed: viewport.forceActiveFocus()
             }
 
             ToolButton {
