@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 
 project(
     ztermy
-VERSION 0.4.0
+VERSION 0.4.2
     DESCRIPTION "A native Windows SSH terminal"
     LANGUAGES C CXX RC
 )
@@ -754,6 +754,8 @@ target_link_libraries(ztermy_ssh_session
 )
 
 add_library(ztermy_terminal_ui STATIC
+    src/platform/windows/WindowsTerminalInput.cpp
+    src/platform/windows/WindowsTerminalInput.h
     src/ui/terminal/TerminalItem.cpp
     src/ui/terminal/TerminalItem.h
     src/ui/terminal/TerminalKeywordHighlighter.cpp
@@ -795,6 +797,7 @@ target_link_libraries(ztermy_terminal_ui
         Qt6::Core
         Qt6::Gui
     Qt6::Quick
+    user32
 )
 
 add_library(ztermy_icon_rendering STATIC

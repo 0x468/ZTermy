@@ -89,7 +89,7 @@ std::expected<void, AiProviderError> OpenAiSubscriptionTokenRefresher::start(sec
     QNetworkRequest request(tokenEndpoint);
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/x-www-form-urlencoded"));
     request.setRawHeader("Accept", "application/json");
-    request.setRawHeader("User-Agent", "ztermy/0.4.0");
+    request.setRawHeader("User-Agent", "ztermy/0.4.2");
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
     request.setTransferTimeout(30'000);
     m_completion = std::move(completion);

@@ -112,6 +112,47 @@ The UI may receive a minimal `mouseTrackingActive` snapshot flag for routing,
 but encoded bytes remain a worker concern. Application cursor/keypad state must
 not be mirrored into QML as a second authority.
 
+### Architecture decision
+
+Qt input is normalized into platform-neutral semantic events, queued without
+blocking the GUI thread, and encoded by the session worker from the live
+libghostty state immediately before the PTY or SSH write. Mouse motion and focus
+updates coalesce in bounded queues. IME commit remains a dedicated UTF-8 path,
+and the semantic shell observer never receives negotiated CSI key sequences.
+
+The complete contract is recorded in
+`docs/adr/0110-worker-side-vt-input-encoding.md`.
+
+### 0.4.2 owner acceptance
+
+Use the same static Release build for local PowerShell and an SSH profile. For
+items involving an interactive application, compare with Windows Terminal on
+the same machine and shell:
+
+1. In PowerShell and a remote POSIX shell, verify letters on the active keyboard
+   layout, Ctrl/Alt shortcuts, AltGr characters, left/right modifiers, Enter,
+   Backspace, Tab, Shift+Tab, Home/End, Insert/Delete, Page Up/Down, arrows,
+   F1-F24, and the numeric keypad with NumLock on and off. No key may be emitted
+   twice and key-up events must not type text.
+2. Enter Chinese text with the Windows IME at the prompt and in `hx` or another
+   full-screen editor. Preedit must remain local, commit must occur exactly
+   once, candidate UI placement must follow the cursor, and AltGr/non-IME
+   layout input must remain unaffected.
+3. In `hx`, Vim, tmux, or another mouse-aware TUI, click, drag, hover, and wheel.
+   The application must receive pointer input. Hold Shift and drag: ztermy must
+   select and copy terminal text locally without also sending mouse reports.
+4. In an alternate-screen application that enables alternate scrolling but not
+   mouse tracking, use the wheel. It must navigate through application key input
+   rather than moving ztermy scrollback. After exit, the wheel must resume local
+   scrollback behavior.
+5. Use an application that enables focus reporting, switch between ztermy,
+   another window, settings, and terminal tabs, then return. Each effective
+   focus transition must be reported once; transient QML focus changes must not
+   produce a burst of duplicate reports.
+6. Resize rapidly while holding a mouse button in a mouse-aware TUI and generate
+   sustained pointer motion. The UI must remain responsive, the final pointer
+   position must arrive, and memory/queue growth must remain bounded.
+
 ## 0.4.3 - links and keyboard-first productivity
 
 The third milestone builds higher-level workflows on the stable selection and

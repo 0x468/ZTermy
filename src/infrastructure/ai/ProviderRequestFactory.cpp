@@ -900,7 +900,7 @@ ProviderRequestFactory::prepare(const AiProviderConfiguration &configuration, co
     {
         request.setRawHeader("ChatGPT-Account-Id", fromUtf8(configuration.accountId).toUtf8());
         request.setRawHeader("originator", "ztermy");
-        request.setRawHeader("User-Agent", "ztermy/0.4.0");
+        request.setRawHeader("User-Agent", "ztermy/0.4.2");
     }
     return PreparedProviderRequest{.request = request,
                                    .body = QJsonDocument(body).toJson(QJsonDocument::Compact),

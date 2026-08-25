@@ -46,7 +46,7 @@ QByteArray McpJsonRpcProtocol::initializeRequest(const std::uint64_t id) const
                                                {QStringLiteral("capabilities"), QJsonObject{}},
                                                {QStringLiteral("clientInfo"),
                                                 QJsonObject{{QStringLiteral("name"), QStringLiteral("ztermy")},
-                                                            {QStringLiteral("version"), QStringLiteral("0.4.0")}}}}}});
+                                                            {QStringLiteral("version"), QStringLiteral("0.4.2")}}}}}});
 }
 
 QByteArray McpJsonRpcProtocol::initializedNotification() const

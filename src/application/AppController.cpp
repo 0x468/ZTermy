@@ -14241,6 +14241,89 @@ void AppController::connectTerminalSignals(ui::TerminalItem &terminal, const QSt
             queueInput(bytes);
         }
     });
+    QObject::connect(
+        &terminal, &ui::TerminalItem::keyEventGenerated, this, [this, paneId](const terminal::TerminalKeyEvent &event) {
+            if (!activateTerminalPane(paneId))
+            {
+                return;
+            }
+            TerminalTab *tab = findTabForPane(paneId);
+            if (tab == nullptr)
+            {
+                return;
+            }
+
+            QByteArray observed;
+            if (event.action != terminal::TerminalKeyAction::release)
+            {
+                if (!event.text.empty())
+                {
+                    observed = QByteArray(event.text.data(), static_cast<qsizetype>(event.text.size()));
+                }
+                else if (event.key == terminal::TerminalKey::enter || event.key == terminal::TerminalKey::numpadEnter)
+                {
+                    observed = QByteArrayLiteral("\r");
+                }
+                else if (event.key == terminal::TerminalKey::backspace)
+                {
+                    observed = QByteArray(1, '\x7f');
+                }
+                else if ((event.modifiers & terminal::terminalModifierControl) != 0
+                         && (event.key == terminal::TerminalKey::keyU || event.key == terminal::TerminalKey::keyC))
+                {
+                    observed = QByteArray(1, event.key == terminal::TerminalKey::keyU ? static_cast<char>(0x15)
+                                                                                      : static_cast<char>(0x03));
+                }
+                else if (event.key != terminal::TerminalKey::shiftLeft && event.key != terminal::TerminalKey::shiftRight
+                         && event.key != terminal::TerminalKey::controlLeft
+                         && event.key != terminal::TerminalKey::controlRight
+                         && event.key != terminal::TerminalKey::altLeft && event.key != terminal::TerminalKey::altRight
+                         && event.key != terminal::TerminalKey::metaLeft
+                         && event.key != terminal::TerminalKey::metaRight)
+                {
+                    // A non-text VT key can move or edit the remote line. Preserve the
+                    // old observer's conservative behavior without feeding its encoded
+                    // Kitty/modifyOtherKeys escape sequence into command history.
+                    observed = QByteArray(1, '\x1b');
+                }
+            }
+            if (!observed.isEmpty())
+            {
+                observeUserInput(*tab, observed);
+                observeTerminalInput(*tab, observed);
+            }
+            if (tab->ssh)
+            {
+                tab->ssh->queueKeyEvent(event);
+            }
+            else if (tab->local)
+            {
+                tab->local->queueKeyEvent(event);
+            }
+        });
+    QObject::connect(&terminal, &ui::TerminalItem::mouseEventGenerated, this,
+                     [this, paneId](const terminal::TerminalMouseEvent &event) {
+                         TerminalTab *tab = findTabForPane(paneId);
+                         if (tab != nullptr && tab->ssh)
+                         {
+                             tab->ssh->queueMouseEvent(event);
+                         }
+                         else if (tab != nullptr && tab->local)
+                         {
+                             tab->local->queueMouseEvent(event);
+                         }
+                     });
+    QObject::connect(&terminal, &ui::TerminalItem::focusEventGenerated, this, [this, paneId](const bool focused) {
+        TerminalTab *tab = findTabForPane(paneId);
+        if (tab != nullptr && tab->ssh)
+        {
+            tab->ssh->queueFocusEvent(focused);
+        }
+        else if (tab != nullptr && tab->local)
+        {
+            tab->local->queueFocusEvent(focused);
+        }
+    });
     QObject::connect(&terminal, &ui::TerminalItem::pasteRequested, this, [this, paneId](const QByteArray &bytes) {
         if (activateTerminalPane(paneId))
         {

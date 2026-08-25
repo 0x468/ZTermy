@@ -30,6 +30,11 @@ public:
     [[nodiscard]] std::error_code clearSearch() override;
     [[nodiscard]] std::expected<std::vector<std::byte>, std::error_code>
     encodePaste(std::span<const std::byte> bytes) const override;
+    [[nodiscard]] std::expected<std::vector<std::byte>, std::error_code>
+    encodeKey(const TerminalKeyEvent &event) override;
+    [[nodiscard]] std::expected<std::vector<std::byte>, std::error_code>
+    encodeMouse(const TerminalMouseEvent &event) override;
+    [[nodiscard]] std::expected<std::vector<std::byte>, std::error_code> encodeFocus(bool focused) const override;
     [[nodiscard]] std::expected<std::string, std::error_code> plainText() const override;
     [[nodiscard]] std::expected<TerminalScrollbackPage, std::error_code>
     scrollbackPage(TerminalScrollbackRequest request) const override;

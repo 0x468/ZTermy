@@ -19,6 +19,7 @@
 
 class QInputMethodEvent;
 class QKeyEvent;
+class QHoverEvent;
 class QMouseEvent;
 class QWheelEvent;
 class QFocusEvent;
@@ -124,6 +125,9 @@ public slots:
 
 signals:
     void inputGenerated(const QByteArray &bytes);
+    void keyEventGenerated(const ztermy::terminal::TerminalKeyEvent &event);
+    void mouseEventGenerated(const ztermy::terminal::TerminalMouseEvent &event);
+    void focusEventGenerated(bool focused);
     void pasteRequested(const QByteArray &bytes);
     void scrollRequested(int rows);
     void selectionRequested(quint16 startColumn, quint16 startRow, quint16 endColumn, quint16 endRow, bool rectangular);
@@ -154,9 +158,12 @@ protected:
     QSGNode *updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *data) override;
     void geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) override;
     void keyPressEvent(QKeyEvent *event) override;
+    void keyReleaseEvent(QKeyEvent *event) override;
     void inputMethodEvent(QInputMethodEvent *event) override;
     [[nodiscard]] QVariant inputMethodQuery(Qt::InputMethodQuery query) const override;
+    void focusInEvent(QFocusEvent *event) override;
     void focusOutEvent(QFocusEvent *event) override;
+    void hoverMoveEvent(QHoverEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
     void mouseDoubleClickEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
@@ -184,11 +191,17 @@ private:
     void updateSelectionAutoscroll(const QPointF &position);
     void stopSelectionAutoscroll();
     void cancelSelectionGesture();
+    [[nodiscard]] bool terminalOwnsMouse(const Qt::KeyboardModifiers &modifiers) const noexcept;
+    [[nodiscard]] ztermy::terminal::TerminalMouseEvent
+    mouseEvent(ztermy::terminal::TerminalMouseAction action, ztermy::terminal::TerminalMouseButton button,
+               const QPointF &position, Qt::KeyboardModifiers modifiers, Qt::MouseButtons buttons) const;
+    void reportFocus(bool focused);
 
     ztermy::terminal::TerminalSnapshotPtr m_snapshot;
     QFont m_font;
     QTimer m_cursorBlinkTimer;
     QTimer m_selectionAutoscrollTimer;
+    QTimer m_focusOutTimer;
     QElapsedTimer m_selectionEdgeDwell;
     QString m_statusText;
     QString m_cursorPreference = QStringLiteral("terminal");
@@ -217,6 +230,7 @@ private:
     bool m_copyOnSelect = false;
     bool m_confirmMultilinePaste = true;
     bool m_fullInvalidationPending = true;
+    std::optional<bool> m_lastReportedFocus;
     QVariantList m_keywordHighlightRuleValues;
     std::vector<TerminalKeywordRule> m_keywordHighlightRules;
     QColor m_foregroundOverride;

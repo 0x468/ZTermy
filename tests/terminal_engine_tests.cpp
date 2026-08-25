@@ -33,6 +33,9 @@ private slots:
     void scrollsThroughHistory();
     void searchesAcrossScrollbackAndWrappedLines();
     void encodesPasteForTerminalMode();
+    void encodesKeysFromLiveTerminalModes();
+    void encodesMouseAndFocusEventsFromLiveTerminalModes();
+    void reportsAlternateScrollMode();
     void exposesShellWorkingDirectorySequences();
     void pagesThroughScrollback();
 };
@@ -601,6 +604,87 @@ void TerminalEngineTests::encodesPasteForTerminalMode()
         QFAIL(encoded.error().message().c_str());
     }
     QCOMPARE(std::string(reinterpret_cast<const char *>(encoded->data()), encoded->size()), "\x1b[200~a\nb\x1b[201~");
+}
+
+void TerminalEngineTests::encodesKeysFromLiveTerminalModes()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 12, .rows = 3});
+    QVERIFY(result);
+    auto &engine = **result;
+
+    auto encoded = engine.encodeKey({.action = ztermy::terminal::TerminalKeyAction::press,
+                                     .key = ztermy::terminal::TerminalKey::keyA,
+                                     .text = "a",
+                                     .unshiftedCodepoint = 'a'});
+    QVERIFY(encoded);
+    QCOMPARE(std::string(reinterpret_cast<const char *>(encoded->data()), encoded->size()), "a");
+
+    encoded = engine.encodeKey(
+        {.action = ztermy::terminal::TerminalKeyAction::press, .key = ztermy::terminal::TerminalKey::arrowUp});
+    QVERIFY(encoded);
+    QCOMPARE(std::string(reinterpret_cast<const char *>(encoded->data()), encoded->size()), "\x1b[A");
+
+    constexpr std::string_view applicationCursor = "\x1b[?1h";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(applicationCursor))));
+    encoded = engine.encodeKey(
+        {.action = ztermy::terminal::TerminalKeyAction::press, .key = ztermy::terminal::TerminalKey::arrowUp});
+    QVERIFY(encoded);
+    QCOMPARE(std::string(reinterpret_cast<const char *>(encoded->data()), encoded->size()), "\x1bOA");
+}
+
+void TerminalEngineTests::encodesMouseAndFocusEventsFromLiveTerminalModes()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 12, .rows = 3});
+    QVERIFY(result);
+    auto &engine = **result;
+
+    const ztermy::terminal::TerminalMouseEvent mouse{
+        .action = ztermy::terminal::TerminalMouseAction::press,
+        .button = ztermy::terminal::TerminalMouseButton::left,
+        .positionX = 0.0,
+        .positionY = 0.0,
+        .screenWidthPixels = 120,
+        .screenHeightPixels = 60,
+        .cellWidthPixels = 10,
+        .cellHeightPixels = 20,
+    };
+    auto encoded = engine.encodeMouse(mouse);
+    QVERIFY(encoded);
+    QVERIFY(encoded->empty());
+
+    constexpr std::string_view mouseModes = "\x1b[?1000h\x1b[?1006h";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(mouseModes))));
+    encoded = engine.encodeMouse(mouse);
+    QVERIFY(encoded);
+    QCOMPARE(std::string(reinterpret_cast<const char *>(encoded->data()), encoded->size()), "\x1b[<0;1;1M");
+
+    auto focus = engine.encodeFocus(true);
+    QVERIFY(focus);
+    QVERIFY(focus->empty());
+    constexpr std::string_view focusMode = "\x1b[?1004h";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(focusMode))));
+    focus = engine.encodeFocus(true);
+    QVERIFY(focus);
+    QCOMPARE(std::string(reinterpret_cast<const char *>(focus->data()), focus->size()), "\x1b[I");
+    focus = engine.encodeFocus(false);
+    QVERIFY(focus);
+    QCOMPARE(std::string(reinterpret_cast<const char *>(focus->data()), focus->size()), "\x1b[O");
+}
+
+void TerminalEngineTests::reportsAlternateScrollMode()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 12, .rows = 3});
+    QVERIFY(result);
+    auto &engine = **result;
+
+    auto snapshot = engine.snapshot();
+    QVERIFY(snapshot);
+    QVERIFY(!snapshot->alternateScrollActive);
+    constexpr std::string_view enable = "\x1b[?1007h\x1b[?1049h";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(enable))));
+    snapshot = engine.snapshot();
+    QVERIFY(snapshot);
+    QVERIFY(snapshot->alternateScrollActive);
 }
 
 void TerminalEngineTests::pagesThroughScrollback()

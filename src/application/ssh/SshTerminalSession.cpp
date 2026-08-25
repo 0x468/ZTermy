@@ -297,6 +297,88 @@ void SshTerminalSession::queueInput(const QByteArray &bytes)
                      static_cast<std::size_t>(bytes.size()));
 }
 
+void SshTerminalSession::queueKeyEvent(const terminal::TerminalKeyEvent &event)
+{
+    if (!m_running.load())
+    {
+        return;
+    }
+    bool queueFull = false;
+    {
+        std::scoped_lock lock(m_commandMutex);
+        if (m_commands.size() >= maximumQueuedEvents)
+        {
+            queueFull = true;
+        }
+        else
+        {
+            m_commands.emplace_back(KeyCommand{.event = event, .enqueuedAt = std::chrono::steady_clock::now()});
+        }
+    }
+    if (queueFull)
+    {
+        postStatus(tr("SSH input queue is full"));
+        return;
+    }
+    signalCommandWake();
+}
+
+void SshTerminalSession::queueMouseEvent(const terminal::TerminalMouseEvent &event)
+{
+    if (!m_running.load())
+    {
+        return;
+    }
+    bool queueFull = false;
+    {
+        std::scoped_lock lock(m_commandMutex);
+        auto *pending = m_commands.empty() ? nullptr : std::get_if<MouseCommand>(&m_commands.back());
+        if (pending != nullptr && pending->event.action == terminal::TerminalMouseAction::motion
+            && event.action == terminal::TerminalMouseAction::motion)
+        {
+            pending->event = event;
+        }
+        else if (m_commands.size() < maximumQueuedEvents)
+        {
+            m_commands.emplace_back(MouseCommand{.event = event});
+        }
+        else
+        {
+            queueFull = true;
+        }
+    }
+    if (queueFull)
+    {
+        postStatus(tr("SSH input queue is full"));
+        return;
+    }
+    signalCommandWake();
+}
+
+void SshTerminalSession::queueFocusEvent(const bool focused)
+{
+    if (!m_running.load())
+    {
+        return;
+    }
+    {
+        std::scoped_lock lock(m_commandMutex);
+        if (auto *pending = m_commands.empty() ? nullptr : std::get_if<FocusCommand>(&m_commands.back()))
+        {
+            pending->focused = focused;
+        }
+        else if (m_commands.size() < maximumQueuedEvents)
+        {
+            m_commands.emplace_back(FocusCommand{.focused = focused});
+        }
+        else
+        {
+            return;
+        }
+    }
+    signalCommandWake();
+}
+
 void SshTerminalSession::queuePaste(const QByteArray &bytes)
 {
     if (bytes.isEmpty() || !m_running.load())
@@ -769,6 +851,92 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                 {
                     const SshFailureKind failure = sshFailureFromTransport(written.error());
                     finishFailure(failure);
+                    return;
+                }
+                continue;
+            }
+
+            if (const auto *key = std::get_if<KeyCommand>(&command))
+            {
+                m_inputQueueLatency.record(std::chrono::steady_clock::now() - key->enqueuedAt);
+                auto encoded = m_engine->encodeKey(key->event);
+                if (!encoded)
+                {
+                    postStatus(tr("SSH terminal key encoding failed: %1")
+                                   .arg(QString::fromStdString(encoded.error().message())));
+                    continue;
+                }
+                if (encoded->empty())
+                {
+                    continue;
+                }
+                const std::error_code selectionError = m_engine->setSelection(std::nullopt);
+                m_engine->scrollToBottom();
+                if (selectionError)
+                {
+                    postStatus(tr("SSH terminal selection clear failed: %1")
+                                   .arg(QString::fromStdString(selectionError.message())));
+                }
+                publishSnapshot();
+                const QByteArray utf8(reinterpret_cast<const char *>(encoded->data()),
+                                      static_cast<qsizetype>(encoded->size()));
+                const auto remote = textCodec.encodeRemote(utf8);
+                if (!remote)
+                {
+                    postStatus(tr("Terminal input could not be converted to the selected encoding."));
+                    continue;
+                }
+                const auto bytes = std::span(remote->constData(), static_cast<std::size_t>(remote->size()));
+                auto written = session->writeTerminal(*transport, bytes, 10s, stopToken);
+                if (!written)
+                {
+                    finishFailure(sshFailureFromTransport(written.error()));
+                    return;
+                }
+                continue;
+            }
+
+            if (const auto *mouse = std::get_if<MouseCommand>(&command))
+            {
+                auto encoded = m_engine->encodeMouse(mouse->event);
+                if (!encoded)
+                {
+                    postStatus(tr("SSH terminal mouse encoding failed: %1")
+                                   .arg(QString::fromStdString(encoded.error().message())));
+                    continue;
+                }
+                if (encoded->empty())
+                {
+                    continue;
+                }
+                const auto bytes = std::span(reinterpret_cast<const char *>(encoded->data()), encoded->size());
+                auto written = session->writeTerminal(*transport, bytes, 10s, stopToken);
+                if (!written)
+                {
+                    finishFailure(sshFailureFromTransport(written.error()));
+                    return;
+                }
+                continue;
+            }
+
+            if (const auto *focus = std::get_if<FocusCommand>(&command))
+            {
+                auto encoded = m_engine->encodeFocus(focus->focused);
+                if (!encoded)
+                {
+                    postStatus(tr("SSH terminal focus encoding failed: %1")
+                                   .arg(QString::fromStdString(encoded.error().message())));
+                    continue;
+                }
+                if (encoded->empty())
+                {
+                    continue;
+                }
+                const auto bytes = std::span(reinterpret_cast<const char *>(encoded->data()), encoded->size());
+                auto written = session->writeTerminal(*transport, bytes, 10s, stopToken);
+                if (!written)
+                {
+                    finishFailure(sshFailureFromTransport(written.error()));
                     return;
                 }
                 continue;

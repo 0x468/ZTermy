@@ -1,3 +1,4 @@
+#include "platform/windows/WindowsTerminalInput.h"
 #include "ui/terminal/TerminalItem.h"
 #include "ui/terminal/TerminalKeywordHighlighter.h"
 #include "ui/terminal/TerminalRenderMetrics.h"
@@ -70,6 +71,7 @@ private slots:
     void commitsImeTextExactlyOnce();
     void appliesRendererPreferences();
     void routesCopyPasteAndTextKeys();
+    void mapsWindowsPhysicalKeys();
     void confirmsMultilinePaste();
     void selectsCellsAndCopiesOnMouseRelease();
     void supportsClassicClipboardAliasesAndContextActions();
@@ -79,6 +81,7 @@ private slots:
     void cancelsTrackedSelectionWhenMouseGrabIsLost();
     void reflectsSelectionStateFromSnapshots();
     void accumulatesWheelDeltasIntoScrollRows();
+    void routesTrackedMouseAndWheelToTerminal();
     void exposesScrollbarAndRequestsAbsoluteScroll();
     void rendersStyledWideCellsAndCursorPixels();
     void keepsBaseTextureDuringCursorBlink();
@@ -347,13 +350,17 @@ void TerminalItemTests::routesCopyPasteAndTextKeys()
     QSignalSpy copySpy(&item, &ztermy::ui::TerminalItem::copyRequested);
     QSignalSpy pasteSpy(&item, &ztermy::ui::TerminalItem::pasteRequested);
     QSignalSpy confirmationSpy(&item, &ztermy::ui::TerminalItem::multilinePasteConfirmationRequested);
-    QSignalSpy inputSpy(&item, &ztermy::ui::TerminalItem::inputGenerated);
+    std::vector<ztermy::terminal::TerminalKeyEvent> keyEvents;
+    QObject::connect(&item, &ztermy::ui::TerminalItem::keyEventGenerated, &item,
+                     [&keyEvents](const ztermy::terminal::TerminalKeyEvent &event) {
+                         keyEvents.push_back(event);
+                     });
     item.clipboardTextFixture = QStringLiteral("single-line paste");
 
     QKeyEvent copyEvent(QEvent::KeyPress, Qt::Key_Insert, Qt::ControlModifier);
     item.keyPressEvent(&copyEvent);
     QCOMPARE(copySpy.count(), 1);
-    QCOMPARE(inputSpy.count(), 0);
+    QVERIFY(keyEvents.empty());
     QVERIFY(copyEvent.isAccepted());
 
     QKeyEvent pasteEvent(QEvent::KeyPress, Qt::Key_Insert, Qt::ShiftModifier);
@@ -361,14 +368,29 @@ void TerminalItemTests::routesCopyPasteAndTextKeys()
     QCOMPARE(pasteSpy.count(), 1);
     QCOMPARE(pasteSpy.at(0).at(0).toByteArray(), QByteArrayLiteral("single-line paste"));
     QCOMPARE(confirmationSpy.count(), 0);
-    QCOMPARE(inputSpy.count(), 0);
+    QVERIFY(keyEvents.empty());
     QVERIFY(pasteEvent.isAccepted());
 
     QKeyEvent textEvent(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier, QStringLiteral("a"));
     item.keyPressEvent(&textEvent);
-    QCOMPARE(inputSpy.count(), 1);
-    QCOMPARE(inputSpy.at(0).at(0).toByteArray(), QByteArrayLiteral("a"));
+    QCOMPARE(keyEvents.size(), std::size_t{1});
+    QCOMPARE(keyEvents.front().key, ztermy::terminal::TerminalKey::keyA);
+    QCOMPARE(keyEvents.front().text, std::string("a"));
     QVERIFY(textEvent.isAccepted());
+}
+
+void TerminalItemTests::mapsWindowsPhysicalKeys()
+{
+    QKeyEvent layoutEvent(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier, 0x10, 'A', 0, QStringLiteral("a"));
+    const auto mapped =
+        ztermy::platform::windows::terminalKeyEvent(layoutEvent, ztermy::terminal::TerminalKeyAction::press);
+    QCOMPARE(mapped.key, ztermy::terminal::TerminalKey::keyQ);
+    QCOMPARE(mapped.text, std::string("a"));
+
+    QKeyEvent keypadEnter(QEvent::KeyPress, Qt::Key_Enter, Qt::KeypadModifier, 0x1C, 0x0D, 0);
+    const auto keypad =
+        ztermy::platform::windows::terminalKeyEvent(keypadEnter, ztermy::terminal::TerminalKeyAction::press);
+    QCOMPARE(keypad.key, ztermy::terminal::TerminalKey::numpadEnter);
 }
 
 void TerminalItemTests::supportsClassicClipboardAliasesAndContextActions()
@@ -379,7 +401,11 @@ void TerminalItemTests::supportsClassicClipboardAliasesAndContextActions()
     item.clipboardTextFixture = QStringLiteral("classic paste");
     QSignalSpy copySpy(&item, &ztermy::ui::TerminalItem::copyRequested);
     QSignalSpy pasteSpy(&item, &ztermy::ui::TerminalItem::pasteRequested);
-    QSignalSpy inputSpy(&item, &ztermy::ui::TerminalItem::inputGenerated);
+    std::vector<ztermy::terminal::TerminalKeyEvent> keyEvents;
+    QObject::connect(&item, &ztermy::ui::TerminalItem::keyEventGenerated, &item,
+                     [&keyEvents](const ztermy::terminal::TerminalKeyEvent &event) {
+                         keyEvents.push_back(event);
+                     });
     QSignalSpy contextSpy(&item, &ztermy::ui::TerminalItem::contextMenuRequested);
 
     item.selectVisibleTerminal();
@@ -391,13 +417,14 @@ void TerminalItemTests::supportsClassicClipboardAliasesAndContextActions()
     QKeyEvent conditionalCopy(QEvent::KeyPress, Qt::Key_C, Qt::ControlModifier);
     item.keyPressEvent(&conditionalCopy);
     QCOMPARE(copySpy.count(), 2);
-    QCOMPARE(inputSpy.count(), 0);
+    QVERIFY(keyEvents.empty());
 
     item.clearSelection();
     QKeyEvent interrupt(QEvent::KeyPress, Qt::Key_C, Qt::ControlModifier);
     item.keyPressEvent(&interrupt);
-    QCOMPARE(inputSpy.count(), 1);
-    QCOMPARE(inputSpy.at(0).at(0).toByteArray(), QByteArray(1, '\x03'));
+    QCOMPARE(keyEvents.size(), std::size_t{1});
+    QCOMPARE(keyEvents.front().key, ztermy::terminal::TerminalKey::keyC);
+    QVERIFY((keyEvents.front().modifiers & ztermy::terminal::terminalModifierControl) != 0);
 
     QKeyEvent shiftInsert(QEvent::KeyPress, Qt::Key_Insert, Qt::ShiftModifier);
     item.keyPressEvent(&shiftInsert);
@@ -731,6 +758,43 @@ void TerminalItemTests::accumulatesWheelDeltasIntoScrollRows()
     QVERIFY(pixelEvent.isAccepted());
     QCOMPARE(scrollSpy.count(), 3);
     QCOMPARE(scrollSpy.at(2).at(0).toInt(), -1);
+}
+
+void TerminalItemTests::routesTrackedMouseAndWheelToTerminal()
+{
+    TestableTerminalItem item;
+    item.setSize(QSizeF{800, 480});
+    auto snapshot = snapshotAt(0, 0);
+    snapshot->mouseTrackingActive = true;
+    item.setSnapshot(snapshot);
+
+    std::vector<ztermy::terminal::TerminalMouseEvent> mouseEvents;
+    QObject::connect(&item, &ztermy::ui::TerminalItem::mouseEventGenerated, &item,
+                     [&mouseEvents](const ztermy::terminal::TerminalMouseEvent &event) {
+                         mouseEvents.push_back(event);
+                     });
+    QSignalSpy selectionSpy(&item, &ztermy::ui::TerminalItem::selectionGestureRequested);
+    QSignalSpy scrollSpy(&item, &ztermy::ui::TerminalItem::scrollRequested);
+
+    const QPointF point{40, 40};
+    QMouseEvent press(QEvent::MouseButtonPress, point, point, point, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    item.mousePressEvent(&press);
+    QCOMPARE(mouseEvents.size(), std::size_t{1});
+    QCOMPARE(mouseEvents.back().action, ztermy::terminal::TerminalMouseAction::press);
+    QCOMPARE(mouseEvents.back().button, ztermy::terminal::TerminalMouseButton::left);
+    QCOMPARE(selectionSpy.count(), 0);
+
+    QWheelEvent wheel(point, point, QPoint{}, QPoint{0, 120}, Qt::NoButton, Qt::NoModifier, Qt::ScrollUpdate, false);
+    item.wheelEvent(&wheel);
+    QCOMPARE(mouseEvents.size(), std::size_t{2});
+    QCOMPARE(mouseEvents.back().button, ztermy::terminal::TerminalMouseButton::four);
+    QCOMPARE(scrollSpy.count(), 0);
+
+    QMouseEvent shiftedPress(QEvent::MouseButtonPress, point, point, point, Qt::LeftButton, Qt::LeftButton,
+                             Qt::ShiftModifier);
+    item.mousePressEvent(&shiftedPress);
+    QCOMPARE(mouseEvents.size(), std::size_t{2});
+    QCOMPARE(selectionSpy.count(), 1);
 }
 
 void TerminalItemTests::exposesScrollbarAndRequestsAbsoluteScroll()

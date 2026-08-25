@@ -39,6 +39,9 @@ struct FakeLocalSessionState final
     int starts = 0;
     int stops = 0;
     QList<QByteArray> inputs;
+    std::vector<ztermy::terminal::TerminalKeyEvent> keyEvents;
+    std::vector<ztermy::terminal::TerminalMouseEvent> mouseEvents;
+    std::vector<bool> focusEvents;
     QList<QByteArray> pastes;
     QString selectedText;
     std::vector<std::string> scrollbackLines{"fake scrollback line"};
@@ -72,6 +75,15 @@ public:
     }
 
     void queueInput(const QByteArray &bytes) override { m_state->inputs.append(bytes); }
+    void queueKeyEvent(const ztermy::terminal::TerminalKeyEvent &event) override
+    {
+        m_state->keyEvents.push_back(event);
+    }
+    void queueMouseEvent(const ztermy::terminal::TerminalMouseEvent &event) override
+    {
+        m_state->mouseEvents.push_back(event);
+    }
+    void queueFocusEvent(const bool focused) override { m_state->focusEvents.push_back(focused); }
     void queuePaste(const QByteArray &bytes) override { m_state->pastes.append(bytes); }
     void setOutputSink(const std::shared_ptr<ztermy::terminal::TerminalOutputSink> &sink) override
     {

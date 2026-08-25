@@ -1,5 +1,6 @@
 #include "ui/terminal/TerminalItem.h"
 
+#include "platform/windows/WindowsTerminalInput.h"
 #include "ui/terminal/TerminalRowReuseAnalysis.h"
 #include "ui/terminal/TerminalTextLayout.h"
 
@@ -9,6 +10,7 @@
 #include <QFocusEvent>
 #include <QFontMetricsF>
 #include <QGuiApplication>
+#include <QHoverEvent>
 #include <QImage>
 #include <QInputMethod>
 #include <QInputMethodEvent>
@@ -147,63 +149,28 @@ void configureLigatures(QFont &font, const bool enabled)
            && first.overline == second.overline && color(first.foreground) == color(second.foreground);
 }
 
-[[nodiscard]] QByteArray encodedKey(QKeyEvent *event)
+[[nodiscard]] ztermy::terminal::TerminalMouseButton terminalMouseButton(const Qt::MouseButton button) noexcept
 {
-    const bool control = event->modifiers().testFlag(Qt::ControlModifier);
-    const bool alt = event->modifiers().testFlag(Qt::AltModifier);
-    if (control && event->key() >= Qt::Key_A && event->key() <= Qt::Key_Z)
+    using ztermy::terminal::TerminalMouseButton;
+    switch (button)
     {
-        return {1, static_cast<char>((event->key() - Qt::Key_A) + 1)};
-    }
-    if (control && event->key() == Qt::Key_Space)
-    {
-        return {1, '\0'};
-    }
-
-    switch (event->key())
-    {
-        case Qt::Key_Return:
-        case Qt::Key_Enter:
-            return QByteArrayLiteral("\r");
-        case Qt::Key_Backspace:
-            return {1, '\x7f'};
-        case Qt::Key_Tab:
-            return QByteArrayLiteral("\t");
-        case Qt::Key_Escape:
-            return QByteArrayLiteral("\x1b");
-        case Qt::Key_Up:
-            return QByteArrayLiteral("\x1b[A");
-        case Qt::Key_Down:
-            return QByteArrayLiteral("\x1b[B");
-        case Qt::Key_Right:
-            return QByteArrayLiteral("\x1b[C");
-        case Qt::Key_Left:
-            return QByteArrayLiteral("\x1b[D");
-        case Qt::Key_Home:
-            return QByteArrayLiteral("\x1b[H");
-        case Qt::Key_End:
-            return QByteArrayLiteral("\x1b[F");
-        case Qt::Key_Delete:
-            return QByteArrayLiteral("\x1b[3~");
-        case Qt::Key_PageUp:
-            return QByteArrayLiteral("\x1b[5~");
-        case Qt::Key_PageDown:
-            return QByteArrayLiteral("\x1b[6~");
+        case Qt::LeftButton:
+            return TerminalMouseButton::left;
+        case Qt::RightButton:
+            return TerminalMouseButton::right;
+        case Qt::MiddleButton:
+            return TerminalMouseButton::middle;
+        case Qt::BackButton:
+            return TerminalMouseButton::eight;
+        case Qt::ForwardButton:
+            return TerminalMouseButton::nine;
+        case Qt::ExtraButton4:
+            return TerminalMouseButton::ten;
+        case Qt::ExtraButton5:
+            return TerminalMouseButton::eleven;
         default:
-            break;
+            return TerminalMouseButton::none;
     }
-
-    if (control || event->text().isEmpty())
-    {
-        return {};
-    }
-
-    QByteArray encoded = event->text().toUtf8();
-    if (alt)
-    {
-        encoded.prepend('\x1b');
-    }
-    return encoded;
 }
 
 } // namespace
@@ -216,7 +183,9 @@ TerminalItem::TerminalItem(QQuickItem *parent) : QQuickItem(parent)
     m_statusText = tr("Starting local terminal...");
     setFlag(ItemHasContents, true);
     setFlag(ItemAcceptsInputMethod, true);
-    setAcceptedMouseButtons(Qt::LeftButton | Qt::MiddleButton | Qt::RightButton);
+    setAcceptedMouseButtons(Qt::LeftButton | Qt::MiddleButton | Qt::RightButton | Qt::BackButton | Qt::ForwardButton
+                            | Qt::ExtraButton4 | Qt::ExtraButton5);
+    setAcceptHoverEvents(true);
     setActiveFocusOnTab(true);
 
     m_font.setFamilies({QStringLiteral("Cascadia Mono"), QStringLiteral("Consolas")});
@@ -254,10 +223,23 @@ TerminalItem::TerminalItem(QQuickItem *parent) : QQuickItem(parent)
         gesture.scrollRows = rows;
         emit selectionGestureRequested(gesture);
     });
+    m_focusOutTimer.setSingleShot(true);
+    m_focusOutTimer.setInterval(0);
+    QObject::connect(&m_focusOutTimer, &QTimer::timeout, this, [this] {
+        if (!hasActiveFocus())
+        {
+            reportFocus(false);
+        }
+    });
     QObject::connect(this, &QQuickItem::visibleChanged, this, [this] {
         if (!isVisible())
         {
             cancelSelectionGesture();
+            reportFocus(false);
+        }
+        else if (hasActiveFocus())
+        {
+            reportFocus(true);
         }
     });
 }
@@ -411,6 +393,8 @@ void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
         emit scrollbarChanged();
         return;
     }
+    const bool focusReportingBecameActive =
+        snapshot->focusReportingActive && (!m_snapshot || !m_snapshot->focusReportingActive);
     m_renderMetrics.recordSnapshot(snapshot->damage, snapshot->damagedRows.size());
     const bool selectionBecameVisible = !m_hasSelection && snapshot->selectionPresent;
     setHasSelection(snapshot->selectionPresent);
@@ -425,6 +409,11 @@ void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
         emit selectionActionChanged();
     }
     m_snapshot = std::move(snapshot);
+    if (focusReportingBecameActive)
+    {
+        m_lastReportedFocus.reset();
+        reportFocus(hasActiveFocus());
+    }
     invalidateRenderer(true);
     notifyInputMethod();
     emit scrollbarChanged();
@@ -1220,8 +1209,10 @@ void TerminalItem::keyPressEvent(QKeyEvent *event)
         return;
     }
 
-    const QByteArray bytes = encodedKey(event);
-    if (bytes.isEmpty())
+    const auto action =
+        event->isAutoRepeat() ? terminal::TerminalKeyAction::repeat : terminal::TerminalKeyAction::press;
+    const auto key = platform::windows::terminalKeyEvent(*event, action, !m_preeditText.isEmpty());
+    if (key.key == terminal::TerminalKey::unidentified && key.text.empty())
     {
         QQuickItem::keyPressEvent(event);
         return;
@@ -1231,7 +1222,25 @@ void TerminalItem::keyPressEvent(QKeyEvent *event)
     {
         clearSelection();
     }
-    emit inputGenerated(bytes);
+    emit keyEventGenerated(key);
+    event->accept();
+}
+
+void TerminalItem::keyReleaseEvent(QKeyEvent *event)
+{
+    if (event->isAutoRepeat())
+    {
+        event->accept();
+        return;
+    }
+    const auto key =
+        platform::windows::terminalKeyEvent(*event, terminal::TerminalKeyAction::release, !m_preeditText.isEmpty());
+    if (key.key == terminal::TerminalKey::unidentified)
+    {
+        QQuickItem::keyReleaseEvent(event);
+        return;
+    }
+    emit keyEventGenerated(key);
     event->accept();
 }
 
@@ -1287,17 +1296,44 @@ QVariant TerminalItem::inputMethodQuery(const Qt::InputMethodQuery query) const
     return QQuickItem::inputMethodQuery(query);
 }
 
+void TerminalItem::focusInEvent(QFocusEvent *event)
+{
+    m_focusOutTimer.stop();
+    reportFocus(true);
+    QQuickItem::focusInEvent(event);
+}
+
 void TerminalItem::focusOutEvent(QFocusEvent *event)
 {
     cancelSelectionGesture();
     clearPreedit();
+    m_focusOutTimer.start();
     QQuickItem::focusOutEvent(event);
+}
+
+void TerminalItem::hoverMoveEvent(QHoverEvent *event)
+{
+    if (terminalOwnsMouse(event->modifiers()))
+    {
+        emit mouseEventGenerated(mouseEvent(terminal::TerminalMouseAction::motion, terminal::TerminalMouseButton::none,
+                                            event->position(), event->modifiers(), Qt::NoButton));
+        event->accept();
+        return;
+    }
+    QQuickItem::hoverMoveEvent(event);
 }
 
 void TerminalItem::mousePressEvent(QMouseEvent *event)
 {
     forceActiveFocus(Qt::MouseFocusReason);
     dismissSelectionAction();
+    if (terminalOwnsMouse(event->modifiers()))
+    {
+        emit mouseEventGenerated(mouseEvent(terminal::TerminalMouseAction::press, terminalMouseButton(event->button()),
+                                            event->position(), event->modifiers(), event->buttons()));
+        event->accept();
+        return;
+    }
     if (event->button() == Qt::MiddleButton)
     {
         if (m_middleClickBehavior == QStringLiteral("paste"))
@@ -1387,6 +1423,13 @@ void TerminalItem::mousePressEvent(QMouseEvent *event)
 void TerminalItem::mouseDoubleClickEvent(QMouseEvent *event)
 {
     forceActiveFocus(Qt::MouseFocusReason);
+    if (terminalOwnsMouse(event->modifiers()))
+    {
+        emit mouseEventGenerated(mouseEvent(terminal::TerminalMouseAction::press, terminalMouseButton(event->button()),
+                                            event->position(), event->modifiers(), event->buttons()));
+        event->accept();
+        return;
+    }
     if (event->button() == Qt::LeftButton)
     {
         if (const auto point = terminalPoint(event->position()))
@@ -1414,6 +1457,13 @@ void TerminalItem::mouseDoubleClickEvent(QMouseEvent *event)
 
 void TerminalItem::mouseMoveEvent(QMouseEvent *event)
 {
+    if (terminalOwnsMouse(event->modifiers()))
+    {
+        emit mouseEventGenerated(mouseEvent(terminal::TerminalMouseAction::motion, terminalMouseButton(event->button()),
+                                            event->position(), event->modifiers(), event->buttons()));
+        event->accept();
+        return;
+    }
     if (!m_selecting || !event->buttons().testFlag(Qt::LeftButton))
     {
         QQuickItem::mouseMoveEvent(event);
@@ -1433,6 +1483,14 @@ void TerminalItem::mouseMoveEvent(QMouseEvent *event)
 
 void TerminalItem::mouseReleaseEvent(QMouseEvent *event)
 {
+    if (terminalOwnsMouse(event->modifiers()))
+    {
+        emit mouseEventGenerated(mouseEvent(terminal::TerminalMouseAction::release,
+                                            terminalMouseButton(event->button()), event->position(), event->modifiers(),
+                                            event->buttons()));
+        event->accept();
+        return;
+    }
     if (!m_selecting || event->button() != Qt::LeftButton)
     {
         QQuickItem::mouseReleaseEvent(event);
@@ -1663,8 +1721,88 @@ void TerminalItem::cancelSelectionGesture()
     m_selectionClickSelected = false;
 }
 
+bool TerminalItem::terminalOwnsMouse(const Qt::KeyboardModifiers &modifiers) const noexcept
+{
+    return m_snapshot && m_snapshot->mouseTrackingActive && !modifiers.testFlag(Qt::ShiftModifier);
+}
+
+terminal::TerminalMouseEvent TerminalItem::mouseEvent(const terminal::TerminalMouseAction action,
+                                                      const terminal::TerminalMouseButton button,
+                                                      const QPointF &position, const Qt::KeyboardModifiers modifiers,
+                                                      const Qt::MouseButtons buttons) const
+{
+    terminal::TerminalMouseButton effectiveButton = button;
+    if (effectiveButton == terminal::TerminalMouseButton::none)
+    {
+        if (buttons.testFlag(Qt::LeftButton))
+        {
+            effectiveButton = terminal::TerminalMouseButton::left;
+        }
+        else if (buttons.testFlag(Qt::RightButton))
+        {
+            effectiveButton = terminal::TerminalMouseButton::right;
+        }
+        else if (buttons.testFlag(Qt::MiddleButton))
+        {
+            effectiveButton = terminal::TerminalMouseButton::middle;
+        }
+    }
+    return {.action = action,
+            .button = effectiveButton,
+            .modifiers = platform::windows::terminalModifiers(modifiers),
+            .positionX = position.x(),
+            .positionY = position.y(),
+            .screenWidthPixels = static_cast<std::uint32_t>(std::max<qreal>(1.0, std::ceil(width()))),
+            .screenHeightPixels = static_cast<std::uint32_t>(std::max<qreal>(1.0, std::ceil(height()))),
+            .cellWidthPixels = static_cast<std::uint32_t>(std::max<qreal>(1.0, std::ceil(cellWidth()))),
+            .cellHeightPixels = static_cast<std::uint32_t>(std::max<qreal>(1.0, std::ceil(cellHeight()))),
+            .paddingTopPixels = static_cast<std::uint32_t>(verticalPadding),
+            .paddingBottomPixels = static_cast<std::uint32_t>(verticalPadding),
+            .paddingRightPixels = static_cast<std::uint32_t>(horizontalPadding),
+            .paddingLeftPixels = static_cast<std::uint32_t>(horizontalPadding),
+            .anyButtonPressed = buttons != Qt::NoButton};
+}
+
+void TerminalItem::reportFocus(const bool focused)
+{
+    const bool effective = focused && isVisible();
+    if (m_lastReportedFocus == effective)
+    {
+        return;
+    }
+    m_lastReportedFocus = effective;
+    emit focusEventGenerated(effective);
+}
+
 void TerminalItem::wheelEvent(QWheelEvent *event)
 {
+    const bool remoteMouse = terminalOwnsMouse(event->modifiers());
+    const bool alternateScroll = m_snapshot && m_snapshot->alternateScrollActive && !remoteMouse;
+    const auto emitRemoteSteps = [this, event, remoteMouse, alternateScroll](int steps) {
+        steps = std::clamp(steps, -64, 64);
+        if (remoteMouse)
+        {
+            const auto button = steps > 0 ? terminal::TerminalMouseButton::four : terminal::TerminalMouseButton::five;
+            for (int index = 0; index < std::abs(steps); ++index)
+            {
+                emit mouseEventGenerated(mouseEvent(terminal::TerminalMouseAction::press, button, event->position(),
+                                                    event->modifiers(), event->buttons()));
+            }
+            return;
+        }
+        if (alternateScroll)
+        {
+            terminal::TerminalKeyEvent key{.action = terminal::TerminalKeyAction::press,
+                                           .key = steps > 0 ? terminal::TerminalKey::arrowUp
+                                                            : terminal::TerminalKey::arrowDown,
+                                           .modifiers = platform::windows::terminalModifiers(event->modifiers())};
+            for (int index = 0; index < std::abs(steps * m_scrollRowsPerWheel); ++index)
+            {
+                emit keyEventGenerated(key);
+            }
+        }
+    };
+
     if (!event->pixelDelta().isNull())
     {
         m_pixelWheelRemainder += event->pixelDelta().y();
@@ -1673,7 +1811,14 @@ void TerminalItem::wheelEvent(QWheelEvent *event)
         m_pixelWheelRemainder -= rows * rowHeight;
         if (rows != 0)
         {
-            emit scrollRequested(-rows);
+            if (remoteMouse || alternateScroll)
+            {
+                emitRemoteSteps(rows);
+            }
+            else
+            {
+                emit scrollRequested(-rows);
+            }
         }
         event->accept();
         return;
@@ -1683,7 +1828,14 @@ void TerminalItem::wheelEvent(QWheelEvent *event)
     m_wheelRemainder -= steps * 120;
     if (steps != 0)
     {
-        emit scrollRequested(-steps * m_scrollRowsPerWheel);
+        if (remoteMouse || alternateScroll)
+        {
+            emitRemoteSteps(steps);
+        }
+        else
+        {
+            emit scrollRequested(-steps * m_scrollRowsPerWheel);
+        }
     }
     event->accept();
 }

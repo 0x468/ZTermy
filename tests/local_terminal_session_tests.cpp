@@ -82,6 +82,7 @@ private slots:
     void buildsEphemeralPowerShellIntegrationCommand();
     void capturesRichPowerShellCommandLifecycle();
     void runsPowerShellAndStopsPromptly();
+    void routesWorkerEncodedKeyEventsToPowerShell();
     void restoresPromptAfterHelixAlternateScreen();
     void measuresInteractiveInputQueueLatency();
     void processesLargeOutputWithoutStarvingEventLoop();
@@ -196,6 +197,41 @@ void LocalTerminalSessionTests::runsPowerShellAndStopsPromptly()
         const qsizetype snapshotsAtStop = snapshotCount;
         QTest::qWait(32);
         QCOMPARE(snapshotCount, snapshotsAtStop);
+    }
+    catch (const std::exception &exception)
+    {
+        QFAIL(exception.what());
+    }
+}
+
+void LocalTerminalSessionTests::routesWorkerEncodedKeyEventsToPowerShell()
+{
+    try
+    {
+        ztermy::terminal::LocalTerminalSession session;
+        ztermy::terminal::TerminalSnapshotPtr latestSnapshot;
+        connect(&session, &ztermy::terminal::LocalTerminalSession::snapshotReady, this,
+                [&latestSnapshot](ztermy::terminal::TerminalSnapshotPtr snapshot) {
+                    latestSnapshot = std::move(snapshot);
+                });
+
+        const std::error_code startError = session.start({.columns = 80, .rows = 24});
+        if (startError)
+        {
+            QFAIL(startError.message().c_str());
+        }
+        QTRY_VERIFY_WITH_TIMEOUT(latestSnapshot && latestSnapshot->cursor.visible, 5000);
+
+        session.queueKeyEvent({.action = ztermy::terminal::TerminalKeyAction::press,
+                               .key = ztermy::terminal::TerminalKey::unidentified,
+                               .text = "Write-Output ZTERMY_KEY_EVENT_OK"});
+        session.queueKeyEvent(
+            {.action = ztermy::terminal::TerminalKeyAction::press, .key = ztermy::terminal::TerminalKey::enter});
+
+        QTRY_VERIFY_WITH_TIMEOUT(
+            latestSnapshot && snapshotText(*latestSnapshot).find(U"ZTERMY_KEY_EVENT_OK") != std::u32string::npos, 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(session.inputQueueLatencySummary().count >= 2, 2000);
+        session.stop();
     }
     catch (const std::exception &exception)
     {

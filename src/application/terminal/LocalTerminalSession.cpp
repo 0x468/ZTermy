@@ -190,6 +190,71 @@ void LocalTerminalSession::queueInput(const QByteArray &bytes)
                      static_cast<std::size_t>(bytes.size()));
 }
 
+void LocalTerminalSession::queueKeyEvent(const TerminalKeyEvent &event)
+{
+    if (!m_running.load())
+    {
+        return;
+    }
+    {
+        std::scoped_lock lock(m_commandMutex);
+        if (m_commands.size() >= maximumQueuedEvents)
+        {
+            qCWarning(terminalSessionLog) << "Terminal event queue is full; key event dropped";
+            return;
+        }
+        m_commands.emplace_back(KeyCommand{.event = event, .enqueuedAt = std::chrono::steady_clock::now()});
+    }
+    m_commandAvailable.notify_one();
+}
+
+void LocalTerminalSession::queueMouseEvent(const TerminalMouseEvent &event)
+{
+    if (!m_running.load())
+    {
+        return;
+    }
+    {
+        std::scoped_lock lock(m_commandMutex);
+        auto *pending = m_commands.empty() ? nullptr : std::get_if<MouseCommand>(&m_commands.back());
+        if (pending != nullptr && pending->event.action == TerminalMouseAction::motion
+            && event.action == TerminalMouseAction::motion)
+        {
+            pending->event = event;
+        }
+        else if (m_commands.size() < maximumQueuedEvents)
+        {
+            m_commands.emplace_back(MouseCommand{.event = event});
+        }
+        else
+        {
+            qCWarning(terminalSessionLog) << "Terminal event queue is full; mouse event dropped";
+            return;
+        }
+    }
+    m_commandAvailable.notify_one();
+}
+
+void LocalTerminalSession::queueFocusEvent(const bool focused)
+{
+    if (!m_running.load())
+    {
+        return;
+    }
+    {
+        std::scoped_lock lock(m_commandMutex);
+        if (auto *pending = m_commands.empty() ? nullptr : std::get_if<FocusCommand>(&m_commands.back()))
+        {
+            pending->focused = focused;
+        }
+        else if (m_commands.size() < maximumQueuedEvents)
+        {
+            m_commands.emplace_back(FocusCommand{.focused = focused});
+        }
+    }
+    m_commandAvailable.notify_one();
+}
+
 void LocalTerminalSession::queuePaste(const QByteArray &bytes)
 {
     if (bytes.isEmpty() || !m_running.load())
@@ -513,6 +578,93 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
             {
                 postStatus(tr("Terminal write failed: %1").arg(QString::fromStdString(writeError.message())));
                 break;
+            }
+            continue;
+        }
+
+        if (const auto *key = std::get_if<KeyCommand>(&command))
+        {
+            m_inputQueueLatency.record(std::chrono::steady_clock::now() - key->enqueuedAt);
+            m_inputQueueLatencyWindow.record(std::chrono::steady_clock::now() - key->enqueuedAt);
+            std::expected<std::vector<std::byte>, std::error_code> encoded;
+            std::error_code selectionError;
+            {
+                std::scoped_lock lock(m_engineMutex);
+                encoded = m_engine->encodeKey(key->event);
+                if (key->event.action != TerminalKeyAction::release && encoded && !encoded->empty())
+                {
+                    selectionError = m_engine->setSelection(std::nullopt);
+                    m_engine->scrollToBottom();
+                }
+            }
+            if (!encoded)
+            {
+                postStatus(
+                    tr("Terminal key encoding failed: %1").arg(QString::fromStdString(encoded.error().message())));
+                continue;
+            }
+            if (selectionError)
+            {
+                postStatus(
+                    tr("Terminal selection clear failed: %1").arg(QString::fromStdString(selectionError.message())));
+            }
+            if (encoded->empty())
+            {
+                continue;
+            }
+            publishSnapshot();
+            if (const std::error_code writeError = m_process->write(*encoded))
+            {
+                postStatus(tr("Terminal write failed: %1").arg(QString::fromStdString(writeError.message())));
+                break;
+            }
+            continue;
+        }
+
+        if (const auto *mouse = std::get_if<MouseCommand>(&command))
+        {
+            std::expected<std::vector<std::byte>, std::error_code> encoded;
+            {
+                std::scoped_lock lock(m_engineMutex);
+                encoded = m_engine->encodeMouse(mouse->event);
+            }
+            if (!encoded)
+            {
+                postStatus(
+                    tr("Terminal mouse encoding failed: %1").arg(QString::fromStdString(encoded.error().message())));
+                continue;
+            }
+            if (!encoded->empty())
+            {
+                if (const std::error_code writeError = m_process->write(*encoded))
+                {
+                    postStatus(tr("Terminal write failed: %1").arg(QString::fromStdString(writeError.message())));
+                    break;
+                }
+            }
+            continue;
+        }
+
+        if (const auto *focus = std::get_if<FocusCommand>(&command))
+        {
+            std::expected<std::vector<std::byte>, std::error_code> encoded;
+            {
+                std::scoped_lock lock(m_engineMutex);
+                encoded = m_engine->encodeFocus(focus->focused);
+            }
+            if (!encoded)
+            {
+                postStatus(
+                    tr("Terminal focus encoding failed: %1").arg(QString::fromStdString(encoded.error().message())));
+                continue;
+            }
+            if (!encoded->empty())
+            {
+                if (const std::error_code writeError = m_process->write(*encoded))
+                {
+                    postStatus(tr("Terminal write failed: %1").arg(QString::fromStdString(writeError.message())));
+                    break;
+                }
             }
             continue;
         }

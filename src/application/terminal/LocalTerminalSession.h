@@ -46,6 +46,9 @@ public:
 
 public slots:
     virtual void queueInput(const QByteArray &bytes) = 0;
+    virtual void queueKeyEvent(const ztermy::terminal::TerminalKeyEvent &event) = 0;
+    virtual void queueMouseEvent(const ztermy::terminal::TerminalMouseEvent &event) = 0;
+    virtual void queueFocusEvent(bool focused) = 0;
     virtual void queuePaste(const QByteArray &bytes) = 0;
     virtual void requestResize(quint16 columns, quint16 rows, quint32 cellWidthPixels, quint32 cellHeightPixels) = 0;
     virtual void requestScroll(int rows) = 0;
@@ -90,6 +93,9 @@ public:
 
 public slots:
     void queueInput(const QByteArray &bytes) override;
+    void queueKeyEvent(const ztermy::terminal::TerminalKeyEvent &event) override;
+    void queueMouseEvent(const ztermy::terminal::TerminalMouseEvent &event) override;
+    void queueFocusEvent(bool focused) override;
     void queuePaste(const QByteArray &bytes) override;
     void requestResize(quint16 columns, quint16 rows, quint32 cellWidthPixels, quint32 cellHeightPixels) override;
     void requestScroll(int rows) override;
@@ -118,6 +124,19 @@ private:
     struct PasteCommand
     {
         QByteArray bytes;
+    };
+    struct KeyCommand
+    {
+        TerminalKeyEvent event;
+        std::chrono::steady_clock::time_point enqueuedAt;
+    };
+    struct MouseCommand
+    {
+        TerminalMouseEvent event;
+    };
+    struct FocusCommand
+    {
+        bool focused = false;
     };
     struct ScrollCommand
     {
@@ -150,9 +169,9 @@ private:
     {
     };
 
-    using Command = std::variant<InputCommand, PasteCommand, TerminalGeometry, ScrollCommand, SelectionCommand,
-                                 SelectionGestureCommand, SelectAllCommand, CopyCommand, SelectedTextCommand,
-                                 SearchCommand, ClearSearchCommand>;
+    using Command = std::variant<InputCommand, PasteCommand, KeyCommand, MouseCommand, FocusCommand, TerminalGeometry,
+                                 ScrollCommand, SelectionCommand, SelectionGestureCommand, SelectAllCommand,
+                                 CopyCommand, SelectedTextCommand, SearchCommand, ClearSearchCommand>;
 
     void queueByteCommand(Command command, std::size_t byteCount);
     void readLoop(const std::stop_token &stopToken);
@@ -163,6 +182,7 @@ private:
     void logMetrics() const;
 
     static constexpr std::size_t maximumQueuedInputBytes = std::size_t{1024} * 1024;
+    static constexpr std::size_t maximumQueuedEvents = 4096;
 
     std::unique_ptr<ConPtyProcess> m_process;
     std::unique_ptr<GhosttyTerminalEngine> m_engine;

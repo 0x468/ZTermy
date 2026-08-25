@@ -56,6 +56,9 @@ public slots:
     void confirmHostKey(bool remember);
     void rejectHostKey();
     void queueInput(const QByteArray &bytes);
+    void queueKeyEvent(const ztermy::terminal::TerminalKeyEvent &event);
+    void queueMouseEvent(const ztermy::terminal::TerminalMouseEvent &event);
+    void queueFocusEvent(bool focused);
     void queuePaste(const QByteArray &bytes);
     void requestResize(quint16 columns, quint16 rows, quint32 cellWidthPixels, quint32 cellHeightPixels);
     void requestScroll(int rows);
@@ -115,6 +118,19 @@ private:
     {
         QByteArray bytes;
     };
+    struct KeyCommand final
+    {
+        terminal::TerminalKeyEvent event;
+        std::chrono::steady_clock::time_point enqueuedAt;
+    };
+    struct MouseCommand final
+    {
+        terminal::TerminalMouseEvent event;
+    };
+    struct FocusCommand final
+    {
+        bool focused = false;
+    };
     struct ScrollCommand final
     {
         int rows = 0;
@@ -161,10 +177,10 @@ private:
     {
     };
 
-    using Command = std::variant<InputCommand, PasteCommand, terminal::TerminalGeometry, ScrollCommand,
-                                 SelectionCommand, SelectionGestureCommand, SelectAllCommand, CopyCommand,
-                                 SelectedTextCommand, SearchCommand, ClearSearchCommand, EncodingCommand,
-                                 HistoryCommand, TelemetryVisibilityCommand, TelemetryRefreshCommand>;
+    using Command = std::variant<InputCommand, PasteCommand, KeyCommand, MouseCommand, FocusCommand,
+                                 terminal::TerminalGeometry, ScrollCommand, SelectionCommand, SelectionGestureCommand,
+                                 SelectAllCommand, CopyCommand, SelectedTextCommand, SearchCommand, ClearSearchCommand,
+                                 EncodingCommand, HistoryCommand, TelemetryVisibilityCommand, TelemetryRefreshCommand>;
 
     void queueByteCommand(Command command, std::size_t byteCount);
     void run(SshConnectionRequest &request, terminal::TerminalGeometry geometry, const std::stop_token &stopToken);
@@ -187,6 +203,7 @@ private:
     void logMetrics() const;
 
     static constexpr std::size_t maximumQueuedInputBytes = std::size_t{1024} * 1024;
+    static constexpr std::size_t maximumQueuedEvents = 4096;
 
     std::unique_ptr<terminal::GhosttyTerminalEngine> m_engine;
     std::shared_ptr<terminal::TerminalOutputSink> m_outputSink;

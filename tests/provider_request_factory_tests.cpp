@@ -543,11 +543,11 @@ void ProviderRequestFactoryTests::resolvesFriendlyApiAddressesAndModels()
 
     auto subscriptionCatalog = ztermy::ai::ProviderModelCatalog::prepareOpenAiSubscriptionRequest(
         ztermy::security::SensitiveByteArray(QByteArray("access-token")), QStringLiteral("account-1"),
-        QStringLiteral("0.4.0"));
+        QStringLiteral("0.4.2"));
     QVERIFY(subscriptionCatalog.has_value());
     QCOMPARE(subscriptionCatalog->url().toString(),
              QStringLiteral("https://chatgpt.com/backend-api/codex/models?client_version=99.99.99"));
-    QCOMPARE(subscriptionCatalog->rawHeader("User-Agent"), QByteArrayLiteral("ztermy/0.4.0"));
+    QCOMPARE(subscriptionCatalog->rawHeader("User-Agent"), QByteArrayLiteral("ztermy/0.4.2"));
     QCOMPARE(subscriptionCatalog->rawHeader("Authorization"), QByteArrayLiteral("Bearer access-token"));
     QCOMPARE(subscriptionCatalog->rawHeader("ChatGPT-Account-Id"), QByteArrayLiteral("account-1"));
     const auto subscriptionModels = ztermy::ai::ProviderModelCatalog::parseOpenAiSubscription(
