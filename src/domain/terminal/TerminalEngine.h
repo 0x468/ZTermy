@@ -66,6 +66,37 @@ struct TerminalSelection
     bool rectangular = false;
 };
 
+enum class TerminalSelectionGestureType : std::uint8_t
+{
+    press,
+    drag,
+    release,
+    autoscrollTick,
+    cancel,
+};
+
+// Platform-neutral pointer data consumed by the terminal worker. Coordinates
+// and geometry share the same logical-pixel space; the engine uses them only
+// to preserve terminal cell/word/line selection semantics.
+struct TerminalSelectionGesture final
+{
+    TerminalSelectionGestureType type = TerminalSelectionGestureType::press;
+    TerminalPoint point;
+    double positionX = 0.0;
+    double positionY = 0.0;
+    std::uint32_t columns = 0;
+    std::uint32_t cellWidthPixels = 0;
+    std::uint32_t paddingLeftPixels = 0;
+    std::uint32_t screenHeightPixels = 0;
+    std::uint64_t eventTimeNanoseconds = 0;
+    std::uint64_t repeatIntervalNanoseconds = 0;
+    double repeatDistancePixels = 0.0;
+    int scrollRows = 0;
+    bool hasPoint = true;
+    bool rectangular = false;
+    std::u32string wordBoundaryCodepoints;
+};
+
 struct TerminalScrollbar
 {
     std::uint64_t total = 0;
@@ -120,6 +151,7 @@ struct TerminalSnapshot
     TerminalColor defaultBackground;
     TerminalCursor cursor;
     TerminalScrollbar scrollbar;
+    bool selectionPresent = false;
     TerminalDamageKind damage = TerminalDamageKind::full;
     std::vector<std::uint16_t> damagedRows;
     std::vector<TerminalCell> cells;
@@ -185,6 +217,12 @@ public:
     [[nodiscard]] virtual std::error_code resize(TerminalGeometry geometry) = 0;
     [[nodiscard]] virtual std::expected<TerminalSnapshot, std::error_code> snapshot() = 0;
     [[nodiscard]] virtual std::error_code setSelection(std::optional<TerminalSelection> selection) = 0;
+    // Returns whether the gesture changed visible terminal state. This lets
+    // session workers avoid rebuilding snapshots for cancel/release events and
+    // autoscroll ticks already held at a scrollback boundary.
+    [[nodiscard]] virtual std::expected<bool, std::error_code>
+    applySelectionGesture(const TerminalSelectionGesture &gesture) = 0;
+    [[nodiscard]] virtual std::error_code selectAll() = 0;
     [[nodiscard]] virtual std::expected<std::optional<std::string>, std::error_code> selectedText() const = 0;
     virtual void scrollViewport(int rows) = 0;
     virtual void scrollToBottom() = 0;

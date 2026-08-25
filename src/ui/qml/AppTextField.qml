@@ -11,6 +11,7 @@ TextField {
     property bool invalid: false
     property bool passwordRevealable: false
     property bool passwordVisible: false
+    property string toolTipText: ""
 
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
@@ -85,5 +86,11 @@ TextField {
         HoverHandler {
             cursorShape: Qt.PointingHandCursor
         }
+    }
+
+    AppToolTip {
+        hoverTarget: control
+        text: control.toolTipText
+        visible: text.length > 0 && control.hovered && !passwordRevealAction.hovered
     }
 }

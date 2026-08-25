@@ -80,6 +80,8 @@ public:
     void requestResize(quint16, quint16, quint32, quint32) override {}
     void requestScroll(int) override {}
     void requestSelection(quint16, quint16, quint16, quint16, bool) override {}
+    void requestSelectionGesture(const ztermy::terminal::TerminalSelectionGesture &) override {}
+    void selectAll() override {}
     void clearSelection() override {}
     void copySelection() override {}
     void requestSelectedText() override { emit selectedTextReady(m_state->selectedText); }
@@ -960,7 +962,7 @@ void AppControllerTests::persistsApplicationSettings()
         QStringLiteral("light"), 0.8, QStringLiteral("micaAlt"), QStringLiteral("custom"), QStringLiteral("#3366cc"),
         QStringLiteral("Microsoft YaHei UI"), QStringLiteral("Cascadia Code"), 18, true, false, 0.45,
         QStringLiteral("bar"), false, true, false, QStringLiteral("zh_CN"), true, false, true, true,
-        QStringLiteral("copy-paste")));
+        QStringLiteral("copy-paste"), QStringLiteral("paste"), QStringLiteral(" |,"), 7));
     QCOMPARE(settingsChanged.count(), 1);
     QCOMPARE(controller.themePreference(), QStringLiteral("light"));
     QCOMPARE(controller.backdropOpacity(), 0.8);
@@ -978,6 +980,9 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(controller.copyOnSelect());
     QVERIFY(!controller.confirmMultilinePaste());
     QCOMPARE(controller.terminalRightClickBehavior(), QStringLiteral("copy-paste"));
+    QCOMPARE(controller.terminalMiddleClickBehavior(), QStringLiteral("paste"));
+    QCOMPARE(controller.terminalWordDelimiters(), QStringLiteral(" |,"));
+    QCOMPARE(controller.terminalScrollRows(), 7);
     QVERIFY(controller.sftpShowHiddenFiles());
     QVERIFY(!controller.sftpConfirmDelete());
     QVERIFY(controller.closeToTray());
@@ -1017,6 +1022,9 @@ void AppControllerTests::persistsApplicationSettings()
     QCOMPARE(reloaded.terminalBackgroundOpacity(), 0.45);
     QVERIFY(reloaded.copyOnSelect());
     QCOMPARE(reloaded.terminalRightClickBehavior(), QStringLiteral("copy-paste"));
+    QCOMPARE(reloaded.terminalMiddleClickBehavior(), QStringLiteral("paste"));
+    QCOMPARE(reloaded.terminalWordDelimiters(), QStringLiteral(" |,"));
+    QCOMPARE(reloaded.terminalScrollRows(), 7);
     QVERIFY(reloaded.sftpShowHiddenFiles());
     QVERIFY(!reloaded.sftpConfirmDelete());
     QVERIFY(reloaded.closeToTray());

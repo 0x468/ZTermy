@@ -60,6 +60,8 @@ public slots:
     void requestResize(quint16 columns, quint16 rows, quint32 cellWidthPixels, quint32 cellHeightPixels);
     void requestScroll(int rows);
     void requestSelection(quint16 startColumn, quint16 startRow, quint16 endColumn, quint16 endRow, bool rectangular);
+    void requestSelectionGesture(const ztermy::terminal::TerminalSelectionGesture &gesture);
+    void selectAll();
     void clearSelection();
     void copySelection();
     void requestSelectedText();
@@ -121,6 +123,13 @@ private:
     {
         std::optional<terminal::TerminalSelection> selection;
     };
+    struct SelectionGestureCommand final
+    {
+        terminal::TerminalSelectionGesture gesture;
+    };
+    struct SelectAllCommand final
+    {
+    };
     struct CopyCommand final
     {
     };
@@ -153,8 +162,9 @@ private:
     };
 
     using Command = std::variant<InputCommand, PasteCommand, terminal::TerminalGeometry, ScrollCommand,
-                                 SelectionCommand, CopyCommand, SelectedTextCommand, SearchCommand, ClearSearchCommand,
-                                 EncodingCommand, HistoryCommand, TelemetryVisibilityCommand, TelemetryRefreshCommand>;
+                                 SelectionCommand, SelectionGestureCommand, SelectAllCommand, CopyCommand,
+                                 SelectedTextCommand, SearchCommand, ClearSearchCommand, EncodingCommand,
+                                 HistoryCommand, TelemetryVisibilityCommand, TelemetryRefreshCommand>;
 
     void queueByteCommand(Command command, std::size_t byteCount);
     void run(SshConnectionRequest &request, terminal::TerminalGeometry geometry, const std::stop_token &stopToken);

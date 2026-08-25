@@ -11,6 +11,7 @@
 
 #include <Windows.h>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <exception>
@@ -292,6 +293,53 @@ void LocalTerminalSession::requestSelection(const quint16 startColumn, const qui
     m_commandAvailable.notify_one();
 }
 
+void LocalTerminalSession::requestSelectionGesture(const TerminalSelectionGesture &gesture)
+{
+    if (!m_running.load())
+    {
+        return;
+    }
+
+    SelectionGestureCommand command{.gesture = gesture};
+    {
+        std::scoped_lock lock(m_commandMutex);
+        auto *pending = m_commands.empty() ? nullptr : std::get_if<SelectionGestureCommand>(&m_commands.back());
+        if (pending != nullptr && pending->gesture.type == gesture.type
+            && (gesture.type == TerminalSelectionGestureType::drag
+                || gesture.type == TerminalSelectionGestureType::autoscrollTick))
+        {
+            if (gesture.type == TerminalSelectionGestureType::autoscrollTick)
+            {
+                const bool sameDirection = pending->gesture.scrollRows != 0 && gesture.scrollRows != 0
+                                           && ((pending->gesture.scrollRows > 0) == (gesture.scrollRows > 0));
+                if (sameDirection)
+                {
+                    command.gesture.scrollRows = std::clamp(pending->gesture.scrollRows + gesture.scrollRows, -64, 64);
+                }
+            }
+            *pending = std::move(command);
+        }
+        else
+        {
+            m_commands.emplace_back(std::move(command));
+        }
+    }
+    m_commandAvailable.notify_one();
+}
+
+void LocalTerminalSession::selectAll()
+{
+    if (!m_running.load())
+    {
+        return;
+    }
+    {
+        std::scoped_lock lock(m_commandMutex);
+        m_commands.emplace_back(SelectAllCommand{});
+    }
+    m_commandAvailable.notify_one();
+}
+
 void LocalTerminalSession::clearSelection()
 {
     if (!m_running.load())
@@ -520,6 +568,42 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
             if (selectionError)
             {
                 postStatus(tr("Terminal selection failed: %1").arg(QString::fromStdString(selectionError.message())));
+                continue;
+            }
+            publishSnapshot();
+            continue;
+        }
+
+        if (const auto *gesture = std::get_if<SelectionGestureCommand>(&command))
+        {
+            std::expected<bool, std::error_code> changed;
+            {
+                std::scoped_lock lock(m_engineMutex);
+                changed = m_engine->applySelectionGesture(gesture->gesture);
+            }
+            if (!changed)
+            {
+                postStatus(
+                    tr("Terminal selection gesture failed: %1").arg(QString::fromStdString(changed.error().message())));
+                continue;
+            }
+            if (*changed)
+            {
+                publishSnapshot();
+            }
+            continue;
+        }
+
+        if (std::holds_alternative<SelectAllCommand>(command))
+        {
+            std::error_code selectionError;
+            {
+                std::scoped_lock lock(m_engineMutex);
+                selectionError = m_engine->selectAll();
+            }
+            if (selectionError)
+            {
+                postStatus(tr("Terminal select all failed: %1").arg(QString::fromStdString(selectionError.message())));
                 continue;
             }
             publishSnapshot();

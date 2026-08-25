@@ -51,6 +51,8 @@ public slots:
     virtual void requestScroll(int rows) = 0;
     virtual void requestSelection(quint16 startColumn, quint16 startRow, quint16 endColumn, quint16 endRow,
                                   bool rectangular) = 0;
+    virtual void requestSelectionGesture(const ztermy::terminal::TerminalSelectionGesture &gesture) = 0;
+    virtual void selectAll() = 0;
     virtual void clearSelection() = 0;
     virtual void copySelection() = 0;
     virtual void requestSelectedText() = 0;
@@ -93,6 +95,8 @@ public slots:
     void requestScroll(int rows) override;
     void requestSelection(quint16 startColumn, quint16 startRow, quint16 endColumn, quint16 endRow,
                           bool rectangular) override;
+    void requestSelectionGesture(const ztermy::terminal::TerminalSelectionGesture &gesture) override;
+    void selectAll() override;
     void clearSelection() override;
     void copySelection() override;
     void requestSelectedText() override;
@@ -123,6 +127,13 @@ private:
     {
         std::optional<TerminalSelection> selection;
     };
+    struct SelectionGestureCommand
+    {
+        TerminalSelectionGesture gesture;
+    };
+    struct SelectAllCommand
+    {
+    };
     struct CopyCommand
     {
     };
@@ -140,7 +151,8 @@ private:
     };
 
     using Command = std::variant<InputCommand, PasteCommand, TerminalGeometry, ScrollCommand, SelectionCommand,
-                                 CopyCommand, SelectedTextCommand, SearchCommand, ClearSearchCommand>;
+                                 SelectionGestureCommand, SelectAllCommand, CopyCommand, SelectedTextCommand,
+                                 SearchCommand, ClearSearchCommand>;
 
     void queueByteCommand(Command command, std::size_t byteCount);
     void readLoop(const std::stop_token &stopToken);

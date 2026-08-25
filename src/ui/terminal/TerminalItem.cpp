@@ -216,7 +216,7 @@ TerminalItem::TerminalItem(QQuickItem *parent) : QQuickItem(parent)
     m_statusText = tr("Starting local terminal...");
     setFlag(ItemHasContents, true);
     setFlag(ItemAcceptsInputMethod, true);
-    setAcceptedMouseButtons(Qt::LeftButton | Qt::RightButton);
+    setAcceptedMouseButtons(Qt::LeftButton | Qt::MiddleButton | Qt::RightButton);
     setActiveFocusOnTab(true);
 
     m_font.setFamilies({QStringLiteral("Cascadia Mono"), QStringLiteral("Consolas")});
@@ -235,6 +235,31 @@ TerminalItem::TerminalItem(QQuickItem *parent) : QQuickItem(parent)
         invalidateRenderer(false);
     });
     m_cursorBlinkTimer.start();
+
+    m_selectionAutoscrollTimer.setInterval(32);
+    QObject::connect(&m_selectionAutoscrollTimer, &QTimer::timeout, this, [this] {
+        constexpr qint64 dwellMilliseconds = 75;
+        if (!m_selecting || m_selectionAutoscrollDirection == 0 || !m_selectionEdgeDwell.isValid()
+            || m_selectionEdgeDwell.elapsed() < dwellMilliseconds)
+        {
+            return;
+        }
+        const qreal edge = m_selectionAutoscrollDirection < 0 ? verticalPadding : height() - verticalPadding;
+        const qreal distance = std::abs(m_selectionPointerPosition.y() - edge);
+        const int distanceRows = static_cast<int>(std::floor(distance / std::max<qreal>(cellHeight(), 1.0)));
+        const int acceleration = static_cast<int>((m_selectionEdgeDwell.elapsed() - dwellMilliseconds) / 600);
+        const int rows = std::clamp(1 + distanceRows + acceleration, 1, 12) * m_selectionAutoscrollDirection;
+        auto gesture =
+            selectionGesture(terminal::TerminalSelectionGestureType::autoscrollTick, m_selectionPointerPosition);
+        gesture.scrollRows = rows;
+        emit selectionGestureRequested(gesture);
+    });
+    QObject::connect(this, &QQuickItem::visibleChanged, this, [this] {
+        if (!isVisible())
+        {
+            cancelSelectionGesture();
+        }
+    });
 }
 
 QString TerminalItem::statusText() const
@@ -285,6 +310,21 @@ bool TerminalItem::confirmMultilinePaste() const noexcept
 QString TerminalItem::rightClickBehavior() const
 {
     return m_rightClickBehavior;
+}
+
+QString TerminalItem::middleClickBehavior() const
+{
+    return m_middleClickBehavior;
+}
+
+QString TerminalItem::wordDelimiters() const
+{
+    return m_wordDelimiters;
+}
+
+int TerminalItem::scrollRowsPerWheel() const noexcept
+{
+    return m_scrollRowsPerWheel;
 }
 
 bool TerminalItem::hasSelection() const noexcept
@@ -362,6 +402,7 @@ void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
 {
     if (!snapshot)
     {
+        cancelSelectionGesture();
         dismissSelectionAction();
         setHasSelection(false);
         m_snapshot.reset();
@@ -371,6 +412,18 @@ void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
         return;
     }
     m_renderMetrics.recordSnapshot(snapshot->damage, snapshot->damagedRows.size());
+    const bool selectionBecameVisible = !m_hasSelection && snapshot->selectionPresent;
+    setHasSelection(snapshot->selectionPresent);
+    if (!snapshot->selectionPresent)
+    {
+        dismissSelectionAction();
+    }
+    else if (selectionBecameVisible && !m_selecting)
+    {
+        m_selectionActionPosition = m_selectionPointerPosition;
+        m_selectionActionVisible = true;
+        emit selectionActionChanged();
+    }
     m_snapshot = std::move(snapshot);
     invalidateRenderer(true);
     notifyInputMethod();
@@ -517,6 +570,40 @@ void TerminalItem::setRightClickBehavior(const QString &behavior)
     emit rightClickBehaviorChanged();
 }
 
+void TerminalItem::setMiddleClickBehavior(const QString &behavior)
+{
+    static constexpr std::array<std::string_view, 3> supported{"disabled", "paste", "context-menu"};
+    const QByteArray encodedBehavior = behavior.toUtf8();
+    const std::string_view value{encodedBehavior.constData(), static_cast<std::size_t>(encodedBehavior.size())};
+    if (!std::ranges::contains(supported, value) || m_middleClickBehavior == behavior)
+    {
+        return;
+    }
+    m_middleClickBehavior = behavior;
+    emit middleClickBehaviorChanged();
+}
+
+void TerminalItem::setWordDelimiters(const QString &delimiters)
+{
+    if (delimiters.size() > 128 || m_wordDelimiters == delimiters)
+    {
+        return;
+    }
+    m_wordDelimiters = delimiters;
+    emit wordDelimitersChanged();
+}
+
+void TerminalItem::setScrollRowsPerWheel(const int rows)
+{
+    const int bounded = std::clamp(rows, 1, 20);
+    if (m_scrollRowsPerWheel == bounded)
+    {
+        return;
+    }
+    m_scrollRowsPerWheel = bounded;
+    emit scrollRowsPerWheelChanged();
+}
+
 void TerminalItem::setKeywordHighlightRules(const QVariantList &rules)
 {
     if (m_keywordHighlightRuleValues == rules)
@@ -617,6 +704,27 @@ void TerminalItem::scrollToFraction(const qreal fraction)
     }
 }
 
+void TerminalItem::scrollLines(const int rows)
+{
+    if (rows != 0)
+    {
+        emit scrollRequested(rows);
+    }
+}
+
+void TerminalItem::scrollPage(const int pages)
+{
+    if (pages == 0 || !m_snapshot || m_snapshot->rows == 0)
+    {
+        return;
+    }
+    const int pageRows = std::max(1, static_cast<int>(m_snapshot->rows) - 1);
+    const qint64 requestedRows = static_cast<qint64>(pages) * static_cast<qint64>(pageRows);
+    emit scrollRequested(
+        static_cast<int>(std::clamp(requestedRows, -static_cast<qint64>(std::numeric_limits<int>::max()),
+                                    static_cast<qint64>(std::numeric_limits<int>::max()))));
+}
+
 void TerminalItem::dismissSelectionAction()
 {
     if (!m_selectionActionVisible)
@@ -659,6 +767,15 @@ void TerminalItem::selectVisibleTerminal()
     emit selectionRequested(0, 0, static_cast<quint16>(m_snapshot->columns - 1),
                             static_cast<quint16>(m_snapshot->rows - 1), false);
     setHasSelection(true);
+}
+
+void TerminalItem::selectAllTerminal()
+{
+    if (!m_snapshot || m_snapshot->columns == 0 || m_snapshot->rows == 0)
+    {
+        return;
+    }
+    emit selectAllRequested();
 }
 
 void TerminalItem::clearSelection()
@@ -1071,6 +1188,7 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 
 void TerminalItem::geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry)
 {
+    cancelSelectionGesture();
     QQuickItem::geometryChange(newGeometry, oldGeometry);
     reportTerminalSize();
     update();
@@ -1171,6 +1289,7 @@ QVariant TerminalItem::inputMethodQuery(const Qt::InputMethodQuery query) const
 
 void TerminalItem::focusOutEvent(QFocusEvent *event)
 {
+    cancelSelectionGesture();
     clearPreedit();
     QQuickItem::focusOutEvent(event);
 }
@@ -1179,6 +1298,19 @@ void TerminalItem::mousePressEvent(QMouseEvent *event)
 {
     forceActiveFocus(Qt::MouseFocusReason);
     dismissSelectionAction();
+    if (event->button() == Qt::MiddleButton)
+    {
+        if (m_middleClickBehavior == QStringLiteral("paste"))
+        {
+            pasteClipboard();
+        }
+        else if (m_middleClickBehavior == QStringLiteral("context-menu"))
+        {
+            emit contextMenuRequested(event->position().x(), event->position().y());
+        }
+        event->accept();
+        return;
+    }
     const auto point = terminalPoint(event->position());
     if (!point)
     {
@@ -1228,13 +1360,6 @@ void TerminalItem::mousePressEvent(QMouseEvent *event)
                              && event->timestamp() - m_lastDoubleClickTimestamp <= clickInterval
                              && (event->position() - m_lastDoubleClickPosition).manhattanLength()
                                     <= QGuiApplication::styleHints()->startDragDistance();
-    if (tripleClick)
-    {
-        m_lastDoubleClickTimestamp = 0;
-        selectLineAt(point->row, event->position());
-        event->accept();
-        return;
-    }
     m_lastDoubleClickTimestamp = 0;
 
     if (event->modifiers().testFlag(Qt::ShiftModifier) && m_hasSelection)
@@ -1250,7 +1375,12 @@ void TerminalItem::mousePressEvent(QMouseEvent *event)
     m_selectionAnchor = *point;
     m_selecting = true;
     m_selectionMoved = false;
-    clearSelection();
+    m_selectionClickSelected = tripleClick;
+    m_selectionPointerPosition = event->position();
+    stopSelectionAutoscroll();
+    setHasSelection(tripleClick);
+    emit selectionGestureRequested(
+        selectionGesture(terminal::TerminalSelectionGestureType::press, event->position(), event->timestamp()));
     event->accept();
 }
 
@@ -1261,7 +1391,18 @@ void TerminalItem::mouseDoubleClickEvent(QMouseEvent *event)
     {
         if (const auto point = terminalPoint(event->position()))
         {
-            selectWordAt(*point, event->position());
+            m_selectionAnchor = *point;
+            m_selecting = true;
+            m_selectionMoved = false;
+            m_selectionClickSelected = true;
+            m_selectionPointerPosition = event->position();
+            stopSelectionAutoscroll();
+            emit selectionGestureRequested(
+                selectionGesture(terminal::TerminalSelectionGestureType::press, event->position(), event->timestamp()));
+            setHasSelection(true);
+            m_selectionActionPosition = event->position();
+            m_selectionActionVisible = true;
+            emit selectionActionChanged();
             m_lastDoubleClickTimestamp = event->timestamp();
             m_lastDoubleClickPosition = event->position();
             event->accept();
@@ -1281,8 +1422,11 @@ void TerminalItem::mouseMoveEvent(QMouseEvent *event)
     if (const auto point = terminalPoint(event->position()))
     {
         m_selectionMoved = true;
-        emit selectionRequested(m_selectionAnchor.column, m_selectionAnchor.row, point->column, point->row,
-                                event->modifiers().testFlag(Qt::AltModifier));
+        auto gesture = selectionGesture(terminal::TerminalSelectionGestureType::drag, event->position());
+        gesture.rectangular = event->modifiers().testFlag(Qt::AltModifier);
+        emit selectionGestureRequested(gesture);
+        m_selectionPointerPosition = event->position();
+        updateSelectionAutoscroll(event->position());
     }
     event->accept();
 }
@@ -1294,12 +1438,14 @@ void TerminalItem::mouseReleaseEvent(QMouseEvent *event)
         QQuickItem::mouseReleaseEvent(event);
         return;
     }
+    stopSelectionAutoscroll();
     if (m_selectionMoved)
     {
         if (const auto point = terminalPoint(event->position()))
         {
-            emit selectionRequested(m_selectionAnchor.column, m_selectionAnchor.row, point->column, point->row,
-                                    event->modifiers().testFlag(Qt::AltModifier));
+            auto gesture = selectionGesture(terminal::TerminalSelectionGestureType::drag, event->position());
+            gesture.rectangular = event->modifiers().testFlag(Qt::AltModifier);
+            emit selectionGestureRequested(gesture);
             const bool nonEmpty = point->column != m_selectionAnchor.column || point->row != m_selectionAnchor.row;
             if (nonEmpty)
             {
@@ -1309,13 +1455,22 @@ void TerminalItem::mouseReleaseEvent(QMouseEvent *event)
                 emit selectionActionChanged();
             }
         }
-        if (m_copyOnSelect)
-        {
-            emit copyRequested();
-        }
+    }
+    emit selectionGestureRequested(
+        selectionGesture(terminal::TerminalSelectionGestureType::release, event->position(), event->timestamp()));
+    if ((m_selectionMoved || m_selectionClickSelected) && m_copyOnSelect)
+    {
+        emit copyRequested();
     }
     m_selecting = false;
+    m_selectionClickSelected = false;
     event->accept();
+}
+
+void TerminalItem::mouseUngrabEvent()
+{
+    cancelSelectionGesture();
+    QQuickItem::mouseUngrabEvent();
 }
 
 void TerminalItem::setHasSelection(const bool selected)
@@ -1413,14 +1568,122 @@ void TerminalItem::selectLineAt(const quint16 row, const QPointF &position)
     }
 }
 
+terminal::TerminalSelectionGesture TerminalItem::selectionGesture(const terminal::TerminalSelectionGestureType type,
+                                                                  const QPointF &position,
+                                                                  const quint64 timestamp) const
+{
+    terminal::TerminalSelectionGesture result;
+    result.type = type;
+    result.positionX = position.x();
+    result.positionY = position.y();
+    result.columns = m_snapshot ? m_snapshot->columns : 0;
+    result.cellWidthPixels = static_cast<quint32>(std::max<qreal>(1.0, std::ceil(cellWidth())));
+    result.paddingLeftPixels = static_cast<quint32>(std::max<qreal>(0.0, std::ceil(horizontalPadding)));
+    result.screenHeightPixels = static_cast<quint32>(std::max<qreal>(1.0, std::ceil(height())));
+    result.eventTimeNanoseconds = timestamp * 1'000'000ULL;
+    result.repeatIntervalNanoseconds =
+        static_cast<quint64>(QGuiApplication::styleHints()->mouseDoubleClickInterval()) * 1'000'000ULL;
+    result.repeatDistancePixels = QGuiApplication::styleHints()->startDragDistance();
+    if (type == terminal::TerminalSelectionGestureType::drag
+        || type == terminal::TerminalSelectionGestureType::autoscrollTick)
+    {
+        if (position.y() <= verticalPadding)
+        {
+            result.positionY = 0.0;
+        }
+        else if (position.y() >= height() - verticalPadding)
+        {
+            result.positionY = height();
+        }
+    }
+    // Keep paths, URLs, host names, and command flags intact by default while
+    // retaining the conventional punctuation boundaries used by terminals.
+    const QList<uint> boundaryCodepoints = m_wordDelimiters.toUcs4();
+    result.wordBoundaryCodepoints.reserve(static_cast<std::size_t>(boundaryCodepoints.size()));
+    for (const uint codepoint : boundaryCodepoints)
+    {
+        result.wordBoundaryCodepoints.push_back(static_cast<char32_t>(codepoint));
+    }
+    if (const auto point = terminalPoint(position))
+    {
+        result.point = *point;
+    }
+    else
+    {
+        result.hasPoint = false;
+    }
+    return result;
+}
+
+void TerminalItem::updateSelectionAutoscroll(const QPointF &position)
+{
+    int direction = 0;
+    if (position.y() < verticalPadding)
+    {
+        direction = -1;
+    }
+    else if (position.y() > height() - verticalPadding)
+    {
+        direction = 1;
+    }
+    if (direction == 0)
+    {
+        stopSelectionAutoscroll();
+        return;
+    }
+    if (direction != m_selectionAutoscrollDirection)
+    {
+        m_selectionAutoscrollDirection = direction;
+        m_selectionEdgeDwell.restart();
+    }
+    if (!m_selectionAutoscrollTimer.isActive())
+    {
+        m_selectionAutoscrollTimer.start();
+    }
+}
+
+void TerminalItem::stopSelectionAutoscroll()
+{
+    m_selectionAutoscrollTimer.stop();
+    m_selectionAutoscrollDirection = 0;
+    m_selectionEdgeDwell.invalidate();
+}
+
+void TerminalItem::cancelSelectionGesture()
+{
+    if (!m_selecting)
+    {
+        stopSelectionAutoscroll();
+        return;
+    }
+    stopSelectionAutoscroll();
+    emit selectionGestureRequested(selectionGesture(terminal::TerminalSelectionGestureType::cancel, {}));
+    m_selecting = false;
+    m_selectionMoved = false;
+    m_selectionClickSelected = false;
+}
+
 void TerminalItem::wheelEvent(QWheelEvent *event)
 {
+    if (!event->pixelDelta().isNull())
+    {
+        m_pixelWheelRemainder += event->pixelDelta().y();
+        const qreal rowHeight = std::max<qreal>(cellHeight(), 1.0);
+        const int rows = static_cast<int>(m_pixelWheelRemainder / rowHeight);
+        m_pixelWheelRemainder -= rows * rowHeight;
+        if (rows != 0)
+        {
+            emit scrollRequested(-rows);
+        }
+        event->accept();
+        return;
+    }
     m_wheelRemainder += event->angleDelta().y();
     const int steps = m_wheelRemainder / 120;
     m_wheelRemainder -= steps * 120;
     if (steps != 0)
     {
-        emit scrollRequested(-steps * 3);
+        emit scrollRequested(-steps * m_scrollRowsPerWheel);
     }
     event->accept();
 }

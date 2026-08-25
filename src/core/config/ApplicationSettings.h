@@ -49,6 +49,13 @@ enum class TerminalRightClickPreference : std::uint8_t
     selectWord,
 };
 
+enum class TerminalMiddleClickPreference : std::uint8_t
+{
+    disabled,
+    paste,
+    contextMenu,
+};
+
 enum class CredentialStoragePreference : std::uint8_t
 {
     automatic,
@@ -106,42 +113,45 @@ enum class AiProxyPreference : std::uint8_t
 
 struct ApplicationSettings final
 {
-    ThemePreference theme = ThemePreference::dark;
     double backdropOpacity = 1.0;
-    BackdropPreference backdrop = BackdropPreference::acrylic;
-    AccentPreference accent = AccentPreference::ztermy;
+    double terminalBackgroundOpacity = 1.0;
+    QMap<QString, QString> shortcutOverrides;
     QString customAccent = QStringLiteral("#22C55E");
     QString uiFontFamily;
     QString terminalFontFamily = QStringLiteral("Cascadia Mono");
+    QString terminalWordDelimiters = QStringLiteral(" \t'\"│`|;,()[]{}<>$");
+    QString aiBaseUrl = QStringLiteral("https://api.openai.com/v1");
+    QString aiEndpointPath;
+    QString aiModel;
+    QString aiCredentialReference = QStringLiteral("ai-default");
+    QString aiProxyUrl;
+    QString aiProxyUsername;
     int terminalFontSize = 14;
+    int terminalScrollRows = 3;
+    ThemePreference theme = ThemePreference::dark;
+    BackdropPreference backdrop = BackdropPreference::acrylic;
+    AccentPreference accent = AccentPreference::ztermy;
     bool showAllTerminalFonts = false;
     bool terminalLigatures = true;
-    double terminalBackgroundOpacity = 1.0;
     CursorPreference cursor = CursorPreference::terminal;
     bool cursorBlink = true;
     bool copyOnSelect = false;
     bool confirmMultilinePaste = true;
     TerminalRightClickPreference terminalRightClick = TerminalRightClickPreference::contextMenu;
+    TerminalMiddleClickPreference terminalMiddleClick = TerminalMiddleClickPreference::disabled;
     bool sftpShowHiddenFiles = false;
     bool sftpConfirmDelete = true;
     bool closeToTray = false;
     bool performanceMode = false;
     CredentialStoragePreference credentialStorage = CredentialStoragePreference::automatic;
     LanguagePreference language = LanguagePreference::system;
-    QMap<QString, QString> shortcutOverrides;
     AiProviderPreference aiProvider = AiProviderPreference::openAiResponses;
-    QString aiBaseUrl = QStringLiteral("https://api.openai.com/v1");
-    QString aiEndpointPath;
-    QString aiModel;
-    QString aiCredentialReference = QStringLiteral("ai-default");
     bool aiAutomaticContext = false;
     AiPermissionPreference aiPermission = AiPermissionPreference::ask;
     bool aiConversationHistoryEnabled = true;
     bool aiDebugTraceEnabled = false;
     AiReasoningPreference aiReasoning = AiReasoningPreference::automatic;
     AiProxyPreference aiProxy = AiProxyPreference::system;
-    QString aiProxyUrl;
-    QString aiProxyUsername;
 
     [[nodiscard]] friend bool operator==(const ApplicationSettings &, const ApplicationSettings &) = default;
 };
@@ -174,6 +184,7 @@ private:
 [[nodiscard]] QString accentPreferenceToken(AccentPreference preference);
 [[nodiscard]] QString cursorPreferenceToken(CursorPreference preference);
 [[nodiscard]] QString terminalRightClickPreferenceToken(TerminalRightClickPreference preference);
+[[nodiscard]] QString terminalMiddleClickPreferenceToken(TerminalMiddleClickPreference preference);
 [[nodiscard]] QString credentialStoragePreferenceToken(CredentialStoragePreference preference);
 [[nodiscard]] QString languagePreferenceToken(LanguagePreference preference);
 [[nodiscard]] QString aiProviderPreferenceToken(AiProviderPreference preference);
@@ -185,6 +196,7 @@ private:
 [[nodiscard]] std::optional<AccentPreference> parseAccentPreference(const QString &token);
 [[nodiscard]] std::optional<CursorPreference> parseCursorPreference(const QString &token);
 [[nodiscard]] std::optional<TerminalRightClickPreference> parseTerminalRightClickPreference(const QString &token);
+[[nodiscard]] std::optional<TerminalMiddleClickPreference> parseTerminalMiddleClickPreference(const QString &token);
 [[nodiscard]] std::optional<CredentialStoragePreference> parseCredentialStoragePreference(const QString &token);
 [[nodiscard]] std::optional<LanguagePreference> parseLanguagePreference(const QString &token);
 [[nodiscard]] std::optional<AiProviderPreference> parseAiProviderPreference(const QString &token);

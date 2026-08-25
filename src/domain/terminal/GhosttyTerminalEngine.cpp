@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <string_view>
@@ -246,6 +247,11 @@ struct GhosttyTerminalEngine::Impl
 
     ~Impl()
     {
+        ghostty_selection_gesture_event_free(selectionAutoscrollEvent);
+        ghostty_selection_gesture_event_free(selectionReleaseEvent);
+        ghostty_selection_gesture_event_free(selectionDragEvent);
+        ghostty_selection_gesture_event_free(selectionPressEvent);
+        ghostty_selection_gesture_free(selectionGesture, terminal);
         if (rowCells != nullptr)
         {
             ghostty_render_state_row_cells_free(rowCells);
@@ -268,6 +274,11 @@ struct GhosttyTerminalEngine::Impl
     GhosttyRenderState renderState = nullptr;
     GhosttyRenderStateRowIterator rowIterator = nullptr;
     GhosttyRenderStateRowCells rowCells = nullptr;
+    GhosttySelectionGesture selectionGesture = nullptr;
+    GhosttySelectionGestureEvent selectionPressEvent = nullptr;
+    GhosttySelectionGestureEvent selectionDragEvent = nullptr;
+    GhosttySelectionGestureEvent selectionReleaseEvent = nullptr;
+    GhosttySelectionGestureEvent selectionAutoscrollEvent = nullptr;
     std::string lastSearchQuery;
     bool lastSearchCaseSensitive = false;
 };
@@ -320,6 +331,39 @@ GhosttyTerminalEngine::create(const TerminalGeometry geometry)
     rowIteratorOwner.release();
     rowCellsOwner.release();
     auto engine = std::unique_ptr<GhosttyTerminalEngine>(new GhosttyTerminalEngine(std::move(impl)));
+    if (const GhosttyResult gestureResult = ghostty_selection_gesture_new(nullptr, &engine->m_impl->selectionGesture);
+        gestureResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(gestureResult));
+    }
+    const auto createGestureEvent = [&engine](GhosttySelectionGestureEvent &event,
+                                              const GhosttySelectionGestureEventType type) {
+        return ghostty_selection_gesture_event_new(nullptr, &event, type);
+    };
+    if (const GhosttyResult eventResult =
+            createGestureEvent(engine->m_impl->selectionPressEvent, GHOSTTY_SELECTION_GESTURE_EVENT_TYPE_PRESS);
+        eventResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(eventResult));
+    }
+    if (const GhosttyResult eventResult =
+            createGestureEvent(engine->m_impl->selectionDragEvent, GHOSTTY_SELECTION_GESTURE_EVENT_TYPE_DRAG);
+        eventResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(eventResult));
+    }
+    if (const GhosttyResult eventResult =
+            createGestureEvent(engine->m_impl->selectionReleaseEvent, GHOSTTY_SELECTION_GESTURE_EVENT_TYPE_RELEASE);
+        eventResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(eventResult));
+    }
+    if (const GhosttyResult eventResult = createGestureEvent(engine->m_impl->selectionAutoscrollEvent,
+                                                             GHOSTTY_SELECTION_GESTURE_EVENT_TYPE_AUTOSCROLL_TICK);
+        eventResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(eventResult));
+    }
     if (const std::error_code resizeError = engine->resize(geometry))
     {
         return std::unexpected(resizeError);
@@ -347,6 +391,7 @@ std::error_code GhosttyTerminalEngine::resize(const TerminalGeometry geometry)
         return invalidArgument();
     }
 
+    ghostty_selection_gesture_reset(m_impl->selectionGesture, m_impl->terminal);
     const GhosttyResult result = ghostty_terminal_resize(m_impl->terminal, geometry.columns, geometry.rows,
                                                          geometry.cellWidthPixels, geometry.cellHeightPixels);
     return result == GHOSTTY_SUCCESS ? std::error_code{} : ghosttyError(result);
@@ -354,6 +399,7 @@ std::error_code GhosttyTerminalEngine::resize(const TerminalGeometry geometry)
 
 std::error_code GhosttyTerminalEngine::setSelection(const std::optional<TerminalSelection> selection)
 {
+    ghostty_selection_gesture_reset(m_impl->selectionGesture, m_impl->terminal);
     m_impl->lastSearchQuery.clear();
     if (!selection)
     {
@@ -394,6 +440,243 @@ std::error_code GhosttyTerminalEngine::setSelection(const std::optional<Terminal
     const GhosttyResult result =
         ghostty_terminal_set(m_impl->terminal, GHOSTTY_TERMINAL_OPT_SELECTION, &ghosttySelection);
     return result == GHOSTTY_SUCCESS ? std::error_code{} : ghosttyError(result);
+}
+
+std::expected<bool, std::error_code>
+GhosttyTerminalEngine::applySelectionGesture(const TerminalSelectionGesture &gesture)
+{
+    m_impl->lastSearchQuery.clear();
+    if (gesture.type == TerminalSelectionGestureType::cancel)
+    {
+        ghostty_selection_gesture_reset(m_impl->selectionGesture, m_impl->terminal);
+        return false;
+    }
+
+    GhosttySelectionGestureEvent event = nullptr;
+    switch (gesture.type)
+    {
+        case TerminalSelectionGestureType::press:
+            event = m_impl->selectionPressEvent;
+            break;
+        case TerminalSelectionGestureType::drag:
+            event = m_impl->selectionDragEvent;
+            break;
+        case TerminalSelectionGestureType::release:
+            event = m_impl->selectionReleaseEvent;
+            break;
+        case TerminalSelectionGestureType::autoscrollTick:
+            event = m_impl->selectionAutoscrollEvent;
+            break;
+        case TerminalSelectionGestureType::cancel:
+            return false;
+    }
+
+    const auto setOption = [event](const GhosttySelectionGestureEventOption option, const void *value) {
+        const GhosttyResult result = ghostty_selection_gesture_event_set(event, option, value);
+        return result == GHOSTTY_SUCCESS ? std::error_code{} : ghosttyError(result);
+    };
+    const auto viewportRef = [this](const TerminalPoint point) -> std::expected<GhosttyGridRef, std::error_code> {
+        GhosttyPoint ghosttyPoint{};
+        ghosttyPoint.tag = GHOSTTY_POINT_TAG_VIEWPORT;
+        ghosttyPoint.value.coordinate = {.x = point.column, .y = point.row};
+        GhosttyGridRef ref{};
+        if (const GhosttyResult result = ghostty_terminal_grid_ref(m_impl->terminal, ghosttyPoint, &ref);
+            result != GHOSTTY_SUCCESS)
+        {
+            return std::unexpected(ghosttyError(result));
+        }
+        return ref;
+    };
+
+    std::optional<GhosttyGridRef> ref;
+    if (gesture.hasPoint && gesture.type != TerminalSelectionGestureType::autoscrollTick)
+    {
+        auto mapped = viewportRef(gesture.point);
+        if (!mapped)
+        {
+            return std::unexpected(mapped.error());
+        }
+        ref = *mapped;
+    }
+    if (gesture.type != TerminalSelectionGestureType::autoscrollTick)
+    {
+        if (const std::error_code error = setOption(GHOSTTY_SELECTION_GESTURE_EVENT_OPT_REF, ref ? &*ref : nullptr))
+        {
+            return std::unexpected(error);
+        }
+    }
+
+    GhosttySurfacePosition position{.x = gesture.positionX, .y = gesture.positionY};
+    const bool usesPosition = gesture.type != TerminalSelectionGestureType::release;
+    if (usesPosition)
+    {
+        if (const std::error_code error = setOption(GHOSTTY_SELECTION_GESTURE_EVENT_OPT_POSITION, &position))
+        {
+            return std::unexpected(error);
+        }
+    }
+
+    if (gesture.type == TerminalSelectionGestureType::press)
+    {
+        if (const std::error_code error =
+                setOption(GHOSTTY_SELECTION_GESTURE_EVENT_OPT_REPEAT_DISTANCE, &gesture.repeatDistancePixels))
+        {
+            return std::unexpected(error);
+        }
+        if (const std::error_code error =
+                setOption(GHOSTTY_SELECTION_GESTURE_EVENT_OPT_REPEAT_INTERVAL_NS, &gesture.repeatIntervalNanoseconds))
+        {
+            return std::unexpected(error);
+        }
+        const std::uint64_t *eventTime = gesture.eventTimeNanoseconds == 0 ? nullptr : &gesture.eventTimeNanoseconds;
+        if (const std::error_code error = setOption(GHOSTTY_SELECTION_GESTURE_EVENT_OPT_TIME_NS, eventTime))
+        {
+            return std::unexpected(error);
+        }
+        const GhosttyResult clearResult =
+            ghostty_terminal_set(m_impl->terminal, GHOSTTY_TERMINAL_OPT_SELECTION, nullptr);
+        if (clearResult != GHOSTTY_SUCCESS)
+        {
+            return std::unexpected(ghosttyError(clearResult));
+        }
+    }
+
+    std::vector<std::uint32_t> boundaryStorage;
+    if (gesture.type != TerminalSelectionGestureType::release)
+    {
+        const GhosttyCodepoints *boundaries = nullptr;
+        GhosttyCodepoints boundaryCodepoints{};
+        if (!gesture.wordBoundaryCodepoints.empty())
+        {
+            boundaryStorage.assign(gesture.wordBoundaryCodepoints.begin(), gesture.wordBoundaryCodepoints.end());
+            boundaryCodepoints = {.ptr = boundaryStorage.data(), .len = boundaryStorage.size()};
+            boundaries = &boundaryCodepoints;
+        }
+        if (const std::error_code error =
+                setOption(GHOSTTY_SELECTION_GESTURE_EVENT_OPT_WORD_BOUNDARY_CODEPOINTS, boundaries))
+        {
+            return std::unexpected(error);
+        }
+    }
+
+    if (gesture.type == TerminalSelectionGestureType::drag
+        || gesture.type == TerminalSelectionGestureType::autoscrollTick)
+    {
+        if (gesture.columns == 0 || gesture.cellWidthPixels == 0 || gesture.screenHeightPixels == 0)
+        {
+            return std::unexpected(invalidArgument());
+        }
+        const GhosttySelectionGestureGeometry geometry{.columns = gesture.columns,
+                                                       .cell_width = gesture.cellWidthPixels,
+                                                       .padding_left = gesture.paddingLeftPixels,
+                                                       .screen_height = gesture.screenHeightPixels};
+        if (const std::error_code error = setOption(GHOSTTY_SELECTION_GESTURE_EVENT_OPT_GEOMETRY, &geometry))
+        {
+            return std::unexpected(error);
+        }
+        if (const std::error_code error =
+                setOption(GHOSTTY_SELECTION_GESTURE_EVENT_OPT_RECTANGLE, &gesture.rectangular))
+        {
+            return std::unexpected(error);
+        }
+    }
+
+    if (gesture.type == TerminalSelectionGestureType::autoscrollTick)
+    {
+        if (gesture.scrollRows == 0)
+        {
+            return false;
+        }
+        const GhosttyPointCoordinate viewport{.x = gesture.point.column, .y = gesture.point.row};
+        if (const std::error_code error = setOption(GHOSTTY_SELECTION_GESTURE_EVENT_OPT_VIEWPORT, &viewport))
+        {
+            return std::unexpected(error);
+        }
+
+        bool changed = false;
+        const int ticks = std::clamp(std::abs(gesture.scrollRows), 1, 64);
+        for (int tick = 0; tick < ticks; ++tick)
+        {
+            GhosttyTerminalScrollbar beforeScrollbar{};
+            if (const GhosttyResult scrollbarResult =
+                    ghostty_terminal_get(m_impl->terminal, GHOSTTY_TERMINAL_DATA_SCROLLBAR, &beforeScrollbar);
+                scrollbarResult != GHOSTTY_SUCCESS)
+            {
+                return std::unexpected(ghosttyError(scrollbarResult));
+            }
+            GhosttySelection selection{};
+            selection.size = sizeof(selection);
+            const GhosttyResult result =
+                ghostty_selection_gesture_event(m_impl->selectionGesture, m_impl->terminal, event, &selection);
+            if (result == GHOSTTY_NO_VALUE)
+            {
+                break;
+            }
+            if (result != GHOSTTY_SUCCESS)
+            {
+                return std::unexpected(ghosttyError(result));
+            }
+            const GhosttyResult installResult =
+                ghostty_terminal_set(m_impl->terminal, GHOSTTY_TERMINAL_OPT_SELECTION, &selection);
+            if (installResult != GHOSTTY_SUCCESS)
+            {
+                return std::unexpected(ghosttyError(installResult));
+            }
+            GhosttyTerminalScrollbar afterScrollbar{};
+            if (const GhosttyResult scrollbarResult =
+                    ghostty_terminal_get(m_impl->terminal, GHOSTTY_TERMINAL_DATA_SCROLLBAR, &afterScrollbar);
+                scrollbarResult != GHOSTTY_SUCCESS)
+            {
+                return std::unexpected(ghosttyError(scrollbarResult));
+            }
+            if (afterScrollbar.offset == beforeScrollbar.offset)
+            {
+                break;
+            }
+            changed = true;
+        }
+        return changed;
+    }
+
+    GhosttySelection selection{};
+    selection.size = sizeof(selection);
+    const GhosttyResult result =
+        ghostty_selection_gesture_event(m_impl->selectionGesture, m_impl->terminal, event, &selection);
+    if (result == GHOSTTY_NO_VALUE)
+    {
+        return gesture.type == TerminalSelectionGestureType::press;
+    }
+    if (result != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(result));
+    }
+    const GhosttyResult installResult =
+        ghostty_terminal_set(m_impl->terminal, GHOSTTY_TERMINAL_OPT_SELECTION, &selection);
+    if (installResult != GHOSTTY_SUCCESS)
+    {
+        return std::unexpected(ghosttyError(installResult));
+    }
+    return gesture.type != TerminalSelectionGestureType::release;
+}
+
+std::error_code GhosttyTerminalEngine::selectAll()
+{
+    ghostty_selection_gesture_reset(m_impl->selectionGesture, m_impl->terminal);
+    m_impl->lastSearchQuery.clear();
+    GhosttySelection selection{};
+    selection.size = sizeof(selection);
+    const GhosttyResult result = ghostty_terminal_select_all(m_impl->terminal, &selection);
+    if (result == GHOSTTY_NO_VALUE)
+    {
+        return setSelection(std::nullopt);
+    }
+    if (result != GHOSTTY_SUCCESS)
+    {
+        return ghosttyError(result);
+    }
+    const GhosttyResult installResult =
+        ghostty_terminal_set(m_impl->terminal, GHOSTTY_TERMINAL_OPT_SELECTION, &selection);
+    return installResult == GHOSTTY_SUCCESS ? std::error_code{} : ghosttyError(installResult);
 }
 
 std::expected<std::optional<std::string>, std::error_code> GhosttyTerminalEngine::selectedText() const
@@ -451,6 +734,7 @@ std::expected<TerminalSearchResult, std::error_code>
 GhosttyTerminalEngine::search(const std::string_view query, const TerminalSearchDirection direction,
                               const bool caseSensitive)
 {
+    ghostty_selection_gesture_reset(m_impl->selectionGesture, m_impl->terminal);
     if (query.empty())
     {
         if (const std::error_code error = clearSearch())
@@ -693,6 +977,7 @@ GhosttyTerminalEngine::search(const std::string_view query, const TerminalSearch
 
 std::error_code GhosttyTerminalEngine::clearSearch()
 {
+    ghostty_selection_gesture_reset(m_impl->selectionGesture, m_impl->terminal);
     m_impl->lastSearchQuery.clear();
     const GhosttyResult result = ghostty_terminal_set(m_impl->terminal, GHOSTTY_TERMINAL_OPT_SELECTION, nullptr);
     return result == GHOSTTY_SUCCESS ? std::error_code{} : ghosttyError(result);
@@ -789,6 +1074,19 @@ std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot
         return std::unexpected(ghosttyError(scrollbarResult));
     }
     result.scrollbar = {.total = scrollbar.total, .offset = scrollbar.offset, .visible = scrollbar.len};
+
+    GhosttySelection activeSelection{};
+    activeSelection.size = sizeof(activeSelection);
+    const GhosttyResult activeSelectionResult =
+        ghostty_terminal_get(m_impl->terminal, GHOSTTY_TERMINAL_DATA_SELECTION, &activeSelection);
+    if (activeSelectionResult == GHOSTTY_SUCCESS)
+    {
+        result.selectionPresent = true;
+    }
+    else if (activeSelectionResult != GHOSTTY_NO_VALUE)
+    {
+        return std::unexpected(ghosttyError(activeSelectionResult));
+    }
 
     GhosttyString workingDirectory{};
     const GhosttyResult workingDirectoryResult =

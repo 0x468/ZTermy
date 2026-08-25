@@ -24,6 +24,7 @@ Button {
     bottomPadding: 7
     implicitWidth: Math.max(72, contentItem.implicitWidth + leftPadding + rightPadding)
     implicitHeight: 34
+    Accessible.role: Accessible.Button
     Accessible.name: accessibleName.length > 0 ? accessibleName : text
 
     Keys.onReturnPressed: event => {

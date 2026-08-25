@@ -19,6 +19,9 @@ public:
     [[nodiscard]] std::error_code resize(TerminalGeometry geometry) override;
     [[nodiscard]] std::expected<TerminalSnapshot, std::error_code> snapshot() override;
     [[nodiscard]] std::error_code setSelection(std::optional<TerminalSelection> selection) override;
+    [[nodiscard]] std::expected<bool, std::error_code>
+    applySelectionGesture(const TerminalSelectionGesture &gesture) override;
+    [[nodiscard]] std::error_code selectAll() override;
     [[nodiscard]] std::expected<std::optional<std::string>, std::error_code> selectedText() const override;
     void scrollViewport(int rows) override;
     void scrollToBottom() override;

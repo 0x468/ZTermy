@@ -439,6 +439,14 @@ Rectangle {
         return rightClickBox.currentIndex === 1 ? "copy-paste" : rightClickBox.currentIndex === 2 ? "paste" : rightClickBox.currentIndex === 3 ? "select-word" : "context-menu";
     }
 
+    function middleClickIndex(token) {
+        return token === "paste" ? 1 : token === "context-menu" ? 2 : 0;
+    }
+
+    function middleClickToken() {
+        return middleClickBox.currentIndex === 1 ? "paste" : middleClickBox.currentIndex === 2 ? "context-menu" : "disabled";
+    }
+
     function accentToken() {
         return accentBox.currentIndex === 1 ? "system" : accentBox.currentIndex === 2 ? "custom" : "ztermy";
     }
@@ -508,6 +516,9 @@ Rectangle {
         copyOnSelectSwitch.checked = controller.copyOnSelect;
         multilinePasteSwitch.checked = controller.confirmMultilinePaste;
         rightClickBox.currentIndex = rightClickIndex(controller.terminalRightClickBehavior);
+        middleClickBox.currentIndex = middleClickIndex(controller.terminalMiddleClickBehavior);
+        wordDelimitersField.text = controller.terminalWordDelimiters;
+        wheelRowsBox.value = controller.terminalScrollRows;
         sftpShowHiddenSwitch.checked = controller.sftpShowHiddenFiles;
         sftpConfirmDeleteSwitch.checked = controller.sftpConfirmDelete;
         closeToTraySwitch.checked = controller.closeToTray;
@@ -543,7 +554,7 @@ Rectangle {
         }
         const wantsOpaqueSurface = performanceModeDraft || backdropToken() === "solid";
         const restartRequired = wantsOpaqueSurface !== windowChrome.opaqueSurface || performanceModeDraft !== windowChrome.performanceModeActive;
-        const saved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), accentToken(), customAccentField.text, uiFontDraft, terminalFontDraft, fontSizeBox.value, showAllFontsSwitch.checked, ligatureSwitch.checked, terminalOpacitySlider.value, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, multilinePasteSwitch.checked, languageDraft, sftpShowHiddenSwitch.checked, sftpConfirmDeleteSwitch.checked, closeToTraySwitch.checked, performanceModeDraft, rightClickToken());
+        const saved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), accentToken(), customAccentField.text, uiFontDraft, terminalFontDraft, fontSizeBox.value, showAllFontsSwitch.checked, ligatureSwitch.checked, terminalOpacitySlider.value, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, multilinePasteSwitch.checked, languageDraft, sftpShowHiddenSwitch.checked, sftpConfirmDeleteSwitch.checked, closeToTraySwitch.checked, performanceModeDraft, rightClickToken(), middleClickToken(), wordDelimitersField.text, wheelRowsBox.value);
         presentStatus(saved ? restartRequired ? qsTr("Settings saved. Restart ztermy to apply the rendering mode.") : qsTr("Settings saved and applied.") : qsTr("These settings could not be saved. Check the font and numeric ranges."), !saved, saved);
         if (!saved) {
             loadDraft();
@@ -1396,6 +1407,47 @@ Rectangle {
                         displayTextModel: [qsTr("Show context menu"), qsTr("Copy selection or paste"), qsTr("Paste"), qsTr("Select word and show menu")]
                         accessibleName: qsTr("Terminal right-click behavior")
                         toolTipText: qsTr("Shift+right-click always opens the context menu.")
+                    }
+
+                    Label {
+                        text: qsTr("Middle-click")
+                        color: Theme.text
+                    }
+                    AppComboBox {
+                        id: middleClickBox
+                        objectName: "settingsTerminalMiddleClick"
+                        Layout.fillWidth: true
+                        model: ["disabled", "paste", "context-menu"]
+                        displayTextModel: [qsTr("Disabled"), qsTr("Paste"), qsTr("Show context menu")]
+                        accessibleName: qsTr("Terminal middle-click behavior")
+                    }
+
+                    Label {
+                        text: qsTr("Word separators")
+                        color: Theme.text
+                    }
+                    AppTextField {
+                        id: wordDelimitersField
+                        objectName: "settingsTerminalWordDelimiters"
+                        Layout.fillWidth: true
+                        maximumLength: 128
+                        accessibleName: qsTr("Terminal word separator characters")
+                        toolTipText: qsTr("Double-click selection stops at these characters. Paths and URLs stay intact by default.")
+                    }
+
+                    Label {
+                        text: qsTr("Mouse wheel rows")
+                        color: Theme.text
+                    }
+                    AppSpinBox {
+                        id: wheelRowsBox
+                        objectName: "settingsTerminalWheelRows"
+                        Layout.fillWidth: true
+                        from: 1
+                        to: 20
+                        editable: true
+                        value: 3
+                        accessibleName: qsTr("Rows per mouse wheel notch")
                     }
                 }
             }

@@ -3359,6 +3359,21 @@ QString AppController::terminalRightClickBehavior() const
     return config::terminalRightClickPreferenceToken(m_settings.terminalRightClick);
 }
 
+QString AppController::terminalMiddleClickBehavior() const
+{
+    return config::terminalMiddleClickPreferenceToken(m_settings.terminalMiddleClick);
+}
+
+QString AppController::terminalWordDelimiters() const
+{
+    return m_settings.terminalWordDelimiters;
+}
+
+int AppController::terminalScrollRows() const noexcept
+{
+    return m_settings.terminalScrollRows;
+}
+
 bool AppController::sftpShowHiddenFiles() const noexcept
 {
     return m_settings.sftpShowHiddenFiles;
@@ -8098,7 +8113,8 @@ bool AppController::saveApplicationSettings(
     const bool showAllFonts, const bool ligatures, const qreal terminalBackgroundOpacity, const QString &cursor,
     const bool cursorShouldBlink, const bool shouldCopyOnSelect, const bool shouldConfirmMultilinePaste,
     const QString &language, const bool shouldShowHiddenSftpFiles, const bool shouldConfirmSftpDelete,
-    const bool shouldCloseToTray, const bool shouldPreferPerformance, const QString &terminalRightClickBehavior)
+    const bool shouldCloseToTray, const bool shouldPreferPerformance, const QString &terminalRightClickBehavior,
+    const QString &terminalMiddleClickBehavior, const QString &terminalWordDelimiters, const int terminalScrollRows)
 {
     const auto parsedTheme = config::parseThemePreference(theme);
     const auto parsedBackdrop = config::parseBackdropPreference(backdrop);
@@ -8108,48 +8124,55 @@ bool AppController::saveApplicationSettings(
     const auto parsedRightClick = terminalRightClickBehavior.isEmpty()
                                       ? std::optional{m_settings.terminalRightClick}
                                       : config::parseTerminalRightClickPreference(terminalRightClickBehavior);
-    if (!parsedTheme || !parsedBackdrop || !parsedAccent || !parsedCursor || !parsedLanguage || !parsedRightClick)
+    const auto parsedMiddleClick = terminalMiddleClickBehavior.isEmpty()
+                                       ? std::optional{m_settings.terminalMiddleClick}
+                                       : config::parseTerminalMiddleClickPreference(terminalMiddleClickBehavior);
+    if (!parsedTheme || !parsedBackdrop || !parsedAccent || !parsedCursor || !parsedLanguage || !parsedRightClick
+        || !parsedMiddleClick)
     {
         return false;
     }
 
     return persistApplicationSettings({
-        .theme = *parsedTheme,
         .backdropOpacity = backdropOpacity,
-        .backdrop = *parsedBackdrop,
-        .accent = *parsedAccent,
+        .terminalBackgroundOpacity = terminalBackgroundOpacity,
+        .shortcutOverrides = m_settings.shortcutOverrides,
         .customAccent = customAccent.trimmed().toUpper(),
         .uiFontFamily = uiFontFamily,
         .terminalFontFamily = fontFamily,
+        .terminalWordDelimiters = terminalWordDelimiters,
+        .aiBaseUrl = m_settings.aiBaseUrl,
+        .aiEndpointPath = m_settings.aiEndpointPath,
+        .aiModel = m_settings.aiModel,
+        .aiCredentialReference = m_settings.aiCredentialReference,
+        .aiProxyUrl = m_settings.aiProxyUrl,
+        .aiProxyUsername = m_settings.aiProxyUsername,
         .terminalFontSize = fontSize,
+        .terminalScrollRows = terminalScrollRows,
+        .theme = *parsedTheme,
+        .backdrop = *parsedBackdrop,
+        .accent = *parsedAccent,
         .showAllTerminalFonts = showAllFonts,
         .terminalLigatures = ligatures,
-        .terminalBackgroundOpacity = terminalBackgroundOpacity,
         .cursor = *parsedCursor,
         .cursorBlink = cursorShouldBlink,
         .copyOnSelect = shouldCopyOnSelect,
         .confirmMultilinePaste = shouldConfirmMultilinePaste,
         .terminalRightClick = *parsedRightClick,
+        .terminalMiddleClick = *parsedMiddleClick,
         .sftpShowHiddenFiles = shouldShowHiddenSftpFiles,
         .sftpConfirmDelete = shouldConfirmSftpDelete,
         .closeToTray = shouldCloseToTray,
         .performanceMode = shouldPreferPerformance,
         .credentialStorage = m_settings.credentialStorage,
         .language = *parsedLanguage,
-        .shortcutOverrides = m_settings.shortcutOverrides,
         .aiProvider = m_settings.aiProvider,
-        .aiBaseUrl = m_settings.aiBaseUrl,
-        .aiEndpointPath = m_settings.aiEndpointPath,
-        .aiModel = m_settings.aiModel,
-        .aiCredentialReference = m_settings.aiCredentialReference,
         .aiAutomaticContext = m_settings.aiAutomaticContext,
         .aiPermission = m_settings.aiPermission,
         .aiConversationHistoryEnabled = m_settings.aiConversationHistoryEnabled,
         .aiDebugTraceEnabled = m_settings.aiDebugTraceEnabled,
         .aiReasoning = m_settings.aiReasoning,
         .aiProxy = m_settings.aiProxy,
-        .aiProxyUrl = m_settings.aiProxyUrl,
-        .aiProxyUsername = m_settings.aiProxyUsername,
     });
 }
 
@@ -14261,6 +14284,29 @@ void AppController::connectTerminalSignals(ui::TerminalItem &terminal, const QSt
                              tab->local->requestSelection(startColumn, startRow, endColumn, endRow, rectangular);
                          }
                      });
+    QObject::connect(&terminal, &ui::TerminalItem::selectionGestureRequested, this,
+                     [this, paneId](const terminal::TerminalSelectionGesture &gesture) {
+                         TerminalTab *tab = findTabForPane(paneId);
+                         if (tab != nullptr && tab->ssh)
+                         {
+                             tab->ssh->requestSelectionGesture(gesture);
+                         }
+                         else if (tab != nullptr && tab->local)
+                         {
+                             tab->local->requestSelectionGesture(gesture);
+                         }
+                     });
+    QObject::connect(&terminal, &ui::TerminalItem::selectAllRequested, this, [this, paneId] {
+        TerminalTab *tab = findTabForPane(paneId);
+        if (tab != nullptr && tab->ssh)
+        {
+            tab->ssh->selectAll();
+        }
+        else if (tab != nullptr && tab->local)
+        {
+            tab->local->selectAll();
+        }
+    });
     QObject::connect(&terminal, &ui::TerminalItem::clearSelectionRequested, this, [this, paneId] {
         TerminalTab *tab = findTabForPane(paneId);
         if (tab != nullptr && tab->ssh)

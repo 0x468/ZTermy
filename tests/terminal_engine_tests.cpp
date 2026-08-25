@@ -27,6 +27,9 @@ private slots:
     void exposesCombiningAndEmojiGraphemes();
     void reportsAndResetsRenderDamage();
     void selectsAndFormatsViewportText();
+    void appliesTrackedWordSelectionGestures();
+    void autoscrollsTrackedSelectionWithoutDoubleScrolling();
+    void selectsCompleteScrollback();
     void scrollsThroughHistory();
     void searchesAcrossScrollbackAndWrappedLines();
     void encodesPasteForTerminalMode();
@@ -359,12 +362,135 @@ void TerminalEngineTests::selectsAndFormatsViewportText()
     {
         QVERIFY(snapshot->cell(column, 0).selected);
     }
+    QVERIFY(snapshot->selectionPresent);
     QVERIFY(!snapshot->cell(5, 0).selected);
 
     QVERIFY(!engine.setSelection(std::nullopt));
     const auto clearedText = engine.selectedText();
     QVERIFY(clearedText);
     QVERIFY(!clearedText->has_value());
+}
+
+void TerminalEngineTests::autoscrollsTrackedSelectionWithoutDoubleScrolling()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 12, .rows = 3});
+    QVERIFY(result.has_value());
+    auto &engine = **result;
+    constexpr std::string_view content =
+        "line0\r\nline1\r\nline2\r\nline3\r\nline4\r\nline5\r\nline6\r\nline7\r\nline8";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(content))));
+
+    ztermy::terminal::TerminalSelectionGesture press{
+        .type = ztermy::terminal::TerminalSelectionGestureType::press,
+        .point = {.column = 2, .row = 1},
+        .positionX = 20.0,
+        .positionY = 24.0,
+        .eventTimeNanoseconds = 1'000'000'000,
+        .repeatIntervalNanoseconds = 500'000'000,
+        .repeatDistancePixels = 4.0,
+    };
+    auto changed = engine.applySelectionGesture(press);
+    QVERIFY(changed);
+
+    auto drag = press;
+    drag.type = ztermy::terminal::TerminalSelectionGestureType::drag;
+    drag.point = {.column = 2, .row = 0};
+    drag.positionY = 0.0;
+    drag.columns = 12;
+    drag.cellWidthPixels = 8;
+    drag.screenHeightPixels = 48;
+    changed = engine.applySelectionGesture(drag);
+    QVERIFY(changed);
+    QVERIFY(*changed);
+
+    const auto before = engine.snapshot();
+    QVERIFY(before);
+    QVERIFY(before->scrollbar.offset >= 3);
+
+    auto tick = drag;
+    tick.type = ztermy::terminal::TerminalSelectionGestureType::autoscrollTick;
+    tick.scrollRows = -3;
+    changed = engine.applySelectionGesture(tick);
+    QVERIFY(changed);
+    QVERIFY(*changed);
+
+    const auto after = engine.snapshot();
+    QVERIFY(after);
+    QCOMPARE(before->scrollbar.offset - after->scrollbar.offset, std::uint64_t{3});
+    QVERIFY(after->selectionPresent);
+
+    tick.scrollRows = -64;
+    changed = engine.applySelectionGesture(tick);
+    QVERIFY(changed);
+    const auto atTop = engine.snapshot();
+    QVERIFY(atTop);
+    QCOMPARE(atTop->scrollbar.offset, std::uint64_t{0});
+    changed = engine.applySelectionGesture(tick);
+    QVERIFY(changed);
+    QVERIFY(!*changed);
+}
+
+void TerminalEngineTests::appliesTrackedWordSelectionGestures()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 40, .rows = 3});
+    if (!result)
+    {
+        QFAIL(result.error().message().c_str());
+    }
+    auto &engine = **result;
+    constexpr std::string_view content = "user@host:/var/log/app.log ready";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(content))));
+
+    auto press = ztermy::terminal::TerminalSelectionGesture{
+        .type = ztermy::terminal::TerminalSelectionGestureType::press,
+        .point = {.column = 4, .row = 0},
+        .positionX = 36.0,
+        .positionY = 8.0,
+        .eventTimeNanoseconds = 1'000'000'000,
+        .repeatIntervalNanoseconds = 500'000'000,
+        .repeatDistancePixels = 4.0,
+        .wordBoundaryCodepoints = U" \t'\"│`|;,()[]{}<>$",
+    };
+    const auto firstPress = engine.applySelectionGesture(press);
+    QVERIFY(firstPress);
+    QVERIFY(*firstPress);
+    auto release = press;
+    release.type = ztermy::terminal::TerminalSelectionGestureType::release;
+    const auto firstRelease = engine.applySelectionGesture(release);
+    QVERIFY(firstRelease);
+    QVERIFY(!*firstRelease);
+    press.eventTimeNanoseconds += 100'000'000;
+    const auto secondPress = engine.applySelectionGesture(press);
+    QVERIFY(secondPress);
+    QVERIFY(*secondPress);
+
+    const auto selected = engine.selectedText();
+    QVERIFY(selected);
+    QVERIFY(selected->has_value());
+    QCOMPARE(**selected, "user@host:/var/log/app.log");
+}
+
+void TerminalEngineTests::selectsCompleteScrollback()
+{
+    auto result = ztermy::terminal::GhosttyTerminalEngine::create({.columns = 12, .rows = 3});
+    if (!result)
+    {
+        QFAIL(result.error().message().c_str());
+    }
+    auto &engine = **result;
+    constexpr std::string_view content = "line0\r\nline1\r\nline2\r\nline3\r\nline4\r\nline5";
+    QVERIFY(!engine.feed(std::as_bytes(std::span(content))));
+    QVERIFY(!engine.selectAll());
+
+    const auto selected = engine.selectedText();
+    QVERIFY(selected);
+    if (!selected->has_value())
+    {
+        QFAIL("selectAll did not produce selected text");
+    }
+    const auto &selectedText = **selected;
+    QVERIFY(selectedText.starts_with("line0"));
+    QVERIFY(selectedText.ends_with("line5"));
 }
 
 void TerminalEngineTests::scrollsThroughHistory()

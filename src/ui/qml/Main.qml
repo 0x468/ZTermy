@@ -377,6 +377,27 @@ Rectangle {
         case "terminal.selectVisible":
             terminalViewport.selectVisibleTerminal();
             break;
+        case "terminal.selectAll":
+            terminalViewport.selectAllTerminal();
+            break;
+        case "terminal.scrollLineUp":
+            terminalViewport.scrollLines(-1);
+            break;
+        case "terminal.scrollLineDown":
+            terminalViewport.scrollLines(1);
+            break;
+        case "terminal.scrollPageUp":
+            terminalViewport.scrollPage(-1);
+            break;
+        case "terminal.scrollPageDown":
+            terminalViewport.scrollPage(1);
+            break;
+        case "terminal.scrollTop":
+            terminalViewport.scrollToFraction(0.0);
+            break;
+        case "terminal.scrollBottom":
+            terminalViewport.scrollToFraction(1.0);
+            break;
         }
     }
 
@@ -1789,6 +1810,9 @@ Rectangle {
                             copyOnSelect: root.controller.copyOnSelect
                             confirmMultilinePaste: root.controller.confirmMultilinePaste
                             rightClickBehavior: root.controller.terminalRightClickBehavior
+                            middleClickBehavior: root.controller.terminalMiddleClickBehavior
+                            wordDelimiters: root.controller.terminalWordDelimiters
+                            scrollRowsPerWheel: root.controller.terminalScrollRows
 
                             Component.onCompleted: forceActiveFocus()
                             onMultilinePasteConfirmationRequested: (viewport, lineCount) => {

@@ -6,6 +6,7 @@
 
 #include <QByteArray>
 #include <QColor>
+#include <QElapsedTimer>
 #include <QFont>
 #include <QPointF>
 #include <QQuickItem>
@@ -42,6 +43,11 @@ class TerminalItem : public QQuickItem
                    confirmMultilinePasteChanged)
     Q_PROPERTY(
         QString rightClickBehavior READ rightClickBehavior WRITE setRightClickBehavior NOTIFY rightClickBehaviorChanged)
+    Q_PROPERTY(QString middleClickBehavior READ middleClickBehavior WRITE setMiddleClickBehavior NOTIFY
+                   middleClickBehaviorChanged)
+    Q_PROPERTY(QString wordDelimiters READ wordDelimiters WRITE setWordDelimiters NOTIFY wordDelimitersChanged)
+    Q_PROPERTY(
+        int scrollRowsPerWheel READ scrollRowsPerWheel WRITE setScrollRowsPerWheel NOTIFY scrollRowsPerWheelChanged)
     Q_PROPERTY(bool hasSelection READ hasSelection NOTIFY hasSelectionChanged)
     Q_PROPERTY(bool scrollbarVisible READ scrollbarVisible NOTIFY scrollbarChanged)
     Q_PROPERTY(qreal scrollbarPosition READ scrollbarPosition NOTIFY scrollbarChanged)
@@ -68,6 +74,9 @@ public:
     [[nodiscard]] bool copyOnSelect() const noexcept;
     [[nodiscard]] bool confirmMultilinePaste() const noexcept;
     [[nodiscard]] QString rightClickBehavior() const;
+    [[nodiscard]] QString middleClickBehavior() const;
+    [[nodiscard]] QString wordDelimiters() const;
+    [[nodiscard]] int scrollRowsPerWheel() const noexcept;
     [[nodiscard]] bool hasSelection() const noexcept;
     [[nodiscard]] bool scrollbarVisible() const noexcept;
     [[nodiscard]] qreal scrollbarPosition() const noexcept;
@@ -95,15 +104,21 @@ public slots:
     void setCopyOnSelect(bool enabled);
     void setConfirmMultilinePaste(bool enabled);
     void setRightClickBehavior(const QString &behavior);
+    void setMiddleClickBehavior(const QString &behavior);
+    void setWordDelimiters(const QString &delimiters);
+    void setScrollRowsPerWheel(int rows);
     void setKeywordHighlightRules(const QVariantList &rules);
     void setForegroundOverride(const QColor &color);
     void setBackgroundOverride(const QColor &color);
     Q_INVOKABLE void resolveMultilinePaste(bool accepted);
     Q_INVOKABLE void scrollToFraction(qreal fraction);
+    Q_INVOKABLE void scrollLines(int rows);
+    Q_INVOKABLE void scrollPage(int pages);
     Q_INVOKABLE void dismissSelectionAction();
     Q_INVOKABLE void copySelection();
     Q_INVOKABLE void pasteClipboard();
     Q_INVOKABLE void selectVisibleTerminal();
+    Q_INVOKABLE void selectAllTerminal();
     Q_INVOKABLE void clearSelection();
     Q_INVOKABLE void requestContextMenu();
 
@@ -112,6 +127,8 @@ signals:
     void pasteRequested(const QByteArray &bytes);
     void scrollRequested(int rows);
     void selectionRequested(quint16 startColumn, quint16 startRow, quint16 endColumn, quint16 endRow, bool rectangular);
+    void selectionGestureRequested(const ztermy::terminal::TerminalSelectionGesture &gesture);
+    void selectAllRequested();
     void clearSelectionRequested();
     void copyRequested();
     void sizeRequested(quint16 columns, quint16 rows, quint32 cellWidthPixels, quint32 cellHeightPixels);
@@ -122,6 +139,9 @@ signals:
     void copyOnSelectChanged();
     void confirmMultilinePasteChanged();
     void rightClickBehaviorChanged();
+    void middleClickBehaviorChanged();
+    void wordDelimitersChanged();
+    void scrollRowsPerWheelChanged();
     void hasSelectionChanged();
     void scrollbarChanged();
     void selectionActionChanged();
@@ -141,6 +161,7 @@ protected:
     void mouseDoubleClickEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
+    void mouseUngrabEvent() override;
     void wheelEvent(QWheelEvent *event) override;
     [[nodiscard]] virtual QString readClipboardText() const;
 
@@ -157,13 +178,23 @@ private:
     void setHasSelection(bool selected);
     void selectWordAt(const ztermy::terminal::TerminalPoint &point, const QPointF &position);
     void selectLineAt(quint16 row, const QPointF &position);
+    [[nodiscard]] ztermy::terminal::TerminalSelectionGesture
+    selectionGesture(ztermy::terminal::TerminalSelectionGestureType type, const QPointF &position,
+                     quint64 timestamp = 0) const;
+    void updateSelectionAutoscroll(const QPointF &position);
+    void stopSelectionAutoscroll();
+    void cancelSelectionGesture();
 
     ztermy::terminal::TerminalSnapshotPtr m_snapshot;
     QFont m_font;
     QTimer m_cursorBlinkTimer;
+    QTimer m_selectionAutoscrollTimer;
+    QElapsedTimer m_selectionEdgeDwell;
     QString m_statusText;
     QString m_cursorPreference = QStringLiteral("terminal");
     QString m_rightClickBehavior = QStringLiteral("context-menu");
+    QString m_middleClickBehavior = QStringLiteral("disabled");
+    QString m_wordDelimiters = QStringLiteral(" \t'\"│`|;,()[]{}<>$");
     QByteArray m_pendingMultilinePaste;
     std::uint64_t m_revision = 0;
     qreal m_backgroundOpacity = 1.0;
@@ -171,11 +202,13 @@ private:
     quint16 m_reportedRows = 0;
     ztermy::terminal::TerminalPoint m_selectionAnchor;
     QPointF m_selectionActionPosition;
+    QPointF m_selectionPointerPosition;
     QString m_preeditText;
     qsizetype m_preeditCursorPosition = 0;
     bool m_preeditCursorVisible = true;
     bool m_selecting = false;
     bool m_selectionMoved = false;
+    bool m_selectionClickSelected = false;
     bool m_selectionActionVisible = false;
     bool m_hasSelection = false;
     bool m_cursorBlink = true;
@@ -190,6 +223,9 @@ private:
     QColor m_backgroundOverride;
     TerminalRenderMetrics m_renderMetrics;
     int m_wheelRemainder = 0;
+    int m_scrollRowsPerWheel = 3;
+    qreal m_pixelWheelRemainder = 0.0;
+    int m_selectionAutoscrollDirection = 0;
     quint64 m_lastDoubleClickTimestamp = 0;
     QPointF m_lastDoubleClickPosition;
 };

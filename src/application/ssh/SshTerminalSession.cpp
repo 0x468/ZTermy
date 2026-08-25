@@ -11,6 +11,7 @@
 #include <QMetaObject>
 #include <QThread>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <expected>
@@ -389,6 +390,49 @@ void SshTerminalSession::requestSelection(const quint16 startColumn, const quint
         return;
     }
     m_commands.emplace_back(command);
+    signalCommandWake();
+}
+
+void SshTerminalSession::requestSelectionGesture(const terminal::TerminalSelectionGesture &gesture)
+{
+    if (!m_running.load())
+    {
+        return;
+    }
+
+    SelectionGestureCommand command{.gesture = gesture};
+    std::scoped_lock lock(m_commandMutex);
+    auto *pending = m_commands.empty() ? nullptr : std::get_if<SelectionGestureCommand>(&m_commands.back());
+    if (pending != nullptr && pending->gesture.type == gesture.type
+        && (gesture.type == terminal::TerminalSelectionGestureType::drag
+            || gesture.type == terminal::TerminalSelectionGestureType::autoscrollTick))
+    {
+        if (gesture.type == terminal::TerminalSelectionGestureType::autoscrollTick)
+        {
+            const bool sameDirection = pending->gesture.scrollRows != 0 && gesture.scrollRows != 0
+                                       && ((pending->gesture.scrollRows > 0) == (gesture.scrollRows > 0));
+            if (sameDirection)
+            {
+                command.gesture.scrollRows = std::clamp(pending->gesture.scrollRows + gesture.scrollRows, -64, 64);
+            }
+        }
+        *pending = std::move(command);
+    }
+    else
+    {
+        m_commands.emplace_back(std::move(command));
+    }
+    signalCommandWake();
+}
+
+void SshTerminalSession::selectAll()
+{
+    if (!m_running.load())
+    {
+        return;
+    }
+    std::scoped_lock lock(m_commandMutex);
+    m_commands.emplace_back(SelectAllCommand{});
     signalCommandWake();
 }
 
@@ -782,6 +826,33 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                 if (const std::error_code error = m_engine->setSelection(selection->selection))
                 {
                     postStatus(tr("SSH terminal selection failed: %1").arg(QString::fromStdString(error.message())));
+                    continue;
+                }
+                publishSnapshot();
+                continue;
+            }
+
+            if (const auto *gesture = std::get_if<SelectionGestureCommand>(&command))
+            {
+                const auto changed = m_engine->applySelectionGesture(gesture->gesture);
+                if (!changed)
+                {
+                    postStatus(tr("SSH terminal selection gesture failed: %1")
+                                   .arg(QString::fromStdString(changed.error().message())));
+                    continue;
+                }
+                if (*changed)
+                {
+                    publishSnapshot();
+                }
+                continue;
+            }
+
+            if (std::holds_alternative<SelectAllCommand>(command))
+            {
+                if (const std::error_code error = m_engine->selectAll())
+                {
+                    postStatus(tr("SSH terminal select all failed: %1").arg(QString::fromStdString(error.message())));
                     continue;
                 }
                 publishSnapshot();

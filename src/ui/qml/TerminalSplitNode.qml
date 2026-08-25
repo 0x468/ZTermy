@@ -13,6 +13,9 @@ Item {
     property bool copyOnSelect: false
     property bool confirmMultilinePaste: true
     property string rightClickBehavior: "context-menu"
+    property string middleClickBehavior: "disabled"
+    property string wordDelimiters: " \t'\"│`|;,()[]{}<>$"
+    property int scrollRowsPerWheel: 3
     property string defaultFontFamily: "Cascadia Mono"
     property int defaultFontSize: 14
     property bool defaultLigatures: true
@@ -65,6 +68,24 @@ Item {
     function selectVisibleTerminal() {
         if (activeViewport) {
             activeViewport.selectVisibleTerminal();
+        }
+    }
+
+    function selectAllTerminal() {
+        if (activeViewport) {
+            activeViewport.selectAllTerminal();
+        }
+    }
+
+    function scrollLines(rows) {
+        if (activeViewport) {
+            activeViewport.scrollLines(rows);
+        }
+    }
+
+    function scrollPage(pages) {
+        if (activeViewport) {
+            activeViewport.scrollPage(pages);
         }
     }
 
@@ -155,6 +176,9 @@ Item {
                 copyOnSelect: root.copyOnSelect
                 confirmMultilinePaste: root.confirmMultilinePaste
                 rightClickBehavior: root.rightClickBehavior
+                middleClickBehavior: root.middleClickBehavior
+                wordDelimiters: root.wordDelimiters
+                scrollRowsPerWheel: root.scrollRowsPerWheel
 
                 Component.onCompleted: Qt.callLater(attachToController)
                 Component.onDestruction: {
@@ -210,9 +234,9 @@ Item {
                 AppMenuSeparator {}
 
                 AppMenuItem {
-                    text: qsTr("Select visible terminal")
+                    text: qsTr("Select all")
                     iconName: "select-visible"
-                    onTriggered: viewport.selectVisibleTerminal()
+                    onTriggered: viewport.selectAllTerminal()
                 }
 
                 AppMenuItem {
@@ -562,6 +586,10 @@ Item {
                         item.cursorBlink = root.cursorBlink;
                         item.copyOnSelect = root.copyOnSelect;
                         item.confirmMultilinePaste = root.confirmMultilinePaste;
+                        item.rightClickBehavior = root.rightClickBehavior;
+                        item.middleClickBehavior = root.middleClickBehavior;
+                        item.wordDelimiters = root.wordDelimiters;
+                        item.scrollRowsPerWheel = root.scrollRowsPerWheel;
                         item.defaultFontFamily = root.defaultFontFamily;
                         item.defaultFontSize = root.defaultFontSize;
                         item.defaultLigatures = root.defaultLigatures;
@@ -592,6 +620,30 @@ Item {
                     target: firstLoader.item
                     property: "copyOnSelect"
                     value: root.copyOnSelect
+                    when: firstLoader.item !== null
+                }
+                Binding {
+                    target: firstLoader.item
+                    property: "middleClickBehavior"
+                    value: root.middleClickBehavior
+                    when: firstLoader.item !== null
+                }
+                Binding {
+                    target: firstLoader.item
+                    property: "wordDelimiters"
+                    value: root.wordDelimiters
+                    when: firstLoader.item !== null
+                }
+                Binding {
+                    target: firstLoader.item
+                    property: "scrollRowsPerWheel"
+                    value: root.scrollRowsPerWheel
+                    when: firstLoader.item !== null
+                }
+                Binding {
+                    target: firstLoader.item
+                    property: "rightClickBehavior"
+                    value: root.rightClickBehavior
                     when: firstLoader.item !== null
                 }
                 Binding {
@@ -668,6 +720,10 @@ Item {
                         item.cursorBlink = root.cursorBlink;
                         item.copyOnSelect = root.copyOnSelect;
                         item.confirmMultilinePaste = root.confirmMultilinePaste;
+                        item.rightClickBehavior = root.rightClickBehavior;
+                        item.middleClickBehavior = root.middleClickBehavior;
+                        item.wordDelimiters = root.wordDelimiters;
+                        item.scrollRowsPerWheel = root.scrollRowsPerWheel;
                         item.defaultFontFamily = root.defaultFontFamily;
                         item.defaultFontSize = root.defaultFontSize;
                         item.defaultLigatures = root.defaultLigatures;
@@ -698,6 +754,30 @@ Item {
                     target: secondLoader.item
                     property: "copyOnSelect"
                     value: root.copyOnSelect
+                    when: secondLoader.item !== null
+                }
+                Binding {
+                    target: secondLoader.item
+                    property: "middleClickBehavior"
+                    value: root.middleClickBehavior
+                    when: secondLoader.item !== null
+                }
+                Binding {
+                    target: secondLoader.item
+                    property: "wordDelimiters"
+                    value: root.wordDelimiters
+                    when: secondLoader.item !== null
+                }
+                Binding {
+                    target: secondLoader.item
+                    property: "scrollRowsPerWheel"
+                    value: root.scrollRowsPerWheel
+                    when: secondLoader.item !== null
+                }
+                Binding {
+                    target: secondLoader.item
+                    property: "rightClickBehavior"
+                    value: root.rightClickBehavior
                     when: secondLoader.item !== null
                 }
                 Binding {

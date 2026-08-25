@@ -1671,11 +1671,20 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
         return false;
     }
     std::vector<const char *> terminalOrder{
-        "settingsFontFamily",   "settingsShowAllTerminalFonts",
-        "settingsFontSize",     "settingsTerminalOpacity",
-        "settingsCursor",       "settingsCursorBlink",
-        "settingsCopyOnSelect", "settingsMultilinePaste",
-        "settingsReset",        "settingsDiscard",
+        "settingsFontFamily",
+        "settingsShowAllTerminalFonts",
+        "settingsFontSize",
+        "settingsTerminalOpacity",
+        "settingsCursor",
+        "settingsCursorBlink",
+        "settingsCopyOnSelect",
+        "settingsMultilinePaste",
+        "settingsTerminalRightClick",
+        "settingsTerminalMiddleClick",
+        "settingsTerminalWordDelimiters",
+        "settingsTerminalWheelRows",
+        "settingsReset",
+        "settingsDiscard",
         "settingsApply",
     };
     QQuickItem *terminalLigatures = quickItem(rootObject, "settingsTerminalLigatures");
@@ -2128,19 +2137,36 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
         return false;
     }
     sendKey(window, Qt::Key_Return);
-    processWindowEventsFor(std::chrono::milliseconds{100});
     auto *quickConnectDialog = rootObject->findChild<QObject *>(QStringLiteral("quickConnectDialog"));
     QQuickItem *quickCredential = quickItem(rootObject, "quickCredential");
-    const bool quickConnectDialogOpened =
-        quickConnectDialog != nullptr && quickConnectDialog->property("visible").toBool() && quickCredential != nullptr
-        && quickCredential->setProperty("text", QStringLiteral("keyboard-smoke-secret"))
-        && namedFocusItem(window) == QStringLiteral("quickAuthentication")
-        && verifyAccessibleButton(rootObject, "quickConnectCancel", "Cancel quick SSH connection")
-        && verifyAccessibleButton(rootObject, "quickConnectConfirm", "Start quick SSH connection");
-    if (!quickConnectDialogOpened || !verifyQuickConnectTabOrder(window, rootObject))
+    const bool quickConnectDialogOpened = processWindowEventsUntil(
+        [quickConnectDialog, quickCredential, &window] {
+            return quickConnectDialog != nullptr && quickConnectDialog->property("visible").toBool()
+                   && quickCredential != nullptr && namedFocusItem(window) == QStringLiteral("quickAuthentication");
+        },
+        std::chrono::seconds{1});
+    const bool quickCredentialPrepared =
+        quickCredential != nullptr && quickCredential->setProperty("text", QStringLiteral("keyboard-smoke-secret"));
+    const bool quickConnectTabOrder =
+        quickConnectDialogOpened && quickCredentialPrepared && verifyQuickConnectTabOrder(window, rootObject);
+    const auto popupButtonContract = [rootObject](const char *objectName, const char *accessibleName) {
+        QQuickItem *item = quickItem(rootObject, objectName);
+        return item != nullptr && item->isVisible() && item->isEnabled()
+               && item->property("accessibleName").toString() == QString::fromLatin1(accessibleName);
+    };
+    // Qt 6.8 does not consistently expose QAccessibleInterface objects for
+    // controls hosted in a transient QQuickPopup. Verify the explicit QML
+    // contract together with the real focus traversal instead.
+    const bool quickConnectAccessible = quickConnectTabOrder
+                                        && popupButtonContract("quickConnectCancel", "Cancel quick SSH connection")
+                                        && popupButtonContract("quickConnectConfirm", "Start quick SSH connection");
+    if (!quickConnectDialogOpened || !quickCredentialPrepared || !quickConnectTabOrder || !quickConnectAccessible)
     {
         qCWarning(applicationLog) << "Quick connect dialog keyboard route failed"
-                                  << "opened=" << quickConnectDialogOpened << "focus=" << namedFocusItem(window);
+                                  << "opened=" << quickConnectDialogOpened
+                                  << "credentialPrepared=" << quickCredentialPrepared
+                                  << "tabOrder=" << quickConnectTabOrder << "accessible=" << quickConnectAccessible
+                                  << "focus=" << namedFocusItem(window);
         return false;
     }
     window.resize(QSize{500, 360});

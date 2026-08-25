@@ -15,8 +15,11 @@
 #include <QTest>
 #include <QWheelEvent>
 
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <memory>
+#include <vector>
 
 namespace
 {
@@ -31,6 +34,7 @@ public:
     using TerminalItem::mouseMoveEvent;
     using TerminalItem::mousePressEvent;
     using TerminalItem::mouseReleaseEvent;
+    using TerminalItem::mouseUngrabEvent;
     using TerminalItem::TerminalItem;
     using TerminalItem::wheelEvent;
 
@@ -71,6 +75,9 @@ private slots:
     void supportsClassicClipboardAliasesAndContextActions();
     void selectsWordsOnDoubleClick();
     void selectsLinesOnTripleClickAndExtendsWithShift();
+    void autoscrollsSelectionNearViewportEdges();
+    void cancelsTrackedSelectionWhenMouseGrabIsLost();
+    void reflectsSelectionStateFromSnapshots();
     void accumulatesWheelDeltasIntoScrollRows();
     void exposesScrollbarAndRequestsAbsoluteScroll();
     void rendersStyledWideCellsAndCursorPixels();
@@ -413,6 +420,24 @@ void TerminalItemTests::supportsClassicClipboardAliasesAndContextActions()
                            Qt::ShiftModifier);
     item.mousePressEvent(&forcedMenu);
     QCOMPARE(contextSpy.count(), 2);
+
+    QMouseEvent disabledMiddle(QEvent::MouseButtonPress, point, point, point, Qt::MiddleButton, Qt::MiddleButton,
+                               Qt::NoModifier);
+    item.mousePressEvent(&disabledMiddle);
+    QCOMPARE(pasteSpy.count(), 2);
+    QCOMPARE(contextSpy.count(), 2);
+
+    item.setMiddleClickBehavior(QStringLiteral("paste"));
+    QMouseEvent middlePaste(QEvent::MouseButtonPress, point, point, point, Qt::MiddleButton, Qt::MiddleButton,
+                            Qt::NoModifier);
+    item.mousePressEvent(&middlePaste);
+    QCOMPARE(pasteSpy.count(), 3);
+
+    item.setMiddleClickBehavior(QStringLiteral("context-menu"));
+    QMouseEvent middleMenu(QEvent::MouseButtonPress, point, point, point, Qt::MiddleButton, Qt::MiddleButton,
+                           Qt::NoModifier);
+    item.mousePressEvent(&middleMenu);
+    QCOMPARE(contextSpy.count(), 3);
 }
 
 void TerminalItemTests::selectsWordsOnDoubleClick()
@@ -428,16 +453,20 @@ void TerminalItemTests::selectsWordsOnDoubleClick()
     item.setSize(QSizeF{800, 480});
     const QRectF origin = item.inputMethodQuery(Qt::ImCursorRectangle).toRectF();
     const QPointF point{origin.x() + (4.5 * origin.width()), origin.y() + (1.5 * origin.height())};
-    QSignalSpy selectionSpy(&item, &ztermy::ui::TerminalItem::selectionRequested);
+    std::vector<ztermy::terminal::TerminalSelectionGesture> gestures;
+    connect(&item, &ztermy::ui::TerminalItem::selectionGestureRequested, &item, [&gestures](const auto &gesture) {
+        gestures.push_back(gesture);
+    });
 
     QMouseEvent event(QEvent::MouseButtonDblClick, point, point, point, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    event.setTimestamp(100);
     item.mouseDoubleClickEvent(&event);
 
-    QCOMPARE(selectionSpy.count(), 1);
-    QCOMPARE(selectionSpy.at(0).at(0).toUInt(), 2U);
-    QCOMPARE(selectionSpy.at(0).at(1).toUInt(), 1U);
-    QCOMPARE(selectionSpy.at(0).at(2).toUInt(), 6U);
-    QCOMPARE(selectionSpy.at(0).at(3).toUInt(), 1U);
+    QCOMPARE(gestures.size(), std::size_t{1});
+    QCOMPARE(gestures.front().type, ztermy::terminal::TerminalSelectionGestureType::press);
+    QCOMPARE(gestures.front().point.column, 4U);
+    QCOMPARE(gestures.front().point.row, 1U);
+    QCOMPARE(gestures.front().eventTimeNanoseconds, std::uint64_t{100'000'000});
     QVERIFY(item.hasSelection());
 }
 
@@ -452,6 +481,10 @@ void TerminalItemTests::selectsLinesOnTripleClickAndExtendsWithShift()
                        origin.y() + ((static_cast<qreal>(row) + 0.5) * origin.height())};
     };
     const QPointF wordPoint = cellCenter(4, 1);
+    std::vector<ztermy::terminal::TerminalSelectionGesture> gestures;
+    connect(&item, &ztermy::ui::TerminalItem::selectionGestureRequested, &item, [&gestures](const auto &gesture) {
+        gestures.push_back(gesture);
+    });
     QSignalSpy selectionSpy(&item, &ztermy::ui::TerminalItem::selectionRequested);
 
     QMouseEvent doubleClick(QEvent::MouseButtonDblClick, wordPoint, wordPoint, wordPoint, Qt::LeftButton,
@@ -463,22 +496,23 @@ void TerminalItemTests::selectsLinesOnTripleClickAndExtendsWithShift()
                            Qt::NoModifier);
     thirdClick.setTimestamp(200);
     item.mousePressEvent(&thirdClick);
-    QCOMPARE(selectionSpy.count(), 2);
-    QCOMPARE(selectionSpy.at(1).at(0).toUInt(), 0U);
-    QCOMPARE(selectionSpy.at(1).at(1).toUInt(), 1U);
-    QCOMPARE(selectionSpy.at(1).at(2).toUInt(), 79U);
-    QCOMPARE(selectionSpy.at(1).at(3).toUInt(), 1U);
+    QCOMPARE(gestures.size(), std::size_t{2});
+    QCOMPARE(gestures.at(0).type, ztermy::terminal::TerminalSelectionGestureType::press);
+    QCOMPARE(gestures.at(1).type, ztermy::terminal::TerminalSelectionGestureType::press);
+    QCOMPARE(gestures.at(0).eventTimeNanoseconds, std::uint64_t{100'000'000});
+    QCOMPARE(gestures.at(1).eventTimeNanoseconds, std::uint64_t{200'000'000});
+    QCOMPARE(selectionSpy.count(), 0);
 
     const QPointF extensionPoint = cellCenter(10, 3);
     QMouseEvent shiftClick(QEvent::MouseButtonPress, extensionPoint, extensionPoint, extensionPoint, Qt::LeftButton,
                            Qt::LeftButton, Qt::ShiftModifier);
     shiftClick.setTimestamp(1000);
     item.mousePressEvent(&shiftClick);
-    QCOMPARE(selectionSpy.count(), 3);
-    QCOMPARE(selectionSpy.at(2).at(0).toUInt(), 0U);
-    QCOMPARE(selectionSpy.at(2).at(1).toUInt(), 1U);
-    QCOMPARE(selectionSpy.at(2).at(2).toUInt(), 10U);
-    QCOMPARE(selectionSpy.at(2).at(3).toUInt(), 3U);
+    QCOMPARE(selectionSpy.count(), 1);
+    QCOMPARE(selectionSpy.at(0).at(0).toUInt(), 4U);
+    QCOMPARE(selectionSpy.at(0).at(1).toUInt(), 1U);
+    QCOMPARE(selectionSpy.at(0).at(2).toUInt(), 10U);
+    QCOMPARE(selectionSpy.at(0).at(3).toUInt(), 3U);
 }
 
 void TerminalItemTests::confirmsMultilinePaste()
@@ -512,8 +546,10 @@ void TerminalItemTests::selectsCellsAndCopiesOnMouseRelease()
                        origin.y() + ((static_cast<qreal>(row) + 0.5) * origin.height())};
     };
 
-    QSignalSpy clearSpy(&item, &ztermy::ui::TerminalItem::clearSelectionRequested);
-    QSignalSpy selectionSpy(&item, &ztermy::ui::TerminalItem::selectionRequested);
+    std::vector<ztermy::terminal::TerminalSelectionGesture> gestures;
+    connect(&item, &ztermy::ui::TerminalItem::selectionGestureRequested, &item, [&gestures](const auto &gesture) {
+        gestures.push_back(gesture);
+    });
     QSignalSpy copySpy(&item, &ztermy::ui::TerminalItem::copyRequested);
     QSignalSpy selectionActionSpy(&item, &ztermy::ui::TerminalItem::selectionActionChanged);
 
@@ -521,23 +557,26 @@ void TerminalItemTests::selectsCellsAndCopiesOnMouseRelease()
     const QPointF end = cellCenter(7, 5);
     QMouseEvent press(QEvent::MouseButtonPress, start, start, start, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
     item.mousePressEvent(&press);
-    QCOMPARE(clearSpy.count(), 1);
+    QCOMPARE(gestures.size(), std::size_t{1});
+    QCOMPARE(gestures.back().type, ztermy::terminal::TerminalSelectionGestureType::press);
+    QCOMPARE(gestures.back().point.column, 2U);
+    QCOMPARE(gestures.back().point.row, 3U);
     QVERIFY(press.isAccepted());
 
     QMouseEvent move(QEvent::MouseMove, end, end, end, Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
     item.mouseMoveEvent(&move);
-    QCOMPARE(selectionSpy.count(), 1);
-    QCOMPARE(selectionSpy.at(0).at(0).toUInt(), 2U);
-    QCOMPARE(selectionSpy.at(0).at(1).toUInt(), 3U);
-    QCOMPARE(selectionSpy.at(0).at(2).toUInt(), 7U);
-    QCOMPARE(selectionSpy.at(0).at(3).toUInt(), 5U);
-    QVERIFY(!selectionSpy.at(0).at(4).toBool());
+    QCOMPARE(gestures.size(), std::size_t{2});
+    QCOMPARE(gestures.back().type, ztermy::terminal::TerminalSelectionGestureType::drag);
+    QCOMPARE(gestures.back().point.column, 7U);
+    QCOMPARE(gestures.back().point.row, 5U);
+    QVERIFY(!gestures.back().rectangular);
     QVERIFY(move.isAccepted());
 
     QMouseEvent release(QEvent::MouseButtonRelease, end, end, end, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
     item.mouseReleaseEvent(&release);
-    QCOMPARE(selectionSpy.count(), 2);
-    QVERIFY(!selectionSpy.at(1).at(4).toBool());
+    QCOMPARE(gestures.size(), std::size_t{4});
+    QCOMPARE(gestures.at(2).type, ztermy::terminal::TerminalSelectionGestureType::drag);
+    QCOMPARE(gestures.at(3).type, ztermy::terminal::TerminalSelectionGestureType::release);
     QCOMPARE(copySpy.count(), 1);
     QVERIFY(item.selectionActionVisible());
     QCOMPARE(item.selectionActionPosition(), end);
@@ -553,10 +592,11 @@ void TerminalItemTests::selectsCellsAndCopiesOnMouseRelease()
     QMouseEvent rectangularRelease(QEvent::MouseButtonRelease, end, end, end, Qt::LeftButton, Qt::NoButton,
                                    Qt::AltModifier);
     item.mouseReleaseEvent(&rectangularRelease);
-    QCOMPARE(clearSpy.count(), 2);
-    QCOMPARE(selectionSpy.count(), 4);
-    QVERIFY(selectionSpy.at(2).at(4).toBool());
-    QVERIFY(selectionSpy.at(3).at(4).toBool());
+    QCOMPARE(gestures.size(), std::size_t{8});
+    QCOMPARE(gestures.at(4).type, ztermy::terminal::TerminalSelectionGestureType::press);
+    QVERIFY(gestures.at(5).rectangular);
+    QVERIFY(gestures.at(6).rectangular);
+    QCOMPARE(gestures.at(7).type, ztermy::terminal::TerminalSelectionGestureType::release);
     QCOMPARE(copySpy.count(), 2);
     QVERIFY(item.selectionActionVisible());
 
@@ -569,9 +609,97 @@ void TerminalItemTests::selectsCellsAndCopiesOnMouseRelease()
     QMouseEvent clickRelease(QEvent::MouseButtonRelease, start, start, start, Qt::LeftButton, Qt::NoButton,
                              Qt::NoModifier);
     item.mouseReleaseEvent(&clickRelease);
-    QCOMPARE(clearSpy.count(), 3);
-    QCOMPARE(selectionSpy.count(), 4);
+    QCOMPARE(gestures.size(), std::size_t{10});
+    QCOMPARE(gestures.at(8).type, ztermy::terminal::TerminalSelectionGestureType::press);
+    QCOMPARE(gestures.at(9).type, ztermy::terminal::TerminalSelectionGestureType::release);
     QCOMPARE(copySpy.count(), 2);
+    QVERIFY(!item.selectionActionVisible());
+}
+
+void TerminalItemTests::autoscrollsSelectionNearViewportEdges()
+{
+    TestableTerminalItem item;
+    item.setSnapshot(snapshotAt(0, 0));
+    item.setSize(QSizeF{800, 480});
+    std::vector<ztermy::terminal::TerminalSelectionGesture> gestures;
+    connect(&item, &ztermy::ui::TerminalItem::selectionGestureRequested, &item, [&gestures](const auto &gesture) {
+        gestures.push_back(gesture);
+    });
+
+    const QRectF origin = item.inputMethodQuery(Qt::ImCursorRectangle).toRectF();
+    const QPointF start{origin.x() + (2.5 * origin.width()), origin.y() + (3.5 * origin.height())};
+    const QPointF belowViewport{start.x(), item.height() + (2.0 * origin.height())};
+    QMouseEvent press(QEvent::MouseButtonPress, start, start, start, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    item.mousePressEvent(&press);
+    QMouseEvent move(QEvent::MouseMove, belowViewport, belowViewport, belowViewport, Qt::NoButton, Qt::LeftButton,
+                     Qt::NoModifier);
+    item.mouseMoveEvent(&move);
+
+    const auto edgeDrag = std::ranges::find_if(gestures, [](const auto &gesture) {
+        return gesture.type == ztermy::terminal::TerminalSelectionGestureType::drag;
+    });
+    QVERIFY(edgeDrag != gestures.end());
+    QCOMPARE(edgeDrag->positionY, item.height());
+
+    QTest::qWait(160);
+    bool observedAutoscroll = false;
+    for (const auto &gesture : gestures)
+    {
+        if (gesture.type == ztermy::terminal::TerminalSelectionGestureType::autoscrollTick && gesture.scrollRows > 0)
+        {
+            observedAutoscroll = true;
+            break;
+        }
+    }
+    QVERIFY(observedAutoscroll);
+
+    QMouseEvent release(QEvent::MouseButtonRelease, belowViewport, belowViewport, belowViewport, Qt::LeftButton,
+                        Qt::NoButton, Qt::NoModifier);
+    item.mouseReleaseEvent(&release);
+    const std::size_t releasedCount = gestures.size();
+    QTest::qWait(70);
+    QCOMPARE(gestures.size(), releasedCount);
+}
+
+void TerminalItemTests::cancelsTrackedSelectionWhenMouseGrabIsLost()
+{
+    TestableTerminalItem item;
+    item.setSnapshot(snapshotAt(0, 0));
+    item.setSize(QSizeF{800, 480});
+    std::vector<ztermy::terminal::TerminalSelectionGesture> gestures;
+    connect(&item, &ztermy::ui::TerminalItem::selectionGestureRequested, &item, [&gestures](const auto &gesture) {
+        gestures.push_back(gesture);
+    });
+
+    const QRectF origin = item.inputMethodQuery(Qt::ImCursorRectangle).toRectF();
+    const QPointF start{origin.x() + (2.5 * origin.width()), origin.y() + (3.5 * origin.height())};
+    const QPointF aboveViewport{start.x(), -origin.height()};
+    QMouseEvent press(QEvent::MouseButtonPress, start, start, start, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    item.mousePressEvent(&press);
+    QMouseEvent move(QEvent::MouseMove, aboveViewport, aboveViewport, aboveViewport, Qt::NoButton, Qt::LeftButton,
+                     Qt::NoModifier);
+    item.mouseMoveEvent(&move);
+    item.mouseUngrabEvent();
+
+    QVERIFY(!gestures.empty());
+    QCOMPARE(gestures.back().type, ztermy::terminal::TerminalSelectionGestureType::cancel);
+    const std::size_t cancelledCount = gestures.size();
+    QTest::qWait(120);
+    QCOMPARE(gestures.size(), cancelledCount);
+}
+
+void TerminalItemTests::reflectsSelectionStateFromSnapshots()
+{
+    TestableTerminalItem item;
+    auto selected = snapshotAt(0, 0);
+    selected->selectionPresent = true;
+    item.setSnapshot(selected);
+    QVERIFY(item.hasSelection());
+    QVERIFY(item.selectionActionVisible());
+
+    auto cleared = snapshotAt(0, 0);
+    item.setSnapshot(cleared);
+    QVERIFY(!item.hasSelection());
     QVERIFY(!item.selectionActionVisible());
 }
 
@@ -595,6 +723,14 @@ void TerminalItemTests::accumulatesWheelDeltasIntoScrollRows()
     sendWheel(-240);
     QCOMPARE(scrollSpy.count(), 2);
     QCOMPARE(scrollSpy.at(1).at(0).toInt(), 6);
+
+    const int rowPixels = static_cast<int>(std::ceil(item.inputMethodQuery(Qt::ImCursorRectangle).toRectF().height()));
+    QWheelEvent pixelEvent(QPointF{}, QPointF{}, QPoint{0, rowPixels}, QPoint{}, Qt::NoButton, Qt::NoModifier,
+                           Qt::ScrollUpdate, false);
+    item.wheelEvent(&pixelEvent);
+    QVERIFY(pixelEvent.isAccepted());
+    QCOMPARE(scrollSpy.count(), 3);
+    QCOMPARE(scrollSpy.at(2).at(0).toInt(), -1);
 }
 
 void TerminalItemTests::exposesScrollbarAndRequestsAbsoluteScroll()
@@ -615,6 +751,22 @@ void TerminalItemTests::exposesScrollbarAndRequestsAbsoluteScroll()
     item.scrollToFraction(0.75);
     QCOMPARE(scrollSpy.count(), 1);
     QCOMPARE(scrollSpy.constFirst().constFirst().toInt(), 20);
+
+    // Keyboard bindings are dispatched exclusively by ActionRegistry/Main.qml
+    // so customized or cleared shortcuts cannot fall through to hard-coded
+    // defaults in TerminalItem.
+    item.scrollPage(-1);
+    item.scrollPage(1);
+    item.scrollLines(-1);
+    item.scrollToFraction(0.0);
+    item.scrollToFraction(1.0);
+
+    QCOMPARE(scrollSpy.count(), 6);
+    QCOMPARE(scrollSpy.at(1).at(0).toInt(), -23);
+    QCOMPARE(scrollSpy.at(2).at(0).toInt(), 23);
+    QCOMPARE(scrollSpy.at(3).at(0).toInt(), -1);
+    QCOMPARE(scrollSpy.at(4).at(0).toInt(), -40);
+    QCOMPARE(scrollSpy.at(5).at(0).toInt(), 40);
 }
 
 void TerminalItemTests::rendersStyledWideCellsAndCursorPixels()

@@ -40,6 +40,7 @@ private slots:
     void migratesNativeChatGptSchemaWithSystemAiProxy();
     void migratesPrePerformanceSchemaWithPerformanceDisabled();
     void migratesPreInteractionSchemaWithContextMenuDefault();
+    void migratesPreSelectionInteractionSchemaWithMainstreamDefaults();
     void rejectsMalformedUnsupportedAndIncompleteDocuments();
     void rejectsOutOfRangeValues();
     void recoversLastKnownGoodSettings();
@@ -64,42 +65,45 @@ void ApplicationSettingsTests::savesAndLoadsEveryPreference()
     QVERIFY(directory.isValid());
 
     const ztermy::config::ApplicationSettings expected{
-        .theme = ztermy::config::ThemePreference::light,
         .backdropOpacity = 0.82,
-        .backdrop = ztermy::config::BackdropPreference::solid,
-        .accent = ztermy::config::AccentPreference::custom,
+        .terminalBackgroundOpacity = 0.45,
+        .shortcutOverrides = {{QStringLiteral("terminal.find"), QStringLiteral("Ctrl+Alt+F")}},
         .customAccent = QStringLiteral("#3366CC"),
         .uiFontFamily = QStringLiteral("Microsoft YaHei UI"),
         .terminalFontFamily = QStringLiteral("Cascadia Code"),
+        .terminalWordDelimiters = QStringLiteral(" |,"),
+        .aiBaseUrl = QStringLiteral("https://gateway.example.test/v1"),
+        .aiEndpointPath = QStringLiteral("/chat/completions"),
+        .aiModel = QStringLiteral("terminal-model"),
+        .aiCredentialReference = QStringLiteral("ai-custom"),
+        .aiProxyUrl = QStringLiteral("socks5://127.0.0.1:1080"),
+        .aiProxyUsername = QStringLiteral("proxy-user"),
         .terminalFontSize = 18,
+        .terminalScrollRows = 7,
+        .theme = ztermy::config::ThemePreference::light,
+        .backdrop = ztermy::config::BackdropPreference::solid,
+        .accent = ztermy::config::AccentPreference::custom,
         .showAllTerminalFonts = true,
         .terminalLigatures = false,
-        .terminalBackgroundOpacity = 0.45,
         .cursor = ztermy::config::CursorPreference::bar,
         .cursorBlink = false,
         .copyOnSelect = true,
         .confirmMultilinePaste = false,
         .terminalRightClick = ztermy::config::TerminalRightClickPreference::copyPaste,
+        .terminalMiddleClick = ztermy::config::TerminalMiddleClickPreference::paste,
         .sftpShowHiddenFiles = true,
         .sftpConfirmDelete = false,
         .closeToTray = true,
         .performanceMode = true,
         .credentialStorage = ztermy::config::CredentialStoragePreference::portable,
         .language = ztermy::config::LanguagePreference::simplifiedChinese,
-        .shortcutOverrides = {{QStringLiteral("terminal.find"), QStringLiteral("Ctrl+Alt+F")}},
         .aiProvider = ztermy::config::AiProviderPreference::openAiCompatible,
-        .aiBaseUrl = QStringLiteral("https://gateway.example.test/v1"),
-        .aiEndpointPath = QStringLiteral("/chat/completions"),
-        .aiModel = QStringLiteral("terminal-model"),
-        .aiCredentialReference = QStringLiteral("ai-custom"),
         .aiAutomaticContext = false,
         .aiPermission = ztermy::config::AiPermissionPreference::yolo,
         .aiConversationHistoryEnabled = true,
         .aiDebugTraceEnabled = true,
         .aiReasoning = ztermy::config::AiReasoningPreference::maximum,
         .aiProxy = ztermy::config::AiProxyPreference::custom,
-        .aiProxyUrl = QStringLiteral("socks5://127.0.0.1:1080"),
-        .aiProxyUsername = QStringLiteral("proxy-user"),
     };
     const ztermy::config::ApplicationSettingsStore store(directory.filePath(QStringLiteral("settings.json")));
 
@@ -171,7 +175,7 @@ void ApplicationSettingsTests::migratesLegacyWindowOpacityAndNoneBackdrop()
     QFile saved(path);
     QVERIFY(saved.open(QIODevice::ReadOnly));
     const QByteArray persisted = saved.readAll();
-    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 25")));
+    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 26")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdropOpacity\": 0.75")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdrop\": \"transparent\"")));
     QVERIFY(!persisted.contains(QByteArrayLiteral("windowOpacity")));
@@ -457,7 +461,7 @@ void ApplicationSettingsTests::migratesRecentPermissionSchemasAndAllowsResave()
 
         QVERIFY(file.open(QIODevice::ReadOnly));
         const auto persisted = QJsonDocument::fromJson(file.readAll()).object();
-        QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 25);
+        QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 26);
         QCOMPARE(persisted.value(QStringLiteral("aiPermission")).toString(), QStringLiteral("ask"));
         QCOMPARE(persisted.value(QStringLiteral("terminalFontSize")).toInt(), 16);
     }
@@ -494,7 +498,7 @@ void ApplicationSettingsTests::migratesRetiredExternalAgentSchemaWithoutLosingPr
     QVERIFY(store.save(*loaded));
     QVERIFY(file.open(QIODevice::ReadOnly));
     const auto persisted = QJsonDocument::fromJson(file.readAll()).object();
-    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 25);
+    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 26);
     QVERIFY(!persisted.contains(QStringLiteral("aiAgent")));
     QCOMPARE(persisted.value(QStringLiteral("aiBaseUrl")).toString(), expected.aiBaseUrl);
     QCOMPARE(persisted.value(QStringLiteral("aiModel")).toString(), expected.aiModel);
@@ -534,7 +538,7 @@ void ApplicationSettingsTests::migratesNativeChatGptSchemaWithSystemAiProxy()
     QVERIFY(store.save(*loaded));
     QVERIFY(file.open(QIODevice::ReadOnly));
     const auto persisted = QJsonDocument::fromJson(file.readAll()).object();
-    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 25);
+    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 26);
     QCOMPARE(persisted.value(QStringLiteral("aiProxy")).toString(), QStringLiteral("system"));
     QVERIFY(!loaded->closeToTray);
     QVERIFY(!loaded->performanceMode);
@@ -567,7 +571,7 @@ void ApplicationSettingsTests::migratesPrePerformanceSchemaWithPerformanceDisabl
     QVERIFY(store.save(*loaded));
     QVERIFY(file.open(QIODevice::ReadOnly));
     const auto persisted = QJsonDocument::fromJson(file.readAll()).object();
-    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 25);
+    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 26);
     QCOMPARE(persisted.value(QStringLiteral("performanceMode")).toBool(), false);
 }
 
@@ -592,6 +596,31 @@ void ApplicationSettingsTests::migratesPreInteractionSchemaWithContextMenuDefaul
     QCOMPARE(loaded->terminalRightClick, ztermy::config::TerminalRightClickPreference::contextMenu);
 }
 
+void ApplicationSettingsTests::migratesPreSelectionInteractionSchemaWithMainstreamDefaults()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("settings.json"));
+    const ztermy::config::ApplicationSettingsStore store(path);
+    QVERIFY(store.save(ztermy::config::ApplicationSettings{}));
+
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    auto root = QJsonDocument::fromJson(file.readAll()).object();
+    file.close();
+    root.insert(QStringLiteral("version"), 25);
+    root.remove(QStringLiteral("terminalMiddleClick"));
+    root.remove(QStringLiteral("terminalWordDelimiters"));
+    root.remove(QStringLiteral("terminalScrollRows"));
+    QVERIFY(writeFile(path, QJsonDocument(root).toJson(QJsonDocument::Compact)));
+
+    const auto loaded = store.load();
+    QVERIFY(loaded);
+    QCOMPARE(loaded->terminalMiddleClick, ztermy::config::TerminalMiddleClickPreference::disabled);
+    QCOMPARE(loaded->terminalWordDelimiters, QStringLiteral(" \t'\"│`|;,()[]{}<>$"));
+    QCOMPARE(loaded->terminalScrollRows, 3);
+}
+
 void ApplicationSettingsTests::rejectsMalformedUnsupportedAndIncompleteDocuments()
 {
     QTemporaryDir directory;
@@ -604,7 +633,7 @@ void ApplicationSettingsTests::rejectsMalformedUnsupportedAndIncompleteDocuments
     QVERIFY(!malformed);
     QCOMPARE(malformed.error(), ztermy::config::ApplicationSettingsStoreError::invalidFormat);
 
-    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":26})")));
+    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":27})")));
     const auto unsupported = store.load();
     QVERIFY(!unsupported);
     QCOMPARE(unsupported.error(), ztermy::config::ApplicationSettingsStoreError::unsupportedVersion);
@@ -667,6 +696,23 @@ void ApplicationSettingsTests::rejectsOutOfRangeValues()
     const auto customAccentResult = store.save(invalidCustomAccent);
     QVERIFY(!customAccentResult);
     QCOMPARE(customAccentResult.error(), ztermy::config::ApplicationSettingsStoreError::invalidFormat);
+
+    auto invalidWordDelimiters = ztermy::config::ApplicationSettings{};
+    invalidWordDelimiters.terminalWordDelimiters = QString(129, QLatin1Char('x'));
+    const auto wordDelimitersResult = store.save(invalidWordDelimiters);
+    QVERIFY(!wordDelimitersResult);
+    QCOMPARE(wordDelimitersResult.error(), ztermy::config::ApplicationSettingsStoreError::invalidFormat);
+
+    auto invalidScrollRows = ztermy::config::ApplicationSettings{};
+    invalidScrollRows.terminalScrollRows = 0;
+    const auto scrollRowsResult = store.save(invalidScrollRows);
+    QVERIFY(!scrollRowsResult);
+    QCOMPARE(scrollRowsResult.error(), ztermy::config::ApplicationSettingsStoreError::invalidFormat);
+
+    invalidScrollRows.terminalScrollRows = 21;
+    const auto excessiveScrollRowsResult = store.save(invalidScrollRows);
+    QVERIFY(!excessiveScrollRowsResult);
+    QCOMPARE(excessiveScrollRowsResult.error(), ztermy::config::ApplicationSettingsStoreError::invalidFormat);
 }
 
 void ApplicationSettingsTests::createsMissingParentDirectory()
