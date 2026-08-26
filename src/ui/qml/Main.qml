@@ -2106,6 +2106,7 @@ Rectangle {
                                 Qt.callLater(() => multilinePasteDialog.openFrom(viewport));
                             }
                             onBrowseHostsRequested: root.currentPage = "hosts"
+                            onTerminalSearchRequested: root.openTerminalSearch()
 
                             Behavior on anchors.rightMargin {
                                 NumberAnimation {

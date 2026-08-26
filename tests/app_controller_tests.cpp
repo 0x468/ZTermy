@@ -6,6 +6,7 @@
 #include "infrastructure/ssh/SshProfileStore.h"
 #include "infrastructure/workbench/WorkspaceStateStore.h"
 #include "platform/windows/WindowsCredentialVault.h"
+#include "ui/terminal/TerminalKeywordHighlighter.h"
 
 #include <QColor>
 #include <QCoreApplication>
@@ -22,6 +23,7 @@
 #include <QTcpSocket>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTimer>
 #include <QUrl>
 #include <QUuid>
 #include <QVariantMap>
@@ -44,9 +46,15 @@ struct FakeLocalSessionState final
     std::vector<bool> focusEvents;
     QList<QByteArray> pastes;
     QString selectedText;
+    QString searchQuery;
     std::vector<std::string> scrollbackLines{"fake scrollback line"};
     std::size_t scrollbackLineCount = 0;
     std::shared_ptr<ztermy::terminal::TerminalOutputSink> outputSink;
+    int selectedTextRequests = 0;
+    int searchRequests = 0;
+    bool deferSelectedText = false;
+    bool searchBackwards = false;
+    bool searchCaseSensitive = false;
 };
 
 class FakeLocalTerminalSession final : public ztermy::terminal::LocalTerminalSessionBackend
@@ -97,8 +105,27 @@ public:
     void selectAll() override {}
     void clearSelection() override {}
     void copySelection() override {}
-    void requestSelectedText() override { emit selectedTextReady(m_state->selectedText); }
-    void search(const QString &, bool, bool) override {}
+    void requestSelectedText() override
+    {
+        ++m_state->selectedTextRequests;
+        const QString selectedText = m_state->selectedText;
+        if (m_state->deferSelectedText)
+        {
+            QTimer::singleShot(0, this, [this, selectedText] {
+                emit selectedTextReady(selectedText);
+            });
+            return;
+        }
+        emit selectedTextReady(selectedText);
+    }
+    void search(const QString &query, const bool backwards, const bool caseSensitive) override
+    {
+        ++m_state->searchRequests;
+        m_state->searchQuery = query;
+        m_state->searchBackwards = backwards;
+        m_state->searchCaseSensitive = caseSensitive;
+        emit searchResultReady(query, 1, 3, false);
+    }
     void clearSearch() override {}
     [[nodiscard]] std::expected<ztermy::terminal::TerminalScrollbackPage, std::error_code>
     scrollbackPage(const ztermy::terminal::TerminalScrollbackRequest request) const override
@@ -183,6 +210,8 @@ private slots:
     void retriesProviderResponseWithoutRepeatingCompletedTool();
     void managesMultipleLocalTerminalTabs();
     void tracksTemporaryTerminalWorkspacePins();
+    void routesTerminalSelectionActionsToOwningTab();
+    void createsKeywordHighlightFromSshSelection();
     void managesFreshTerminalTabWorkflows();
     void managesPersistentTerminalWorkspaceSplits();
     void restoresSavedSshWorkspaceWithoutConnecting();
@@ -1945,6 +1974,138 @@ void AppControllerTests::tracksTemporaryTerminalWorkspacePins()
     QVERIFY(!controller.activeTerminalTabPinned());
     QVERIFY(!controller.terminalTabs().constLast().toMap().value(QStringLiteral("pinned")).toBool());
     QVERIFY(pinnedChanged.count() >= 5);
+}
+
+void AppControllerTests::routesTerminalSelectionActionsToOwningTab()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const auto firstState = std::make_shared<FakeLocalSessionState>();
+    const auto secondState = std::make_shared<FakeLocalSessionState>();
+    int createdSessions = 0;
+    ztermy::AppController controller(
+        directory.filePath(QStringLiteral("profiles.json")), directory.filePath(QStringLiteral("known_hosts.json")),
+        [&createdSessions, firstState, secondState] {
+            return std::make_unique<FakeLocalTerminalSession>(createdSessions++ == 0 ? firstState : secondState);
+        });
+
+    const QString first = controller.startLocalTerminal();
+    QVERIFY(!first.isEmpty());
+    firstState->selectedText = QStringLiteral("AI terminal evidence");
+    QVERIFY(controller.attachAiSelection());
+    QCOMPARE(firstState->selectedTextRequests, 1);
+    QVERIFY(controller.activeAiContextPreview().contains(QStringLiteral("AI terminal evidence")));
+
+    firstState->selectedText = QStringLiteral("  Search Needle  ");
+    firstState->deferSelectedText = true;
+    QVERIFY(controller.searchTerminalSelection());
+    QVERIFY(!controller.searchTerminalSelection());
+    QCOMPARE(firstState->selectedTextRequests, 2);
+
+    const QString second = controller.startLocalTerminal();
+    QVERIFY(!second.isEmpty());
+    QCoreApplication::processEvents();
+    QCOMPARE(firstState->searchRequests, 1);
+    QCOMPARE(firstState->searchQuery, QStringLiteral("Search Needle"));
+    QVERIFY(!firstState->searchBackwards);
+    QVERIFY(!firstState->searchCaseSensitive);
+    QCOMPARE(secondState->searchRequests, 0);
+    QVERIFY(controller.terminalSearchQuery().isEmpty());
+    QVERIFY(!controller.highlightTerminalSelection());
+
+    QVERIFY(controller.activateTerminalTab(first));
+    QCOMPARE(controller.terminalSearchQuery(), QStringLiteral("Search Needle"));
+    QCOMPARE(controller.terminalSearchCurrent(), 1);
+    QCOMPARE(controller.terminalSearchTotal(), 3);
+    QVERIFY(!controller.terminalSearchCaseSensitive());
+    QVERIFY(controller.activeAiContextPreview().contains(QStringLiteral("AI terminal evidence")));
+    QVERIFY(!controller.activeAiContextPreview().contains(QStringLiteral("Search Needle")));
+}
+
+void AppControllerTests::createsKeywordHighlightFromSshSelection()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString profilesPath = directory.filePath(QStringLiteral("profiles.json"));
+    const QString knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json"));
+    const QString settingsPath = directory.filePath(QStringLiteral("settings.json"));
+    const QString credentialsPath = directory.filePath(QStringLiteral("credentials.json"));
+
+    const std::array profiles{ztermy::ssh::SshProfile{
+        .id = "selection-highlight-ssh",
+        .name = "Selection highlight SSH",
+        .host = "192.0.2.45",
+        .username = "operator",
+        .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
+        .privateKeyPath = "unused-test-key",
+        .keywordHighlightEnabled = false,
+    }};
+    QVERIFY(ztermy::ssh::SshProfileStore(profilesPath).save(profiles));
+
+    ztermy::workbench::WorkspaceState persisted;
+    persisted.terminalWorkspaces.push_back(ztermy::workbench::makeSinglePaneTerminalWorkspace(
+        "selection-highlight-workspace", "selection-highlight-pane",
+        ztermy::workbench::TerminalRestoreIntent{
+            .id = "selection-highlight-intent",
+            .profileId = "selection-highlight-ssh",
+            .title = "Selection highlight SSH",
+            .kind = ztermy::workbench::TerminalRestoreKind::SshProfile,
+        }));
+    persisted.activeTerminalWorkspaceId = "selection-highlight-workspace";
+    QVERIFY(ztermy::workbench::WorkspaceStateStore(directory.filePath(QStringLiteral("workspace_state.json")))
+                .save(persisted));
+
+    const auto localState = std::make_shared<FakeLocalSessionState>();
+    ztermy::AppController controller(profilesPath, knownHostsPath, settingsPath, credentialsPath,
+                                     ztermy::config::StorageMode::installed, [localState] {
+                                         return std::make_unique<FakeLocalTerminalSession>(localState);
+                                     });
+    const QString sessionId =
+        controller.terminalTabs().constFirst().toMap().value(QStringLiteral("sessionId")).toString();
+    QVERIFY(!sessionId.isEmpty());
+
+    const auto deliverSelection = [&controller, &sessionId](const QString &selection) {
+        return QMetaObject::invokeMethod(&controller, "handleTerminalSelectedTextReady", Qt::DirectConnection,
+                                         Q_ARG(QString, sessionId), Q_ARG(QString, selection));
+    };
+    QVERIFY(controller.highlightTerminalSelection());
+    QVERIFY(deliverSelection(QStringLiteral("  docker  ")));
+    QVariantMap tab = controller.terminalTabs().constFirst().toMap();
+    QVERIFY(tab.value(QStringLiteral("keywordHighlightEnabled")).toBool());
+    QVariantList rules = tab.value(QStringLiteral("keywordHighlightRules")).toList();
+    QCOMPARE(rules.size(), 1);
+    QCOMPARE(rules.constFirst().toMap().value(QStringLiteral("pattern")).toString(), QStringLiteral("docker"));
+    QCOMPARE(rules.constFirst().toMap().value(QStringLiteral("foreground")).toString(), QStringLiteral("#FFFFFF"));
+    QCOMPARE(rules.constFirst().toMap().value(QStringLiteral("background")).toString(), QStringLiteral("#D13438"));
+    QVERIFY(rules.constFirst().toMap().value(QStringLiteral("enabled")).toBool());
+    QVERIFY(!rules.constFirst().toMap().value(QStringLiteral("caseSensitive")).toBool());
+
+    QVERIFY(controller.highlightTerminalSelection());
+    QVERIFY(deliverSelection(QStringLiteral("DOCKER")));
+    QCOMPARE(
+        controller.terminalTabs().constFirst().toMap().value(QStringLiteral("keywordHighlightRules")).toList().size(),
+        1);
+
+    const QString maximumPattern(ztermy::ui::maximumKeywordPatternLength, QLatin1Char('x'));
+    QVERIFY(controller.highlightTerminalSelection());
+    QVERIFY(deliverSelection(maximumPattern));
+    QCOMPARE(
+        controller.terminalTabs().constFirst().toMap().value(QStringLiteral("keywordHighlightRules")).toList().size(),
+        2);
+
+    QVERIFY(controller.highlightTerminalSelection());
+    QVERIFY(deliverSelection(maximumPattern + QLatin1Char('x')));
+    QVERIFY(controller.highlightTerminalSelection());
+    QVERIFY(deliverSelection(QStringLiteral("first\nsecond")));
+    QCOMPARE(
+        controller.terminalTabs().constFirst().toMap().value(QStringLiteral("keywordHighlightRules")).toList().size(),
+        2);
+
+    const auto reloadedProfiles = ztermy::ssh::SshProfileStore(profilesPath).load();
+    QVERIFY(reloadedProfiles.has_value());
+    QCOMPARE(reloadedProfiles->size(), std::size_t{1});
+    QCOMPARE(reloadedProfiles->front().keywordHighlightRules.size(), std::size_t{2});
+    QVERIFY(reloadedProfiles->front().keywordHighlightEnabled);
 }
 
 void AppControllerTests::managesFreshTerminalTabWorkflows()

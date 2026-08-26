@@ -33,6 +33,7 @@ Item {
 
     signal multilinePasteConfirmationRequested(var viewport, int lineCount)
     signal browseHostsRequested
+    signal terminalSearchRequested
 
     function forceActiveFocus() {
         // qmllint disable missing-property
@@ -138,6 +139,28 @@ Item {
                 if (root.controller.activateTerminalPane(node.id)) {
                     root.controller.closeActiveTerminalPane();
                 }
+            }
+
+            function restoreTerminalFocusAfterSelectionAction() {
+                if (!viewport.multilinePastePending) {
+                    Qt.callLater(viewport.forceActiveFocus);
+                }
+            }
+
+            function dismissSelectionActionAndRestoreFocus() {
+                viewport.dismissSelectionAction();
+                restoreTerminalFocusAfterSelectionAction();
+            }
+
+            function openSelectionMoreMenu() {
+                root.controller.activateTerminalPane(node.id);
+                const menuWidth = Math.max(selectionMoreMenu.width, selectionMoreMenu.implicitWidth);
+                const menuHeight = Math.max(selectionMoreMenu.height, selectionMoreMenu.implicitHeight);
+                selectionMoreMenu.x = Math.max(8, Math.min(leaf.width - menuWidth - 8, selectionActionStrip.x + selectionActionStrip.width - menuWidth));
+                const belowY = selectionActionStrip.y + selectionActionStrip.height + 4;
+                const aboveY = selectionActionStrip.y - menuHeight - 4;
+                selectionMoreMenu.y = belowY + menuHeight <= leaf.height - 8 ? belowY : Math.max(8, aboveY);
+                selectionMoreMenu.open();
             }
 
             color: "transparent"
@@ -256,9 +279,11 @@ Item {
                 id: terminalContextMenu
 
                 property var commandActions: ({})
+                property bool restoreViewportOnClose: true
 
                 modal: false
                 onAboutToShow: {
+                    restoreViewportOnClose = true;
                     root.controller.activateTerminalPane(leaf.node.id);
                     commandActions = root.controller.activeCommandBlockActions();
                 }
@@ -339,71 +364,214 @@ Item {
                     }
                 }
 
+                AppMenuItem {
+                    text: qsTr("Search selection")
+                    iconName: "search"
+                    enabled: viewport.hasSelection
+                    onTriggered: {
+                        if (root.controller.activateTerminalPane(leaf.node.id) && root.controller.searchTerminalSelection()) {
+                            terminalContextMenu.restoreViewportOnClose = false;
+                            root.terminalSearchRequested();
+                            viewport.dismissSelectionAction();
+                        }
+                    }
+                }
+
+                AppMenuItem {
+                    text: qsTr("Highlight selection")
+                    iconName: "highlight"
+                    visible: leaf.tab.kind === "ssh"
+                    enabled: viewport.hasSelection
+                    onTriggered: {
+                        if (root.controller.activateTerminalPane(leaf.node.id) && root.controller.highlightTerminalSelection()) {
+                            viewport.dismissSelectionAction();
+                        }
+                    }
+                }
+
                 onClosed: {
                     // A multiline-paste dialog becomes the next focus owner. Do not
                     // let the closing context menu steal focus back from that modal.
-                    if (!viewport.multilinePastePending) {
+                    if (terminalContextMenu.restoreViewportOnClose && !viewport.multilinePastePending) {
                         viewport.forceActiveFocus();
                     }
                 }
             }
 
-            ToolButton {
-                id: selectionAiButton
+            Rectangle {
+                id: selectionActionStrip
 
                 readonly property real preferredY: viewport.y + viewport.selectionActionPosition.y - height - 9
 
-                objectName: "terminalSelectionAiAction"
-                visible: !!leaf.node.active && viewport.selectionActionVisible && leaf.aiConfigured && leaf.tab.workbenchOpen && leaf.tab.workbenchPage === "ai"
-                width: 112
-                height: 30
+                objectName: "terminalSelectionActionStrip"
+                visible: !!leaf.node.active && viewport.selectionActionVisible && !viewport.multilinePastePending
+                width: Math.min(selectionActionRow.implicitWidth + 8, Math.max(0, leaf.width - 16))
+                height: 32
                 x: Math.max(8, Math.min(leaf.width - width - 8, viewport.x + viewport.selectionActionPosition.x - (width / 2)))
                 y: preferredY >= 8 ? preferredY : Math.min(leaf.height - height - 8, viewport.y + viewport.selectionActionPosition.y + 9)
                 z: 12
-                hoverEnabled: true
-                focusPolicy: Qt.StrongFocus
-                Accessible.name: qsTr("Attach terminal selection to AI")
-                onClicked: {
-                    if (!root.controller.activateTerminalPane(leaf.node.id)) {
-                        return;
-                    }
-                    if (!root.controller.attachAiSelection()) {
-                        return;
-                    }
-                    if (!leaf.tab.workbenchOpen || leaf.tab.workbenchPage !== "ai") {
-                        root.controller.toggleTerminalWorkbench("ai");
-                    }
-                    viewport.dismissSelectionAction();
-                }
-
-                contentItem: RowLayout {
-                    spacing: 6
-
-                    AppIcon {
-                        Layout.preferredWidth: 15
-                        Layout.preferredHeight: 15
-                        name: "ai"
-                        color: Theme.accent
-                    }
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: qsTr("Add to AI")
-                        color: Theme.text
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.textCompact
-                        font.weight: Font.DemiBold
+                radius: height / 2
+                color: Theme.floatingBackground
+                border.color: Theme.border
+                border.width: 1
+                clip: true
+                onVisibleChanged: {
+                    if (!visible && selectionMoreMenu.visible) {
+                        selectionMoreMenu.close();
                     }
                 }
-                background: Rectangle {
-                    radius: height / 2
-                    color: selectionAiButton.down ? Theme.controlPressed : selectionAiButton.hovered ? Theme.controlHover : Theme.floatingBackground
-                    border.color: selectionAiButton.visualFocus ? Theme.focus : Theme.border
-                    border.width: selectionAiButton.visualFocus ? 2 : 1
+
+                RowLayout {
+                    id: selectionActionRow
+
+                    anchors.centerIn: parent
+                    spacing: 2
+
+                    ToolButton {
+                        id: selectionCopyButton
+
+                        objectName: "terminalSelectionCopyAction"
+                        Layout.preferredWidth: 28
+                        Layout.preferredHeight: 28
+                        hoverEnabled: true
+                        focusPolicy: Qt.TabFocus
+                        Accessible.name: qsTr("Copy terminal selection")
+                        onClicked: {
+                            viewport.copySelection();
+                            leaf.dismissSelectionActionAndRestoreFocus();
+                        }
+                        Keys.onEscapePressed: event => {
+                            leaf.dismissSelectionActionAndRestoreFocus();
+                            event.accepted = true;
+                        }
+
+                        contentItem: AppIcon {
+                            name: "copy"
+                            color: Theme.text
+                        }
+                        background: Rectangle {
+                            radius: height / 2
+                            color: selectionCopyButton.down ? Theme.controlPressed : selectionCopyButton.hovered ? Theme.controlHover : "transparent"
+                            border.color: selectionCopyButton.visualFocus ? Theme.focus : "transparent"
+                            border.width: selectionCopyButton.visualFocus ? 2 : 0
+                        }
+
+                        AppToolTip {
+                            text: qsTr("Copy selection")
+                        }
+                    }
+
+                    ToolButton {
+                        id: selectionAiButton
+
+                        objectName: "terminalSelectionAiAction"
+                        visible: leaf.aiConfigured
+                        Layout.preferredWidth: visible ? 28 : 0
+                        Layout.preferredHeight: 28
+                        hoverEnabled: true
+                        focusPolicy: Qt.TabFocus
+                        Accessible.name: qsTr("Attach terminal selection to AI")
+                        onClicked: {
+                            if (!root.controller.activateTerminalPane(leaf.node.id) || !root.controller.attachAiSelection()) {
+                                return;
+                            }
+                            if (!leaf.tab.workbenchOpen || leaf.tab.workbenchPage !== "ai") {
+                                root.controller.toggleTerminalWorkbench("ai");
+                            }
+                            viewport.dismissSelectionAction();
+                        }
+                        Keys.onEscapePressed: event => {
+                            leaf.dismissSelectionActionAndRestoreFocus();
+                            event.accepted = true;
+                        }
+
+                        contentItem: AppIcon {
+                            name: "ai"
+                            color: Theme.accent
+                        }
+                        background: Rectangle {
+                            radius: height / 2
+                            color: selectionAiButton.down ? Theme.controlPressed : selectionAiButton.hovered ? Theme.controlHover : "transparent"
+                            border.color: selectionAiButton.visualFocus ? Theme.focus : "transparent"
+                            border.width: selectionAiButton.visualFocus ? 2 : 0
+                        }
+
+                        AppToolTip {
+                            text: qsTr("Attach selection to the current terminal conversation")
+                        }
+                    }
+
+                    ToolButton {
+                        id: selectionMoreButton
+
+                        objectName: "terminalSelectionMoreAction"
+                        Layout.preferredWidth: 28
+                        Layout.preferredHeight: 28
+                        hoverEnabled: true
+                        focusPolicy: Qt.TabFocus
+                        Accessible.name: qsTr("More selection actions")
+                        onClicked: leaf.openSelectionMoreMenu()
+                        Keys.onEscapePressed: event => {
+                            leaf.dismissSelectionActionAndRestoreFocus();
+                            event.accepted = true;
+                        }
+
+                        contentItem: AppIcon {
+                            name: "more"
+                            color: Theme.text
+                        }
+                        background: Rectangle {
+                            radius: height / 2
+                            color: selectionMoreButton.down ? Theme.controlPressed : selectionMoreButton.hovered || selectionMoreMenu.visible ? Theme.controlHover : "transparent"
+                            border.color: selectionMoreButton.visualFocus ? Theme.focus : "transparent"
+                            border.width: selectionMoreButton.visualFocus ? 2 : 0
+                        }
+
+                        AppToolTip {
+                            text: qsTr("More selection actions")
+                        }
+                    }
+                }
+            }
+
+            AppMenu {
+                id: selectionMoreMenu
+
+                property bool restoreViewportOnClose: true
+
+                objectName: "terminalSelectionMoreMenu"
+                modal: false
+                onAboutToShow: restoreViewportOnClose = true
+
+                AppMenuItem {
+                    objectName: "terminalSelectionSearchAction"
+                    text: qsTr("Search selection")
+                    iconName: "search"
+                    onTriggered: {
+                        if (root.controller.activateTerminalPane(leaf.node.id) && root.controller.searchTerminalSelection()) {
+                            selectionMoreMenu.restoreViewportOnClose = false;
+                            root.terminalSearchRequested();
+                            viewport.dismissSelectionAction();
+                        }
+                    }
                 }
 
-                AppToolTip {
-                    text: qsTr("Attach this selection to the current terminal conversation")
+                AppMenuItem {
+                    objectName: "terminalSelectionHighlightAction"
+                    text: qsTr("Highlight selection")
+                    iconName: "highlight"
+                    visible: leaf.tab.kind === "ssh"
+                    onTriggered: {
+                        if (root.controller.activateTerminalPane(leaf.node.id) && root.controller.highlightTerminalSelection()) {
+                            viewport.dismissSelectionAction();
+                        }
+                    }
+                }
+
+                onClosed: {
+                    if (restoreViewportOnClose) {
+                        leaf.restoreTerminalFocusAfterSelectionAction();
+                    }
                 }
             }
 
@@ -793,6 +961,9 @@ Item {
                     function onBrowseHostsRequested() {
                         root.browseHostsRequested();
                     }
+                    function onTerminalSearchRequested() {
+                        root.terminalSearchRequested();
+                    }
                 }
             }
 
@@ -933,6 +1104,9 @@ Item {
                     }
                     function onBrowseHostsRequested() {
                         root.browseHostsRequested();
+                    }
+                    function onTerminalSearchRequested() {
+                        root.terminalSearchRequested();
                     }
                 }
             }

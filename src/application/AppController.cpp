@@ -5124,6 +5124,19 @@ void AppController::searchTerminal(const QString &query, const bool backwards, c
     emit terminalSearchChanged();
 }
 
+bool AppController::searchTerminalSelection()
+{
+    TerminalTab *tab = activeTab();
+    return tab != nullptr && requestTerminalSelectionAction(*tab, TerminalSelectionAction::Search);
+}
+
+bool AppController::highlightTerminalSelection()
+{
+    TerminalTab *tab = activeTab();
+    return tab != nullptr && tab->kind == TerminalTabKind::Ssh
+           && requestTerminalSelectionAction(*tab, TerminalSelectionAction::Highlight);
+}
+
 void AppController::clearTerminalSearch()
 {
     TerminalTab *tab = activeTab();
@@ -10350,19 +10363,12 @@ bool AppController::attachAiSelection()
         return false;
     }
     tab->aiError.clear();
-    if (tab->ssh)
+    if (!requestTerminalSelectionAction(*tab, TerminalSelectionAction::AttachAi))
     {
-        tab->ssh->requestSelectedText();
-        emit aiConversationChanged();
-        return true;
+        return false;
     }
-    if (tab->local)
-    {
-        tab->local->requestSelectedText();
-        emit aiConversationChanged();
-        return true;
-    }
-    return false;
+    emit aiConversationChanged();
+    return true;
 }
 
 bool AppController::attachAiRecentCommands(const int count)
@@ -11166,6 +11172,129 @@ void AppController::acceptAiSelectedText(TerminalTab &tab, const QString &text)
     tab.aiError.clear();
     static_cast<void>(buildAiContext(tab, false));
     emit aiConversationChanged();
+}
+
+bool AppController::requestTerminalSelectionAction(TerminalTab &tab, const TerminalSelectionAction action)
+{
+    if (action == TerminalSelectionAction::None || tab.pendingSelectionAction != TerminalSelectionAction::None)
+    {
+        return false;
+    }
+    tab.pendingSelectionAction = action;
+    if (tab.ssh)
+    {
+        tab.ssh->requestSelectedText();
+        return true;
+    }
+    if (tab.local)
+    {
+        tab.local->requestSelectedText();
+        return true;
+    }
+    tab.pendingSelectionAction = TerminalSelectionAction::None;
+    return false;
+}
+
+void AppController::handleTerminalSelectedTextReady(const QString &tabId, const QString &text)
+{
+    TerminalTab *tab = findTab(tabId);
+    if (tab == nullptr)
+    {
+        return;
+    }
+    const TerminalSelectionAction action = std::exchange(tab->pendingSelectionAction, TerminalSelectionAction::None);
+    if (action == TerminalSelectionAction::AttachAi)
+    {
+        acceptAiSelectedText(*tab, text);
+        return;
+    }
+
+    const QString selection = text.trimmed();
+    if (selection.isEmpty())
+    {
+        return;
+    }
+    if (action == TerminalSelectionAction::Search)
+    {
+        tab->searchQuery = selection;
+        tab->searchCaseSensitive = false;
+        tab->searchCurrent = 0;
+        tab->searchTotal = 0;
+        if (tab->ssh)
+        {
+            tab->ssh->search(selection, false, false);
+        }
+        else if (tab->local)
+        {
+            tab->local->search(selection, false, false);
+        }
+        if (m_focusedTabId == tabId)
+        {
+            emit terminalSearchChanged();
+        }
+        return;
+    }
+    if (action != TerminalSelectionAction::Highlight || tab->kind != TerminalTabKind::Ssh
+        || selection.size() > ui::maximumKeywordPatternLength || selection.contains(QLatin1Char('\n'))
+        || selection.contains(QLatin1Char('\r')))
+    {
+        return;
+    }
+
+    const auto matchingRule = std::ranges::find_if(tab->keywordHighlightRules, [&selection](const auto &rule) {
+        return !rule.caseSensitive && QString::compare(utf8QString(rule.pattern), selection, Qt::CaseInsensitive) == 0;
+    });
+    if (matchingRule != tab->keywordHighlightRules.end())
+    {
+        const bool previousRuleEnabled = matchingRule->enabled;
+        const bool previousHighlightEnabled = tab->keywordHighlightEnabled;
+        matchingRule->enabled = true;
+        tab->keywordHighlightEnabled = true;
+        if (!persistKeywordRules(*tab))
+        {
+            matchingRule->enabled = previousRuleEnabled;
+            tab->keywordHighlightEnabled = previousHighlightEnabled;
+            return;
+        }
+        if (ui::TerminalItem *terminal = m_terminalViewports.value(tab->paneId))
+        {
+            terminal->setKeywordHighlightRules(keywordRulesVariant(*tab));
+        }
+        emit terminalTabsChanged();
+        return;
+    }
+    if (tab->keywordHighlightRules.size() >= ui::maximumKeywordRules)
+    {
+        return;
+    }
+
+    ssh::SshKeywordHighlightRule rule{
+        .id = utf8String(QUuid::createUuid().toString(QUuid::WithoutBraces)),
+        .pattern = utf8String(selection),
+        .foreground = "#FFFFFF",
+        .background = "#D13438",
+        .enabled = true,
+        .caseSensitive = false,
+    };
+    if (!ssh::validKeywordHighlightRule(rule))
+    {
+        return;
+    }
+    const std::vector<ssh::SshKeywordHighlightRule> previousRules = tab->keywordHighlightRules;
+    const bool previousEnabled = tab->keywordHighlightEnabled;
+    tab->keywordHighlightRules.push_back(std::move(rule));
+    tab->keywordHighlightEnabled = true;
+    if (!persistKeywordRules(*tab))
+    {
+        tab->keywordHighlightRules = previousRules;
+        tab->keywordHighlightEnabled = previousEnabled;
+        return;
+    }
+    if (ui::TerminalItem *terminal = m_terminalViewports.value(tab->paneId))
+    {
+        terminal->setKeywordHighlightRules(keywordRulesVariant(*tab));
+    }
+    emit terminalTabsChanged();
 }
 
 void AppController::recordAiActivity(const TerminalTab &tab, const ai::AiToolCall &call, const QString &state,
@@ -14154,10 +14283,7 @@ void AppController::connectLocalTabSignals(TerminalTab &tab)
                      });
     QObject::connect(tab.local.get(), &terminal::LocalTerminalSessionBackend::selectedTextReady, this,
                      [this, tabId](const QString &text) {
-                         if (TerminalTab *updated = findTab(tabId))
-                         {
-                             acceptAiSelectedText(*updated, text);
-                         }
+                         handleTerminalSelectedTextReady(tabId, text);
                      });
     QObject::connect(tab.local.get(), &terminal::LocalTerminalSessionBackend::runningChanged, this,
                      [this, tabId](const bool running) {
@@ -14249,10 +14375,7 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
                      });
     QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::selectedTextReady, this,
                      [this, tabId](const QString &text) {
-                         if (TerminalTab *updated = findTab(tabId))
-                         {
-                             acceptAiSelectedText(*updated, text);
-                         }
+                         handleTerminalSelectedTextReady(tabId, text);
                      });
     QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::runningChanged, this, [this, tabId](const bool running) {
         if (TerminalTab *updated = findTab(tabId))

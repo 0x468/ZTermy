@@ -427,6 +427,8 @@ public:
     Q_INVOKABLE bool setTerminalSplitRatio(const QString &splitNodeId, qreal ratio);
     Q_INVOKABLE bool swapActiveTerminalPane(int offset);
     Q_INVOKABLE void searchTerminal(const QString &query, bool backwards, bool caseSensitive);
+    Q_INVOKABLE bool searchTerminalSelection();
+    Q_INVOKABLE bool highlightTerminalSelection();
     Q_INVOKABLE void clearTerminalSearch();
     Q_INVOKABLE bool toggleTerminalWorkbench(const QString &page);
     Q_INVOKABLE void closeTerminalWorkbench();
@@ -721,6 +723,14 @@ private:
         Ssh,
     };
 
+    enum class TerminalSelectionAction : std::uint8_t
+    {
+        None,
+        AttachAi,
+        Search,
+        Highlight,
+    };
+
     struct TerminalTab final
     {
         struct PendingAiSftpRead final
@@ -842,6 +852,7 @@ private:
         std::uint8_t reconnectAttempt = 0;
         int sessionFontSize = 0;
         TerminalTabKind kind = TerminalTabKind::Local;
+        TerminalSelectionAction pendingSelectionAction = TerminalSelectionAction::None;
         ssh::SshConnectionPhase sshPhase = ssh::SshConnectionPhase::Disconnected;
         bool searchCaseSensitive = false;
         bool keywordHighlightEnabled = true;
@@ -903,6 +914,8 @@ private:
     void persistAiConversation(const TerminalTab &tab);
     [[nodiscard]] ai::AiContextBundle buildAiContext(TerminalTab &tab, bool preferLastFailure);
     [[nodiscard]] ai::AiTerminalReadSnapshot aiReadSnapshot(const TerminalTab &tab) const;
+    [[nodiscard]] bool requestTerminalSelectionAction(TerminalTab &tab, TerminalSelectionAction action);
+    Q_SLOT void handleTerminalSelectedTextReady(const QString &tabId, const QString &text);
     void acceptAiSelectedText(TerminalTab &tab, const QString &text);
     [[nodiscard]] bool sendAiMessage(TerminalTab &tab, const QString &prompt, bool preferLastFailure,
                                      bool appendPrompt = true, bool commandRequest = false,

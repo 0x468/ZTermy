@@ -1535,6 +1535,115 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     return true;
 }
 
+[[nodiscard]] bool verifyAccessibleButton(QQuickItem *rootObject, const char *objectName, const char *expectedName);
+
+[[nodiscard]] bool verifyTerminalSelectionActionStrip(ztermy::NativeWindow &window, QQuickItem *rootObject)
+{
+    auto *viewport = qobject_cast<ztermy::ui::TerminalItem *>(terminalViewportItem(rootObject));
+    if (viewport == nullptr)
+    {
+        qCWarning(applicationLog) << "Terminal selection action smoke could not find its viewport";
+        return false;
+    }
+
+    const auto showSelectionActions = [viewport, rootObject] {
+        auto snapshot = std::make_shared<ztermy::terminal::TerminalSnapshot>();
+        snapshot->columns = 80;
+        snapshot->rows = 24;
+        snapshot->cells.resize(static_cast<std::size_t>(snapshot->columns) * snapshot->rows);
+        snapshot->selectionPresent = true;
+        viewport->setSnapshot(std::move(snapshot));
+        return processWindowEventsUntil(
+            [rootObject] {
+                QQuickItem *strip = visualQuickItem(rootObject, "terminalSelectionActionStrip");
+                return strip != nullptr && strip->isVisible();
+            },
+            std::chrono::seconds{1});
+    };
+
+    viewport->setKeepSelectionAfterCopy(false);
+    if (!showSelectionActions())
+    {
+        qCWarning(applicationLog) << "Terminal selection action strip did not become visible";
+        return false;
+    }
+
+    QQuickItem *strip = visualQuickItem(rootObject, "terminalSelectionActionStrip");
+    QQuickItem *copyAction = visualQuickItem(rootObject, "terminalSelectionCopyAction");
+    QQuickItem *aiAction = visualQuickItem(rootObject, "terminalSelectionAiAction");
+    QQuickItem *moreAction = visualQuickItem(rootObject, "terminalSelectionMoreAction");
+    const bool accessible =
+        verifyAccessibleButton(rootObject, "terminalSelectionCopyAction", "Copy terminal selection")
+        && verifyAccessibleButton(rootObject, "terminalSelectionAiAction", "Attach terminal selection to AI")
+        && verifyAccessibleButton(rootObject, "terminalSelectionMoreAction", "More selection actions");
+    if (strip == nullptr || copyAction == nullptr || aiAction == nullptr || moreAction == nullptr || !accessible)
+    {
+        qCWarning(applicationLog) << "Terminal selection action contract lookup failed";
+        return false;
+    }
+
+    viewport->forceActiveFocus(Qt::OtherFocusReason);
+    copyAction->forceActiveFocus(Qt::MouseFocusReason);
+    processWindowEventsFor(std::chrono::milliseconds{40});
+    const bool mouseFocusWithoutRing = copyAction->hasActiveFocus() && !copyAction->property("visualFocus").toBool();
+    QAccessibleInterface *copyInterface = QAccessible::queryAccessibleInterface(copyAction);
+    QAccessibleActionInterface *copyAccessibleAction =
+        copyInterface == nullptr ? nullptr : copyInterface->actionInterface();
+    const bool keyboardFocusPolicy =
+        copyAction->property("activeFocusOnTab").toBool() && copyAccessibleAction != nullptr
+        && copyAccessibleAction->actionNames().contains(QAccessibleActionInterface::pressAction());
+    copyAction->forceActiveFocus(Qt::TabFocusReason);
+    processWindowEventsFor(std::chrono::milliseconds{40});
+    sendKey(window, Qt::Key_Space);
+    const bool copyDismissed = processWindowEventsUntil(
+        [viewport, &window] {
+            return !viewport->selectionActionVisible() && terminalViewportHasFocus(window);
+        },
+        std::chrono::seconds{1});
+
+    const bool selectionRestored = showSelectionActions();
+    const bool moreFocused =
+        selectionRestored && focusItem(window, moreAction, QStringLiteral("terminalSelectionMoreAction"));
+    if (moreFocused)
+    {
+        sendKey(window, Qt::Key_Space);
+    }
+    QObject *moreMenu = rootObject->findChild<QObject *>(QStringLiteral("terminalSelectionMoreMenu"));
+    const bool menuOpened = processWindowEventsUntil(
+        [moreMenu] {
+            return moreMenu != nullptr && moreMenu->property("visible").toBool();
+        },
+        std::chrono::seconds{1});
+    QQuickItem *searchAction = quickItem(rootObject, "terminalSelectionSearchAction");
+    if (menuOpened)
+    {
+        sendKey(window, Qt::Key_Down);
+    }
+    const bool searchRouteAvailable = moreMenu != nullptr && searchAction != nullptr && searchAction->isVisible()
+                                      && searchAction->isEnabled()
+                                      && searchAction->property("text").toString() == QStringLiteral("Search selection")
+                                      && moreMenu->property("currentIndex").toInt() == 0;
+    sendKey(window, Qt::Key_Escape);
+    const bool menuClosedAndFocusRestored = processWindowEventsUntil(
+        [moreMenu, &window] {
+            return moreMenu != nullptr && !moreMenu->property("visible").toBool() && terminalViewportHasFocus(window);
+        },
+        std::chrono::seconds{1});
+    viewport->clearSelection();
+
+    if (!mouseFocusWithoutRing || !keyboardFocusPolicy || !copyDismissed || !menuOpened || !searchRouteAvailable
+        || !menuClosedAndFocusRestored)
+    {
+        qCWarning(applicationLog) << "Terminal selection action runtime contract failed"
+                                  << "mouseFocusWithoutRing=" << mouseFocusWithoutRing
+                                  << "keyboardFocusPolicy=" << keyboardFocusPolicy << "copyDismissed=" << copyDismissed
+                                  << "menuOpened=" << menuOpened << "searchRouteAvailable=" << searchRouteAvailable
+                                  << "focusRestored=" << menuClosedAndFocusRestored;
+        return false;
+    }
+    return true;
+}
+
 [[nodiscard]] bool verifyAccessibleButton(QQuickItem *rootObject, const char *objectName, const char *expectedName)
 {
     QQuickItem *item = visualQuickItem(rootObject, objectName);
@@ -2460,6 +2569,10 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
                                   << "finalTabs=" << controller.terminalTabs().size()
                                   << "page=" << rootObject->property("currentPage").toString()
                                   << "focus=" << namedFocusItem(window);
+        return false;
+    }
+    if (!verifyTerminalSelectionActionStrip(window, rootObject))
+    {
         return false;
     }
 
