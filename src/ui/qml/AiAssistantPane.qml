@@ -96,8 +96,8 @@ Rectangle {
         background: Rectangle {
             radius: width / 2
             color: contextButton.down ? Theme.controlPressed : contextButton.hovered ? Theme.controlHover : "transparent"
-            border.color: contextButton.activeFocus ? Theme.focus : "transparent"
-            border.width: contextButton.activeFocus ? 2 : 0
+            border.color: contextButton.visualFocus ? Theme.focus : "transparent"
+            border.width: contextButton.visualFocus ? 2 : 0
         }
 
         HoverHandler {
@@ -857,8 +857,8 @@ Rectangle {
             background: Rectangle {
                 radius: Theme.radiusSmall
                 color: contextToggle.down ? Theme.controlPressed : contextToggle.hovered ? Theme.controlHover : "transparent"
-                border.color: contextToggle.activeFocus ? Theme.focus : "transparent"
-                border.width: contextToggle.activeFocus ? 2 : 0
+                border.color: contextToggle.visualFocus ? Theme.focus : "transparent"
+                border.width: contextToggle.visualFocus ? 2 : 0
             }
         }
 
@@ -1867,8 +1867,8 @@ Rectangle {
                                     background: Rectangle {
                                         radius: Theme.radiusSmall
                                         color: toolGroupToggle.down ? Theme.controlPressed : toolGroupToggle.hovered ? Theme.controlHover : "transparent"
-                                        border.color: toolGroupToggle.activeFocus ? Theme.focus : "transparent"
-                                        border.width: toolGroupToggle.activeFocus ? 2 : 0
+                                        border.color: toolGroupToggle.visualFocus ? Theme.focus : "transparent"
+                                        border.width: toolGroupToggle.visualFocus ? 2 : 0
                                     }
                                 }
 
@@ -1981,8 +1981,8 @@ Rectangle {
                                                     background: Rectangle {
                                                         radius: Theme.radiusSmall
                                                         color: "transparent"
-                                                        border.color: toolHeader.activeFocus ? Theme.focus : "transparent"
-                                                        border.width: toolHeader.activeFocus ? 2 : 0
+                                                        border.color: toolHeader.visualFocus ? Theme.focus : "transparent"
+                                                        border.width: toolHeader.visualFocus ? 2 : 0
                                                     }
                                                 }
 
@@ -2203,8 +2203,8 @@ Rectangle {
                                 background: Rectangle {
                                     radius: Theme.radiusControl
                                     color: toolEvidenceNotice.down ? Theme.controlPressed : toolEvidenceNotice.hovered ? Theme.controlHover : Theme.withAlpha(Theme.warning, Theme.dark ? 0.12 : 0.08)
-                                    border.color: toolEvidenceNotice.activeFocus ? Theme.focus : Theme.withAlpha(Theme.warning, 0.42)
-                                    border.width: toolEvidenceNotice.activeFocus ? 2 : 1
+                                    border.color: toolEvidenceNotice.visualFocus ? Theme.focus : Theme.withAlpha(Theme.warning, 0.42)
+                                    border.width: toolEvidenceNotice.visualFocus ? 2 : 1
                                 }
                             }
 
@@ -2271,7 +2271,7 @@ Rectangle {
                                                 Layout.fillWidth: true
                                                 Layout.minimumWidth: 0
                                                 text: sourceButton.modelData.title || sourceButton.modelData.url
-                                                color: sourceButton.hovered || sourceButton.activeFocus ? Theme.accent : Theme.text
+                                                color: sourceButton.hovered || sourceButton.visualFocus ? Theme.accent : Theme.text
                                                 elide: Text.ElideRight
                                                 font.family: Theme.uiFont
                                                 font.pixelSize: Theme.textCompact
@@ -2291,8 +2291,8 @@ Rectangle {
                                         background: Rectangle {
                                             radius: Theme.radiusSmall
                                             color: sourceButton.down ? Theme.controlPressed : sourceButton.hovered ? Theme.controlHover : Theme.controlBackground
-                                            border.color: sourceButton.activeFocus ? Theme.focus : Theme.border
-                                            border.width: sourceButton.activeFocus ? 2 : 1
+                                            border.color: sourceButton.visualFocus ? Theme.focus : Theme.border
+                                            border.width: sourceButton.visualFocus ? 2 : 1
                                         }
 
                                         HoverHandler {
@@ -2466,8 +2466,8 @@ Rectangle {
                 background: Rectangle {
                     radius: width / 2
                     color: returnToLatestButton.down ? Theme.controlPressed : returnToLatestButton.hovered ? Theme.controlHover : Theme.elevatedBackground
-                    border.color: returnToLatestButton.activeFocus ? Theme.focus : Theme.borderStrong
-                    border.width: returnToLatestButton.activeFocus ? 2 : 1
+                    border.color: returnToLatestButton.visualFocus ? Theme.focus : Theme.borderStrong
+                    border.width: returnToLatestButton.visualFocus ? 2 : 1
                 }
 
                 AppToolTip {
@@ -2527,15 +2527,15 @@ Rectangle {
                             }
                             contentItem: Text {
                                 text: viewAllHistoryButton.text
-                                color: viewAllHistoryButton.hovered || viewAllHistoryButton.activeFocus ? Theme.accent : Theme.textMuted
+                                color: viewAllHistoryButton.hovered || viewAllHistoryButton.visualFocus ? Theme.accent : Theme.textMuted
                                 font.family: Theme.uiFont
                                 font.pixelSize: Theme.textCompact
                             }
                             background: Rectangle {
                                 radius: Theme.radiusSmall
                                 color: viewAllHistoryButton.down ? Theme.controlPressed : viewAllHistoryButton.hovered ? Theme.controlHover : "transparent"
-                                border.color: viewAllHistoryButton.activeFocus ? Theme.focus : "transparent"
-                                border.width: viewAllHistoryButton.activeFocus ? 2 : 0
+                                border.color: viewAllHistoryButton.visualFocus ? Theme.focus : "transparent"
+                                border.width: viewAllHistoryButton.visualFocus ? 2 : 0
                             }
 
                             HoverHandler {
@@ -2778,8 +2778,8 @@ Rectangle {
                         background: Rectangle {
                             radius: height / 2
                             color: composerContextToggle.down ? Theme.controlPressed : composerContextToggle.hovered ? Theme.controlHover : Theme.controlBackground
-                            border.color: composerContextToggle.activeFocus ? Theme.focus : Theme.border
-                            border.width: composerContextToggle.activeFocus ? 2 : 1
+                            border.color: composerContextToggle.visualFocus ? Theme.focus : Theme.border
+                            border.width: composerContextToggle.visualFocus ? 2 : 1
                         }
                     }
 
@@ -2894,8 +2894,8 @@ Rectangle {
                                     background: Rectangle {
                                         radius: width / 2
                                         color: removeSkillButton.down ? Theme.controlPressed : removeSkillButton.hovered ? Theme.controlHover : "transparent"
-                                        border.color: removeSkillButton.activeFocus ? Theme.focus : "transparent"
-                                        border.width: removeSkillButton.activeFocus ? 2 : 0
+                                        border.color: removeSkillButton.visualFocus ? Theme.focus : "transparent"
+                                        border.width: removeSkillButton.visualFocus ? 2 : 0
                                     }
 
                                     HoverHandler {

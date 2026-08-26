@@ -73,14 +73,14 @@ TextField {
 
         contentItem: AppIcon {
             name: control.passwordVisible ? "eye-off" : "eye"
-            color: passwordRevealAction.activeFocus ? Theme.text : Theme.textMuted
+            color: passwordRevealAction.visualFocus ? Theme.text : Theme.textMuted
         }
 
         background: Rectangle {
             radius: Theme.radiusSmall
             color: passwordRevealAction.down ? Theme.controlPressed : passwordRevealAction.hovered ? Theme.controlHover : "transparent"
-            border.color: passwordRevealAction.activeFocus ? Theme.focus : "transparent"
-            border.width: passwordRevealAction.activeFocus ? 2 : 0
+            border.color: passwordRevealAction.visualFocus ? Theme.focus : "transparent"
+            border.width: passwordRevealAction.visualFocus ? 2 : 0
         }
 
         HoverHandler {

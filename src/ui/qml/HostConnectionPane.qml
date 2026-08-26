@@ -748,8 +748,8 @@ Rectangle {
                         background: Rectangle {
                             radius: Theme.radiusSmall
                             color: recentSectionToggle.hovered ? Theme.controlHover : "transparent"
-                            border.color: recentSectionToggle.activeFocus ? Theme.focus : "transparent"
-                            border.width: recentSectionToggle.activeFocus ? 2 : 0
+                            border.color: recentSectionToggle.visualFocus ? Theme.focus : "transparent"
+                            border.width: recentSectionToggle.visualFocus ? 2 : 0
                         }
                     }
 
@@ -764,13 +764,13 @@ Rectangle {
                         onClicked: pane.controller.clearRecentHostProfiles()
                         contentItem: AppIcon {
                             name: "trash"
-                            color: clearRecentButton.hovered || clearRecentButton.activeFocus ? Theme.text : pane.mutedColor
+                            color: clearRecentButton.hovered || clearRecentButton.visualFocus ? Theme.text : pane.mutedColor
                         }
                         background: Rectangle {
                             radius: Theme.radiusSmall
                             color: clearRecentButton.hovered ? Theme.controlHover : "transparent"
-                            border.color: clearRecentButton.activeFocus ? Theme.focus : "transparent"
-                            border.width: clearRecentButton.activeFocus ? 2 : 0
+                            border.color: clearRecentButton.visualFocus ? Theme.focus : "transparent"
+                            border.width: clearRecentButton.visualFocus ? 2 : 0
                         }
                         AppToolTip {
                             text: qsTr("Clear recent connections")
@@ -961,8 +961,8 @@ Rectangle {
                         background: Rectangle {
                             radius: Theme.radiusSmall
                             color: groupSectionToggle.hovered ? Theme.controlHover : "transparent"
-                            border.color: groupSectionToggle.activeFocus ? Theme.focus : "transparent"
-                            border.width: groupSectionToggle.activeFocus ? 2 : 0
+                            border.color: groupSectionToggle.visualFocus ? Theme.focus : "transparent"
+                            border.width: groupSectionToggle.visualFocus ? 2 : 0
                         }
                     }
 
@@ -1073,12 +1073,12 @@ Rectangle {
                                         onClicked: pane.editProfile(profileCard.modelData)
                                         contentItem: AppIcon {
                                             name: "edit"
-                                            color: editProfileButton.hovered || editProfileButton.activeFocus ? pane.textColor : Theme.textSubtle
+                                            color: editProfileButton.hovered || editProfileButton.visualFocus ? pane.textColor : Theme.textSubtle
                                         }
                                         background: Rectangle {
                                             radius: width / 2
                                             color: editProfileButton.down ? Theme.controlPressed : editProfileButton.hovered ? Theme.controlHover : "transparent"
-                                            border.color: editProfileButton.activeFocus ? Theme.focus : "transparent"
+                                            border.color: editProfileButton.visualFocus ? Theme.focus : "transparent"
                                         }
                                     }
 
@@ -1097,12 +1097,12 @@ Rectangle {
                                         Keys.onEnterPressed: click()
                                         contentItem: AppIcon {
                                             name: "more"
-                                            color: profileMoreButton.hovered || profileMoreButton.activeFocus || profileMoreMenu.visible ? pane.textColor : Theme.textSubtle
+                                            color: profileMoreButton.hovered || profileMoreButton.visualFocus || profileMoreMenu.visible ? pane.textColor : Theme.textSubtle
                                         }
                                         background: Rectangle {
                                             radius: width / 2
                                             color: profileMoreButton.down ? Theme.controlPressed : profileMoreButton.hovered ? Theme.controlHover : "transparent"
-                                            border.color: profileMoreButton.activeFocus ? Theme.focus : "transparent"
+                                            border.color: profileMoreButton.visualFocus ? Theme.focus : "transparent"
                                         }
                                     }
                                 }

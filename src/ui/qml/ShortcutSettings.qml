@@ -137,8 +137,8 @@ ColumnLayout {
                     background: Rectangle {
                         radius: Theme.radiusControl
                         color: recorder.down ? Theme.controlPressed : recorder.hovered ? Theme.controlHover : Theme.fieldBackground
-                        border.color: pane.recordingActionId === row.actionData.id ? Theme.accent : recorder.activeFocus ? Theme.focus : Theme.border
-                        border.width: pane.recordingActionId === row.actionData.id || recorder.activeFocus ? 2 : 1
+                        border.color: pane.recordingActionId === row.actionData.id ? Theme.accent : recorder.visualFocus ? Theme.focus : Theme.border
+                        border.width: pane.recordingActionId === row.actionData.id || recorder.visualFocus ? 2 : 1
                     }
 
                     HoverHandler {
@@ -166,8 +166,8 @@ ColumnLayout {
                     background: Rectangle {
                         radius: 15
                         color: clearAction.down ? Theme.controlPressed : clearAction.hovered ? Theme.controlHover : "transparent"
-                        border.color: clearAction.activeFocus ? Theme.focus : "transparent"
-                        border.width: clearAction.activeFocus ? 2 : 0
+                        border.color: clearAction.visualFocus ? Theme.focus : "transparent"
+                        border.width: clearAction.visualFocus ? 2 : 0
                     }
                     AppToolTip {
                         visible: clearAction.hovered
@@ -198,8 +198,8 @@ ColumnLayout {
                     background: Rectangle {
                         radius: 15
                         color: resetAction.down ? Theme.controlPressed : resetAction.hovered ? Theme.controlHover : "transparent"
-                        border.color: resetAction.activeFocus ? Theme.focus : "transparent"
-                        border.width: resetAction.activeFocus ? 2 : 0
+                        border.color: resetAction.visualFocus ? Theme.focus : "transparent"
+                        border.width: resetAction.visualFocus ? 2 : 0
                     }
                     AppToolTip {
                         visible: resetAction.hovered

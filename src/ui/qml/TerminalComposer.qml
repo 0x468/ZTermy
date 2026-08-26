@@ -42,8 +42,8 @@ Rectangle {
             height: width
             radius: width / 2
             color: control.down ? Theme.controlPressed : control.hovered ? Theme.controlHover : "transparent"
-            border.color: control.activeFocus ? Theme.focus : "transparent"
-            border.width: control.activeFocus ? 2 : 0
+            border.color: control.visualFocus ? Theme.focus : "transparent"
+            border.width: control.visualFocus ? 2 : 0
 
             Behavior on color {
                 ColorAnimation {
@@ -176,8 +176,8 @@ Rectangle {
                     background: Rectangle {
                         radius: height / 2
                         color: snippetMouse.pressed ? Theme.controlPressed : snippetMouse.containsMouse ? Theme.controlHover : "transparent"
-                        border.color: snippetChip.activeFocus ? Theme.focus : snippetMouse.containsMouse ? Theme.borderStrong : Theme.border
-                        border.width: snippetChip.activeFocus ? 2 : 1
+                        border.color: snippetChip.visualFocus ? Theme.focus : snippetMouse.containsMouse ? Theme.borderStrong : Theme.border
+                        border.width: snippetChip.visualFocus ? 2 : 1
 
                         Behavior on color {
                             ColorAnimation {

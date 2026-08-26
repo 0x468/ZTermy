@@ -75,8 +75,8 @@ Button {
         implicitHeight: 34
         radius: Theme.radiusControl
         color: !control.enabled ? Theme.controlDisabled : control.down ? control.pressedColor : control.hovered ? control.hoverColor : control.restColor
-        border.color: control.activeFocus ? Theme.focus : control.primary ? Theme.accent : control.destructive ? Theme.dangerBorder : control.hovered ? Theme.borderStrong : Theme.border
-        border.width: control.activeFocus ? 2 : 1
+        border.color: control.visualFocus ? Theme.focus : control.primary ? Theme.accent : control.destructive ? Theme.dangerBorder : control.hovered ? Theme.borderStrong : Theme.border
+        border.width: control.visualFocus ? 2 : 1
 
         Behavior on color {
             ColorAnimation {

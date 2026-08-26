@@ -63,8 +63,8 @@ SpinBox {
         implicitHeight: 34
         radius: Theme.radiusControl
         color: control.enabled ? Theme.fieldBackground : Theme.controlDisabled
-        border.color: control.activeFocus ? Theme.focus : control.hovered ? Theme.borderStrong : Theme.border
-        border.width: control.activeFocus ? 2 : 1
+        border.color: control.visualFocus ? Theme.focus : control.hovered ? Theme.borderStrong : Theme.border
+        border.width: control.visualFocus ? 2 : 1
     }
 
     HoverHandler {

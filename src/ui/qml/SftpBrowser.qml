@@ -120,8 +120,8 @@ Item {
         background: Rectangle {
             radius: width / 2
             color: toolButton.down ? Theme.controlPressed : toolButton.hovered ? Theme.controlHover : "transparent"
-            border.color: toolButton.activeFocus ? Theme.focus : "transparent"
-            border.width: toolButton.activeFocus ? 2 : 0
+            border.color: toolButton.visualFocus ? Theme.focus : "transparent"
+            border.width: toolButton.visualFocus ? 2 : 0
         }
         HoverHandler {
             cursorShape: toolButton.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor

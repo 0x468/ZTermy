@@ -293,12 +293,12 @@ ColumnLayout {
                         onClicked: ruleCard.active ? root.controller.stopPortForwardingRule(ruleCard.modelData.id) : root.controller.startPortForwardingRule(ruleCard.modelData.id)
                         contentItem: AppIcon {
                             name: ruleCard.active ? "close" : "play"
-                            color: runButton.hovered || runButton.activeFocus ? Theme.accent : Theme.textMuted
+                            color: runButton.hovered || runButton.visualFocus ? Theme.accent : Theme.textMuted
                         }
                         background: Rectangle {
                             radius: width / 2
                             color: runButton.down ? Theme.controlPressed : runButton.hovered ? Theme.controlHover : "transparent"
-                            border.color: runButton.activeFocus ? Theme.focus : "transparent"
+                            border.color: runButton.visualFocus ? Theme.focus : "transparent"
                         }
                         AppToolTip {
                             text: ruleCard.active ? qsTr("Stop forwarding") : qsTr("Start forwarding")
@@ -316,12 +316,12 @@ ColumnLayout {
                         onClicked: root.beginEdit(ruleCard.modelData)
                         contentItem: AppIcon {
                             name: "edit"
-                            color: editButton.hovered || editButton.activeFocus ? Theme.text : Theme.textMuted
+                            color: editButton.hovered || editButton.visualFocus ? Theme.text : Theme.textMuted
                         }
                         background: Rectangle {
                             radius: width / 2
                             color: editButton.down ? Theme.controlPressed : editButton.hovered ? Theme.controlHover : "transparent"
-                            border.color: editButton.activeFocus ? Theme.focus : "transparent"
+                            border.color: editButton.visualFocus ? Theme.focus : "transparent"
                         }
                         AppToolTip {
                             text: qsTr("Edit forwarding rule")
@@ -339,12 +339,12 @@ ColumnLayout {
                         onClicked: ruleMoreMenu.open()
                         contentItem: AppIcon {
                             name: "more"
-                            color: ruleMoreButton.hovered || ruleMoreButton.activeFocus || ruleMoreMenu.visible ? Theme.text : Theme.textMuted
+                            color: ruleMoreButton.hovered || ruleMoreButton.visualFocus || ruleMoreMenu.visible ? Theme.text : Theme.textMuted
                         }
                         background: Rectangle {
                             radius: width / 2
                             color: ruleMoreButton.down ? Theme.controlPressed : ruleMoreButton.hovered ? Theme.controlHover : "transparent"
-                            border.color: ruleMoreButton.activeFocus ? Theme.focus : "transparent"
+                            border.color: ruleMoreButton.visualFocus ? Theme.focus : "transparent"
                         }
                         AppToolTip {
                             text: qsTr("More forwarding actions")

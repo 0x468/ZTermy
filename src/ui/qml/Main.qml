@@ -81,8 +81,8 @@ Rectangle {
                 height: width
                 radius: width / 2
                 color: control.down ? Theme.controlPressed : control.hovered ? Theme.controlHover : "transparent"
-                border.color: control.activeFocus ? Theme.focus : "transparent"
-                border.width: control.activeFocus ? 2 : 0
+                border.color: control.visualFocus ? Theme.focus : "transparent"
+                border.width: control.visualFocus ? 2 : 0
 
                 Behavior on color {
                     ColorAnimation {
@@ -690,9 +690,9 @@ Rectangle {
 
                 width: 94
                 height: titleNavigation.height
-                color: root.currentPage === "hosts" ? Theme.controlBackground : (hostsTitleAction.hovered || hostsTitleAction.activeFocus ? Theme.controlHover : "transparent")
-                border.color: hostsTitleAction.activeFocus ? Theme.focus : "transparent"
-                border.width: hostsTitleAction.activeFocus ? 1 : 0
+                color: root.currentPage === "hosts" ? Theme.controlBackground : (hostsTitleAction.hovered || hostsTitleAction.visualFocus ? Theme.controlHover : "transparent")
+                border.color: hostsTitleAction.visualFocus ? Theme.focus : "transparent"
+                border.width: hostsTitleAction.visualFocus ? 1 : 0
 
                 Behavior on color {
                     ColorAnimation {
@@ -845,9 +845,9 @@ Rectangle {
                 objectName: "titleNewTabContainer"
                 width: 36
                 height: titleNavigation.height
-                color: titleNewTabAction.hovered || titleNewTabAction.activeFocus ? Theme.controlHover : "transparent"
-                border.color: titleNewTabAction.activeFocus ? Theme.focus : "transparent"
-                border.width: titleNewTabAction.activeFocus ? 1 : 0
+                color: titleNewTabAction.hovered || titleNewTabAction.visualFocus ? Theme.controlHover : "transparent"
+                border.color: titleNewTabAction.visualFocus ? Theme.focus : "transparent"
+                border.width: titleNewTabAction.visualFocus ? 1 : 0
 
                 Behavior on color {
                     ColorAnimation {
@@ -930,9 +930,9 @@ Rectangle {
                 width: root.titleSecurityActionWidth
                 height: titleBar.height
                 visible: root.portableVaultNeedsAttention
-                color: portableVaultStatusAction.hovered || portableVaultStatusAction.activeFocus ? Theme.controlHover : "transparent"
-                border.color: portableVaultStatusAction.activeFocus ? Theme.focus : "transparent"
-                border.width: portableVaultStatusAction.activeFocus ? 1 : 0
+                color: portableVaultStatusAction.hovered || portableVaultStatusAction.visualFocus ? Theme.controlHover : "transparent"
+                border.color: portableVaultStatusAction.visualFocus ? Theme.focus : "transparent"
+                border.width: portableVaultStatusAction.visualFocus ? 1 : 0
 
                 Behavior on color {
                     ColorAnimation {
@@ -975,9 +975,9 @@ Rectangle {
             Rectangle {
                 width: root.titleQuickActionWidth
                 height: titleBar.height
-                color: alwaysOnTopAction.hovered || alwaysOnTopAction.activeFocus ? Theme.controlHover : "transparent"
-                border.color: alwaysOnTopAction.activeFocus ? Theme.focus : "transparent"
-                border.width: alwaysOnTopAction.activeFocus ? 1 : 0
+                color: alwaysOnTopAction.hovered || alwaysOnTopAction.visualFocus ? Theme.controlHover : "transparent"
+                border.color: alwaysOnTopAction.visualFocus ? Theme.focus : "transparent"
+                border.width: alwaysOnTopAction.visualFocus ? 1 : 0
 
                 AppIcon {
                     anchors.centerIn: parent
@@ -1006,9 +1006,9 @@ Rectangle {
             Rectangle {
                 width: root.titleQuickActionWidth
                 height: titleBar.height
-                color: transferCenterAction.hovered || transferCenterAction.activeFocus ? Theme.controlHover : "transparent"
-                border.color: transferCenterAction.activeFocus ? Theme.focus : "transparent"
-                border.width: transferCenterAction.activeFocus ? 1 : 0
+                color: transferCenterAction.hovered || transferCenterAction.visualFocus ? Theme.controlHover : "transparent"
+                border.color: transferCenterAction.visualFocus ? Theme.focus : "transparent"
+                border.width: transferCenterAction.visualFocus ? 1 : 0
 
                 AppIcon {
                     anchors.centerIn: parent
@@ -1060,9 +1060,9 @@ Rectangle {
             Rectangle {
                 width: root.titleQuickActionWidth
                 height: titleBar.height
-                color: commandPaletteAction.hovered || commandPaletteAction.activeFocus ? Theme.controlHover : "transparent"
-                border.color: commandPaletteAction.activeFocus ? Theme.focus : "transparent"
-                border.width: commandPaletteAction.activeFocus ? 1 : 0
+                color: commandPaletteAction.hovered || commandPaletteAction.visualFocus ? Theme.controlHover : "transparent"
+                border.color: commandPaletteAction.visualFocus ? Theme.focus : "transparent"
+                border.width: commandPaletteAction.visualFocus ? 1 : 0
 
                 Behavior on color {
                     ColorAnimation {
@@ -1100,9 +1100,9 @@ Rectangle {
             Rectangle {
                 width: root.titleQuickActionWidth
                 height: titleBar.height
-                color: settingsShortcutAction.hovered || settingsShortcutAction.activeFocus ? Theme.controlHover : "transparent"
-                border.color: settingsShortcutAction.activeFocus ? Theme.focus : "transparent"
-                border.width: settingsShortcutAction.activeFocus ? 1 : 0
+                color: settingsShortcutAction.hovered || settingsShortcutAction.visualFocus ? Theme.controlHover : "transparent"
+                border.color: settingsShortcutAction.visualFocus ? Theme.focus : "transparent"
+                border.width: settingsShortcutAction.visualFocus ? 1 : 0
 
                 Behavior on color {
                     ColorAnimation {
@@ -1222,8 +1222,8 @@ Rectangle {
                 background: Rectangle {
                     radius: Theme.radiusSmall
                     color: dismissRecoveryButton.down ? Theme.controlPressed : dismissRecoveryButton.hovered ? Theme.controlHover : "transparent"
-                    border.color: dismissRecoveryButton.activeFocus ? Theme.focus : "transparent"
-                    border.width: dismissRecoveryButton.activeFocus ? 2 : 0
+                    border.color: dismissRecoveryButton.visualFocus ? Theme.focus : "transparent"
+                    border.width: dismissRecoveryButton.visualFocus ? 2 : 0
                 }
 
                 contentItem: AppIcon {
@@ -2169,8 +2169,8 @@ Rectangle {
                                     background: Rectangle {
                                         radius: Theme.radiusSmall
                                         color: caseSensitiveButton.checked ? Theme.accent : caseSensitiveButton.down ? Theme.controlPressed : caseSensitiveButton.hovered ? Theme.controlHover : Theme.controlBackground
-                                        border.color: caseSensitiveButton.activeFocus ? Theme.focus : caseSensitiveButton.checked ? Theme.accentHover : root.borderColor
-                                        border.width: caseSensitiveButton.activeFocus ? 2 : 1
+                                        border.color: caseSensitiveButton.visualFocus ? Theme.focus : caseSensitiveButton.checked ? Theme.accentHover : root.borderColor
+                                        border.width: caseSensitiveButton.visualFocus ? 2 : 1
                                     }
                                 }
 

@@ -1492,6 +1492,49 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     return true;
 }
 
+[[nodiscard]] bool verifyKeyboardActionFocusVisibility(QQuickItem *rootObject)
+{
+    QQuickItem *action = quickItem(rootObject, "alwaysOnTopAction");
+    if (action == nullptr || !action->isVisible() || !action->isEnabled())
+    {
+        qCWarning(applicationLog) << "Always-on-top keyboard action is unavailable for focus visibility smoke";
+        return false;
+    }
+    QQuickItem *focusReset = quickItem(rootObject, "hostsTitleAction");
+    if (focusReset == nullptr || !focusReset->isVisible() || !focusReset->isEnabled())
+    {
+        qCWarning(applicationLog) << "Focus reset action is unavailable for focus visibility smoke";
+        return false;
+    }
+
+    focusReset->forceActiveFocus(Qt::OtherFocusReason);
+    action->forceActiveFocus(Qt::MouseFocusReason);
+    processWindowEventsFor(std::chrono::milliseconds{40});
+    const bool mouseFocusWithoutRing = action->hasActiveFocus() && !action->property("visualFocus").toBool();
+
+    focusReset->forceActiveFocus(Qt::OtherFocusReason);
+    action->forceActiveFocus(Qt::TabFocusReason);
+    processWindowEventsFor(std::chrono::milliseconds{40});
+    const bool tabFocusWithRing = action->hasActiveFocus() && action->property("visualFocus").toBool();
+
+    QAccessibleInterface *accessible = QAccessible::queryAccessibleInterface(action);
+    QAccessibleActionInterface *accessibleAction = accessible == nullptr ? nullptr : accessible->actionInterface();
+    const bool keyboardActivationAvailable =
+        action->property("activeFocusOnTab").toBool() && accessibleAction != nullptr
+        && accessibleAction->actionNames().contains(QAccessibleActionInterface::pressAction());
+    if (!mouseFocusWithoutRing || !tabFocusWithRing || !keyboardActivationAvailable)
+    {
+        qCWarning(applicationLog) << "Keyboard action focus visibility contract failed"
+                                  << "mouseFocusWithoutRing=" << mouseFocusWithoutRing
+                                  << "tabFocusWithRing=" << tabFocusWithRing
+                                  << "keyboardActivationAvailable=" << keyboardActivationAvailable
+                                  << "activeFocus=" << action->hasActiveFocus()
+                                  << "visualFocus=" << action->property("visualFocus").toBool();
+        return false;
+    }
+    return true;
+}
+
 [[nodiscard]] bool verifyAccessibleButton(QQuickItem *rootObject, const char *objectName, const char *expectedName)
 {
     QQuickItem *item = visualQuickItem(rootObject, objectName);
@@ -1852,6 +1895,10 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
         {
             return false;
         }
+    }
+    if (!verifyKeyboardActionFocusVisibility(rootObject))
+    {
+        return false;
     }
 
     sendKey(window, Qt::Key_P, Qt::ControlModifier | Qt::ShiftModifier);

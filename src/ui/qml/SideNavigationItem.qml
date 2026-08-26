@@ -15,8 +15,8 @@ Rectangle {
     implicitHeight: 34
     radius: 7
     color: control.selected || action.hovered ? Theme.raisedBackground : "transparent"
-    border.color: action.activeFocus ? Theme.focus : "transparent"
-    border.width: action.activeFocus ? 1 : 0
+    border.color: action.visualFocus ? Theme.focus : "transparent"
+    border.width: action.visualFocus ? 1 : 0
 
     Rectangle {
         anchors.left: parent.left

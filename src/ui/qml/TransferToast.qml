@@ -124,8 +124,8 @@ Popup {
             background: Rectangle {
                 radius: width / 2
                 color: dismissButton.down ? Theme.controlPressed : dismissButton.hovered ? Theme.controlHover : "transparent"
-                border.color: dismissButton.activeFocus ? Theme.focus : "transparent"
-                border.width: dismissButton.activeFocus ? 2 : 0
+                border.color: dismissButton.visualFocus ? Theme.focus : "transparent"
+                border.width: dismissButton.visualFocus ? 2 : 0
             }
 
             HoverHandler {

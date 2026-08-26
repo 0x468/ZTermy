@@ -334,8 +334,8 @@ Item {
                         background: Rectangle {
                             radius: Theme.radiusSmall
                             color: copyCodeButton.down ? Theme.controlPressed : copyCodeButton.hovered ? Theme.controlHover : "transparent"
-                            border.color: copyCodeButton.activeFocus ? Theme.focus : "transparent"
-                            border.width: copyCodeButton.activeFocus ? 2 : 1
+                            border.color: copyCodeButton.visualFocus ? Theme.focus : "transparent"
+                            border.width: copyCodeButton.visualFocus ? 2 : 1
                         }
 
                         AppToolTip {

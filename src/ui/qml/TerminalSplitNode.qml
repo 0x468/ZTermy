@@ -377,8 +377,8 @@ Item {
                 background: Rectangle {
                     radius: height / 2
                     color: selectionAiButton.down ? Theme.controlPressed : selectionAiButton.hovered ? Theme.controlHover : Theme.floatingBackground
-                    border.color: selectionAiButton.activeFocus ? Theme.focus : Theme.border
-                    border.width: selectionAiButton.activeFocus ? 2 : 1
+                    border.color: selectionAiButton.visualFocus ? Theme.focus : Theme.border
+                    border.width: selectionAiButton.visualFocus ? 2 : 1
                 }
 
                 AppToolTip {

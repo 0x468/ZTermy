@@ -84,8 +84,8 @@ MenuItem {
         height: control.height - 2
         radius: Theme.radiusSmall
         color: control.down ? Theme.controlPressed : control.highlighted ? Theme.controlHover : "transparent"
-        border.color: control.activeFocus ? Theme.focus : "transparent"
-        border.width: control.activeFocus ? 2 : 0
+        border.color: control.visualFocus ? Theme.focus : "transparent"
+        border.width: control.visualFocus ? 2 : 0
 
         Behavior on color {
             ColorAnimation {

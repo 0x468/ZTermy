@@ -31,9 +31,9 @@ Rectangle {
 
     implicitWidth: Math.min(184, Math.max(112, titleText.implicitWidth + 54))
     implicitHeight: Theme.titleBarHeight
-    color: control.selected ? Theme.controlBackground : (control.hovered || activateAction.activeFocus ? Theme.controlHover : "transparent")
-    border.color: activateAction.activeFocus ? Theme.focus : "transparent"
-    border.width: activateAction.activeFocus ? 1 : 0
+    color: control.selected ? Theme.controlBackground : (control.hovered || activateAction.visualFocus ? Theme.controlHover : "transparent")
+    border.color: activateAction.visualFocus ? Theme.focus : "transparent"
+    border.width: activateAction.visualFocus ? 1 : 0
     Behavior on color {
         ColorAnimation {
             duration: Theme.motionFast
@@ -173,10 +173,10 @@ Rectangle {
         width: 24
         height: 24
         radius: 5
-        color: closeAction.hovered || closeAction.activeFocus ? Theme.borderStrong : "transparent"
-        opacity: control.selected || control.hovered || activateAction.activeFocus || closeAction.activeFocus ? 1.0 : 0.45
-        border.color: closeAction.activeFocus ? Theme.focus : "transparent"
-        border.width: closeAction.activeFocus ? 1 : 0
+        color: closeAction.hovered || closeAction.visualFocus ? Theme.borderStrong : "transparent"
+        opacity: control.selected || control.hovered || activateAction.visualFocus || closeAction.visualFocus ? 1.0 : 0.45
+        border.color: closeAction.visualFocus ? Theme.focus : "transparent"
+        border.width: closeAction.visualFocus ? 1 : 0
 
         Behavior on color {
             ColorAnimation {

@@ -71,9 +71,9 @@ Rectangle {
 
         implicitHeight: 36
         radius: Theme.radiusControl
-        color: selected ? Theme.controlBackground : (categoryAction.hovered || categoryAction.activeFocus ? Theme.controlHover : "transparent")
-        border.color: categoryAction.activeFocus ? Theme.focus : "transparent"
-        border.width: categoryAction.activeFocus ? 1 : 0
+        color: selected ? Theme.controlBackground : (categoryAction.hovered || categoryAction.visualFocus ? Theme.controlHover : "transparent")
+        border.color: categoryAction.visualFocus ? Theme.focus : "transparent"
+        border.width: categoryAction.visualFocus ? 1 : 0
 
         function focusAction() {
             categoryAction.forceActiveFocus();

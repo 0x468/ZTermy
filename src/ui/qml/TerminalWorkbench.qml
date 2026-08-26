@@ -70,8 +70,8 @@ Rectangle {
                 height: width
                 radius: width / 2
                 color: control.down ? Theme.controlPressed : control.hovered ? Theme.controlHover : "transparent"
-                border.color: control.activeFocus ? Theme.focus : "transparent"
-                border.width: control.activeFocus ? 2 : 0
+                border.color: control.visualFocus ? Theme.focus : "transparent"
+                border.width: control.visualFocus ? 2 : 0
 
                 Behavior on color {
                     ColorAnimation {
@@ -126,8 +126,8 @@ Rectangle {
         background: Rectangle {
             radius: height / 2
             color: scopeControl.active ? Theme.selectedBackground : scopeControl.hovered ? Theme.controlHover : "transparent"
-            border.color: scopeControl.activeFocus ? Theme.focus : "transparent"
-            border.width: scopeControl.activeFocus ? 2 : 0
+            border.color: scopeControl.visualFocus ? Theme.focus : "transparent"
+            border.width: scopeControl.visualFocus ? 2 : 0
         }
 
         HoverHandler {

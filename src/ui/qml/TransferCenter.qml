@@ -253,8 +253,8 @@ Popup {
                 background: Rectangle {
                     radius: Theme.radiusSmall
                     color: clearFinishedButton.hovered ? Theme.controlHover : "transparent"
-                    border.color: clearFinishedButton.activeFocus ? Theme.focus : "transparent"
-                    border.width: clearFinishedButton.activeFocus ? 2 : 0
+                    border.color: clearFinishedButton.visualFocus ? Theme.focus : "transparent"
+                    border.width: clearFinishedButton.visualFocus ? 2 : 0
                 }
                 AppToolTip {
                     text: qsTr("Clear finished transfers")
@@ -631,8 +631,8 @@ Popup {
                         background: Rectangle {
                             radius: width / 2
                             color: retryButton.down ? Theme.controlPressed : retryButton.hovered ? Theme.controlHover : "transparent"
-                            border.color: retryButton.activeFocus ? Theme.focus : "transparent"
-                            border.width: retryButton.activeFocus ? 2 : 0
+                            border.color: retryButton.visualFocus ? Theme.focus : "transparent"
+                            border.width: retryButton.visualFocus ? 2 : 0
                         }
                         AppToolTip {
                             text: qsTr("Retry")
@@ -660,8 +660,8 @@ Popup {
                         background: Rectangle {
                             radius: width / 2
                             color: cancelButton.down ? Theme.controlPressed : cancelButton.hovered ? Theme.controlHover : "transparent"
-                            border.color: cancelButton.activeFocus ? Theme.focus : "transparent"
-                            border.width: cancelButton.activeFocus ? 2 : 0
+                            border.color: cancelButton.visualFocus ? Theme.focus : "transparent"
+                            border.width: cancelButton.visualFocus ? 2 : 0
                         }
                         AppToolTip {
                             text: qsTr("Cancel")
@@ -687,8 +687,8 @@ Popup {
                         background: Rectangle {
                             radius: width / 2
                             color: dismissButton.down ? Theme.controlPressed : dismissButton.hovered ? Theme.controlHover : "transparent"
-                            border.color: dismissButton.activeFocus ? Theme.focus : "transparent"
-                            border.width: dismissButton.activeFocus ? 2 : 0
+                            border.color: dismissButton.visualFocus ? Theme.focus : "transparent"
+                            border.width: dismissButton.visualFocus ? 2 : 0
                         }
                         AppToolTip {
                             text: qsTr("Remove")

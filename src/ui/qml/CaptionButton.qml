@@ -1,6 +1,7 @@
 import QtQuick
+import QtQuick.Controls
 
-Item {
+Control {
     id: control
 
     required property string kind
@@ -8,16 +9,16 @@ Item {
     property bool externallyHovered: false
     property bool externallyPressed: false
     property string accessibleName: ""
-    readonly property bool hovered: externallyHovered || mouseArea.containsMouse
-    readonly property bool pressed: externallyPressed || mouseArea.pressed
+    readonly property bool effectiveHovered: externallyHovered || control.hovered || mouseArea.containsMouse
+    readonly property bool effectivePressed: externallyPressed || mouseArea.pressed
     readonly property color surfaceColor: {
-        if (control.kind === "close" && (control.hovered || control.activeFocus)) {
+        if (control.kind === "close" && (control.effectiveHovered || control.visualFocus)) {
             return Theme.closeHover;
         }
-        if (control.pressed) {
+        if (control.effectivePressed) {
             return Theme.captionPressed;
         }
-        if (control.hovered || control.activeFocus) {
+        if (control.effectiveHovered || control.visualFocus) {
             return Theme.captionHover;
         }
         return "transparent";
@@ -25,10 +26,13 @@ Item {
     signal activated
 
     activeFocusOnTab: true
+    background: null
+    hoverEnabled: true
     Accessible.role: Accessible.Button
     Accessible.name: accessibleName
     Accessible.onPressAction: activated()
     onActiveFocusChanged: icon.requestPaint()
+    onVisualFocusChanged: icon.requestPaint()
 
     Rectangle {
         anchors.fill: parent
@@ -42,7 +46,7 @@ Item {
     }
 
     Rectangle {
-        visible: control.activeFocus
+        visible: control.visualFocus
         anchors.fill: parent
         anchors.margins: 3
         color: "transparent"
@@ -60,7 +64,7 @@ Item {
         onPaint: {
             const context = getContext("2d");
             context.reset();
-            context.strokeStyle = control.kind === "close" && (control.hovered || control.activeFocus) ? Theme.dangerSurfaceText : Theme.text;
+            context.strokeStyle = control.kind === "close" && (control.effectiveHovered || control.visualFocus) ? Theme.dangerSurfaceText : Theme.text;
             context.lineWidth = 1;
             context.lineCap = "square";
 

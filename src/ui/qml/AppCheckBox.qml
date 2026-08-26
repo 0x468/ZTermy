@@ -25,8 +25,8 @@ CheckBox {
         y: (control.height - height) / 2
         radius: Theme.radiusSmall
         color: !control.enabled ? Theme.controlDisabled : control.checked ? Theme.accent : control.hovered ? Theme.controlHover : Theme.fieldBackground
-        border.color: control.activeFocus ? Theme.focus : control.checked ? Theme.accent : Theme.borderStrong
-        border.width: control.activeFocus ? 2 : 1
+        border.color: control.visualFocus ? Theme.focus : control.checked ? Theme.accent : Theme.borderStrong
+        border.width: control.visualFocus ? 2 : 1
 
         AppIcon {
             anchors.centerIn: parent

@@ -25,8 +25,8 @@ Switch {
         y: (control.height - height) / 2
         radius: height / 2
         color: !control.enabled ? Theme.controlDisabled : control.checked ? Theme.accent : control.hovered ? Theme.controlPressed : Theme.controlBackground
-        border.color: control.activeFocus ? Theme.focus : control.checked ? Theme.accent : Theme.borderStrong
-        border.width: control.activeFocus ? 2 : 1
+        border.color: control.visualFocus ? Theme.focus : control.checked ? Theme.accent : Theme.borderStrong
+        border.width: control.visualFocus ? 2 : 1
 
         Rectangle {
             width: 14

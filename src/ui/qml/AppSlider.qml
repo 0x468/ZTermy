@@ -35,8 +35,8 @@ Slider {
         height: 18
         radius: width / 2
         color: control.enabled ? Theme.text : Theme.textSubtle
-        border.color: control.activeFocus ? Theme.focus : control.hovered ? Theme.accent : Theme.borderStrong
-        border.width: control.activeFocus ? 3 : 2
+        border.color: control.visualFocus ? Theme.focus : control.hovered ? Theme.accent : Theme.borderStrong
+        border.width: control.visualFocus ? 3 : 2
     }
 
     HoverHandler {

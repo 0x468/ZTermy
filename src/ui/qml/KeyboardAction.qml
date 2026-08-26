@@ -1,14 +1,15 @@
 import QtQuick
+import QtQuick.Controls
 
-Item {
+Control {
     id: control
 
     required property string accessibleName
-    readonly property alias hovered: pointerArea.containsMouse
-    readonly property alias pressed: pointerArea.pressed
     signal activated
 
     activeFocusOnTab: true
+    background: null
+    hoverEnabled: true
     Accessible.role: Accessible.Button
     Accessible.name: accessibleName
     Accessible.onPressAction: activated()

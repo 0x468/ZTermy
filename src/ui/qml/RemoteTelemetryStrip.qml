@@ -92,8 +92,8 @@ Item {
 
         background: Rectangle {
             radius: Theme.radiusSmall
-            color: metricButton.down ? Theme.controlPressed : metricButton.hovered || metricButton.activeFocus ? Theme.controlHover : "transparent"
-            border.color: metricButton.activeFocus ? Theme.focus : "transparent"
+            color: metricButton.down ? Theme.controlPressed : metricButton.hovered || metricButton.visualFocus ? Theme.controlHover : "transparent"
+            border.color: metricButton.visualFocus ? Theme.focus : "transparent"
         }
 
         contentItem: Row {
