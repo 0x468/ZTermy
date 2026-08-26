@@ -116,6 +116,19 @@ template <typename Endpoint>
 }
 
 template <typename Endpoint>
+[[nodiscard]] std::chrono::seconds endpointConnectionTimeout(const Endpoint &endpoint) noexcept
+{
+    if constexpr (requires { endpoint.connectionTimeoutSeconds; })
+    {
+        return std::chrono::seconds(endpoint.connectionTimeoutSeconds);
+    }
+    else
+    {
+        return std::chrono::seconds(endpoint.sessionOptions.connectionTimeoutSeconds);
+    }
+}
+
+template <typename Endpoint>
 [[nodiscard]] std::expected<std::unique_ptr<SshByteTransport>, SshBootstrapError>
 connectInitialTransport(Endpoint &endpoint, const std::stop_token &stopToken)
 {
@@ -130,7 +143,8 @@ connectInitialTransport(Endpoint &endpoint, const std::stop_token &stopToken)
     }
     const std::string &connectHost = endpoint.proxy.type == SshProxyType::None ? host : endpoint.proxy.host;
     const std::uint16_t connectPort = endpoint.proxy.type == SshProxyType::None ? endpoint.port : endpoint.proxy.port;
-    auto directSocket = WindowsTcpSocket::connect(connectHost, connectPort, 10s, stopToken);
+    const auto timeout = endpointConnectionTimeout(endpoint);
+    auto directSocket = WindowsTcpSocket::connect(connectHost, connectPort, timeout, stopToken);
     if (!directSocket)
     {
         return std::unexpected(connectionError(failureFromTcp(directSocket.error().kind)));
@@ -149,7 +163,7 @@ connectInitialTransport(Endpoint &endpoint, const std::stop_token &stopToken)
     {
         auto tunnel =
             establishExplicitProxyTunnel(*transport, endpoint.proxy.type, host, endpoint.port, endpoint.proxy.username,
-                                         endpoint.proxySecret.view(), 10s, stopToken);
+                                         endpoint.proxySecret.view(), timeout, stopToken);
         if (!tunnel)
         {
             return std::unexpected(connectionError(failureFromProxy(tunnel.error().kind)));
@@ -175,8 +189,9 @@ connectTransportThroughJump(std::unique_ptr<SshByteTransport> upstreamTransport,
     }
     const std::string &connectHost = endpoint.proxy.type == SshProxyType::None ? host : endpoint.proxy.host;
     const std::uint16_t connectPort = endpoint.proxy.type == SshProxyType::None ? endpoint.port : endpoint.proxy.port;
+    const auto timeout = endpointConnectionTimeout(endpoint);
     auto tunneled = SshDirectTcpipTransport::create(std::move(upstreamTransport), std::move(upstreamSession),
-                                                    connectHost, connectPort, 10s, stopToken);
+                                                    connectHost, connectPort, timeout, stopToken);
     if (!tunneled)
     {
         return std::unexpected(connectionError(sshFailureFromTransport(tunneled.error(), true)));
@@ -186,7 +201,7 @@ connectTransportThroughJump(std::unique_ptr<SshByteTransport> upstreamTransport,
     {
         auto tunnel =
             establishExplicitProxyTunnel(*transport, endpoint.proxy.type, host, endpoint.port, endpoint.proxy.username,
-                                         endpoint.proxySecret.view(), 10s, stopToken);
+                                         endpoint.proxySecret.view(), timeout, stopToken);
         if (!tunnel)
         {
             return std::unexpected(connectionError(failureFromProxy(tunnel.error().kind)));
@@ -207,7 +222,7 @@ authenticateEndpoint(Endpoint &endpoint, SshByteTransport &transport, const QStr
     }
 
     publishPhase(callbacks, SshConnectionPhase::Handshaking);
-    auto handshake = (*session)->handshake(transport, 10s, stopToken);
+    auto handshake = (*session)->handshake(transport, endpointConnectionTimeout(endpoint), stopToken);
     if (!handshake)
     {
         return std::unexpected(connectionError(sshFailureFromTransport(handshake.error())));

@@ -16,6 +16,7 @@ class NativeWindow final : public QQuickView
     Q_PROPERTY(bool maximized READ maximized NOTIFY maximizedChanged)
     Q_PROPERTY(bool maximizeButtonHovered READ maximizeButtonHovered NOTIFY maximizeButtonHoveredChanged)
     Q_PROPERTY(bool maximizeButtonPressed READ maximizeButtonPressed NOTIFY maximizeButtonPressedChanged)
+    Q_PROPERTY(bool alwaysOnTop READ alwaysOnTop NOTIFY alwaysOnTopChanged)
     Q_PROPERTY(bool systemDarkMode READ systemDarkMode NOTIFY systemDarkModeChanged)
     Q_PROPERTY(QColor systemAccentColor READ systemAccentColor NOTIFY systemAccentColorChanged)
     Q_PROPERTY(bool animationsEnabled READ animationsEnabled NOTIFY animationsEnabledChanged)
@@ -35,6 +36,7 @@ public:
     [[nodiscard]] bool maximized() const noexcept;
     [[nodiscard]] bool maximizeButtonHovered() const noexcept;
     [[nodiscard]] bool maximizeButtonPressed() const noexcept;
+    [[nodiscard]] bool alwaysOnTop() const noexcept;
     [[nodiscard]] bool systemDarkMode() const noexcept;
     [[nodiscard]] QColor systemAccentColor() const noexcept;
     [[nodiscard]] bool animationsEnabled() const noexcept;
@@ -52,6 +54,7 @@ public:
     Q_INVOKABLE void minimizeWindow();
     Q_INVOKABLE void toggleMaximize();
     Q_INVOKABLE void closeWindow();
+    Q_INVOKABLE void toggleAlwaysOnTop();
     void setCloseToTrayEnabled(bool enabled);
     Q_INVOKABLE bool applyAppearance(const QString &backdropPreference, bool darkMode);
     Q_INVOKABLE void setTitleBarMetrics(qreal titleHeight, qreal captionLeft, qreal controlsLeft, qreal maximizeLeft,
@@ -61,6 +64,7 @@ signals:
     void maximizedChanged();
     void maximizeButtonHoveredChanged();
     void maximizeButtonPressedChanged();
+    void alwaysOnTopChanged();
     void systemDarkModeChanged();
     void systemAccentColorChanged();
     void animationsEnabledChanged();
@@ -98,6 +102,7 @@ private:
     qreal m_maximizeWidth = 46.0;
     bool m_maximizeButtonHovered = false;
     bool m_maximizeButtonPressed = false;
+    bool m_alwaysOnTop = false;
     QString m_backdropPreference = QStringLiteral("acrylic");
     bool m_darkMode = true;
     bool m_closeToTrayEnabled = false;

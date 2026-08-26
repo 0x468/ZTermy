@@ -182,11 +182,16 @@ Rectangle {
     }
 
     function sessionOptionsMap() {
+        const connectionTimeout = Number(connectionTimeoutField.text);
         const keepaliveInterval = Number(keepaliveIntervalField.text);
         const keepaliveThreshold = Number(keepaliveThresholdField.text);
         const startupDelay = Number(startupDelayField.text);
         const reconnectAttempts = Number(reconnectAttemptsField.text);
         const reconnectBackoff = Number(reconnectBackoffField.text);
+        if (!Number.isInteger(connectionTimeout) || connectionTimeout < 1 || connectionTimeout > 300) {
+            showStatus(qsTr("Connection timeout must be between 1 and 300 seconds."), true);
+            return null;
+        }
         if (!Number.isInteger(keepaliveInterval) || keepaliveInterval < 0 || keepaliveInterval > 3600) {
             showStatus(qsTr("Keepalive interval must be between 0 and 3600 seconds."), true);
             return null;
@@ -227,6 +232,7 @@ Rectangle {
         }
         return {
             terminalType: terminalTypeField.text.trim(),
+            connectionTimeoutSeconds: connectionTimeout,
             keepaliveIntervalSeconds: keepaliveInterval,
             keepaliveFailureThreshold: keepaliveThreshold,
             startupCommand: startupCommandField.text,
@@ -378,6 +384,7 @@ Rectangle {
         editingProxyCredentialStored = false;
         jumpProfileIds = [];
         terminalTypeField.text = "xterm-256color";
+        connectionTimeoutField.text = "10";
         keepaliveIntervalField.text = "0";
         keepaliveThresholdField.text = "3";
         startupCommandField.text = "";
@@ -475,6 +482,7 @@ Rectangle {
         jumpProfileIds = profile.jumpProfileIds ? profile.jumpProfileIds.slice(0) : [];
         const options = profile.sessionOptions || {};
         terminalTypeField.text = options.terminalType || "xterm-256color";
+        connectionTimeoutField.text = String(options.connectionTimeoutSeconds === undefined ? 10 : options.connectionTimeoutSeconds);
         keepaliveIntervalField.text = String(options.keepaliveIntervalSeconds === undefined ? 0 : options.keepaliveIntervalSeconds);
         keepaliveThresholdField.text = String(options.keepaliveFailureThreshold === undefined ? 3 : options.keepaliveFailureThreshold);
         startupCommandField.text = options.startupCommand || "";
@@ -1821,6 +1829,28 @@ Rectangle {
                                                 placeholderText: "xterm-256color"
                                                 accessibleName: qsTr("SSH terminal type")
                                                 selectByMouse: true
+                                            }
+
+                                            Label {
+                                                text: qsTr("Connection timeout")
+                                                color: pane.textColor
+                                            }
+                                            AppTextField {
+                                                id: connectionTimeoutField
+                                                objectName: "hostConnectionTimeout"
+                                                Layout.fillWidth: true
+                                                text: "10"
+                                                placeholderText: qsTr("Seconds")
+                                                accessibleName: qsTr("SSH connection timeout in seconds")
+                                                inputMethodHints: Qt.ImhDigitsOnly
+                                                validator: IntValidator {
+                                                    bottom: 1
+                                                    top: 300
+                                                }
+                                                selectByMouse: true
+                                                AppToolTip {
+                                                    text: qsTr("Applies to TCP, proxy, jump-host, and SSH handshake setup. Authentication keeps its own timeout.")
+                                                }
                                             }
 
                                             Label {

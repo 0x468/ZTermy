@@ -297,6 +297,11 @@ bool TerminalItem::confirmMultilinePaste() const noexcept
     return m_confirmMultilinePaste;
 }
 
+bool TerminalItem::multilinePastePending() const noexcept
+{
+    return !m_pendingMultilinePaste.isEmpty();
+}
+
 QString TerminalItem::rightClickBehavior() const
 {
     return m_rightClickBehavior;
@@ -446,6 +451,11 @@ QString TerminalItem::hoveredLink() const
     return link == nullptr ? QString{} : QString::fromUtf8(link->uri);
 }
 
+QPointF TerminalItem::hoveredLinkPosition() const noexcept
+{
+    return m_hoverPosition;
+}
+
 bool TerminalItem::quickSelectActive() const noexcept
 {
     return m_quickSelectActive;
@@ -576,9 +586,10 @@ void TerminalItem::setConfirmMultilinePaste(const bool enabled)
         return;
     }
     m_confirmMultilinePaste = enabled;
-    if (!enabled)
+    if (!enabled && !m_pendingMultilinePaste.isEmpty())
     {
         m_pendingMultilinePaste.clear();
+        emit multilinePastePendingChanged();
     }
     emit confirmMultilinePasteChanged();
 }
@@ -696,6 +707,10 @@ void TerminalItem::resolveMultilinePaste(const bool accepted)
 {
     QByteArray pending = std::move(m_pendingMultilinePaste);
     m_pendingMultilinePaste.clear();
+    if (!pending.isEmpty())
+    {
+        emit multilinePastePendingChanged();
+    }
     if (accepted && !pending.isEmpty())
     {
         emit pasteRequested(pending);
@@ -780,7 +795,12 @@ void TerminalItem::requestPasteBytes(const QByteArray &bytes)
     const qsizetype lineBreaks = bytes.count('\n') > 0 ? bytes.count('\n') : bytes.count('\r');
     if (m_confirmMultilinePaste && lineBreaks > 0)
     {
+        const bool wasPending = !m_pendingMultilinePaste.isEmpty();
         m_pendingMultilinePaste = bytes;
+        if (!wasPending)
+        {
+            emit multilinePastePendingChanged();
+        }
         const qsizetype maximumLineCount = std::numeric_limits<int>::max();
         emit multilinePasteConfirmationRequested(static_cast<int>(std::min(lineBreaks + 1, maximumLineCount)));
         return;
@@ -1345,7 +1365,12 @@ void TerminalItem::geometryChange(const QRectF &newGeometry, const QRectF &oldGe
 
 void TerminalItem::keyPressEvent(QKeyEvent *event)
 {
-    dismissSelectionAction();
+    const bool modifierOnly = event->key() == Qt::Key_Control || event->key() == Qt::Key_Shift
+                              || event->key() == Qt::Key_Alt || event->key() == Qt::Key_Meta;
+    if (!modifierOnly)
+    {
+        dismissSelectionAction();
+    }
     if (m_copyModeActive && handleCopyModeKey(event))
     {
         event->accept();
@@ -1358,6 +1383,7 @@ void TerminalItem::keyPressEvent(QKeyEvent *event)
     }
     if (event->key() == Qt::Key_Control && m_hoverInside)
     {
+        m_controlModifierDown = true;
         updateHoveredLink(m_hoverPosition, event->modifiers() | Qt::ControlModifier);
     }
     const bool control = event->modifiers().testFlag(Qt::ControlModifier);
@@ -1391,7 +1417,7 @@ void TerminalItem::keyPressEvent(QKeyEvent *event)
         return;
     }
 
-    if (m_hasSelection)
+    if (m_hasSelection && !modifierOnly)
     {
         clearSelection();
     }
@@ -1408,7 +1434,12 @@ void TerminalItem::keyReleaseEvent(QKeyEvent *event)
     }
     if (event->key() == Qt::Key_Control && m_hoverInside)
     {
+        m_controlModifierDown = false;
         updateHoveredLink(m_hoverPosition, event->modifiers() & ~Qt::ControlModifier);
+    }
+    else if (event->key() == Qt::Key_Control)
+    {
+        m_controlModifierDown = false;
     }
     if (event->isAutoRepeat())
     {
@@ -1488,6 +1519,7 @@ void TerminalItem::focusInEvent(QFocusEvent *event)
 void TerminalItem::focusOutEvent(QFocusEvent *event)
 {
     cancelSelectionGesture();
+    m_controlModifierDown = false;
     clearPreedit();
     m_focusOutTimer.start();
     QQuickItem::focusOutEvent(event);
@@ -1496,8 +1528,13 @@ void TerminalItem::focusOutEvent(QFocusEvent *event)
 void TerminalItem::hoverMoveEvent(QHoverEvent *event)
 {
     m_hoverInside = true;
-    m_hoverPosition = event->position();
-    updateHoveredLink(event->position(), event->modifiers());
+    if (m_hoverPosition != event->position())
+    {
+        m_hoverPosition = event->position();
+        emit hoveredLinkPositionChanged();
+    }
+    const auto modifiers = event->modifiers() | (m_controlModifierDown ? Qt::ControlModifier : Qt::NoModifier);
+    updateHoveredLink(event->position(), modifiers);
     if (terminalOwnsMouse(event->modifiers()))
     {
         emit mouseEventGenerated(mouseEvent(terminal::TerminalMouseAction::motion, terminal::TerminalMouseButton::none,
@@ -1601,6 +1638,12 @@ void TerminalItem::mousePressEvent(QMouseEvent *event)
     if (event->modifiers().testFlag(Qt::ShiftModifier) && m_hasSelection)
     {
         emit selectionRequested(m_selectionAnchor.column, m_selectionAnchor.row, point->column, point->row, false);
+        m_selecting = true;
+        m_extendingSelection = true;
+        m_selectionMoved = false;
+        m_selectionClickSelected = true;
+        m_selectionPointerPosition = event->position();
+        stopSelectionAutoscroll();
         m_selectionActionPosition = event->position();
         m_selectionActionVisible = true;
         emit selectionActionChanged();
@@ -1608,13 +1651,21 @@ void TerminalItem::mousePressEvent(QMouseEvent *event)
         return;
     }
 
+    if (tripleClick)
+    {
+        selectLineAt(point->row, event->position());
+        m_selectionClickSelected = true;
+        event->accept();
+        return;
+    }
+
     m_selectionAnchor = *point;
     m_selecting = true;
     m_selectionMoved = false;
-    m_selectionClickSelected = tripleClick;
+    m_selectionClickSelected = false;
     m_selectionPointerPosition = event->position();
     stopSelectionAutoscroll();
-    setHasSelection(tripleClick);
+    setHasSelection(false);
     emit selectionGestureRequested(
         selectionGesture(terminal::TerminalSelectionGestureType::press, event->position(), event->timestamp()));
     event->accept();
@@ -1634,18 +1685,10 @@ void TerminalItem::mouseDoubleClickEvent(QMouseEvent *event)
     {
         if (const auto point = terminalPoint(event->position()))
         {
-            m_selectionAnchor = *point;
-            m_selecting = true;
-            m_selectionMoved = false;
+            selectWordAt(*point, event->position());
+            m_selecting = false;
             m_selectionClickSelected = true;
-            m_selectionPointerPosition = event->position();
             stopSelectionAutoscroll();
-            emit selectionGestureRequested(
-                selectionGesture(terminal::TerminalSelectionGestureType::press, event->position(), event->timestamp()));
-            setHasSelection(true);
-            m_selectionActionPosition = event->position();
-            m_selectionActionVisible = true;
-            emit selectionActionChanged();
             m_lastDoubleClickTimestamp = event->timestamp();
             m_lastDoubleClickPosition = event->position();
             event->accept();
@@ -1672,11 +1715,19 @@ void TerminalItem::mouseMoveEvent(QMouseEvent *event)
     if (const auto point = terminalPoint(event->position()))
     {
         m_selectionMoved = true;
-        auto gesture = selectionGesture(terminal::TerminalSelectionGestureType::drag, event->position());
-        gesture.rectangular = event->modifiers().testFlag(Qt::AltModifier);
-        emit selectionGestureRequested(gesture);
+        if (m_extendingSelection)
+        {
+            emit selectionRequested(m_selectionAnchor.column, m_selectionAnchor.row, point->column, point->row, false);
+            stopSelectionAutoscroll();
+        }
+        else
+        {
+            auto gesture = selectionGesture(terminal::TerminalSelectionGestureType::drag, event->position());
+            gesture.rectangular = event->modifiers().testFlag(Qt::AltModifier);
+            emit selectionGestureRequested(gesture);
+            updateSelectionAutoscroll(event->position());
+        }
         m_selectionPointerPosition = event->position();
-        updateSelectionAutoscroll(event->position());
     }
     event->accept();
 }
@@ -1712,6 +1763,25 @@ void TerminalItem::mouseReleaseEvent(QMouseEvent *event)
         return;
     }
     stopSelectionAutoscroll();
+    if (m_extendingSelection)
+    {
+        if (const auto point = terminalPoint(event->position()))
+        {
+            emit selectionRequested(m_selectionAnchor.column, m_selectionAnchor.row, point->column, point->row, false);
+            m_selectionActionPosition = event->position();
+            m_selectionActionVisible = true;
+            emit selectionActionChanged();
+        }
+        if ((m_selectionMoved || m_selectionClickSelected) && m_copyOnSelect)
+        {
+            emit copyRequested();
+        }
+        m_selecting = false;
+        m_extendingSelection = false;
+        m_selectionClickSelected = false;
+        event->accept();
+        return;
+    }
     if (m_selectionMoved)
     {
         if (const auto point = terminalPoint(event->position()))
@@ -1736,6 +1806,7 @@ void TerminalItem::mouseReleaseEvent(QMouseEvent *event)
         emit copyRequested();
     }
     m_selecting = false;
+    m_extendingSelection = false;
     m_selectionClickSelected = false;
     event->accept();
 }
@@ -1768,7 +1839,7 @@ void TerminalItem::selectWordAt(const terminal::TerminalPoint &point, const QPoi
     {
         --column;
     }
-    const auto wordClass = [](const terminal::TerminalCell &cell) {
+    const auto wordClass = [this](const terminal::TerminalCell &cell) {
         if (cell.grapheme.empty())
         {
             return 0;
@@ -1778,9 +1849,9 @@ void TerminalItem::selectWordAt(const terminal::TerminalPoint &point, const QPoi
         {
             return 0;
         }
-        return std::ranges::all_of(text,
-                                   [](const QChar character) {
-                                       return character.isLetterOrNumber() || character == QLatin1Char('_');
+        return std::ranges::any_of(text,
+                                   [this](const QChar character) {
+                                       return m_wordDelimiters.contains(character);
                                    })
                    ? 1
                    : 2;
@@ -1812,6 +1883,7 @@ void TerminalItem::selectWordAt(const terminal::TerminalPoint &point, const QPoi
     }
     const auto lastWidth = static_cast<quint16>(std::max<int>(1, m_snapshot->cell(last, point.row).displayWidth));
     const quint16 finalColumn = static_cast<quint16>(std::min<int>(m_snapshot->columns - 1, last + lastWidth - 1));
+    m_selectionAnchor = {.column = first, .row = point.row};
     emit selectionRequested(first, point.row, finalColumn, point.row, false);
     setHasSelection(true);
     m_selectionActionPosition = position;
@@ -1932,6 +2004,7 @@ void TerminalItem::cancelSelectionGesture()
     stopSelectionAutoscroll();
     emit selectionGestureRequested(selectionGesture(terminal::TerminalSelectionGestureType::cancel, {}));
     m_selecting = false;
+    m_extendingSelection = false;
     m_selectionMoved = false;
     m_selectionClickSelected = false;
 }

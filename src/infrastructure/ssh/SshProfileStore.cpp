@@ -153,6 +153,7 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
     }
     const QJsonObject object = value.toObject();
     const QJsonValue terminalType = object.value(QStringLiteral("terminalType"));
+    const QJsonValue connectionTimeout = object.value(QStringLiteral("connectionTimeoutSeconds"));
     const QJsonValue keepaliveInterval = object.value(QStringLiteral("keepaliveIntervalSeconds"));
     const QJsonValue keepaliveThreshold = object.value(QStringLiteral("keepaliveFailureThreshold"));
     const QJsonValue startupCommand = object.value(QStringLiteral("startupCommand"));
@@ -162,25 +163,30 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
     const QJsonValue reconnectPolicy = object.value(QStringLiteral("reconnectPolicy"));
     const QJsonValue reconnectAttempts = object.value(QStringLiteral("reconnectMaximumAttempts"));
     const QJsonValue reconnectBackoff = object.value(QStringLiteral("reconnectInitialBackoffMilliseconds"));
-    if (!terminalType.isString() || !keepaliveInterval.isDouble() || !keepaliveThreshold.isDouble()
-        || !startupCommand.isString() || !startupMode.isString() || !startupDelay.isDouble() || !environment.isArray()
-        || !reconnectPolicy.isString() || !reconnectAttempts.isDouble() || !reconnectBackoff.isDouble())
+    if (!terminalType.isString() || (!connectionTimeout.isUndefined() && !connectionTimeout.isDouble())
+        || !keepaliveInterval.isDouble() || !keepaliveThreshold.isDouble() || !startupCommand.isString()
+        || !startupMode.isString() || !startupDelay.isDouble() || !environment.isArray() || !reconnectPolicy.isString()
+        || !reconnectAttempts.isDouble() || !reconnectBackoff.isDouble())
     {
         return std::nullopt;
     }
     const auto parsedStartupMode = parseStartupCommandMode(startupMode.toString());
     const auto parsedReconnectPolicy = parseReconnectPolicy(reconnectPolicy.toString());
+    const qint64 timeout = connectionTimeout.isUndefined() ? 10 : connectionTimeout.toInteger(-1);
     const qint64 interval = keepaliveInterval.toInteger(-1);
     const qint64 threshold = keepaliveThreshold.toInteger(-1);
     const qint64 delay = startupDelay.toInteger(-1);
     const qint64 attempts = reconnectAttempts.toInteger(-1);
     const qint64 backoff = reconnectBackoff.toInteger(-1);
-    if (!parsedStartupMode || !parsedReconnectPolicy || interval < 0 || threshold < 0 || delay < 0 || attempts < 0
-        || backoff < 0 || static_cast<double>(interval) != keepaliveInterval.toDouble()
+    if (!parsedStartupMode || !parsedReconnectPolicy || timeout < 0 || interval < 0 || threshold < 0 || delay < 0
+        || attempts < 0 || backoff < 0
+        || (!connectionTimeout.isUndefined() && static_cast<double>(timeout) != connectionTimeout.toDouble())
+        || static_cast<double>(interval) != keepaliveInterval.toDouble()
         || static_cast<double>(threshold) != keepaliveThreshold.toDouble()
         || static_cast<double>(delay) != startupDelay.toDouble()
         || static_cast<double>(attempts) != reconnectAttempts.toDouble()
         || static_cast<double>(backoff) != reconnectBackoff.toDouble()
+        || std::cmp_greater(timeout, std::numeric_limits<std::uint16_t>::max())
         || std::cmp_greater(interval, std::numeric_limits<std::uint16_t>::max())
         || std::cmp_greater(threshold, std::numeric_limits<std::uint8_t>::max())
         || std::cmp_greater(delay, std::numeric_limits<std::uint16_t>::max())
@@ -215,6 +221,7 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
 
     ztermy::ssh::SshSessionOptions options{
         .terminalType = terminalType.toString().toStdString(),
+        .connectionTimeoutSeconds = static_cast<std::uint16_t>(timeout),
         .keepaliveIntervalSeconds = static_cast<std::uint16_t>(interval),
         .keepaliveFailureThreshold = static_cast<std::uint8_t>(threshold),
         .startupCommand = startupCommand.toString().toStdString(),
@@ -238,6 +245,7 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
     }
     return {
         {QStringLiteral("terminalType"), QString::fromStdString(options.terminalType)},
+        {QStringLiteral("connectionTimeoutSeconds"), options.connectionTimeoutSeconds},
         {QStringLiteral("keepaliveIntervalSeconds"), options.keepaliveIntervalSeconds},
         {QStringLiteral("keepaliveFailureThreshold"), options.keepaliveFailureThreshold},
         {QStringLiteral("startupCommand"), QString::fromStdString(options.startupCommand)},

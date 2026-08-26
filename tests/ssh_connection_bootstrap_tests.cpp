@@ -67,6 +67,9 @@ void SshConnectionBootstrapTests::validatesReusableConnectionRequests()
     auto invalidSessionOptions = validPasswordRequest();
     invalidSessionOptions.sessionOptions.terminalType = "xterm 256color";
     QVERIFY(!ztermy::ssh::validSshConnectionRequest(invalidSessionOptions));
+    invalidSessionOptions = validPasswordRequest();
+    invalidSessionOptions.sessionOptions.connectionTimeoutSeconds = 0;
+    QVERIFY(!ztermy::ssh::validSshConnectionRequest(invalidSessionOptions));
 
     auto proxied = validPasswordRequest();
     proxied.proxy = {.type = ztermy::ssh::SshProxyType::HttpConnect,
@@ -95,6 +98,9 @@ void SshConnectionBootstrapTests::validatesReusableConnectionRequests()
         .secret = ztermy::security::SensitiveByteArray(QByteArray("jump-secret")),
     });
     QVERIFY(ztermy::ssh::validSshConnectionRequest(jumped));
+    jumped.jumpHosts.front().connectionTimeoutSeconds = 0;
+    QVERIFY(!ztermy::ssh::validSshConnectionRequest(jumped));
+    jumped.jumpHosts.front().connectionTimeoutSeconds = 10;
     jumped.jumpHosts.push_back({
         .profileId = QStringLiteral("jump-1"),
         .displayName = QStringLiteral("Duplicate jump"),

@@ -37,6 +37,7 @@ public:
     using TerminalItem::inputMethodEvent;
     using TerminalItem::inputMethodQuery;
     using TerminalItem::keyPressEvent;
+    using TerminalItem::keyReleaseEvent;
     using TerminalItem::mouseDoubleClickEvent;
     using TerminalItem::mouseMoveEvent;
     using TerminalItem::mousePressEvent;
@@ -563,6 +564,10 @@ void TerminalItemTests::supportsClassicClipboardAliasesAndContextActions()
 
     item.selectVisibleTerminal();
     QVERIFY(item.hasSelection());
+    QKeyEvent controlDown(QEvent::KeyPress, Qt::Key_Control, Qt::ControlModifier);
+    item.keyPressEvent(&controlDown);
+    QVERIFY(item.hasSelection());
+    keyEvents.clear();
     QKeyEvent ctrlInsert(QEvent::KeyPress, Qt::Key_Insert, Qt::ControlModifier);
     item.keyPressEvent(&ctrlInsert);
     QCOMPARE(copySpy.count(), 1);
@@ -571,6 +576,9 @@ void TerminalItemTests::supportsClassicClipboardAliasesAndContextActions()
     item.keyPressEvent(&conditionalCopy);
     QCOMPARE(copySpy.count(), 2);
     QVERIFY(keyEvents.empty());
+    QKeyEvent controlUp(QEvent::KeyRelease, Qt::Key_Control, Qt::NoModifier);
+    item.keyReleaseEvent(&controlUp);
+    keyEvents.clear();
 
     item.clearSelection();
     QKeyEvent interrupt(QEvent::KeyPress, Qt::Key_C, Qt::ControlModifier);
@@ -624,6 +632,34 @@ void TerminalItemTests::selectsWordsOnDoubleClick()
 {
     TestableTerminalItem item;
     auto snapshot = snapshotAt(0, 0);
+    const QString word = QStringLiteral("hello-world");
+    for (qsizetype index = 0; index < word.size(); ++index)
+    {
+        snapshot->cell(static_cast<quint16>(index + 2), 1).grapheme = {word.at(index).unicode()};
+    }
+    item.setSnapshot(snapshot);
+    item.setWordDelimiters(QStringLiteral(" -"));
+    item.setSize(QSizeF{800, 480});
+    const QRectF origin = item.inputMethodQuery(Qt::ImCursorRectangle).toRectF();
+    const QPointF point{origin.x() + (4.5 * origin.width()), origin.y() + (1.5 * origin.height())};
+    QSignalSpy selectionSpy(&item, &ztermy::ui::TerminalItem::selectionRequested);
+
+    QMouseEvent event(QEvent::MouseButtonDblClick, point, point, point, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    event.setTimestamp(100);
+    item.mouseDoubleClickEvent(&event);
+
+    QCOMPARE(selectionSpy.count(), 1);
+    QCOMPARE(selectionSpy.at(0).at(0).toUInt(), 2U);
+    QCOMPARE(selectionSpy.at(0).at(1).toUInt(), 1U);
+    QCOMPARE(selectionSpy.at(0).at(2).toUInt(), 6U);
+    QCOMPARE(selectionSpy.at(0).at(3).toUInt(), 1U);
+    QVERIFY(item.hasSelection());
+}
+
+void TerminalItemTests::selectsLinesOnTripleClickAndExtendsWithShift()
+{
+    TestableTerminalItem item;
+    auto snapshot = snapshotAt(0, 0);
     const QString word = QStringLiteral("hello");
     for (qsizetype index = 0; index < word.size(); ++index)
     {
@@ -632,39 +668,11 @@ void TerminalItemTests::selectsWordsOnDoubleClick()
     item.setSnapshot(snapshot);
     item.setSize(QSizeF{800, 480});
     const QRectF origin = item.inputMethodQuery(Qt::ImCursorRectangle).toRectF();
-    const QPointF point{origin.x() + (4.5 * origin.width()), origin.y() + (1.5 * origin.height())};
-    std::vector<ztermy::terminal::TerminalSelectionGesture> gestures;
-    connect(&item, &ztermy::ui::TerminalItem::selectionGestureRequested, &item, [&gestures](const auto &gesture) {
-        gestures.push_back(gesture);
-    });
-
-    QMouseEvent event(QEvent::MouseButtonDblClick, point, point, point, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
-    event.setTimestamp(100);
-    item.mouseDoubleClickEvent(&event);
-
-    QCOMPARE(gestures.size(), std::size_t{1});
-    QCOMPARE(gestures.front().type, ztermy::terminal::TerminalSelectionGestureType::press);
-    QCOMPARE(gestures.front().point.column, 4U);
-    QCOMPARE(gestures.front().point.row, 1U);
-    QCOMPARE(gestures.front().eventTimeNanoseconds, std::uint64_t{100'000'000});
-    QVERIFY(item.hasSelection());
-}
-
-void TerminalItemTests::selectsLinesOnTripleClickAndExtendsWithShift()
-{
-    TestableTerminalItem item;
-    item.setSnapshot(snapshotAt(0, 0));
-    item.setSize(QSizeF{800, 480});
-    const QRectF origin = item.inputMethodQuery(Qt::ImCursorRectangle).toRectF();
     const auto cellCenter = [&origin](const int column, const int row) {
         return QPointF{origin.x() + ((static_cast<qreal>(column) + 0.5) * origin.width()),
                        origin.y() + ((static_cast<qreal>(row) + 0.5) * origin.height())};
     };
     const QPointF wordPoint = cellCenter(4, 1);
-    std::vector<ztermy::terminal::TerminalSelectionGesture> gestures;
-    connect(&item, &ztermy::ui::TerminalItem::selectionGestureRequested, &item, [&gestures](const auto &gesture) {
-        gestures.push_back(gesture);
-    });
     QSignalSpy selectionSpy(&item, &ztermy::ui::TerminalItem::selectionRequested);
 
     QMouseEvent doubleClick(QEvent::MouseButtonDblClick, wordPoint, wordPoint, wordPoint, Qt::LeftButton,
@@ -676,23 +684,42 @@ void TerminalItemTests::selectsLinesOnTripleClickAndExtendsWithShift()
                            Qt::NoModifier);
     thirdClick.setTimestamp(200);
     item.mousePressEvent(&thirdClick);
-    QCOMPARE(gestures.size(), std::size_t{2});
-    QCOMPARE(gestures.at(0).type, ztermy::terminal::TerminalSelectionGestureType::press);
-    QCOMPARE(gestures.at(1).type, ztermy::terminal::TerminalSelectionGestureType::press);
-    QCOMPARE(gestures.at(0).eventTimeNanoseconds, std::uint64_t{100'000'000});
-    QCOMPARE(gestures.at(1).eventTimeNanoseconds, std::uint64_t{200'000'000});
-    QCOMPARE(selectionSpy.count(), 0);
+    QCOMPARE(selectionSpy.count(), 2);
+    QCOMPARE(selectionSpy.at(0).at(0).toUInt(), 2U);
+    QCOMPARE(selectionSpy.at(0).at(2).toUInt(), 6U);
+    QCOMPARE(selectionSpy.at(1).at(0).toUInt(), 0U);
+    QCOMPARE(selectionSpy.at(1).at(2).toUInt(), 79U);
 
     const QPointF extensionPoint = cellCenter(10, 3);
+    QKeyEvent shiftDown(QEvent::KeyPress, Qt::Key_Shift, Qt::ShiftModifier);
+    item.keyPressEvent(&shiftDown);
+    QVERIFY(item.hasSelection());
     QMouseEvent shiftClick(QEvent::MouseButtonPress, extensionPoint, extensionPoint, extensionPoint, Qt::LeftButton,
                            Qt::LeftButton, Qt::ShiftModifier);
     shiftClick.setTimestamp(1000);
     item.mousePressEvent(&shiftClick);
-    QCOMPARE(selectionSpy.count(), 1);
-    QCOMPARE(selectionSpy.at(0).at(0).toUInt(), 4U);
-    QCOMPARE(selectionSpy.at(0).at(1).toUInt(), 1U);
-    QCOMPARE(selectionSpy.at(0).at(2).toUInt(), 10U);
-    QCOMPARE(selectionSpy.at(0).at(3).toUInt(), 3U);
+    QCOMPARE(selectionSpy.count(), 3);
+    QCOMPARE(selectionSpy.at(2).at(0).toUInt(), 0U);
+    QCOMPARE(selectionSpy.at(2).at(1).toUInt(), 1U);
+    QCOMPARE(selectionSpy.at(2).at(2).toUInt(), 10U);
+    QCOMPARE(selectionSpy.at(2).at(3).toUInt(), 3U);
+
+    const QPointF dragPoint = cellCenter(15, 4);
+    QMouseEvent shiftDrag(QEvent::MouseMove, dragPoint, dragPoint, dragPoint, Qt::NoButton, Qt::LeftButton,
+                          Qt::ShiftModifier);
+    item.mouseMoveEvent(&shiftDrag);
+    QCOMPARE(selectionSpy.count(), 4);
+    QCOMPARE(selectionSpy.at(3).at(0).toUInt(), 0U);
+    QCOMPARE(selectionSpy.at(3).at(1).toUInt(), 1U);
+    QCOMPARE(selectionSpy.at(3).at(2).toUInt(), 15U);
+    QCOMPARE(selectionSpy.at(3).at(3).toUInt(), 4U);
+
+    QMouseEvent shiftRelease(QEvent::MouseButtonRelease, dragPoint, dragPoint, dragPoint, Qt::LeftButton, Qt::NoButton,
+                             Qt::ShiftModifier);
+    item.mouseReleaseEvent(&shiftRelease);
+    QCOMPARE(selectionSpy.count(), 5);
+    QCOMPARE(selectionSpy.at(4).at(2).toUInt(), 15U);
+    QCOMPARE(selectionSpy.at(4).at(3).toUInt(), 4U);
 }
 
 void TerminalItemTests::confirmsMultilinePaste()
@@ -706,10 +733,12 @@ void TerminalItemTests::confirmsMultilinePaste()
     item.keyPressEvent(&pasteEvent);
 
     QCOMPARE(confirmationSpy.count(), 1);
+    QVERIFY(item.multilinePastePending());
     QCOMPARE(confirmationSpy.at(0).at(0).toInt(), 2);
     QCOMPARE(pasteSpy.count(), 0);
 
     item.resolveMultilinePaste(true);
+    QVERIFY(!item.multilinePastePending());
     QCOMPARE(pasteSpy.count(), 1);
     QCOMPARE(pasteSpy.at(0).at(0).toByteArray(), QByteArrayLiteral("first\nsecond"));
 }

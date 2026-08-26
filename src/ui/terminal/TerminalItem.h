@@ -47,6 +47,7 @@ class TerminalItem : public QQuickItem
     Q_PROPERTY(bool copyOnSelect READ copyOnSelect WRITE setCopyOnSelect NOTIFY copyOnSelectChanged)
     Q_PROPERTY(bool confirmMultilinePaste READ confirmMultilinePaste WRITE setConfirmMultilinePaste NOTIFY
                    confirmMultilinePasteChanged)
+    Q_PROPERTY(bool multilinePastePending READ multilinePastePending NOTIFY multilinePastePendingChanged)
     Q_PROPERTY(
         QString rightClickBehavior READ rightClickBehavior WRITE setRightClickBehavior NOTIFY rightClickBehaviorChanged)
     Q_PROPERTY(QString middleClickBehavior READ middleClickBehavior WRITE setMiddleClickBehavior NOTIFY
@@ -61,6 +62,7 @@ class TerminalItem : public QQuickItem
     Q_PROPERTY(bool selectionActionVisible READ selectionActionVisible NOTIFY selectionActionChanged)
     Q_PROPERTY(QPointF selectionActionPosition READ selectionActionPosition NOTIFY selectionActionChanged)
     Q_PROPERTY(QString hoveredLink READ hoveredLink NOTIFY hoveredLinkChanged)
+    Q_PROPERTY(QPointF hoveredLinkPosition READ hoveredLinkPosition NOTIFY hoveredLinkPositionChanged)
     Q_PROPERTY(bool quickSelectActive READ quickSelectActive NOTIFY quickSelectChanged)
     Q_PROPERTY(bool copyModeActive READ copyModeActive NOTIFY copyModeChanged)
     Q_PROPERTY(QVariantList keywordHighlightRules READ keywordHighlightRules WRITE setKeywordHighlightRules NOTIFY
@@ -82,6 +84,7 @@ public:
     [[nodiscard]] bool cursorBlink() const noexcept;
     [[nodiscard]] bool copyOnSelect() const noexcept;
     [[nodiscard]] bool confirmMultilinePaste() const noexcept;
+    [[nodiscard]] bool multilinePastePending() const noexcept;
     [[nodiscard]] QString rightClickBehavior() const;
     [[nodiscard]] QString middleClickBehavior() const;
     [[nodiscard]] QString wordDelimiters() const;
@@ -93,6 +96,7 @@ public:
     [[nodiscard]] bool selectionActionVisible() const noexcept;
     [[nodiscard]] QPointF selectionActionPosition() const noexcept;
     [[nodiscard]] QString hoveredLink() const;
+    [[nodiscard]] QPointF hoveredLinkPosition() const noexcept;
     [[nodiscard]] bool quickSelectActive() const noexcept;
     [[nodiscard]] bool copyModeActive() const noexcept;
     [[nodiscard]] QVariantList keywordHighlightRules() const;
@@ -160,6 +164,7 @@ signals:
     void cursorAppearanceChanged();
     void copyOnSelectChanged();
     void confirmMultilinePasteChanged();
+    void multilinePastePendingChanged();
     void rightClickBehaviorChanged();
     void middleClickBehaviorChanged();
     void wordDelimitersChanged();
@@ -170,6 +175,7 @@ signals:
     void keywordHighlightRulesChanged();
     void paletteOverrideChanged();
     void hoveredLinkChanged();
+    void hoveredLinkPositionChanged();
     void linkActivated(const QString &uri);
     void quickSelectChanged();
     void copyModeChanged();
@@ -257,10 +263,12 @@ private:
     qsizetype m_preeditCursorPosition = 0;
     bool m_preeditCursorVisible = true;
     bool m_selecting = false;
+    bool m_extendingSelection = false;
     bool m_selectionMoved = false;
     bool m_selectionClickSelected = false;
     bool m_selectionActionVisible = false;
     bool m_hoverInside = false;
+    bool m_controlModifierDown = false;
     bool m_quickSelectActive = false;
     bool m_copyModeActive = false;
     bool m_hasSelection = false;

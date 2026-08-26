@@ -16,7 +16,7 @@ Rectangle {
     readonly property int titleBarHeight: Theme.titleBarHeight
     readonly property int captionButtonWidth: 46
     readonly property int titleQuickActionWidth: 40
-    readonly property int titleQuickActionsWidth: titleQuickActionWidth * 3
+    readonly property int titleQuickActionsWidth: titleQuickActionWidth * 4
     readonly property int titleSecurityActionWidth: portableVaultNeedsAttention ? 40 : 0
     readonly property int titleNavigationWidth: Math.min(830, Math.max(310, width - (captionButtonWidth * 3) - titleQuickActionsWidth - titleSecurityActionWidth - 96))
     readonly property color backgroundColor: Theme.windowBackground
@@ -811,6 +811,7 @@ Rectangle {
 
                     title: modelData.title
                     selected: root.currentPage === "terminal" && root.controller.activeTerminalTabId === modelData.id
+                    connecting: modelData.connecting === true
                     running: modelData.running
                     canReconnect: modelData.canReconnect
                     canDuplicate: modelData.canDuplicate
@@ -968,6 +969,37 @@ Rectangle {
                     anchors.margins: 2
                     accessibleName: root.controller.portableVaultInitialized ? qsTr("Portable vault locked; unlock") : qsTr("Portable vault not configured; open Security settings")
                     onActivated: root.requestPortableVaultAccess(portableVaultStatusAction)
+                }
+            }
+
+            Rectangle {
+                width: root.titleQuickActionWidth
+                height: titleBar.height
+                color: alwaysOnTopAction.hovered || alwaysOnTopAction.activeFocus ? Theme.controlHover : "transparent"
+                border.color: alwaysOnTopAction.activeFocus ? Theme.focus : "transparent"
+                border.width: alwaysOnTopAction.activeFocus ? 1 : 0
+
+                AppIcon {
+                    anchors.centerIn: parent
+                    width: 16
+                    height: 16
+                    name: "pin"
+                    color: root.windowChrome.alwaysOnTop ? Theme.accent : root.mutedColor
+                }
+
+                KeyboardAction {
+                    id: alwaysOnTopAction
+
+                    objectName: "alwaysOnTopAction"
+                    anchors.fill: parent
+                    anchors.margins: 2
+                    accessibleName: root.windowChrome.alwaysOnTop ? qsTr("Disable always on top") : qsTr("Keep window always on top")
+                    onActivated: root.windowChrome.toggleAlwaysOnTop()
+                }
+
+                AppToolTip {
+                    visible: alwaysOnTopAction.hovered
+                    text: root.windowChrome.alwaysOnTop ? qsTr("Always on top · click to disable") : qsTr("Keep this window always on top")
                 }
             }
 
@@ -1941,7 +1973,9 @@ Rectangle {
                             onMultilinePasteConfirmationRequested: (viewport, lineCount) => {
                                 root.pendingPasteLineCount = lineCount;
                                 root.pendingPasteViewport = viewport;
-                                multilinePasteDialog.openFrom(viewport);
+                                // A context menu restores focus as it closes. Defer the modal so it
+                                // becomes the final focus owner regardless of how paste was invoked.
+                                Qt.callLater(() => multilinePasteDialog.openFrom(viewport));
                             }
                             onBrowseHostsRequested: root.currentPage = "hosts"
 

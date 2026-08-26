@@ -1315,6 +1315,7 @@ void removeLastUtf8CodePoint(QByteArray &value)
     }
     return {
         {QStringLiteral("terminalType"), utf8QString(options.terminalType)},
+        {QStringLiteral("connectionTimeoutSeconds"), options.connectionTimeoutSeconds},
         {QStringLiteral("keepaliveIntervalSeconds"), options.keepaliveIntervalSeconds},
         {QStringLiteral("keepaliveFailureThreshold"), options.keepaliveFailureThreshold},
         {QStringLiteral("startupCommand"), utf8QString(options.startupCommand)},
@@ -1391,7 +1392,8 @@ void removeLastUtf8CodePoint(QByteArray &value)
             return std::nullopt;
         }
     }
-    if (!integerOverride(QStringLiteral("keepaliveIntervalSeconds"), options.keepaliveIntervalSeconds)
+    if (!integerOverride(QStringLiteral("connectionTimeoutSeconds"), options.connectionTimeoutSeconds)
+        || !integerOverride(QStringLiteral("keepaliveIntervalSeconds"), options.keepaliveIntervalSeconds)
         || !integerOverride(QStringLiteral("keepaliveFailureThreshold"), options.keepaliveFailureThreshold)
         || !integerOverride(QStringLiteral("startupLineDelayMilliseconds"), options.startupLineDelayMilliseconds)
         || !integerOverride(QStringLiteral("reconnectMaximumAttempts"), options.reconnectMaximumAttempts)
@@ -8363,6 +8365,7 @@ std::optional<ssh::SshConnectionRequest> AppController::connectionRequestForProf
             .secret = std::move(jumpSecret),
             .proxy = jump->proxy,
             .proxySecret = std::move(jumpProxySecret),
+            .connectionTimeoutSeconds = jump->sessionOptions.connectionTimeoutSeconds,
         });
     }
     return ssh::SshConnectionRequest{

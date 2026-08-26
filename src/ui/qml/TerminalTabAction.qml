@@ -8,6 +8,7 @@ Rectangle {
     required property string title
     property bool selected: false
     property bool running: false
+    property bool connecting: false
     property bool canReconnect: false
     property bool canDuplicate: false
     property bool canCloseOthers: false
@@ -17,8 +18,6 @@ Rectangle {
     property string iconName: ""
     property string actionObjectName: ""
     property string closeActionObjectName: ""
-    property bool componentReady: false
-    property real enterProgress: Theme.animationsEnabled ? 0.0 : 1.0
     readonly property bool hovered: activateAction.hovered || closeAction.hovered
     signal activated
     signal closeRequested
@@ -32,46 +31,9 @@ Rectangle {
 
     implicitWidth: Math.min(184, Math.max(112, titleText.implicitWidth + 54))
     implicitHeight: Theme.titleBarHeight
-    opacity: enterProgress
     color: control.selected ? Theme.controlBackground : (control.hovered || activateAction.activeFocus ? Theme.controlHover : "transparent")
     border.color: activateAction.activeFocus ? Theme.focus : "transparent"
     border.width: activateAction.activeFocus ? 1 : 0
-    transform: Translate {
-        x: -Theme.motionDistanceSmall * (1.0 - control.enterProgress)
-    }
-
-    function beginEntry() {
-        if (Theme.animationsEnabled) {
-            enterProgress = 0.0;
-            enterAnimation.start();
-        } else {
-            enterProgress = 1.0;
-        }
-    }
-
-    Component.onCompleted: {
-        componentReady = true;
-        if (visible) {
-            beginEntry();
-        }
-    }
-    onVisibleChanged: {
-        if (componentReady && visible) {
-            beginEntry();
-        }
-    }
-
-    NumberAnimation {
-        id: enterAnimation
-
-        target: control
-        property: "enterProgress"
-        from: 0.0
-        to: 1.0
-        duration: Theme.motionSlow
-        easing.type: Easing.OutCubic
-    }
-
     Behavior on color {
         ColorAnimation {
             duration: Theme.motionFast
@@ -79,6 +41,8 @@ Rectangle {
     }
 
     Rectangle {
+        id: statusDot
+
         anchors.left: parent.left
         anchors.leftMargin: 10
         anchors.verticalCenter: parent.verticalCenter
@@ -86,7 +50,22 @@ Rectangle {
         height: 6
         radius: 3
         visible: control.iconName.length === 0
-        color: control.running ? Theme.accent : Theme.textSubtle
+        color: control.running || control.connecting ? Theme.accent : Theme.textSubtle
+
+        SequentialAnimation on opacity {
+            running: control.connecting && Theme.animationsEnabled
+            loops: Animation.Infinite
+            NumberAnimation {
+                to: 0.3
+                duration: Theme.motionMedium
+                easing.type: Easing.InOutSine
+            }
+            NumberAnimation {
+                to: 1.0
+                duration: Theme.motionMedium
+                easing.type: Easing.InOutSine
+            }
+        }
     }
 
     AppIcon {

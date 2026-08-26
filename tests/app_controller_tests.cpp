@@ -330,6 +330,7 @@ void AppControllerTests::persistsAndPreservesSessionOptions()
 
     const QVariantMap options{
         {QStringLiteral("terminalType"), QStringLiteral("screen-256color")},
+        {QStringLiteral("connectionTimeoutSeconds"), 25},
         {QStringLiteral("keepaliveIntervalSeconds"), 45},
         {QStringLiteral("keepaliveFailureThreshold"), 4},
         {QStringLiteral("startupCommand"), QStringLiteral("uname -a")},
@@ -350,6 +351,7 @@ void AppControllerTests::persistsAndPreservesSessionOptions()
     const QString id = saved.value(QStringLiteral("id")).toString();
     const QVariantMap savedOptions = saved.value(QStringLiteral("sessionOptions")).toMap();
     QCOMPARE(savedOptions.value(QStringLiteral("terminalType")).toString(), QStringLiteral("screen-256color"));
+    QCOMPARE(savedOptions.value(QStringLiteral("connectionTimeoutSeconds")).toInt(), 25);
     QCOMPARE(savedOptions.value(QStringLiteral("keepaliveIntervalSeconds")).toInt(), 45);
     QCOMPARE(savedOptions.value(QStringLiteral("startupCommandMode")).toString(), QStringLiteral("line-delay"));
     QCOMPARE(savedOptions.value(QStringLiteral("reconnectPolicy")).toString(), QStringLiteral("transport-failure"));
@@ -365,6 +367,11 @@ void AppControllerTests::persistsAndPreservesSessionOptions()
              savedOptions);
 
     QVariantMap invalid = options;
+    invalid.insert(QStringLiteral("connectionTimeoutSeconds"), 0);
+    QVERIFY(!controller.saveHostProfileWithCredential(
+        id, QStringLiteral("Invalid"), QStringLiteral("server.example.test"), 22, QStringLiteral("operator"),
+        QStringLiteral("password"), {}, false, QStringLiteral("Lab"), {}, false, invalid));
+    invalid = options;
     invalid.insert(QStringLiteral("keepaliveIntervalSeconds"), 4000);
     QVERIFY(!controller.saveHostProfileWithCredential(
         id, QStringLiteral("Invalid"), QStringLiteral("server.example.test"), 22, QStringLiteral("operator"),

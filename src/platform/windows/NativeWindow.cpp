@@ -143,6 +143,11 @@ bool NativeWindow::maximizeButtonPressed() const noexcept
     return m_maximizeButtonPressed;
 }
 
+bool NativeWindow::alwaysOnTop() const noexcept
+{
+    return m_alwaysOnTop;
+}
+
 bool NativeWindow::systemDarkMode() const noexcept
 {
     return QGuiApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark;
@@ -250,6 +255,25 @@ void NativeWindow::toggleMaximize()
 void NativeWindow::closeWindow()
 {
     close();
+}
+
+void NativeWindow::toggleAlwaysOnTop()
+{
+    if (m_windowHandle == nullptr)
+    {
+        qCWarning(windowLog) << "Unable to change always-on-top state before native window initialization";
+        return;
+    }
+    const bool enabled = !m_alwaysOnTop;
+    if (SetWindowPos(m_windowHandle, enabled ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
+        == FALSE)
+    {
+        qCWarning(windowLog) << "Unable to change always-on-top state" << "error=" << GetLastError();
+        return;
+    }
+    m_alwaysOnTop = enabled;
+    emit alwaysOnTopChanged();
 }
 
 void NativeWindow::setCloseToTrayEnabled(const bool enabled)
@@ -744,8 +768,8 @@ void NativeWindow::configureNativeWindow()
                       << "hwnd=" << windowHandle << "qtFlags=" << flags() << "style=" << Qt::hex << style;
 
     installWindowProcedure(windowHandle);
-    SetWindowPos(windowHandle, nullptr, 0, 0, 0, 0,
-                 SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    SetWindowPos(windowHandle, m_alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0,
+                 SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 
     setOpacity(1.0);
     (void)applyBackdrop();

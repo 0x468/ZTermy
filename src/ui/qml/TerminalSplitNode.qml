@@ -117,6 +117,7 @@ Item {
             readonly property var node: root.node
             readonly property var tab: node.tab || ({})
             readonly property var activeViewport: node.active ? viewport : null
+            readonly property bool aiConfigured: !!root.controller && root.controller.aiModel.trim().length > 0 && (root.controller.aiProviderPreference === "openai-chatgpt" ? root.controller.aiChatGptConfigured : root.controller.aiBaseUrl.trim().length > 0 && (root.controller.aiProviderPreference === "ollama" || root.controller.aiApiKeyConfigured))
 
             function focusActivePane() {
                 if (node.active) {
@@ -212,6 +213,24 @@ Item {
                 }
             }
 
+            Item {
+                id: linkHintAnchor
+
+                property bool containsMouse: visible
+
+                x: Math.max(12, Math.min(leaf.width - 12, viewport.x + viewport.hoveredLinkPosition.x))
+                y: Math.max(34, viewport.y + viewport.hoveredLinkPosition.y - 4)
+                width: 1
+                height: 1
+                visible: viewport.hoveredLink.length > 0 && !terminalContextMenu.visible
+                z: 18
+
+                AppToolTip {
+                    hoverTarget: linkHintAnchor
+                    text: qsTr("Hold Ctrl and click to open\n%1").arg(viewport.hoveredLink)
+                }
+            }
+
             AppMenu {
                 id: terminalContextMenu
 
@@ -286,6 +305,7 @@ Item {
                 AppMenuItem {
                     text: qsTr("Attach selection to AI")
                     iconName: "ai"
+                    visible: leaf.aiConfigured
                     enabled: viewport.hasSelection && !!root.controller
                     onTriggered: {
                         if (!root.controller.activateTerminalPane(leaf.node.id) || !root.controller.attachAiSelection()) {
@@ -298,7 +318,13 @@ Item {
                     }
                 }
 
-                onClosed: viewport.forceActiveFocus()
+                onClosed: {
+                    // A multiline-paste dialog becomes the next focus owner. Do not
+                    // let the closing context menu steal focus back from that modal.
+                    if (!viewport.multilinePastePending) {
+                        viewport.forceActiveFocus();
+                    }
+                }
             }
 
             ToolButton {
@@ -307,7 +333,7 @@ Item {
                 readonly property real preferredY: viewport.y + viewport.selectionActionPosition.y - height - 9
 
                 objectName: "terminalSelectionAiAction"
-                visible: !!leaf.node.active && viewport.selectionActionVisible && root.controller
+                visible: !!leaf.node.active && viewport.selectionActionVisible && leaf.aiConfigured && leaf.tab.workbenchOpen && leaf.tab.workbenchPage === "ai"
                 width: 112
                 height: 30
                 x: Math.max(8, Math.min(leaf.width - width - 8, viewport.x + viewport.selectionActionPosition.x - (width / 2)))

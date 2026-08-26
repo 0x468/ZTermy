@@ -906,6 +906,7 @@ set(ZTERMY_INTERFACE_ICON_FILES
     resources/icons/play.svg
     resources/icons/pause.svg
     resources/icons/paste.svg
+    resources/icons/pin.svg
     resources/icons/plus.svg
     resources/icons/refresh.svg
     resources/icons/save.svg
