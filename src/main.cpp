@@ -1494,10 +1494,10 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
 
 [[nodiscard]] bool verifyKeyboardActionFocusVisibility(QQuickItem *rootObject)
 {
-    QQuickItem *action = quickItem(rootObject, "alwaysOnTopAction");
+    QQuickItem *action = quickItem(rootObject, "alwaysOnTopMenuAction");
     if (action == nullptr || !action->isVisible() || !action->isEnabled())
     {
-        qCWarning(applicationLog) << "Always-on-top keyboard action is unavailable for focus visibility smoke";
+        qCWarning(applicationLog) << "Pin-options keyboard action is unavailable for focus visibility smoke";
         return false;
     }
     QQuickItem *focusReset = quickItem(rootObject, "hostsTitleAction");
@@ -1881,6 +1881,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     constexpr std::array accessibleButtons{
         std::pair{"hostsTitleAction", "Hosts"},
         std::pair{"titleNewTabAction", "Open new terminal menu"},
+        std::pair{"alwaysOnTopMenuAction", "Open pin options"},
         std::pair{"minimizeCaptionButton", "Minimize"},
         std::pair{"maximizeCaptionButton", "Maximize"},
         std::pair{"closeCaptionButton", "Close"},
@@ -2461,6 +2462,53 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
                                   << "focus=" << namedFocusItem(window);
         return false;
     }
+
+    QQuickItem *alwaysOnTopAction = quickItem(rootObject, "alwaysOnTopAction");
+    if (!focusItem(window, alwaysOnTopAction, QStringLiteral("alwaysOnTopAction")))
+    {
+        return false;
+    }
+    sendKey(window, Qt::Key_Space);
+    const bool terminalTabPinned = processWindowEventsUntil(
+        [&controller, &window] {
+            return controller.activeTerminalTabPinned() && window.alwaysOnTop();
+        },
+        std::chrono::seconds{1});
+    rootObject->setProperty("currentPage", QStringLiteral("hosts"));
+    const bool hostsPageNotPinned = processWindowEventsUntil(
+        [&window] {
+            return !window.alwaysOnTop();
+        },
+        std::chrono::seconds{1});
+    rootObject->setProperty("currentPage", QStringLiteral("terminal"));
+    const bool terminalPinRestored = processWindowEventsUntil(
+        [&window] {
+            return window.alwaysOnTop();
+        },
+        std::chrono::seconds{1});
+    if (!focusItem(window, alwaysOnTopAction, QStringLiteral("alwaysOnTopAction")))
+    {
+        return false;
+    }
+    sendKey(window, Qt::Key_Space);
+    const bool terminalTabUnpinned = processWindowEventsUntil(
+        [&controller, &window] {
+            return !controller.activeTerminalTabPinned() && !window.alwaysOnTop();
+        },
+        std::chrono::seconds{1});
+    if (!terminalTabPinned || !hostsPageNotPinned || !terminalPinRestored || !terminalTabUnpinned)
+    {
+        qCWarning(applicationLog) << "Terminal-tab pin keyboard route failed"
+                                  << "pinned=" << terminalTabPinned << "hostsReleased=" << hostsPageNotPinned
+                                  << "terminalRestored=" << terminalPinRestored << "unpinned=" << terminalTabUnpinned;
+        return false;
+    }
+    QQuickItem *pinnedTerminalViewport = terminalViewportItem(rootObject);
+    if (pinnedTerminalViewport == nullptr)
+    {
+        return false;
+    }
+    pinnedTerminalViewport->forceActiveFocus();
 
     sendKey(window, Qt::Key_F, Qt::ControlModifier);
     const bool controlFindPreservedForTerminal =

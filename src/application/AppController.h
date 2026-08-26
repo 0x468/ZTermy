@@ -51,6 +51,7 @@
 #include <QNetworkReply>
 #include <QObject>
 #include <QPointer>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
@@ -153,6 +154,7 @@ class AppController final : public QObject
     Q_PROPERTY(QVariantList transferBatches READ transferBatches NOTIFY transferTasksChanged)
     Q_PROPERTY(int activeTransferCount READ activeTransferCount NOTIFY transferTasksChanged)
     Q_PROPERTY(QString activeTerminalTabId READ activeTerminalTabId NOTIFY activeTerminalTabChanged)
+    Q_PROPERTY(bool activeTerminalTabPinned READ activeTerminalTabPinned NOTIFY activeTerminalTabPinnedChanged)
     Q_PROPERTY(QVariantMap activeTerminalWorkspace READ activeTerminalWorkspace NOTIFY terminalWorkspaceChanged)
     Q_PROPERTY(QVariantMap activeRemoteTelemetry READ activeRemoteTelemetry NOTIFY remoteTelemetryChanged)
     Q_PROPERTY(QString terminalSearchQuery READ terminalSearchQuery NOTIFY terminalSearchChanged)
@@ -316,6 +318,7 @@ public:
     [[nodiscard]] QVariantList transferBatches() const;
     [[nodiscard]] int activeTransferCount() const noexcept;
     [[nodiscard]] QString activeTerminalTabId() const;
+    [[nodiscard]] bool activeTerminalTabPinned() const;
     [[nodiscard]] QVariantMap activeTerminalWorkspace() const;
     [[nodiscard]] QVariantMap activeRemoteTelemetry() const;
     [[nodiscard]] QString terminalSearchQuery() const;
@@ -411,6 +414,7 @@ public:
     Q_INVOKABLE bool closeOtherTerminalTabs(const QString &id);
     Q_INVOKABLE bool closeTerminalTabsToRight(const QString &id);
     Q_INVOKABLE bool moveTerminalTab(const QString &id, int targetIndex);
+    Q_INVOKABLE bool toggleActiveTerminalTabPinned();
     Q_INVOKABLE bool setTerminalTabTitle(const QString &id, const QString &title);
     [[nodiscard]] Q_INVOKABLE QVariantMap activeCommandBlockActions() const;
     Q_INVOKABLE bool copyLastTerminalCommand();
@@ -674,6 +678,7 @@ signals:
     void actionRegistryChanged();
     void actionRequested(const QString &actionId);
     void activeTerminalTabChanged();
+    void activeTerminalTabPinnedChanged();
     void terminalWorkspaceChanged();
     void terminalSearchChanged();
     void remoteTelemetryChanged();
@@ -1142,6 +1147,7 @@ private:
     std::vector<std::unique_ptr<TerminalTab>> m_tabs;
     std::deque<ClosedTerminalDescription> m_closedTerminalTabs;
     std::vector<std::unique_ptr<sftp::SftpSession>> m_stoppingSftpSessions;
+    QSet<QString> m_pinnedTerminalWorkspaceIds;
     QString m_activeTabId;
     QString m_focusedTabId;
     QString m_hostKeyTabId;

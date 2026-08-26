@@ -2770,6 +2770,7 @@ QVariantList AppController::terminalTabs() const
             value.insert(QStringLiteral("canCloseToRight"), index + 1U < m_workspaceState.terminalWorkspaces.size());
             value.insert(QStringLiteral("canMoveLeft"), index > 0U);
             value.insert(QStringLiteral("canMoveRight"), index + 1U < m_workspaceState.terminalWorkspaces.size());
+            value.insert(QStringLiteral("pinned"), m_pinnedTerminalWorkspaceIds.contains(utf8QString(workspace.id)));
             result.append(value);
         }
     }
@@ -3218,6 +3219,11 @@ int AppController::activeTransferCount() const noexcept
 QString AppController::activeTerminalTabId() const
 {
     return m_activeTabId;
+}
+
+bool AppController::activeTerminalTabPinned() const
+{
+    return !m_activeTabId.isEmpty() && m_pinnedTerminalWorkspaceIds.contains(m_activeTabId);
 }
 
 QVariantMap AppController::activeTerminalWorkspace() const
@@ -4480,6 +4486,7 @@ bool AppController::closeTerminalTabInternal(const QString &id, const bool recor
         return true;
     });
     m_workspaceState.terminalWorkspaces.erase(workspacePosition);
+    m_pinnedTerminalWorkspaceIds.remove(workspaceId);
     emit terminalTabsChanged();
 
     if (closingActive)
@@ -4645,6 +4652,21 @@ bool AppController::moveTerminalTab(const QString &id, const int targetIndex)
     }
     m_workspaceState = std::move(candidate);
     emit terminalTabsChanged();
+    return true;
+}
+
+bool AppController::toggleActiveTerminalTabPinned()
+{
+    if (m_activeTabId.isEmpty() || findTerminalWorkspace(m_activeTabId) == nullptr)
+    {
+        return false;
+    }
+    if (!m_pinnedTerminalWorkspaceIds.remove(m_activeTabId))
+    {
+        m_pinnedTerminalWorkspaceIds.insert(m_activeTabId);
+    }
+    emit terminalTabsChanged();
+    emit activeTerminalTabPinnedChanged();
     return true;
 }
 
@@ -15292,6 +15314,7 @@ void AppController::emitActiveTerminalContextChanged()
 {
     updateTelemetryVisibility();
     emit activeTerminalTabChanged();
+    emit activeTerminalTabPinnedChanged();
     emit terminalWorkspaceChanged();
     emit remoteTelemetryChanged();
     emit sshActiveChanged();

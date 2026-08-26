@@ -54,6 +54,7 @@ public:
     Q_INVOKABLE void minimizeWindow();
     Q_INVOKABLE void toggleMaximize();
     Q_INVOKABLE void closeWindow();
+    Q_INVOKABLE void setAlwaysOnTop(bool enabled);
     Q_INVOKABLE void toggleAlwaysOnTop();
     void setCloseToTrayEnabled(bool enabled);
     Q_INVOKABLE bool applyAppearance(const QString &backdropPreference, bool darkMode);

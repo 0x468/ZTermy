@@ -182,6 +182,7 @@ private slots:
     void exposesProviderFailureRecoveryActions();
     void retriesProviderResponseWithoutRepeatingCompletedTool();
     void managesMultipleLocalTerminalTabs();
+    void tracksTemporaryTerminalWorkspacePins();
     void managesFreshTerminalTabWorkflows();
     void managesPersistentTerminalWorkspaceSplits();
     void restoresSavedSshWorkspaceWithoutConnecting();
@@ -1899,6 +1900,51 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
     QCOMPARE(sessionState->stops, 2);
     QVERIFY(tabsChanged.count() >= 4);
     QVERIFY(activeChanged.count() >= 4);
+}
+
+void AppControllerTests::tracksTemporaryTerminalWorkspacePins()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const auto sessionState = std::make_shared<FakeLocalSessionState>();
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
+                                     directory.filePath(QStringLiteral("known_hosts.json")), [sessionState] {
+                                         return std::make_unique<FakeLocalTerminalSession>(sessionState);
+                                     });
+    QSignalSpy pinnedChanged(&controller, &ztermy::AppController::activeTerminalTabPinnedChanged);
+
+    QVERIFY(!controller.activeTerminalTabPinned());
+    QVERIFY(!controller.toggleActiveTerminalTabPinned());
+
+    const QString first = controller.startLocalTerminal();
+    QVERIFY(!first.isEmpty());
+    QVERIFY(!controller.activeTerminalTabPinned());
+    QVERIFY(!controller.terminalTabs().constFirst().toMap().value(QStringLiteral("pinned")).toBool());
+    QVERIFY(controller.toggleActiveTerminalTabPinned());
+    QVERIFY(controller.activeTerminalTabPinned());
+    QVERIFY(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("pinned")).toBool());
+
+    const QString second = controller.startLocalTerminal();
+    QVERIFY(!second.isEmpty());
+    QVERIFY(!controller.activeTerminalTabPinned());
+    QCOMPARE(controller.terminalTabs().at(0).toMap().value(QStringLiteral("id")).toString(), first);
+    QVERIFY(controller.terminalTabs().at(0).toMap().value(QStringLiteral("pinned")).toBool());
+    QVERIFY(!controller.terminalTabs().at(1).toMap().value(QStringLiteral("pinned")).toBool());
+
+    QVERIFY(controller.moveTerminalTab(first, 1));
+    QCOMPARE(controller.terminalTabs().at(1).toMap().value(QStringLiteral("id")).toString(), first);
+    QVERIFY(controller.terminalTabs().at(1).toMap().value(QStringLiteral("pinned")).toBool());
+    QVERIFY(controller.activateTerminalTab(first));
+    QVERIFY(controller.activeTerminalTabPinned());
+    QVERIFY(controller.activateTerminalTab(second));
+    QVERIFY(!controller.activeTerminalTabPinned());
+
+    QVERIFY(controller.closeTerminalTab(first));
+    QVERIFY(!controller.activeTerminalTabPinned());
+    QVERIFY(controller.reopenLastClosedTerminalTab());
+    QVERIFY(!controller.activeTerminalTabPinned());
+    QVERIFY(!controller.terminalTabs().constLast().toMap().value(QStringLiteral("pinned")).toBool());
+    QVERIFY(pinnedChanged.count() >= 5);
 }
 
 void AppControllerTests::managesFreshTerminalTabWorkflows()

@@ -48,6 +48,8 @@ Rectangle {
     property string previewAccentPreference: "ztermy"
     property color previewCustomAccent: "#22C55E"
     property double sessionClock: Date.now()
+    property bool windowAlwaysOnTopRequested: false
+    readonly property bool currentTerminalTabPinned: currentPage === "terminal" && activeTerminalTab !== null && controller.activeTerminalTabPinned
     readonly property var activeTerminalTab: {
         for (const tab of controller.terminalTabs) {
             if (tab.id === controller.activeTerminalTabId) {
@@ -117,6 +119,31 @@ Rectangle {
 
     function reportTitleBarMetrics() {
         root.windowChrome.setTitleBarMetrics(titleBarHeight, titleNavigation.width + 8, width - (captionButtonWidth * 3) - titleQuickActionsWidth - titleSecurityActionWidth, width - (captionButtonWidth * 2), captionButtonWidth);
+    }
+
+    function applyAlwaysOnTopPreference() {
+        root.windowChrome.setAlwaysOnTop(root.windowAlwaysOnTopRequested || root.currentTerminalTabPinned);
+    }
+
+    function toggleActiveTerminalPin() {
+        if (root.currentPage !== "terminal" || root.activeTerminalTab === null) {
+            return;
+        }
+        root.controller.toggleActiveTerminalTabPinned();
+        Qt.callLater(root.applyAlwaysOnTopPreference);
+    }
+
+    function setWindowAlwaysOnTopRequested(enabled) {
+        root.windowAlwaysOnTopRequested = enabled;
+        root.applyAlwaysOnTopPreference();
+    }
+
+    function clearAlwaysOnTopPreference() {
+        root.windowAlwaysOnTopRequested = false;
+        if (root.currentTerminalTabPinned) {
+            root.controller.toggleActiveTerminalTabPinned();
+        }
+        Qt.callLater(root.applyAlwaysOnTopPreference);
     }
 
     function requestTerminalCommandRun(command) {
@@ -523,12 +550,14 @@ Rectangle {
     Component.onCompleted: {
         reportTitleBarMetrics();
         applyWindowAppearance();
+        Qt.callLater(root.applyAlwaysOnTopPreference);
         controller.setTerminalTelemetryVisible(terminalTelemetryVisible);
         Qt.callLater(root.presentStartupVaultPrompt);
     }
     onTerminalTelemetryVisibleChanged: controller.setTerminalTelemetryVisible(terminalTelemetryVisible)
     onWidthChanged: reportTitleBarMetrics()
     onCurrentPageChanged: {
+        Qt.callLater(root.applyAlwaysOnTopPreference);
         if (currentPage === "settings") {
             settingsTabOpen = true;
         }
@@ -586,6 +615,7 @@ Rectangle {
 
         function onTerminalTabsChanged() {
             Qt.callLater(titleTerminalTabs.syncCurrentIndex);
+            Qt.callLater(root.applyAlwaysOnTopPreference);
             if (root.currentPage === "terminal" && root.controller.terminalTabs.length === 0) {
                 root.currentPage = "hosts";
                 Qt.callLater(hostsTitleAction.forceActiveFocus);
@@ -594,6 +624,11 @@ Rectangle {
 
         function onActiveTerminalTabChanged() {
             Qt.callLater(titleTerminalTabs.syncCurrentIndex);
+            Qt.callLater(root.applyAlwaysOnTopPreference);
+        }
+
+        function onActiveTerminalTabPinnedChanged() {
+            Qt.callLater(root.applyAlwaysOnTopPreference);
         }
 
         function onCredentialVaultChanged() {
@@ -973,33 +1008,125 @@ Rectangle {
             }
 
             Rectangle {
+                id: alwaysOnTopContainer
+
+                objectName: "alwaysOnTopContainer"
                 width: root.titleQuickActionWidth
                 height: titleBar.height
-                color: alwaysOnTopAction.hovered || alwaysOnTopAction.visualFocus ? Theme.controlHover : "transparent"
-                border.color: alwaysOnTopAction.visualFocus ? Theme.focus : "transparent"
-                border.width: alwaysOnTopAction.visualFocus ? 1 : 0
+                color: "transparent"
 
-                AppIcon {
-                    anchors.centerIn: parent
-                    width: 16
-                    height: 16
-                    name: "pin"
-                    color: root.windowChrome.alwaysOnTop ? Theme.accent : root.mutedColor
-                }
-
-                KeyboardAction {
-                    id: alwaysOnTopAction
-
-                    objectName: "alwaysOnTopAction"
+                Row {
                     anchors.fill: parent
-                    anchors.margins: 2
-                    accessibleName: root.windowChrome.alwaysOnTop ? qsTr("Disable always on top") : qsTr("Keep window always on top")
-                    onActivated: root.windowChrome.toggleAlwaysOnTop()
+
+                    Rectangle {
+                        width: 26
+                        height: parent.height
+                        color: alwaysOnTopAction.hovered || alwaysOnTopAction.visualFocus ? Theme.controlHover : "transparent"
+                        border.color: alwaysOnTopAction.visualFocus ? Theme.focus : "transparent"
+                        border.width: alwaysOnTopAction.visualFocus ? 1 : 0
+
+                        AppIcon {
+                            anchors.centerIn: parent
+                            width: 16
+                            height: 16
+                            name: "pin"
+                            color: root.windowAlwaysOnTopRequested || root.currentTerminalTabPinned ? Theme.accent : root.mutedColor
+                        }
+
+                        KeyboardAction {
+                            id: alwaysOnTopAction
+
+                            objectName: "alwaysOnTopAction"
+                            anchors.fill: parent
+                            anchors.margins: 2
+                            enabled: root.currentPage === "terminal" && root.activeTerminalTab !== null
+                            accessibleName: root.currentTerminalTabPinned ? qsTr("Unpin current terminal tab") : qsTr("Pin current terminal tab")
+                            onActivated: root.toggleActiveTerminalPin()
+                        }
+
+                        AppToolTip {
+                            visible: alwaysOnTopAction.hovered && !alwaysOnTopMenu.visible
+                            text: {
+                                if (root.windowAlwaysOnTopRequested && root.currentTerminalTabPinned) {
+                                    return qsTr("Current tab pinned · window always on top");
+                                }
+                                if (root.windowAlwaysOnTopRequested) {
+                                    return qsTr("Window always on top");
+                                }
+                                if (root.currentTerminalTabPinned) {
+                                    return qsTr("Current terminal tab pinned");
+                                }
+                                return qsTr("Pin current terminal tab");
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        width: 14
+                        height: parent.height
+                        color: alwaysOnTopMenuAction.hovered || alwaysOnTopMenuAction.visualFocus || alwaysOnTopMenu.visible ? Theme.controlHover : "transparent"
+                        border.color: alwaysOnTopMenuAction.visualFocus ? Theme.focus : "transparent"
+                        border.width: alwaysOnTopMenuAction.visualFocus ? 1 : 0
+
+                        AppIcon {
+                            anchors.centerIn: parent
+                            width: 10
+                            height: 10
+                            name: "chevron-down"
+                            color: root.mutedColor
+                        }
+
+                        KeyboardAction {
+                            id: alwaysOnTopMenuAction
+
+                            objectName: "alwaysOnTopMenuAction"
+                            anchors.fill: parent
+                            accessibleName: qsTr("Open pin options")
+                            onActivated: alwaysOnTopMenu.open()
+                        }
+
+                        AppToolTip {
+                            visible: alwaysOnTopMenuAction.hovered && !alwaysOnTopMenu.visible
+                            text: qsTr("Pin options")
+                        }
+                    }
                 }
 
-                AppToolTip {
-                    visible: alwaysOnTopAction.hovered
-                    text: root.windowChrome.alwaysOnTop ? qsTr("Always on top · click to disable") : qsTr("Keep this window always on top")
+                AppMenu {
+                    id: alwaysOnTopMenu
+
+                    objectName: "alwaysOnTopMenu"
+                    x: alwaysOnTopContainer.width - width
+                    y: alwaysOnTopContainer.height
+
+                    AppMenuItem {
+                        objectName: "pinCurrentTerminalTabMenuAction"
+                        text: qsTr("Pin current terminal tab")
+                        iconName: "pin"
+                        checkable: true
+                        checked: root.currentTerminalTabPinned
+                        enabled: root.currentPage === "terminal" && root.activeTerminalTab !== null
+                        onTriggered: root.toggleActiveTerminalPin()
+                    }
+
+                    AppMenuItem {
+                        objectName: "pinWindowMenuAction"
+                        text: qsTr("Keep window always on top")
+                        iconName: "pin"
+                        checkable: true
+                        checked: root.windowAlwaysOnTopRequested
+                        onTriggered: root.setWindowAlwaysOnTopRequested(!root.windowAlwaysOnTopRequested)
+                    }
+
+                    AppMenuSeparator {}
+
+                    AppMenuItem {
+                        objectName: "disablePinningMenuAction"
+                        text: qsTr("Turn off pinning")
+                        iconName: "close"
+                        enabled: root.windowAlwaysOnTopRequested || root.currentTerminalTabPinned
+                        onTriggered: root.clearAlwaysOnTopPreference()
+                    }
                 }
             }
 

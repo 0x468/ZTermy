@@ -259,12 +259,20 @@ void NativeWindow::closeWindow()
 
 void NativeWindow::toggleAlwaysOnTop()
 {
+    setAlwaysOnTop(!m_alwaysOnTop);
+}
+
+void NativeWindow::setAlwaysOnTop(const bool enabled)
+{
+    if (m_alwaysOnTop == enabled)
+    {
+        return;
+    }
     if (m_windowHandle == nullptr)
     {
         qCWarning(windowLog) << "Unable to change always-on-top state before native window initialization";
         return;
     }
-    const bool enabled = !m_alwaysOnTop;
     if (SetWindowPos(m_windowHandle, enabled ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
         == FALSE)
