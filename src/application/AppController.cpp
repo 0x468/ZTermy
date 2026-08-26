@@ -2151,6 +2151,87 @@ private:
     return QCoreApplication::translate("SshTerminalSession", "SSH connection failed");
 }
 
+[[nodiscard]] QString sshConnectionPhaseToken(const ztermy::ssh::SshConnectionPhase phase)
+{
+    using enum ztermy::ssh::SshConnectionPhase;
+    switch (phase)
+    {
+        case Disconnected:
+            return QStringLiteral("disconnected");
+        case Resolving:
+            return QStringLiteral("resolving");
+        case Connecting:
+            return QStringLiteral("connecting");
+        case Handshaking:
+            return QStringLiteral("handshaking");
+        case VerifyingHostKey:
+            return QStringLiteral("verifying-host-key");
+        case AwaitingHostKeyConfirmation:
+            return QStringLiteral("awaiting-host-key-confirmation");
+        case Authenticating:
+            return QStringLiteral("authenticating");
+        case OpeningChannel:
+            return QStringLiteral("opening-channel");
+        case Connected:
+            return QStringLiteral("connected");
+        case Closing:
+            return QStringLiteral("closing");
+        case Failed:
+            return QStringLiteral("failed");
+    }
+    return QStringLiteral("disconnected");
+}
+
+[[nodiscard]] QString sshConnectionStageToken(const ztermy::ssh::SshConnectionPhase phase)
+{
+    using enum ztermy::ssh::SshConnectionPhase;
+    switch (phase)
+    {
+        case Resolving:
+        case Connecting:
+        case Handshaking:
+        case VerifyingHostKey:
+        case AwaitingHostKeyConfirmation:
+            return QStringLiteral("transport");
+        case Authenticating:
+            return QStringLiteral("authentication");
+        case OpeningChannel:
+            return QStringLiteral("terminal");
+        case Connected:
+            return QStringLiteral("connected");
+        case Failed:
+            return QStringLiteral("failed");
+        case Disconnected:
+        case Closing:
+            return QStringLiteral("idle");
+    }
+    return QStringLiteral("idle");
+}
+
+[[nodiscard]] int sshConnectionStageIndex(const ztermy::ssh::SshConnectionPhase phase) noexcept
+{
+    using enum ztermy::ssh::SshConnectionPhase;
+    switch (phase)
+    {
+        case Resolving:
+        case Connecting:
+        case Handshaking:
+        case VerifyingHostKey:
+        case AwaitingHostKeyConfirmation:
+            return 0;
+        case Authenticating:
+            return 1;
+        case OpeningChannel:
+            return 2;
+        case Disconnected:
+        case Connected:
+        case Closing:
+        case Failed:
+            return -1;
+    }
+    return -1;
+}
+
 } // namespace
 
 namespace ztermy
@@ -2703,6 +2784,7 @@ bool AppController::canReopenClosedTerminalTab() const noexcept
 QVariantMap AppController::terminalTabValue(const TerminalTab &tab, const QString &publicId) const
 {
     const workbench::ScriptExecutionSnapshot execution = tab.scriptExecution.snapshot();
+    const ssh::SshConnectionPhase connectionPhase = tab.sshPhase;
     return {
         {QStringLiteral("id"), publicId},
         {QStringLiteral("sessionId"), tab.id},
@@ -2724,12 +2806,19 @@ QVariantMap AppController::terminalTabValue(const TerminalTab &tab, const QStrin
         {QStringLiteral("reconnectAttempt"), static_cast<int>(tab.reconnectAttempt)},
         {QStringLiteral("canReconnect"),
          tab.kind == TerminalTabKind::Ssh && !tab.sourceProfileId.isEmpty() && !tab.running},
+        {QStringLiteral("connectionPhase"), sshConnectionPhaseToken(connectionPhase)},
+        {QStringLiteral("connectionStage"), sshConnectionStageToken(connectionPhase)},
+        {QStringLiteral("connectionStageIndex"), sshConnectionStageIndex(connectionPhase)},
+        {QStringLiteral("connectionStageCount"), 3},
+        {QStringLiteral("connectionInteractionRequired"),
+         connectionPhase == ssh::SshConnectionPhase::AwaitingHostKeyConfirmation},
         {QStringLiteral("connected"),
-         tab.kind == TerminalTabKind::Ssh && tab.sshPhase == ssh::SshConnectionPhase::Connected},
-        {QStringLiteral("connecting"),
-         tab.kind == TerminalTabKind::Ssh && tab.sshPhase != ssh::SshConnectionPhase::Disconnected
-             && tab.sshPhase != ssh::SshConnectionPhase::Connected && tab.sshPhase != ssh::SshConnectionPhase::Closing
-             && tab.sshPhase != ssh::SshConnectionPhase::Failed},
+         tab.kind == TerminalTabKind::Ssh && connectionPhase == ssh::SshConnectionPhase::Connected},
+        {QStringLiteral("connecting"), tab.kind == TerminalTabKind::Ssh
+                                           && connectionPhase != ssh::SshConnectionPhase::Disconnected
+                                           && connectionPhase != ssh::SshConnectionPhase::Connected
+                                           && connectionPhase != ssh::SshConnectionPhase::Closing
+                                           && connectionPhase != ssh::SshConnectionPhase::Failed},
         {QStringLiteral("failed"), !tab.reconnectPending && tab.kind == TerminalTabKind::Ssh
                                        && tab.sshPhase == ssh::SshConnectionPhase::Failed
                                        && tab.sshFailure != ssh::SshFailureKind::RemoteClosed},

@@ -119,6 +119,14 @@ Item {
             readonly property var tab: node.tab || ({})
             readonly property var activeViewport: node.active ? viewport : null
             readonly property bool aiConfigured: !!root.controller && root.controller.aiModel.trim().length > 0 && (root.controller.aiProviderPreference === "openai-chatgpt" ? root.controller.aiChatGptConfigured : root.controller.aiBaseUrl.trim().length > 0 && (root.controller.aiProviderPreference === "ollama" || root.controller.aiApiKeyConfigured))
+            readonly property bool connectionProgressRequested: tab.kind === "ssh" && (!!tab.connecting || !!tab.reconnecting)
+            property bool connectionProgressDelayElapsed: false
+
+            onConnectionProgressRequestedChanged: {
+                if (!connectionProgressRequested) {
+                    connectionProgressDelayElapsed = false;
+                }
+            }
 
             function focusActivePane() {
                 if (node.active) {
@@ -137,6 +145,17 @@ Item {
             border.width: node.active ? 2 : 1
             radius: Theme.radiusControl
             clip: true
+
+            Timer {
+                interval: 180
+                repeat: false
+                running: leaf.connectionProgressRequested && !leaf.connectionProgressDelayElapsed
+                onTriggered: {
+                    if (leaf.connectionProgressRequested) {
+                        leaf.connectionProgressDelayElapsed = true;
+                    }
+                }
+            }
 
             TerminalView {
                 id: viewport
@@ -485,12 +504,14 @@ Item {
             StatePanel {
                 anchors.centerIn: parent
                 width: Math.max(180, Math.min(440, parent.width - 24))
-                visible: leaf.tab.kind === "ssh" && leaf.tab.connecting
+                visible: leaf.connectionProgressDelayElapsed && leaf.tab.connecting && !leaf.tab.reconnecting
                 z: 9
                 kind: "loading"
                 heading: qsTr("Connecting to SSH host")
                 description: leaf.tab.status || ""
-                detail: qsTr("Connection setup runs outside the interface thread. You can close this pane to cancel.")
+                detail: leaf.tab.connectionInteractionRequired ? qsTr("Waiting for host key confirmation.") : qsTr("Connection setup runs outside the interface thread. You can close this pane to cancel.")
+                steps: [qsTr("Establish connection"), qsTr("Authenticate"), qsTr("Open terminal")]
+                activeStep: leaf.tab.connectionStageIndex
 
                 ActionButton {
                     text: qsTr("Cancel connection")
@@ -502,12 +523,14 @@ Item {
             StatePanel {
                 anchors.centerIn: parent
                 width: Math.max(180, Math.min(440, parent.width - 24))
-                visible: leaf.tab.kind === "ssh" && leaf.tab.reconnecting
+                visible: leaf.connectionProgressDelayElapsed && leaf.tab.reconnecting
                 z: 9
                 kind: "loading"
                 heading: qsTr("Reconnecting to SSH host")
                 description: leaf.tab.status || ""
-                detail: qsTr("Automatic retries use bounded exponential backoff and never retain credentials in the terminal pane.")
+                detail: leaf.tab.connectionInteractionRequired ? qsTr("Waiting for host key confirmation.") : qsTr("Automatic retries use bounded exponential backoff and never retain credentials in the terminal pane.")
+                steps: [qsTr("Establish connection"), qsTr("Authenticate"), qsTr("Open terminal")]
+                activeStep: leaf.tab.connectionStageIndex
 
                 ActionButton {
                     text: qsTr("Cancel reconnect")

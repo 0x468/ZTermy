@@ -739,9 +739,22 @@ void AppControllerTests::saveAndConnectPersistsBeforeConnectionOutcome()
              QStringLiteral("127.0.0.1"));
     QCOMPARE(controller.hostProfiles().front().toMap().value(QStringLiteral("credentialStored")).toBool(), true);
 
+    const QVariantMap initialTab = controller.terminalTabs().constFirst().toMap();
+    QCOMPARE(initialTab.value(QStringLiteral("connectionPhase")).toString(), QStringLiteral("resolving"));
+    QCOMPARE(initialTab.value(QStringLiteral("connectionStage")).toString(), QStringLiteral("transport"));
+    QCOMPARE(initialTab.value(QStringLiteral("connectionStageIndex")).toInt(), 0);
+    QCOMPARE(initialTab.value(QStringLiteral("connectionStageCount")).toInt(), 3);
+    QVERIFY(!initialTab.value(QStringLiteral("connectionInteractionRequired")).toBool());
+
     QTRY_VERIFY_WITH_TIMEOUT(!controller.terminalTabs().isEmpty()
                                  && controller.terminalTabs().front().toMap().value(QStringLiteral("failed")).toBool(),
                              5000);
+    const QVariantMap failedTab = controller.terminalTabs().constFirst().toMap();
+    QCOMPARE(failedTab.value(QStringLiteral("connectionPhase")).toString(), QStringLiteral("failed"));
+    QCOMPARE(failedTab.value(QStringLiteral("connectionStage")).toString(), QStringLiteral("failed"));
+    QCOMPARE(failedTab.value(QStringLiteral("connectionStageIndex")).toInt(), -1);
+    QCOMPARE(failedTab.value(QStringLiteral("connectionStageCount")).toInt(), 3);
+    QVERIFY(!failedTab.value(QStringLiteral("connectionInteractionRequired")).toBool());
     QCOMPARE(controller.hostProfiles().front().toMap().value(QStringLiteral("credentialStored")).toBool(), true);
     controller.shutdown();
 }
@@ -1703,6 +1716,12 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
     QVERIFY(!first.isEmpty());
     QCOMPARE(controller.terminalTabs().size(), 1);
     QCOMPARE(controller.activeTerminalTabId(), first);
+    const QVariantMap initialLocalTab = controller.terminalTabs().constFirst().toMap();
+    QCOMPARE(initialLocalTab.value(QStringLiteral("connectionPhase")).toString(), QStringLiteral("disconnected"));
+    QCOMPARE(initialLocalTab.value(QStringLiteral("connectionStage")).toString(), QStringLiteral("idle"));
+    QCOMPARE(initialLocalTab.value(QStringLiteral("connectionStageIndex")).toInt(), -1);
+    QCOMPARE(initialLocalTab.value(QStringLiteral("connectionStageCount")).toInt(), 3);
+    QVERIFY(!initialLocalTab.value(QStringLiteral("connectionInteractionRequired")).toBool());
     QVERIFY(controller.activeAiConversation() != nullptr);
     auto *aiConversation = qobject_cast<ztermy::ai::AiConversationModel *>(controller.activeAiConversation());
     QVERIFY(aiConversation != nullptr);
