@@ -1608,7 +1608,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     {
         sendKey(window, Qt::Key_Space);
     }
-    QObject *moreMenu = rootObject->findChild<QObject *>(QStringLiteral("terminalSelectionMoreMenu"));
+    auto *moreMenu = rootObject->findChild<QObject *>(QStringLiteral("terminalSelectionMoreMenu"));
     const bool menuOpened = processWindowEventsUntil(
         [moreMenu] {
             return moreMenu != nullptr && moreMenu->property("visible").toBool();
