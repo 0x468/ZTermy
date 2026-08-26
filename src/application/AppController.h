@@ -173,6 +173,7 @@ class AppController final : public QObject
     Q_PROPERTY(QString cursorPreference READ cursorPreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool cursorBlink READ cursorBlink NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool copyOnSelect READ copyOnSelect NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(bool keepSelectionAfterCopy READ keepSelectionAfterCopy NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool confirmMultilinePaste READ confirmMultilinePaste NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString terminalRightClickBehavior READ terminalRightClickBehavior NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString terminalMiddleClickBehavior READ terminalMiddleClickBehavior NOTIFY applicationSettingsChanged)
@@ -335,6 +336,7 @@ public:
     [[nodiscard]] QString cursorPreference() const;
     [[nodiscard]] bool cursorBlink() const noexcept;
     [[nodiscard]] bool copyOnSelect() const noexcept;
+    [[nodiscard]] bool keepSelectionAfterCopy() const noexcept;
     [[nodiscard]] bool confirmMultilinePaste() const noexcept;
     [[nodiscard]] QString terminalRightClickBehavior() const;
     [[nodiscard]] QString terminalMiddleClickBehavior() const;
@@ -561,17 +563,15 @@ public:
     Q_INVOKABLE bool connectQuick(const QString &target, const QString &authentication, const QString &privateKeyPath,
                                   bool privateKeyPassphraseRequired, const QString &secret, bool saveProfile,
                                   const QString &profileName, const QString &group);
-    Q_INVOKABLE bool saveApplicationSettings(const QString &theme, qreal backdropOpacity, const QString &backdrop,
-                                             const QString &accent, const QString &customAccent,
-                                             const QString &uiFontFamily, const QString &fontFamily, int fontSize,
-                                             bool showAllFonts, bool ligatures, qreal terminalBackgroundOpacity,
-                                             const QString &cursor, bool cursorShouldBlink, bool shouldCopyOnSelect,
-                                             bool shouldConfirmMultilinePaste, const QString &language,
-                                             bool shouldShowHiddenSftpFiles, bool shouldConfirmSftpDelete,
-                                             bool shouldCloseToTray = false, bool shouldPreferPerformance = false,
-                                             const QString &terminalRightClickBehavior = {},
-                                             const QString &terminalMiddleClickBehavior = {},
-                                             const QString &terminalWordDelimiters = {}, int terminalScrollRows = 3);
+    Q_INVOKABLE bool saveApplicationSettings(
+        const QString &theme, qreal backdropOpacity, const QString &backdrop, const QString &accent,
+        const QString &customAccent, const QString &uiFontFamily, const QString &fontFamily, int fontSize,
+        bool showAllFonts, bool ligatures, qreal terminalBackgroundOpacity, const QString &cursor,
+        bool cursorShouldBlink, bool shouldCopyOnSelect, bool shouldKeepSelectionAfterCopy,
+        bool shouldConfirmMultilinePaste, const QString &language, bool shouldShowHiddenSftpFiles,
+        bool shouldConfirmSftpDelete, bool shouldCloseToTray = false, bool shouldPreferPerformance = false,
+        const QString &terminalRightClickBehavior = {}, const QString &terminalMiddleClickBehavior = {},
+        const QString &terminalWordDelimiters = {}, int terminalScrollRows = 3);
     Q_INVOKABLE bool saveAiProviderSettings(const QString &provider, const QString &baseUrl,
                                             const QString &endpointPath, const QString &model, bool automaticContext,
                                             const QString &permissionMode);

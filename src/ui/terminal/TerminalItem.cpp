@@ -292,6 +292,11 @@ bool TerminalItem::copyOnSelect() const noexcept
     return m_copyOnSelect;
 }
 
+bool TerminalItem::keepSelectionAfterCopy() const noexcept
+{
+    return m_keepSelectionAfterCopy;
+}
+
 bool TerminalItem::confirmMultilinePaste() const noexcept
 {
     return m_confirmMultilinePaste;
@@ -579,6 +584,16 @@ void TerminalItem::setCopyOnSelect(const bool enabled)
     emit copyOnSelectChanged();
 }
 
+void TerminalItem::setKeepSelectionAfterCopy(const bool enabled)
+{
+    if (m_keepSelectionAfterCopy == enabled)
+    {
+        return;
+    }
+    m_keepSelectionAfterCopy = enabled;
+    emit keepSelectionAfterCopyChanged();
+}
+
 void TerminalItem::setConfirmMultilinePaste(const bool enabled)
 {
     if (m_confirmMultilinePaste == enabled)
@@ -779,6 +794,10 @@ void TerminalItem::dismissSelectionAction()
 void TerminalItem::copySelection()
 {
     emit copyRequested();
+    if (!m_keepSelectionAfterCopy && m_hasSelection)
+    {
+        clearSelection();
+    }
 }
 
 void TerminalItem::pasteClipboard()
@@ -1602,7 +1621,6 @@ void TerminalItem::mousePressEvent(QMouseEvent *event)
             if (m_hasSelection)
             {
                 copySelection();
-                clearSelection();
             }
             else
             {

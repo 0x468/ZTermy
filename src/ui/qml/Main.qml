@@ -1963,6 +1963,7 @@ Rectangle {
                             defaultCursor: root.controller.cursorPreference
                             cursorBlink: root.controller.cursorBlink
                             copyOnSelect: root.controller.copyOnSelect
+                            keepSelectionAfterCopy: root.controller.keepSelectionAfterCopy
                             confirmMultilinePaste: root.controller.confirmMultilinePaste
                             rightClickBehavior: root.controller.terminalRightClickBehavior
                             middleClickBehavior: root.controller.terminalMiddleClickBehavior

@@ -982,7 +982,7 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(controller.saveApplicationSettings(
         QStringLiteral("light"), 0.8, QStringLiteral("micaAlt"), QStringLiteral("custom"), QStringLiteral("#3366cc"),
         QStringLiteral("Microsoft YaHei UI"), QStringLiteral("Cascadia Code"), 18, true, false, 0.45,
-        QStringLiteral("bar"), false, true, false, QStringLiteral("zh_CN"), true, false, true, true,
+        QStringLiteral("bar"), false, true, true, false, QStringLiteral("zh_CN"), true, false, true, true,
         QStringLiteral("copy-paste"), QStringLiteral("paste"), QStringLiteral(" |,"), 7));
     QCOMPARE(settingsChanged.count(), 1);
     QCOMPARE(controller.themePreference(), QStringLiteral("light"));
@@ -999,6 +999,7 @@ void AppControllerTests::persistsApplicationSettings()
     QCOMPARE(controller.cursorPreference(), QStringLiteral("bar"));
     QVERIFY(!controller.cursorBlink());
     QVERIFY(controller.copyOnSelect());
+    QVERIFY(controller.keepSelectionAfterCopy());
     QVERIFY(!controller.confirmMultilinePaste());
     QCOMPARE(controller.terminalRightClickBehavior(), QStringLiteral("copy-paste"));
     QCOMPARE(controller.terminalMiddleClickBehavior(), QStringLiteral("paste"));
@@ -1014,19 +1015,19 @@ void AppControllerTests::persistsApplicationSettings()
 
     QVERIFY(!controller.saveApplicationSettings(
         QStringLiteral("unknown"), 0.8, QStringLiteral("mica"), QStringLiteral("system"), QStringLiteral("#3366CC"), {},
-        QStringLiteral("Cascadia Code"), 18, false, true, 0.45, QStringLiteral("bar"), false, true, false,
+        QStringLiteral("Cascadia Code"), 18, false, true, 0.45, QStringLiteral("bar"), false, true, false, false,
         QStringLiteral("zh_CN"), false, true));
     QVERIFY(!controller.saveApplicationSettings(
         QStringLiteral("light"), 0.8, QStringLiteral("mica"), QStringLiteral("system"), QStringLiteral("#3366CC"), {},
-        QStringLiteral("Cascadia Code"), 18, false, true, 0.45, QStringLiteral("bar"), false, true, false,
+        QStringLiteral("Cascadia Code"), 18, false, true, 0.45, QStringLiteral("bar"), false, true, false, false,
         QStringLiteral("zh_CN"), false, true, false, false, QStringLiteral("unsupported")));
     QVERIFY(!controller.saveApplicationSettings(
         QStringLiteral("light"), 0.8, QStringLiteral("mica"), QStringLiteral("system"), QStringLiteral("#3366CC"), {},
-        QStringLiteral("Cascadia Code"), 18, false, true, 0.45, QStringLiteral("bar"), false, true, false,
+        QStringLiteral("Cascadia Code"), 18, false, true, 0.45, QStringLiteral("bar"), false, true, false, false,
         QStringLiteral("unsupported"), false, true));
     QVERIFY(!controller.saveApplicationSettings(
         QStringLiteral("light"), 0.8, QStringLiteral("mica"), QStringLiteral("custom"), QStringLiteral("invalid"), {},
-        QStringLiteral("Cascadia Code"), 18, false, true, 0.45, QStringLiteral("bar"), false, true, false,
+        QStringLiteral("Cascadia Code"), 18, false, true, 0.45, QStringLiteral("bar"), false, true, false, false,
         QStringLiteral("zh_CN"), false, true));
     QCOMPARE(settingsChanged.count(), 1);
 
@@ -1042,6 +1043,7 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(!reloaded.terminalLigatures());
     QCOMPARE(reloaded.terminalBackgroundOpacity(), 0.45);
     QVERIFY(reloaded.copyOnSelect());
+    QVERIFY(reloaded.keepSelectionAfterCopy());
     QCOMPARE(reloaded.terminalRightClickBehavior(), QStringLiteral("copy-paste"));
     QCOMPARE(reloaded.terminalMiddleClickBehavior(), QStringLiteral("paste"));
     QCOMPARE(reloaded.terminalWordDelimiters(), QStringLiteral(" |,"));
@@ -1069,6 +1071,7 @@ void AppControllerTests::persistsApplicationSettings()
     QCOMPARE(reloaded.customAccent(), QStringLiteral("#22C55E"));
     QCOMPARE(reloaded.terminalFontFamily(), QStringLiteral("Cascadia Mono"));
     QCOMPARE(reloaded.terminalBackgroundOpacity(), 1.0);
+    QVERIFY(!reloaded.keepSelectionAfterCopy());
     QCOMPARE(reloaded.languagePreference(), QStringLiteral("system"));
     QVERIFY(!reloaded.closeToTray());
     QVERIFY(reloaded.aiWebSearchAvailable());

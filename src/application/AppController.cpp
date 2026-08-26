@@ -3365,6 +3365,11 @@ bool AppController::copyOnSelect() const noexcept
     return m_settings.copyOnSelect;
 }
 
+bool AppController::keepSelectionAfterCopy() const noexcept
+{
+    return m_settings.keepSelectionAfterCopy;
+}
+
 bool AppController::confirmMultilinePaste() const noexcept
 {
     return m_settings.confirmMultilinePaste;
@@ -8470,10 +8475,11 @@ bool AppController::saveApplicationSettings(
     const QString &theme, const qreal backdropOpacity, const QString &backdrop, const QString &accent,
     const QString &customAccent, const QString &uiFontFamily, const QString &fontFamily, const int fontSize,
     const bool showAllFonts, const bool ligatures, const qreal terminalBackgroundOpacity, const QString &cursor,
-    const bool cursorShouldBlink, const bool shouldCopyOnSelect, const bool shouldConfirmMultilinePaste,
-    const QString &language, const bool shouldShowHiddenSftpFiles, const bool shouldConfirmSftpDelete,
-    const bool shouldCloseToTray, const bool shouldPreferPerformance, const QString &terminalRightClickBehavior,
-    const QString &terminalMiddleClickBehavior, const QString &terminalWordDelimiters, const int terminalScrollRows)
+    const bool cursorShouldBlink, const bool shouldCopyOnSelect, const bool shouldKeepSelectionAfterCopy,
+    const bool shouldConfirmMultilinePaste, const QString &language, const bool shouldShowHiddenSftpFiles,
+    const bool shouldConfirmSftpDelete, const bool shouldCloseToTray, const bool shouldPreferPerformance,
+    const QString &terminalRightClickBehavior, const QString &terminalMiddleClickBehavior,
+    const QString &terminalWordDelimiters, const int terminalScrollRows)
 {
     const auto parsedTheme = config::parseThemePreference(theme);
     const auto parsedBackdrop = config::parseBackdropPreference(backdrop);
@@ -8516,6 +8522,7 @@ bool AppController::saveApplicationSettings(
         .cursor = *parsedCursor,
         .cursorBlink = cursorShouldBlink,
         .copyOnSelect = shouldCopyOnSelect,
+        .keepSelectionAfterCopy = shouldKeepSelectionAfterCopy,
         .confirmMultilinePaste = shouldConfirmMultilinePaste,
         .terminalRightClick = *parsedRightClick,
         .terminalMiddleClick = *parsedMiddleClick,

@@ -136,6 +136,7 @@ struct ApplicationSettings final
     CursorPreference cursor = CursorPreference::terminal;
     bool cursorBlink = true;
     bool copyOnSelect = false;
+    bool keepSelectionAfterCopy = false;
     bool confirmMultilinePaste = true;
     TerminalRightClickPreference terminalRightClick = TerminalRightClickPreference::contextMenu;
     TerminalMiddleClickPreference terminalMiddleClick = TerminalMiddleClickPreference::disabled;

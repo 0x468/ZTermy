@@ -454,8 +454,8 @@ struct ResizeHitRuntimeCase
             controller.uiFontFamily(), controller.terminalFontFamily(), controller.terminalFontSize(),
             controller.showAllTerminalFonts(), controller.terminalLigatures(), controller.terminalBackgroundOpacity(),
             controller.cursorPreference(), controller.cursorBlink(), controller.copyOnSelect(),
-            controller.confirmMultilinePaste(), controller.languagePreference(), controller.sftpShowHiddenFiles(),
-            controller.sftpConfirmDelete());
+            controller.keepSelectionAfterCopy(), controller.confirmMultilinePaste(), controller.languagePreference(),
+            controller.sftpShowHiddenFiles(), controller.sftpConfirmDelete());
     };
     const auto surfaceAlpha = [&window](const char *propertyName) {
         QQuickItem *rootObject = window.rootObject();
@@ -757,9 +757,9 @@ struct ResizeHitRuntimeCase
 [[nodiscard]] bool applyUiLayoutSmokeTheme(ztermy::AppController &controller, const QString &theme,
                                            const QString &language, const QString &backdrop = QStringLiteral("acrylic"))
 {
-    return controller.saveApplicationSettings(theme, 1.0, backdrop, QStringLiteral("ztermy"), QStringLiteral("#22C55E"),
-                                              {}, QStringLiteral("Cascadia Mono"), 14, false, true, 1.0,
-                                              QStringLiteral("terminal"), true, false, true, language, false, true);
+    return controller.saveApplicationSettings(
+        theme, 1.0, backdrop, QStringLiteral("ztermy"), QStringLiteral("#22C55E"), {}, QStringLiteral("Cascadia Mono"),
+        14, false, true, 1.0, QStringLiteral("terminal"), true, false, false, true, language, false, true);
 }
 
 [[nodiscard]] bool runUiLayoutRuntimeSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller,
@@ -1721,6 +1721,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
         "settingsCursor",
         "settingsCursorBlink",
         "settingsCopyOnSelect",
+        "settingsKeepSelectionAfterCopy",
         "settingsMultilinePaste",
         "settingsTerminalRightClick",
         "settingsTerminalMiddleClick",
@@ -1999,10 +2000,12 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     QQuickItem *fontSize = quickItem(rootObject, "settingsFontSize");
     QQuickItem *cursorBlink = quickItem(rootObject, "settingsCursorBlink");
     QQuickItem *copyOnSelect = quickItem(rootObject, "settingsCopyOnSelect");
+    QQuickItem *keepSelectionAfterCopy = quickItem(rootObject, "settingsKeepSelectionAfterCopy");
     QQuickItem *multilinePaste = quickItem(rootObject, "settingsMultilinePaste");
     QQuickItem *apply = quickItem(rootObject, "settingsApply");
     if (theme == nullptr || accent == nullptr || opacity == nullptr || fontSize == nullptr || cursorBlink == nullptr
-        || copyOnSelect == nullptr || multilinePaste == nullptr || apply == nullptr)
+        || copyOnSelect == nullptr || keepSelectionAfterCopy == nullptr || multilinePaste == nullptr
+        || apply == nullptr)
     {
         qCWarning(applicationLog) << "Settings keyboard smoke object lookup failed";
         return false;
@@ -2074,9 +2077,11 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
         sendKey(window, Qt::Key_Space);
         return item->property("checked").toBool() != before;
     };
-    const bool switchesChanged = toggleWithSpace(cursorBlink, QStringLiteral("settingsCursorBlink"))
-                                 && toggleWithSpace(copyOnSelect, QStringLiteral("settingsCopyOnSelect"))
-                                 && toggleWithSpace(multilinePaste, QStringLiteral("settingsMultilinePaste"));
+    const bool switchesChanged =
+        toggleWithSpace(cursorBlink, QStringLiteral("settingsCursorBlink"))
+        && toggleWithSpace(copyOnSelect, QStringLiteral("settingsCopyOnSelect"))
+        && toggleWithSpace(keepSelectionAfterCopy, QStringLiteral("settingsKeepSelectionAfterCopy"))
+        && toggleWithSpace(multilinePaste, QStringLiteral("settingsMultilinePaste"));
 
     const bool livePreviewMatches =
         rootObject->property("appearancePreviewActive").toBool()

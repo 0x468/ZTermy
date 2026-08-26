@@ -514,6 +514,7 @@ Rectangle {
         cursorBox.currentIndex = cursorIndex(controller.cursorPreference);
         cursorBlinkSwitch.checked = controller.cursorBlink;
         copyOnSelectSwitch.checked = controller.copyOnSelect;
+        keepSelectionAfterCopySwitch.checked = controller.keepSelectionAfterCopy;
         multilinePasteSwitch.checked = controller.confirmMultilinePaste;
         rightClickBox.currentIndex = rightClickIndex(controller.terminalRightClickBehavior);
         middleClickBox.currentIndex = middleClickIndex(controller.terminalMiddleClickBehavior);
@@ -554,7 +555,7 @@ Rectangle {
         }
         const wantsOpaqueSurface = performanceModeDraft || backdropToken() === "solid";
         const restartRequired = wantsOpaqueSurface !== windowChrome.opaqueSurface || performanceModeDraft !== windowChrome.performanceModeActive;
-        const saved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), accentToken(), customAccentField.text, uiFontDraft, terminalFontDraft, fontSizeBox.value, showAllFontsSwitch.checked, ligatureSwitch.checked, terminalOpacitySlider.value, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, multilinePasteSwitch.checked, languageDraft, sftpShowHiddenSwitch.checked, sftpConfirmDeleteSwitch.checked, closeToTraySwitch.checked, performanceModeDraft, rightClickToken(), middleClickToken(), wordDelimitersField.text, wheelRowsBox.value);
+        const saved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), accentToken(), customAccentField.text, uiFontDraft, terminalFontDraft, fontSizeBox.value, showAllFontsSwitch.checked, ligatureSwitch.checked, terminalOpacitySlider.value, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, keepSelectionAfterCopySwitch.checked, multilinePasteSwitch.checked, languageDraft, sftpShowHiddenSwitch.checked, sftpConfirmDeleteSwitch.checked, closeToTraySwitch.checked, performanceModeDraft, rightClickToken(), middleClickToken(), wordDelimitersField.text, wheelRowsBox.value);
         presentStatus(saved ? restartRequired ? qsTr("Settings saved. Restart ztermy to apply the rendering mode.") : qsTr("Settings saved and applied.") : qsTr("These settings could not be saved. Check the font and numeric ranges."), !saved, saved);
         if (!saved) {
             loadDraft();
@@ -1381,6 +1382,18 @@ Rectangle {
                         Layout.fillWidth: true
                         text: qsTr("Copy selected terminal text automatically")
                         accessibleName: qsTr("Copy terminal selection automatically")
+                    }
+
+                    Item {
+                        visible: !pane.compactLayout
+                        implicitHeight: keepSelectionAfterCopySwitch.implicitHeight
+                    }
+                    AppSwitch {
+                        id: keepSelectionAfterCopySwitch
+                        objectName: "settingsKeepSelectionAfterCopy"
+                        Layout.fillWidth: true
+                        text: qsTr("Keep selection after copying")
+                        accessibleName: qsTr("Keep terminal selection after copying")
                     }
 
                     Item {

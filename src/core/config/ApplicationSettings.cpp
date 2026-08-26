@@ -52,7 +52,8 @@ constexpr qint64 closeToTraySchemaVersion = 23;
 // with reduced motion.
 constexpr qint64 performanceModeSchemaVersion = 24;
 constexpr qint64 terminalInteractionSchemaVersion = 25;
-constexpr qint64 terminalSelectionInteractionSchemaVersion = 26;
+constexpr qint64 terminalSelectionSettingsSchemaVersion = 26;
+constexpr qint64 terminalSelectionInteractionSchemaVersion = 27;
 constexpr qint64 currentSchemaVersion = terminalSelectionInteractionSchemaVersion;
 
 using ztermy::config::AccentPreference;
@@ -428,6 +429,7 @@ template <>
     const QJsonValue cursorValue = root.value(QStringLiteral("cursor"));
     const QJsonValue cursorBlinkValue = root.value(QStringLiteral("cursorBlink"));
     const QJsonValue copyOnSelectValue = root.value(QStringLiteral("copyOnSelect"));
+    const QJsonValue keepSelectionAfterCopyValue = root.value(QStringLiteral("keepSelectionAfterCopy"));
     const QJsonValue confirmMultilinePasteValue = root.value(QStringLiteral("confirmMultilinePaste"));
     const QJsonValue terminalRightClickValue = root.value(QStringLiteral("terminalRightClick"));
     const QJsonValue terminalMiddleClickValue = root.value(QStringLiteral("terminalMiddleClick"));
@@ -501,9 +503,13 @@ template <>
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
-    if (version >= terminalSelectionInteractionSchemaVersion
+    if (version >= terminalSelectionSettingsSchemaVersion
         && (!terminalMiddleClickValue.isString() || !terminalWordDelimitersValue.isString()
             || !terminalScrollRowsValue.isDouble()))
+    {
+        return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
+    }
+    if (version >= terminalSelectionInteractionSchemaVersion && !keepSelectionAfterCopyValue.isBool())
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
@@ -544,7 +550,7 @@ template <>
             ? parsePreference<TerminalRightClickPreference>(terminalRightClickValue.toString())
             : std::optional{TerminalRightClickPreference::contextMenu};
     const auto terminalMiddleClick =
-        version >= terminalSelectionInteractionSchemaVersion
+        version >= terminalSelectionSettingsSchemaVersion
             ? parsePreference<TerminalMiddleClickPreference>(terminalMiddleClickValue.toString())
             : std::optional{TerminalMiddleClickPreference::disabled};
     const auto credentialStorage = version >= credentialStorageSchemaVersion
@@ -569,11 +575,11 @@ template <>
                                                          : std::optional{AiProxyPreference::system};
     const qint64 fontSize = fontSizeValue.toInteger(-1);
     const qint64 terminalScrollRows =
-        version >= terminalSelectionInteractionSchemaVersion ? terminalScrollRowsValue.toInteger(-1) : 3;
+        version >= terminalSelectionSettingsSchemaVersion ? terminalScrollRowsValue.toInteger(-1) : 3;
     if (!theme || !backdrop || !accent || !cursor || !terminalRightClick || !terminalMiddleClick || !credentialStorage
         || !language || !aiProvider || !aiPermission || !aiReasoning || !aiProxy
         || fontSizeValue.toDouble() != static_cast<double>(fontSize)
-        || (version >= terminalSelectionInteractionSchemaVersion
+        || (version >= terminalSelectionSettingsSchemaVersion
             && terminalScrollRowsValue.toDouble() != static_cast<double>(terminalScrollRows)))
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
@@ -605,7 +611,7 @@ template <>
         .customAccent = version >= accentSchemaVersion ? customAccentValue.toString() : QStringLiteral("#22C55E"),
         .uiFontFamily = version >= fontOptionsSchemaVersion ? uiFontFamilyValue.toString() : QString{},
         .terminalFontFamily = fontFamilyValue.toString(),
-        .terminalWordDelimiters = version >= terminalSelectionInteractionSchemaVersion
+        .terminalWordDelimiters = version >= terminalSelectionSettingsSchemaVersion
                                       ? terminalWordDelimitersValue.toString()
                                       : QStringLiteral(" \t'\"│`|;,()[]{}<>$"),
         .aiBaseUrl = version >= aiProviderSchemaVersion ? aiBaseUrlValue.toString()
@@ -626,6 +632,8 @@ template <>
         .cursor = *cursor,
         .cursorBlink = cursorBlinkValue.toBool(),
         .copyOnSelect = copyOnSelectValue.toBool(),
+        .keepSelectionAfterCopy =
+            version >= terminalSelectionInteractionSchemaVersion && keepSelectionAfterCopyValue.toBool(),
         .confirmMultilinePaste = confirmMultilinePasteValue.toBool(),
         .terminalRightClick = *terminalRightClick,
         .terminalMiddleClick = *terminalMiddleClick,
@@ -767,6 +775,7 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
         {QStringLiteral("cursor"), cursorPreferenceToken(settings.cursor)},
         {QStringLiteral("cursorBlink"), settings.cursorBlink},
         {QStringLiteral("copyOnSelect"), settings.copyOnSelect},
+        {QStringLiteral("keepSelectionAfterCopy"), settings.keepSelectionAfterCopy},
         {QStringLiteral("confirmMultilinePaste"), settings.confirmMultilinePaste},
         {QStringLiteral("terminalRightClick"), terminalRightClickPreferenceToken(settings.terminalRightClick)},
         {QStringLiteral("terminalMiddleClick"), terminalMiddleClickPreferenceToken(settings.terminalMiddleClick)},

@@ -78,6 +78,7 @@ private slots:
     void commitsImeTextExactlyOnce();
     void appliesRendererPreferences();
     void routesCopyPasteAndTextKeys();
+    void dismissesSelectionAfterExplicitCopyUnlessConfiguredToKeepIt();
     void mapsWindowsPhysicalKeys();
     void confirmsMultilinePaste();
     void selectsCellsAndCopiesOnMouseRelease();
@@ -533,6 +534,69 @@ void TerminalItemTests::routesCopyPasteAndTextKeys()
     QVERIFY(textEvent.isAccepted());
 }
 
+void TerminalItemTests::dismissesSelectionAfterExplicitCopyUnlessConfiguredToKeepIt()
+{
+    TestableTerminalItem item;
+    item.setSnapshot(snapshotAt(0, 0));
+    item.setSize(QSizeF{800, 480});
+    QSignalSpy copySpy(&item, &ztermy::ui::TerminalItem::copyRequested);
+    QSignalSpy clearSpy(&item, &ztermy::ui::TerminalItem::clearSelectionRequested);
+    QSignalSpy preferenceSpy(&item, &ztermy::ui::TerminalItem::keepSelectionAfterCopyChanged);
+
+    QVERIFY(!item.keepSelectionAfterCopy());
+    item.selectVisibleTerminal();
+    QKeyEvent controlCopy(QEvent::KeyPress, Qt::Key_C, Qt::ControlModifier);
+    item.keyPressEvent(&controlCopy);
+    QCOMPARE(copySpy.count(), 1);
+    QCOMPARE(clearSpy.count(), 1);
+    QVERIFY(!item.hasSelection());
+
+    item.selectVisibleTerminal();
+    QKeyEvent controlInsert(QEvent::KeyPress, Qt::Key_Insert, Qt::ControlModifier);
+    item.keyPressEvent(&controlInsert);
+    QCOMPARE(copySpy.count(), 2);
+    QCOMPARE(clearSpy.count(), 2);
+    QVERIFY(!item.hasSelection());
+
+    item.selectVisibleTerminal();
+    item.copySelection();
+    QCOMPARE(copySpy.count(), 3);
+    QCOMPARE(clearSpy.count(), 3);
+    QVERIFY(!item.hasSelection());
+
+    item.setKeepSelectionAfterCopy(true);
+    QVERIFY(item.keepSelectionAfterCopy());
+    QCOMPARE(preferenceSpy.count(), 1);
+    item.selectVisibleTerminal();
+    item.keyPressEvent(&controlCopy);
+    QCOMPARE(copySpy.count(), 4);
+    QCOMPARE(clearSpy.count(), 3);
+    QVERIFY(item.hasSelection());
+
+    item.keyPressEvent(&controlInsert);
+    QCOMPARE(copySpy.count(), 5);
+    QCOMPARE(clearSpy.count(), 3);
+    QVERIFY(item.hasSelection());
+
+    item.setKeepSelectionAfterCopy(false);
+    QCOMPARE(preferenceSpy.count(), 2);
+    item.setRightClickBehavior(QStringLiteral("copy-paste"));
+    const QPointF point{40, 40};
+    QMouseEvent rightClick(QEvent::MouseButtonPress, point, point, point, Qt::RightButton, Qt::RightButton,
+                           Qt::NoModifier);
+    item.mousePressEvent(&rightClick);
+    QCOMPARE(copySpy.count(), 6);
+    QCOMPARE(clearSpy.count(), 4);
+    QVERIFY(!item.hasSelection());
+
+    item.setKeepSelectionAfterCopy(true);
+    item.selectVisibleTerminal();
+    item.mousePressEvent(&rightClick);
+    QCOMPARE(copySpy.count(), 7);
+    QCOMPARE(clearSpy.count(), 4);
+    QVERIFY(item.hasSelection());
+}
+
 void TerminalItemTests::mapsWindowsPhysicalKeys()
 {
     QKeyEvent layoutEvent(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier, 0x10, 'A', 0, QStringLiteral("a"));
@@ -550,6 +614,7 @@ void TerminalItemTests::mapsWindowsPhysicalKeys()
 void TerminalItemTests::supportsClassicClipboardAliasesAndContextActions()
 {
     TestableTerminalItem item;
+    item.setKeepSelectionAfterCopy(true);
     item.setSnapshot(snapshotAt(0, 0));
     item.setSize(QSizeF{800, 480});
     item.clipboardTextFixture = QStringLiteral("classic paste");
@@ -760,6 +825,7 @@ void TerminalItemTests::selectsCellsAndCopiesOnMouseRelease()
         gestures.push_back(gesture);
     });
     QSignalSpy copySpy(&item, &ztermy::ui::TerminalItem::copyRequested);
+    QSignalSpy clearSpy(&item, &ztermy::ui::TerminalItem::clearSelectionRequested);
     QSignalSpy selectionActionSpy(&item, &ztermy::ui::TerminalItem::selectionActionChanged);
 
     const QPointF start = cellCenter(2, 3);
@@ -787,6 +853,8 @@ void TerminalItemTests::selectsCellsAndCopiesOnMouseRelease()
     QCOMPARE(gestures.at(2).type, ztermy::terminal::TerminalSelectionGestureType::drag);
     QCOMPARE(gestures.at(3).type, ztermy::terminal::TerminalSelectionGestureType::release);
     QCOMPARE(copySpy.count(), 1);
+    QCOMPARE(clearSpy.count(), 0);
+    QVERIFY(item.hasSelection());
     QVERIFY(item.selectionActionVisible());
     QCOMPARE(item.selectionActionPosition(), end);
     QCOMPARE(selectionActionSpy.count(), 1);
@@ -807,6 +875,8 @@ void TerminalItemTests::selectsCellsAndCopiesOnMouseRelease()
     QVERIFY(gestures.at(6).rectangular);
     QCOMPARE(gestures.at(7).type, ztermy::terminal::TerminalSelectionGestureType::release);
     QCOMPARE(copySpy.count(), 2);
+    QCOMPARE(clearSpy.count(), 0);
+    QVERIFY(item.hasSelection());
     QVERIFY(item.selectionActionVisible());
 
     item.dismissSelectionAction();

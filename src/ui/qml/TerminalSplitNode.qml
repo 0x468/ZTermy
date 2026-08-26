@@ -11,6 +11,7 @@ Item {
     property var node: ({})
     property bool cursorBlink: true
     property bool copyOnSelect: false
+    property bool keepSelectionAfterCopy: false
     property bool confirmMultilinePaste: true
     property string rightClickBehavior: "context-menu"
     property string middleClickBehavior: "disabled"
@@ -175,6 +176,7 @@ Item {
                 backgroundOverride: leaf.tab.sessionBackground || ""
                 cursorBlink: root.cursorBlink
                 copyOnSelect: root.copyOnSelect
+                keepSelectionAfterCopy: root.keepSelectionAfterCopy
                 confirmMultilinePaste: root.confirmMultilinePaste
                 rightClickBehavior: root.rightClickBehavior
                 middleClickBehavior: root.middleClickBehavior
@@ -655,6 +657,7 @@ Item {
                         item.node = split.node.first;
                         item.cursorBlink = root.cursorBlink;
                         item.copyOnSelect = root.copyOnSelect;
+                        item.keepSelectionAfterCopy = root.keepSelectionAfterCopy;
                         item.confirmMultilinePaste = root.confirmMultilinePaste;
                         item.rightClickBehavior = root.rightClickBehavior;
                         item.middleClickBehavior = root.middleClickBehavior;
@@ -690,6 +693,12 @@ Item {
                     target: firstLoader.item
                     property: "copyOnSelect"
                     value: root.copyOnSelect
+                    when: firstLoader.item !== null
+                }
+                Binding {
+                    target: firstLoader.item
+                    property: "keepSelectionAfterCopy"
+                    value: root.keepSelectionAfterCopy
                     when: firstLoader.item !== null
                 }
                 Binding {
@@ -789,6 +798,7 @@ Item {
                         item.node = split.node.second;
                         item.cursorBlink = root.cursorBlink;
                         item.copyOnSelect = root.copyOnSelect;
+                        item.keepSelectionAfterCopy = root.keepSelectionAfterCopy;
                         item.confirmMultilinePaste = root.confirmMultilinePaste;
                         item.rightClickBehavior = root.rightClickBehavior;
                         item.middleClickBehavior = root.middleClickBehavior;
@@ -824,6 +834,12 @@ Item {
                     target: secondLoader.item
                     property: "copyOnSelect"
                     value: root.copyOnSelect
+                    when: secondLoader.item !== null
+                }
+                Binding {
+                    target: secondLoader.item
+                    property: "keepSelectionAfterCopy"
+                    value: root.keepSelectionAfterCopy
                     when: secondLoader.item !== null
                 }
                 Binding {
