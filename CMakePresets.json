@@ -76,8 +76,30 @@
       "configurePreset": "msvc-dynamic-debug",
       "output": {
         "outputOnFailure": true
+      },
+      "execution": {
+        "jobs": 12
+      }
+    },
+    {
+      "name": "msvc-dynamic-relwithdebinfo",
+      "configurePreset": "msvc-dynamic-relwithdebinfo",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "jobs": 12
+      }
+    },
+    {
+      "name": "msvc-static-release",
+      "configurePreset": "msvc-static-release",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "jobs": 12
       }
     }
   ]
 }
-
