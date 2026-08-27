@@ -14835,16 +14835,16 @@ void AppController::scheduleTerminalTabsChanged()
         return;
     }
     m_terminalTabsChangePending = true;
-    QMetaObject::invokeMethod(
-        this,
-        [this] {
-            m_terminalTabsChangePending = false;
-            if (!m_shutdownStarted)
-            {
-                emit terminalTabsChanged();
-            }
-        },
-        Qt::QueuedConnection);
+    QTimer::singleShot(0, this, &AppController::flushTerminalTabsChanged);
+}
+
+void AppController::flushTerminalTabsChanged()
+{
+    m_terminalTabsChangePending = false;
+    if (!m_shutdownStarted)
+    {
+        emit terminalTabsChanged();
+    }
 }
 
 void AppController::updateTelemetryVisibility()

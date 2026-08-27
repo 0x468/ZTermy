@@ -915,6 +915,7 @@ private:
     void connectLocalTabSignals(TerminalTab &tab);
     void connectSshTabSignals(TerminalTab &tab);
     void scheduleTerminalTabsChanged();
+    void flushTerminalTabsChanged();
     void connectSftpTabSignals(TerminalTab &tab);
     void initializeSessionLog(TerminalTab &tab);
     void initializeTerminalOutputSink(TerminalTab &tab);

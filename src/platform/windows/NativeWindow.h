@@ -33,7 +33,7 @@ public:
     ~NativeWindow() override;
 
     [[nodiscard]] bool load(QVariantMap initialProperties = {});
-    void releaseResources();
+    void releaseQmlResources();
     [[nodiscard]] bool maximized() const noexcept;
     [[nodiscard]] bool maximizeButtonHovered() const noexcept;
     [[nodiscard]] bool maximizeButtonPressed() const noexcept;

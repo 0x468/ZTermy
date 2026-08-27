@@ -37,8 +37,8 @@ public:
     ConPtyProcess(ConPtyProcess &&) = delete;
     ConPtyProcess &operator=(ConPtyProcess &&) = delete;
 
-    [[nodiscard]] std::error_code start(std::wstring applicationName, std::wstring commandLine, TerminalSize size,
-                                        std::wstring_view workingDirectory = {});
+    [[nodiscard]] std::error_code start(const std::wstring &applicationName, std::wstring commandLine,
+                                        TerminalSize size, std::wstring_view workingDirectory = {});
     [[nodiscard]] std::expected<std::size_t, std::error_code> read(std::span<std::byte> destination);
     [[nodiscard]] std::error_code write(std::span<const std::byte> source);
     [[nodiscard]] std::error_code resize(TerminalSize size);

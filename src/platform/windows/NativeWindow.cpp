@@ -129,7 +129,7 @@ bool NativeWindow::load(QVariantMap initialProperties)
     return true;
 }
 
-void NativeWindow::releaseResources()
+void NativeWindow::releaseQmlResources()
 {
     // Unload the object tree while the QML engine and image providers are
     // still alive. This lets pending asynchronous component creation cancel
