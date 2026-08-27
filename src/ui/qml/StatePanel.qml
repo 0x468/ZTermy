@@ -14,8 +14,12 @@ Rectangle {
     property bool centered: false
     property var steps: []
     property int activeStep: 0
+    property real progress: -1
+    property int progressAnimationDuration: 110
     readonly property bool error: kind === "error"
     readonly property bool loading: kind === "loading"
+    readonly property bool determinateProgress: loading && progress >= 0
+    readonly property real normalizedProgress: Math.max(0, Math.min(1, progress))
     readonly property int stepCount: steps && steps.length !== undefined ? steps.length : 0
     readonly property int normalizedActiveStep: stepCount > 0 ? Math.max(0, Math.min(activeStep, stepCount - 1)) : -1
 
@@ -85,8 +89,8 @@ Rectangle {
             Rectangle {
                 id: loadingIndicator
 
-                x: Theme.animationsEnabled ? -width : 0
-                width: Theme.animationsEnabled ? Math.max(36, loadingTrack.width * 0.32) : loadingTrack.width
+                x: control.determinateProgress ? 0 : Theme.animationsEnabled ? -width : 0
+                width: control.determinateProgress ? loadingTrack.width * control.normalizedProgress : Theme.animationsEnabled ? Math.max(36, loadingTrack.width * 0.32) : loadingTrack.width
                 height: loadingTrack.height
                 radius: height / 2
                 color: Theme.accent
@@ -94,9 +98,18 @@ Rectangle {
                 NumberAnimation on x {
                     from: -loadingIndicator.width
                     to: loadingTrack.width
-                    duration: 1100
+                    duration: 650
                     loops: Animation.Infinite
-                    running: loadingTrack.visible && Theme.animationsEnabled
+                    running: loadingTrack.visible && !control.determinateProgress && Theme.animationsEnabled
+                }
+
+                Behavior on width {
+                    enabled: control.determinateProgress && Theme.animationsEnabled
+
+                    NumberAnimation {
+                        duration: control.progressAnimationDuration
+                        easing.type: Easing.OutCubic
+                    }
                 }
             }
         }
@@ -127,6 +140,18 @@ Rectangle {
                         color: stepRow.currentStep ? Theme.accent : stepRow.completedStep ? Theme.selectedBackground : Theme.controlBackground
                         border.color: stepRow.currentStep || stepRow.completedStep ? Theme.accent : Theme.border
 
+                        Behavior on color {
+                            ColorAnimation {
+                                duration: Theme.motionFast
+                            }
+                        }
+
+                        Behavior on border.color {
+                            ColorAnimation {
+                                duration: Theme.motionFast
+                            }
+                        }
+
                         Text {
                             anchors.centerIn: parent
                             text: String(stepRow.index + 1)
@@ -145,6 +170,12 @@ Rectangle {
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.textLabel
                         font.weight: stepRow.currentStep ? Font.DemiBold : Font.Normal
+
+                        Behavior on color {
+                            ColorAnimation {
+                                duration: Theme.motionFast
+                            }
+                        }
                     }
                 }
             }

@@ -21,6 +21,7 @@ Rectangle {
     property string languageDraft: "system"
     property string uiFontDraft: ""
     property string terminalFontDraft: "Cascadia Mono"
+    property string localShellDraft: "automatic"
     property string aiBaseUrlDraft: "https://api.openai.com"
     property string aiModelDraft: ""
     property string aiSelectedProviderToken: "openai-responses"
@@ -56,6 +57,8 @@ Rectangle {
     readonly property bool uiFontHasCjk: fontCatalog.supportsCjk(uiFontDraft)
     readonly property var uiFontOptions: systemFontOptions(fontCatalog.allFamilies)
     readonly property var terminalFontOptions: visibleTerminalFonts(showAllFontsSwitch.checked, terminalFontDraft)
+    readonly property var localShellTokens: controller.availableLocalShells.map(shell => shell.id)
+    readonly property var localShellLabels: controller.availableLocalShells.map(shell => shell.available ? shell.name : qsTr("%1 (unavailable)").arg(shell.name))
 
     signal appearancePreviewRequested(string theme, real opacity, string backdrop, string accent, string customAccent)
     signal appearancePreviewEnded
@@ -149,6 +152,11 @@ Rectangle {
 
     function cursorIndex(token) {
         return token === "block" ? 1 : token === "bar" ? 2 : token === "underline" ? 3 : 0;
+    }
+
+    function localShellIndex(token) {
+        const index = localShellTokens.indexOf(token);
+        return index < 0 ? 0 : index;
     }
 
     function accentIndex(token) {
@@ -507,6 +515,8 @@ Rectangle {
         customAccentField.text = controller.customAccent;
         uiFontDraft = controller.uiFontFamily;
         terminalFontDraft = controller.terminalFontFamily;
+        localShellDraft = controller.localShellPreference;
+        localShellBox.currentIndex = localShellIndex(localShellDraft);
         fontSizeBox.value = controller.terminalFontSize;
         showAllFontsSwitch.checked = controller.showAllTerminalFonts;
         ligatureSwitch.checked = controller.terminalLigatures;
@@ -555,7 +565,8 @@ Rectangle {
         }
         const wantsOpaqueSurface = performanceModeDraft || backdropToken() === "solid";
         const restartRequired = wantsOpaqueSurface !== windowChrome.opaqueSurface || performanceModeDraft !== windowChrome.performanceModeActive;
-        const saved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), accentToken(), customAccentField.text, uiFontDraft, terminalFontDraft, fontSizeBox.value, showAllFontsSwitch.checked, ligatureSwitch.checked, terminalOpacitySlider.value, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, keepSelectionAfterCopySwitch.checked, multilinePasteSwitch.checked, languageDraft, sftpShowHiddenSwitch.checked, sftpConfirmDeleteSwitch.checked, closeToTraySwitch.checked, performanceModeDraft, rightClickToken(), middleClickToken(), wordDelimitersField.text, wheelRowsBox.value);
+        const applicationSaved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), accentToken(), customAccentField.text, uiFontDraft, terminalFontDraft, fontSizeBox.value, showAllFontsSwitch.checked, ligatureSwitch.checked, terminalOpacitySlider.value, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, keepSelectionAfterCopySwitch.checked, multilinePasteSwitch.checked, languageDraft, sftpShowHiddenSwitch.checked, sftpConfirmDeleteSwitch.checked, closeToTraySwitch.checked, performanceModeDraft, rightClickToken(), middleClickToken(), wordDelimitersField.text, wheelRowsBox.value);
+        const saved = applicationSaved && controller.saveLocalShellPreference(localShellTokens[Math.max(0, localShellBox.currentIndex)] || "automatic");
         presentStatus(saved ? restartRequired ? qsTr("Settings saved. Restart ztermy to apply the rendering mode.") : qsTr("Settings saved and applied.") : qsTr("These settings could not be saved. Check the font and numeric ranges."), !saved, saved);
         if (!saved) {
             loadDraft();
@@ -1344,6 +1355,42 @@ Rectangle {
                             color: Theme.textSoft
                             font.family: Theme.terminalFont
                             font.pixelSize: Theme.textLabel
+                        }
+                    }
+
+                    Label {
+                        text: qsTr("Default local shell")
+                        color: Theme.text
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        AppComboBox {
+                            id: localShellBox
+                            objectName: "settingsLocalShell"
+                            Layout.fillWidth: true
+                            model: pane.localShellTokens
+                            displayTextModel: pane.localShellLabels
+                            accessibleName: qsTr("Default local terminal shell")
+                            toolTipText: {
+                                const shell = pane.controller.availableLocalShells[Math.max(0, currentIndex)];
+                                return shell ? shell.name + "\n" + shell.detail : "";
+                            }
+                            onCurrentIndexChanged: {
+                                if (!pane.loadingDraft)
+                                    pane.localShellDraft = pane.localShellTokens[Math.max(0, currentIndex)] || "automatic";
+                            }
+                        }
+
+                        ActionButton {
+                            text: qsTr("Refresh")
+                            iconName: "refresh"
+                            accessibleName: qsTr("Detect installed local shells again")
+                            onClicked: {
+                                pane.controller.refreshLocalShells();
+                                localShellBox.currentIndex = pane.localShellIndex(pane.localShellDraft);
+                            }
                         }
                     }
 

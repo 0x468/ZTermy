@@ -10,6 +10,7 @@ Rectangle {
     property string accessibleName: text
     property string actionObjectName: ""
     property bool selected: false
+    property bool compact: false
     signal activated
 
     implicitHeight: 34
@@ -28,8 +29,9 @@ Rectangle {
     }
 
     Row {
-        anchors.left: parent.left
-        anchors.leftMargin: 10
+        id: contentRow
+
+        x: control.compact ? Math.round((control.width - width) / 2) : 10
         anchors.verticalCenter: parent.verticalCenter
         spacing: 8
 
@@ -42,6 +44,7 @@ Rectangle {
         }
 
         Text {
+            visible: !control.compact
             text: control.text
             color: control.selected ? Theme.text : Theme.textMuted
             font.family: Theme.uiFont
@@ -58,5 +61,10 @@ Rectangle {
         anchors.margins: 2
         accessibleName: control.accessibleName
         onActivated: control.activated()
+    }
+
+    AppToolTip {
+        visible: control.compact && action.hovered
+        text: control.accessibleName
     }
 }

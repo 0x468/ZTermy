@@ -7,6 +7,7 @@
 #include "infrastructure/ssh/WindowsTcpSocket.h"
 
 #include <QByteArray>
+#include <QLoggingCategory>
 
 #include <chrono>
 #include <new>
@@ -20,6 +21,32 @@ namespace ztermy::ssh
 {
 namespace
 {
+
+Q_LOGGING_CATEGORY(sshBootstrapLog, "ztermy.ssh.bootstrap")
+
+[[nodiscard]] bool sshTimingInfoEnabled() noexcept
+{
+    static const bool enabled = qEnvironmentVariableIntValue("ZTERMY_SSH_TIMING") > 0;
+    return enabled;
+}
+
+void logTcpTiming(const char *outcome, const TcpConnectTimings &timings, const int errorKind, const int nativeCode)
+{
+    if (sshTimingInfoEnabled())
+    {
+        qCInfo(sshBootstrapLog) << "TCP connection timing"
+                                << "outcome=" << outcome << "resolutionMs=" << timings.resolution.count()
+                                << "connectMs=" << timings.connection.count()
+                                << "candidatesAttempted=" << timings.candidatesAttempted << "errorKind=" << errorKind
+                                << "nativeCode=" << nativeCode;
+        return;
+    }
+    qCDebug(sshBootstrapLog) << "TCP connection timing"
+                             << "outcome=" << outcome << "resolutionMs=" << timings.resolution.count()
+                             << "connectMs=" << timings.connection.count()
+                             << "candidatesAttempted=" << timings.candidatesAttempted << "errorKind=" << errorKind
+                             << "nativeCode=" << nativeCode;
+}
 
 class RequestSecretsClearGuard final
 {
@@ -157,7 +184,11 @@ connectInitialTransport(Endpoint &endpoint, const std::stop_token &stopToken)
     const std::string &connectHost = endpoint.proxy.type == SshProxyType::None ? host : endpoint.proxy.host;
     const std::uint16_t connectPort = endpoint.proxy.type == SshProxyType::None ? endpoint.port : endpoint.proxy.port;
     const auto timeout = endpointConnectionTimeout(endpoint);
-    auto directSocket = WindowsTcpSocket::connect(connectHost, connectPort, timeout, stopToken);
+    TcpConnectTimings timings;
+    auto directSocket = WindowsTcpSocket::connect(connectHost, connectPort, timeout, stopToken, &timings);
+    logTcpTiming(directSocket ? "connected" : "failed", timings,
+                 directSocket ? -1 : static_cast<int>(directSocket.error().kind),
+                 directSocket ? 0 : directSocket.error().nativeCode);
     if (!directSocket)
     {
         return std::unexpected(connectionError(failureFromTcp(directSocket.error().kind)));

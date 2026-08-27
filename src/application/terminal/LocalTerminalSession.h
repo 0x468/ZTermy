@@ -7,6 +7,7 @@
 #include <QByteArray>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 #include <QTimer>
 
 #include <atomic>
@@ -28,6 +29,16 @@ namespace ztermy::terminal
 class ConPtyProcess;
 class GhosttyTerminalEngine;
 
+struct LocalTerminalLaunchSpec final
+{
+    QString id = QStringLiteral("automatic");
+    QString displayName = QStringLiteral("PowerShell");
+    QString executable;
+    QStringList arguments;
+    QString workingDirectory;
+    bool powerShellIntegration = true;
+};
+
 class LocalTerminalSessionBackend : public QObject
 {
     Q_OBJECT
@@ -43,6 +54,7 @@ public:
     virtual void stop() noexcept = 0;
     virtual void setOutputSink(const std::shared_ptr<TerminalOutputSink> &) {}
     virtual void setShellIntegrationNonce(const std::string &) {}
+    virtual void setLaunchSpec(const LocalTerminalLaunchSpec &) {}
 
 public slots:
     virtual void queueInput(const QByteArray &bytes) = 0;
@@ -89,6 +101,7 @@ public:
     void stop() noexcept override;
     void setOutputSink(const std::shared_ptr<TerminalOutputSink> &sink) override;
     void setShellIntegrationNonce(const std::string &nonce) override;
+    void setLaunchSpec(const LocalTerminalLaunchSpec &spec) override;
     [[nodiscard]] diagnostics::LatencySummary inputQueueLatencySummary() const noexcept;
     [[nodiscard]] diagnostics::LatencySummary takeInputQueueLatencySummary() noexcept;
 
@@ -194,6 +207,7 @@ private:
     std::unique_ptr<GhosttyTerminalEngine> m_engine;
     std::shared_ptr<TerminalOutputSink> m_outputSink;
     std::string m_shellIntegrationNonce;
+    LocalTerminalLaunchSpec m_launchSpec;
     std::jthread m_readThread;
     std::jthread m_writeThread;
 

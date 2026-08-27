@@ -56,6 +56,15 @@ enum class TerminalMiddleClickPreference : std::uint8_t
     contextMenu,
 };
 
+enum class LocalShellPreference : std::uint8_t
+{
+    automatic,
+    powerShellCore,
+    windowsPowerShell,
+    commandPrompt,
+    gitBash,
+};
+
 enum class CredentialStoragePreference : std::uint8_t
 {
     automatic,
@@ -128,6 +137,7 @@ struct ApplicationSettings final
     QString aiProxyUsername;
     int terminalFontSize = 14;
     int terminalScrollRows = 3;
+    LocalShellPreference localShell = LocalShellPreference::automatic;
     ThemePreference theme = ThemePreference::dark;
     BackdropPreference backdrop = BackdropPreference::acrylic;
     AccentPreference accent = AccentPreference::ztermy;
@@ -186,6 +196,7 @@ private:
 [[nodiscard]] QString cursorPreferenceToken(CursorPreference preference);
 [[nodiscard]] QString terminalRightClickPreferenceToken(TerminalRightClickPreference preference);
 [[nodiscard]] QString terminalMiddleClickPreferenceToken(TerminalMiddleClickPreference preference);
+[[nodiscard]] QString localShellPreferenceToken(LocalShellPreference preference);
 [[nodiscard]] QString credentialStoragePreferenceToken(CredentialStoragePreference preference);
 [[nodiscard]] QString languagePreferenceToken(LanguagePreference preference);
 [[nodiscard]] QString aiProviderPreferenceToken(AiProviderPreference preference);
@@ -198,6 +209,7 @@ private:
 [[nodiscard]] std::optional<CursorPreference> parseCursorPreference(const QString &token);
 [[nodiscard]] std::optional<TerminalRightClickPreference> parseTerminalRightClickPreference(const QString &token);
 [[nodiscard]] std::optional<TerminalMiddleClickPreference> parseTerminalMiddleClickPreference(const QString &token);
+[[nodiscard]] std::optional<LocalShellPreference> parseLocalShellPreference(const QString &token);
 [[nodiscard]] std::optional<CredentialStoragePreference> parseCredentialStoragePreference(const QString &token);
 [[nodiscard]] std::optional<LanguagePreference> parseLanguagePreference(const QString &token);
 [[nodiscard]] std::optional<AiProviderPreference> parseAiProviderPreference(const QString &token);

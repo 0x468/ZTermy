@@ -118,6 +118,61 @@ constexpr std::string_view remoteHistoryMarker = "ZTERMY-HISTORY/1 ";
     return QCoreApplication::translate("SshTerminalSession", "SSH connection failed");
 }
 
+[[nodiscard]] const char *connectionPhaseName(const ztermy::ssh::SshConnectionPhase phase) noexcept
+{
+    using enum ztermy::ssh::SshConnectionPhase;
+    switch (phase)
+    {
+        case Disconnected:
+            return "disconnected";
+        case Resolving:
+            return "resolving";
+        case Connecting:
+            return "connecting";
+        case Handshaking:
+            return "handshaking";
+        case VerifyingHostKey:
+            return "verifying-host-key";
+        case AwaitingHostKeyConfirmation:
+            return "awaiting-host-key-confirmation";
+        case Authenticating:
+            return "authenticating";
+        case OpeningChannel:
+            return "opening-channel";
+        case Connected:
+            return "connected";
+        case Closing:
+            return "closing";
+        case Failed:
+            return "failed";
+    }
+    return "unknown";
+}
+
+[[nodiscard]] bool sshTimingInfoEnabled() noexcept
+{
+    static const bool enabled = qEnvironmentVariableIntValue("ZTERMY_SSH_TIMING") > 0;
+    return enabled;
+}
+
+void logConnectionTiming(const ztermy::ssh::SshConnectionPhase phase,
+                         const ztermy::ssh::SshConnectionPhase previousPhase, const std::chrono::milliseconds delta,
+                         const std::chrono::milliseconds elapsed)
+{
+    if (sshTimingInfoEnabled())
+    {
+        qCInfo(sshSessionLog) << "SSH connection timing"
+                              << "phase=" << connectionPhaseName(phase)
+                              << "previousPhase=" << connectionPhaseName(previousPhase)
+                              << "previousPhaseMs=" << delta.count() << "elapsedMs=" << elapsed.count();
+        return;
+    }
+    qCDebug(sshSessionLog) << "SSH connection timing"
+                           << "phase=" << connectionPhaseName(phase)
+                           << "previousPhase=" << connectionPhaseName(previousPhase)
+                           << "previousPhaseMs=" << delta.count() << "elapsedMs=" << elapsed.count();
+}
+
 void requireStateTransition(const std::expected<void, ztermy::ssh::SshStateError> &result, const char *operation)
 {
     if (!result)
@@ -649,8 +704,22 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
                              const std::stop_token &stopToken)
 {
     SshConnectionState state;
-    const auto finishFailure = [this, &state](const SshFailureKind failure, const QString &status = QString{}) {
+    const auto connectionStartedAt = std::chrono::steady_clock::now();
+    auto previousPhaseAt = connectionStartedAt;
+    auto previousPhase = SshConnectionPhase::Resolving;
+    auto tracePhase = [&previousPhaseAt, &previousPhase, connectionStartedAt](const SshConnectionPhase phase) mutable {
+        const auto now = std::chrono::steady_clock::now();
+        logConnectionTiming(phase, previousPhase,
+                            std::chrono::duration_cast<std::chrono::milliseconds>(now - previousPhaseAt),
+                            std::chrono::duration_cast<std::chrono::milliseconds>(now - connectionStartedAt));
+        previousPhaseAt = now;
+        previousPhase = phase;
+    };
+    tracePhase(SshConnectionPhase::Resolving);
+    const auto finishFailure = [this, &state, &tracePhase](const SshFailureKind failure,
+                                                           const QString &status = QString{}) {
         failState(state, failure);
+        tracePhase(state.phase());
         postFailure(failure);
         finishWorker(status.isEmpty() ? sshFailureStatus(failure) : status, state.phase());
     };
@@ -658,8 +727,9 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     startState(state);
     const SshConnectionCallbacks callbacks{
         .phaseChanged =
-            [this, &state](const SshConnectionPhase phase) {
+            [this, &state, &tracePhase](const SshConnectionPhase phase) {
                 advanceState(state, phase);
+                tracePhase(state.phase());
                 postPhase(state.phase());
                 switch (phase)
                 {
@@ -740,6 +810,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     }
 
     advanceState(state, SshConnectionPhase::OpeningChannel);
+    tracePhase(state.phase());
     postPhase(state.phase());
     postStatus(tr("Opening SSH terminal"));
     auto open = session->openTerminal(
@@ -779,6 +850,7 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     }
 
     advanceState(state, SshConnectionPhase::Connected);
+    tracePhase(state.phase());
     postPhase(state.phase());
     postStatus(tr("SSH terminal connected"));
     m_running.store(true);

@@ -7,6 +7,7 @@
 #include <QGuiApplication>
 #include <QLoggingCategory>
 #include <QOperatingSystemVersion>
+#include <QQmlEngine>
 #include <QScreen>
 #include <QStyleHints>
 #include <QVariant>
@@ -126,6 +127,21 @@ bool NativeWindow::load(QVariantMap initialProperties)
 
     configureNativeWindow();
     return true;
+}
+
+void NativeWindow::releaseResources()
+{
+    // Unload the object tree while the QML engine and image providers are
+    // still alive. This lets pending asynchronous component creation cancel
+    // cleanly instead of reaching QQmlEngine destruction.
+    setSource(QUrl{});
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    if (QQmlEngine *qmlEngine = engine(); qmlEngine != nullptr)
+    {
+        qmlEngine->collectGarbage();
+        qmlEngine->trimComponentCache();
+    }
+    QQuickView::releaseResources();
 }
 
 bool NativeWindow::maximized() const noexcept

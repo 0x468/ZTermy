@@ -3,6 +3,7 @@
 #include "infrastructure/ssh/SshByteTransport.h"
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <stop_token>
@@ -30,6 +31,13 @@ struct TcpConnectError final
     int nativeCode = 0;
 
     [[nodiscard]] friend bool operator==(const TcpConnectError &, const TcpConnectError &) = default;
+};
+
+struct TcpConnectTimings final
+{
+    std::chrono::milliseconds resolution{};
+    std::chrono::milliseconds connection{};
+    std::size_t candidatesAttempted = 0;
 };
 
 class WindowsWaitEvent final
@@ -66,7 +74,7 @@ public:
 
     [[nodiscard]] static std::expected<WindowsTcpSocket, TcpConnectError>
     connect(std::string_view host, std::uint16_t port, std::chrono::milliseconds timeout,
-            const std::stop_token &stopToken = {}) noexcept;
+            const std::stop_token &stopToken = {}, TcpConnectTimings *timings = nullptr) noexcept;
 
     [[nodiscard]] bool valid() const noexcept override;
     [[nodiscard]] std::uintptr_t nativeHandle() const noexcept;

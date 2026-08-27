@@ -554,8 +554,14 @@ WindowsTcpSocket &WindowsTcpSocket::operator=(WindowsTcpSocket &&other) noexcept
 std::expected<WindowsTcpSocket, TcpConnectError> WindowsTcpSocket::connect(const std::string_view host,
                                                                            const std::uint16_t port,
                                                                            const std::chrono::milliseconds timeout,
-                                                                           const std::stop_token &stopToken) noexcept
+                                                                           const std::stop_token &stopToken,
+                                                                           TcpConnectTimings *timings) noexcept
 {
+    if (timings != nullptr)
+    {
+        *timings = {};
+    }
+    const auto startedAt = Clock::now();
     if (port == 0)
     {
         return std::unexpected(TcpConnectError{.kind = TcpConnectErrorKind::InvalidEndpoint});
@@ -585,22 +591,38 @@ std::expected<WindowsTcpSocket, TcpConnectError> WindowsTcpSocket::connect(const
 
         const Clock::time_point deadline = Clock::now() + timeout;
         auto addresses = resolveAddresses(*wideHost, port, deadline, stopToken);
+        const auto resolvedAt = Clock::now();
+        if (timings != nullptr)
+        {
+            timings->resolution = std::chrono::duration_cast<std::chrono::milliseconds>(resolvedAt - startedAt);
+        }
         if (!addresses)
         {
             return std::unexpected(addresses.error());
         }
 
         TcpConnectError lastError{.kind = TcpConnectErrorKind::NetworkUnreachable};
+        std::size_t candidatesAttempted = 0;
+        const auto recordConnectionTiming = [&](const Clock::time_point finishedAt) {
+            if (timings != nullptr)
+            {
+                timings->connection = std::chrono::duration_cast<std::chrono::milliseconds>(finishedAt - resolvedAt);
+                timings->candidatesAttempted = candidatesAttempted;
+            }
+        };
         for (const ADDRINFOEXW *address = addresses->get(); address != nullptr; address = address->ai_next)
         {
             if (stopToken.stop_requested())
             {
+                recordConnectionTiming(Clock::now());
                 return std::unexpected(TcpConnectError{.kind = TcpConnectErrorKind::Cancelled});
             }
             if (Clock::now() >= deadline)
             {
+                recordConnectionTiming(Clock::now());
                 return std::unexpected(TcpConnectError{.kind = TcpConnectErrorKind::TimedOut});
             }
+            ++candidatesAttempted;
 
             const SOCKET rawSocket = WSASocketW(address->ai_family, address->ai_socktype, address->ai_protocol, nullptr,
                                                 0, WSA_FLAG_NO_HANDLE_INHERIT);
@@ -620,6 +642,7 @@ std::expected<WindowsTcpSocket, TcpConnectError> WindowsTcpSocket::connect(const
 
             if (::connect(rawSocket, address->ai_addr, static_cast<int>(address->ai_addrlen)) == 0)
             {
+                recordConnectionTiming(Clock::now());
                 return socket;
             }
 
@@ -633,18 +656,22 @@ std::expected<WindowsTcpSocket, TcpConnectError> WindowsTcpSocket::connect(const
             const WaitResult waitResult = waitForConnect(rawSocket, deadline, stopToken);
             if (waitResult.outcome == WaitOutcome::Ready)
             {
+                recordConnectionTiming(Clock::now());
                 return socket;
             }
             if (waitResult.outcome == WaitOutcome::Cancelled)
             {
+                recordConnectionTiming(Clock::now());
                 return std::unexpected(TcpConnectError{.kind = TcpConnectErrorKind::Cancelled});
             }
             if (waitResult.outcome == WaitOutcome::TimedOut)
             {
+                recordConnectionTiming(Clock::now());
                 return std::unexpected(TcpConnectError{.kind = TcpConnectErrorKind::TimedOut});
             }
             lastError = mapSocketError(waitResult.nativeCode);
         }
+        recordConnectionTiming(Clock::now());
         return std::unexpected(lastError);
     }
     catch (const std::bad_alloc &)

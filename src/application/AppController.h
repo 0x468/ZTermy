@@ -20,6 +20,7 @@
 #include "application/sftp/TransferManager.h"
 #include "application/ssh/SshTerminalSession.h"
 #include "application/terminal/LocalTerminalSession.h"
+#include "application/terminal/WindowsLocalShellCatalog.h"
 #include "core/config/ApplicationPaths.h"
 #include "core/config/ApplicationSettings.h"
 #include "domain/ai/AiCommandTracker.h"
@@ -181,6 +182,8 @@ class AppController final : public QObject
     Q_PROPERTY(QString terminalMiddleClickBehavior READ terminalMiddleClickBehavior NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString terminalWordDelimiters READ terminalWordDelimiters NOTIFY applicationSettingsChanged)
     Q_PROPERTY(int terminalScrollRows READ terminalScrollRows NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(QString localShellPreference READ localShellPreference NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(QVariantList availableLocalShells READ availableLocalShells NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool sftpShowHiddenFiles READ sftpShowHiddenFiles NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool sftpConfirmDelete READ sftpConfirmDelete NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool closeToTray READ closeToTray NOTIFY applicationSettingsChanged)
@@ -345,6 +348,8 @@ public:
     [[nodiscard]] QString terminalMiddleClickBehavior() const;
     [[nodiscard]] QString terminalWordDelimiters() const;
     [[nodiscard]] int terminalScrollRows() const noexcept;
+    [[nodiscard]] QString localShellPreference() const;
+    [[nodiscard]] QVariantList availableLocalShells() const;
     [[nodiscard]] bool sftpShowHiddenFiles() const noexcept;
     [[nodiscard]] bool sftpConfirmDelete() const noexcept;
     [[nodiscard]] bool closeToTray() const noexcept;
@@ -580,6 +585,8 @@ public:
         bool shouldConfirmSftpDelete, bool shouldCloseToTray = false, bool shouldPreferPerformance = false,
         const QString &terminalRightClickBehavior = {}, const QString &terminalMiddleClickBehavior = {},
         const QString &terminalWordDelimiters = {}, int terminalScrollRows = 3);
+    Q_INVOKABLE bool saveLocalShellPreference(const QString &preference);
+    Q_INVOKABLE void refreshLocalShells();
     Q_INVOKABLE bool saveAiProviderSettings(const QString &provider, const QString &baseUrl,
                                             const QString &endpointPath, const QString &model, bool automaticContext,
                                             const QString &permissionMode);
@@ -634,6 +641,8 @@ public:
     Q_INVOKABLE void reloadAiUserSkills();
     Q_INVOKABLE bool openAiUserSkillsDirectory();
     Q_INVOKABLE bool retryAiMessage();
+    Q_INVOKABLE bool compactAiConversation();
+    Q_INVOKABLE void dismissAiCompactionNotice();
     Q_INVOKABLE void clearAiConversation();
     Q_INVOKABLE void clearAiActivity();
     Q_INVOKABLE [[nodiscard]] bool exportAiConversation(const QString &localFileUrl) const;
@@ -807,6 +816,7 @@ private:
         QString identity;
         QString address;
         QString terminalEncoding = QStringLiteral("utf-8");
+        QString localShellId;
         QString sessionFontFamily;
         QString sessionCursor;
         QString sessionForeground;
@@ -836,6 +846,8 @@ private:
         QHash<QString, QString> aiWebSearchQueries;
         QString aiContextPreview;
         QString aiConversationId;
+        QString aiManualCompactionCheckpoint;
+        qsizetype aiManualCompactionCutoff = 0;
         QVariantList aiContextItems;
         QVariantMap aiCompaction;
         std::unordered_set<std::string> aiExcludedContextIds;
@@ -902,6 +914,7 @@ private:
     void connectTerminalSignals(ui::TerminalItem &terminal, const QString &paneId);
     void connectLocalTabSignals(TerminalTab &tab);
     void connectSshTabSignals(TerminalTab &tab);
+    void scheduleTerminalTabsChanged();
     void connectSftpTabSignals(TerminalTab &tab);
     void initializeSessionLog(TerminalTab &tab);
     void initializeTerminalOutputSink(TerminalTab &tab);
@@ -988,6 +1001,7 @@ private:
     void resolvePortForwardingHostKey(PortForwardingRuntime &runtime, ssh::UnknownHostKeyDecision decision) noexcept;
     void stopAllPortForwardingRules() noexcept;
     void loadApplicationSettings();
+    void refreshLocalShellCatalog();
     void applyAiNetworkProxy();
     void initializeAiModelCatalogRefresh();
     void refreshConfiguredAiModels();
@@ -1163,6 +1177,7 @@ private:
     ai::AiReadToolDispatcher m_aiReadToolDispatcher;
     ai::AiToolDispatchLedger m_mcpDispatchLedger;
     std::vector<std::unique_ptr<TerminalTab>> m_tabs;
+    QList<terminal::LocalShellProfile> m_localShellProfiles;
     std::deque<ClosedTerminalDescription> m_closedTerminalTabs;
     std::vector<std::unique_ptr<sftp::SftpSession>> m_stoppingSftpSessions;
     QSet<QString> m_pinnedTerminalWorkspaceIds;
@@ -1178,6 +1193,7 @@ private:
     bool m_hostKeyForSftp = false;
     bool m_shutdownStarted = false;
     bool m_terminalTelemetryVisible = false;
+    bool m_terminalTabsChangePending = false;
     QTimer m_scriptExecutionTimer;
     QString m_hostKeyTransferTaskId;
     QString m_hostKeyForwardingRuleId;

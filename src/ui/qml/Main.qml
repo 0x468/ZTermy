@@ -33,11 +33,12 @@ Rectangle {
     readonly property color mutedColor: Theme.textMuted
     readonly property color accentColor: Theme.accent
     property string currentPage: "hosts"
+    property string workspaceSection: "hosts"
     property bool settingsTabOpen: false
     property string renameTerminalTabId: ""
     property string settingsReturnPage: "hosts"
     property bool startupVaultPromptPresented: false
-    property real hostsPageReveal: 1.0
+    property real pageReveal: 1.0
     property bool terminalSearchVisible: false
     property int pendingPasteLineCount: 0
     property var pendingPasteViewport: null
@@ -52,6 +53,12 @@ Rectangle {
     property string lastPinPrimaryScope: ""
     property bool lastPinPreviousWindowState: false
     property bool lastPinPreviousTabState: false
+    property real workspaceNavigationWidth: Theme.navigationWidth
+    property real workspaceNavigationExpandedWidth: Theme.navigationWidth
+    readonly property real workspaceNavigationMinimumWidth: 56
+    readonly property real workspaceNavigationMaximumWidth: 320
+    readonly property real workspaceNavigationLabelThreshold: 132
+    readonly property bool workspaceNavigationCompact: workspaceNavigationWidth < workspaceNavigationLabelThreshold
     readonly property bool currentTerminalTabPinned: currentPage === "terminal" && activeTerminalTab !== null && controller.activeTerminalTabPinned
     readonly property var activeTerminalTab: {
         for (const tab of controller.terminalTabs) {
@@ -70,6 +77,36 @@ Rectangle {
     readonly property real activeTerminalComposerHeight: activeTerminalTab !== null && activeTerminalTab.composerOpen ? Math.min(activeTerminalTab.composerHeight, Math.max(0, terminalBody.height - 120)) : 0
     readonly property bool portableVaultNeedsAttention: controller.effectiveCredentialStorage === "portable" && (!controller.portableVaultInitialized || controller.portableVaultLocked)
     readonly property bool terminalTelemetryVisible: currentPage === "terminal" && visible && root.Window.window !== null && root.Window.window.active
+    readonly property string currentContextTitle: {
+        if (currentPage === "terminal" && activeTerminalTab !== null)
+            return activeTerminalTab.title.length > 0 ? activeTerminalTab.title : qsTr("Terminal");
+        if (currentPage === "settings")
+            return qsTr("Settings");
+        return qsTr("Workspace");
+    }
+    readonly property string applicationWindowTitle: qsTr("%1 — ztermy").arg(currentContextTitle)
+
+    function resizeWorkspaceNavigation(requestedWidth) {
+        const boundedWidth = Math.max(workspaceNavigationMinimumWidth, Math.min(workspaceNavigationMaximumWidth, requestedWidth));
+        workspaceNavigationWidth = boundedWidth;
+        if (boundedWidth >= workspaceNavigationLabelThreshold)
+            workspaceNavigationExpandedWidth = boundedWidth;
+    }
+
+    function toggleWorkspaceNavigation() {
+        if (workspaceNavigationCompact) {
+            resizeWorkspaceNavigation(Math.max(workspaceNavigationLabelThreshold, workspaceNavigationExpandedWidth));
+            return;
+        }
+        workspaceNavigationExpandedWidth = workspaceNavigationWidth;
+        resizeWorkspaceNavigation(workspaceNavigationMinimumWidth);
+    }
+
+    Binding {
+        target: root.windowChrome
+        property: "title"
+        value: root.applicationWindowTitle
+    }
 
     component TerminalToolbarButton: ToolButton {
         id: control
@@ -227,6 +264,17 @@ Rectangle {
         openSettingsTab();
     }
 
+    function editWorkspaceHost(profileId) {
+        workspaceSection = "hosts";
+        currentPage = "hosts";
+        for (const profile of controller.hostProfiles) {
+            if (profile.id === profileId) {
+                Qt.callLater(() => hostConnectionPane.editProfile(profile));
+                return;
+            }
+        }
+    }
+
     function openAiSettingsTab() {
         settingsPane.currentCategory = "ai";
         openSettingsTab();
@@ -288,9 +336,11 @@ Rectangle {
     }
 
     function startLocalTerminalTab() {
-        controller.startLocalTerminal();
         currentPage = "terminal";
-        terminalViewport.forceActiveFocus();
+        Qt.callLater(() => {
+            controller.startLocalTerminal();
+            terminalViewport.forceActiveFocus();
+        });
     }
 
     function closeActiveTerminalTab() {
@@ -582,14 +632,12 @@ Rectangle {
     onWidthChanged: reportTitleBarMetrics()
     onCurrentPageChanged: {
         Qt.callLater(root.applyAlwaysOnTopPreference);
+        pageReveal = Theme.animationsEnabled ? 0.0 : 1.0;
+        if (Theme.animationsEnabled) {
+            pageEntryAnimation.restart();
+        }
         if (currentPage === "settings") {
             settingsTabOpen = true;
-        }
-        if (currentPage === "hosts") {
-            hostsPageReveal = Theme.animationsEnabled ? 0.0 : 1.0;
-            if (Theme.animationsEnabled) {
-                hostsPageEntryAnimation.restart();
-            }
         }
         if (currentPage !== "settings") {
             endWindowAppearancePreview();
@@ -688,10 +736,10 @@ Rectangle {
     }
 
     NumberAnimation {
-        id: hostsPageEntryAnimation
+        id: pageEntryAnimation
 
         target: root
-        property: "hostsPageReveal"
+        property: "pageReveal"
         from: 0.0
         to: 1.0
         duration: Theme.motionMedium
@@ -740,26 +788,9 @@ Rectangle {
             onWidthChanged: root.reportTitleBarMetrics()
 
             Rectangle {
-                width: 44
-                height: titleNavigation.height
-                color: "transparent"
-
-                BrandIcon {
-                    objectName: "titleBrandIcon"
-                    anchors.centerIn: parent
-                    width: 24
-                    height: 24
-                    tileColor: root.accentColor
-                    ribbonColor: Theme.accentText
-                    promptColor: Theme.contrastText(ribbonColor)
-                    promptStrokeWidth: 0.86
-                }
-            }
-
-            Rectangle {
                 id: hostsTitleTab
 
-                width: 94
+                width: root.currentPage === "hosts" ? 124 : 44
                 height: titleNavigation.height
                 color: root.currentPage === "hosts" ? Theme.controlBackground : (hostsTitleAction.hovered || hostsTitleAction.visualFocus ? Theme.controlHover : "transparent")
                 border.color: hostsTitleAction.visualFocus ? Theme.focus : "transparent"
@@ -771,19 +802,32 @@ Rectangle {
                     }
                 }
 
-                Row {
+                Behavior on width {
+                    NumberAnimation {
+                        duration: Theme.motionMedium
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
+                RowLayout {
                     anchors.centerIn: parent
                     spacing: 8
 
-                    AppIcon {
-                        width: 16
-                        height: 16
-                        name: "hosts"
-                        color: root.currentPage === "hosts" ? root.textColor : root.mutedColor
+                    BrandIcon {
+                        objectName: "titleBrandIcon"
+                        Layout.alignment: Qt.AlignVCenter
+                        Layout.preferredWidth: 24
+                        Layout.preferredHeight: 24
+                        tileColor: root.accentColor
+                        ribbonColor: Theme.accentText
+                        promptColor: Theme.contrastText(ribbonColor)
+                        promptStrokeWidth: 0.86
                     }
 
                     Text {
-                        text: qsTr("Hosts")
+                        Layout.alignment: Qt.AlignVCenter
+                        visible: root.currentPage === "hosts"
+                        text: qsTr("Workspace")
                         color: root.currentPage === "hosts" ? root.textColor : root.mutedColor
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.textBody
@@ -797,8 +841,13 @@ Rectangle {
                     objectName: "hostsTitleAction"
                     anchors.fill: parent
                     anchors.margins: 2
-                    accessibleName: qsTr("Hosts")
+                    accessibleName: qsTr("Workspace")
                     onActivated: root.currentPage = "hosts"
+                }
+
+                AppToolTip {
+                    visible: root.currentPage !== "hosts" && hostsTitleAction.hovered
+                    text: qsTr("Workspace")
                 }
             }
 
@@ -822,7 +871,7 @@ Rectangle {
 
                 objectName: "titleTerminalTabs"
                 currentIndex: -1
-                width: count === 0 ? 0 : Math.min(contentWidth, Math.max(140, root.titleNavigationWidth - 174 - settingsTitleTab.width))
+                width: count === 0 ? 0 : Math.min(contentWidth, Math.max(140, root.titleNavigationWidth - hostsTitleTab.width - 36 - settingsTitleTab.width))
                 height: titleNavigation.height
                 orientation: ListView.Horizontal
                 spacing: 2
@@ -1548,40 +1597,85 @@ Rectangle {
         spacing: 0
 
         Rectangle {
+            id: workspaceNavigation
+
+            objectName: "workspaceNavigation"
             Layout.fillHeight: true
-            Layout.preferredWidth: visible ? (root.width < Theme.narrowWindowWidth ? Theme.navigationWidthCompact : Theme.navigationWidth) : 0
+            Layout.preferredWidth: root.currentPage === "hosts" ? root.workspaceNavigationWidth : 0
             Layout.minimumWidth: Layout.preferredWidth
             Layout.maximumWidth: Layout.preferredWidth
-            visible: root.currentPage === "hosts"
+            visible: Layout.preferredWidth > 0
+            opacity: root.currentPage === "hosts" ? 1.0 : 0.0
+            clip: true
             color: root.panelColor
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: Theme.motionFast
+                    easing.type: Easing.OutCubic
+                }
+            }
+
+            Behavior on Layout.preferredWidth {
+                enabled: !workspaceNavigationResizeDrag.active
+
+                NumberAnimation {
+                    duration: Theme.motionMedium
+                    easing.type: Easing.OutCubic
+                }
+            }
 
             ColumnLayout {
                 anchors.fill: parent
                 anchors.margins: 8
                 spacing: 4
 
-                RowLayout {
+                Rectangle {
+                    id: workspaceNavigationHeader
+
+                    objectName: "workspaceNavigationHeader"
                     Layout.fillWidth: true
-                    Layout.leftMargin: 4
-                    Layout.rightMargin: 4
                     Layout.bottomMargin: 8
                     Layout.preferredHeight: 38
-                    spacing: 9
+                    radius: 7
+                    color: workspaceNavigationHeaderAction.hovered ? Theme.raisedBackground : "transparent"
+                    border.color: workspaceNavigationHeaderAction.visualFocus ? Theme.focus : "transparent"
+                    border.width: workspaceNavigationHeaderAction.visualFocus ? 1 : 0
 
-                    BrandIcon {
-                        Layout.preferredWidth: 30
-                        Layout.preferredHeight: 30
-                        tileColor: Theme.accent
-                        ribbonColor: Theme.accentText
+                    Row {
+                        anchors.centerIn: parent
+                        spacing: 9
+
+                        BrandIcon {
+                            width: 30
+                            height: 30
+                            tileColor: Theme.accent
+                            ribbonColor: Theme.accentText
+                        }
+
+                        Text {
+                            visible: !root.workspaceNavigationCompact
+                            text: qsTr("ztermy")
+                            color: Theme.text
+                            font.family: Theme.uiFont
+                            font.pixelSize: 17
+                            font.weight: Font.Bold
+                        }
                     }
 
-                    Text {
-                        Layout.fillWidth: true
-                        text: qsTr("ztermy")
-                        color: Theme.text
-                        font.family: Theme.uiFont
-                        font.pixelSize: 17
-                        font.weight: Font.Bold
+                    KeyboardAction {
+                        id: workspaceNavigationHeaderAction
+
+                        objectName: "workspaceNavigationToggle"
+                        anchors.fill: parent
+                        anchors.margins: 2
+                        accessibleName: root.workspaceNavigationCompact ? qsTr("Expand sidebar") : qsTr("Collapse sidebar")
+                        onActivated: root.toggleWorkspaceNavigation()
+                    }
+
+                    AppToolTip {
+                        visible: workspaceNavigationHeaderAction.hovered
+                        text: workspaceNavigationHeaderAction.accessibleName
                     }
                 }
 
@@ -1590,8 +1684,9 @@ Rectangle {
                     Layout.fillWidth: true
                     iconName: "hosts"
                     text: qsTr("Hosts")
-                    selected: root.currentPage === "hosts"
-                    onActivated: root.currentPage = "hosts"
+                    compact: root.workspaceNavigationCompact
+                    selected: root.workspaceSection === "hosts"
+                    onActivated: root.workspaceSection = "hosts"
                 }
 
                 SideNavigationItem {
@@ -1599,15 +1694,49 @@ Rectangle {
                     Layout.fillWidth: true
                     iconName: "security"
                     text: qsTr("Credentials")
-                    onActivated: root.openSecuritySettingsTab()
+                    compact: root.workspaceNavigationCompact
+                    selected: root.workspaceSection === "credentials"
+                    onActivated: root.workspaceSection = "credentials"
                 }
 
                 SideNavigationItem {
-                    actionObjectName: "sideTransfersAction"
+                    actionObjectName: "sideProxiesAction"
+                    Layout.fillWidth: true
+                    iconName: "network"
+                    text: qsTr("Proxies")
+                    compact: root.workspaceNavigationCompact
+                    selected: root.workspaceSection === "proxies"
+                    onActivated: root.workspaceSection = "proxies"
+                }
+
+                SideNavigationItem {
+                    actionObjectName: "sidePortForwardingAction"
                     Layout.fillWidth: true
                     iconName: "transfer"
-                    text: qsTr("Transfers")
-                    onActivated: transferCenter.visible ? transferCenter.close() : transferCenter.open()
+                    text: qsTr("Port forwarding")
+                    compact: root.workspaceNavigationCompact
+                    selected: root.workspaceSection === "forwarding"
+                    onActivated: root.workspaceSection = "forwarding"
+                }
+
+                SideNavigationItem {
+                    actionObjectName: "sideScriptsAction"
+                    Layout.fillWidth: true
+                    iconName: "commands"
+                    text: qsTr("Scripts")
+                    compact: root.workspaceNavigationCompact
+                    selected: root.workspaceSection === "scripts"
+                    onActivated: root.workspaceSection = "scripts"
+                }
+
+                SideNavigationItem {
+                    actionObjectName: "sideLogsAction"
+                    Layout.fillWidth: true
+                    iconName: "history"
+                    text: qsTr("Logs")
+                    compact: root.workspaceNavigationCompact
+                    selected: root.workspaceSection === "logs"
+                    onActivated: root.workspaceSection = "logs"
                 }
 
                 Item {
@@ -1619,7 +1748,43 @@ Rectangle {
                     Layout.fillWidth: true
                     iconName: "settings"
                     text: qsTr("Settings")
+                    compact: root.workspaceNavigationCompact
                     onActivated: root.openSettingsTab()
+                }
+            }
+
+            Rectangle {
+                id: workspaceNavigationResizeHandle
+
+                objectName: "workspaceNavigationResizeHandle"
+                anchors.top: parent.top
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                width: 6
+                z: 5
+                color: workspaceNavigationResizeHover.hovered || workspaceNavigationResizeDrag.active ? Theme.mixColor("transparent", Theme.accent, 0.24) : "transparent"
+
+                HoverHandler {
+                    id: workspaceNavigationResizeHover
+
+                    cursorShape: Qt.SizeHorCursor
+                }
+
+                DragHandler {
+                    id: workspaceNavigationResizeDrag
+
+                    property real initialWidth: root.workspaceNavigationWidth
+                    target: null
+                    xAxis.enabled: true
+                    yAxis.enabled: false
+                    onActiveChanged: {
+                        if (active)
+                            initialWidth = root.workspaceNavigationWidth;
+                    }
+                    onTranslationChanged: {
+                        if (active)
+                            root.resizeWorkspaceNavigation(initialWidth + translation.x);
+                    }
                 }
             }
         }
@@ -1633,6 +1798,11 @@ Rectangle {
                 anchors.fill: parent
                 color: "transparent"
                 visible: root.currentPage === "terminal"
+                opacity: root.pageReveal
+
+                transform: Translate {
+                    x: Theme.motionDistanceSmall * (1.0 - root.pageReveal)
+                }
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -2500,10 +2670,13 @@ Rectangle {
             }
 
             HostConnectionPane {
+                id: hostConnectionPane
+
                 anchors.fill: parent
-                visible: root.currentPage === "hosts"
-                opacity: root.hostsPageReveal
+                visible: root.currentPage === "hosts" && root.workspaceSection === "hosts"
+                opacity: root.pageReveal
                 controller: root.controller
+                showPortForwarding: false
                 backgroundColor: Theme.workspaceBackground
                 raisedColor: root.raisedColor
                 borderColor: root.borderColor
@@ -2515,8 +2688,63 @@ Rectangle {
                 onLocalTerminalRequested: root.startLocalTerminalTab()
 
                 transform: Translate {
-                    y: Theme.motionDistanceSmall * (1.0 - root.hostsPageReveal)
+                    x: -Theme.motionDistanceSmall * (1.0 - root.pageReveal)
                 }
+            }
+
+            WorkspaceCredentialsPane {
+                anchors.fill: parent
+                visible: root.currentPage === "hosts" && root.workspaceSection === "credentials"
+                controller: root.controller
+                onEditHostRequested: profileId => root.editWorkspaceHost(profileId)
+                onSecuritySettingsRequested: root.openSecuritySettingsTab()
+            }
+
+            WorkspaceProxiesPane {
+                anchors.fill: parent
+                visible: root.currentPage === "hosts" && root.workspaceSection === "proxies"
+                controller: root.controller
+                onEditHostRequested: profileId => root.editWorkspaceHost(profileId)
+            }
+
+            Item {
+                id: forwardingWorkspacePane
+                anchors.fill: parent
+                visible: root.currentPage === "hosts" && root.workspaceSection === "forwarding"
+
+                ScrollView {
+                    id: forwardingWorkspaceScroll
+                    anchors.fill: parent
+                    clip: true
+                    contentWidth: availableWidth
+
+                    PortForwardingPane {
+                        x: 20
+                        y: 20
+                        width: Math.max(0, forwardingWorkspaceScroll.availableWidth - 40)
+                        controller: root.controller
+                        overlayParent: forwardingWorkspacePane
+                        compactLayout: forwardingWorkspacePane.width < Theme.narrowWindowWidth
+                    }
+                }
+            }
+
+            WorkspaceScriptsPane {
+                anchors.fill: parent
+                visible: root.currentPage === "hosts" && root.workspaceSection === "scripts"
+                controller: root.controller
+            }
+
+            WorkspaceLogsPane {
+                anchors.fill: parent
+                visible: root.currentPage === "hosts" && root.workspaceSection === "logs"
+                controller: root.controller
+                activeTab: root.activeTerminalTab
+                onOpenTerminalRequested: tabId => {
+                    root.controller.activateTerminalTab(tabId);
+                    root.currentPage = "terminal";
+                }
+                onToggleActiveLogRequested: root.toggleSessionLog()
             }
 
             SettingsPane {
@@ -2524,6 +2752,7 @@ Rectangle {
 
                 anchors.fill: parent
                 visible: root.currentPage === "settings"
+                opacity: root.pageReveal
                 controller: root.controller
                 diagnostics: root.diagnostics
                 fontCatalog: root.fontCatalog
@@ -2531,6 +2760,10 @@ Rectangle {
                 onAppearancePreviewEnded: root.endWindowAppearancePreview()
                 onAppearancePreviewRequested: (theme, opacity, backdrop, accent, customAccent) => {
                     root.previewWindowAppearance(theme, opacity, backdrop, accent, customAccent);
+                }
+
+                transform: Translate {
+                    x: Theme.motionDistanceSmall * (1.0 - root.pageReveal)
                 }
             }
         }

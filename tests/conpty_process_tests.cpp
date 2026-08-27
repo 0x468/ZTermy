@@ -28,9 +28,9 @@ void ConPtyProcessTests::rejectsInvalidDimensions()
     ztermy::terminal::ConPtyProcess process;
 
     const std::error_code zeroDimensionError =
-        process.start(L"cmd.exe /d /s /c \"exit 0\"", {.columns = 0, .rows = 24});
-    const std::error_code overflowingDimensionError =
-        process.start(L"cmd.exe /d /s /c \"exit 0\"", {.columns = 80, .rows = 32768});
+        process.start(L"C:\\Windows\\System32\\cmd.exe", L"cmd.exe /d /s /c \"exit 0\"", {.columns = 0, .rows = 24});
+    const std::error_code overflowingDimensionError = process.start(
+        L"C:\\Windows\\System32\\cmd.exe", L"cmd.exe /d /s /c \"exit 0\"", {.columns = 80, .rows = 32768});
 
     QCOMPARE(zeroDimensionError, std::make_error_code(std::errc::invalid_argument));
     QCOMPARE(overflowingDimensionError, std::make_error_code(std::errc::invalid_argument));
@@ -41,7 +41,7 @@ void ConPtyProcessTests::capturesUtf8OutputFromChildProcess()
 {
     ztermy::terminal::ConPtyProcess process;
     const std::error_code startError =
-        process.start(L"C:\\Windows\\System32\\cmd.exe /d /q", {.columns = 80, .rows = 24});
+        process.start(L"C:\\Windows\\System32\\cmd.exe", L"cmd.exe /d /q", {.columns = 80, .rows = 24});
     QVERIFY2(!startError, startError.message().c_str());
 
     constexpr std::string_view command = "echo ZTERMY_CONPTY_READY\r\nexit\r\n";

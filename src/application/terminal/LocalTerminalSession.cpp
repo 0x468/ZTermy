@@ -23,6 +23,35 @@ Q_LOGGING_CATEGORY(terminalSessionLog, "ztermy.terminal.session")
 namespace ztermy::terminal
 {
 
+namespace
+{
+
+[[nodiscard]] std::wstring quotedExecutable(const QString &path)
+{
+    std::wstring result = L"\"";
+    result.append(path.toStdWString());
+    result.push_back(L'\"');
+    return result;
+}
+
+[[nodiscard]] std::wstring launchCommand(const LocalTerminalLaunchSpec &spec, const std::string_view nonce)
+{
+    const std::wstring executable = quotedExecutable(spec.executable);
+    if (spec.powerShellIntegration)
+    {
+        return powerShellLaunchCommand(executable, nonce).value_or(executable + L" -NoLogo");
+    }
+    std::wstring command = executable;
+    for (const QString &argument : spec.arguments)
+    {
+        command.push_back(L' ');
+        command.append(argument.toStdWString());
+    }
+    return command;
+}
+
+} // namespace
+
 LocalTerminalSession::LocalTerminalSession(QObject *parent) : LocalTerminalSessionBackend(parent)
 {
     m_snapshotDeliveryTimer.setInterval(8);
@@ -60,19 +89,27 @@ std::error_code LocalTerminalSession::start(const TerminalGeometry geometry)
     }
 
     auto process = std::make_unique<ConPtyProcess>();
-    const std::wstring workingDirectory = QStandardPaths::writableLocation(QStandardPaths::HomeLocation).toStdWString();
-    const std::wstring pwshCommand =
-        powerShellLaunchCommand(L"pwsh.exe", m_shellIntegrationNonce).value_or(L"pwsh.exe -NoLogo");
-    std::error_code processError =
-        process->start(pwshCommand, {.columns = geometry.columns, .rows = geometry.rows}, workingDirectory);
-    if (processError == std::make_error_code(std::errc::no_such_file_or_directory)
-        || processError.value() == ERROR_FILE_NOT_FOUND)
+    LocalTerminalLaunchSpec launchSpec = m_launchSpec;
+    if (launchSpec.executable.isEmpty())
     {
-        const std::wstring windowsPowerShellCommand =
-            powerShellLaunchCommand(L"powershell.exe", m_shellIntegrationNonce).value_or(L"powershell.exe -NoLogo");
-        processError = process->start(windowsPowerShellCommand, {.columns = geometry.columns, .rows = geometry.rows},
-                                      workingDirectory);
+        launchSpec.executable = QStandardPaths::findExecutable(QStringLiteral("pwsh.exe"));
+        launchSpec.displayName = tr("PowerShell 7");
+        if (launchSpec.executable.isEmpty())
+        {
+            launchSpec.executable = QStandardPaths::findExecutable(QStringLiteral("powershell.exe"));
+            launchSpec.displayName = tr("Windows PowerShell");
+        }
     }
+    if (launchSpec.executable.isEmpty())
+    {
+        return std::make_error_code(std::errc::no_such_file_or_directory);
+    }
+    const QString workingDirectory = launchSpec.workingDirectory.isEmpty()
+                                         ? QStandardPaths::writableLocation(QStandardPaths::HomeLocation)
+                                         : launchSpec.workingDirectory;
+    const std::error_code processError =
+        process->start(launchSpec.executable.toStdWString(), launchCommand(launchSpec, m_shellIntegrationNonce),
+                       {.columns = geometry.columns, .rows = geometry.rows}, workingDirectory.toStdWString());
     if (processError)
     {
         return processError;
@@ -83,7 +120,7 @@ std::error_code LocalTerminalSession::start(const TerminalGeometry geometry)
     resetMetrics();
     m_running.store(true);
     emit runningChanged(true);
-    emit statusChanged(tr("Local PowerShell connected"));
+    emit statusChanged(tr("Local %1 connected").arg(launchSpec.displayName));
     publishSnapshot();
 
     m_readThread = std::jthread([this](const std::stop_token &token) {
@@ -178,6 +215,14 @@ void LocalTerminalSession::setShellIntegrationNonce(const std::string &nonce)
         return;
     }
     m_shellIntegrationNonce = nonce;
+}
+
+void LocalTerminalSession::setLaunchSpec(const LocalTerminalLaunchSpec &spec)
+{
+    if (!m_running.load())
+    {
+        m_launchSpec = spec;
+    }
 }
 
 void LocalTerminalSession::queueInput(const QByteArray &bytes)

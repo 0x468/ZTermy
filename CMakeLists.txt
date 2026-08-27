@@ -658,6 +658,8 @@ target_link_libraries(ztermy_terminal_engine PRIVATE ghostty-vt-static)
 add_library(ztermy_terminal_session STATIC
     src/application/terminal/LocalTerminalSession.cpp
     src/application/terminal/LocalTerminalSession.h
+    src/application/terminal/WindowsLocalShellCatalog.cpp
+    src/application/terminal/WindowsLocalShellCatalog.h
     src/application/terminal/PowerShellShellIntegration.cpp
     src/application/terminal/PowerShellShellIntegration.h
 )
@@ -887,6 +889,7 @@ set(ZTERMY_INTERFACE_ICON_FILES
     resources/icons/edit.svg
     resources/icons/eye-off.svg
     resources/icons/eye.svg
+    resources/icons/external-link.svg
     resources/icons/file.svg
     resources/icons/folder.svg
     resources/icons/follow.svg
@@ -1186,6 +1189,10 @@ qt_add_qml_module(ztermy
         src/ui/qml/TransferCenter.qml
         src/ui/qml/TransferToast.qml
         src/ui/qml/ActionToast.qml
+        src/ui/qml/WorkspaceCredentialsPane.qml
+        src/ui/qml/WorkspaceLogsPane.qml
+        src/ui/qml/WorkspaceProxiesPane.qml
+        src/ui/qml/WorkspaceScriptsPane.qml
         src/ui/qml/Theme.qml
 )
 
@@ -2530,6 +2537,19 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME conpty-process COMMAND ztermy_conpty_process_tests)
+
+    qt_add_executable(ztermy_windows_local_shell_catalog_tests
+        tests/windows_local_shell_catalog_tests.cpp
+        src/application/terminal/WindowsLocalShellCatalog.cpp
+    )
+    target_compile_features(ztermy_windows_local_shell_catalog_tests PRIVATE cxx_std_23)
+    target_include_directories(ztermy_windows_local_shell_catalog_tests PRIVATE src)
+    target_link_libraries(ztermy_windows_local_shell_catalog_tests PRIVATE Qt6::Core Qt6::Test)
+    if(MSVC)
+        target_compile_options(ztermy_windows_local_shell_catalog_tests PRIVATE /permissive- /utf-8 /W4 /Zc:__cplusplus)
+        target_compile_definitions(ztermy_windows_local_shell_catalog_tests PRIVATE NOMINMAX UNICODE WIN32_LEAN_AND_MEAN _UNICODE)
+    endif()
+    add_test(NAME windows-local-shell-catalog COMMAND ztermy_windows_local_shell_catalog_tests)
 
     qt_add_executable(ztermy_ssh_runtime_tests
         tests/ssh_runtime_tests.cpp
@@ -4278,6 +4298,7 @@ if(BUILD_TESTING)
             ztermy_latency_histogram_tests
             ztermy_window_hit_test_tests
             ztermy_conpty_process_tests
+            ztermy_windows_local_shell_catalog_tests
             ztermy_ssh_runtime_tests
             ztermy_ssh_connection_state_tests
             ztermy_ssh_host_key_tests

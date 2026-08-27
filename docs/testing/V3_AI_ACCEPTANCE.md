@@ -159,6 +159,9 @@ evaluations serve different purposes and are reported separately.
       provider tool loop.
 - [ ] Owner check: typing `/` opens the built-in command picker; Up/Down, Tab, Enter, and click
       invoke the selected local action without sending the literal slash command to the provider.
+- [ ] Owner check: `/compact` immediately condenses older conversation turns for future requests,
+      keeps the four most recent messages verbatim, leaves the visible transcript intact, and shows
+      the compacted item/token estimate. Empty or already-short conversations report why no action ran.
 - [ ] Owner check: Attach > Local text files accepts one or more UTF-8 text files, shows removable
       and pinnable context chips, includes their bounded contents in the next request, and keeps the
       UI responsive while loading. Binary, invalid UTF-8, inaccessible, oversized, or more than four

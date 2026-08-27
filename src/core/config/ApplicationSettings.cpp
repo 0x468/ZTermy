@@ -57,7 +57,8 @@ constexpr qint64 terminalSelectionInteractionSchemaVersion = 27;
 // Version 28 expands the mainstream default word separators for shell prompt
 // identities while preserving every customized separator set.
 constexpr qint64 terminalPromptDelimiterSchemaVersion = 28;
-constexpr qint64 currentSchemaVersion = terminalPromptDelimiterSchemaVersion;
+constexpr qint64 localShellSchemaVersion = 29;
+constexpr qint64 currentSchemaVersion = localShellSchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::AiPermissionPreference;
@@ -70,6 +71,7 @@ using ztermy::config::BackdropPreference;
 using ztermy::config::CredentialStoragePreference;
 using ztermy::config::CursorPreference;
 using ztermy::config::LanguagePreference;
+using ztermy::config::LocalShellPreference;
 using ztermy::config::TerminalMiddleClickPreference;
 using ztermy::config::TerminalRightClickPreference;
 using ztermy::config::ThemePreference;
@@ -197,6 +199,32 @@ template <>
     if (token == QStringLiteral("context-menu"))
     {
         return TerminalMiddleClickPreference::contextMenu;
+    }
+    return std::nullopt;
+}
+
+template <>
+[[nodiscard]] std::optional<LocalShellPreference> parsePreference(const QString &token)
+{
+    if (token == QStringLiteral("automatic"))
+    {
+        return LocalShellPreference::automatic;
+    }
+    if (token == QStringLiteral("powerShellCore"))
+    {
+        return LocalShellPreference::powerShellCore;
+    }
+    if (token == QStringLiteral("windowsPowerShell"))
+    {
+        return LocalShellPreference::windowsPowerShell;
+    }
+    if (token == QStringLiteral("commandPrompt"))
+    {
+        return LocalShellPreference::commandPrompt;
+    }
+    if (token == QStringLiteral("gitBash"))
+    {
+        return LocalShellPreference::gitBash;
     }
     return std::nullopt;
 }
@@ -438,6 +466,7 @@ template <>
     const QJsonValue terminalMiddleClickValue = root.value(QStringLiteral("terminalMiddleClick"));
     const QJsonValue terminalWordDelimitersValue = root.value(QStringLiteral("terminalWordDelimiters"));
     const QJsonValue terminalScrollRowsValue = root.value(QStringLiteral("terminalScrollRows"));
+    const QJsonValue localShellValue = root.value(QStringLiteral("localShell"));
     const QJsonValue sftpShowHiddenFilesValue = root.value(QStringLiteral("sftpShowHiddenFiles"));
     const QJsonValue sftpConfirmDeleteValue = root.value(QStringLiteral("sftpConfirmDelete"));
     const QJsonValue closeToTrayValue = root.value(QStringLiteral("closeToTray"));
@@ -516,6 +545,10 @@ template <>
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
+    if (version >= localShellSchemaVersion && !localShellValue.isString())
+    {
+        return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
+    }
     if (version >= aiProviderSchemaVersion
         && (!aiProviderValue.isString() || !aiBaseUrlValue.isString() || !aiEndpointPathValue.isString()
             || !aiModelValue.isString() || !aiCredentialReferenceValue.isString() || !aiAutomaticContextValue.isBool()))
@@ -556,6 +589,9 @@ template <>
         version >= terminalSelectionSettingsSchemaVersion
             ? parsePreference<TerminalMiddleClickPreference>(terminalMiddleClickValue.toString())
             : std::optional{TerminalMiddleClickPreference::disabled};
+    const auto localShell = version >= localShellSchemaVersion
+                                ? parsePreference<LocalShellPreference>(localShellValue.toString())
+                                : std::optional{LocalShellPreference::automatic};
     const auto credentialStorage = version >= credentialStorageSchemaVersion
                                        ? parsePreference<CredentialStoragePreference>(credentialStorageValue.toString())
                                        : std::optional{CredentialStoragePreference::automatic};
@@ -579,8 +615,8 @@ template <>
     const qint64 fontSize = fontSizeValue.toInteger(-1);
     const qint64 terminalScrollRows =
         version >= terminalSelectionSettingsSchemaVersion ? terminalScrollRowsValue.toInteger(-1) : 3;
-    if (!theme || !backdrop || !accent || !cursor || !terminalRightClick || !terminalMiddleClick || !credentialStorage
-        || !language || !aiProvider || !aiPermission || !aiReasoning || !aiProxy
+    if (!theme || !backdrop || !accent || !cursor || !terminalRightClick || !terminalMiddleClick || !localShell
+        || !credentialStorage || !language || !aiProvider || !aiPermission || !aiReasoning || !aiProxy
         || fontSizeValue.toDouble() != static_cast<double>(fontSize)
         || (version >= terminalSelectionSettingsSchemaVersion
             && terminalScrollRowsValue.toDouble() != static_cast<double>(terminalScrollRows)))
@@ -630,6 +666,7 @@ template <>
         .aiProxyUsername = version >= aiProxySchemaVersion ? aiProxyUsernameValue.toString() : QString{},
         .terminalFontSize = static_cast<int>(fontSize),
         .terminalScrollRows = static_cast<int>(terminalScrollRows),
+        .localShell = *localShell,
         .theme = *theme,
         .backdrop = *backdrop,
         .accent = *accent,
@@ -787,6 +824,7 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
         {QStringLiteral("terminalMiddleClick"), terminalMiddleClickPreferenceToken(settings.terminalMiddleClick)},
         {QStringLiteral("terminalWordDelimiters"), settings.terminalWordDelimiters},
         {QStringLiteral("terminalScrollRows"), settings.terminalScrollRows},
+        {QStringLiteral("localShell"), localShellPreferenceToken(settings.localShell)},
         {QStringLiteral("sftpShowHiddenFiles"), settings.sftpShowHiddenFiles},
         {QStringLiteral("sftpConfirmDelete"), settings.sftpConfirmDelete},
         {QStringLiteral("closeToTray"), settings.closeToTray},
@@ -909,6 +947,24 @@ QString terminalMiddleClickPreferenceToken(const TerminalMiddleClickPreference p
         case TerminalMiddleClickPreference::disabled:
         default:
             return QStringLiteral("disabled");
+    }
+}
+
+QString localShellPreferenceToken(const LocalShellPreference preference)
+{
+    switch (preference)
+    {
+        case LocalShellPreference::powerShellCore:
+            return QStringLiteral("powerShellCore");
+        case LocalShellPreference::windowsPowerShell:
+            return QStringLiteral("windowsPowerShell");
+        case LocalShellPreference::commandPrompt:
+            return QStringLiteral("commandPrompt");
+        case LocalShellPreference::gitBash:
+            return QStringLiteral("gitBash");
+        case LocalShellPreference::automatic:
+        default:
+            return QStringLiteral("automatic");
     }
 }
 
@@ -1050,6 +1106,11 @@ std::optional<TerminalRightClickPreference> parseTerminalRightClickPreference(co
 std::optional<TerminalMiddleClickPreference> parseTerminalMiddleClickPreference(const QString &token)
 {
     return parsePreference<TerminalMiddleClickPreference>(token);
+}
+
+std::optional<LocalShellPreference> parseLocalShellPreference(const QString &token)
+{
+    return parsePreference<LocalShellPreference>(token);
 }
 
 std::optional<CredentialStoragePreference> parseCredentialStoragePreference(const QString &token)

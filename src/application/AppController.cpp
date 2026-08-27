@@ -28,6 +28,7 @@
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -113,6 +114,37 @@ constexpr qsizetype maximumAiImageAttachmentBytes = qsizetype{5} * 1024 * 1024;
 constexpr qsizetype maximumAiImageAttachmentTotalBytes = qsizetype{12} * 1024 * 1024;
 constexpr qsizetype maximumAiImageAttachmentFiles = 4;
 constexpr quint64 maximumAiImagePixels = quint64{40} * 1024 * 1024;
+
+class TabLifecycleTiming final
+{
+public:
+    explicit TabLifecycleTiming(const char *operation)
+        : m_operation(operation), m_enabled(qEnvironmentVariableIntValue("ZTERMY_TAB_TIMING") > 0)
+    {
+        if (m_enabled)
+        {
+            m_timer.start();
+        }
+    }
+
+    void mark(const char *stage)
+    {
+        if (!m_enabled)
+        {
+            return;
+        }
+        const qint64 elapsed = m_timer.elapsed();
+        qCInfo(appControllerLog) << "Terminal tab timing" << "operation=" << m_operation << "stage=" << stage
+                                 << "stageMs=" << elapsed - m_previousElapsed << "elapsedMs=" << elapsed;
+        m_previousElapsed = elapsed;
+    }
+
+private:
+    const char *m_operation;
+    bool m_enabled = false;
+    QElapsedTimer m_timer;
+    qint64 m_previousElapsed = 0;
+};
 
 struct AiTextAttachmentLoadResult final
 {
@@ -286,13 +318,61 @@ private:
     const qulonglong itemCount = previousItems + static_cast<qulonglong>(result.compactedItemCount);
     const qulonglong removedBytes = previousBytes + static_cast<qulonglong>(result.removedBytes);
     const bool compacted = previous.value(QStringLiteral("compacted")).toBool() || result.compacted;
-    return {{QStringLiteral("visible"), compacted || result.overBudget},
+    const bool manual = previous.value(QStringLiteral("manual")).toBool();
+    return {{QStringLiteral("visible"), compacted || result.overBudget || manual},
             {QStringLiteral("compacted"), compacted},
+            {QStringLiteral("manual"), manual},
             {QStringLiteral("itemCount"), QVariant::fromValue(itemCount)},
             {QStringLiteral("removedBytes"), QVariant::fromValue(removedBytes)},
             {QStringLiteral("estimatedInputTokens"),
              QVariant::fromValue(static_cast<qulonglong>(result.estimatedInputTokens))},
             {QStringLiteral("overBudget"), result.overBudget}};
+}
+
+[[nodiscard]] QString manualCompactionExcerpt(const std::string_view value)
+{
+    QString text = QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size())).trimmed();
+    constexpr qsizetype maximumCharacters = 640;
+    constexpr qsizetype headCharacters = 240;
+    constexpr qsizetype tailCharacters = 360;
+    if (text.size() <= maximumCharacters)
+    {
+        return text;
+    }
+    QString head = text.left(headCharacters);
+    if (!head.isEmpty() && head.back().isHighSurrogate())
+    {
+        head.chop(1);
+    }
+    QString tail = text.right(tailCharacters);
+    if (!tail.isEmpty() && tail.front().isLowSurrogate())
+    {
+        tail.removeFirst();
+    }
+    return head + QStringLiteral("\n…[earlier message shortened]…\n") + tail;
+}
+
+[[nodiscard]] QString manualCompactionCheckpoint(const std::span<const ztermy::ai::AiChatMessage> messages)
+{
+    constexpr std::size_t maximumCheckpointMessages = 24;
+    QStringList sections{
+        QStringLiteral("Earlier conversation checkpoint generated locally by ztermy. This is a lossy recap of "
+                       "older turns; the recent conversation follows verbatim.")};
+    const std::size_t first =
+        messages.size() > maximumCheckpointMessages ? messages.size() - maximumCheckpointMessages : 0;
+    for (std::size_t index = first; index < messages.size(); ++index)
+    {
+        const auto &message = messages[index];
+        const QString excerpt = manualCompactionExcerpt(message.content);
+        if (excerpt.isEmpty())
+        {
+            continue;
+        }
+        const QString role =
+            QString::fromLatin1(message.role == ztermy::ai::AiMessageRole::assistant ? "Assistant" : "User");
+        sections.push_back(QStringLiteral("[%1]\n%2").arg(role, excerpt));
+    }
+    return sections.join(QStringLiteral("\n\n"));
 }
 
 [[nodiscard]] std::optional<std::string> imageMediaType(QByteArray format)
@@ -1189,6 +1269,26 @@ semanticCapability(const ztermy::terminal::SemanticTerminalSnapshot &snapshot) n
         default:
             return QStringLiteral("unknown");
     }
+}
+
+[[nodiscard]] std::string localShellSemanticName(const QString &id)
+{
+    if (id == QStringLiteral("gitBash"))
+    {
+        return "bash";
+    }
+    if (id == QStringLiteral("commandPrompt"))
+    {
+        return "cmd";
+    }
+    return "pwsh";
+}
+
+[[nodiscard]] ztermy::workbench::ShellKind localShellHistoryKind(const QString &id) noexcept
+{
+    return id == QStringLiteral("gitBash")         ? ztermy::workbench::ShellKind::bash
+           : id == QStringLiteral("commandPrompt") ? ztermy::workbench::ShellKind::unknown
+                                                   : ztermy::workbench::ShellKind::powershell;
 }
 
 [[nodiscard]] QString normalizedQuickCommandText(QString value)
@@ -2333,6 +2433,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     loadHostProfiles();
     loadPortForwardingRules();
     loadApplicationSettings();
+    refreshLocalShellCatalog();
     loadAiPermissionRules();
     loadAiQuickMessages();
     initializeAiDebugTrace();
@@ -2420,6 +2521,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
     loadHostProfiles();
     loadPortForwardingRules();
     loadApplicationSettings();
+    refreshLocalShellCatalog();
     loadAiPermissionRules();
     loadAiQuickMessages();
     initializeAiDebugTrace();
@@ -2796,6 +2898,7 @@ QVariantMap AppController::terminalTabValue(const TerminalTab &tab, const QStrin
         {QStringLiteral("paneId"), tab.paneId},
         {QStringLiteral("title"), tab.title},
         {QStringLiteral("kind"), tab.kind == TerminalTabKind::Local ? QStringLiteral("local") : QStringLiteral("ssh")},
+        {QStringLiteral("localShell"), tab.localShellId},
         {QStringLiteral("status"), tab.status},
         {QStringLiteral("identity"), tab.identity.isEmpty() ? tab.title : tab.identity},
         {QStringLiteral("address"), tab.address},
@@ -3494,6 +3597,32 @@ QString AppController::terminalWordDelimiters() const
 int AppController::terminalScrollRows() const noexcept
 {
     return m_settings.terminalScrollRows;
+}
+
+QString AppController::localShellPreference() const
+{
+    return config::localShellPreferenceToken(m_settings.localShell);
+}
+
+QVariantList AppController::availableLocalShells() const
+{
+    QVariantList result;
+    const auto effective =
+        terminal::WindowsLocalShellCatalog::resolve(m_localShellProfiles, QStringLiteral("automatic"));
+    result.append(QVariantMap{{QStringLiteral("id"), QStringLiteral("automatic")},
+                              {QStringLiteral("name"), tr("Automatic")},
+                              {QStringLiteral("detail"),
+                               effective ? tr("Currently %1").arg(effective->name) : tr("No supported shell found")},
+                              {QStringLiteral("available"), effective.has_value()}});
+    for (const terminal::LocalShellProfile &profile : m_localShellProfiles)
+    {
+        result.append(
+            QVariantMap{{QStringLiteral("id"), profile.id},
+                        {QStringLiteral("name"), profile.name},
+                        {QStringLiteral("detail"), profile.available ? profile.executable : tr("Not installed")},
+                        {QStringLiteral("available"), profile.available}});
+    }
+    return result;
 }
 
 bool AppController::sftpShowHiddenFiles() const noexcept
@@ -4302,6 +4431,7 @@ QString AppController::startLocalTerminal()
 
 QString AppController::startLocalTerminalAt(const QString &workingDirectory, const QString &preferredTitle)
 {
+    TabLifecycleTiming timing("open-local");
     if (m_tabs.size() >= maximumTerminalTabs)
     {
         if (m_terminal != nullptr)
@@ -4311,20 +4441,38 @@ QString AppController::startLocalTerminalAt(const QString &workingDirectory, con
         return {};
     }
 
+    if (m_localShellProfiles.isEmpty())
+    {
+        refreshLocalShellCatalog();
+    }
+    const QString preference = config::localShellPreferenceToken(m_settings.localShell);
+    const auto shell = terminal::WindowsLocalShellCatalog::resolve(m_localShellProfiles, preference);
+    if (!shell)
+    {
+        if (m_terminal != nullptr)
+        {
+            m_terminal->setStatusText(tr("No supported local shell is available"));
+        }
+        return {};
+    }
+
     const std::string previousActiveWorkspaceId = m_workspaceState.activeTerminalWorkspaceId;
     auto tab = std::make_unique<TerminalTab>();
     tab->id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     tab->workspaceId = tab->id;
     tab->paneId = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    const QString defaultTitle = tr("PowerShell %1").arg(m_nextLocalTabNumber++);
+    const QString defaultTitle = QStringLiteral("%1 %2").arg(shell->name).arg(m_nextLocalTabNumber++);
     tab->title = preferredTitle.trimmed().isEmpty() ? defaultTitle : preferredTitle.trimmed();
     tab->status = tr("Starting local terminal...");
     tab->kind = TerminalTabKind::Local;
+    tab->localShellId = shell->id;
     tab->local = m_localSessionFactory();
+    timing.mark("session-created");
     if (!tab->local)
     {
         return {};
     }
+    tab->local->setLaunchSpec(terminal::WindowsLocalShellCatalog::launchSpec(*shell, workingDirectory.trimmed()));
     initializeSessionLog(*tab);
     initializeTerminalOutputSink(*tab);
     QString tabId = tab->id;
@@ -4333,6 +4481,7 @@ QString AppController::startLocalTerminalAt(const QString &workingDirectory, con
         {.id = utf8String(tab->id), .title = utf8String(tab->title), .kind = workbench::TerminalRestoreKind::Local});
     workspace.title = utf8String(tab->title);
     connectLocalTabSignals(*tab);
+    timing.mark("tab-prepared");
     m_tabs.push_back(std::move(tab));
     m_workspaceState.terminalWorkspaces.push_back(std::move(workspace));
     m_workspaceState.activeTerminalWorkspaceId = utf8String(tabId);
@@ -4343,8 +4492,11 @@ QString AppController::startLocalTerminalAt(const QString &workingDirectory, con
         m_tabs.pop_back();
         return {};
     }
+    timing.mark("workspace-persisted");
     emit terminalTabsChanged();
+    timing.mark("tab-list-published");
     activateTerminalTab(tabId);
+    timing.mark("tab-published");
 
     TerminalTab *created = findTab(tabId);
     if (created == nullptr || !created->local)
@@ -4352,24 +4504,18 @@ QString AppController::startLocalTerminalAt(const QString &workingDirectory, con
         return {};
     }
     const std::error_code error = created->local->start({.columns = 100, .rows = 30});
+    timing.mark("session-started");
     if (error)
     {
         created->status = tr("Unable to start local terminal: %1").arg(QString::fromStdString(error.message()));
         showActiveTab();
         emit terminalTabsChanged();
     }
-    else if (!workingDirectory.trimmed().isEmpty())
-    {
-        const QString command = QLatin1StringView("Set-Location -LiteralPath ")
-                                + utf8QString(terminal::quoteShellPath(utf8String(workingDirectory.trimmed()),
-                                                                       terminal::ShellDialect::PowerShell))
-                                + QLatin1Char('\r');
-        created->local->queuePaste(command.toUtf8());
-    }
     if (m_terminal != nullptr)
     {
         m_terminal->requestCurrentSize();
     }
+    timing.mark("complete");
     return tabId;
 }
 
@@ -4398,8 +4544,12 @@ bool AppController::activateTerminalTab(const QString &id)
         return true;
     }
     m_activeTabId = workspaceId;
+    const bool persistedWorkspaceChanged = m_workspaceState.activeTerminalWorkspaceId != utf8String(workspaceId);
     m_workspaceState.activeTerminalWorkspaceId = utf8String(workspaceId);
-    static_cast<void>(persistTerminalWorkspaces());
+    if (persistedWorkspaceChanged)
+    {
+        static_cast<void>(persistTerminalWorkspaces());
+    }
     emitActiveTerminalContextChanged();
     return true;
 }
@@ -4439,6 +4589,7 @@ void AppController::recordClosedTerminal(const QString &workspaceId)
 
 bool AppController::closeTerminalTabInternal(const QString &id, const bool recordClosed)
 {
+    TabLifecycleTiming timing("close");
     QString workspaceId = id;
     if (const TerminalTab *session = findTab(id); session != nullptr)
     {
@@ -4491,9 +4642,11 @@ bool AppController::closeTerminalTabInternal(const QString &id, const bool recor
         m_terminalViewports.remove(tab->paneId);
         return true;
     });
+    timing.mark("sessions-stopped");
     m_workspaceState.terminalWorkspaces.erase(workspacePosition);
     m_pinnedTerminalWorkspaceIds.remove(workspaceId);
     emit terminalTabsChanged();
+    timing.mark("tab-unpublished");
 
     if (closingActive)
     {
@@ -4512,6 +4665,7 @@ bool AppController::closeTerminalTabInternal(const QString &id, const bool recor
         }
     }
     static_cast<void>(persistTerminalWorkspaces());
+    timing.mark("workspace-persisted");
     return true;
 }
 
@@ -7230,6 +7384,7 @@ bool AppController::connectPassword(const QString &host, const int port, const Q
 
 bool AppController::startSshConnection(ssh::SshConnectionRequest request, QString sourceProfileId)
 {
+    TabLifecycleTiming timing("open-ssh");
     if (m_tabs.size() >= maximumTerminalTabs)
     {
         if (m_terminal != nullptr)
@@ -7263,6 +7418,7 @@ bool AppController::startSshConnection(ssh::SshConnectionRequest request, QStrin
     applyWorkspaceState(*tab);
     tab->sshPhase = ssh::SshConnectionPhase::Resolving;
     tab->ssh = std::make_unique<ssh::SshTerminalSession>();
+    timing.mark("session-created");
     const QString tabId = tab->id;
     initializeSessionLog(*tab);
     initializeTerminalOutputSink(*tab);
@@ -7275,6 +7431,7 @@ bool AppController::startSshConnection(ssh::SshConnectionRequest request, QStrin
                                                 : workbench::TerminalRestoreKind::SshProfile});
     workspace.title = utf8String(tab->title);
     connectSshTabSignals(*tab);
+    timing.mark("tab-prepared");
     m_tabs.push_back(std::move(tab));
     m_workspaceState.terminalWorkspaces.push_back(std::move(workspace));
     m_workspaceState.activeTerminalWorkspaceId = utf8String(tabId);
@@ -7285,8 +7442,11 @@ bool AppController::startSshConnection(ssh::SshConnectionRequest request, QStrin
         m_tabs.pop_back();
         return false;
     }
+    timing.mark("workspace-persisted");
     emit terminalTabsChanged();
+    timing.mark("tab-list-published");
     activateTerminalTab(tabId);
+    timing.mark("tab-published");
 
     TerminalTab *created = findTab(tabId);
     if (created == nullptr || !created->ssh)
@@ -7294,6 +7454,7 @@ bool AppController::startSshConnection(ssh::SshConnectionRequest request, QStrin
         return false;
     }
     const std::error_code error = created->ssh->start(std::move(request), {.columns = 100, .rows = 30});
+    timing.mark("session-started");
     if (error)
     {
         static_cast<void>(closeTerminalTabInternal(tabId, false));
@@ -7303,6 +7464,7 @@ bool AppController::startSshConnection(ssh::SshConnectionRequest request, QStrin
     {
         m_terminal->requestCurrentSize();
     }
+    timing.mark("complete");
     return true;
 }
 
@@ -8667,6 +8829,7 @@ bool AppController::saveApplicationSettings(
         .aiProxyUsername = m_settings.aiProxyUsername,
         .terminalFontSize = fontSize,
         .terminalScrollRows = terminalScrollRows,
+        .localShell = m_settings.localShell,
         .theme = *parsedTheme,
         .backdrop = *parsedBackdrop,
         .accent = *parsedAccent,
@@ -8693,6 +8856,24 @@ bool AppController::saveApplicationSettings(
         .aiReasoning = m_settings.aiReasoning,
         .aiProxy = m_settings.aiProxy,
     });
+}
+
+bool AppController::saveLocalShellPreference(const QString &preference)
+{
+    const auto parsed = config::parseLocalShellPreference(preference);
+    if (!parsed)
+    {
+        return false;
+    }
+    config::ApplicationSettings updated = m_settings;
+    updated.localShell = *parsed;
+    return persistApplicationSettings(updated);
+}
+
+void AppController::refreshLocalShells()
+{
+    refreshLocalShellCatalog();
+    emit applicationSettingsChanged();
 }
 
 bool AppController::saveAiProviderSettings(const QString &provider, const QString &baseUrl, const QString &endpointPath,
@@ -9705,6 +9886,8 @@ bool AppController::restoreAiConversationHistory(const QString &conversationId)
     tab->aiContextItems.clear();
     tab->aiContextPreview.clear();
     tab->aiCompaction.clear();
+    tab->aiManualCompactionCheckpoint.clear();
+    tab->aiManualCompactionCutoff = 0;
     m_aiActionToolDispatcher.clearConversation(utf8String(tab->aiConversationId));
     m_aiCommandTracker.clearConversation(utf8String(tab->aiConversationId));
     tab->aiConversationId = stored->id;
@@ -10295,6 +10478,89 @@ bool AppController::retryAiMessage()
                          tab->aiLastSelectedSkillIds, tab->aiLastWebSearchEnabled);
 }
 
+bool AppController::compactAiConversation()
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || !tab->aiConversation || aiTurnActive(*tab))
+    {
+        return false;
+    }
+
+    auto rawMessages = tab->aiConversation->providerMessagesWithEvidence();
+    if (rawMessages.empty())
+    {
+        tab->aiError = tr("There is no conversation context to compact.");
+        emit aiConversationChanged();
+        return false;
+    }
+
+    std::vector<ai::AiChatMessage> effectiveMessages = rawMessages;
+    if (!tab->aiManualCompactionCheckpoint.isEmpty())
+    {
+        const auto cutoff = static_cast<std::size_t>(
+            std::clamp<qsizetype>(tab->aiManualCompactionCutoff, 0, static_cast<qsizetype>(effectiveMessages.size())));
+        effectiveMessages.erase(effectiveMessages.begin(),
+                                effectiveMessages.begin() + static_cast<std::ptrdiff_t>(cutoff));
+        effectiveMessages.insert(effectiveMessages.begin(),
+                                 ai::AiChatMessage{.role = ai::AiMessageRole::user,
+                                                   .content = utf8String(tab->aiManualCompactionCheckpoint)});
+    }
+
+    constexpr std::size_t preservedRecentMessages = 4;
+    if (effectiveMessages.size() <= preservedRecentMessages)
+    {
+        tab->aiError = tr("The conversation is already compact.");
+        emit aiConversationChanged();
+        return false;
+    }
+
+    const std::size_t oldCount = effectiveMessages.size() - preservedRecentMessages;
+    const QString checkpoint =
+        manualCompactionCheckpoint(std::span<const ai::AiChatMessage>(effectiveMessages.data(), oldCount));
+    if (checkpoint.isEmpty())
+    {
+        tab->aiError = tr("The conversation is already compact.");
+        emit aiConversationChanged();
+        return false;
+    }
+
+    ai::AiGenerationRequest before{.messages = effectiveMessages};
+    const std::size_t beforeTokens = ai::AiContextCompactor::estimateRequestTokens(before);
+    std::vector<ai::AiChatMessage> compactedMessages;
+    compactedMessages.reserve(preservedRecentMessages + 1);
+    compactedMessages.push_back(ai::AiChatMessage{.role = ai::AiMessageRole::user, .content = utf8String(checkpoint)});
+    compactedMessages.insert(compactedMessages.end(), effectiveMessages.end() - preservedRecentMessages,
+                             effectiveMessages.end());
+    ai::AiGenerationRequest after{.messages = std::move(compactedMessages)};
+    const std::size_t afterTokens = ai::AiContextCompactor::estimateRequestTokens(after);
+
+    tab->aiManualCompactionCheckpoint = checkpoint;
+    tab->aiManualCompactionCutoff = static_cast<qsizetype>(rawMessages.size() - preservedRecentMessages);
+    tab->aiError.clear();
+    tab->aiCompaction = {
+        {QStringLiteral("visible"), true},
+        {QStringLiteral("compacted"), true},
+        {QStringLiteral("manual"), true},
+        {QStringLiteral("itemCount"), QVariant::fromValue(static_cast<qulonglong>(oldCount))},
+        {QStringLiteral("removedBytes"), QVariant::fromValue(static_cast<qulonglong>(
+                                             (beforeTokens > afterTokens) ? (beforeTokens - afterTokens) * 4 : 0))},
+        {QStringLiteral("estimatedInputTokens"), QVariant::fromValue(static_cast<qulonglong>(afterTokens))},
+        {QStringLiteral("overBudget"), false}};
+    emit aiConversationChanged();
+    return true;
+}
+
+void AppController::dismissAiCompactionNotice()
+{
+    TerminalTab *tab = activeTab();
+    if (tab == nullptr || tab->aiCompaction.isEmpty())
+    {
+        return;
+    }
+    tab->aiCompaction.clear();
+    emit aiConversationChanged();
+}
+
 void AppController::clearAiConversation()
 {
     TerminalTab *tab = activeTab();
@@ -10317,6 +10583,8 @@ void AppController::clearAiConversation()
     tab->aiContextPreview.clear();
     tab->aiContextItems.clear();
     tab->aiCompaction.clear();
+    tab->aiManualCompactionCheckpoint.clear();
+    tab->aiManualCompactionCutoff = 0;
     tab->aiExplicitContextItems.clear();
     tab->aiImageAttachments.clear();
     tab->aiExcludedContextIds.clear();
@@ -11690,6 +11958,14 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
         static_cast<void>(tab.aiConversation->appendUserMessage(normalizedPrompt));
         messages = tab.aiConversation->providerMessagesWithEvidence();
     }
+    if (!tab.aiManualCompactionCheckpoint.isEmpty())
+    {
+        const auto cutoff = static_cast<std::size_t>(
+            std::clamp<qsizetype>(tab.aiManualCompactionCutoff, 0, static_cast<qsizetype>(messages.size())));
+        messages.erase(messages.begin(), messages.begin() + static_cast<std::ptrdiff_t>(cutoff));
+        messages.insert(messages.begin(), ai::AiChatMessage{.role = ai::AiMessageRole::user,
+                                                            .content = utf8String(tab.aiManualCompactionCheckpoint)});
+    }
     if (!context.items.empty())
     {
         messages.insert(messages.end() - 1, ai::AiContextSerializer::asUntrustedEvidenceMessage(context));
@@ -11777,7 +12053,8 @@ bool AppController::sendAiMessage(TerminalTab &tab, const QString &prompt, const
     // The conversation model itself is untouched; only the request view
     // changes, so follow-up turns re-compact deterministically.
     auto compacted = ai::AiContextCompactor::compact(std::move(generation));
-    tab.aiCompaction = aiCompactionValue(compacted);
+    tab.aiCompaction = aiCompactionValue(
+        compacted, tab.aiCompaction.value(QStringLiteral("manual")).toBool() ? tab.aiCompaction : QVariantMap{});
     if (compacted.compacted)
     {
         qCInfo(appControllerLog) << "AI context compacted for" << compacted.compactedItemCount << "item(s), removing"
@@ -14089,7 +14366,7 @@ void AppController::initializeTerminalOutputSink(TerminalTab &tab)
         terminal::CommandBlockSessionContext{
             .sessionId = utf8String(tab.id),
             .host = utf8String(tab.address),
-            .shell = tab.kind == TerminalTabKind::Local ? "pwsh" : std::string{},
+            .shell = tab.kind == TerminalTabKind::Local ? localShellSemanticName(tab.localShellId) : std::string{},
             .sessionGeneration = tab.reconnectGeneration,
         },
         nonce);
@@ -14401,7 +14678,7 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
                          {
                              terminal->setStatusText(status);
                          }
-                         emit terminalTabsChanged();
+                         scheduleTerminalTabsChanged();
                      });
     QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::clipboardTextReady, this,
                      [this, tabId](const QString &text) {
@@ -14426,7 +14703,7 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
             {
                 updated->connectedUtcMs = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
             }
-            emit terminalTabsChanged();
+            scheduleTerminalTabsChanged();
             updateTelemetryVisibility();
         }
     });
@@ -14446,7 +14723,7 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
                              {
                                  scheduleSshReconnect(*updated, *updated->sshFailure);
                              }
-                             emit terminalTabsChanged();
+                             scheduleTerminalTabsChanged();
                          }
                      });
     QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::failureOccurred, this,
@@ -14454,7 +14731,7 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
                          if (TerminalTab *updated = findTab(tabId))
                          {
                              updated->sshFailure = failure;
-                             emit terminalTabsChanged();
+                             scheduleTerminalTabsChanged();
                          }
                      });
     QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::searchResultReady, this,
@@ -14588,6 +14865,25 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
                              m_terminal->setStatusText(tr("SSH host key changed; connection blocked"));
                          }
                      });
+}
+
+void AppController::scheduleTerminalTabsChanged()
+{
+    if (m_terminalTabsChangePending)
+    {
+        return;
+    }
+    m_terminalTabsChangePending = true;
+    QMetaObject::invokeMethod(
+        this,
+        [this] {
+            m_terminalTabsChangePending = false;
+            if (!m_shutdownStarted)
+            {
+                emit terminalTabsChanged();
+            }
+        },
+        Qt::QueuedConnection);
 }
 
 void AppController::updateTelemetryVisibility()
@@ -15277,7 +15573,7 @@ void AppController::appendCapturedHistory(TerminalTab &tab, const QString &comma
 
     const workbench::ShellKind shell =
         tab.kind == TerminalTabKind::Local
-            ? workbench::ShellKind::powershell
+            ? localShellHistoryKind(tab.localShellId)
             : (!tab.history.empty() ? tab.history.front().shell : workbench::ShellKind::unknown);
     const std::int64_t timestamp = QDateTime::currentSecsSinceEpoch();
     if (!tab.capturedHistory.empty() && utf8QString(tab.capturedHistory.front().command) == normalized)
@@ -15822,6 +16118,11 @@ void AppController::loadApplicationSettings()
     }
     m_credentialVaults->select(selected);
     applyAiNetworkProxy();
+}
+
+void AppController::refreshLocalShellCatalog()
+{
+    m_localShellProfiles = terminal::WindowsLocalShellCatalog::detect();
 }
 
 void AppController::applyAiNetworkProxy()

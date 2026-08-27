@@ -36,7 +36,8 @@ void WindowsTcpSocketTests::connectsToLoopbackListener()
     QTcpServer server;
     QVERIFY(server.listen(QHostAddress::LocalHost, 0));
 
-    auto socket = ztermy::ssh::WindowsTcpSocket::connect("127.0.0.1", server.serverPort(), 2s);
+    ztermy::ssh::TcpConnectTimings timings;
+    auto socket = ztermy::ssh::WindowsTcpSocket::connect("127.0.0.1", server.serverPort(), 2s, {}, &timings);
     if (!socket)
     {
         QFAIL(qPrintable(QStringLiteral("connect failed: kind=%1 native=%2")
@@ -45,6 +46,9 @@ void WindowsTcpSocketTests::connectsToLoopbackListener()
     }
 
     QVERIFY(socket->valid());
+    QVERIFY(timings.resolution >= 0ms);
+    QVERIFY(timings.connection >= 0ms);
+    QVERIFY(timings.candidatesAttempted >= 1);
     QVERIFY(server.waitForNewConnection(1000));
 }
 

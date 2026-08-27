@@ -135,10 +135,10 @@ ConPtyProcess::~ConPtyProcess()
     close();
 }
 
-std::error_code ConPtyProcess::start(std::wstring commandLine, const TerminalSize size,
+std::error_code ConPtyProcess::start(std::wstring applicationName, std::wstring commandLine, const TerminalSize size,
                                      const std::wstring_view workingDirectory)
 {
-    if (commandLine.empty() || !size.valid())
+    if (applicationName.empty() || commandLine.empty() || !size.valid())
     {
         return invalidArgument();
     }
@@ -233,9 +233,9 @@ std::error_code ConPtyProcess::start(std::wstring commandLine, const TerminalSiz
     const wchar_t *workingDirectoryPointer =
         workingDirectoryStorage.empty() ? nullptr : workingDirectoryStorage.c_str();
 
-    const BOOL processCreated =
-        CreateProcessW(nullptr, mutableCommand.data(), nullptr, nullptr, FALSE, EXTENDED_STARTUPINFO_PRESENT, nullptr,
-                       workingDirectoryPointer, &startupInfo.StartupInfo, &processInformation);
+    const BOOL processCreated = CreateProcessW(applicationName.c_str(), mutableCommand.data(), nullptr, nullptr, FALSE,
+                                               EXTENDED_STARTUPINFO_PRESENT, nullptr, workingDirectoryPointer,
+                                               &startupInfo.StartupInfo, &processInformation);
     const std::error_code processError = processCreated == FALSE ? lastSystemError() : std::error_code{};
     deleteAttributeList();
 

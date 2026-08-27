@@ -59,6 +59,12 @@ and after creation; first-open and reopen latency; stream duration; GUI heartbea
 frame count as diagnostic evidence rather than a score: more frames can mean smoother progressive presentation, but can
 also mean more render work.
 
+For a focused terminal-tab lifecycle trace, enable `ZTERMY_TAB_TIMING=1` before launching a Debug, RelWithDebInfo, or
+static Release executable. The `ztermy.application.controller` log then splits local/SSH open and close into session
+construction, workspace persistence, tab-list publication, active-context publication, process/session start, session
+stop, and UI unpublication. The trace contains stage names and elapsed milliseconds only. Compare like-for-like build
+types; Debug runtime checks intentionally make QML publication and ConPTY lifecycle timings much larger than Release.
+
 For focused diagnostics only, set `ZTERMY_UI_BENCHMARK_PAGE` to another workbench page, set
 `ZTERMY_UI_BENCHMARK_CHUNKS` to `0` through `2000`, or set `ZTERMY_UI_BENCHMARK_CAPTURE=0` to omit the screenshot. Do not
 mix different values in a before/after comparison.

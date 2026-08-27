@@ -614,6 +614,30 @@ struct ResizeHitRuntimeCase
     auto *quickConnectTarget = rootObject->findChild<QObject *>(QStringLiteral("quickConnectTarget"));
     auto *quickConnectAction = rootObject->findChild<QObject *>(QStringLiteral("quickConnectAction"));
     auto *newHostAction = rootObject->findChild<QObject *>(QStringLiteral("hostNew"));
+    auto *workspaceNavigation = rootObject->findChild<QObject *>(QStringLiteral("workspaceNavigation"));
+    auto *workspaceNavigationToggle = rootObject->findChild<QObject *>(QStringLiteral("workspaceNavigationToggle"));
+    auto *workspaceNavigationResizeHandle =
+        rootObject->findChild<QObject *>(QStringLiteral("workspaceNavigationResizeHandle"));
+    rootObject->setProperty("workspaceNavigationWidth", 210.0);
+    processWindowEventsFor(std::chrono::milliseconds{250});
+    const qreal expandedNavigationWidth =
+        workspaceNavigation == nullptr ? 0.0 : workspaceNavigation->property("width").toReal();
+    rootObject->setProperty("workspaceNavigationWidth", 56.0);
+    processWindowEventsFor(std::chrono::milliseconds{250});
+    const qreal collapsedNavigationWidth =
+        workspaceNavigation == nullptr ? 0.0 : workspaceNavigation->property("width").toReal();
+    rootObject->setProperty("workspaceNavigationWidth", 120.0);
+    processWindowEventsFor(std::chrono::milliseconds{100});
+    const bool belowThresholdCompact = rootObject->property("workspaceNavigationCompact").toBool();
+    rootObject->setProperty("workspaceNavigationWidth", 132.0);
+    processWindowEventsFor(std::chrono::milliseconds{100});
+    const bool thresholdExpanded = !rootObject->property("workspaceNavigationCompact").toBool();
+    rootObject->setProperty("workspaceNavigationWidth", compact ? 56.0 : 210.0);
+    processWindowEventsFor(std::chrono::milliseconds{250});
+    const bool workspaceNavigationMatches =
+        workspaceNavigation != nullptr && workspaceNavigationToggle != nullptr
+        && workspaceNavigationResizeHandle != nullptr && qAbs(expandedNavigationWidth - 210.0) < 0.5
+        && qAbs(collapsedNavigationWidth - 56.0) < 0.5 && belowThresholdCompact && thresholdExpanded;
     const QString breakpointName = compact ? QStringLiteral("compact") : QStringLiteral("regular");
     const QString capturePrefix = themeName + QStringLiteral("-") + breakpointName;
     const bool hostCaptured = captureLayout(window, outputDirectory, capturePrefix + QStringLiteral("-hosts"));
@@ -628,7 +652,7 @@ struct ResizeHitRuntimeCase
         && hostContentWidth <= hostPaneWidth && hostCommandRow->property("width").toReal() > 0.0
         && hostCommandRow->property("width").toReal() <= hostContentWidth
         && quickConnectTarget->property("width").toReal() > 0.0 && quickConnectAction->property("width").toReal() > 0.0
-        && newHostAction->property("width").toReal() > 0.0;
+        && newHostAction->property("width").toReal() > 0.0 && workspaceNavigationMatches;
 
     rootObject->setProperty("currentPage", QStringLiteral("settings"));
     processWindowEventsFor(std::chrono::milliseconds{100});
@@ -858,12 +882,18 @@ struct ResizeHitRuntimeCase
     auto *aiProviderSetupCard = quickItem(rootObject, "aiProviderSetupCard");
     auto *aiProviderSetupButton = quickItem(rootObject, "aiProviderSetupButton");
     auto *aiComposerPanel = quickItem(rootObject, "aiComposerPanel");
+    const QVariantList aiSlashCommands =
+        aiAssistantPane == nullptr ? QVariantList{} : aiAssistantPane->property("slashCommands").toList();
+    const bool compactSlashCommandAvailable = std::ranges::any_of(aiSlashCommands, [](const QVariant &command) {
+        return command.toMap().value(QStringLiteral("command")).toString() == QStringLiteral("/compact");
+    });
     QAccessibleInterface *aiProviderSetupInterface =
         aiProviderSetupCard == nullptr ? nullptr : QAccessible::queryAccessibleInterface(aiProviderSetupCard);
     const bool aiProviderSetupRegular =
         aiProviderSetupCard != nullptr && aiProviderSetupCard->isVisible() && aiPromptEditor != nullptr
         && !aiPromptEditor->isEnabled() && aiComposerPanel != nullptr && !aiComposerPanel->isVisible()
-        && aiProviderSetupInterface != nullptr && aiProviderSetupInterface->role() == QAccessible::Pane
+        && compactSlashCommandAvailable && aiProviderSetupInterface != nullptr
+        && aiProviderSetupInterface->role() == QAccessible::Pane
         && aiProviderSetupInterface->text(QAccessible::Name) == QStringLiteral("Set up the terminal assistant")
         && verifyAccessibleButton(rootObject, "aiProviderSetupButton", "Open AI provider settings")
         && captureLayout(window, outputDirectory, QStringLiteral("dark-regular-ai-provider-setup"));
@@ -1988,7 +2018,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     }
 
     constexpr std::array accessibleButtons{
-        std::pair{"hostsTitleAction", "Hosts"},
+        std::pair{"hostsTitleAction", "Workspace"},
         std::pair{"titleNewTabAction", "Open new terminal menu"},
         std::pair{"alwaysOnTopMenuAction", "Open pin options"},
         std::pair{"minimizeCaptionButton", "Minimize"},
@@ -2006,6 +2036,11 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
         {
             return false;
         }
+    }
+    if (window.title() != QStringLiteral("Workspace — ztermy"))
+    {
+        qCWarning(applicationLog) << "Workspace did not update the native window title" << window.title();
+        return false;
     }
     if (!verifyKeyboardActionFocusVisibility(rootObject))
     {
@@ -2094,6 +2129,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
         return false;
     }
     sendKey(window, Qt::Key_Space);
+    processWindowEventsFor(std::chrono::milliseconds{100});
     if (rootObject->property("currentPage").toString() != QStringLiteral("settings")
         || !rootObject->property("settingsTabOpen").toBool()
         || !verifyAccessibleButton(rootObject, "settingsTitleAction", "Activate Settings")
@@ -2106,6 +2142,11 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
         || !verifyAccessibleButton(rootObject, "settingsAboutCategory", "About settings"))
     {
         qCWarning(applicationLog) << "Space did not open the singleton Settings work tab";
+        return false;
+    }
+    if (window.title() != QStringLiteral("Settings — ztermy"))
+    {
+        qCWarning(applicationLog) << "Settings did not update the native window title" << window.title();
         return false;
     }
 
@@ -2609,6 +2650,14 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
                                   << "finalTabs=" << controller.terminalTabs().size()
                                   << "page=" << rootObject->property("currentPage").toString()
                                   << "focus=" << namedFocusItem(window);
+        return false;
+    }
+    const QString activeTerminalTitle =
+        controller.terminalTabs().constLast().toMap().value(QStringLiteral("title")).toString();
+    if (window.title() != QStringLiteral("%1 — ztermy").arg(activeTerminalTitle))
+    {
+        qCWarning(applicationLog) << "Terminal tab did not update the native window title"
+                                  << "expectedContext=" << activeTerminalTitle << "actual=" << window.title();
         return false;
     }
     if (!verifyTerminalSelectionActionStrip(window, rootObject))

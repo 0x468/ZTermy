@@ -266,6 +266,9 @@ becomes conversation retention.
   copy, local table/code overflow, and narrow-panel responsive layout;
 - provide a keyboard-first built-in slash-command picker for conversation,
   history, context attachment, explanation, and command-generation actions;
+- provide an explicit `/compact` action that locally checkpoints older turns,
+  preserves the recent conversation verbatim, and leaves the visible transcript
+  intact (ADR 0112);
 - preserve explicit selection/recent-command evidence across follow-up turns,
   keep bounded source summaries visibly bound to the originating user message
   across encrypted-history restore, and use a clearly labelled approximate

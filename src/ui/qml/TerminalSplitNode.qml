@@ -125,6 +125,10 @@ Item {
             property bool connectionProgressWasReconnect: false
             property int connectionProgressLastStep: 0
             property string connectionProgressLastStatus: ""
+            property real connectionProgressValue: 0.0
+            property real connectionProgressOpacity: 1.0
+            property bool connectionProgressPresented: false
+            property bool connectionProgressFinishPending: false
 
             onConnectionProgressRequestedChanged: {
                 if (connectionProgressRequested)
@@ -138,9 +142,20 @@ Item {
             }
 
             function beginConnectionProgress() {
+                connectionProgressHideTimer.stop();
                 connectionProgressWasReconnect = !!tab.reconnecting;
                 connectionProgressLastStep = Math.max(0, Number(tab.connectionStageIndex || 0));
                 connectionProgressLastStatus = tab.status || "";
+                connectionProgressOpacity = 1.0;
+                if (!connectionProgressVisible) {
+                    connectionProgressPresented = false;
+                    connectionProgressFinishPending = false;
+                    connectionProgressValue = 0.0;
+                    connectionProgressVisible = true;
+                    connectionProgressEntryTimer.restart();
+                    return;
+                }
+                connectionProgressValue = progressForStep(connectionProgressLastStep);
                 connectionProgressVisible = true;
             }
 
@@ -149,7 +164,69 @@ Item {
                     return;
                 connectionProgressLastStep = tab.connectionPhase === "connected" ? 2 : connectionProgressLastStep;
                 connectionProgressLastStatus = tab.status || connectionProgressLastStatus;
-                connectionProgressVisible = false;
+                if (!connectionProgressPresented && Theme.animationsEnabled) {
+                    connectionProgressFinishPending = true;
+                    return;
+                }
+                completeConnectionProgress();
+            }
+
+            function completeConnectionProgress() {
+                connectionProgressFinishPending = false;
+                if (tab.connectionPhase === "connected" && Theme.animationsEnabled) {
+                    connectionProgressValue = 1.0;
+                    connectionProgressOpacity = 0.0;
+                    connectionProgressHideTimer.restart();
+                } else {
+                    connectionProgressVisible = false;
+                }
+            }
+
+            function progressForStep(step) {
+                if (step <= 0)
+                    return 0.18;
+                if (step === 1)
+                    return 0.62;
+                return 0.84;
+            }
+
+            Timer {
+                id: connectionProgressEntryTimer
+
+                interval: 16
+                repeat: false
+                onTriggered: {
+                    leaf.connectionProgressValue = leaf.progressForStep(leaf.connectionProgressLastStep);
+                    connectionProgressPresentationTimer.restart();
+                }
+            }
+
+            Timer {
+                id: connectionProgressPresentationTimer
+
+                // Let Qt Quick submit at least one fully opaque frame before a
+                // fast SSH connection starts the exit animation. This does not
+                // delay the connection or terminal input path.
+                interval: 32
+                repeat: false
+                onTriggered: {
+                    leaf.connectionProgressPresented = true;
+                    if (leaf.connectionProgressFinishPending)
+                        leaf.completeConnectionProgress();
+                }
+            }
+
+            Timer {
+                id: connectionProgressHideTimer
+
+                interval: 160
+                repeat: false
+                onTriggered: {
+                    leaf.connectionProgressVisible = false;
+                    leaf.connectionProgressOpacity = 1.0;
+                    leaf.connectionProgressPresented = false;
+                    leaf.connectionProgressFinishPending = false;
+                }
             }
 
             function focusActivePane() {
@@ -708,6 +785,7 @@ Item {
                 anchors.centerIn: parent
                 width: Math.max(180, Math.min(440, parent.width - 24))
                 visible: leaf.connectionProgressVisible && !leaf.connectionProgressWasReconnect
+                opacity: leaf.connectionProgressOpacity
                 z: 9
                 kind: "loading"
                 heading: qsTr("Connecting to SSH host")
@@ -715,6 +793,14 @@ Item {
                 detail: leaf.tab.connectionInteractionRequired ? qsTr("Waiting for host key confirmation.") : qsTr("Connection setup runs outside the interface thread. You can close this pane to cancel.")
                 steps: [qsTr("Establish connection"), qsTr("Authenticate"), qsTr("Open terminal")]
                 activeStep: leaf.connectionProgressRequested ? leaf.tab.connectionStageIndex : leaf.connectionProgressLastStep
+                progress: leaf.connectionProgressValue
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 150
+                        easing.type: Easing.OutCubic
+                    }
+                }
 
                 ActionButton {
                     text: qsTr("Cancel connection")
@@ -728,6 +814,7 @@ Item {
                 anchors.centerIn: parent
                 width: Math.max(180, Math.min(440, parent.width - 24))
                 visible: leaf.connectionProgressVisible && leaf.connectionProgressWasReconnect
+                opacity: leaf.connectionProgressOpacity
                 z: 9
                 kind: "loading"
                 heading: qsTr("Reconnecting to SSH host")
@@ -735,6 +822,14 @@ Item {
                 detail: leaf.tab.connectionInteractionRequired ? qsTr("Waiting for host key confirmation.") : qsTr("Automatic retries use bounded exponential backoff and never retain credentials in the terminal pane.")
                 steps: [qsTr("Establish connection"), qsTr("Authenticate"), qsTr("Open terminal")]
                 activeStep: leaf.connectionProgressRequested ? leaf.tab.connectionStageIndex : leaf.connectionProgressLastStep
+                progress: leaf.connectionProgressValue
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 150
+                        easing.type: Easing.OutCubic
+                    }
+                }
 
                 ActionButton {
                     text: qsTr("Cancel reconnect")

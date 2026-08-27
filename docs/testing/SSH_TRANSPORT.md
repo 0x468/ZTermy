@@ -52,6 +52,31 @@ ctest --test-dir build/msvc-dynamic-debug -R "windows-tcp-socket|ssh-handshake|s
 The full Debug and static Release test suites must also pass before changes are
 committed.
 
+## Connection phase timing
+
+Debug builds record privacy-safe connection timing through the
+`ztermy.ssh.tcp` and `ztermy.ssh.session` logging categories. The records
+contain only phase names, elapsed milliseconds, outcomes, address-candidate
+counts, and native error codes. They never include hosts, ports, usernames,
+profile names, credentials, key paths, or terminal data.
+
+Release builds keep debug categories disabled. To collect the same timing as
+`INFO` while reproducing a Release-only connection delay, opt in before
+starting ztermy:
+
+```powershell
+$env:ZTERMY_SSH_TIMING = "1"
+.\build\msvc-static-release\ztermy.exe
+Remove-Item Env:ZTERMY_SSH_TIMING
+```
+
+The TCP record separates address resolution from socket connection. Session
+records report time spent in the preceding phase, so the entry for
+`handshaking` measures DNS plus TCP connection, `verifying-host-key` measures
+the SSH handshake, `authenticating` measures host-key verification, and
+`opening-channel` measures authentication. The `connected` entry measures
+terminal-channel creation and configured startup commands.
+
 ## Real-host pre-authentication gate
 
 `ssh-real-host` is skipped unless `ZTERMY_TEST_SSH_HOST` is set. When enabled,

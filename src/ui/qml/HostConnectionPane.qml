@@ -35,6 +35,7 @@ Rectangle {
     property bool statusIsError: false
     property bool editorExpanded: false
     property bool advancedExpanded: false
+    property bool showPortForwarding: true
     readonly property bool compactLayout: width < Theme.narrowWindowWidth
     readonly property int contentInset: compactLayout ? 8 : 12
     readonly property int profileCardColumns: scrollView.availableWidth < 540 ? 1 : (scrollView.availableWidth < 840 ? 2 : (scrollView.availableWidth < 1140 ? 3 : 4))
@@ -1181,6 +1182,7 @@ Rectangle {
                 id: forwardingPane
 
                 Layout.fillWidth: true
+                visible: pane.showPortForwarding
                 controller: pane.controller
                 overlayParent: pane
                 compactLayout: pane.compactLayout

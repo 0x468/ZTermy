@@ -55,6 +55,11 @@ Rectangle {
             "description": qsTr("Inspect context attached to the next request")
         },
         {
+            "command": "/compact",
+            "title": qsTr("Compact conversation"),
+            "description": qsTr("Condense older turns and keep recent messages verbatim")
+        },
+        {
             "command": "/explain",
             "title": qsTr("Explain last failure"),
             "description": qsTr("Explain the most recent failed command")
@@ -557,6 +562,10 @@ Rectangle {
             pane.activityExpanded = false;
             pane.contextExpanded = !pane.contextExpanded;
             return true;
+        case "/compact":
+            pane.historyExpanded = false;
+            pane.activityExpanded = false;
+            return pane.controller.compactAiConversation();
         case "/explain":
             return pane.controller.explainAiLastFailure();
         case "/selection":
@@ -1648,12 +1657,11 @@ Rectangle {
 
                 WheelHandler {
                     target: null
-                    blocking: false
+                    blocking: true
                     onWheel: event => {
                         const delta = event.pixelDelta.y !== 0 ? event.pixelDelta.y : event.angleDelta.y;
-                        if (delta > 0)
-                            conversationList.stickToBottom = false;
-                        event.accepted = false;
+                        conversationList.scrollByWheel(delta);
+                        event.accepted = true;
                     }
                 }
 
@@ -2625,6 +2633,15 @@ Rectangle {
             Accessible.role: Accessible.StaticText
             Accessible.name: compactionTitle.text + ". " + compactionDetail.text
 
+            Timer {
+                id: compactionNoticeTimer
+
+                interval: 7000
+                repeat: false
+                running: compactionNotice.visible && pane.contextCompaction.overBudget !== true
+                onTriggered: pane.controller.dismissAiCompactionNotice()
+            }
+
             RowLayout {
                 id: compactionContent
 
@@ -2651,7 +2668,7 @@ Rectangle {
                         id: compactionTitle
 
                         Layout.fillWidth: true
-                        text: pane.contextCompaction.overBudget === true ? qsTr("Context limit reached") : qsTr("Context optimized")
+                        text: pane.contextCompaction.overBudget === true ? qsTr("Context limit reached") : pane.contextCompaction.manual === true ? qsTr("Conversation compacted") : qsTr("Context optimized")
                         color: Theme.text
                         elide: Text.ElideRight
                         font.family: Theme.uiFont
@@ -2663,11 +2680,39 @@ Rectangle {
                         id: compactionDetail
 
                         Layout.fillWidth: true
-                        text: pane.contextCompaction.overBudget === true ? qsTr("The provider may require a shorter conversation.") : qsTr("%n older context item(s) shortened", "", Number(pane.contextCompaction.itemCount || 0))
+                        text: pane.contextCompaction.overBudget === true ? qsTr("The provider may require a shorter conversation.") : pane.contextCompaction.manual === true ? qsTr("%n older conversation item(s) condensed", "", Number(pane.contextCompaction.itemCount || 0)) : qsTr("%n older context item(s) shortened", "", Number(pane.contextCompaction.itemCount || 0))
                         color: Theme.textMuted
                         elide: Text.ElideRight
                         font.family: Theme.uiFont
                         font.pixelSize: Theme.textCompact
+                    }
+                }
+
+                Button {
+                    id: dismissCompactionNoticeButton
+
+                    objectName: "dismissAiCompactionNotice"
+                    Layout.preferredWidth: 24
+                    Layout.preferredHeight: 24
+                    hoverEnabled: true
+                    focusPolicy: Qt.TabFocus
+                    Accessible.name: qsTr("Dismiss context notice")
+                    onClicked: pane.controller.dismissAiCompactionNotice()
+
+                    contentItem: AppIcon {
+                        name: "close"
+                        color: Theme.textMuted
+                    }
+
+                    background: Rectangle {
+                        radius: Theme.radiusSmall
+                        color: dismissCompactionNoticeButton.down ? Theme.controlPressed : dismissCompactionNoticeButton.hovered ? Theme.controlHover : "transparent"
+                        border.color: dismissCompactionNoticeButton.visualFocus ? Theme.focus : "transparent"
+                        border.width: dismissCompactionNoticeButton.visualFocus ? 1 : 0
+                    }
+
+                    AppToolTip {
+                        text: dismissCompactionNoticeButton.Accessible.name
                     }
                 }
             }

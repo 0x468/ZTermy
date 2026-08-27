@@ -208,6 +208,7 @@ private slots:
     void restoresCompleteAgentPresentationFromHistory();
     void exposesProviderFailureRecoveryActions();
     void retriesProviderResponseWithoutRepeatingCompletedTool();
+    void compactsConversationContextWithoutDeletingTranscript();
     void managesMultipleLocalTerminalTabs();
     void tracksTemporaryTerminalWorkspacePins();
     void routesTerminalSelectionActionsToOwningTab();
@@ -954,6 +955,8 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(!controller.showAllTerminalFonts());
     QVERIFY(controller.terminalLigatures());
     QCOMPARE(controller.terminalBackgroundOpacity(), 1.0);
+    QCOMPARE(controller.localShellPreference(), QStringLiteral("automatic"));
+    QVERIFY(controller.availableLocalShells().size() >= 4);
     QCOMPARE(controller.languagePreference(), QStringLiteral("system"));
     QCOMPARE(controller.aiProviderPreference(), QStringLiteral("openai-responses"));
     QVERIFY(controller.aiWebSearchAvailable());
@@ -1034,6 +1037,8 @@ void AppControllerTests::persistsApplicationSettings()
     QCOMPARE(controller.aiProxyUsername(), QStringLiteral("proxy-user"));
     QVERIFY(!controller.aiProxyPasswordConfigured());
     QVERIFY(!controller.saveAiProxySettings(QStringLiteral("invalid"), {}, {}, {}));
+    QVERIFY(controller.saveLocalShellPreference(QStringLiteral("gitBash")));
+    QVERIFY(!controller.saveLocalShellPreference(QStringLiteral("unknown")));
     settingsChanged.clear();
 
     QVERIFY(controller.saveApplicationSettings(
@@ -1105,6 +1110,7 @@ void AppControllerTests::persistsApplicationSettings()
     QCOMPARE(reloaded.terminalMiddleClickBehavior(), QStringLiteral("paste"));
     QCOMPARE(reloaded.terminalWordDelimiters(), QStringLiteral(" |,"));
     QCOMPARE(reloaded.terminalScrollRows(), 7);
+    QCOMPARE(reloaded.localShellPreference(), QStringLiteral("gitBash"));
     QVERIFY(reloaded.sftpShowHiddenFiles());
     QVERIFY(!reloaded.sftpConfirmDelete());
     QVERIFY(reloaded.closeToTray());
@@ -1129,6 +1135,7 @@ void AppControllerTests::persistsApplicationSettings()
     QCOMPARE(reloaded.terminalFontFamily(), QStringLiteral("Cascadia Mono"));
     QCOMPARE(reloaded.terminalBackgroundOpacity(), 1.0);
     QVERIFY(!reloaded.keepSelectionAfterCopy());
+    QCOMPARE(reloaded.localShellPreference(), QStringLiteral("automatic"));
     QCOMPARE(reloaded.languagePreference(), QStringLiteral("system"));
     QVERIFY(!reloaded.closeToTray());
     QVERIFY(reloaded.aiWebSearchAvailable());
@@ -1740,6 +1747,52 @@ void AppControllerTests::retriesProviderResponseWithoutRepeatingCompletedTool()
              QStringLiteral("failed"));
     QCOMPARE(conversation->data(conversation->index(2), ztermy::ai::AiConversationModel::TextRole).toString(),
              QStringLiteral("continued without rerunning"));
+}
+
+void AppControllerTests::compactsConversationContextWithoutDeletingTranscript()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const auto sessionState = std::make_shared<FakeLocalSessionState>();
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
+                                     directory.filePath(QStringLiteral("known_hosts.json")),
+                                     directory.filePath(QStringLiteral("settings.json")), [sessionState] {
+                                         return std::make_unique<FakeLocalTerminalSession>(sessionState);
+                                     });
+    QVERIFY(!controller.startLocalTerminal().isEmpty());
+    auto *conversation = qobject_cast<ztermy::ai::AiConversationModel *>(controller.activeAiConversation());
+    QVERIFY(conversation != nullptr);
+
+    const QString verbosePayload(2'000, QLatin1Char('x'));
+    for (int index = 0; index < 6; ++index)
+    {
+        QVERIFY(conversation->appendUserMessage(QStringLiteral("request-%1 ").arg(index) + verbosePayload) != 0);
+        const auto assistantId = conversation->beginAssistantMessage();
+        QVERIFY(assistantId != 0);
+        QVERIFY(conversation->appendAssistantDelta(assistantId,
+                                                   QStringLiteral("response-%1 ").arg(index) + verbosePayload));
+        QVERIFY(conversation->completeAssistantMessage(assistantId));
+    }
+    QCOMPARE(conversation->rowCount(), 12);
+
+    QVERIFY(controller.compactAiConversation());
+    QCOMPARE(conversation->rowCount(), 12);
+    const QVariantMap compaction = controller.activeAiCompaction();
+    QVERIFY(compaction.value(QStringLiteral("visible")).toBool());
+    QVERIFY(compaction.value(QStringLiteral("compacted")).toBool());
+    QVERIFY(compaction.value(QStringLiteral("manual")).toBool());
+    QCOMPARE(compaction.value(QStringLiteral("itemCount")).toULongLong(), qulonglong{8});
+    QVERIFY(compaction.value(QStringLiteral("removedBytes")).toULongLong() > 0);
+    QVERIFY(compaction.value(QStringLiteral("estimatedInputTokens")).toULongLong() > 0);
+
+    controller.dismissAiCompactionNotice();
+    QCOMPARE(controller.activeAiCompaction(), QVariantMap{});
+
+    controller.clearAiConversation();
+    QCOMPARE(conversation->rowCount(), 0);
+    QCOMPARE(controller.activeAiCompaction(), QVariantMap{});
+    QVERIFY(!controller.compactAiConversation());
+    QVERIFY(!controller.activeAiError().isEmpty());
 }
 
 void AppControllerTests::managesMultipleLocalTerminalTabs()

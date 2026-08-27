@@ -472,6 +472,13 @@ void SshTerminalSessionTests::doesNotExposeCredentialsInStatusOrLogs()
         messages = capture.messages();
     }
 
+    QVERIFY(std::ranges::any_of(messages, [](const QString &message) {
+        return message.contains(QStringLiteral("SSH connection timing"));
+    }));
+    QVERIFY(std::ranges::any_of(messages, [](const QString &message) {
+        return message.contains(QStringLiteral("TCP connection timing"));
+    }));
+
     for (const QString &sentinelText : sentinelTexts)
     {
         for (const QList<QVariant> &arguments : statuses)
