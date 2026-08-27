@@ -55,7 +55,7 @@
   declaring work complete.
 - For persisted schemas, interface or branding assets, translations, QML
   controls, versioning, or release packaging, read and apply
-  `skills/ztermy-change-checks/SKILL.md`. Use its risk-proportionate checks
+  `.agents/skills/ztermy-change-checks/SKILL.md`. Use its risk-proportionate checks
   during iteration and reserve the full matrix for milestones.
 - UI and platform behavior require runtime evidence; unit tests alone are not
   sufficient for Snap Layouts, IME, DPI, transparency, or terminal latency.

@@ -26,12 +26,15 @@ every small edit.
 - Read `docs/adr/0101-monotonic-application-settings-schema.md`. Check the
   owning store for profile, workspace, script, note, transfer, or AI data
   instead of using the application version.
+- `SshProfileStore` is currently schema 7. Preserve schema-6 jump-host data
+  while defaulting the authentication and terminal-startup timeouts introduced
+  by schema 7.
 
 ### Interface and brand assets
 
 - Production interface SVGs use `viewBox="0 0 20 20"`, `currentColor`, and no
   hard-coded hex colors. Add them to the CMake resource list.
-- `cmake/VerifyInterfaceIcons.cmake` currently guards 57 SVGs. Update its exact
+- `cmake/VerifyInterfaceIcons.cmake` currently guards 59 SVGs. Update its exact
   count when adding or removing an icon and add contract-critical names to its
   required list.
 - Brand output keeps a nine-layer ICO plus PNG sizes 16, 20, 24, 32, 40, 48,
