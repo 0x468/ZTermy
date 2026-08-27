@@ -822,10 +822,54 @@ target_link_libraries(ztermy_icon_rendering
         Qt6::Svg
 )
 
-qt_add_executable(ztermy WIN32
-    src/main.cpp
+add_library(ztermy_application_controller STATIC
     src/application/AppController.cpp
     src/application/AppController.h
+)
+target_compile_features(ztermy_application_controller PUBLIC cxx_std_23)
+target_include_directories(ztermy_application_controller PUBLIC src)
+target_compile_definitions(ztermy_application_controller PRIVATE
+    NOMINMAX
+    UNICODE
+    WIN32_LEAN_AND_MEAN
+    _UNICODE
+)
+target_link_libraries(ztermy_application_controller
+    PRIVATE
+        ztermy_ai_application
+        ztermy_ai_context
+        ztermy_ai_permission_store
+        ztermy_ai_quick_message_store
+        ztermy_ai_user_skill_catalog
+        ztermy_application_actions
+        ztermy_application_diagnostics
+        ztermy_credential_vault
+        ztermy_core_config
+        ztermy_forwarding_persistence
+        ztermy_forwarding_session
+        ztermy_ssh_persistence
+        ztermy_ssh_session
+        ztermy_sftp_session
+        ztermy_session_logging
+        ztermy_terminal_session
+        ztermy_terminal_transport
+        ztermy_terminal_ui
+        ztermy_windows_clipboard
+        ztermy_workbench_persistence
+        Qt6::Core
+        Qt6::Gui
+)
+if(MSVC)
+    target_compile_options(ztermy_application_controller PRIVATE
+        /permissive-
+        /utf-8
+        /W4
+        /Zc:__cplusplus
+    )
+endif()
+
+qt_add_executable(ztermy WIN32
+    src/main.cpp
     src/application/FontCatalog.cpp
     src/application/FontCatalog.h
     src/application/LocalizationManager.cpp
@@ -1261,6 +1305,7 @@ if(ZTERMY_STATIC_BUILD)
 endif()
 
 target_link_libraries(ztermy PRIVATE
+    ztermy_application_controller
     ztermy_ai_application
     ztermy_ai_context
     ztermy_ai_permission_store
@@ -4020,8 +4065,6 @@ if(BUILD_TESTING)
 
     qt_add_executable(ztermy_app_controller_tests
         tests/app_controller_tests.cpp
-        src/application/AppController.cpp
-        src/application/AppController.h
     )
 
     target_compile_features(ztermy_app_controller_tests PRIVATE cxx_std_23)
@@ -4033,6 +4076,7 @@ if(BUILD_TESTING)
         _UNICODE
     )
     target_link_libraries(ztermy_app_controller_tests PRIVATE
+        ztermy_application_controller
         ztermy_ai_application
         ztermy_ai_context
         ztermy_ai_permission_store

@@ -53,6 +53,7 @@ Rectangle {
     property string lastPinPrimaryScope: ""
     property bool lastPinPreviousWindowState: false
     property bool lastPinPreviousTabState: false
+    property bool titleBarMetricsPending: false
     property real workspaceNavigationWidth: Theme.navigationWidth
     property real workspaceNavigationExpandedWidth: Theme.navigationWidth
     readonly property real workspaceNavigationMinimumWidth: 56
@@ -159,6 +160,16 @@ Rectangle {
 
     function reportTitleBarMetrics() {
         root.windowChrome.setTitleBarMetrics(titleBarHeight, titleNavigation.width + 8, width - (captionButtonWidth * 3) - titleQuickActionsWidth - titleSecurityActionWidth, width - (captionButtonWidth * 2), captionButtonWidth);
+    }
+
+    function scheduleTitleBarMetrics() {
+        if (titleBarMetricsPending)
+            return;
+        titleBarMetricsPending = true;
+        Qt.callLater(function () {
+            titleBarMetricsPending = false;
+            reportTitleBarMetrics();
+        });
     }
 
     function applyAlwaysOnTopPreference() {
@@ -629,7 +640,7 @@ Rectangle {
         Qt.callLater(root.presentStartupVaultPrompt);
     }
     onTerminalTelemetryVisibleChanged: controller.setTerminalTelemetryVisible(terminalTelemetryVisible)
-    onWidthChanged: reportTitleBarMetrics()
+    onWidthChanged: scheduleTitleBarMetrics()
     onCurrentPageChanged: {
         Qt.callLater(root.applyAlwaysOnTopPreference);
         pageReveal = Theme.animationsEnabled ? 0.0 : 1.0;
@@ -785,7 +796,7 @@ Rectangle {
             width: childrenRect.width
             height: parent.height
             spacing: 0
-            onWidthChanged: root.reportTitleBarMetrics()
+            onWidthChanged: root.scheduleTitleBarMetrics()
 
             Rectangle {
                 id: hostsTitleTab

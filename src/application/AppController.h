@@ -993,6 +993,7 @@ private:
     void recordPersistenceRecovery();
     void loadHostProfiles();
     void loadPortForwardingRules();
+    void initializeRuntime();
     void initializePortForwardingSignalBridges();
     [[nodiscard]] bool persistPortForwardingRules(const std::vector<forwarding::PortForwardingRule> &rules);
     void applyPortForwardingSnapshot(const std::string &ruleId, const forwarding::PortForwardingJobSnapshot &snapshot);
