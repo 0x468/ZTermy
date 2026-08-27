@@ -907,6 +907,8 @@ set(ZTERMY_INTERFACE_ICON_FILES
     resources/icons/pause.svg
     resources/icons/paste.svg
     resources/icons/pin.svg
+    resources/icons/pin-tab.svg
+    resources/icons/pin-window.svg
     resources/icons/plus.svg
     resources/icons/refresh.svg
     resources/icons/save.svg
@@ -1125,6 +1127,10 @@ set_source_files_properties(
     src/ui/qml/TransferToast.qml
     PROPERTIES QT_RESOURCE_ALIAS TransferToast.qml
 )
+set_source_files_properties(
+    src/ui/qml/ActionToast.qml
+    PROPERTIES QT_RESOURCE_ALIAS ActionToast.qml
+)
 
 qt_add_qml_module(ztermy
     URI Ztermy
@@ -1179,6 +1185,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/TerminalWorkbench.qml
         src/ui/qml/TransferCenter.qml
         src/ui/qml/TransferToast.qml
+        src/ui/qml/ActionToast.qml
         src/ui/qml/Theme.qml
 )
 

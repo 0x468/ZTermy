@@ -1316,6 +1316,8 @@ void removeLastUtf8CodePoint(QByteArray &value)
     return {
         {QStringLiteral("terminalType"), utf8QString(options.terminalType)},
         {QStringLiteral("connectionTimeoutSeconds"), options.connectionTimeoutSeconds},
+        {QStringLiteral("authenticationTimeoutSeconds"), options.authenticationTimeoutSeconds},
+        {QStringLiteral("terminalOpenTimeoutSeconds"), options.terminalOpenTimeoutSeconds},
         {QStringLiteral("keepaliveIntervalSeconds"), options.keepaliveIntervalSeconds},
         {QStringLiteral("keepaliveFailureThreshold"), options.keepaliveFailureThreshold},
         {QStringLiteral("startupCommand"), utf8QString(options.startupCommand)},
@@ -1393,6 +1395,8 @@ void removeLastUtf8CodePoint(QByteArray &value)
         }
     }
     if (!integerOverride(QStringLiteral("connectionTimeoutSeconds"), options.connectionTimeoutSeconds)
+        || !integerOverride(QStringLiteral("authenticationTimeoutSeconds"), options.authenticationTimeoutSeconds)
+        || !integerOverride(QStringLiteral("terminalOpenTimeoutSeconds"), options.terminalOpenTimeoutSeconds)
         || !integerOverride(QStringLiteral("keepaliveIntervalSeconds"), options.keepaliveIntervalSeconds)
         || !integerOverride(QStringLiteral("keepaliveFailureThreshold"), options.keepaliveFailureThreshold)
         || !integerOverride(QStringLiteral("startupLineDelayMilliseconds"), options.startupLineDelayMilliseconds)
@@ -5137,6 +5141,19 @@ bool AppController::highlightTerminalSelection()
            && requestTerminalSelectionAction(*tab, TerminalSelectionAction::Highlight);
 }
 
+bool AppController::unhighlightTerminalSelection()
+{
+    TerminalTab *tab = activeTab();
+    return tab != nullptr && tab->kind == TerminalTabKind::Ssh
+           && requestTerminalSelectionAction(*tab, TerminalSelectionAction::Unhighlight);
+}
+
+bool AppController::undoTerminalKeywordHighlight(const QString &tabId, const QString &ruleId)
+{
+    TerminalTab *tab = findTab(tabId);
+    return tab != nullptr && deleteKeywordHighlightRule(*tab, ruleId);
+}
+
 void AppController::clearTerminalSearch()
 {
     TerminalTab *tab = activeTab();
@@ -5451,25 +5468,32 @@ bool AppController::saveActiveKeywordHighlightRule(const QString &id, const QStr
 bool AppController::deleteActiveKeywordHighlightRule(const QString &id)
 {
     TerminalTab *tab = activeTab();
-    if (tab == nullptr || tab->kind != TerminalTabKind::Ssh)
+    return tab != nullptr && deleteKeywordHighlightRule(*tab, id);
+}
+
+bool AppController::deleteKeywordHighlightRule(TerminalTab &tab, const QString &id)
+{
+    if (tab.kind != TerminalTabKind::Ssh)
     {
         return false;
     }
     const std::string normalizedId = utf8String(id.trimmed());
-    const auto existing =
-        std::ranges::find(tab->keywordHighlightRules, normalizedId, &ssh::SshKeywordHighlightRule::id);
-    if (existing == tab->keywordHighlightRules.end())
+    const auto existing = std::ranges::find(tab.keywordHighlightRules, normalizedId, &ssh::SshKeywordHighlightRule::id);
+    if (existing == tab.keywordHighlightRules.end())
     {
         return false;
     }
-    const std::vector<ssh::SshKeywordHighlightRule> previous = tab->keywordHighlightRules;
-    tab->keywordHighlightRules.erase(existing);
-    if (!persistKeywordRules(*tab))
+    const std::vector<ssh::SshKeywordHighlightRule> previous = tab.keywordHighlightRules;
+    tab.keywordHighlightRules.erase(existing);
+    if (!persistKeywordRules(tab))
     {
-        tab->keywordHighlightRules = previous;
+        tab.keywordHighlightRules = previous;
         return false;
     }
-    showActiveTab();
+    if (ui::TerminalItem *terminal = m_terminalViewports.value(tab.paneId))
+    {
+        terminal->setKeywordHighlightRules(tab.keywordHighlightEnabled ? keywordRulesVariant(tab) : QVariantList{});
+    }
     emit terminalTabsChanged();
     return true;
 }
@@ -8495,6 +8519,7 @@ std::optional<ssh::SshConnectionRequest> AppController::connectionRequestForProf
             .proxy = jump->proxy,
             .proxySecret = std::move(jumpProxySecret),
             .connectionTimeoutSeconds = jump->sessionOptions.connectionTimeoutSeconds,
+            .authenticationTimeoutSeconds = jump->sessionOptions.authenticationTimeoutSeconds,
         });
     }
     return ssh::SshConnectionRequest{
@@ -11234,9 +11259,9 @@ void AppController::handleTerminalSelectedTextReady(const QString &tabId, const 
         }
         return;
     }
-    if (action != TerminalSelectionAction::Highlight || tab->kind != TerminalTabKind::Ssh
-        || selection.size() > ui::maximumKeywordPatternLength || selection.contains(QLatin1Char('\n'))
-        || selection.contains(QLatin1Char('\r')))
+    if ((action != TerminalSelectionAction::Highlight && action != TerminalSelectionAction::Unhighlight)
+        || tab->kind != TerminalTabKind::Ssh || selection.size() > ui::maximumKeywordPatternLength
+        || selection.contains(QLatin1Char('\n')) || selection.contains(QLatin1Char('\r')))
     {
         return;
     }
@@ -11244,6 +11269,14 @@ void AppController::handleTerminalSelectedTextReady(const QString &tabId, const 
     const auto matchingRule = std::ranges::find_if(tab->keywordHighlightRules, [&selection](const auto &rule) {
         return !rule.caseSensitive && QString::compare(utf8QString(rule.pattern), selection, Qt::CaseInsensitive) == 0;
     });
+    if (action == TerminalSelectionAction::Unhighlight)
+    {
+        if (matchingRule != tab->keywordHighlightRules.end())
+        {
+            (void)deleteKeywordHighlightRule(*tab, utf8QString(matchingRule->id));
+        }
+        return;
+    }
     if (matchingRule != tab->keywordHighlightRules.end())
     {
         const bool previousRuleEnabled = matchingRule->enabled;
@@ -11282,6 +11315,7 @@ void AppController::handleTerminalSelectedTextReady(const QString &tabId, const 
     }
     const std::vector<ssh::SshKeywordHighlightRule> previousRules = tab->keywordHighlightRules;
     const bool previousEnabled = tab->keywordHighlightEnabled;
+    const QString addedRuleId = utf8QString(rule.id);
     tab->keywordHighlightRules.push_back(std::move(rule));
     tab->keywordHighlightEnabled = true;
     if (!persistKeywordRules(*tab))
@@ -11295,6 +11329,7 @@ void AppController::handleTerminalSelectedTextReady(const QString &tabId, const 
         terminal->setKeywordHighlightRules(keywordRulesVariant(*tab));
     }
     emit terminalTabsChanged();
+    emit terminalKeywordHighlightAdded(tabId, addedRuleId, selection);
 }
 
 void AppController::recordAiActivity(const TerminalTab &tab, const ai::AiToolCall &call, const QString &state,

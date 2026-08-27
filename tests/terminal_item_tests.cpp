@@ -472,6 +472,7 @@ void TerminalItemTests::appliesRendererPreferences()
     QSignalSpy fontSpy(&item, &ztermy::ui::TerminalItem::fontChanged);
     QSignalSpy cursorSpy(&item, &ztermy::ui::TerminalItem::cursorAppearanceChanged);
     QSignalSpy backgroundSpy(&item, &ztermy::ui::TerminalItem::backgroundOpacityChanged);
+    QSignalSpy searchSpy(&item, &ztermy::ui::TerminalItem::searchHighlightChanged);
 
     item.setFontFamily(QStringLiteral("Cascadia Code"));
     item.setFontPixelSize(18);
@@ -479,6 +480,11 @@ void TerminalItemTests::appliesRendererPreferences()
     item.setCursorPreference(QStringLiteral("bar"));
     item.setCursorBlink(false);
     item.setBackgroundOpacity(0.45);
+    item.setSearchQuery(QStringLiteral("needle"));
+    item.setSearchCaseSensitive(true);
+    item.setSearchMatchBackground(QColor(QStringLiteral("#443322")));
+    item.setSearchCurrentBackground(QColor(QStringLiteral("#AA5500")));
+    item.setSearchCurrentForeground(QColor(QStringLiteral("#FFFFFF")));
 
     QCOMPARE(item.fontFamily(), QStringLiteral("Cascadia Code"));
     QCOMPARE(item.fontPixelSize(), 18);
@@ -486,9 +492,15 @@ void TerminalItemTests::appliesRendererPreferences()
     QCOMPARE(item.cursorPreference(), QStringLiteral("bar"));
     QVERIFY(!item.cursorBlink());
     QCOMPARE(item.backgroundOpacity(), 0.45);
+    QCOMPARE(item.searchQuery(), QStringLiteral("needle"));
+    QVERIFY(item.searchCaseSensitive());
+    QCOMPARE(item.searchMatchBackground(), QColor(QStringLiteral("#443322")));
+    QCOMPARE(item.searchCurrentBackground(), QColor(QStringLiteral("#AA5500")));
+    QCOMPARE(item.searchCurrentForeground(), QColor(QStringLiteral("#FFFFFF")));
     QCOMPARE(fontSpy.count(), 3);
     QCOMPARE(cursorSpy.count(), 2);
     QCOMPARE(backgroundSpy.count(), 1);
+    QCOMPARE(searchSpy.count(), 5);
 
     item.setFontPixelSize(99);
     item.setCursorPreference(QStringLiteral("invalid"));
@@ -979,6 +991,13 @@ void TerminalItemTests::reflectsSelectionStateFromSnapshots()
     auto cleared = snapshotAt(0, 0);
     item.setSnapshot(cleared);
     QVERIFY(!item.hasSelection());
+    QVERIFY(!item.selectionActionVisible());
+
+    auto searchSelection = snapshotAt(0, 0);
+    searchSelection->selectionPresent = true;
+    searchSelection->searchSelectionPresent = true;
+    item.setSnapshot(searchSelection);
+    QVERIFY(item.hasSelection());
     QVERIFY(!item.selectionActionVisible());
 }
 

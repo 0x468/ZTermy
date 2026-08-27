@@ -67,6 +67,15 @@ class TerminalItem : public QQuickItem
     Q_PROPERTY(QPointF hoveredLinkPosition READ hoveredLinkPosition NOTIFY hoveredLinkPositionChanged)
     Q_PROPERTY(bool quickSelectActive READ quickSelectActive NOTIFY quickSelectChanged)
     Q_PROPERTY(bool copyModeActive READ copyModeActive NOTIFY copyModeChanged)
+    Q_PROPERTY(QString searchQuery READ searchQuery WRITE setSearchQuery NOTIFY searchHighlightChanged)
+    Q_PROPERTY(
+        bool searchCaseSensitive READ searchCaseSensitive WRITE setSearchCaseSensitive NOTIFY searchHighlightChanged)
+    Q_PROPERTY(QColor searchMatchBackground READ searchMatchBackground WRITE setSearchMatchBackground NOTIFY
+                   searchHighlightChanged)
+    Q_PROPERTY(QColor searchCurrentBackground READ searchCurrentBackground WRITE setSearchCurrentBackground NOTIFY
+                   searchHighlightChanged)
+    Q_PROPERTY(QColor searchCurrentForeground READ searchCurrentForeground WRITE setSearchCurrentForeground NOTIFY
+                   searchHighlightChanged)
     Q_PROPERTY(QVariantList keywordHighlightRules READ keywordHighlightRules WRITE setKeywordHighlightRules NOTIFY
                    keywordHighlightRulesChanged)
     Q_PROPERTY(
@@ -102,6 +111,11 @@ public:
     [[nodiscard]] QPointF hoveredLinkPosition() const noexcept;
     [[nodiscard]] bool quickSelectActive() const noexcept;
     [[nodiscard]] bool copyModeActive() const noexcept;
+    [[nodiscard]] QString searchQuery() const;
+    [[nodiscard]] bool searchCaseSensitive() const noexcept;
+    [[nodiscard]] QColor searchMatchBackground() const;
+    [[nodiscard]] QColor searchCurrentBackground() const;
+    [[nodiscard]] QColor searchCurrentForeground() const;
     [[nodiscard]] QVariantList keywordHighlightRules() const;
     [[nodiscard]] QColor foregroundOverride() const;
     [[nodiscard]] QColor backgroundOverride() const;
@@ -127,6 +141,11 @@ public slots:
     void setMiddleClickBehavior(const QString &behavior);
     void setWordDelimiters(const QString &delimiters);
     void setScrollRowsPerWheel(int rows);
+    void setSearchQuery(const QString &query);
+    void setSearchCaseSensitive(bool enabled);
+    void setSearchMatchBackground(const QColor &color);
+    void setSearchCurrentBackground(const QColor &color);
+    void setSearchCurrentForeground(const QColor &color);
     void setKeywordHighlightRules(const QVariantList &rules);
     void setForegroundOverride(const QColor &color);
     void setBackgroundOverride(const QColor &color);
@@ -177,6 +196,7 @@ signals:
     void hasSelectionChanged();
     void scrollbarChanged();
     void selectionActionChanged();
+    void searchHighlightChanged();
     void keywordHighlightRulesChanged();
     void paletteOverrideChanged();
     void hoveredLinkChanged();
@@ -265,6 +285,7 @@ private:
     QPointF m_linkPressPosition;
     QString m_preeditText;
     QString m_quickSelectInput;
+    QString m_searchQuery;
     qsizetype m_preeditCursorPosition = 0;
     bool m_preeditCursorVisible = true;
     bool m_selecting = false;
@@ -283,10 +304,14 @@ private:
     bool m_copyOnSelect = false;
     bool m_keepSelectionAfterCopy = false;
     bool m_confirmMultilinePaste = true;
+    bool m_searchCaseSensitive = false;
     bool m_fullInvalidationPending = true;
     std::optional<bool> m_lastReportedFocus;
     QVariantList m_keywordHighlightRuleValues;
     std::vector<TerminalKeywordRule> m_keywordHighlightRules;
+    QColor m_searchMatchBackground = QColor(245, 158, 11, 82);
+    QColor m_searchCurrentBackground = QColor(245, 158, 11);
+    QColor m_searchCurrentForeground = QColor(15, 23, 42);
     QColor m_foregroundOverride;
     QColor m_backgroundOverride;
     TerminalRenderMetrics m_renderMetrics;

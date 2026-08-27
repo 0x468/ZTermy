@@ -62,6 +62,8 @@ struct SshSessionOptions final
 {
     std::string terminalType = "xterm-256color";
     std::uint16_t connectionTimeoutSeconds = 10;
+    std::uint16_t authenticationTimeoutSeconds = 30;
+    std::uint16_t terminalOpenTimeoutSeconds = 30;
     std::uint16_t keepaliveIntervalSeconds = 0;
     std::uint8_t keepaliveFailureThreshold = 3;
     std::string startupCommand;

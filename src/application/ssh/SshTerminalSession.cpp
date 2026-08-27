@@ -742,8 +742,9 @@ void SshTerminalSession::run(SshConnectionRequest &request, const terminal::Term
     advanceState(state, SshConnectionPhase::OpeningChannel);
     postPhase(state.phase());
     postStatus(tr("Opening SSH terminal"));
-    auto open = session->openTerminal(*transport, geometry.columns, geometry.rows, request.sessionOptions.terminalType,
-                                      terminalEnvironment, 10s, stopToken);
+    auto open = session->openTerminal(
+        *transport, geometry.columns, geometry.rows, request.sessionOptions.terminalType, terminalEnvironment,
+        std::chrono::seconds(request.sessionOptions.terminalOpenTimeoutSeconds), stopToken);
     if (!open)
     {
         const SshFailureKind failure = sshFailureFromTransport(open.error(), true);

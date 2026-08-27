@@ -1873,6 +1873,7 @@ std::expected<TerminalSnapshot, std::error_code> GhosttyTerminalEngine::snapshot
     if (activeSelectionResult == GHOSTTY_SUCCESS)
     {
         result.selectionPresent = true;
+        result.searchSelectionPresent = !m_impl->lastSearchQuery.empty();
     }
     else if (activeSelectionResult != GHOSTTY_NO_VALUE)
     {

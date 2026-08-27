@@ -22,7 +22,9 @@ constexpr qint64 credentialSchemaVersion = 2;
 constexpr qint64 keywordSchemaVersion = 3;
 constexpr qint64 sessionOptionsSchemaVersion = 4;
 constexpr qint64 proxySchemaVersion = 5;
-constexpr qint64 currentSchemaVersion = 6;
+constexpr qint64 jumpHostSchemaVersion = 6;
+constexpr qint64 stageTimeoutSchemaVersion = 7;
+constexpr qint64 currentSchemaVersion = stageTimeoutSchemaVersion;
 constexpr qsizetype maximumEnvironmentVariableCount = 32;
 
 [[nodiscard]] std::optional<ztermy::ssh::SshStartupCommandMode> parseStartupCommandMode(const QString &value)
@@ -145,7 +147,8 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
     return object;
 }
 
-[[nodiscard]] std::optional<ztermy::ssh::SshSessionOptions> parseSessionOptions(const QJsonValue &value)
+[[nodiscard]] std::optional<ztermy::ssh::SshSessionOptions> parseSessionOptions(const QJsonValue &value,
+                                                                                const qint64 version)
 {
     if (!value.isObject())
     {
@@ -154,6 +157,8 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
     const QJsonObject object = value.toObject();
     const QJsonValue terminalType = object.value(QStringLiteral("terminalType"));
     const QJsonValue connectionTimeout = object.value(QStringLiteral("connectionTimeoutSeconds"));
+    const QJsonValue authenticationTimeout = object.value(QStringLiteral("authenticationTimeoutSeconds"));
+    const QJsonValue terminalOpenTimeout = object.value(QStringLiteral("terminalOpenTimeoutSeconds"));
     const QJsonValue keepaliveInterval = object.value(QStringLiteral("keepaliveIntervalSeconds"));
     const QJsonValue keepaliveThreshold = object.value(QStringLiteral("keepaliveFailureThreshold"));
     const QJsonValue startupCommand = object.value(QStringLiteral("startupCommand"));
@@ -164,8 +169,10 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
     const QJsonValue reconnectAttempts = object.value(QStringLiteral("reconnectMaximumAttempts"));
     const QJsonValue reconnectBackoff = object.value(QStringLiteral("reconnectInitialBackoffMilliseconds"));
     if (!terminalType.isString() || (!connectionTimeout.isUndefined() && !connectionTimeout.isDouble())
-        || !keepaliveInterval.isDouble() || !keepaliveThreshold.isDouble() || !startupCommand.isString()
-        || !startupMode.isString() || !startupDelay.isDouble() || !environment.isArray() || !reconnectPolicy.isString()
+        || (version >= stageTimeoutSchemaVersion && !authenticationTimeout.isDouble())
+        || (version >= stageTimeoutSchemaVersion && !terminalOpenTimeout.isDouble()) || !keepaliveInterval.isDouble()
+        || !keepaliveThreshold.isDouble() || !startupCommand.isString() || !startupMode.isString()
+        || !startupDelay.isDouble() || !environment.isArray() || !reconnectPolicy.isString()
         || !reconnectAttempts.isDouble() || !reconnectBackoff.isDouble())
     {
         return std::nullopt;
@@ -173,20 +180,27 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
     const auto parsedStartupMode = parseStartupCommandMode(startupMode.toString());
     const auto parsedReconnectPolicy = parseReconnectPolicy(reconnectPolicy.toString());
     const qint64 timeout = connectionTimeout.isUndefined() ? 10 : connectionTimeout.toInteger(-1);
+    const qint64 authentication = version < stageTimeoutSchemaVersion ? 30 : authenticationTimeout.toInteger(-1);
+    const qint64 terminalOpen = version < stageTimeoutSchemaVersion ? 30 : terminalOpenTimeout.toInteger(-1);
     const qint64 interval = keepaliveInterval.toInteger(-1);
     const qint64 threshold = keepaliveThreshold.toInteger(-1);
     const qint64 delay = startupDelay.toInteger(-1);
     const qint64 attempts = reconnectAttempts.toInteger(-1);
     const qint64 backoff = reconnectBackoff.toInteger(-1);
-    if (!parsedStartupMode || !parsedReconnectPolicy || timeout < 0 || interval < 0 || threshold < 0 || delay < 0
-        || attempts < 0 || backoff < 0
+    if (!parsedStartupMode || !parsedReconnectPolicy || timeout < 0 || authentication < 0 || terminalOpen < 0
+        || interval < 0 || threshold < 0 || delay < 0 || attempts < 0 || backoff < 0
         || (!connectionTimeout.isUndefined() && static_cast<double>(timeout) != connectionTimeout.toDouble())
+        || (version >= stageTimeoutSchemaVersion
+            && static_cast<double>(authentication) != authenticationTimeout.toDouble())
+        || (version >= stageTimeoutSchemaVersion && static_cast<double>(terminalOpen) != terminalOpenTimeout.toDouble())
         || static_cast<double>(interval) != keepaliveInterval.toDouble()
         || static_cast<double>(threshold) != keepaliveThreshold.toDouble()
         || static_cast<double>(delay) != startupDelay.toDouble()
         || static_cast<double>(attempts) != reconnectAttempts.toDouble()
         || static_cast<double>(backoff) != reconnectBackoff.toDouble()
         || std::cmp_greater(timeout, std::numeric_limits<std::uint16_t>::max())
+        || std::cmp_greater(authentication, std::numeric_limits<std::uint16_t>::max())
+        || std::cmp_greater(terminalOpen, std::numeric_limits<std::uint16_t>::max())
         || std::cmp_greater(interval, std::numeric_limits<std::uint16_t>::max())
         || std::cmp_greater(threshold, std::numeric_limits<std::uint8_t>::max())
         || std::cmp_greater(delay, std::numeric_limits<std::uint16_t>::max())
@@ -222,6 +236,8 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
     ztermy::ssh::SshSessionOptions options{
         .terminalType = terminalType.toString().toStdString(),
         .connectionTimeoutSeconds = static_cast<std::uint16_t>(timeout),
+        .authenticationTimeoutSeconds = static_cast<std::uint16_t>(authentication),
+        .terminalOpenTimeoutSeconds = static_cast<std::uint16_t>(terminalOpen),
         .keepaliveIntervalSeconds = static_cast<std::uint16_t>(interval),
         .keepaliveFailureThreshold = static_cast<std::uint8_t>(threshold),
         .startupCommand = startupCommand.toString().toStdString(),
@@ -246,6 +262,8 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
     return {
         {QStringLiteral("terminalType"), QString::fromStdString(options.terminalType)},
         {QStringLiteral("connectionTimeoutSeconds"), options.connectionTimeoutSeconds},
+        {QStringLiteral("authenticationTimeoutSeconds"), options.authenticationTimeoutSeconds},
+        {QStringLiteral("terminalOpenTimeoutSeconds"), options.terminalOpenTimeoutSeconds},
         {QStringLiteral("keepaliveIntervalSeconds"), options.keepaliveIntervalSeconds},
         {QStringLiteral("keepaliveFailureThreshold"), options.keepaliveFailureThreshold},
         {QStringLiteral("startupCommand"), QString::fromStdString(options.startupCommand)},
@@ -353,7 +371,7 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
         || (version >= keywordSchemaVersion && !keywordRulesValue.isUndefined() && !keywordRulesValue.isArray())
         || (version >= sessionOptionsSchemaVersion && !sessionOptionsValue.isObject())
         || (version >= proxySchemaVersion && !proxyValue.isObject())
-        || (version >= currentSchemaVersion && !jumpProfileIdsValue.isArray()))
+        || (version >= jumpHostSchemaVersion && !jumpProfileIdsValue.isArray()))
     {
         return std::nullopt;
     }
@@ -402,7 +420,7 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
         }
     }
 
-    auto sessionOptions = version >= sessionOptionsSchemaVersion ? parseSessionOptions(sessionOptionsValue)
+    auto sessionOptions = version >= sessionOptionsSchemaVersion ? parseSessionOptions(sessionOptionsValue, version)
                                                                  : std::optional{ztermy::ssh::SshSessionOptions{}};
     if (!sessionOptions)
     {
@@ -415,7 +433,7 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
         return std::nullopt;
     }
     std::vector<std::string> jumpProfileIds;
-    if (version >= currentSchemaVersion)
+    if (version >= jumpHostSchemaVersion)
     {
         const QJsonArray values = jumpProfileIdsValue.toArray();
         if (std::cmp_greater(values.size(), ztermy::ssh::maximumSshJumpHostCount))
@@ -544,7 +562,7 @@ parseProfilesPayload(const QByteArrayView payload)
         || (versionValue.toInteger() != legacySchemaVersion && versionValue.toInteger() != credentialSchemaVersion
             && versionValue.toInteger() != keywordSchemaVersion
             && versionValue.toInteger() != sessionOptionsSchemaVersion && versionValue.toInteger() != proxySchemaVersion
-            && versionValue.toInteger() != currentSchemaVersion))
+            && versionValue.toInteger() != jumpHostSchemaVersion && versionValue.toInteger() != currentSchemaVersion))
     {
         return std::unexpected(versionValue.isDouble() ? ztermy::ssh::SshProfileStoreError::UnsupportedVersion
                                                        : ztermy::ssh::SshProfileStoreError::InvalidFormat);

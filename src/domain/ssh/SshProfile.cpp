@@ -92,7 +92,9 @@ bool validKeywordHighlightRule(const SshKeywordHighlightRule &rule) noexcept
 bool validSshSessionOptions(const SshSessionOptions &options) noexcept
 {
     if (!validTerminalType(options.terminalType) || options.connectionTimeoutSeconds == 0
-        || options.connectionTimeoutSeconds > 300 || options.keepaliveIntervalSeconds > 3600
+        || options.connectionTimeoutSeconds > 300 || options.authenticationTimeoutSeconds == 0
+        || options.authenticationTimeoutSeconds > 300 || options.terminalOpenTimeoutSeconds == 0
+        || options.terminalOpenTimeoutSeconds > 300 || options.keepaliveIntervalSeconds > 3600
         || options.keepaliveFailureThreshold == 0 || options.keepaliveFailureThreshold > 10
         || !validBoundedText(options.startupCommand, maximumStartupCommandLength)
         || std::cmp_greater(std::ranges::count_if(options.startupCommand,

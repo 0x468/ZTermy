@@ -183,6 +183,8 @@ Rectangle {
 
     function sessionOptionsMap() {
         const connectionTimeout = Number(connectionTimeoutField.text);
+        const authenticationTimeout = Number(authenticationTimeoutField.text);
+        const terminalOpenTimeout = Number(terminalOpenTimeoutField.text);
         const keepaliveInterval = Number(keepaliveIntervalField.text);
         const keepaliveThreshold = Number(keepaliveThresholdField.text);
         const startupDelay = Number(startupDelayField.text);
@@ -190,6 +192,14 @@ Rectangle {
         const reconnectBackoff = Number(reconnectBackoffField.text);
         if (!Number.isInteger(connectionTimeout) || connectionTimeout < 1 || connectionTimeout > 300) {
             showStatus(qsTr("Connection timeout must be between 1 and 300 seconds."), true);
+            return null;
+        }
+        if (!Number.isInteger(authenticationTimeout) || authenticationTimeout < 1 || authenticationTimeout > 300) {
+            showStatus(qsTr("Authentication timeout must be between 1 and 300 seconds."), true);
+            return null;
+        }
+        if (!Number.isInteger(terminalOpenTimeout) || terminalOpenTimeout < 1 || terminalOpenTimeout > 300) {
+            showStatus(qsTr("Terminal startup timeout must be between 1 and 300 seconds."), true);
             return null;
         }
         if (!Number.isInteger(keepaliveInterval) || keepaliveInterval < 0 || keepaliveInterval > 3600) {
@@ -233,6 +243,8 @@ Rectangle {
         return {
             terminalType: terminalTypeField.text.trim(),
             connectionTimeoutSeconds: connectionTimeout,
+            authenticationTimeoutSeconds: authenticationTimeout,
+            terminalOpenTimeoutSeconds: terminalOpenTimeout,
             keepaliveIntervalSeconds: keepaliveInterval,
             keepaliveFailureThreshold: keepaliveThreshold,
             startupCommand: startupCommandField.text,
@@ -385,6 +397,8 @@ Rectangle {
         jumpProfileIds = [];
         terminalTypeField.text = "xterm-256color";
         connectionTimeoutField.text = "10";
+        authenticationTimeoutField.text = "30";
+        terminalOpenTimeoutField.text = "30";
         keepaliveIntervalField.text = "0";
         keepaliveThresholdField.text = "3";
         startupCommandField.text = "";
@@ -483,6 +497,8 @@ Rectangle {
         const options = profile.sessionOptions || {};
         terminalTypeField.text = options.terminalType || "xterm-256color";
         connectionTimeoutField.text = String(options.connectionTimeoutSeconds === undefined ? 10 : options.connectionTimeoutSeconds);
+        authenticationTimeoutField.text = String(options.authenticationTimeoutSeconds === undefined ? 30 : options.authenticationTimeoutSeconds);
+        terminalOpenTimeoutField.text = String(options.terminalOpenTimeoutSeconds === undefined ? 30 : options.terminalOpenTimeoutSeconds);
         keepaliveIntervalField.text = String(options.keepaliveIntervalSeconds === undefined ? 0 : options.keepaliveIntervalSeconds);
         keepaliveThresholdField.text = String(options.keepaliveFailureThreshold === undefined ? 3 : options.keepaliveFailureThreshold);
         startupCommandField.text = options.startupCommand || "";
@@ -1850,6 +1866,50 @@ Rectangle {
                                                 selectByMouse: true
                                                 AppToolTip {
                                                     text: qsTr("Applies to TCP, proxy, jump-host, and SSH handshake setup. Authentication keeps its own timeout.")
+                                                }
+                                            }
+
+                                            Label {
+                                                text: qsTr("Authentication timeout")
+                                                color: pane.textColor
+                                            }
+                                            AppTextField {
+                                                id: authenticationTimeoutField
+                                                objectName: "hostAuthenticationTimeout"
+                                                Layout.fillWidth: true
+                                                text: "30"
+                                                placeholderText: qsTr("Seconds")
+                                                accessibleName: qsTr("SSH authentication timeout in seconds")
+                                                inputMethodHints: Qt.ImhDigitsOnly
+                                                validator: IntValidator {
+                                                    bottom: 1
+                                                    top: 300
+                                                }
+                                                selectByMouse: true
+                                                AppToolTip {
+                                                    text: qsTr("Applies only while the SSH server verifies the selected credential.")
+                                                }
+                                            }
+
+                                            Label {
+                                                text: qsTr("Terminal startup timeout")
+                                                color: pane.textColor
+                                            }
+                                            AppTextField {
+                                                id: terminalOpenTimeoutField
+                                                objectName: "hostTerminalOpenTimeout"
+                                                Layout.fillWidth: true
+                                                text: "30"
+                                                placeholderText: qsTr("Seconds")
+                                                accessibleName: qsTr("SSH terminal startup timeout in seconds")
+                                                inputMethodHints: Qt.ImhDigitsOnly
+                                                validator: IntValidator {
+                                                    bottom: 1
+                                                    top: 300
+                                                }
+                                                selectByMouse: true
+                                                AppToolTip {
+                                                    text: qsTr("Applies while opening the SSH channel, allocating a PTY, and requesting the remote shell.")
                                                 }
                                             }
 

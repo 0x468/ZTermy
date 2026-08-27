@@ -92,6 +92,7 @@ public:
     QImage image;
     ztermy::terminal::TerminalSnapshotPtr previousDiagnosticSnapshot;
     std::vector<ztermy::ui::TerminalKeywordCellStyle> keywordStyles;
+    std::vector<ztermy::ui::TerminalKeywordCellStyle> searchStyles;
     QSGSimpleTextureNode *cursorNode = nullptr;
     QRectF cursorRect;
 
@@ -373,6 +374,31 @@ QVariantList TerminalItem::keywordHighlightRules() const
     return m_keywordHighlightRuleValues;
 }
 
+QString TerminalItem::searchQuery() const
+{
+    return m_searchQuery;
+}
+
+bool TerminalItem::searchCaseSensitive() const noexcept
+{
+    return m_searchCaseSensitive;
+}
+
+QColor TerminalItem::searchMatchBackground() const
+{
+    return m_searchMatchBackground;
+}
+
+QColor TerminalItem::searchCurrentBackground() const
+{
+    return m_searchCurrentBackground;
+}
+
+QColor TerminalItem::searchCurrentForeground() const
+{
+    return m_searchCurrentForeground;
+}
+
 QColor TerminalItem::foregroundOverride() const
 {
     return m_foregroundOverride;
@@ -421,7 +447,7 @@ void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
     m_renderMetrics.recordSnapshot(snapshot->damage, snapshot->damagedRows.size());
     const bool selectionBecameVisible = !m_hasSelection && snapshot->selectionPresent;
     setHasSelection(snapshot->selectionPresent);
-    if (!snapshot->selectionPresent)
+    if (!snapshot->selectionPresent || snapshot->searchSelectionPresent)
     {
         dismissSelectionAction();
     }
@@ -694,6 +720,61 @@ void TerminalItem::setKeywordHighlightRules(const QVariantList &rules)
     }
     invalidateRenderer(true);
     emit keywordHighlightRulesChanged();
+}
+
+void TerminalItem::setSearchQuery(const QString &query)
+{
+    if (m_searchQuery == query)
+    {
+        return;
+    }
+    m_searchQuery = query;
+    invalidateRenderer(true);
+    emit searchHighlightChanged();
+}
+
+void TerminalItem::setSearchCaseSensitive(const bool enabled)
+{
+    if (m_searchCaseSensitive == enabled)
+    {
+        return;
+    }
+    m_searchCaseSensitive = enabled;
+    invalidateRenderer(true);
+    emit searchHighlightChanged();
+}
+
+void TerminalItem::setSearchMatchBackground(const QColor &value)
+{
+    if (m_searchMatchBackground == value)
+    {
+        return;
+    }
+    m_searchMatchBackground = value;
+    invalidateRenderer(true);
+    emit searchHighlightChanged();
+}
+
+void TerminalItem::setSearchCurrentBackground(const QColor &value)
+{
+    if (m_searchCurrentBackground == value)
+    {
+        return;
+    }
+    m_searchCurrentBackground = value;
+    invalidateRenderer(true);
+    emit searchHighlightChanged();
+}
+
+void TerminalItem::setSearchCurrentForeground(const QColor &value)
+{
+    if (m_searchCurrentForeground == value)
+    {
+        return;
+    }
+    m_searchCurrentForeground = value;
+    invalidateRenderer(true);
+    emit searchHighlightChanged();
 }
 
 void TerminalItem::setForegroundOverride(const QColor &value)
@@ -1047,8 +1128,21 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
         if (!cursorOnlyPaint)
         {
             node->keywordStyles = highlightTerminalKeywords(*m_snapshot, m_keywordHighlightRules);
+            std::vector<TerminalKeywordRule> searchRules;
+            if (!m_searchQuery.isEmpty() && m_searchMatchBackground.isValid())
+            {
+                searchRules.push_back(TerminalKeywordRule{
+                    .id = QStringLiteral("terminal-search"),
+                    .pattern = m_searchQuery,
+                    .background = m_searchMatchBackground,
+                    .enabled = true,
+                    .caseSensitive = m_searchCaseSensitive,
+                });
+            }
+            node->searchStyles = highlightTerminalKeywords(*m_snapshot, searchRules);
         }
         const std::vector<TerminalKeywordCellStyle> &keywordStyles = node->keywordStyles;
+        const std::vector<TerminalKeywordCellStyle> &searchStyles = node->searchStyles;
         const quint16 firstRow = cursorOnlyPaint ? m_snapshot->cursor.row : 0;
         const quint16 lastRow = cursorOnlyPaint ? static_cast<quint16>(firstRow + 1) : m_snapshot->rows;
         if (collectPaintPhases)
@@ -1082,15 +1176,26 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                     std::max<qreal>(1.0, cell.displayWidth) * cellWidthValue,
                     cellHeightValue,
                 };
-                if (cell.selected)
+                const bool currentSearchCell = m_snapshot->searchSelectionPresent && cell.selected;
+                if (currentSearchCell)
+                {
+                    painter.fillRect(cellRect, m_searchCurrentBackground);
+                }
+                else if (cell.selected)
                 {
                     painter.fillRect(cellRect, selectionBackground);
                 }
-                else if (const TerminalKeywordCellStyle &style =
-                             keywordStyles[(static_cast<std::size_t>(row) * m_snapshot->columns) + column];
-                         style.background.isValid())
+                else if (const TerminalKeywordCellStyle &searchStyle =
+                             searchStyles[(static_cast<std::size_t>(row) * m_snapshot->columns) + column];
+                         searchStyle.background.isValid())
                 {
-                    painter.fillRect(cellRect, style.background);
+                    painter.fillRect(cellRect, searchStyle.background);
+                }
+                else if (const TerminalKeywordCellStyle &keywordStyle =
+                             keywordStyles[(static_cast<std::size_t>(row) * m_snapshot->columns) + column];
+                         keywordStyle.background.isValid())
+                {
+                    painter.fillRect(cellRect, keywordStyle.background);
                 }
                 else if (cell.explicitBackground)
                 {
@@ -1136,7 +1241,9 @@ QSGNode *TerminalItem::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
                     m_foregroundOverride.isValid() && sameColor(cell.foreground, defaultForeground)
                         ? m_foregroundOverride
                         : color(cell.foreground);
-                painter.setPen(cell.selected                       ? selectionForeground
+                const bool currentSearchCell = m_snapshot->searchSelectionPresent && cell.selected;
+                painter.setPen(currentSearchCell                   ? m_searchCurrentForeground
+                               : cell.selected                     ? selectionForeground
                                : keywordStyle.foreground.isValid() ? keywordStyle.foreground
                                                                    : cellForeground);
 

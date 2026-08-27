@@ -129,6 +129,19 @@ template <typename Endpoint>
 }
 
 template <typename Endpoint>
+[[nodiscard]] std::chrono::seconds endpointAuthenticationTimeout(const Endpoint &endpoint) noexcept
+{
+    if constexpr (requires { endpoint.authenticationTimeoutSeconds; })
+    {
+        return std::chrono::seconds(endpoint.authenticationTimeoutSeconds);
+    }
+    else
+    {
+        return std::chrono::seconds(endpoint.sessionOptions.authenticationTimeoutSeconds);
+    }
+}
+
+template <typename Endpoint>
 [[nodiscard]] std::expected<std::unique_ptr<SshByteTransport>, SshBootstrapError>
 connectInitialTransport(Endpoint &endpoint, const std::stop_token &stopToken)
 {
@@ -304,15 +317,17 @@ authenticateEndpoint(Endpoint &endpoint, SshByteTransport &transport, const QStr
     switch (endpoint.authentication)
     {
         case SshAuthenticationMethod::PrivateKey:
-            authentication = (*session)->authenticateWithPrivateKeyFile(transport, username, privateKeyPath,
-                                                                        endpoint.secret.view(), 15s, stopToken);
+            authentication =
+                (*session)->authenticateWithPrivateKeyFile(transport, username, privateKeyPath, endpoint.secret.view(),
+                                                           endpointAuthenticationTimeout(endpoint), stopToken);
             break;
         case SshAuthenticationMethod::Password:
-            authentication =
-                (*session)->authenticateWithPassword(transport, username, endpoint.secret.view(), 15s, stopToken);
+            authentication = (*session)->authenticateWithPassword(transport, username, endpoint.secret.view(),
+                                                                  endpointAuthenticationTimeout(endpoint), stopToken);
             break;
         case SshAuthenticationMethod::Agent:
-            authentication = (*session)->authenticateWithAgent(transport, username, 15s, stopToken);
+            authentication = (*session)->authenticateWithAgent(transport, username,
+                                                               endpointAuthenticationTimeout(endpoint), stopToken);
             break;
     }
     if (!authentication)

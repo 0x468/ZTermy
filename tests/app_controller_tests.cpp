@@ -361,6 +361,8 @@ void AppControllerTests::persistsAndPreservesSessionOptions()
     const QVariantMap options{
         {QStringLiteral("terminalType"), QStringLiteral("screen-256color")},
         {QStringLiteral("connectionTimeoutSeconds"), 25},
+        {QStringLiteral("authenticationTimeoutSeconds"), 35},
+        {QStringLiteral("terminalOpenTimeoutSeconds"), 50},
         {QStringLiteral("keepaliveIntervalSeconds"), 45},
         {QStringLiteral("keepaliveFailureThreshold"), 4},
         {QStringLiteral("startupCommand"), QStringLiteral("uname -a")},
@@ -382,6 +384,8 @@ void AppControllerTests::persistsAndPreservesSessionOptions()
     const QVariantMap savedOptions = saved.value(QStringLiteral("sessionOptions")).toMap();
     QCOMPARE(savedOptions.value(QStringLiteral("terminalType")).toString(), QStringLiteral("screen-256color"));
     QCOMPARE(savedOptions.value(QStringLiteral("connectionTimeoutSeconds")).toInt(), 25);
+    QCOMPARE(savedOptions.value(QStringLiteral("authenticationTimeoutSeconds")).toInt(), 35);
+    QCOMPARE(savedOptions.value(QStringLiteral("terminalOpenTimeoutSeconds")).toInt(), 50);
     QCOMPARE(savedOptions.value(QStringLiteral("keepaliveIntervalSeconds")).toInt(), 45);
     QCOMPARE(savedOptions.value(QStringLiteral("startupCommandMode")).toString(), QStringLiteral("line-delay"));
     QCOMPARE(savedOptions.value(QStringLiteral("reconnectPolicy")).toString(), QStringLiteral("transport-failure"));
@@ -398,6 +402,16 @@ void AppControllerTests::persistsAndPreservesSessionOptions()
 
     QVariantMap invalid = options;
     invalid.insert(QStringLiteral("connectionTimeoutSeconds"), 0);
+    QVERIFY(!controller.saveHostProfileWithCredential(
+        id, QStringLiteral("Invalid"), QStringLiteral("server.example.test"), 22, QStringLiteral("operator"),
+        QStringLiteral("password"), {}, false, QStringLiteral("Lab"), {}, false, invalid));
+    invalid = options;
+    invalid.insert(QStringLiteral("authenticationTimeoutSeconds"), 0);
+    QVERIFY(!controller.saveHostProfileWithCredential(
+        id, QStringLiteral("Invalid"), QStringLiteral("server.example.test"), 22, QStringLiteral("operator"),
+        QStringLiteral("password"), {}, false, QStringLiteral("Lab"), {}, false, invalid));
+    invalid = options;
+    invalid.insert(QStringLiteral("terminalOpenTimeoutSeconds"), 301);
     QVERIFY(!controller.saveHostProfileWithCredential(
         id, QStringLiteral("Invalid"), QStringLiteral("server.example.test"), 22, QStringLiteral("operator"),
         QStringLiteral("password"), {}, false, QStringLiteral("Lab"), {}, false, invalid));
@@ -2068,6 +2082,7 @@ void AppControllerTests::createsKeywordHighlightFromSshSelection()
         return QMetaObject::invokeMethod(&controller, "handleTerminalSelectedTextReady", Qt::DirectConnection,
                                          Q_ARG(QString, sessionId), Q_ARG(QString, selection));
     };
+    QSignalSpy highlightAdded(&controller, &ztermy::AppController::terminalKeywordHighlightAdded);
     QVERIFY(controller.highlightTerminalSelection());
     QVERIFY(deliverSelection(QStringLiteral("  docker  ")));
     QVariantMap tab = controller.terminalTabs().constFirst().toMap();
@@ -2079,6 +2094,20 @@ void AppControllerTests::createsKeywordHighlightFromSshSelection()
     QCOMPARE(rules.constFirst().toMap().value(QStringLiteral("background")).toString(), QStringLiteral("#D13438"));
     QVERIFY(rules.constFirst().toMap().value(QStringLiteral("enabled")).toBool());
     QVERIFY(!rules.constFirst().toMap().value(QStringLiteral("caseSensitive")).toBool());
+    QCOMPARE(highlightAdded.count(), 1);
+    const QString firstRuleId = highlightAdded.constFirst().at(1).toString();
+    QCOMPARE(highlightAdded.constFirst().at(2).toString(), QStringLiteral("docker"));
+    QVERIFY(controller.undoTerminalKeywordHighlight(sessionId, firstRuleId));
+    QVERIFY(controller.terminalTabs()
+                .constFirst()
+                .toMap()
+                .value(QStringLiteral("keywordHighlightRules"))
+                .toList()
+                .isEmpty());
+
+    QVERIFY(controller.highlightTerminalSelection());
+    QVERIFY(deliverSelection(QStringLiteral("docker")));
+    QCOMPARE(highlightAdded.count(), 2);
 
     QVERIFY(controller.highlightTerminalSelection());
     QVERIFY(deliverSelection(QStringLiteral("DOCKER")));
@@ -2092,6 +2121,14 @@ void AppControllerTests::createsKeywordHighlightFromSshSelection()
     QCOMPARE(
         controller.terminalTabs().constFirst().toMap().value(QStringLiteral("keywordHighlightRules")).toList().size(),
         2);
+
+    QVERIFY(controller.unhighlightTerminalSelection());
+    QVERIFY(deliverSelection(maximumPattern));
+    QCOMPARE(
+        controller.terminalTabs().constFirst().toMap().value(QStringLiteral("keywordHighlightRules")).toList().size(),
+        1);
+    QVERIFY(controller.highlightTerminalSelection());
+    QVERIFY(deliverSelection(maximumPattern));
 
     QVERIFY(controller.highlightTerminalSelection());
     QVERIFY(deliverSelection(maximumPattern + QLatin1Char('x')));

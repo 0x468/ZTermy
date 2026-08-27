@@ -121,12 +121,44 @@ Item {
             readonly property var activeViewport: node.active ? viewport : null
             readonly property bool aiConfigured: !!root.controller && root.controller.aiModel.trim().length > 0 && (root.controller.aiProviderPreference === "openai-chatgpt" ? root.controller.aiChatGptConfigured : root.controller.aiBaseUrl.trim().length > 0 && (root.controller.aiProviderPreference === "ollama" || root.controller.aiApiKeyConfigured))
             readonly property bool connectionProgressRequested: tab.kind === "ssh" && (!!tab.connecting || !!tab.reconnecting)
-            property bool connectionProgressDelayElapsed: false
+            property bool connectionProgressVisible: false
+            property bool connectionProgressWasReconnect: false
+            property double connectionProgressShownAt: 0
+            property int connectionProgressLastStep: 0
+            property string connectionProgressLastStatus: ""
 
             onConnectionProgressRequestedChanged: {
-                if (!connectionProgressRequested) {
-                    connectionProgressDelayElapsed = false;
+                if (connectionProgressRequested)
+                    beginConnectionProgress();
+                else
+                    finishConnectionProgress();
+            }
+            onTabChanged: {
+                if (connectionProgressRequested)
+                    beginConnectionProgress();
+            }
+
+            function beginConnectionProgress() {
+                connectionProgressDismissTimer.stop();
+                connectionProgressWasReconnect = !!tab.reconnecting;
+                connectionProgressShownAt = Date.now();
+                connectionProgressLastStep = Math.max(0, Number(tab.connectionStageIndex || 0));
+                connectionProgressLastStatus = tab.status || "";
+                connectionProgressVisible = true;
+            }
+
+            function finishConnectionProgress() {
+                if (!connectionProgressVisible)
+                    return;
+                connectionProgressLastStep = tab.connectionPhase === "connected" ? 2 : connectionProgressLastStep;
+                connectionProgressLastStatus = tab.status || connectionProgressLastStatus;
+                const remaining = Math.max(0, 180 - (Date.now() - connectionProgressShownAt));
+                if (remaining === 0) {
+                    connectionProgressVisible = false;
+                    return;
                 }
+                connectionProgressDismissTimer.interval = remaining;
+                connectionProgressDismissTimer.restart();
             }
 
             function focusActivePane() {
@@ -170,14 +202,15 @@ Item {
             clip: true
 
             Timer {
-                interval: 180
+                id: connectionProgressDismissTimer
+
                 repeat: false
-                running: leaf.connectionProgressRequested && !leaf.connectionProgressDelayElapsed
-                onTriggered: {
-                    if (leaf.connectionProgressRequested) {
-                        leaf.connectionProgressDelayElapsed = true;
-                    }
-                }
+                onTriggered: leaf.connectionProgressVisible = false
+            }
+
+            Component.onCompleted: {
+                if (connectionProgressRequested)
+                    beginConnectionProgress();
             }
 
             TerminalView {
@@ -224,6 +257,11 @@ Item {
                 middleClickBehavior: root.middleClickBehavior
                 wordDelimiters: root.wordDelimiters
                 scrollRowsPerWheel: root.scrollRowsPerWheel
+                searchQuery: leaf.tab.searchQuery || ""
+                searchCaseSensitive: !!leaf.tab.searchCaseSensitive
+                searchMatchBackground: Theme.searchMatchBackground
+                searchCurrentBackground: Theme.searchCurrentBackground
+                searchCurrentForeground: Theme.searchCurrentForeground
 
                 Component.onCompleted: Qt.callLater(attachToController)
                 Component.onDestruction: {
@@ -568,6 +606,18 @@ Item {
                     }
                 }
 
+                AppMenuItem {
+                    objectName: "terminalSelectionRemoveHighlightAction"
+                    text: qsTr("Remove selection highlight")
+                    iconName: "close"
+                    visible: leaf.tab.kind === "ssh"
+                    onTriggered: {
+                        if (root.controller.activateTerminalPane(leaf.node.id) && root.controller.unhighlightTerminalSelection()) {
+                            viewport.dismissSelectionAction();
+                        }
+                    }
+                }
+
                 onClosed: {
                     if (restoreViewportOnClose) {
                         leaf.restoreTerminalFocusAfterSelectionAction();
@@ -670,16 +720,17 @@ Item {
             }
 
             StatePanel {
+                objectName: "sshConnectionProgressPanel"
                 anchors.centerIn: parent
                 width: Math.max(180, Math.min(440, parent.width - 24))
-                visible: leaf.connectionProgressDelayElapsed && leaf.tab.connecting && !leaf.tab.reconnecting
+                visible: leaf.connectionProgressVisible && !leaf.connectionProgressWasReconnect
                 z: 9
                 kind: "loading"
                 heading: qsTr("Connecting to SSH host")
-                description: leaf.tab.status || ""
+                description: leaf.connectionProgressRequested ? leaf.tab.status || "" : leaf.connectionProgressLastStatus
                 detail: leaf.tab.connectionInteractionRequired ? qsTr("Waiting for host key confirmation.") : qsTr("Connection setup runs outside the interface thread. You can close this pane to cancel.")
                 steps: [qsTr("Establish connection"), qsTr("Authenticate"), qsTr("Open terminal")]
-                activeStep: leaf.tab.connectionStageIndex
+                activeStep: leaf.connectionProgressRequested ? leaf.tab.connectionStageIndex : leaf.connectionProgressLastStep
 
                 ActionButton {
                     text: qsTr("Cancel connection")
@@ -689,16 +740,17 @@ Item {
             }
 
             StatePanel {
+                objectName: "sshReconnectProgressPanel"
                 anchors.centerIn: parent
                 width: Math.max(180, Math.min(440, parent.width - 24))
-                visible: leaf.connectionProgressDelayElapsed && leaf.tab.reconnecting
+                visible: leaf.connectionProgressVisible && leaf.connectionProgressWasReconnect
                 z: 9
                 kind: "loading"
                 heading: qsTr("Reconnecting to SSH host")
-                description: leaf.tab.status || ""
+                description: leaf.connectionProgressRequested ? leaf.tab.status || "" : leaf.connectionProgressLastStatus
                 detail: leaf.tab.connectionInteractionRequired ? qsTr("Waiting for host key confirmation.") : qsTr("Automatic retries use bounded exponential backoff and never retain credentials in the terminal pane.")
                 steps: [qsTr("Establish connection"), qsTr("Authenticate"), qsTr("Open terminal")]
-                activeStep: leaf.tab.connectionStageIndex
+                activeStep: leaf.connectionProgressRequested ? leaf.tab.connectionStageIndex : leaf.connectionProgressLastStep
 
                 ActionButton {
                     text: qsTr("Cancel reconnect")

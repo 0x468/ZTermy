@@ -24,6 +24,7 @@ struct SshJumpHostRequest final
     SshProxyOptions proxy;
     security::SensitiveByteArray proxySecret;
     std::uint16_t connectionTimeoutSeconds = 10;
+    std::uint16_t authenticationTimeoutSeconds = 30;
 };
 
 struct SshConnectionRequest final

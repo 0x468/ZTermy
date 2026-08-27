@@ -429,6 +429,8 @@ public:
     Q_INVOKABLE void searchTerminal(const QString &query, bool backwards, bool caseSensitive);
     Q_INVOKABLE bool searchTerminalSelection();
     Q_INVOKABLE bool highlightTerminalSelection();
+    Q_INVOKABLE bool unhighlightTerminalSelection();
+    Q_INVOKABLE bool undoTerminalKeywordHighlight(const QString &tabId, const QString &ruleId);
     Q_INVOKABLE void clearTerminalSearch();
     Q_INVOKABLE bool toggleTerminalWorkbench(const QString &page);
     Q_INVOKABLE void closeTerminalWorkbench();
@@ -676,6 +678,7 @@ signals:
     void sftpChanged();
     void transferTasksChanged();
     void transferNotificationRequested(const QVariantMap &notification);
+    void terminalKeywordHighlightAdded(const QString &tabId, const QString &ruleId, const QString &pattern);
     void transferConflictRequested(const QString &taskId, const QVariantMap &conflict);
     void actionRegistryChanged();
     void actionRequested(const QString &actionId);
@@ -729,6 +732,7 @@ private:
         AttachAi,
         Search,
         Highlight,
+        Unhighlight,
     };
 
     struct TerminalTab final
@@ -1072,6 +1076,7 @@ private:
     void showActiveTab();
     [[nodiscard]] QVariantList keywordRulesVariant(const TerminalTab &tab) const;
     [[nodiscard]] bool persistKeywordRules(TerminalTab &tab);
+    [[nodiscard]] bool deleteKeywordHighlightRule(TerminalTab &tab, const QString &id);
     [[nodiscard]] QVariantList recordedScriptStepsVariant(const TerminalTab &tab) const;
     void replayRecordedScriptStep(const QString &tabId, std::size_t index, std::uint64_t generation);
     void updateTelemetryVisibility();

@@ -682,6 +682,11 @@ void TerminalEngineTests::searchesAcrossScrollbackAndWrappedLines()
     QCOMPARE(search->total, std::uint32_t{3});
     QVERIFY(!search->wrapped);
 
+    const auto searchSnapshot = engine.snapshot();
+    QVERIFY(searchSnapshot);
+    QVERIFY(searchSnapshot->selectionPresent);
+    QVERIFY(searchSnapshot->searchSelectionPresent);
+
     auto selected = engine.selectedText();
     QVERIFY(selected);
     QVERIFY(selected->has_value());
@@ -704,6 +709,9 @@ void TerminalEngineTests::searchesAcrossScrollbackAndWrappedLines()
     QCOMPARE(search->total, std::uint32_t{1});
 
     QVERIFY(!engine.clearSearch());
+    const auto clearedSnapshot = engine.snapshot();
+    QVERIFY(clearedSnapshot);
+    QVERIFY(!clearedSnapshot->searchSelectionPresent);
     selected = engine.selectedText();
     QVERIFY(selected);
     QVERIFY(!selected->has_value());

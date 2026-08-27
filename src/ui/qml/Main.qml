@@ -49,6 +49,9 @@ Rectangle {
     property color previewCustomAccent: "#22C55E"
     property double sessionClock: Date.now()
     property bool windowAlwaysOnTopRequested: false
+    property string lastPinPrimaryScope: ""
+    property bool lastPinPreviousWindowState: false
+    property bool lastPinPreviousTabState: false
     readonly property bool currentTerminalTabPinned: currentPage === "terminal" && activeTerminalTab !== null && controller.activeTerminalTabPinned
     readonly property var activeTerminalTab: {
         for (const tab of controller.terminalTabs) {
@@ -131,6 +134,27 @@ Rectangle {
         }
         root.controller.toggleActiveTerminalTabPinned();
         Qt.callLater(root.applyAlwaysOnTopPreference);
+    }
+
+    function activatePinPrimary() {
+        lastPinPreviousWindowState = windowAlwaysOnTopRequested;
+        lastPinPreviousTabState = currentTerminalTabPinned;
+        if (windowAlwaysOnTopRequested) {
+            lastPinPrimaryScope = "window";
+            setWindowAlwaysOnTopRequested(false);
+            return;
+        }
+        lastPinPrimaryScope = "tab";
+        toggleActiveTerminalPin();
+    }
+
+    function activatePinDouble() {
+        if (lastPinPrimaryScope === "tab" && currentTerminalTabPinned !== lastPinPreviousTabState)
+            toggleActiveTerminalPin();
+        else if (lastPinPrimaryScope === "window" && windowAlwaysOnTopRequested !== lastPinPreviousWindowState)
+            setWindowAlwaysOnTopRequested(lastPinPreviousWindowState);
+        setWindowAlwaysOnTopRequested(!lastPinPreviousWindowState);
+        lastPinPrimaryScope = "";
     }
 
     function setWindowAlwaysOnTopRequested(enabled) {
@@ -642,6 +666,18 @@ Rectangle {
         function onTransferNotificationRequested(notification) {
             transferToast.present(notification);
         }
+
+        function onTerminalKeywordHighlightAdded(tabId, ruleId, pattern) {
+            terminalActionToast.present({
+                title: qsTr("Keyword highlight added"),
+                message: pattern,
+                actionText: qsTr("Undo"),
+                payload: {
+                    tabId: tabId,
+                    ruleId: ruleId
+                }
+            });
+        }
     }
 
     Timer {
@@ -1029,7 +1065,7 @@ Rectangle {
                             anchors.centerIn: parent
                             width: 16
                             height: 16
-                            name: "pin"
+                            name: root.windowAlwaysOnTopRequested ? "pin-window" : root.currentTerminalTabPinned ? "pin-tab" : "pin"
                             color: root.windowAlwaysOnTopRequested || root.currentTerminalTabPinned ? Theme.accent : root.mutedColor
                         }
 
@@ -1040,23 +1076,25 @@ Rectangle {
                             anchors.fill: parent
                             anchors.margins: 2
                             enabled: root.currentPage === "terminal" && root.activeTerminalTab !== null
-                            accessibleName: root.currentTerminalTabPinned ? qsTr("Unpin current terminal tab") : qsTr("Pin current terminal tab")
-                            onActivated: root.toggleActiveTerminalPin()
+                            doubleClickEnabled: true
+                            accessibleName: root.windowAlwaysOnTopRequested ? qsTr("Turn off window always on top") : root.currentTerminalTabPinned ? qsTr("Unpin current terminal tab") : qsTr("Pin current terminal tab")
+                            onActivated: root.activatePinPrimary()
+                            onDoubleActivated: root.activatePinDouble()
                         }
 
                         AppToolTip {
                             visible: alwaysOnTopAction.hovered && !alwaysOnTopMenu.visible
                             text: {
                                 if (root.windowAlwaysOnTopRequested && root.currentTerminalTabPinned) {
-                                    return qsTr("Current tab pinned · window always on top");
+                                    return qsTr("Current tab pinned · window always on top\nDouble-click to turn off window pinning");
                                 }
                                 if (root.windowAlwaysOnTopRequested) {
-                                    return qsTr("Window always on top");
+                                    return qsTr("Window always on top\nClick to turn off · Double-click toggles window pinning");
                                 }
                                 if (root.currentTerminalTabPinned) {
-                                    return qsTr("Current terminal tab pinned");
+                                    return qsTr("Current terminal tab pinned\nClick to unpin · Double-click pins the whole window");
                                 }
-                                return qsTr("Pin current terminal tab");
+                                return qsTr("Click to pin this tab · Double-click to pin the whole window");
                             }
                         }
                     }
@@ -1102,7 +1140,7 @@ Rectangle {
                     AppMenuItem {
                         objectName: "pinCurrentTerminalTabMenuAction"
                         text: qsTr("Pin current terminal tab")
-                        iconName: "pin"
+                        iconName: "pin-tab"
                         checkable: true
                         checked: root.currentTerminalTabPinned
                         enabled: root.currentPage === "terminal" && root.activeTerminalTab !== null
@@ -1112,7 +1150,7 @@ Rectangle {
                     AppMenuItem {
                         objectName: "pinWindowMenuAction"
                         text: qsTr("Keep window always on top")
-                        iconName: "pin"
+                        iconName: "pin-window"
                         checkable: true
                         checked: root.windowAlwaysOnTopRequested
                         onTriggered: root.setWindowAlwaysOnTopRequested(!root.windowAlwaysOnTopRequested)
@@ -1386,6 +1424,15 @@ Rectangle {
         x: root.width - width - 16
         y: root.titleBarHeight + 14
         z: 100
+    }
+
+    ActionToast {
+        id: terminalActionToast
+
+        x: root.width - width - 16
+        y: root.titleBarHeight + 14 + (transferToast.opened ? transferToast.height + 8 : 0)
+        z: 100
+        onActionTriggered: payload => root.controller.undoTerminalKeywordHighlight(payload.tabId || "", payload.ruleId || "")
     }
 
     FileDialog {

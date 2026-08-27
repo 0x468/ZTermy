@@ -15,6 +15,13 @@ template <typename Endpoint>
             return false;
         }
     }
+    if constexpr (requires { endpoint.authenticationTimeoutSeconds; })
+    {
+        if (endpoint.authenticationTimeoutSeconds == 0 || endpoint.authenticationTimeoutSeconds > 300)
+        {
+            return false;
+        }
+    }
     if (endpoint.host.trimmed().isEmpty() || endpoint.port == 0 || endpoint.username.isEmpty()
         || !validSshProxyOptions(endpoint.proxy)
         || (endpoint.proxy.username.empty() ? !endpoint.proxySecret.empty() : endpoint.proxySecret.empty()))

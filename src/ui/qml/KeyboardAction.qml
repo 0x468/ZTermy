@@ -5,7 +5,9 @@ Control {
     id: control
 
     required property string accessibleName
+    property bool doubleClickEnabled: false
     signal activated
+    signal doubleActivated
 
     activeFocusOnTab: true
     background: null
@@ -30,6 +32,12 @@ Control {
         onClicked: {
             control.forceActiveFocus(Qt.MouseFocusReason);
             control.activated();
+        }
+        onDoubleClicked: {
+            if (!control.doubleClickEnabled)
+                return;
+            control.forceActiveFocus(Qt.MouseFocusReason);
+            control.doubleActivated();
         }
     }
 

@@ -33,6 +33,9 @@ namespace
                                    .caseSensitive = false}},
         .keywordHighlightEnabled = true,
         .sessionOptions = {.terminalType = "screen-256color",
+                           .connectionTimeoutSeconds = 20,
+                           .authenticationTimeoutSeconds = 45,
+                           .terminalOpenTimeoutSeconds = 60,
                            .keepaliveIntervalSeconds = 30,
                            .keepaliveFailureThreshold = 4,
                            .startupCommand = "export TERM_PROGRAM=ztermy\nuname -a",
@@ -72,6 +75,7 @@ private slots:
     void rejectsFractionalPortsAndUnknownAuthentication();
     void loadsProfilesWrittenBeforePassphraseMetadata();
     void loadsKeywordSchemaWithDefaultSessionOptions();
+    void loadsPreviousSchemaWithDefaultStageTimeouts();
     void rejectsMalformedSessionOptions();
     void rejectsMalformedProxyOptions();
     void savesAndValidatesJumpHostChains();
@@ -136,6 +140,8 @@ void SshProfileStoreTests::savesAndLoadsNonSecretProfiles()
     QVERIFY(persisted.contains("\"pattern\": \"failed\""));
     QVERIFY(persisted.contains("\"sessionOptions\""));
     QVERIFY(persisted.contains("\"terminalType\": \"screen-256color\""));
+    QVERIFY(persisted.contains("\"authenticationTimeoutSeconds\": 45"));
+    QVERIFY(persisted.contains("\"terminalOpenTimeoutSeconds\": 60"));
     QVERIFY(persisted.contains("\"reconnectPolicy\": \"transport-failure\""));
     QVERIFY(persisted.contains("\"type\": \"socks5\""));
     QVERIFY(persisted.contains("\"host\": \"proxy.example.test\""));
@@ -188,6 +194,32 @@ void SshProfileStoreTests::loadsKeywordSchemaWithDefaultSessionOptions()
     QCOMPARE(profiles->front().sessionOptions, ztermy::ssh::SshSessionOptions{});
     QCOMPARE(profiles->front().proxy, ztermy::ssh::SshProxyOptions{});
     QVERIFY(profiles->front().jumpProfileIds.empty());
+}
+
+void SshProfileStoreTests::loadsPreviousSchemaWithDefaultStageTimeouts()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("profiles.json"));
+    const ztermy::ssh::SshProfileStore store(path);
+
+    QVERIFY(writeFile(
+        path,
+        QByteArrayLiteral(
+            R"({"version":6,"profiles":[{"id":"p","name":"n","group":"","host":"h","port":22,"username":"u","authentication":"password","privateKeyPath":"","keywordHighlightEnabled":true,"keywordHighlightRules":[],"sessionOptions":{"terminalType":"xterm-256color","connectionTimeoutSeconds":10,"keepaliveIntervalSeconds":0,"keepaliveFailureThreshold":3,"startupCommand":"","startupCommandMode":"paste","startupLineDelayMilliseconds":100,"environment":[],"reconnectPolicy":"never","reconnectMaximumAttempts":3,"reconnectInitialBackoffMilliseconds":1000},"proxy":{"type":"none","host":"","port":0,"username":""},"jumpProfileIds":[]}]})")));
+    auto profiles = store.load();
+    QVERIFY(profiles);
+    QCOMPARE(profiles->size(), std::size_t{1});
+    QCOMPARE(profiles->front().sessionOptions.authenticationTimeoutSeconds, std::uint16_t{30});
+    QCOMPARE(profiles->front().sessionOptions.terminalOpenTimeoutSeconds, std::uint16_t{30});
+
+    QVERIFY(store.save(*profiles));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    const QByteArray persisted = file.readAll();
+    QVERIFY(persisted.contains("\"version\": 7"));
+    QVERIFY(persisted.contains("\"authenticationTimeoutSeconds\": 30"));
+    QVERIFY(persisted.contains("\"terminalOpenTimeoutSeconds\": 30"));
 }
 
 void SshProfileStoreTests::createsMissingParentDirectory()
@@ -278,7 +310,7 @@ void SshProfileStoreTests::rejectsMalformedAndUnsupportedDocuments()
     QVERIFY(!malformed);
     QCOMPARE(malformed.error(), ztermy::ssh::SshProfileStoreError::InvalidFormat);
 
-    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":7,"profiles":[]})")));
+    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":8,"profiles":[]})")));
     auto unsupported = store.load();
     QVERIFY(!unsupported);
     QCOMPARE(unsupported.error(), ztermy::ssh::SshProfileStoreError::UnsupportedVersion);

@@ -2616,6 +2616,34 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
                                   << "terminalRestored=" << terminalPinRestored << "unpinned=" << terminalTabUnpinned;
         return false;
     }
+    sendMouseClick(window, *alwaysOnTopAction,
+                   QPointF{alwaysOnTopAction->width() / 2.0, alwaysOnTopAction->height() / 2.0});
+    const bool doublePinActivated = QMetaObject::invokeMethod(alwaysOnTopAction, "doubleActivated");
+    processWindowEventsFor(std::chrono::milliseconds{120});
+    const bool globalPinEnabled = processWindowEventsUntil(
+        [rootObject, &controller, &window] {
+            return rootObject->property("windowAlwaysOnTopRequested").toBool() && !controller.activeTerminalTabPinned()
+                   && window.alwaysOnTop();
+        },
+        std::chrono::seconds{1});
+    const bool globalPinPrimaryActivated = QMetaObject::invokeMethod(alwaysOnTopAction, "activated");
+    processWindowEventsFor(std::chrono::milliseconds{80});
+    const bool globalPinDisabled = processWindowEventsUntil(
+        [rootObject, &window] {
+            return !rootObject->property("windowAlwaysOnTopRequested").toBool() && !window.alwaysOnTop();
+        },
+        std::chrono::seconds{1});
+    if (!doublePinActivated || !globalPinEnabled || !globalPinPrimaryActivated || !globalPinDisabled)
+    {
+        qCWarning(applicationLog) << "Window pin double-click route failed"
+                                  << "activated=" << doublePinActivated << "enabled=" << globalPinEnabled
+                                  << "primaryActivated=" << globalPinPrimaryActivated
+                                  << "disabled=" << globalPinDisabled
+                                  << "windowRequested=" << rootObject->property("windowAlwaysOnTopRequested").toBool()
+                                  << "tabPinned=" << controller.activeTerminalTabPinned()
+                                  << "nativeTop=" << window.alwaysOnTop();
+        return false;
+    }
     QQuickItem *pinnedTerminalViewport = terminalViewportItem(rootObject);
     if (pinnedTerminalViewport == nullptr)
     {
@@ -2699,14 +2727,14 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     const auto keywordPopoverVisible = [keywordHighlightPopover] {
         return keywordHighlightPopover != nullptr && keywordHighlightPopover->property("visible").toBool();
     };
-    const auto clickKeywordHighlightAction = [&window, keywordHighlightAction] {
+    const auto clickKeywordHighlightAction = [keywordHighlightAction] {
         if (keywordHighlightAction == nullptr)
         {
             return false;
         }
-        sendMouseClick(window, *keywordHighlightAction,
-                       QPointF{keywordHighlightAction->width() / 2.0, keywordHighlightAction->height() / 2.0});
-        return true;
+        const bool invoked = QMetaObject::invokeMethod(keywordHighlightAction, "click");
+        processWindowEventsFor(std::chrono::milliseconds{80});
+        return invoked;
     };
     if (keywordHighlightPopover == nullptr || keywordHighlightAction == nullptr
         || !keywordHighlightPopover->setProperty("terminalTab", keywordTerminalFixture(2)))

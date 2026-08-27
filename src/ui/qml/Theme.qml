@@ -82,6 +82,9 @@ QtObject {
     readonly property color success: highContrast ? highContrastHighlight : dark ? "#22C55E" : "#15803D"
     readonly property color successText: highContrast ? highContrastText : dark ? "#86EFAC" : "#15803D"
     readonly property color warning: highContrast ? highContrastHighlight : dark ? "#F59E0B" : "#D97706"
+    readonly property color searchMatchBackground: highContrast ? selectedBackground : mixColor(warning, dark ? "#0B1017" : "#FFFFFF", dark ? 0.68 : 0.82)
+    readonly property color searchCurrentBackground: warning
+    readonly property color searchCurrentForeground: highContrast ? highContrastHighlightText : contrastText(warning)
     readonly property color danger: highContrast ? highContrastHighlight : dark ? "#EF4444" : "#DC2626"
     readonly property color dangerText: highContrast ? highContrastText : dark ? "#FCA5A5" : "#B91C1C"
     readonly property color dangerBorder: highContrast ? highContrastText : dark ? "#7F1D1D" : "#FCA5A5"

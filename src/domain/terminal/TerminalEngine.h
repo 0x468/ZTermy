@@ -421,6 +421,7 @@ struct TerminalSnapshot
     TerminalCursor cursor;
     TerminalScrollbar scrollbar;
     bool selectionPresent = false;
+    bool searchSelectionPresent = false;
     bool mouseTrackingActive = false;
     bool alternateScrollActive = false;
     bool focusReportingActive = false;
