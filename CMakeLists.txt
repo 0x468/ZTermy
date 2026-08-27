@@ -1246,12 +1246,12 @@ set(ZTERMY_TRANSLATION_FILES
 qt_add_translations(ztermy
     SOURCE_TARGETS
         ztermy
+        ztermy_application_controller
         ztermy_terminal_session
         ztermy_ssh_session
         ztermy_terminal_ui
         ztermy_application_actions
         ztermy_application_diagnostics
-        ztermy_ai_provider
         ztermy_ai_provider
     TS_FILES ${ZTERMY_TRANSLATION_FILES}
     RESOURCE_PREFIX "/i18n"
