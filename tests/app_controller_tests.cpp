@@ -2032,6 +2032,10 @@ void AppControllerTests::routesTerminalSelectionActionsToOwningTab()
     QCOMPARE(controller.terminalSearchCurrent(), 1);
     QCOMPARE(controller.terminalSearchTotal(), 3);
     QVERIFY(!controller.terminalSearchCaseSensitive());
+    const QVariantMap activeSearchTab =
+        controller.activeTerminalWorkspace().value(QStringLiteral("root")).toMap().value(QStringLiteral("tab")).toMap();
+    QCOMPARE(activeSearchTab.value(QStringLiteral("searchQuery")).toString(), QStringLiteral("Search Needle"));
+    QVERIFY(!activeSearchTab.value(QStringLiteral("searchCaseSensitive")).toBool());
     QVERIFY(controller.activeAiContextPreview().contains(QStringLiteral("AI terminal evidence")));
     QVERIFY(!controller.activeAiContextPreview().contains(QStringLiteral("Search Needle")));
 }

@@ -2012,6 +2012,46 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
         return false;
     }
 
+    QQuickItem *hostsPinAction = quickItem(rootObject, "alwaysOnTopAction");
+    const bool hostsPinEnabled = hostsPinAction != nullptr && hostsPinAction->isEnabled();
+    const bool hostsPinActivated =
+        hostsPinEnabled && QMetaObject::invokeMethod(hostsPinAction, "activated")
+        && processWindowEventsUntil(
+            [rootObject, &window] {
+                return rootObject->property("windowAlwaysOnTopRequested").toBool() && window.alwaysOnTop();
+            },
+            std::chrono::seconds{1});
+    const bool hostsPinReleased =
+        hostsPinActivated && QMetaObject::invokeMethod(hostsPinAction, "activated")
+        && processWindowEventsUntil(
+            [rootObject, &window] {
+                return !rootObject->property("windowAlwaysOnTopRequested").toBool() && !window.alwaysOnTop();
+            },
+            std::chrono::seconds{1});
+    const bool hostsFirstClickForDouble = hostsPinReleased && QMetaObject::invokeMethod(hostsPinAction, "activated");
+    const bool hostsDoubleActivated =
+        hostsFirstClickForDouble && QMetaObject::invokeMethod(hostsPinAction, "doubleActivated")
+        && processWindowEventsUntil(
+            [rootObject, &window] {
+                return rootObject->property("windowAlwaysOnTopRequested").toBool() && window.alwaysOnTop();
+            },
+            std::chrono::seconds{1});
+    const bool hostsDoubleReleased =
+        hostsDoubleActivated && QMetaObject::invokeMethod(hostsPinAction, "activated")
+        && processWindowEventsUntil(
+            [rootObject, &window] {
+                return !rootObject->property("windowAlwaysOnTopRequested").toBool() && !window.alwaysOnTop();
+            },
+            std::chrono::seconds{1});
+    if (!hostsPinEnabled || !hostsPinActivated || !hostsPinReleased || !hostsDoubleActivated || !hostsDoubleReleased)
+    {
+        qCWarning(applicationLog) << "Hosts-page window pin route failed"
+                                  << "enabled=" << hostsPinEnabled << "activated=" << hostsPinActivated
+                                  << "released=" << hostsPinReleased << "doubleActivated=" << hostsDoubleActivated
+                                  << "doubleReleased=" << hostsDoubleReleased;
+        return false;
+    }
+
     sendKey(window, Qt::Key_P, Qt::ControlModifier | Qt::ShiftModifier);
     QQuickItem *commandPalette = quickItem(rootObject, "commandPalette");
     QQuickItem *commandPaletteSearch = quickItem(rootObject, "commandPaletteSearch");

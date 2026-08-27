@@ -84,6 +84,7 @@ private slots:
     void selectsCellsAndCopiesOnMouseRelease();
     void supportsClassicClipboardAliasesAndContextActions();
     void selectsWordsOnDoubleClick();
+    void separatesShellPromptIdentityWords();
     void selectsLinesOnTripleClickAndExtendsWithShift();
     void autoscrollsSelectionNearViewportEdges();
     void cancelsTrackedSelectionWhenMouseGrabIsLost();
@@ -733,6 +734,43 @@ void TerminalItemTests::selectsWordsOnDoubleClick()
     QVERIFY(item.hasSelection());
 }
 
+void TerminalItemTests::separatesShellPromptIdentityWords()
+{
+    TestableTerminalItem item;
+    auto snapshot = snapshotAt(0, 0);
+    const QString prompt = QStringLiteral("root@gateway:~#");
+    for (qsizetype index = 0; index < prompt.size(); ++index)
+    {
+        snapshot->cell(static_cast<quint16>(index), 1).grapheme = {prompt.at(index).unicode()};
+    }
+    item.setSnapshot(snapshot);
+    item.setWordDelimiters(QStringLiteral(" \t'\"│`|;,()[]{}<>$@:#~"));
+    item.setRightClickBehavior(QStringLiteral("select-word"));
+    item.setSize(QSizeF{800, 480});
+    const QRectF origin = item.inputMethodQuery(Qt::ImCursorRectangle).toRectF();
+    const auto cellCenter = [&origin](const int column) {
+        return QPointF{origin.x() + ((static_cast<qreal>(column) + 0.5) * origin.width()),
+                       origin.y() + (1.5 * origin.height())};
+    };
+    QSignalSpy selectionSpy(&item, &ztermy::ui::TerminalItem::selectionRequested);
+
+    const QPointF gatewayPoint = cellCenter(7);
+    QMouseEvent doubleClick(QEvent::MouseButtonDblClick, gatewayPoint, gatewayPoint, gatewayPoint, Qt::LeftButton,
+                            Qt::LeftButton, Qt::NoModifier);
+    item.mouseDoubleClickEvent(&doubleClick);
+    QCOMPARE(selectionSpy.count(), 1);
+    QCOMPARE(selectionSpy.at(0).at(0).toUInt(), 5U);
+    QCOMPARE(selectionSpy.at(0).at(2).toUInt(), 11U);
+
+    const QPointF rootPoint = cellCenter(2);
+    QMouseEvent rightClick(QEvent::MouseButtonPress, rootPoint, rootPoint, rootPoint, Qt::RightButton, Qt::RightButton,
+                           Qt::NoModifier);
+    item.mousePressEvent(&rightClick);
+    QCOMPARE(selectionSpy.count(), 2);
+    QCOMPARE(selectionSpy.at(1).at(0).toUInt(), 0U);
+    QCOMPARE(selectionSpy.at(1).at(2).toUInt(), 3U);
+}
+
 void TerminalItemTests::selectsLinesOnTripleClickAndExtendsWithShift()
 {
     TestableTerminalItem item;
@@ -983,15 +1021,26 @@ void TerminalItemTests::reflectsSelectionStateFromSnapshots()
 {
     TestableTerminalItem item;
     auto selected = snapshotAt(0, 0);
+    const QString highlightedWord = QStringLiteral("root");
+    for (qsizetype index = 0; index < highlightedWord.size(); ++index)
+    {
+        auto &cell = selected->cell(static_cast<quint16>(index), 0);
+        cell.grapheme = {highlightedWord.at(index).unicode()};
+        cell.selected = true;
+    }
     selected->selectionPresent = true;
+    item.setKeywordHighlightRules({QVariantMap{{QStringLiteral("pattern"), highlightedWord},
+                                               {QStringLiteral("background"), QStringLiteral("#D13438")}}});
     item.setSnapshot(selected);
     QVERIFY(item.hasSelection());
     QVERIFY(item.selectionActionVisible());
+    QVERIFY(item.selectionMatchesKeywordHighlight());
 
     auto cleared = snapshotAt(0, 0);
     item.setSnapshot(cleared);
     QVERIFY(!item.hasSelection());
     QVERIFY(!item.selectionActionVisible());
+    QVERIFY(!item.selectionMatchesKeywordHighlight());
 
     auto searchSelection = snapshotAt(0, 0);
     searchSelection->selectionPresent = true;
@@ -999,6 +1048,7 @@ void TerminalItemTests::reflectsSelectionStateFromSnapshots()
     item.setSnapshot(searchSelection);
     QVERIFY(item.hasSelection());
     QVERIFY(!item.selectionActionVisible());
+    QVERIFY(!item.selectionMatchesKeywordHighlight());
 }
 
 void TerminalItemTests::accumulatesWheelDeltasIntoScrollRows()

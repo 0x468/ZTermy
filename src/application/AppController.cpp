@@ -2838,6 +2838,8 @@ QVariantMap AppController::terminalTabValue(const TerminalTab &tab, const QStrin
         {QStringLiteral("composerHeight"), tab.composerHeight},
         {QStringLiteral("keywordHighlightEnabled"), tab.keywordHighlightEnabled},
         {QStringLiteral("keywordHighlightRules"), keywordRulesVariant(tab)},
+        {QStringLiteral("searchQuery"), tab.searchQuery},
+        {QStringLiteral("searchCaseSensitive"), tab.searchCaseSensitive},
         {QStringLiteral("terminalEncoding"), tab.terminalEncoding},
         {QStringLiteral("sessionFontFamily"), tab.sessionFontFamily},
         {QStringLiteral("sessionFontSize"), tab.sessionFontSize},
@@ -5126,6 +5128,7 @@ void AppController::searchTerminal(const QString &query, const bool backwards, c
         tab->local->search(query, backwards, caseSensitive);
     }
     emit terminalSearchChanged();
+    emit terminalWorkspaceChanged();
 }
 
 bool AppController::searchTerminalSelection()
@@ -5173,6 +5176,7 @@ void AppController::clearTerminalSearch()
         tab->local->clearSearch();
     }
     emit terminalSearchChanged();
+    emit terminalWorkspaceChanged();
 }
 
 bool AppController::toggleTerminalWorkbench(const QString &page)
@@ -11256,6 +11260,7 @@ void AppController::handleTerminalSelectedTextReady(const QString &tabId, const 
         if (m_focusedTabId == tabId)
         {
             emit terminalSearchChanged();
+            emit terminalWorkspaceChanged();
         }
         return;
     }
@@ -14345,6 +14350,7 @@ void AppController::connectLocalTabSignals(TerminalTab &tab)
                          if (m_focusedTabId == tabId)
                          {
                              emit terminalSearchChanged();
+                             emit terminalWorkspaceChanged();
                          }
                      });
 }
@@ -14464,6 +14470,7 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
                          if (m_focusedTabId == tabId)
                          {
                              emit terminalSearchChanged();
+                             emit terminalWorkspaceChanged();
                          }
                      });
     QObject::connect(

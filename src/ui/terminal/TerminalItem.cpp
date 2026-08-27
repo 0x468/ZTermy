@@ -333,6 +333,11 @@ bool TerminalItem::hasSelection() const noexcept
     return m_hasSelection;
 }
 
+bool TerminalItem::selectionMatchesKeywordHighlight() const noexcept
+{
+    return m_selectionMatchesKeywordHighlight;
+}
+
 bool TerminalItem::scrollbarVisible() const noexcept
 {
     return m_snapshot && m_snapshot->scrollbar.total > m_snapshot->scrollbar.visible;
@@ -436,6 +441,7 @@ void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
         dismissSelectionAction();
         setHasSelection(false);
         m_snapshot.reset();
+        refreshSelectionMatchesKeywordHighlight();
         clearHoveredLink();
         invalidateRenderer(true);
         notifyInputMethod();
@@ -458,6 +464,7 @@ void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
         emit selectionActionChanged();
     }
     m_snapshot = std::move(snapshot);
+    refreshSelectionMatchesKeywordHighlight();
     if (m_hoverInside)
     {
         updateHoveredLink(m_hoverPosition, QGuiApplication::keyboardModifiers());
@@ -718,6 +725,7 @@ void TerminalItem::setKeywordHighlightRules(const QVariantList &rules)
             .caseSensitive = map.value(QStringLiteral("caseSensitive"), false).toBool(),
         });
     }
+    refreshSelectionMatchesKeywordHighlight();
     invalidateRenderer(true);
     emit keywordHighlightRulesChanged();
 }
@@ -1950,6 +1958,41 @@ void TerminalItem::setHasSelection(const bool selected)
     }
     m_hasSelection = selected;
     emit hasSelectionChanged();
+    if (!selected && m_selectionMatchesKeywordHighlight)
+    {
+        m_selectionMatchesKeywordHighlight = false;
+        emit selectionMatchesKeywordHighlightChanged();
+    }
+}
+
+void TerminalItem::refreshSelectionMatchesKeywordHighlight()
+{
+    bool matches = false;
+    if (m_snapshot && m_snapshot->selectionPresent && !m_snapshot->searchSelectionPresent
+        && !m_keywordHighlightRules.empty())
+    {
+        const std::vector<TerminalKeywordCellStyle> styles =
+            highlightTerminalKeywords(*m_snapshot, m_keywordHighlightRules);
+        for (quint16 row = 0; row < m_snapshot->rows && !matches; ++row)
+        {
+            for (quint16 column = 0; column < m_snapshot->columns; ++column)
+            {
+                const std::size_t index = (static_cast<std::size_t>(row) * m_snapshot->columns) + column;
+                const terminal::TerminalCell &cell = m_snapshot->cell(column, row);
+                if (cell.selected && (styles[index].foreground.isValid() || styles[index].background.isValid()))
+                {
+                    matches = true;
+                    break;
+                }
+            }
+        }
+    }
+    if (m_selectionMatchesKeywordHighlight == matches)
+    {
+        return;
+    }
+    m_selectionMatchesKeywordHighlight = matches;
+    emit selectionMatchesKeywordHighlightChanged();
 }
 
 void TerminalItem::selectWordAt(const terminal::TerminalPoint &point, const QPointF &position)

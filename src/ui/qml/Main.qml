@@ -139,9 +139,9 @@ Rectangle {
     function activatePinPrimary() {
         lastPinPreviousWindowState = windowAlwaysOnTopRequested;
         lastPinPreviousTabState = currentTerminalTabPinned;
-        if (windowAlwaysOnTopRequested) {
+        if (windowAlwaysOnTopRequested || currentPage !== "terminal" || activeTerminalTab === null) {
             lastPinPrimaryScope = "window";
-            setWindowAlwaysOnTopRequested(false);
+            setWindowAlwaysOnTopRequested(!windowAlwaysOnTopRequested);
             return;
         }
         lastPinPrimaryScope = "tab";
@@ -1058,8 +1058,6 @@ Rectangle {
                         width: 26
                         height: parent.height
                         color: alwaysOnTopAction.hovered || alwaysOnTopAction.visualFocus ? Theme.controlHover : "transparent"
-                        border.color: alwaysOnTopAction.visualFocus ? Theme.focus : "transparent"
-                        border.width: alwaysOnTopAction.visualFocus ? 1 : 0
 
                         AppIcon {
                             anchors.centerIn: parent
@@ -1075,9 +1073,9 @@ Rectangle {
                             objectName: "alwaysOnTopAction"
                             anchors.fill: parent
                             anchors.margins: 2
-                            enabled: root.currentPage === "terminal" && root.activeTerminalTab !== null
+                            enabled: true
                             doubleClickEnabled: true
-                            accessibleName: root.windowAlwaysOnTopRequested ? qsTr("Turn off window always on top") : root.currentTerminalTabPinned ? qsTr("Unpin current terminal tab") : qsTr("Pin current terminal tab")
+                            accessibleName: root.windowAlwaysOnTopRequested ? qsTr("Turn off window always on top") : root.currentPage !== "terminal" || root.activeTerminalTab === null ? qsTr("Keep window always on top") : root.currentTerminalTabPinned ? qsTr("Unpin current terminal tab") : qsTr("Pin current terminal tab")
                             onActivated: root.activatePinPrimary()
                             onDoubleActivated: root.activatePinDouble()
                         }
@@ -1093,6 +1091,9 @@ Rectangle {
                                 }
                                 if (root.currentTerminalTabPinned) {
                                     return qsTr("Current terminal tab pinned\nClick to unpin · Double-click pins the whole window");
+                                }
+                                if (root.currentPage !== "terminal" || root.activeTerminalTab === null) {
+                                    return qsTr("Click or double-click to keep the whole window always on top");
                                 }
                                 return qsTr("Click to pin this tab · Double-click to pin the whole window");
                             }

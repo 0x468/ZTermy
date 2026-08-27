@@ -54,7 +54,10 @@ constexpr qint64 performanceModeSchemaVersion = 24;
 constexpr qint64 terminalInteractionSchemaVersion = 25;
 constexpr qint64 terminalSelectionSettingsSchemaVersion = 26;
 constexpr qint64 terminalSelectionInteractionSchemaVersion = 27;
-constexpr qint64 currentSchemaVersion = terminalSelectionInteractionSchemaVersion;
+// Version 28 expands the mainstream default word separators for shell prompt
+// identities while preserving every customized separator set.
+constexpr qint64 terminalPromptDelimiterSchemaVersion = 28;
+constexpr qint64 currentSchemaVersion = terminalPromptDelimiterSchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::AiPermissionPreference;
@@ -611,9 +614,12 @@ template <>
         .customAccent = version >= accentSchemaVersion ? customAccentValue.toString() : QStringLiteral("#22C55E"),
         .uiFontFamily = version >= fontOptionsSchemaVersion ? uiFontFamilyValue.toString() : QString{},
         .terminalFontFamily = fontFamilyValue.toString(),
-        .terminalWordDelimiters = version >= terminalSelectionSettingsSchemaVersion
-                                      ? terminalWordDelimitersValue.toString()
-                                      : QStringLiteral(" \t'\"│`|;,()[]{}<>$"),
+        .terminalWordDelimiters =
+            version < terminalSelectionSettingsSchemaVersion ? QStringLiteral(" \t'\"│`|;,()[]{}<>$@:#~")
+            : version < terminalPromptDelimiterSchemaVersion
+                    && terminalWordDelimitersValue.toString() == QStringLiteral(" \t'\"│`|;,()[]{}<>$")
+                ? QStringLiteral(" \t'\"│`|;,()[]{}<>$@:#~")
+                : terminalWordDelimitersValue.toString(),
         .aiBaseUrl = version >= aiProviderSchemaVersion ? aiBaseUrlValue.toString()
                                                         : QStringLiteral("https://api.openai.com/v1"),
         .aiEndpointPath = version >= aiProviderSchemaVersion ? aiEndpointPathValue.toString() : QString{},

@@ -15,7 +15,7 @@ every small edit.
 
 - Treat every stored schema as an independent, durable contract. Never
   decrement, reuse, or renumber a version already written by any build.
-- `ApplicationSettings` is currently schema 27. Verify the current constant in
+- `ApplicationSettings` is currently schema 28. Verify the current constant in
   `src/core/config/ApplicationSettings.cpp` before changing it; source wins if
   this note has not yet been updated.
 - A new persisted application setting uses the next schema, adds a fixture for

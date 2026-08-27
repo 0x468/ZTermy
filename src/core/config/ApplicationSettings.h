@@ -119,7 +119,7 @@ struct ApplicationSettings final
     QString customAccent = QStringLiteral("#22C55E");
     QString uiFontFamily;
     QString terminalFontFamily = QStringLiteral("Cascadia Mono");
-    QString terminalWordDelimiters = QStringLiteral(" \t'\"│`|;,()[]{}<>$");
+    QString terminalWordDelimiters = QStringLiteral(" \t'\"│`|;,()[]{}<>$@:#~");
     QString aiBaseUrl = QStringLiteral("https://api.openai.com/v1");
     QString aiEndpointPath;
     QString aiModel;

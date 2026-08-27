@@ -123,7 +123,6 @@ Item {
             readonly property bool connectionProgressRequested: tab.kind === "ssh" && (!!tab.connecting || !!tab.reconnecting)
             property bool connectionProgressVisible: false
             property bool connectionProgressWasReconnect: false
-            property double connectionProgressShownAt: 0
             property int connectionProgressLastStep: 0
             property string connectionProgressLastStatus: ""
 
@@ -139,9 +138,7 @@ Item {
             }
 
             function beginConnectionProgress() {
-                connectionProgressDismissTimer.stop();
                 connectionProgressWasReconnect = !!tab.reconnecting;
-                connectionProgressShownAt = Date.now();
                 connectionProgressLastStep = Math.max(0, Number(tab.connectionStageIndex || 0));
                 connectionProgressLastStatus = tab.status || "";
                 connectionProgressVisible = true;
@@ -152,13 +149,7 @@ Item {
                     return;
                 connectionProgressLastStep = tab.connectionPhase === "connected" ? 2 : connectionProgressLastStep;
                 connectionProgressLastStatus = tab.status || connectionProgressLastStatus;
-                const remaining = Math.max(0, 180 - (Date.now() - connectionProgressShownAt));
-                if (remaining === 0) {
-                    connectionProgressVisible = false;
-                    return;
-                }
-                connectionProgressDismissTimer.interval = remaining;
-                connectionProgressDismissTimer.restart();
+                connectionProgressVisible = false;
             }
 
             function focusActivePane() {
@@ -200,13 +191,6 @@ Item {
             border.width: node.active ? 2 : 1
             radius: Theme.radiusControl
             clip: true
-
-            Timer {
-                id: connectionProgressDismissTimer
-
-                repeat: false
-                onTriggered: leaf.connectionProgressVisible = false
-            }
 
             Component.onCompleted: {
                 if (connectionProgressRequested)
@@ -610,7 +594,7 @@ Item {
                     objectName: "terminalSelectionRemoveHighlightAction"
                     text: qsTr("Remove selection highlight")
                     iconName: "close"
-                    visible: leaf.tab.kind === "ssh"
+                    visible: leaf.tab.kind === "ssh" && viewport.selectionMatchesKeywordHighlight
                     onTriggered: {
                         if (root.controller.activateTerminalPane(leaf.node.id) && root.controller.unhighlightTerminalSelection()) {
                             viewport.dismissSelectionAction();

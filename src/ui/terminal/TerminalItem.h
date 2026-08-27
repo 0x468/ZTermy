@@ -58,6 +58,8 @@ class TerminalItem : public QQuickItem
     Q_PROPERTY(
         int scrollRowsPerWheel READ scrollRowsPerWheel WRITE setScrollRowsPerWheel NOTIFY scrollRowsPerWheelChanged)
     Q_PROPERTY(bool hasSelection READ hasSelection NOTIFY hasSelectionChanged)
+    Q_PROPERTY(bool selectionMatchesKeywordHighlight READ selectionMatchesKeywordHighlight NOTIFY
+                   selectionMatchesKeywordHighlightChanged)
     Q_PROPERTY(bool scrollbarVisible READ scrollbarVisible NOTIFY scrollbarChanged)
     Q_PROPERTY(qreal scrollbarPosition READ scrollbarPosition NOTIFY scrollbarChanged)
     Q_PROPERTY(qreal scrollbarPageRatio READ scrollbarPageRatio NOTIFY scrollbarChanged)
@@ -102,6 +104,7 @@ public:
     [[nodiscard]] QString wordDelimiters() const;
     [[nodiscard]] int scrollRowsPerWheel() const noexcept;
     [[nodiscard]] bool hasSelection() const noexcept;
+    [[nodiscard]] bool selectionMatchesKeywordHighlight() const noexcept;
     [[nodiscard]] bool scrollbarVisible() const noexcept;
     [[nodiscard]] qreal scrollbarPosition() const noexcept;
     [[nodiscard]] qreal scrollbarPageRatio() const noexcept;
@@ -194,6 +197,7 @@ signals:
     void wordDelimitersChanged();
     void scrollRowsPerWheelChanged();
     void hasSelectionChanged();
+    void selectionMatchesKeywordHighlightChanged();
     void scrollbarChanged();
     void selectionActionChanged();
     void searchHighlightChanged();
@@ -247,6 +251,7 @@ private:
     [[nodiscard]] qreal cellHeight() const;
     [[nodiscard]] ztermy::terminal::TerminalCursorStyle effectiveCursorStyle() const noexcept;
     void setHasSelection(bool selected);
+    void refreshSelectionMatchesKeywordHighlight();
     void selectWordAt(const ztermy::terminal::TerminalPoint &point, const QPointF &position);
     void selectLineAt(quint16 row, const QPointF &position);
     [[nodiscard]] ztermy::terminal::TerminalSelectionGesture
@@ -272,7 +277,7 @@ private:
     QString m_cursorPreference = QStringLiteral("terminal");
     QString m_rightClickBehavior = QStringLiteral("context-menu");
     QString m_middleClickBehavior = QStringLiteral("disabled");
-    QString m_wordDelimiters = QStringLiteral(" \t'\"│`|;,()[]{}<>$");
+    QString m_wordDelimiters = QStringLiteral(" \t'\"│`|;,()[]{}<>$@:#~");
     QByteArray m_pendingMultilinePaste;
     std::uint64_t m_revision = 0;
     qreal m_backgroundOpacity = 1.0;
@@ -298,6 +303,7 @@ private:
     bool m_quickSelectActive = false;
     bool m_copyModeActive = false;
     bool m_hasSelection = false;
+    bool m_selectionMatchesKeywordHighlight = false;
     bool m_cursorBlink = true;
     bool m_cursorBlinkPhase = true;
     bool m_ligaturesEnabled = true;
