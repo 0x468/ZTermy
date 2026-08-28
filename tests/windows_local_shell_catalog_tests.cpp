@@ -26,7 +26,11 @@ void WindowsLocalShellCatalogTests::resolvesAutomaticInStableOrder()
          .available = true},
     };
     const auto resolved = ztermy::terminal::WindowsLocalShellCatalog::resolve(profiles, QStringLiteral("automatic"));
-    QVERIFY(resolved);
+    if (!resolved)
+    {
+        QTest::qFail("Automatic shell resolution returned no profile", __FILE__, __LINE__);
+        return;
+    }
     QCOMPARE(resolved->id, QStringLiteral("windowsPowerShell"));
 }
 
@@ -40,7 +44,11 @@ void WindowsLocalShellCatalogTests::fallsBackWithoutOverwritingPreference()
         {.id = QStringLiteral("gitBash"), .name = QStringLiteral("Git Bash"), .available = false},
     };
     const auto resolved = ztermy::terminal::WindowsLocalShellCatalog::resolve(profiles, QStringLiteral("gitBash"));
-    QVERIFY(resolved);
+    if (!resolved)
+    {
+        QTest::qFail("Unavailable shell fallback returned no profile", __FILE__, __LINE__);
+        return;
+    }
     QCOMPARE(resolved->id, QStringLiteral("powerShellCore"));
 }
 

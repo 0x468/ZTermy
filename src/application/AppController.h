@@ -915,6 +915,7 @@ private:
     void connectLocalTabSignals(TerminalTab &tab);
     void connectSshTabSignals(TerminalTab &tab);
     void scheduleTerminalTabsChanged();
+    void flushTerminalTabsChanged();
     void connectSftpTabSignals(TerminalTab &tab);
     void initializeSessionLog(TerminalTab &tab);
     void initializeTerminalOutputSink(TerminalTab &tab);
@@ -993,6 +994,7 @@ private:
     void recordPersistenceRecovery();
     void loadHostProfiles();
     void loadPortForwardingRules();
+    void initializeRuntime();
     void initializePortForwardingSignalBridges();
     [[nodiscard]] bool persistPortForwardingRules(const std::vector<forwarding::PortForwardingRule> &rules);
     void applyPortForwardingSnapshot(const std::string &ruleId, const forwarding::PortForwardingJobSnapshot &snapshot);

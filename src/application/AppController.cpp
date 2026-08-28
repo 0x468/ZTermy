@@ -2401,51 +2401,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
           siblingCredentialsFile(m_profileStore.filePath()), security::CredentialStorage::Session)),
       m_knownHostsPath(std::move(knownHostsPath))
 {
-    if (!m_localSessionFactory)
-    {
-        m_localSessionFactory = [] {
-            return std::make_unique<terminal::LocalTerminalSession>();
-        };
-    }
-    Q_ASSERT(m_localSessionFactory);
-    qRegisterMetaType<ShellHistoryEntries>();
-    qRegisterMetaType<NoteSearchResults>();
-    qRegisterMetaType<AiTextAttachments>();
-    qRegisterMetaType<AiImageAttachments>();
-    qRegisterMetaType<AiUserSkills>();
-    QObject::connect(this, &AppController::terminalTabsChanged, this, &AppController::terminalWorkspaceChanged);
-    QObject::connect(this, &AppController::terminalHistoryTaskCompleted, this,
-                     &AppController::applyTerminalHistoryTaskResult, Qt::QueuedConnection);
-    QObject::connect(this, &AppController::noteSearchTaskCompleted, this, &AppController::applyNoteSearchTaskResult,
-                     Qt::QueuedConnection);
-    QObject::connect(this, &AppController::aiNoteReadTaskCompleted, this, &AppController::applyAiNoteReadTaskResult,
-                     Qt::QueuedConnection);
-    QObject::connect(this, &AppController::aiTextAttachmentTaskCompleted, this,
-                     &AppController::applyAiTextAttachmentTaskResult, Qt::QueuedConnection);
-    QObject::connect(this, &AppController::aiImageAttachmentTaskCompleted, this,
-                     &AppController::applyAiImageAttachmentTaskResult, Qt::QueuedConnection);
-    QObject::connect(this, &AppController::aiUserSkillTaskCompleted, this, &AppController::applyAiUserSkillTaskResult,
-                     Qt::QueuedConnection);
-    QObject::connect(this, &AppController::scriptOutputObserved, this, &AppController::observeScriptOutput,
-                     Qt::QueuedConnection);
-    initializeAiPrivacySignals();
-    initializePortForwardingSignalBridges();
-    loadHostProfiles();
-    loadPortForwardingRules();
-    loadApplicationSettings();
-    refreshLocalShellCatalog();
-    loadAiPermissionRules();
-    loadAiQuickMessages();
-    initializeAiDebugTrace();
-    m_mcpRuntime.initialize();
-    initializeAiConversationHistory();
-    initializeActionRegistry();
-    initializeTransferManager();
-    initializeScriptExecutionTimer();
-    loadQuickCommands();
-    loadWorkspaceState();
-    refreshNotes();
-    initializeAiModelCatalogRefresh();
+    initializeRuntime();
 }
 
 AppController::AppController(QString profileStorePath, QString knownHostsPath, QString settingsPath,
@@ -2487,6 +2443,11 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
           defaultCredentialStorage(storageMode))),
       m_defaultCredentialStorage(defaultCredentialStorage(storageMode)),
       m_knownHostsPath(std::move(knownHostsPath))
+{
+    initializeRuntime();
+}
+
+void AppController::initializeRuntime()
 {
     if (!m_localSessionFactory)
     {
@@ -14874,16 +14835,16 @@ void AppController::scheduleTerminalTabsChanged()
         return;
     }
     m_terminalTabsChangePending = true;
-    QMetaObject::invokeMethod(
-        this,
-        [this] {
-            m_terminalTabsChangePending = false;
-            if (!m_shutdownStarted)
-            {
-                emit terminalTabsChanged();
-            }
-        },
-        Qt::QueuedConnection);
+    QTimer::singleShot(0, this, &AppController::flushTerminalTabsChanged);
+}
+
+void AppController::flushTerminalTabsChanged()
+{
+    m_terminalTabsChangePending = false;
+    if (!m_shutdownStarted)
+    {
+        emit terminalTabsChanged();
+    }
 }
 
 void AppController::updateTelemetryVisibility()

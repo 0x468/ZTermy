@@ -135,8 +135,8 @@ ConPtyProcess::~ConPtyProcess()
     close();
 }
 
-std::error_code ConPtyProcess::start(std::wstring applicationName, std::wstring commandLine, const TerminalSize size,
-                                     const std::wstring_view workingDirectory)
+std::error_code ConPtyProcess::start(const std::wstring &applicationName, std::wstring commandLine,
+                                     const TerminalSize size, const std::wstring_view workingDirectory)
 {
     if (applicationName.empty() || commandLine.empty() || !size.valid())
     {

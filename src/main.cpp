@@ -4739,7 +4739,7 @@ int main(int argc, char *argv[])
 
     qCInfo(applicationLog) << "Application event loop stopped; beginning orderly shutdown";
     appController.shutdown();
-    window.releaseResources();
+    window.releaseQmlResources();
     qCInfo(applicationLog) << "Terminal and scene graph resources released";
     return exitCode;
 }
