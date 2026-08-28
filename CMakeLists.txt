@@ -25,6 +25,12 @@ include(FetchContent)
 
 option(ZTERMY_STATIC_BUILD "Build ztermy with the locally provided static Qt package" OFF)
 
+if(ZTERMY_STATIC_BUILD)
+    set(ZTERMY_PACKAGE_FLAVOR "static")
+else()
+    set(ZTERMY_PACKAGE_FLAVOR "dynamic")
+endif()
+
 set(OPENSSL_USE_STATIC_LIBS "${ZTERMY_STATIC_BUILD}")
 set(OPENSSL_MSVC_STATIC_RT "${ZTERMY_STATIC_BUILD}")
 if(ZTERMY_STATIC_BUILD)
@@ -1576,10 +1582,10 @@ add_custom_target(ztermy_real_host_ui_runtime_smoke
 if(ZTERMY_STATIC_BUILD)
     install(TARGETS ztermy RUNTIME DESTINATION . COMPONENT Runtime)
 else()
-    install(TARGETS ztermy RUNTIME DESTINATION bin COMPONENT Runtime)
+    install(TARGETS ztermy RUNTIME DESTINATION . COMPONENT Runtime)
     install(
         FILES ${RUNTIME_DEPENDENCIES}
-        DESTINATION bin
+        DESTINATION .
         COMPONENT Runtime
     )
 
@@ -1589,12 +1595,33 @@ else()
     qt_generate_deploy_qml_app_script(
         TARGET ztermy
         OUTPUT_SCRIPT ZTERMY_DYNAMIC_DEPLOY_SCRIPT
+        NO_COMPILER_RUNTIME
         NO_TRANSLATIONS
     )
     install(
         SCRIPT "${ZTERMY_DYNAMIC_DEPLOY_SCRIPT}"
         COMPONENT Runtime
     )
+    install(CODE [[
+        set(ztermy_deploy_bin "${CMAKE_INSTALL_PREFIX}/bin")
+        if(EXISTS "${ztermy_deploy_bin}")
+            file(GLOB ztermy_deploy_bin_files
+                LIST_DIRECTORIES FALSE
+                "${ztermy_deploy_bin}/*"
+            )
+            foreach(ztermy_deploy_file IN LISTS ztermy_deploy_bin_files)
+                cmake_path(GET ztermy_deploy_file FILENAME ztermy_deploy_name)
+                file(RENAME
+                    "${ztermy_deploy_file}"
+                    "${CMAKE_INSTALL_PREFIX}/${ztermy_deploy_name}"
+                )
+            endforeach()
+            file(REMOVE_RECURSE "${ztermy_deploy_bin}")
+        endif()
+        file(WRITE "${CMAKE_INSTALL_PREFIX}/qt.conf"
+            "[Paths]\nPrefix = .\nPlugins = plugins\nQml2Imports = qml\n"
+        )
+    ]] COMPONENT Runtime)
 
     add_custom_target(ztermy_dynamic_deploy
         COMMAND "${CMAKE_COMMAND}" -E rm -rf "${ZTERMY_DYNAMIC_DEPLOY_ROOT}"
@@ -1609,7 +1636,7 @@ else()
 
     add_custom_target(ztermy_dynamic_deploy_smoke
         COMMAND "${CMAKE_COMMAND}"
-                "-DZTERMY_DEPLOYED_EXECUTABLE=${ZTERMY_DYNAMIC_DEPLOY_ROOT}/bin/ztermy.exe"
+                "-DZTERMY_DEPLOYED_EXECUTABLE=${ZTERMY_DYNAMIC_DEPLOY_ROOT}/ztermy.exe"
                 "-DZTERMY_DEPLOYED_DATA_DIR=${ZTERMY_DYNAMIC_DEPLOY_ROOT}/smoke-data"
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunDynamicDeploymentSmoke.cmake"
         DEPENDS ztermy_dynamic_deploy
@@ -1622,19 +1649,42 @@ if(ZTERMY_STATIC_BUILD)
     set(ZTERMY_PORTABLE_PACKAGE_ROOT "${CMAKE_CURRENT_BINARY_DIR}/package/portable")
     file(MAKE_DIRECTORY "${ZTERMY_PORTABLE_PACKAGE_ROOT}")
     add_custom_target(ztermy_portable_package
-        COMMAND "${CMAKE_COMMAND}" -E rm -rf "ztermy-${PROJECT_VERSION}-windows-x64"
-        COMMAND "${CMAKE_COMMAND}" -E make_directory "ztermy-${PROJECT_VERSION}-windows-x64"
+        COMMAND "${CMAKE_COMMAND}" -E rm -rf "ztermy-${PROJECT_VERSION}-windows-x64-static"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "ztermy-${PROJECT_VERSION}-windows-x64-static"
         COMMAND "${CMAKE_COMMAND}" -E copy "$<TARGET_FILE:ztermy>"
-                "ztermy-${PROJECT_VERSION}-windows-x64/ztermy.exe"
+                "ztermy-${PROJECT_VERSION}-windows-x64-static/ztermy.exe"
         COMMAND "${CMAKE_COMMAND}" -E touch
-                "ztermy-${PROJECT_VERSION}-windows-x64/portable.flag"
+                "ztermy-${PROJECT_VERSION}-windows-x64-static/portable.flag"
         COMMAND "${CMAKE_COMMAND}" -E tar cf
-                "ztermy-${PROJECT_VERSION}-windows-x64-portable.zip"
+                "ztermy-${PROJECT_VERSION}-windows-x64-static-portable.zip"
                 --format=zip
-                "ztermy-${PROJECT_VERSION}-windows-x64"
+                "ztermy-${PROJECT_VERSION}-windows-x64-static"
         WORKING_DIRECTORY "${ZTERMY_PORTABLE_PACKAGE_ROOT}"
         DEPENDS ztermy
         COMMENT "Creating the self-contained ztermy portable package"
+        VERBATIM
+    )
+else()
+    set(ZTERMY_PORTABLE_PACKAGE_ROOT "${CMAKE_CURRENT_BINARY_DIR}/package/portable")
+    file(MAKE_DIRECTORY "${ZTERMY_PORTABLE_PACKAGE_ROOT}")
+    add_custom_target(ztermy_portable_package
+        COMMAND "${CMAKE_COMMAND}"
+                "-DZTERMY_DYNAMIC_DEPLOY_ROOT=${ZTERMY_DYNAMIC_DEPLOY_ROOT}"
+                "-DZTERMY_PORTABLE_PACKAGE_ROOT=${ZTERMY_PORTABLE_PACKAGE_ROOT}"
+                "-DZTERMY_PORTABLE_VERSION=${PROJECT_VERSION}"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/PackageDynamicPortable.cmake"
+        DEPENDS ztermy_dynamic_deploy_smoke
+        COMMENT "Creating the deployed dynamic Qt ztermy portable package"
+        VERBATIM
+    )
+    add_custom_target(ztermy_portable_contract_smoke
+        COMMAND "${CMAKE_COMMAND}"
+                "-DZTERMY_PORTABLE_ARCHIVE=${ZTERMY_PORTABLE_PACKAGE_ROOT}/ztermy-${PROJECT_VERSION}-windows-x64-dynamic-portable.zip"
+                "-DZTERMY_PORTABLE_INSPECTION_ROOT=${CMAKE_CURRENT_BINARY_DIR}/test-data/dynamic-portable-contract"
+                "-DZTERMY_PORTABLE_VERSION=${PROJECT_VERSION}"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyDynamicPortable.cmake"
+        DEPENDS ztermy_portable_package
+        COMMENT "Inspecting and starting the dynamic portable archive"
         VERBATIM
     )
 endif()
@@ -4218,21 +4268,22 @@ if(BUILD_TESTING)
     )
 endif()
 
-if(ZTERMY_STATIC_BUILD)
-    if(CMAKE_VERSION VERSION_LESS 4.3)
-        message(FATAL_ERROR
-            "The per-user WiX installer requires CMake 4.3 or newer. "
-            "Use a current CMake release for the msvc-static-release preset."
-        )
-    endif()
+if(CMAKE_VERSION VERSION_LESS 4.3)
+    message(FATAL_ERROR
+        "The per-user WiX installer requires CMake 4.3 or newer. "
+        "Use a current CMake release for a packaging preset."
+    )
+endif()
 
-    set(CPACK_GENERATOR "WIX")
+set(CPACK_GENERATOR "WIX")
     set(CPACK_WIX_VERSION "4")
     set(CPACK_PACKAGE_NAME "ztermy")
     set(CPACK_PACKAGE_VENDOR "ztermy")
     set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "A native Windows 11 SSH terminal")
     set(CPACK_PACKAGE_INSTALL_DIRECTORY "ztermy")
-    set(CPACK_PACKAGE_FILE_NAME "ztermy-${PROJECT_VERSION}-windows-x64")
+    set(CPACK_PACKAGE_FILE_NAME
+        "ztermy-${PROJECT_VERSION}-windows-x64-${ZTERMY_PACKAGE_FLAVOR}"
+    )
     set(CPACK_PACKAGE_EXECUTABLES "ztermy" "ztermy")
     set(CPACK_INSTALL_CMAKE_PROJECTS
         "${CMAKE_BINARY_DIR};${PROJECT_NAME};Runtime;/"
@@ -4270,7 +4321,7 @@ if(ZTERMY_STATIC_BUILD)
     )
     unset(ZTERMY_WIX_DEFAULT_ROOT)
 
-    add_custom_target(ztermy_installer
+add_custom_target(ztermy_installer
         COMMAND "${CMAKE_COMMAND}" -E env
                 "WIX=${ZTERMY_WIX_ROOT}"
                 "${CMAKE_CPACK_COMMAND}"
@@ -4280,38 +4331,43 @@ if(ZTERMY_STATIC_BUILD)
         DEPENDS ztermy
         COMMENT "Creating the per-user ztermy MSI installer"
         VERBATIM
-    )
+)
 
-    add_custom_target(ztermy_installer_contract_smoke
+if(NOT ZTERMY_STATIC_BUILD)
+    add_dependencies(ztermy_installer ztermy_dynamic_deploy_smoke)
+endif()
+
+add_custom_target(ztermy_installer_contract_smoke
         COMMAND "${CMAKE_COMMAND}"
                 "-DZTERMY_WIX_EXECUTABLE=${ZTERMY_WIX_ROOT}/wix.exe"
-                "-DZTERMY_INSTALLER=${CMAKE_BINARY_DIR}/ztermy-${PROJECT_VERSION}-windows-x64.msi"
+                "-DZTERMY_INSTALLER=${CMAKE_BINARY_DIR}/ztermy-${PROJECT_VERSION}-windows-x64-${ZTERMY_PACKAGE_FLAVOR}.msi"
+                "-DZTERMY_INSTALLER_FLAVOR=${ZTERMY_PACKAGE_FLAVOR}"
                 "-DZTERMY_INSTALLER_INSPECTION_ROOT=${CMAKE_BINARY_DIR}/test-data/installer-contract"
                 "-DZTERMY_SKIP_ICE_VALIDATION:BOOL=${ZTERMY_SKIP_ICE_VALIDATION}"
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyWixInstaller.cmake"
         DEPENDS ztermy_installer
         COMMENT "Validating and inspecting the per-user ztermy MSI contract"
         VERBATIM
-    )
+)
 
-    set(ZTERMY_RELEASE_BUNDLE_ROOT
-        "${CMAKE_BINARY_DIR}/package/release/ztermy-${PROJECT_VERSION}-windows-x64"
-    )
-    add_custom_target(ztermy_release_bundle
+set(ZTERMY_RELEASE_BUNDLE_ROOT
+    "${CMAKE_BINARY_DIR}/package/release/ztermy-${PROJECT_VERSION}-windows-x64-${ZTERMY_PACKAGE_FLAVOR}"
+)
+add_custom_target(ztermy_release_bundle
         COMMAND "${CMAKE_COMMAND}"
                 "-DZTERMY_BUILD_ROOT=${CMAKE_BINARY_DIR}"
                 "-DZTERMY_RELEASE_BUNDLE_ROOT=${ZTERMY_RELEASE_BUNDLE_ROOT}"
                 "-DZTERMY_RELEASE_VERSION=${PROJECT_VERSION}"
-                "-DZTERMY_PORTABLE_ARCHIVE=${ZTERMY_PORTABLE_PACKAGE_ROOT}/ztermy-${PROJECT_VERSION}-windows-x64-portable.zip"
-                "-DZTERMY_INSTALLER=${CMAKE_BINARY_DIR}/ztermy-${PROJECT_VERSION}-windows-x64.msi"
+                "-DZTERMY_RELEASE_FLAVOR=${ZTERMY_PACKAGE_FLAVOR}"
+                "-DZTERMY_PORTABLE_ARCHIVE=${ZTERMY_PORTABLE_PACKAGE_ROOT}/ztermy-${PROJECT_VERSION}-windows-x64-${ZTERMY_PACKAGE_FLAVOR}-portable.zip"
+                "-DZTERMY_INSTALLER=${CMAKE_BINARY_DIR}/ztermy-${PROJECT_VERSION}-windows-x64-${ZTERMY_PACKAGE_FLAVOR}.msi"
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/AssembleReleaseBundle.cmake"
         DEPENDS
             ztermy_portable_package
             ztermy_installer_contract_smoke
         COMMENT "Assembling the checksummed ztermy release bundle"
         VERBATIM
-    )
-endif()
+)
 
 if(BUILD_TESTING)
     add_test(
@@ -4560,6 +4616,14 @@ endforeach()
 add_custom_target(ztermy_clang_tidy_check
     DEPENDS ${ZTERMY_CLANG_TIDY_TARGETS}
 )
+
+# A distributable static bundle must never be assembled from a source tree
+# that only passed the dynamic Debug compilation database. MSVC's Release
+# iterator and preprocessor configuration can expose diagnostics that are not
+# actionable in Debug, so make the package target enforce its own analysis.
+if(TARGET ztermy_release_bundle)
+    add_dependencies(ztermy_release_bundle ztermy_clang_tidy_check)
+endif()
 
 unset(ZTERMY_CLANG_TIDY_DEFAULT_JOBS)
 unset(ZTERMY_CLANG_TIDY_INDEX)

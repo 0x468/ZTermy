@@ -4703,12 +4703,11 @@ bool AppController::closeOtherTerminalTabs(const QString &id)
         return false;
     }
     std::vector<QString> toClose;
-    for (auto position = m_workspaceState.terminalWorkspaces.rbegin();
-         position != m_workspaceState.terminalWorkspaces.rend(); ++position)
+    for (const auto &terminalWorkspace : std::views::reverse(m_workspaceState.terminalWorkspaces))
     {
-        if (position->id != utf8String(workspaceId))
+        if (terminalWorkspace.id != utf8String(workspaceId))
         {
-            toClose.push_back(utf8QString(position->id));
+            toClose.push_back(utf8QString(terminalWorkspace.id));
         }
     }
     for (const QString &candidate : toClose)

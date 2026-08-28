@@ -77,9 +77,14 @@ incrementally when the owner will test that binary.
 ### Milestone, RC, tag, or package
 
 - Run formatting, QML quality, translation, and asset gates.
-- Run full clang-tidy.
+- Run full clang-tidy from the static Release build tree for every Windows
+  package or tag. A Debug-only clang-tidy pass is insufficient because MSVC
+  iterator and preprocessor configuration can expose Release-only diagnostics.
 - Run Debug and static Release CTest with
   `--parallel 12 --output-on-failure`.
+- For every versioned Windows release, build and verify both the portable ZIP
+  and MSI installer. Do not treat a standalone executable or a successful
+  compile as a complete release handoff.
 - Run relevant window, IME, DPI, material, terminal-latency, portable, and
   installer acceptance checks. Package only after the tested build succeeds.
 

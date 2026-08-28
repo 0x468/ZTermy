@@ -1,12 +1,20 @@
 foreach(required_variable
         ZTERMY_WIX_EXECUTABLE
         ZTERMY_INSTALLER
+        ZTERMY_INSTALLER_FLAVOR
         ZTERMY_INSTALLER_INSPECTION_ROOT)
     if(NOT DEFINED ${required_variable}
        OR "${${required_variable}}" STREQUAL "")
         message(FATAL_ERROR "${required_variable} is required")
     endif()
 endforeach()
+
+if(NOT ZTERMY_INSTALLER_FLAVOR MATCHES "^(static|dynamic)$")
+    message(FATAL_ERROR
+        "ZTERMY_INSTALLER_FLAVOR must be static or dynamic, got: "
+        "${ZTERMY_INSTALLER_FLAVOR}"
+    )
+endif()
 
 if(NOT EXISTS "${ZTERMY_WIX_EXECUTABLE}")
     message(FATAL_ERROR
@@ -115,16 +123,10 @@ endforeach()
 
 string(REGEX MATCHALL "<File[ \t\r\n]" installer_files "${installer_source}")
 list(LENGTH installer_files installer_file_count)
-if(NOT installer_file_count EQUAL 1)
-    message(FATAL_ERROR
-        "Expected exactly one MSI File entry, observed ${installer_file_count}"
-    )
-endif()
 
 string(TOLOWER "${installer_source}" installer_source_lower)
 foreach(forbidden_name
         "portable.flag"
-        "\\.dll"
         "\\.pdb"
         "ghostty")
     if(installer_source_lower MATCHES "${forbidden_name}")
@@ -134,16 +136,67 @@ foreach(forbidden_name
     endif()
 endforeach()
 
+if(ZTERMY_INSTALLER_FLAVOR STREQUAL "static")
+    if(NOT installer_file_count EQUAL 1)
+        message(FATAL_ERROR
+            "Expected exactly one static MSI File entry, observed "
+            "${installer_file_count}"
+        )
+    endif()
+    if(installer_source_lower MATCHES "\\.dll")
+        message(FATAL_ERROR
+            "Static MSI contains an unexpected DLL payload reference"
+        )
+    endif()
+elseif(installer_file_count LESS 8)
+    message(FATAL_ERROR
+        "Dynamic MSI contains too few payload files: ${installer_file_count}"
+    )
+endif()
+
 file(GLOB_RECURSE extracted_files
     LIST_DIRECTORIES FALSE
     "${extracted_payload}/*"
 )
 list(LENGTH extracted_files extracted_file_count)
-if(NOT extracted_file_count EQUAL 2)
+if(ZTERMY_INSTALLER_FLAVOR STREQUAL "static"
+   AND NOT extracted_file_count EQUAL 2)
     message(FATAL_ERROR
         "Expected one executable and one product icon, observed "
         "${extracted_file_count}: ${extracted_files}"
     )
+endif()
+
+if(ZTERMY_INSTALLER_FLAVOR STREQUAL "dynamic")
+    foreach(required_payload_name
+            "Qt6Core.dll"
+            "Qt6Gui.dll"
+            "Qt6Qml.dll"
+            "Qt6Quick.dll"
+            "libcrypto-3-x64.dll"
+            "qwindows.dll")
+        string(TOLOWER "${required_payload_name}" required_payload_name_lower)
+        string(REPLACE "." "\\." required_payload_pattern
+            "${required_payload_name_lower}"
+        )
+        if(NOT installer_source_lower MATCHES
+           "name=\"${required_payload_pattern}\"")
+            message(FATAL_ERROR
+                "Dynamic MSI is missing ${required_payload_name}"
+            )
+        endif()
+    endforeach()
+
+    foreach(extracted_file IN LISTS extracted_files)
+        cmake_path(GET extracted_file FILENAME extracted_name)
+        string(TOLOWER "${extracted_name}" extracted_name_lower)
+        if(extracted_name_lower MATCHES
+           "^qt6(core|gui|network|qml|quick|svg)d\\.dll$")
+            message(FATAL_ERROR
+                "Dynamic MSI contains a Debug Qt library: ${extracted_file}"
+            )
+        endif()
+    endforeach()
 endif()
 
 set(extracted_executables ${extracted_files})
@@ -181,7 +234,8 @@ if(extracted_icon_size LESS 1)
 endif()
 
 message(STATUS
-    "Installer contract passed: per-user LocalAppData package, one ztermy.exe, "
+    "${ZTERMY_INSTALLER_FLAVOR} installer contract passed: per-user "
+    "LocalAppData package, one ztermy.exe, "
     "product icon, Start-menu shortcut, same-version upgrade, and uninstall "
     "folder removal"
 )

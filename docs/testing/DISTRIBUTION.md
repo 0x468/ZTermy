@@ -61,12 +61,41 @@ use the build directory or the Qt installation as a runtime dependency.
 
 Expected:
 
-- `bin/ztermy.exe`, the required Qt and OpenSSL DLLs, `bin/qt.conf`, and
+- Root-level `ztermy.exe`, the required Qt and OpenSSL DLLs, root `qt.conf`, and
   platform/QML plugins are present below the clean deployment directory.
 - The native/QML smoke path exits successfully without a missing-DLL or
   missing-plugin dialog.
 - Smoke-test data is written only below the deployment's `smoke-data`
   directory.
+
+## Build the dynamic release artifacts
+
+Use the dynamic Release preset for public dynamically linked packages:
+
+```powershell
+$env:ZTERMY_QT_DYNAMIC_ROOT = "C:\Qt\6.8.3\msvc2022_64"
+cmake --preset msvc-dynamic-release `
+  -DZTERMY_WIX_ROOT="$PWD/build/tools/wix"
+cmake --build --preset msvc-dynamic-release `
+  --target ztermy_portable_contract_smoke
+cmake --build --preset msvc-dynamic-release `
+  --target ztermy_installer_contract_smoke
+```
+
+Expected artifacts:
+
+```text
+build/msvc-dynamic-release/package/portable/ztermy-<version>-windows-x64-dynamic-portable.zip
+build/msvc-dynamic-release/ztermy-<version>-windows-x64-dynamic.msi
+```
+
+The portable contract extracts the archive and starts it from the isolated
+tree. The MSI contract decompiles the database and requires the Qt Core, GUI,
+QML, Quick, Windows platform, and OpenSSL crypto runtime payloads. Neither
+package may contain PDBs or Debug Qt libraries. The current dynamic package
+does not bootstrap the Microsoft Visual C++ Redistributable; clean-machine
+acceptance must therefore verify that prerequisite until a bootstrapper or
+app-local runtime policy is adopted.
 
 ## Build the static portable archive
 
@@ -137,7 +166,7 @@ If `build/tools/wix` already contains WiX 4.0.4, omit the install command. The
 MSI is written to:
 
 ```text
-build/msvc-static-release/ztermy-0.2.0-windows-x64.msi
+build/msvc-static-release/ztermy-<version>-windows-x64-static.msi
 ```
 
 Expected:
@@ -182,16 +211,16 @@ cmake --build --preset msvc-static-release --target ztermy_release_bundle
 The authoritative handoff directory is recreated below:
 
 ```text
-build/msvc-static-release/package/release/ztermy-0.2.0-windows-x64
+build/msvc-static-release/package/release/ztermy-<version>-windows-x64-static
 ```
 
 Expected:
 
 - The directory contains exactly the MSI, portable ZIP, `SHA256SUMS.txt`, and
   `release-manifest.json`.
-- `release-manifest.json` reports version `0.2.0`, platform `windows`, and
-  architecture `x64`; both manifests contain the exact SHA-256 values of the
-  copied artifacts.
+- `release-manifest.json` reports the version, `static` flavor, platform
+  `windows`, and architecture `x64`; both manifests contain the exact SHA-256
+  values of the copied artifacts.
 - Rebuilding removes stale files from the handoff directory.
 - No build tree, source file, PDB, DLL, portable marker, private data, or
   license placeholder is added.

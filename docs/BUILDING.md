@@ -57,6 +57,17 @@ cmake --preset msvc-dynamic-relwithdebinfo
 cmake --build --preset msvc-dynamic-relwithdebinfo
 ```
 
+Dynamic release packaging:
+
+```powershell
+cmake --preset msvc-dynamic-release `
+  -DZTERMY_WIX_ROOT="$PWD/build/tools/wix"
+cmake --build --preset msvc-dynamic-release `
+  --target ztermy_portable_contract_smoke
+cmake --build --preset msvc-dynamic-release `
+  --target ztermy_installer_contract_smoke
+```
+
 Static packaging:
 
 ```powershell
@@ -130,18 +141,21 @@ producing a mislabeled package when a Qt root is missing or a stale cache points
 at the wrong installation. Use `--fresh` when switching an existing build
 directory between Qt installations.
 
-The static portable archive is written below
-`build/msvc-static-release/package/portable`. It contains `portable.flag`, so
-all runtime data remains below the extracted directory. See
+Static and dynamic portable archives are written below their preset-specific
+`package/portable` directories. Both contain `portable.flag`, so all runtime
+data remains below the extracted directory. The dynamic archive additionally
+contains the deployed Qt, QML, plugin, graphics, and OpenSSL runtime files and
+is started from its extracted tree by `ztermy_portable_contract_smoke`. See
 [testing/DISTRIBUTION.md](testing/DISTRIBUTION.md) for the runtime checks.
 
-The per-user MSI is written directly below `build/msvc-static-release`. CPack
+Each per-user MSI is written directly below its preset build directory. CPack
 uses the workspace-local WiX executable selected through the
 `ZTERMY_WIX_ROOT` CMake cache path; WiX does not need to be installed globally.
-The contract-smoke target generates and validates the MSI, decompiles it, and
-requires one static `ztermy.exe` payload under the per-user LocalAppData
-directory plus the direct Start-menu shortcut. It rejects `portable.flag`, Qt
-or OpenSSL DLLs, PDBs, and Ghostty development payloads.
+The contract-smoke target generates and validates the MSI and decompiles it.
+The static contract requires one `ztermy.exe` and rejects runtime DLLs. The
+dynamic contract requires the executable, core Qt DLLs, the Windows platform
+plugin, and OpenSSL crypto runtime. Both reject `portable.flag`, PDBs, Debug Qt
+libraries, and Ghostty development payloads.
 
 WiX ICE validation calls the Windows Installer service. On the current
 development machine a non-elevated WiX process can report `WIX0217` and exit

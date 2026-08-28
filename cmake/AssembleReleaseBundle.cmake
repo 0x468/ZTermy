@@ -2,6 +2,7 @@ foreach(required_variable
         ZTERMY_BUILD_ROOT
         ZTERMY_RELEASE_BUNDLE_ROOT
         ZTERMY_RELEASE_VERSION
+        ZTERMY_RELEASE_FLAVOR
         ZTERMY_PORTABLE_ARCHIVE
         ZTERMY_INSTALLER)
     if(NOT DEFINED ${required_variable}
@@ -9,6 +10,13 @@ foreach(required_variable
         message(FATAL_ERROR "${required_variable} is required")
     endif()
 endforeach()
+
+if(NOT ZTERMY_RELEASE_FLAVOR MATCHES "^(static|dynamic)$")
+    message(FATAL_ERROR
+        "ZTERMY_RELEASE_FLAVOR must be static or dynamic, got: "
+        "${ZTERMY_RELEASE_FLAVOR}"
+    )
+endif()
 
 foreach(required_artifact
         ZTERMY_PORTABLE_ARCHIVE
@@ -49,7 +57,9 @@ if(NOT bundle_is_below_build
     )
 endif()
 
-set(expected_stem "ztermy-${ZTERMY_RELEASE_VERSION}-windows-x64")
+set(expected_stem
+    "ztermy-${ZTERMY_RELEASE_VERSION}-windows-x64-${ZTERMY_RELEASE_FLAVOR}"
+)
 set(expected_portable_name "${expected_stem}-portable.zip")
 set(expected_installer_name "${expected_stem}.msi")
 cmake_path(GET ZTERMY_PORTABLE_ARCHIVE FILENAME portable_name)
@@ -101,6 +111,7 @@ string(CONCAT release_manifest
     "  \"version\": \"${ZTERMY_RELEASE_VERSION}\",\n"
     "  \"platform\": \"windows\",\n"
     "  \"architecture\": \"x64\",\n"
+    "  \"flavor\": \"${ZTERMY_RELEASE_FLAVOR}\",\n"
     "  \"checksumAlgorithm\": \"SHA-256\",\n"
     "  \"artifacts\": [\n"
     "    {\n"

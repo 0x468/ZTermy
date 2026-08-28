@@ -42,6 +42,17 @@
       }
     },
     {
+      "name": "msvc-dynamic-release",
+      "displayName": "MSVC + dynamic Qt (Release)",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_PREFIX_PATH": "$env{ZTERMY_QT_DYNAMIC_ROOT}",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDLL",
+        "ZTERMY_STATIC_BUILD": "OFF"
+      }
+    },
+    {
       "name": "msvc-static-release",
       "displayName": "MSVC + static Qt (Release)",
       "inherits": "base",
@@ -65,6 +76,11 @@
       "jobs": 0
     },
     {
+      "name": "msvc-dynamic-release",
+      "configurePreset": "msvc-dynamic-release",
+      "jobs": 0
+    },
+    {
       "name": "msvc-static-release",
       "configurePreset": "msvc-static-release",
       "jobs": 0
@@ -84,6 +100,16 @@
     {
       "name": "msvc-dynamic-relwithdebinfo",
       "configurePreset": "msvc-dynamic-relwithdebinfo",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "jobs": 12
+      }
+    },
+    {
+      "name": "msvc-dynamic-release",
+      "configurePreset": "msvc-dynamic-release",
       "output": {
         "outputOnFailure": true
       },
