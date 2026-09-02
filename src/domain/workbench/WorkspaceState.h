@@ -119,6 +119,9 @@ inline constexpr double maximumTerminalSplitRatio = 0.8;
 [[nodiscard]] bool resizeTerminalSplit(TerminalWorkspaceLayout &layout, std::string_view splitNodeId, double ratio);
 [[nodiscard]] bool swapTerminalPanes(TerminalWorkspaceLayout &layout, std::string_view firstPaneId,
                                      std::string_view secondPaneId);
+[[nodiscard]] bool moveTerminalPane(TerminalWorkspaceLayout &layout, std::string_view paneId,
+                                    std::string_view targetPaneId, std::string splitNodeId,
+                                    TerminalSplitOrientation orientation, bool placeAfter);
 [[nodiscard]] std::vector<std::string> terminalPaneOrder(const TerminalWorkspaceLayout &layout);
 [[nodiscard]] ProfileWorkspaceState *findProfileWorkspaceState(WorkspaceState &state, std::string_view profileId);
 [[nodiscard]] const ProfileWorkspaceState *findProfileWorkspaceState(const WorkspaceState &state,

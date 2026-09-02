@@ -24,6 +24,8 @@ Item {
     property bool defaultLigatures: true
     property real defaultBackgroundOpacity: 1.0
     property string defaultCursor: "terminal"
+    property string zoomedPaneId: ""
+    property bool detachedPane: false
     // Dynamic self-loading is required because QML rejects static recursive type instantiation.
     // qmllint disable missing-property
     readonly property var activeViewport: contentLoader.item && contentLoader.item["activeViewport"] ? contentLoader.item["activeViewport"] : null
@@ -36,6 +38,8 @@ Item {
     signal multilinePasteConfirmationRequested(var viewport, int lineCount)
     signal browseHostsRequested
     signal terminalSearchRequested
+    signal zoomPaneRequested(string paneId)
+    signal detachPaneRequested(string paneId)
 
     function forceActiveFocus() {
         // qmllint disable missing-property
@@ -123,6 +127,7 @@ Item {
             readonly property var activeViewport: node.active ? viewport : null
             readonly property bool aiConfigured: !!root.controller && root.controller.aiModel.trim().length > 0 && (root.controller.aiProviderPreference === "openai-chatgpt" ? root.controller.aiChatGptConfigured : root.controller.aiBaseUrl.trim().length > 0 && (root.controller.aiProviderPreference === "ollama" || root.controller.aiApiKeyConfigured))
             readonly property bool connectionProgressRequested: tab.kind === "ssh" && (!!tab.connecting || !!tab.reconnecting)
+            readonly property bool paneHeaderVisible: root.detachedPane || root.zoomedPaneId.length > 0 || (root.controller && root.controller.activeTerminalWorkspace.paneCount > 1)
             property bool connectionProgressVisible: false
             property bool connectionProgressWasReconnect: false
             property int connectionProgressLastStep: 0
@@ -387,6 +392,7 @@ Item {
                 objectName: "terminalViewport-" + leaf.node.id
                 anchors.fill: parent
                 anchors.margins: leaf.node.active ? 2 : 1
+                anchors.topMargin: leaf.paneHeaderVisible ? 32 : (leaf.node.active ? 2 : 1)
                 focus: !!leaf.node.active
                 fontFamily: leaf.tab.sessionFontFamily && leaf.tab.sessionFontFamily.length > 0 ? leaf.tab.sessionFontFamily : root.defaultFontFamily
                 fontPixelSize: leaf.tab.sessionFontSize > 0 ? leaf.tab.sessionFontSize : root.defaultFontSize
@@ -439,6 +445,89 @@ Item {
                     function onNodeChanged() {
                         Qt.callLater(viewport.attachToController);
                     }
+                }
+            }
+
+            Rectangle {
+                id: paneHeader
+
+                property string paneId: leaf.node.id || ""
+                property bool dropCompleted: false
+
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                height: leaf.paneHeaderVisible ? 32 : 0
+                visible: height > 0
+                color: leaf.node.active ? Theme.controlBackground : Theme.chromeBackground
+                border.color: Theme.border
+                z: 12
+                Drag.active: paneDetachDrag.active
+                Drag.source: paneHeader
+                Drag.keys: ["ztermy-terminal-pane"]
+                Drag.hotSpot.x: paneDetachDrag.centroid.position.x
+                Drag.hotSpot.y: paneDetachDrag.centroid.position.y
+
+                Text {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 10
+                    anchors.right: paneActions.left
+                    anchors.rightMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: leaf.tab.title || leaf.tab.identity || qsTr("Terminal pane")
+                    color: leaf.node.active ? Theme.text : Theme.textMuted
+                    elide: Text.ElideRight
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.textLabel
+                    font.weight: leaf.node.active ? Font.DemiBold : Font.Normal
+                }
+
+                DragHandler {
+                    id: paneDetachDrag
+
+                    target: null
+                    acceptedButtons: Qt.LeftButton
+                    dragThreshold: 10
+                    onActiveChanged: {
+                        if (active) {
+                            paneHeader.dropCompleted = false;
+                        } else if (!paneHeader.dropCompleted && Math.hypot(translation.x, translation.y) > 96) {
+                            root.detachPaneRequested(leaf.node.id);
+                        }
+                    }
+                }
+            }
+
+            DropArea {
+                id: paneDropArea
+
+                anchors.fill: parent
+                keys: ["ztermy-terminal-pane"]
+                z: 11
+                onDropped: drop => {
+                    // qmllint disable missing-property
+                    if (!drop.source || drop.source["paneId"] === leaf.node.id)
+                        return;
+                    const horizontalEdge = drop.x < width * 0.25 || drop.x > width * 0.75;
+                    const orientation = horizontalEdge ? "horizontal" : "vertical";
+                    const placeAfter = horizontalEdge ? drop.x > width / 2 : drop.y > height / 2;
+                    drop.source["dropCompleted"] = root.controller.moveTerminalPane(drop.source["paneId"], leaf.node.id, orientation, placeAfter);
+                    if (drop.source["dropCompleted"])
+                        drop.acceptProposedAction();
+                    // qmllint enable missing-property
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.leftMargin: paneDropArea.drag.x < paneDropArea.width * 0.25 ? 0 : paneDropArea.drag.x > paneDropArea.width * 0.75 ? paneDropArea.width / 2 : 0
+                    anchors.rightMargin: paneDropArea.drag.x < paneDropArea.width * 0.25 ? paneDropArea.width / 2 : 0
+                    anchors.topMargin: paneDropArea.drag.x >= paneDropArea.width * 0.25 && paneDropArea.drag.x <= paneDropArea.width * 0.75 && paneDropArea.drag.y > paneDropArea.height / 2 ? paneDropArea.height / 2 : 0
+                    anchors.bottomMargin: paneDropArea.drag.x >= paneDropArea.width * 0.25 && paneDropArea.drag.x <= paneDropArea.width * 0.75 && paneDropArea.drag.y <= paneDropArea.height / 2 ? paneDropArea.height / 2 : 0
+                    visible: paneDropArea.containsDrag
+                    color: Theme.controlHover
+                    border.color: Theme.accent
+                    border.width: 2
+                    opacity: 0.72
                 }
             }
 
@@ -871,12 +960,57 @@ Item {
             }
 
             RowLayout {
+                id: paneActions
+
                 anchors.top: parent.top
                 anchors.right: parent.right
-                anchors.margins: 8
+                anchors.topMargin: leaf.paneHeaderVisible ? 2 : 8
+                anchors.rightMargin: leaf.paneHeaderVisible ? 4 : 8
                 spacing: 2
                 visible: !!leaf.node.active && root.controller
                 z: 10
+
+                ToolButton {
+                    id: zoomPaneButton
+
+                    Layout.preferredWidth: 28
+                    Layout.preferredHeight: 28
+                    hoverEnabled: true
+                    contentItem: AppIcon {
+                        name: "locate"
+                        color: root.zoomedPaneId === leaf.node.id ? Theme.accent : Theme.text
+                    }
+                    background: Rectangle {
+                        radius: Theme.radiusSmall
+                        color: zoomPaneButton.down ? Theme.controlPressed : zoomPaneButton.hovered ? Theme.controlHover : "transparent"
+                    }
+                    onClicked: root.zoomPaneRequested(leaf.node.id)
+                    Accessible.name: root.zoomedPaneId === leaf.node.id ? qsTr("Restore pane layout") : qsTr("Zoom terminal pane")
+                    AppToolTip {
+                        text: zoomPaneButton.Accessible.name
+                    }
+                }
+
+                ToolButton {
+                    id: detachPaneButton
+
+                    Layout.preferredWidth: 28
+                    Layout.preferredHeight: 28
+                    hoverEnabled: true
+                    contentItem: AppIcon {
+                        name: "external-link"
+                        color: Theme.text
+                    }
+                    background: Rectangle {
+                        radius: Theme.radiusSmall
+                        color: detachPaneButton.down ? Theme.controlPressed : detachPaneButton.hovered ? Theme.controlHover : "transparent"
+                    }
+                    onClicked: root.detachedPane ? root.detachPaneRequested("") : root.detachPaneRequested(leaf.node.id)
+                    Accessible.name: root.detachedPane ? qsTr("Reattach terminal pane") : qsTr("Detach terminal pane")
+                    AppToolTip {
+                        text: detachPaneButton.Accessible.name
+                    }
+                }
 
                 ToolButton {
                     id: horizontalSplitButton
@@ -1174,6 +1308,8 @@ Item {
                         item.defaultLigatures = root.defaultLigatures;
                         item.defaultBackgroundOpacity = root.defaultBackgroundOpacity;
                         item.defaultCursor = root.defaultCursor;
+                        item.zoomedPaneId = root.zoomedPaneId;
+                        item.detachedPane = root.detachedPane;
                     }
                 }
 
@@ -1267,6 +1403,18 @@ Item {
                     value: root.defaultCursor
                     when: firstLoader.item !== null
                 }
+                Binding {
+                    target: firstLoader.item
+                    property: "zoomedPaneId"
+                    value: root.zoomedPaneId
+                    when: firstLoader.item !== null
+                }
+                Binding {
+                    target: firstLoader.item
+                    property: "detachedPane"
+                    value: root.detachedPane
+                    when: firstLoader.item !== null
+                }
 
                 Connections {
                     target: firstLoader.item
@@ -1278,6 +1426,12 @@ Item {
                     }
                     function onTerminalSearchRequested() {
                         root.terminalSearchRequested();
+                    }
+                    function onZoomPaneRequested(paneId) {
+                        root.zoomPaneRequested(paneId);
+                    }
+                    function onDetachPaneRequested(paneId) {
+                        root.detachPaneRequested(paneId);
                     }
                 }
             }
@@ -1318,6 +1472,8 @@ Item {
                         item.defaultLigatures = root.defaultLigatures;
                         item.defaultBackgroundOpacity = root.defaultBackgroundOpacity;
                         item.defaultCursor = root.defaultCursor;
+                        item.zoomedPaneId = root.zoomedPaneId;
+                        item.detachedPane = root.detachedPane;
                     }
                 }
 
@@ -1411,6 +1567,18 @@ Item {
                     value: root.defaultCursor
                     when: secondLoader.item !== null
                 }
+                Binding {
+                    target: secondLoader.item
+                    property: "zoomedPaneId"
+                    value: root.zoomedPaneId
+                    when: secondLoader.item !== null
+                }
+                Binding {
+                    target: secondLoader.item
+                    property: "detachedPane"
+                    value: root.detachedPane
+                    when: secondLoader.item !== null
+                }
 
                 Connections {
                     target: secondLoader.item
@@ -1422,6 +1590,12 @@ Item {
                     }
                     function onTerminalSearchRequested() {
                         root.terminalSearchRequested();
+                    }
+                    function onZoomPaneRequested(paneId) {
+                        root.zoomPaneRequested(paneId);
+                    }
+                    function onDetachPaneRequested(paneId) {
+                        root.detachPaneRequested(paneId);
                     }
                 }
             }

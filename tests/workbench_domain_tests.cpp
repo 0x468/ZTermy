@@ -130,8 +130,11 @@ void WorkbenchDomainTests::mutatesBoundedTerminalWorkspaceTreeAtomically()
     QVERIFY(resizeTerminalSplit(layout, "split-root", 0.55));
     QVERIFY(!resizeTerminalSplit(layout, "split-root", 0.1));
     QVERIFY(swapTerminalPanes(layout, "pane-a", "pane-b"));
+    QVERIFY(moveTerminalPane(layout, "pane-a", "pane-b", "split-moved", TerminalSplitOrientation::Horizontal, true));
+    QCOMPARE(terminalPaneOrder(layout), std::vector<std::string>({"pane-c", "pane-b", "pane-a"}));
+    QVERIFY(validTerminalWorkspaceLayout(layout));
     QVERIFY(closeTerminalPane(layout, "pane-c"));
-    QCOMPARE(terminalPaneOrder(layout), std::vector<std::string>({"pane-a", "pane-b"}));
+    QCOMPARE(terminalPaneOrder(layout), std::vector<std::string>({"pane-b", "pane-a"}));
     QVERIFY(validTerminalWorkspaceLayout(layout));
 
     const TerminalWorkspaceLayout unchanged = layout;

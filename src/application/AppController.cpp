@@ -5374,6 +5374,35 @@ bool AppController::splitActiveTerminal(const QString &orientation, const bool d
     return true;
 }
 
+bool AppController::moveTerminalPane(const QString &paneId, const QString &targetPaneId, const QString &orientation,
+                                     const bool placeAfter)
+{
+    workbench::TerminalWorkspaceLayout *workspace = findTerminalWorkspace(m_activeTabId);
+    if (workspace == nullptr)
+        return false;
+    workbench::TerminalSplitOrientation splitOrientation;
+    if (orientation == QStringLiteral("horizontal"))
+        splitOrientation = workbench::TerminalSplitOrientation::Horizontal;
+    else if (orientation == QStringLiteral("vertical"))
+        splitOrientation = workbench::TerminalSplitOrientation::Vertical;
+    else
+        return false;
+
+    const workbench::TerminalWorkspaceLayout previous = *workspace;
+    if (!workbench::moveTerminalPane(*workspace, utf8String(paneId), utf8String(targetPaneId),
+                                     utf8String(QUuid::createUuid().toString(QUuid::WithoutBraces)), splitOrientation,
+                                     placeAfter))
+        return false;
+    if (!persistTerminalWorkspaces())
+    {
+        *workspace = previous;
+        return false;
+    }
+    static_cast<void>(activateTerminalPane(paneId));
+    emit terminalTabsChanged();
+    return true;
+}
+
 bool AppController::closeActiveTerminalPane()
 {
     TerminalTab *tab = activeTab();

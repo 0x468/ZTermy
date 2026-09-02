@@ -28,6 +28,8 @@ Rectangle {
     signal closeToRightRequested
     signal moveLeftRequested
     signal moveRightRequested
+    signal dragMoved(real sceneX)
+    signal dragFinished(real sceneX)
 
     implicitWidth: Math.min(184, Math.max(112, titleText.implicitWidth + 54))
     implicitHeight: Theme.titleBarHeight
@@ -105,6 +107,22 @@ Rectangle {
         anchors.margins: 2
         accessibleName: qsTr("Activate %1").arg(control.title)
         onActivated: control.activated()
+    }
+
+    DragHandler {
+        id: reorderDrag
+
+        target: null
+        acceptedButtons: Qt.LeftButton
+        dragThreshold: 8
+        onCentroidChanged: {
+            if (active)
+                control.dragMoved(centroid.scenePosition.x);
+        }
+        onActiveChanged: {
+            if (!active)
+                control.dragFinished(centroid.scenePosition.x);
+        }
     }
 
     TapHandler {

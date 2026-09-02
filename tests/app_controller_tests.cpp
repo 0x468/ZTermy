@@ -2320,6 +2320,17 @@ void AppControllerTests::managesPersistentTerminalWorkspaceSplits()
         workspace = controller.activeTerminalWorkspace();
         root = workspace.value(QStringLiteral("root")).toMap();
         QCOMPARE(root.value(QStringLiteral("orientation")).toString(), QStringLiteral("vertical"));
+        const QString restoredFirstPane = root.value(QStringLiteral("first")).toMap().value(QStringLiteral("id")).toString();
+        const QString restoredSecondPane = root.value(QStringLiteral("second")).toMap().value(QStringLiteral("id")).toString();
+        QVERIFY(controller.moveTerminalPane(restoredSecondPane, restoredFirstPane, QStringLiteral("horizontal"), false));
+        QCOMPARE(controller.activeTerminalWorkspace()
+                     .value(QStringLiteral("root"))
+                     .toMap()
+                     .value(QStringLiteral("orientation"))
+                     .toString(),
+                 QStringLiteral("horizontal"));
+        QVERIFY(controller.moveTerminalPane(restoredSecondPane, restoredFirstPane, QStringLiteral("vertical"), true));
+        root = controller.activeTerminalWorkspace().value(QStringLiteral("root")).toMap();
         QVERIFY(controller.setTerminalSplitRatio(root.value(QStringLiteral("id")).toString(), 0.42));
         QCOMPARE(firstState->starts, 3);
     }

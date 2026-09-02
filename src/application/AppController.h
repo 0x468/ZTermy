@@ -445,6 +445,8 @@ public:
     Q_INVOKABLE bool copyLastTerminalCommandOutput();
     Q_INVOKABLE bool activateTerminalPane(const QString &paneId);
     Q_INVOKABLE bool splitActiveTerminal(const QString &orientation, bool duplicateActive = false);
+    Q_INVOKABLE bool moveTerminalPane(const QString &paneId, const QString &targetPaneId, const QString &orientation,
+                                      bool placeAfter);
     Q_INVOKABLE bool closeActiveTerminalPane();
     Q_INVOKABLE bool focusRelativeTerminalPane(int offset);
     Q_INVOKABLE bool resizeActiveTerminalPane(qreal delta);

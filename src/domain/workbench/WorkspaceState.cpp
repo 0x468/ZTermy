@@ -409,6 +409,71 @@ bool swapTerminalPanes(TerminalWorkspaceLayout &layout, const std::string_view f
     return true;
 }
 
+bool moveTerminalPane(TerminalWorkspaceLayout &layout, const std::string_view paneId,
+                      const std::string_view targetPaneId, std::string splitNodeId,
+                      const TerminalSplitOrientation orientation, const bool placeAfter)
+{
+    if (!validTerminalWorkspaceLayout(layout) || paneId == targetPaneId || !validBoundedText(splitNodeId, 128, false)
+        || findTerminalNode(layout, splitNodeId) != nullptr)
+    {
+        return false;
+    }
+    TerminalWorkspaceLayout candidate = layout;
+    TerminalLayoutNode *pane = findTerminalNode(candidate, paneId);
+    TerminalLayoutNode *target = findTerminalNode(candidate, targetPaneId);
+    TerminalLayoutNode *parent = findParentNode(candidate, paneId);
+    if (pane == nullptr || target == nullptr || parent == nullptr || pane->kind != TerminalLayoutNodeKind::Leaf
+        || target->kind != TerminalLayoutNodeKind::Leaf)
+    {
+        return false;
+    }
+
+    const std::string sourceId(paneId);
+    const std::string sourceParentId = parent->id;
+    const std::string siblingId = parent->firstChildId == paneId ? parent->secondChildId : parent->firstChildId;
+    TerminalLayoutNode *grandparent = findParentNode(candidate, sourceParentId);
+    if (grandparent == nullptr)
+        candidate.rootNodeId = siblingId;
+    else if (grandparent->firstChildId == sourceParentId)
+        grandparent->firstChildId = siblingId;
+    else
+        grandparent->secondChildId = siblingId;
+    std::erase_if(candidate.nodes, [&sourceParentId](const TerminalLayoutNode &node) {
+        return node.id == sourceParentId;
+    });
+
+    target = findTerminalNode(candidate, targetPaneId);
+    if (target == nullptr)
+        return false;
+    TerminalLayoutNode *targetParent = findParentNode(candidate, targetPaneId);
+    const std::string targetParentId = targetParent == nullptr ? std::string{} : targetParent->id;
+    const bool targetWasFirst = targetParent != nullptr && targetParent->firstChildId == targetPaneId;
+    const std::string targetId(targetPaneId);
+    candidate.nodes.push_back(TerminalLayoutNode{.id = splitNodeId,
+                                                 .firstChildId = placeAfter ? targetId : sourceId,
+                                                 .secondChildId = placeAfter ? sourceId : targetId,
+                                                 .kind = TerminalLayoutNodeKind::Split,
+                                                 .orientation = orientation,
+                                                 .ratio = 0.5});
+    if (targetParent == nullptr)
+        candidate.rootNodeId = std::move(splitNodeId);
+    else
+    {
+        TerminalLayoutNode *updatedParent = findTerminalNode(candidate, targetParentId);
+        if (updatedParent == nullptr)
+            return false;
+        if (targetWasFirst)
+            updatedParent->firstChildId = std::move(splitNodeId);
+        else
+            updatedParent->secondChildId = std::move(splitNodeId);
+    }
+    candidate.activePaneId = sourceId;
+    if (!validTerminalWorkspaceLayout(candidate))
+        return false;
+    layout = std::move(candidate);
+    return true;
+}
+
 std::vector<std::string> terminalPaneOrder(const TerminalWorkspaceLayout &layout)
 {
     std::vector<std::string> order;

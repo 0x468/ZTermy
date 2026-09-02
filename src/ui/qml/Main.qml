@@ -54,6 +54,10 @@ Rectangle {
     property bool lastPinPreviousWindowState: false
     property bool lastPinPreviousTabState: false
     property bool titleBarMetricsPending: false
+    property string draggedTerminalTabId: ""
+    property real draggedTerminalTabSceneX: 0
+    property string zoomedTerminalPaneId: ""
+    property string detachedTerminalPaneId: ""
     property real workspaceNavigationWidth: Theme.navigationWidth
     property real workspaceNavigationExpandedWidth: Theme.navigationWidth
     readonly property real workspaceNavigationMinimumWidth: 56
@@ -86,6 +90,62 @@ Rectangle {
         return qsTr("Workspace");
     }
     readonly property string applicationWindowTitle: qsTr("%1 — ztermy").arg(currentContextTitle)
+    readonly property var terminalLayoutRoot: controller.activeTerminalWorkspace.root || ({})
+    readonly property var visibleTerminalLayoutRoot: {
+        if (detachedTerminalPaneId.length > 0)
+            return terminalLayoutWithoutPane(terminalLayoutRoot, detachedTerminalPaneId) || ({});
+        if (zoomedTerminalPaneId.length > 0)
+            return findTerminalPane(terminalLayoutRoot, zoomedTerminalPaneId) || terminalLayoutRoot;
+        return terminalLayoutRoot;
+    }
+
+    function findTerminalPane(node, paneId) {
+        if (!node || !node.kind)
+            return null;
+        if (node.kind === "leaf")
+            return node.id === paneId ? node : null;
+        return findTerminalPane(node.first, paneId) || findTerminalPane(node.second, paneId);
+    }
+
+    function terminalLayoutWithoutPane(node, paneId) {
+        if (!node || !node.kind)
+            return null;
+        if (node.kind === "leaf")
+            return node.id === paneId ? null : node;
+        const first = terminalLayoutWithoutPane(node.first, paneId);
+        const second = terminalLayoutWithoutPane(node.second, paneId);
+        if (!first)
+            return second;
+        if (!second)
+            return first;
+        return {
+            "kind": "split",
+            "id": node.id,
+            "orientation": node.orientation,
+            "ratio": node.ratio,
+            "first": first,
+            "second": second
+        };
+    }
+
+    function toggleTerminalPaneZoom(paneId) {
+        detachedTerminalPaneId = "";
+        zoomedTerminalPaneId = zoomedTerminalPaneId === paneId ? "" : paneId;
+    }
+
+    function detachTerminalPane(paneId) {
+        zoomedTerminalPaneId = "";
+        detachedTerminalPaneId = paneId;
+        detachedTerminalWindow.show();
+        detachedTerminalWindow.raise();
+        detachedTerminalWindow.requestActivate();
+    }
+
+    function reattachTerminalPane() {
+        detachedTerminalPaneId = "";
+        detachedTerminalWindow.hide();
+        Qt.callLater(terminalViewport.forceActiveFocus);
+    }
 
     function resizeWorkspaceNavigation(requestedWidth) {
         const boundedWidth = Math.max(workspaceNavigationMinimumWidth, Math.min(workspaceNavigationMaximumWidth, requestedWidth));
@@ -709,6 +769,10 @@ Rectangle {
                 root.currentPage = "hosts";
                 Qt.callLater(hostsTitleAction.forceActiveFocus);
             }
+            if (root.detachedTerminalPaneId.length > 0 && !root.findTerminalPane(root.terminalLayoutRoot, root.detachedTerminalPaneId))
+                root.reattachTerminalPane();
+            if (root.zoomedTerminalPaneId.length > 0 && !root.findTerminalPane(root.terminalLayoutRoot, root.zoomedTerminalPaneId))
+                root.zoomedTerminalPaneId = "";
         }
 
         function onActiveTerminalTabChanged() {
@@ -888,7 +952,7 @@ Rectangle {
 
                 objectName: "titleTerminalTabs"
                 currentIndex: -1
-                width: count === 0 ? 0 : Math.min(contentWidth, Math.max(140, root.titleNavigationWidth - hostsTitleTab.width - 36 - settingsTitleTab.width))
+                width: count === 0 ? 0 : Math.min(contentWidth, Math.max(140, root.titleNavigationWidth - hostsTitleTab.width - 36 - settingsTitleTab.width - titleTabOverflow.width))
                 height: titleNavigation.height
                 orientation: ListView.Horizontal
                 spacing: 2
@@ -941,6 +1005,33 @@ Rectangle {
                     }
                 }
 
+                function updateTabDrag(tabId, sceneX) {
+                    root.draggedTerminalTabId = tabId;
+                    root.draggedTerminalTabSceneX = sceneX;
+                }
+
+                function finishTabDrag(tabId, sceneX) {
+                    root.draggedTerminalTabSceneX = sceneX;
+                    const localX = mapFromItem(null, sceneX, 0).x;
+                    const targetIndex = indexAt(contentX + Math.max(0, Math.min(width - 1, localX)), height / 2);
+                    if (targetIndex >= 0)
+                        root.controller.moveTerminalTab(tabId, targetIndex);
+                    root.draggedTerminalTabId = "";
+                }
+
+                Timer {
+                    interval: 16
+                    repeat: true
+                    running: root.draggedTerminalTabId.length > 0
+                    onTriggered: {
+                        const localX = titleTerminalTabs.mapFromItem(null, root.draggedTerminalTabSceneX, 0).x;
+                        if (localX < 28)
+                            titleTerminalTabs.contentX = Math.max(0, titleTerminalTabs.contentX - 12);
+                        else if (localX > titleTerminalTabs.width - 28)
+                            titleTerminalTabs.contentX = Math.min(Math.max(0, titleTerminalTabs.contentWidth - titleTerminalTabs.width), titleTerminalTabs.contentX + 12);
+                    }
+                }
+
                 delegate: TerminalTabAction {
                     id: titleTerminalTab
 
@@ -970,10 +1061,125 @@ Rectangle {
                     onCloseToRightRequested: root.controller.closeTerminalTabsToRight(modelData.id)
                     onMoveLeftRequested: root.controller.moveTerminalTab(modelData.id, modelData.tabIndex - 1)
                     onMoveRightRequested: root.controller.moveTerminalTab(modelData.id, modelData.tabIndex + 1)
+                    onDragMoved: sceneX => titleTerminalTabs.updateTabDrag(modelData.id, sceneX)
+                    onDragFinished: sceneX => titleTerminalTabs.finishTabDrag(modelData.id, sceneX)
                     onReconnectRequested: {
                         root.controller.activateTerminalTab(modelData.id);
                         root.currentPage = "terminal";
                         root.controller.reconnectTerminalTab(modelData.id);
+                    }
+                }
+            }
+
+            Rectangle {
+                id: titleTabOverflow
+
+                width: visible ? 78 : 0
+                height: titleNavigation.height
+                visible: titleTerminalTabs.contentWidth > titleTerminalTabs.width + 1
+                color: "transparent"
+
+                Row {
+                    anchors.fill: parent
+
+                    Repeater {
+                        model: [
+                            {
+                                "icon": "chevron-left",
+                                "name": qsTr("Previous tab page"),
+                                "direction": -1
+                            },
+                            {
+                                "icon": "chevron-right",
+                                "name": qsTr("Next tab page"),
+                                "direction": 1
+                            }
+                        ]
+
+                        Rectangle {
+                            id: pageButton
+
+                            required property var modelData
+                            width: 26
+                            height: parent.height
+                            color: pageAction.hovered || pageAction.visualFocus ? Theme.controlHover : "transparent"
+
+                            AppIcon {
+                                anchors.centerIn: parent
+                                width: 13
+                                height: 13
+                                name: pageButton.modelData.icon
+                                color: root.textColor
+                            }
+
+                            KeyboardAction {
+                                id: pageAction
+                                anchors.fill: parent
+                                anchors.margins: 2
+                                accessibleName: pageButton.modelData.name
+                                onActivated: {
+                                    const maximum = Math.max(0, titleTerminalTabs.contentWidth - titleTerminalTabs.width);
+                                    titleTerminalTabs.contentX = Math.max(0, Math.min(maximum, titleTerminalTabs.contentX + pageButton.modelData.direction * titleTerminalTabs.width * 0.8));
+                                }
+                            }
+
+                            AppToolTip {
+                                visible: pageAction.hovered
+                                text: pageButton.modelData.name
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        width: 26
+                        height: parent.height
+                        color: titleTabOverflowAction.hovered || titleTabOverflowAction.visualFocus ? Theme.controlHover : "transparent"
+
+                        AppIcon {
+                            anchors.centerIn: parent
+                            width: 14
+                            height: 14
+                            name: "chevron-down"
+                            color: root.textColor
+                        }
+
+                        KeyboardAction {
+                            id: titleTabOverflowAction
+
+                            objectName: "titleTabOverflowAction"
+                            anchors.fill: parent
+                            anchors.margins: 2
+                            accessibleName: qsTr("Show all terminal tabs")
+                            onActivated: titleTabOverflowMenu.open()
+                        }
+
+                        AppToolTip {
+                            visible: titleTabOverflowAction.hovered && !titleTabOverflowMenu.visible
+                            text: qsTr("All terminal tabs")
+                        }
+                    }
+                }
+
+                AppMenu {
+                    id: titleTabOverflowMenu
+
+                    y: parent.height
+
+                    Instantiator {
+                        model: root.controller.terminalTabs
+                        delegate: AppMenuItem {
+                            required property var modelData
+                            text: modelData.title
+                            checkable: true
+                            checked: root.controller.activeTerminalTabId === modelData.id
+                            onTriggered: {
+                                root.controller.activateTerminalTab(modelData.id);
+                                root.currentPage = "terminal";
+                                terminalViewport.forceActiveFocus();
+                            }
+                        }
+                        onObjectAdded: (index, object) => titleTabOverflowMenu.insertItem(index, object)
+                        onObjectRemoved: (index, object) => titleTabOverflowMenu.removeItem(object)
                     }
                 }
             }
@@ -2325,9 +2531,10 @@ Rectangle {
                             anchors.leftMargin: root.activeTerminalWorkbenchSide === "left" ? root.activeTerminalWorkbenchWidth : 0
                             anchors.rightMargin: root.activeTerminalWorkbenchSide === "right" ? root.activeTerminalWorkbenchWidth : 0
                             anchors.bottomMargin: root.activeTerminalComposerHeight
-                            visible: root.activeTerminalTab !== null && root.controller.activeTerminalWorkspace.root
+                            visible: root.activeTerminalTab !== null && root.visibleTerminalLayoutRoot.kind
                             controller: root.controller
-                            node: root.controller.activeTerminalWorkspace.root || ({})
+                            node: root.visibleTerminalLayoutRoot
+                            zoomedPaneId: root.zoomedTerminalPaneId
                             defaultFontFamily: root.controller.terminalFontFamily
                             defaultFontSize: root.controller.terminalFontSize
                             defaultLigatures: root.controller.terminalLigatures
@@ -2352,6 +2559,8 @@ Rectangle {
                                 // becomes the final focus owner regardless of how paste was invoked.
                                 Qt.callLater(() => multilinePasteDialog.openFrom(viewport));
                             }
+                            onZoomPaneRequested: paneId => root.toggleTerminalPaneZoom(paneId)
+                            onDetachPaneRequested: paneId => root.detachTerminalPane(paneId)
                             onBrowseHostsRequested: root.currentPage = "hosts"
                             onTerminalSearchRequested: root.openTerminalSearch()
 
@@ -2942,6 +3151,58 @@ Rectangle {
             }
             root.pendingPasteLineCount = 0;
             root.pendingPasteViewport = null;
+        }
+    }
+
+    Window {
+        id: detachedTerminalWindow
+
+        width: 920
+        height: 620
+        minimumWidth: 480
+        minimumHeight: 320
+        visible: false
+        title: root.activeTerminalTab !== null ? qsTr("%1 — Detached pane").arg(root.activeTerminalTab.title) : qsTr("Detached terminal pane")
+        color: Theme.windowBackground
+        onClosing: close => {
+            if (root.detachedTerminalPaneId.length > 0) {
+                close.accepted = false;
+                root.reattachTerminalPane();
+            }
+        }
+
+        TerminalSplitNode {
+            anchors.fill: parent
+            controller: root.controller
+            node: root.findTerminalPane(root.terminalLayoutRoot, root.detachedTerminalPaneId) || ({})
+            detachedPane: true
+            defaultFontFamily: root.controller.terminalFontFamily
+            defaultFontSize: root.controller.terminalFontSize
+            defaultLigatures: root.controller.terminalLigatures
+            defaultBackgroundOpacity: root.controller.terminalBackgroundOpacity
+            defaultCursor: root.controller.cursorPreference
+            cursorBlink: root.controller.cursorBlink
+            copyOnSelect: root.controller.copyOnSelect
+            keepSelectionAfterCopy: root.controller.keepSelectionAfterCopy
+            selectionActionPopupEnabled: root.controller.terminalSelectionPopupEnabled
+            selectionActions: root.controller.terminalSelectionActions
+            confirmMultilinePaste: root.controller.confirmMultilinePaste
+            rightClickBehavior: root.controller.terminalRightClickBehavior
+            middleClickBehavior: root.controller.terminalMiddleClickBehavior
+            wordDelimiters: root.controller.terminalWordDelimiters
+            scrollRowsPerWheel: root.controller.terminalScrollRows
+            onDetachPaneRequested: paneId => root.reattachTerminalPane()
+            onZoomPaneRequested: paneId => {}
+            onMultilinePasteConfirmationRequested: (viewport, lineCount) => {
+                root.pendingPasteLineCount = lineCount;
+                root.pendingPasteViewport = viewport;
+                multilinePasteDialog.open();
+            }
+            onTerminalSearchRequested: root.openTerminalSearch()
+            onBrowseHostsRequested: {
+                root.reattachTerminalPane();
+                root.currentPage = "hosts";
+            }
         }
     }
 
