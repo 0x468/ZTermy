@@ -9,6 +9,8 @@
 - 类应只有一个主要变化原因。连接、持久化、列表投影和 QML 编排不得继续汇集到 `AppController`。
 - 新功能优先建立领域/应用服务，由 `AppController` 暴露窄接口；不得为了少建文件而扩大万能控制器。
 - 文件大小是审查触发器而不是机械失败条件。拆分后若增加循环依赖、重复状态或隐式生命周期，则保留原结构并记录 ADR/评审说明。
+- `ztermy_code_structure_gate` 对规模债务采用棘轮：基线内旧文件只能缩小不能增长，新文件必须直接满足预算；
+  `ztermy_code_health_report` 刷新可审阅的规模与直接 include 依赖报告。
 
 ## 2. 分层与依赖方向
 
@@ -18,6 +20,8 @@
 - `ui/qml` 负责呈现与轻量交互胶水，不拥有持久化真源、后台线程或 SSH 状态机。
 - `platform/windows` 封装 Win32、ConPTY、凭据管理器、通知区、窗口材质和命中测试；上层通过窄接口使用。
 - 禁止反向依赖和跨层“顺手 include”。新增依赖必须能解释其所有权和替换边界。
+- 自动门禁禁止 `core` 反向依赖上层、`domain` 依赖 application/infrastructure/platform/ui，以及
+  `infrastructure` 依赖 application/ui；无法由直接 include 扫描表达的运行时依赖仍由评审负责。
 
 ## 3. 所有权、RAII 与生命周期
 

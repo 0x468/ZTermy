@@ -2389,26 +2389,16 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     {
         return false;
     }
-    sendKey(window, Qt::Key_Tab);
-    if (namedFocusItem(window) != QStringLiteral("quickConnectAction"))
+    constexpr std::array hostActionOrder{"quickConnectAction", "hostLocalTerminal", "hostImportOpenSsh", "hostNew"};
+    for (const char *expected : hostActionOrder)
     {
-        qCWarning(applicationLog) << "Host page Tab order did not reach Quick connect action"
-                                  << "actual=" << namedFocusItem(window);
-        return false;
-    }
-    sendKey(window, Qt::Key_Tab);
-    if (namedFocusItem(window) != QStringLiteral("hostLocalTerminal"))
-    {
-        qCWarning(applicationLog) << "Host page Tab order did not reach local terminal after Quick connect"
-                                  << "actual=" << namedFocusItem(window);
-        return false;
-    }
-    sendKey(window, Qt::Key_Tab);
-    if (namedFocusItem(window) != QStringLiteral("hostNew"))
-    {
-        qCWarning(applicationLog) << "Host page Tab order did not reach New host after local terminal"
-                                  << "actual=" << namedFocusItem(window);
-        return false;
+        sendKey(window, Qt::Key_Tab);
+        if (namedFocusItem(window) != QString::fromLatin1(expected))
+        {
+            qCWarning(applicationLog) << "Host page Tab order mismatch" << "expected=" << expected
+                                      << "actual=" << namedFocusItem(window);
+            return false;
+        }
     }
 
     if (quickConnectTarget == nullptr || quickConnectAction == nullptr

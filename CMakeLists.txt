@@ -897,6 +897,7 @@ target_link_libraries(ztermy_icon_rendering
 
 add_library(ztermy_application_controller STATIC
     src/application/AppController.cpp
+    src/application/AppControllerWorkspace.cpp
     src/application/AppController.h
     src/application/workbench/CommandHistoryController.cpp
     src/application/workbench/CommandHistoryController.h
@@ -1353,6 +1354,24 @@ add_custom_target(ztermy_translation_gate
         -SourceRoot "${CMAKE_CURRENT_SOURCE_DIR}"
     DEPENDS update_translations
     COMMENT "Verifying translation freshness, completeness, placeholders, and localization call sites"
+    VERBATIM
+)
+
+add_custom_target(ztermy_code_structure_gate
+    COMMAND pwsh -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/scripts/code_health_report.ps1"
+            -RootPath "${CMAKE_CURRENT_SOURCE_DIR}"
+            -Check
+    COMMENT "Checking source-size budgets and dependency direction"
+    VERBATIM
+)
+
+add_custom_target(ztermy_code_health_report
+    COMMAND pwsh -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/scripts/code_health_report.ps1"
+            -RootPath "${CMAKE_CURRENT_SOURCE_DIR}"
+            -OutputPath "docs/reports/CODE_HEALTH_BASELINE.md"
+    COMMENT "Generating the Ztermy code-health report"
     VERBATIM
 )
 if(BUILD_TESTING)
@@ -4638,6 +4657,12 @@ if(BUILD_TESTING)
             ztermy_ssh_connection_state_tests
             ztermy_ssh_host_key_tests
             ztermy_known_hosts_store_tests
+            ztermy_open_ssh_config_importer_tests
+            ztermy_local_file_browser_controller_tests
+            ztermy_known_hosts_controller_tests
+            ztermy_keychain_controller_tests
+            ztermy_connection_history_tests
+            ztermy_command_history_tests
             ztermy_ssh_keychain_store_tests
             ztermy_ssh_keychain_migration_tests
             ztermy_ssh_identity_resolver_tests
@@ -4860,7 +4885,7 @@ add_custom_target(ztermy_clang_tidy_check
 # iterator and preprocessor configuration can expose diagnostics that are not
 # actionable in Debug, so make the package target enforce its own analysis.
 if(TARGET ztermy_release_bundle)
-    add_dependencies(ztermy_release_bundle ztermy_clang_tidy_check)
+    add_dependencies(ztermy_release_bundle ztermy_clang_tidy_check ztermy_code_structure_gate)
 endif()
 
 unset(ZTERMY_CLANG_TIDY_DEFAULT_JOBS)
@@ -4957,6 +4982,7 @@ if(BUILD_TESTING)
         DEPENDS
             ztermy_format_check
             ztermy_clang_tidy_check
+            ztermy_code_structure_gate
             ztermy_v1_runtime_preflight
         COMMENT "Running the complete automated V1 preflight"
         USES_TERMINAL

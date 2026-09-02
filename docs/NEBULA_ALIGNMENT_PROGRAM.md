@@ -187,11 +187,21 @@ OpenSSH 导入覆盖 `Host`、`HostName`、`User`、`Port`、`IdentityFile`、`P
 
 ### N6：C++ 规范与重构门禁
 
-- [ ] 采用 [Ztermy C++ 工程规范](CPP_GUIDELINES.md)；
-- [ ] 生成文件/类规模报告和依赖方向报告；
-- [ ] 优先拆分 `AppController`、超长 QML 页面和多职责平台文件；
-- [ ] 重构必须保持行为测试先行，禁止“大爆炸式”全仓改写；
-- [ ] 最终运行格式、clang-tidy、QML、翻译、资产、Debug/Release 测试和安装包门禁。
+- [x] 采用 [Ztermy C++ 工程规范](CPP_GUIDELINES.md)；
+- [x] 生成文件/类规模报告和依赖方向报告；
+- [x] 优先拆分 `AppController`、超长 QML 页面和多职责平台文件；
+- [x] 重构必须保持行为测试先行，禁止“大爆炸式”全仓改写；
+- [x] 最终运行格式、clang-tidy、QML、翻译、资产、Debug/Release 测试和安装包门禁。
+
+实施记录（2026-09-03）：新增 `ztermy_code_structure_gate` 与可复现的
+[code health baseline](reports/CODE_HEALTH_BASELINE.md)，对 17 个既有超预算文件采用“只许缩小、不许增长”的
+棘轮，并禁止 core/domain/infrastructure 的直接反向 include；门禁已接入自动 preflight 和 release bundle。
+本轮把 OpenSSH 导入及本地路径编排从 `AppController.cpp` 拆到独立编译单元，前序 N5 已把命令面板、
+本地文件抽屉等从长 QML 页面抽成组件。`NativeWindow.cpp` 当前仍在 C++ 预算内，未为了勾选项目盲目拆分
+高风险 Win32 生命周期代码；后续按触达职责渐进收敛。重构前后的 AppController/设置/文件工作流测试保持通过。
+最终门禁覆盖 static Release 全量 clang-tidy、124 项非联网测试、Debug 124 项测试、55 个 QML 文件格式与
+静态检查、2281 条翻译、结构/资产门禁、Portable/MSI 合同和八个真实窗口 smoke。门禁同时捕获并修复了
+OpenSSH 导入按钮加入后主机页键盘 Tab 顺序断言未同步的问题；授权外部主机测试仍按设计单独执行。
 
 ## 4. 里程碑完成定义
 
@@ -213,3 +223,5 @@ OpenSSH 导入覆盖 `Host`、`HostName`、`User`、`Port`、`IdentityFile`、`P
 | 2026-09-03 | 完成 N1 已知主机中心；记录 OpenSSH 导入边界、事务写入和自动化运行证据。 |
 | 2026-09-03 | 完成 N5.4：OpenSSH 配置导入、远程文件信息架构统一及异步本地文件抽屉。 |
 | 2026-09-03 | 完成 N5.5：Nushell/WSL 本地会话、显式 shell 启动入口和语义能力矩阵。 |
+| 2026-09-03 | 建立 N6 代码健康棘轮和依赖方向门禁；开始按编译单元渐进拆分 AppController。 |
+| 2026-09-03 | 完成 N6 最终门禁、静态 Portable/MSI 发布包和真实窗口预检，长期对齐计划收口。 |
