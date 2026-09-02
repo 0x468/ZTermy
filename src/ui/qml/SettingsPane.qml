@@ -63,6 +63,10 @@ Rectangle {
     signal appearancePreviewRequested(string theme, real opacity, string backdrop, string accent, string customAccent)
     signal appearancePreviewEnded
 
+    ListModel {
+        id: selectionActionDraftModel
+    }
+
     component CategoryButton: Rectangle {
         id: categoryControl
 
@@ -455,6 +459,79 @@ Rectangle {
         return middleClickBox.currentIndex === 1 ? "paste" : middleClickBox.currentIndex === 2 ? "context-menu" : "disabled";
     }
 
+    function loadSelectionActionDraft() {
+        selectionActionDraftModel.clear();
+        const actions = controller.terminalSelectionActions || [];
+        for (let index = 0; index < actions.length; ++index) {
+            const action = actions[index];
+            selectionActionDraftModel.append({
+                "actionId": action.id,
+                "label": action.label,
+                "iconName": action.icon,
+                "primary": !!action.primary,
+                "retainSelection": !!action.retainSelection
+            });
+        }
+        selectionPopupSwitch.checked = controller.terminalSelectionPopupEnabled;
+    }
+
+    function selectionActionDraftValues() {
+        const result = [];
+        for (let index = 0; index < selectionActionDraftModel.count; ++index) {
+            const action = selectionActionDraftModel.get(index);
+            result.push({
+                "id": action.actionId,
+                "primary": !!action.primary,
+                "retainSelection": !!action.retainSelection
+            });
+        }
+        return result;
+    }
+
+    function resetSelectionActionDraft() {
+        const defaults = [
+            {
+                "actionId": "copy",
+                "label": qsTr("Copy selection"),
+                "iconName": "copy",
+                "primary": true,
+                "retainSelection": false
+            },
+            {
+                "actionId": "ai",
+                "label": qsTr("Attach selection to AI"),
+                "iconName": "ai",
+                "primary": true,
+                "retainSelection": true
+            },
+            {
+                "actionId": "search",
+                "label": qsTr("Search selection"),
+                "iconName": "search",
+                "primary": false,
+                "retainSelection": true
+            },
+            {
+                "actionId": "highlight",
+                "label": qsTr("Highlight selection"),
+                "iconName": "highlight",
+                "primary": false,
+                "retainSelection": true
+            },
+            {
+                "actionId": "unhighlight",
+                "label": qsTr("Remove selection highlight"),
+                "iconName": "close",
+                "primary": false,
+                "retainSelection": true
+            }
+        ];
+        selectionActionDraftModel.clear();
+        for (let index = 0; index < defaults.length; ++index)
+            selectionActionDraftModel.append(defaults[index]);
+        selectionPopupSwitch.checked = true;
+    }
+
     function accentToken() {
         return accentBox.currentIndex === 1 ? "system" : accentBox.currentIndex === 2 ? "custom" : "ztermy";
     }
@@ -530,6 +607,7 @@ Rectangle {
         middleClickBox.currentIndex = middleClickIndex(controller.terminalMiddleClickBehavior);
         wordDelimitersField.text = controller.terminalWordDelimiters;
         wheelRowsBox.value = controller.terminalScrollRows;
+        loadSelectionActionDraft();
         sftpShowHiddenSwitch.checked = controller.sftpShowHiddenFiles;
         sftpConfirmDeleteSwitch.checked = controller.sftpConfirmDelete;
         closeToTraySwitch.checked = controller.closeToTray;
@@ -566,7 +644,8 @@ Rectangle {
         const wantsOpaqueSurface = performanceModeDraft || backdropToken() === "solid";
         const restartRequired = wantsOpaqueSurface !== windowChrome.opaqueSurface || performanceModeDraft !== windowChrome.performanceModeActive;
         const applicationSaved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), accentToken(), customAccentField.text, uiFontDraft, terminalFontDraft, fontSizeBox.value, showAllFontsSwitch.checked, ligatureSwitch.checked, terminalOpacitySlider.value, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, keepSelectionAfterCopySwitch.checked, multilinePasteSwitch.checked, languageDraft, sftpShowHiddenSwitch.checked, sftpConfirmDeleteSwitch.checked, closeToTraySwitch.checked, performanceModeDraft, rightClickToken(), middleClickToken(), wordDelimitersField.text, wheelRowsBox.value);
-        const saved = applicationSaved && controller.saveLocalShellPreference(localShellTokens[Math.max(0, localShellBox.currentIndex)] || "automatic");
+        const shellSaved = applicationSaved && controller.saveLocalShellPreference(localShellTokens[Math.max(0, localShellBox.currentIndex)] || "automatic");
+        const saved = shellSaved && controller.saveTerminalSelectionPopupSettings(selectionPopupSwitch.checked, selectionActionDraftValues());
         presentStatus(saved ? restartRequired ? qsTr("Settings saved. Restart ztermy to apply the rendering mode.") : qsTr("Settings saved and applied.") : qsTr("These settings could not be saved. Check the font and numeric ranges."), !saved, saved);
         if (!saved) {
             loadDraft();
@@ -1509,6 +1588,149 @@ Rectangle {
                         editable: true
                         value: 3
                         accessibleName: qsTr("Rows per mouse wheel notch")
+                    }
+                }
+            }
+
+            SectionCard {
+                Layout.fillWidth: true
+                visible: pane.currentCategory === "terminal"
+                compact: true
+                heading: qsTr("Selection action popup")
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+
+                    RowLayout {
+                        Layout.fillWidth: true
+
+                        AppSwitch {
+                            id: selectionPopupSwitch
+                            objectName: "settingsSelectionPopupEnabled"
+                            Layout.fillWidth: true
+                            text: qsTr("Show actions after selecting terminal text")
+                            accessibleName: text
+                        }
+
+                        ActionButton {
+                            objectName: "settingsSelectionPopupReset"
+                            text: qsTr("Restore defaults")
+                            iconName: "refresh"
+                            accessibleName: qsTr("Restore default selection actions")
+                            onClicked: pane.resetSelectionActionDraft()
+                        }
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("Choose the action order, whether each action appears directly or under More, and whether its result keeps the terminal selection.")
+                        color: Theme.textMuted
+                        wrapMode: Text.WordWrap
+                        font.family: Theme.uiFont
+                        font.pixelSize: Theme.textLabel
+                    }
+
+                    Repeater {
+                        model: selectionActionDraftModel
+
+                        delegate: Rectangle {
+                            id: selectionActionPreference
+                            required property int index
+                            required property string actionId
+                            required property string label
+                            required property string iconName
+                            required property bool primary
+                            required property bool retainSelection
+
+                            Layout.fillWidth: true
+                            implicitHeight: actionPreferenceRow.implicitHeight + 12
+                            radius: Theme.radiusControl
+                            color: Theme.controlBackground
+                            border.color: Theme.border
+                            border.width: 1
+
+                            RowLayout {
+                                id: actionPreferenceRow
+                                anchors.fill: parent
+                                anchors.margins: 6
+                                spacing: 8
+
+                                AppIcon {
+                                    Layout.preferredWidth: 16
+                                    Layout.preferredHeight: 16
+                                    name: selectionActionPreference.iconName
+                                    color: Theme.textSoft
+                                }
+
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: selectionActionPreference.label
+                                    color: Theme.text
+                                    elide: Text.ElideRight
+                                }
+
+                                AppSwitch {
+                                    objectName: "settingsSelectionActionDirect-" + selectionActionPreference.actionId
+                                    text: qsTr("Direct")
+                                    checked: selectionActionPreference.primary
+                                    accessibleName: qsTr("Show %1 directly").arg(selectionActionPreference.label)
+                                    onToggled: selectionActionDraftModel.setProperty(selectionActionPreference.index, "primary", checked)
+                                }
+
+                                AppSwitch {
+                                    objectName: "settingsSelectionActionRetain-" + selectionActionPreference.actionId
+                                    text: qsTr("Keep selection")
+                                    checked: selectionActionPreference.retainSelection
+                                    accessibleName: qsTr("Keep selection after %1").arg(selectionActionPreference.label)
+                                    onToggled: selectionActionDraftModel.setProperty(selectionActionPreference.index, "retainSelection", checked)
+                                }
+
+                                ToolButton {
+                                    id: moveSelectionActionUp
+
+                                    objectName: "settingsSelectionActionUp-" + selectionActionPreference.actionId
+                                    enabled: selectionActionPreference.index > 0
+                                    hoverEnabled: true
+                                    focusPolicy: Qt.TabFocus
+                                    Accessible.name: qsTr("Move %1 up").arg(selectionActionPreference.label)
+                                    onClicked: selectionActionDraftModel.move(selectionActionPreference.index, selectionActionPreference.index - 1, 1)
+                                    contentItem: AppIcon {
+                                        name: "chevron-up"
+                                        color: parent.enabled ? Theme.text : Theme.textMuted
+                                    }
+                                    background: Rectangle {
+                                        radius: Theme.radiusSmall
+                                        color: moveSelectionActionUp.down ? Theme.controlPressed : moveSelectionActionUp.hovered ? Theme.controlHover : "transparent"
+                                    }
+                                    AppToolTip {
+                                        text: parent.Accessible.name
+                                    }
+                                }
+
+                                ToolButton {
+                                    id: moveSelectionActionDown
+
+                                    objectName: "settingsSelectionActionDown-" + selectionActionPreference.actionId
+                                    enabled: selectionActionPreference.index + 1 < selectionActionDraftModel.count
+                                    hoverEnabled: true
+                                    focusPolicy: Qt.TabFocus
+                                    Accessible.name: qsTr("Move %1 down").arg(selectionActionPreference.label)
+                                    onClicked: selectionActionDraftModel.move(selectionActionPreference.index, selectionActionPreference.index + 1, 1)
+                                    contentItem: AppIcon {
+                                        name: "chevron-down"
+                                        color: parent.enabled ? Theme.text : Theme.textMuted
+                                    }
+                                    background: Rectangle {
+                                        radius: Theme.radiusSmall
+                                        color: moveSelectionActionDown.down ? Theme.controlPressed : moveSelectionActionDown.hovered ? Theme.controlHover : "transparent"
+                                    }
+                                    AppToolTip {
+                                        text: parent.Accessible.name
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

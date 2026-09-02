@@ -2336,6 +2336,8 @@ Rectangle {
                             cursorBlink: root.controller.cursorBlink
                             copyOnSelect: root.controller.copyOnSelect
                             keepSelectionAfterCopy: root.controller.keepSelectionAfterCopy
+                            selectionActionPopupEnabled: root.controller.terminalSelectionPopupEnabled
+                            selectionActions: root.controller.terminalSelectionActions
                             confirmMultilinePaste: root.controller.confirmMultilinePaste
                             rightClickBehavior: root.controller.terminalRightClickBehavior
                             middleClickBehavior: root.controller.terminalMiddleClickBehavior

@@ -1039,6 +1039,21 @@ void AppControllerTests::persistsApplicationSettings()
     QVERIFY(!controller.saveAiProxySettings(QStringLiteral("invalid"), {}, {}, {}));
     QVERIFY(controller.saveLocalShellPreference(QStringLiteral("gitBash")));
     QVERIFY(!controller.saveLocalShellPreference(QStringLiteral("unknown")));
+    QVERIFY(controller.terminalSelectionPopupEnabled());
+    QVariantList selectionActions = controller.terminalSelectionActions();
+    QCOMPARE(selectionActions.size(), 5);
+    QVariantMap searchAction = selectionActions.takeAt(2).toMap();
+    searchAction.insert(QStringLiteral("primary"), true);
+    searchAction.insert(QStringLiteral("retainSelection"), false);
+    selectionActions.prepend(searchAction);
+    QVERIFY(controller.saveTerminalSelectionPopupSettings(false, selectionActions));
+    QVERIFY(!controller.terminalSelectionPopupEnabled());
+    QCOMPARE(controller.terminalSelectionActions().constFirst().toMap().value(QStringLiteral("id")).toString(),
+             QStringLiteral("search"));
+    QVERIFY(controller.terminalSelectionActions().constFirst().toMap().value(QStringLiteral("primary")).toBool());
+    QVERIFY(
+        !controller.terminalSelectionActions().constFirst().toMap().value(QStringLiteral("retainSelection")).toBool());
+    QVERIFY(!controller.saveTerminalSelectionPopupSettings(true, QVariantList{}));
     settingsChanged.clear();
 
     QVERIFY(controller.saveApplicationSettings(
@@ -1110,6 +1125,9 @@ void AppControllerTests::persistsApplicationSettings()
     QCOMPARE(reloaded.terminalMiddleClickBehavior(), QStringLiteral("paste"));
     QCOMPARE(reloaded.terminalWordDelimiters(), QStringLiteral(" |,"));
     QCOMPARE(reloaded.terminalScrollRows(), 7);
+    QVERIFY(!reloaded.terminalSelectionPopupEnabled());
+    QCOMPARE(reloaded.terminalSelectionActions().constFirst().toMap().value(QStringLiteral("id")).toString(),
+             QStringLiteral("search"));
     QCOMPARE(reloaded.localShellPreference(), QStringLiteral("gitBash"));
     QVERIFY(reloaded.sftpShowHiddenFiles());
     QVERIFY(!reloaded.sftpConfirmDelete());

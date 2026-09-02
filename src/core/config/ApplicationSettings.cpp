@@ -2,9 +2,11 @@
 
 #include "core/persistence/LastKnownGoodFile.h"
 
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
+#include <QSet>
 #include <QUrl>
 
 #include <algorithm>
@@ -58,7 +60,8 @@ constexpr qint64 terminalSelectionInteractionSchemaVersion = 27;
 // identities while preserving every customized separator set.
 constexpr qint64 terminalPromptDelimiterSchemaVersion = 28;
 constexpr qint64 localShellSchemaVersion = 29;
-constexpr qint64 currentSchemaVersion = localShellSchemaVersion;
+constexpr qint64 terminalSelectionPopupSchemaVersion = 30;
+constexpr qint64 currentSchemaVersion = terminalSelectionPopupSchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::AiPermissionPreference;
@@ -75,6 +78,59 @@ using ztermy::config::LocalShellPreference;
 using ztermy::config::TerminalMiddleClickPreference;
 using ztermy::config::TerminalRightClickPreference;
 using ztermy::config::ThemePreference;
+
+[[nodiscard]] QStringList defaultSelectionActionOrder()
+{
+    return {QStringLiteral("copy"), QStringLiteral("ai"), QStringLiteral("search"), QStringLiteral("highlight"),
+            QStringLiteral("unhighlight")};
+}
+
+[[nodiscard]] QStringList defaultSelectionPrimaryActions()
+{
+    return {QStringLiteral("copy"), QStringLiteral("ai")};
+}
+
+[[nodiscard]] QStringList defaultSelectionRetainActions()
+{
+    return {QStringLiteral("ai"), QStringLiteral("search"), QStringLiteral("highlight"), QStringLiteral("unhighlight")};
+}
+
+[[nodiscard]] bool validSelectionActionSubset(const QStringList &values)
+{
+    QSet<QString> unique;
+    for (const QString &value : values)
+    {
+        if (!defaultSelectionActionOrder().contains(value) || unique.contains(value))
+        {
+            return false;
+        }
+        unique.insert(value);
+    }
+    return true;
+}
+
+[[nodiscard]] bool validSelectionActionOrder(const QStringList &values)
+{
+    return values.size() == defaultSelectionActionOrder().size() && validSelectionActionSubset(values);
+}
+
+[[nodiscard]] std::optional<QStringList> parseStringList(const QJsonValue &value)
+{
+    if (!value.isArray())
+    {
+        return std::nullopt;
+    }
+    QStringList result;
+    for (const QJsonValue item : value.toArray())
+    {
+        if (!item.isString())
+        {
+            return std::nullopt;
+        }
+        result.push_back(item.toString());
+    }
+    return result;
+}
 
 template <typename Preference>
 [[nodiscard]] std::optional<Preference> parsePreference(const QString &token);
@@ -429,7 +485,9 @@ template <>
            && settings.aiModel.size() <= 256 && validCredentialReference && validAiProxy
            && settings.aiProxyUrl.size() <= 2048 && settings.aiProxyUsername.size() <= 256
            && settings.terminalWordDelimiters.size() <= 128 && settings.terminalScrollRows >= 1
-           && settings.terminalScrollRows <= 20;
+           && settings.terminalScrollRows <= 20 && validSelectionActionOrder(settings.terminalSelectionActionOrder)
+           && validSelectionActionSubset(settings.terminalSelectionPrimaryActions)
+           && validSelectionActionSubset(settings.terminalSelectionRetainActions);
 }
 
 [[nodiscard]] std::expected<ApplicationSettings, ApplicationSettingsStoreError> parseSettings(const QJsonObject &root)
@@ -467,6 +525,11 @@ template <>
     const QJsonValue terminalWordDelimitersValue = root.value(QStringLiteral("terminalWordDelimiters"));
     const QJsonValue terminalScrollRowsValue = root.value(QStringLiteral("terminalScrollRows"));
     const QJsonValue localShellValue = root.value(QStringLiteral("localShell"));
+    const QJsonValue terminalSelectionPopupEnabledValue = root.value(QStringLiteral("terminalSelectionPopupEnabled"));
+    const QJsonValue terminalSelectionActionOrderValue = root.value(QStringLiteral("terminalSelectionActionOrder"));
+    const QJsonValue terminalSelectionPrimaryActionsValue =
+        root.value(QStringLiteral("terminalSelectionPrimaryActions"));
+    const QJsonValue terminalSelectionRetainActionsValue = root.value(QStringLiteral("terminalSelectionRetainActions"));
     const QJsonValue sftpShowHiddenFilesValue = root.value(QStringLiteral("sftpShowHiddenFiles"));
     const QJsonValue sftpConfirmDeleteValue = root.value(QStringLiteral("sftpConfirmDelete"));
     const QJsonValue closeToTrayValue = root.value(QStringLiteral("closeToTray"));
@@ -549,6 +612,12 @@ template <>
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
+    if (version >= terminalSelectionPopupSchemaVersion
+        && (!terminalSelectionPopupEnabledValue.isBool() || !terminalSelectionActionOrderValue.isArray()
+            || !terminalSelectionPrimaryActionsValue.isArray() || !terminalSelectionRetainActionsValue.isArray()))
+    {
+        return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
+    }
     if (version >= aiProviderSchemaVersion
         && (!aiProviderValue.isString() || !aiBaseUrlValue.isString() || !aiEndpointPathValue.isString()
             || !aiModelValue.isString() || !aiCredentialReferenceValue.isString() || !aiAutomaticContextValue.isBool()))
@@ -615,8 +684,18 @@ template <>
     const qint64 fontSize = fontSizeValue.toInteger(-1);
     const qint64 terminalScrollRows =
         version >= terminalSelectionSettingsSchemaVersion ? terminalScrollRowsValue.toInteger(-1) : 3;
+    const auto selectionActionOrder = version >= terminalSelectionPopupSchemaVersion
+                                          ? parseStringList(terminalSelectionActionOrderValue)
+                                          : std::optional{defaultSelectionActionOrder()};
+    const auto selectionPrimaryActions = version >= terminalSelectionPopupSchemaVersion
+                                             ? parseStringList(terminalSelectionPrimaryActionsValue)
+                                             : std::optional{defaultSelectionPrimaryActions()};
+    const auto selectionRetainActions = version >= terminalSelectionPopupSchemaVersion
+                                            ? parseStringList(terminalSelectionRetainActionsValue)
+                                            : std::optional{defaultSelectionRetainActions()};
     if (!theme || !backdrop || !accent || !cursor || !terminalRightClick || !terminalMiddleClick || !localShell
         || !credentialStorage || !language || !aiProvider || !aiPermission || !aiReasoning || !aiProxy
+        || !selectionActionOrder || !selectionPrimaryActions || !selectionRetainActions
         || fontSizeValue.toDouble() != static_cast<double>(fontSize)
         || (version >= terminalSelectionSettingsSchemaVersion
             && terminalScrollRowsValue.toDouble() != static_cast<double>(terminalScrollRows)))
@@ -666,6 +745,9 @@ template <>
         .aiProxyUsername = version >= aiProxySchemaVersion ? aiProxyUsernameValue.toString() : QString{},
         .terminalFontSize = static_cast<int>(fontSize),
         .terminalScrollRows = static_cast<int>(terminalScrollRows),
+        .terminalSelectionActionOrder = *selectionActionOrder,
+        .terminalSelectionPrimaryActions = *selectionPrimaryActions,
+        .terminalSelectionRetainActions = *selectionRetainActions,
         .localShell = *localShell,
         .theme = *theme,
         .backdrop = *backdrop,
@@ -678,6 +760,8 @@ template <>
         .keepSelectionAfterCopy =
             version >= terminalSelectionInteractionSchemaVersion && keepSelectionAfterCopyValue.toBool(),
         .confirmMultilinePaste = confirmMultilinePasteValue.toBool(),
+        .terminalSelectionPopupEnabled =
+            version < terminalSelectionPopupSchemaVersion || terminalSelectionPopupEnabledValue.toBool(),
         .terminalRightClick = *terminalRightClick,
         .terminalMiddleClick = *terminalMiddleClick,
         .sftpShowHiddenFiles = version >= sftpSchemaVersion && sftpShowHiddenFilesValue.toBool(),
@@ -824,6 +908,13 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
         {QStringLiteral("terminalMiddleClick"), terminalMiddleClickPreferenceToken(settings.terminalMiddleClick)},
         {QStringLiteral("terminalWordDelimiters"), settings.terminalWordDelimiters},
         {QStringLiteral("terminalScrollRows"), settings.terminalScrollRows},
+        {QStringLiteral("terminalSelectionPopupEnabled"), settings.terminalSelectionPopupEnabled},
+        {QStringLiteral("terminalSelectionActionOrder"),
+         QJsonArray::fromStringList(settings.terminalSelectionActionOrder)},
+        {QStringLiteral("terminalSelectionPrimaryActions"),
+         QJsonArray::fromStringList(settings.terminalSelectionPrimaryActions)},
+        {QStringLiteral("terminalSelectionRetainActions"),
+         QJsonArray::fromStringList(settings.terminalSelectionRetainActions)},
         {QStringLiteral("localShell"), localShellPreferenceToken(settings.localShell)},
         {QStringLiteral("sftpShowHiddenFiles"), settings.sftpShowHiddenFiles},
         {QStringLiteral("sftpConfirmDelete"), settings.sftpConfirmDelete},

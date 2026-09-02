@@ -185,6 +185,8 @@ class AppController final : public QObject
     Q_PROPERTY(bool cursorBlink READ cursorBlink NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool copyOnSelect READ copyOnSelect NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool keepSelectionAfterCopy READ keepSelectionAfterCopy NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(bool terminalSelectionPopupEnabled READ terminalSelectionPopupEnabled NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(QVariantList terminalSelectionActions READ terminalSelectionActions NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool confirmMultilinePaste READ confirmMultilinePaste NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString terminalRightClickBehavior READ terminalRightClickBehavior NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString terminalMiddleClickBehavior READ terminalMiddleClickBehavior NOTIFY applicationSettingsChanged)
@@ -354,6 +356,8 @@ public:
     [[nodiscard]] bool cursorBlink() const noexcept;
     [[nodiscard]] bool copyOnSelect() const noexcept;
     [[nodiscard]] bool keepSelectionAfterCopy() const noexcept;
+    [[nodiscard]] bool terminalSelectionPopupEnabled() const noexcept;
+    [[nodiscard]] QVariantList terminalSelectionActions() const;
     [[nodiscard]] bool confirmMultilinePaste() const noexcept;
     [[nodiscard]] QString terminalRightClickBehavior() const;
     [[nodiscard]] QString terminalMiddleClickBehavior() const;
@@ -600,6 +604,7 @@ public:
         const QString &terminalRightClickBehavior = {}, const QString &terminalMiddleClickBehavior = {},
         const QString &terminalWordDelimiters = {}, int terminalScrollRows = 3);
     Q_INVOKABLE bool saveLocalShellPreference(const QString &preference);
+    Q_INVOKABLE bool saveTerminalSelectionPopupSettings(bool enabled, const QVariantList &actions);
     Q_INVOKABLE void refreshLocalShells();
     Q_INVOKABLE bool saveAiProviderSettings(const QString &provider, const QString &baseUrl,
                                             const QString &endpointPath, const QString &model, bool automaticContext,

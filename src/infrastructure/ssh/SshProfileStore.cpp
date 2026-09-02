@@ -24,7 +24,8 @@ constexpr qint64 sessionOptionsSchemaVersion = 4;
 constexpr qint64 proxySchemaVersion = 5;
 constexpr qint64 jumpHostSchemaVersion = 6;
 constexpr qint64 stageTimeoutSchemaVersion = 7;
-constexpr qint64 currentSchemaVersion = stageTimeoutSchemaVersion;
+constexpr qint64 identitySchemaVersion = 8;
+constexpr qint64 currentSchemaVersion = identitySchemaVersion;
 constexpr qsizetype maximumEnvironmentVariableCount = 32;
 
 [[nodiscard]] std::optional<ztermy::ssh::SshStartupCommandMode> parseStartupCommandMode(const QString &value)
@@ -350,6 +351,7 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
     const QJsonValue hostValue = object.value(QStringLiteral("host"));
     const QJsonValue portValue = object.value(QStringLiteral("port"));
     const QJsonValue usernameValue = object.value(QStringLiteral("username"));
+    const QJsonValue identityReferenceValue = object.value(QStringLiteral("identityReference"));
     const QJsonValue authenticationValue = object.value(QStringLiteral("authentication"));
     const QJsonValue privateKeyPathValue = object.value(QStringLiteral("privateKeyPath"));
     const QJsonValue passphraseRequiredValue = object.value(QStringLiteral("privateKeyPassphraseRequired"));
@@ -362,6 +364,8 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
     const QJsonValue jumpProfileIdsValue = object.value(QStringLiteral("jumpProfileIds"));
     if (!idValue.isString() || !nameValue.isString() || (!groupValue.isUndefined() && !groupValue.isString())
         || !hostValue.isString() || !portValue.isDouble() || !usernameValue.isString()
+        || (version >= identitySchemaVersion && !identityReferenceValue.isUndefined()
+            && !identityReferenceValue.isString())
         || !authenticationValue.isString() || !privateKeyPathValue.isString()
         || (!passphraseRequiredValue.isUndefined() && !passphraseRequiredValue.isBool())
         || (!lastConnectedValue.isUndefined() && !lastConnectedValue.isDouble())
@@ -458,6 +462,9 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
         .host = hostValue.toString().toStdString(),
         .port = static_cast<std::uint16_t>(port),
         .username = usernameValue.toString().toStdString(),
+        .identityReference = identityReferenceValue.isString()
+                                 ? std::optional{identityReferenceValue.toString().toStdString()}
+                                 : std::nullopt,
         .authentication = *authentication,
         .privateKeyPath = privateKeyPathValue.toString().toStdString(),
         .privateKeyPassphraseRequired = passphraseRequiredValue.toBool(false),
@@ -487,6 +494,10 @@ constexpr qsizetype maximumEnvironmentVariableCount = 32;
         {QStringLiteral("privateKeyPath"), QString::fromStdString(profile.privateKeyPath)},
         {QStringLiteral("privateKeyPassphraseRequired"), profile.privateKeyPassphraseRequired},
     };
+    if (profile.identityReference)
+    {
+        object.insert(QStringLiteral("identityReference"), QString::fromStdString(*profile.identityReference));
+    }
     if (profile.lastConnectedUtcMs)
     {
         object.insert(QStringLiteral("lastConnectedUtcMs"), *profile.lastConnectedUtcMs);
@@ -562,7 +573,9 @@ parseProfilesPayload(const QByteArrayView payload)
         || (versionValue.toInteger() != legacySchemaVersion && versionValue.toInteger() != credentialSchemaVersion
             && versionValue.toInteger() != keywordSchemaVersion
             && versionValue.toInteger() != sessionOptionsSchemaVersion && versionValue.toInteger() != proxySchemaVersion
-            && versionValue.toInteger() != jumpHostSchemaVersion && versionValue.toInteger() != currentSchemaVersion))
+            && versionValue.toInteger() != jumpHostSchemaVersion
+            && versionValue.toInteger() != stageTimeoutSchemaVersion
+            && versionValue.toInteger() != currentSchemaVersion))
     {
         return std::unexpected(versionValue.isDouble() ? ztermy::ssh::SshProfileStoreError::UnsupportedVersion
                                                        : ztermy::ssh::SshProfileStoreError::InvalidFormat);

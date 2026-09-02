@@ -374,6 +374,11 @@ QPointF TerminalItem::selectionActionPosition() const noexcept
     return m_selectionActionPosition;
 }
 
+bool TerminalItem::selectionActionPreferBelow() const noexcept
+{
+    return m_selectionActionPreferBelow;
+}
+
 QVariantList TerminalItem::keywordHighlightRules() const
 {
     return m_keywordHighlightRuleValues;
@@ -882,8 +887,13 @@ void TerminalItem::dismissSelectionAction()
 
 void TerminalItem::copySelection()
 {
+    copySelectionWithPolicy(m_keepSelectionAfterCopy);
+}
+
+void TerminalItem::copySelectionWithPolicy(const bool keepSelection)
+{
     emit copyRequested();
-    if (!m_keepSelectionAfterCopy && m_hasSelection)
+    if (!keepSelection && m_hasSelection)
     {
         clearSelection();
     }
@@ -1778,6 +1788,7 @@ void TerminalItem::mousePressEvent(QMouseEvent *event)
         m_selectionPointerPosition = event->position();
         stopSelectionAutoscroll();
         m_selectionActionPosition = event->position();
+        m_selectionActionPreferBelow = point->row < m_selectionAnchor.row;
         m_selectionActionVisible = true;
         emit selectionActionChanged();
         event->accept();
@@ -1902,6 +1913,7 @@ void TerminalItem::mouseReleaseEvent(QMouseEvent *event)
         {
             emit selectionRequested(m_selectionAnchor.column, m_selectionAnchor.row, point->column, point->row, false);
             m_selectionActionPosition = event->position();
+            m_selectionActionPreferBelow = point->row < m_selectionAnchor.row;
             m_selectionActionVisible = true;
             emit selectionActionChanged();
         }
@@ -1927,6 +1939,7 @@ void TerminalItem::mouseReleaseEvent(QMouseEvent *event)
             {
                 setHasSelection(true);
                 m_selectionActionPosition = event->position();
+                m_selectionActionPreferBelow = point->row < m_selectionAnchor.row;
                 m_selectionActionVisible = true;
                 emit selectionActionChanged();
             }
@@ -2055,6 +2068,7 @@ void TerminalItem::selectWordAt(const terminal::TerminalPoint &point, const QPoi
     emit selectionRequested(first, point.row, finalColumn, point.row, false);
     setHasSelection(true);
     m_selectionActionPosition = position;
+    m_selectionActionPreferBelow = false;
     m_selectionActionVisible = true;
     emit selectionActionChanged();
     if (m_copyOnSelect)
@@ -2073,6 +2087,7 @@ void TerminalItem::selectLineAt(const quint16 row, const QPointF &position)
     emit selectionRequested(0, row, static_cast<quint16>(m_snapshot->columns - 1), row, false);
     setHasSelection(true);
     m_selectionActionPosition = position;
+    m_selectionActionPreferBelow = false;
     m_selectionActionVisible = true;
     emit selectionActionChanged();
     if (m_copyOnSelect)

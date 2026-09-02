@@ -12,6 +12,8 @@ Item {
     property bool cursorBlink: true
     property bool copyOnSelect: false
     property bool keepSelectionAfterCopy: false
+    property bool selectionActionPopupEnabled: true
+    property var selectionActions: []
     property bool confirmMultilinePaste: true
     property string rightClickBehavior: "context-menu"
     property string middleClickBehavior: "disabled"
@@ -263,6 +265,89 @@ Item {
                 selectionMoreMenu.open();
             }
 
+            function selectionActionAvailable(action) {
+                if (!action)
+                    return false;
+                if (action.id === "ai")
+                    return leaf.aiConfigured;
+                if (action.id === "highlight")
+                    return leaf.tab.kind === "ssh";
+                if (action.id === "unhighlight")
+                    return leaf.tab.kind === "ssh" && viewport.selectionMatchesKeywordHighlight;
+                return true;
+            }
+
+            function selectionActionsFor(primary) {
+                const result = [];
+                for (let index = 0; index < root.selectionActions.length; ++index) {
+                    const action = root.selectionActions[index];
+                    if (!!action.primary === primary)
+                        result.push(action);
+                }
+                return result;
+            }
+
+            function selectionActionObjectName(id) {
+                if (id === "copy")
+                    return "terminalSelectionCopyAction";
+                if (id === "ai")
+                    return "terminalSelectionAiAction";
+                if (id === "search")
+                    return "terminalSelectionSearchAction";
+                if (id === "highlight")
+                    return "terminalSelectionHighlightAction";
+                return "terminalSelectionRemoveHighlightAction";
+            }
+
+            function selectionActionAccessibleName(id, label) {
+                if (id === "copy")
+                    return qsTr("Copy terminal selection");
+                if (id === "ai")
+                    return qsTr("Attach terminal selection to AI");
+                return label;
+            }
+
+            function finishSelectionAction(retainSelection, restoreFocus) {
+                if (!retainSelection)
+                    viewport.clearSelection();
+                else
+                    viewport.dismissSelectionAction();
+                if (restoreFocus)
+                    restoreTerminalFocusAfterSelectionAction();
+            }
+
+            function triggerSelectionAction(action) {
+                if (!action || !root.controller.activateTerminalPane(node.id))
+                    return;
+                let succeeded = true;
+                let restoreFocus = true;
+                if (action.id === "copy") {
+                    viewport.copySelectionWithPolicy(!!action.retainSelection);
+                    viewport.dismissSelectionAction();
+                    restoreTerminalFocusAfterSelectionAction();
+                    return;
+                } else if (action.id === "ai") {
+                    succeeded = root.controller.attachAiSelection();
+                    if (succeeded && (!leaf.tab.workbenchOpen || leaf.tab.workbenchPage !== "ai"))
+                        root.controller.toggleTerminalWorkbench("ai");
+                } else if (action.id === "search") {
+                    succeeded = root.controller.searchTerminalSelection();
+                    if (succeeded) {
+                        selectionMoreMenu.restoreViewportOnClose = false;
+                        root.terminalSearchRequested();
+                        restoreFocus = false;
+                    }
+                } else if (action.id === "highlight") {
+                    succeeded = root.controller.highlightTerminalSelection();
+                } else if (action.id === "unhighlight") {
+                    succeeded = root.controller.unhighlightTerminalSelection();
+                } else {
+                    succeeded = false;
+                }
+                if (succeeded)
+                    finishSelectionAction(!!action.retainSelection, restoreFocus);
+            }
+
             color: "transparent"
             border.color: node.active ? Theme.accent : Theme.border
             border.width: node.active ? 2 : 1
@@ -500,24 +585,55 @@ Item {
             Rectangle {
                 id: selectionActionStrip
 
-                readonly property real preferredY: viewport.y + viewport.selectionActionPosition.y - height - 9
+                readonly property real aboveY: viewport.y + viewport.selectionActionPosition.y - height - 9
+                readonly property real belowY: viewport.y + viewport.selectionActionPosition.y + 9
+                property bool idleDimmed: false
 
                 objectName: "terminalSelectionActionStrip"
-                visible: !!leaf.node.active && viewport.selectionActionVisible && !viewport.multilinePastePending
+                visible: root.selectionActionPopupEnabled && !!leaf.node.active && viewport.selectionActionVisible && !viewport.multilinePastePending
                 width: Math.min(selectionActionRow.implicitWidth + 8, Math.max(0, leaf.width - 16))
                 height: 32
                 x: Math.max(8, Math.min(leaf.width - width - 8, viewport.x + viewport.selectionActionPosition.x - (width / 2)))
-                y: preferredY >= 8 ? preferredY : Math.min(leaf.height - height - 8, viewport.y + viewport.selectionActionPosition.y + 9)
+                y: viewport.selectionActionPreferBelow ? (belowY + height <= leaf.height - 8 ? belowY : Math.max(8, aboveY)) : (aboveY >= 8 ? aboveY : Math.min(leaf.height - height - 8, belowY))
                 z: 12
                 radius: height / 2
                 color: Theme.floatingBackground
                 border.color: Theme.border
                 border.width: 1
                 clip: true
+                opacity: selectionHover.hovered || selectionMoreMenu.visible ? 1.0 : idleDimmed ? 0.38 : 1.0
                 onVisibleChanged: {
                     if (!visible && selectionMoreMenu.visible) {
                         selectionMoreMenu.close();
                     }
+                    idleDimmed = false;
+                    if (visible)
+                        selectionIdleTimer.restart();
+                }
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: Theme.animationsEnabled ? Theme.motionFast : 0
+                    }
+                }
+
+                HoverHandler {
+                    id: selectionHover
+                    onHoveredChanged: {
+                        if (hovered) {
+                            selectionActionStrip.idleDimmed = false;
+                            selectionIdleTimer.stop();
+                        } else if (selectionActionStrip.visible) {
+                            selectionIdleTimer.restart();
+                        }
+                    }
+                }
+
+                Timer {
+                    id: selectionIdleTimer
+                    interval: 2200
+                    repeat: false
+                    onTriggered: selectionActionStrip.idleDimmed = true
                 }
 
                 RowLayout {
@@ -526,77 +642,41 @@ Item {
                     anchors.centerIn: parent
                     spacing: 2
 
-                    ToolButton {
-                        id: selectionCopyButton
+                    Repeater {
+                        model: leaf.selectionActionsFor(true)
 
-                        objectName: "terminalSelectionCopyAction"
-                        Layout.preferredWidth: 28
-                        Layout.preferredHeight: 28
-                        hoverEnabled: true
-                        focusPolicy: Qt.TabFocus
-                        Accessible.name: qsTr("Copy terminal selection")
-                        onClicked: {
-                            viewport.copySelection();
-                            leaf.dismissSelectionActionAndRestoreFocus();
-                        }
-                        Keys.onEscapePressed: event => {
-                            leaf.dismissSelectionActionAndRestoreFocus();
-                            event.accepted = true;
-                        }
+                        delegate: ToolButton {
+                            id: selectionPrimaryButton
+                            required property var modelData
 
-                        contentItem: AppIcon {
-                            name: "copy"
-                            color: Theme.text
-                        }
-                        background: Rectangle {
-                            radius: height / 2
-                            color: selectionCopyButton.down ? Theme.controlPressed : selectionCopyButton.hovered ? Theme.controlHover : "transparent"
-                            border.color: selectionCopyButton.visualFocus ? Theme.focus : "transparent"
-                            border.width: selectionCopyButton.visualFocus ? 2 : 0
-                        }
-
-                        AppToolTip {
-                            text: qsTr("Copy selection")
-                        }
-                    }
-
-                    ToolButton {
-                        id: selectionAiButton
-
-                        objectName: "terminalSelectionAiAction"
-                        visible: leaf.aiConfigured
-                        Layout.preferredWidth: visible ? 28 : 0
-                        Layout.preferredHeight: 28
-                        hoverEnabled: true
-                        focusPolicy: Qt.TabFocus
-                        Accessible.name: qsTr("Attach terminal selection to AI")
-                        onClicked: {
-                            if (!root.controller.activateTerminalPane(leaf.node.id) || !root.controller.attachAiSelection()) {
-                                return;
+                            objectName: leaf.selectionActionObjectName(modelData.id)
+                            visible: leaf.selectionActionAvailable(modelData)
+                            Layout.preferredWidth: visible ? 28 : 0
+                            Layout.preferredHeight: 28
+                            hoverEnabled: true
+                            focusPolicy: Qt.TabFocus
+                            Accessible.role: Accessible.Button
+                            Accessible.name: leaf.selectionActionAccessibleName(modelData.id, modelData.label)
+                            onClicked: leaf.triggerSelectionAction(modelData)
+                            Keys.onEscapePressed: event => {
+                                leaf.dismissSelectionActionAndRestoreFocus();
+                                event.accepted = true;
                             }
-                            if (!leaf.tab.workbenchOpen || leaf.tab.workbenchPage !== "ai") {
-                                root.controller.toggleTerminalWorkbench("ai");
+
+                            contentItem: AppIcon {
+                                name: selectionPrimaryButton.modelData.icon
+                                color: selectionPrimaryButton.modelData.id === "ai" ? Theme.accent : Theme.text
                             }
-                            viewport.dismissSelectionAction();
-                        }
-                        Keys.onEscapePressed: event => {
-                            leaf.dismissSelectionActionAndRestoreFocus();
-                            event.accepted = true;
-                        }
+                            background: Rectangle {
+                                radius: height / 2
+                                color: selectionPrimaryButton.down ? Theme.controlPressed : selectionPrimaryButton.hovered ? Theme.controlHover : "transparent"
+                                border.color: selectionPrimaryButton.visualFocus ? Theme.focus : "transparent"
+                                border.width: selectionPrimaryButton.visualFocus ? 2 : 0
+                            }
 
-                        contentItem: AppIcon {
-                            name: "ai"
-                            color: Theme.accent
-                        }
-                        background: Rectangle {
-                            radius: height / 2
-                            color: selectionAiButton.down ? Theme.controlPressed : selectionAiButton.hovered ? Theme.controlHover : "transparent"
-                            border.color: selectionAiButton.visualFocus ? Theme.focus : "transparent"
-                            border.width: selectionAiButton.visualFocus ? 2 : 0
-                        }
-
-                        AppToolTip {
-                            text: qsTr("Attach selection to the current terminal conversation")
+                            AppToolTip {
+                                text: selectionPrimaryButton.modelData.label
+                            }
                         }
                     }
 
@@ -642,41 +722,27 @@ Item {
                 modal: false
                 onAboutToShow: restoreViewportOnClose = true
 
-                AppMenuItem {
-                    objectName: "terminalSelectionSearchAction"
-                    text: qsTr("Search selection")
-                    iconName: "search"
-                    onTriggered: {
-                        if (root.controller.activateTerminalPane(leaf.node.id) && root.controller.searchTerminalSelection()) {
-                            selectionMoreMenu.restoreViewportOnClose = false;
-                            root.terminalSearchRequested();
-                            viewport.dismissSelectionAction();
-                        }
+                Instantiator {
+                    model: leaf.selectionActionsFor(false)
+                    delegate: AppMenuItem {
+                        required property var modelData
+                        objectName: leaf.selectionActionObjectName(modelData.id)
+                        text: modelData.label
+                        iconName: modelData.icon
+                        visible: leaf.selectionActionAvailable(modelData)
+                        onTriggered: leaf.triggerSelectionAction(modelData)
                     }
+                    onObjectAdded: (index, object) => selectionMoreMenu.insertItem(index, object)
+                    onObjectRemoved: (index, object) => selectionMoreMenu.removeItem(object)
                 }
 
-                AppMenuItem {
-                    objectName: "terminalSelectionHighlightAction"
-                    text: qsTr("Highlight selection")
-                    iconName: "highlight"
-                    visible: leaf.tab.kind === "ssh"
-                    onTriggered: {
-                        if (root.controller.activateTerminalPane(leaf.node.id) && root.controller.highlightTerminalSelection()) {
-                            viewport.dismissSelectionAction();
-                        }
-                    }
-                }
+                AppMenuSeparator {}
 
                 AppMenuItem {
-                    objectName: "terminalSelectionRemoveHighlightAction"
-                    text: qsTr("Remove selection highlight")
-                    iconName: "close"
-                    visible: leaf.tab.kind === "ssh" && viewport.selectionMatchesKeywordHighlight
-                    onTriggered: {
-                        if (root.controller.activateTerminalPane(leaf.node.id) && root.controller.unhighlightTerminalSelection()) {
-                            viewport.dismissSelectionAction();
-                        }
-                    }
+                    objectName: "terminalSelectionHideAction"
+                    text: qsTr("Hide for this selection")
+                    iconName: "eye-off"
+                    onTriggered: leaf.dismissSelectionActionAndRestoreFocus()
                 }
 
                 onClosed: {

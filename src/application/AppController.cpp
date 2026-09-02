@@ -3609,6 +3609,57 @@ bool AppController::keepSelectionAfterCopy() const noexcept
     return m_settings.keepSelectionAfterCopy;
 }
 
+bool AppController::terminalSelectionPopupEnabled() const noexcept
+{
+    return m_settings.terminalSelectionPopupEnabled;
+}
+
+QVariantList AppController::terminalSelectionActions() const
+{
+    const auto descriptor = [this](const QString &id) -> QVariantMap {
+        QString label;
+        QString icon;
+        if (id == QStringLiteral("copy"))
+        {
+            label = tr("Copy selection");
+            icon = QStringLiteral("copy");
+        }
+        else if (id == QStringLiteral("ai"))
+        {
+            label = tr("Attach selection to AI");
+            icon = QStringLiteral("ai");
+        }
+        else if (id == QStringLiteral("search"))
+        {
+            label = tr("Search selection");
+            icon = QStringLiteral("search");
+        }
+        else if (id == QStringLiteral("highlight"))
+        {
+            label = tr("Highlight selection");
+            icon = QStringLiteral("highlight");
+        }
+        else if (id == QStringLiteral("unhighlight"))
+        {
+            label = tr("Remove selection highlight");
+            icon = QStringLiteral("close");
+        }
+        return {{QStringLiteral("id"), id},
+                {QStringLiteral("label"), label},
+                {QStringLiteral("icon"), icon},
+                {QStringLiteral("primary"), m_settings.terminalSelectionPrimaryActions.contains(id)},
+                {QStringLiteral("retainSelection"), m_settings.terminalSelectionRetainActions.contains(id)}};
+    };
+
+    QVariantList result;
+    result.reserve(m_settings.terminalSelectionActionOrder.size());
+    for (const QString &id : m_settings.terminalSelectionActionOrder)
+    {
+        result.push_back(descriptor(id));
+    }
+    return result;
+}
+
 bool AppController::confirmMultilinePaste() const noexcept
 {
     return m_settings.confirmMultilinePaste;
@@ -8980,6 +9031,9 @@ bool AppController::saveApplicationSettings(
         .aiProxyUsername = m_settings.aiProxyUsername,
         .terminalFontSize = fontSize,
         .terminalScrollRows = terminalScrollRows,
+        .terminalSelectionActionOrder = m_settings.terminalSelectionActionOrder,
+        .terminalSelectionPrimaryActions = m_settings.terminalSelectionPrimaryActions,
+        .terminalSelectionRetainActions = m_settings.terminalSelectionRetainActions,
         .localShell = m_settings.localShell,
         .theme = *parsedTheme,
         .backdrop = *parsedBackdrop,
@@ -8991,6 +9045,7 @@ bool AppController::saveApplicationSettings(
         .copyOnSelect = shouldCopyOnSelect,
         .keepSelectionAfterCopy = shouldKeepSelectionAfterCopy,
         .confirmMultilinePaste = shouldConfirmMultilinePaste,
+        .terminalSelectionPopupEnabled = m_settings.terminalSelectionPopupEnabled,
         .terminalRightClick = *parsedRightClick,
         .terminalMiddleClick = *parsedMiddleClick,
         .sftpShowHiddenFiles = shouldShowHiddenSftpFiles,
@@ -9018,6 +9073,45 @@ bool AppController::saveLocalShellPreference(const QString &preference)
     }
     config::ApplicationSettings updated = m_settings;
     updated.localShell = *parsed;
+    return persistApplicationSettings(updated);
+}
+
+bool AppController::saveTerminalSelectionPopupSettings(const bool enabled, const QVariantList &actions)
+{
+    static const QStringList expectedIds = {QStringLiteral("copy"), QStringLiteral("ai"), QStringLiteral("search"),
+                                            QStringLiteral("highlight"), QStringLiteral("unhighlight")};
+    if (actions.size() != expectedIds.size())
+    {
+        return false;
+    }
+
+    QStringList order;
+    QStringList primary;
+    QStringList retain;
+    for (const QVariant &value : actions)
+    {
+        const QVariantMap action = value.toMap();
+        const QString id = action.value(QStringLiteral("id")).toString();
+        if (!expectedIds.contains(id) || order.contains(id))
+        {
+            return false;
+        }
+        order.push_back(id);
+        if (action.value(QStringLiteral("primary")).toBool())
+        {
+            primary.push_back(id);
+        }
+        if (action.value(QStringLiteral("retainSelection")).toBool())
+        {
+            retain.push_back(id);
+        }
+    }
+
+    config::ApplicationSettings updated = m_settings;
+    updated.terminalSelectionPopupEnabled = enabled;
+    updated.terminalSelectionActionOrder = std::move(order);
+    updated.terminalSelectionPrimaryActions = std::move(primary);
+    updated.terminalSelectionRetainActions = std::move(retain);
     return persistApplicationSettings(updated);
 }
 

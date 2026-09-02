@@ -2,6 +2,7 @@
 
 #include <QMap>
 #include <QString>
+#include <QStringList>
 
 #include <cstdint>
 #include <expected>
@@ -137,6 +138,11 @@ struct ApplicationSettings final
     QString aiProxyUsername;
     int terminalFontSize = 14;
     int terminalScrollRows = 3;
+    QStringList terminalSelectionActionOrder = {QStringLiteral("copy"), QStringLiteral("ai"), QStringLiteral("search"),
+                                                QStringLiteral("highlight"), QStringLiteral("unhighlight")};
+    QStringList terminalSelectionPrimaryActions = {QStringLiteral("copy"), QStringLiteral("ai")};
+    QStringList terminalSelectionRetainActions = {QStringLiteral("ai"), QStringLiteral("search"),
+                                                  QStringLiteral("highlight"), QStringLiteral("unhighlight")};
     LocalShellPreference localShell = LocalShellPreference::automatic;
     ThemePreference theme = ThemePreference::dark;
     BackdropPreference backdrop = BackdropPreference::acrylic;
@@ -148,6 +154,7 @@ struct ApplicationSettings final
     bool copyOnSelect = false;
     bool keepSelectionAfterCopy = false;
     bool confirmMultilinePaste = true;
+    bool terminalSelectionPopupEnabled = true;
     TerminalRightClickPreference terminalRightClick = TerminalRightClickPreference::contextMenu;
     TerminalMiddleClickPreference terminalMiddleClick = TerminalMiddleClickPreference::disabled;
     bool sftpShowHiddenFiles = false;

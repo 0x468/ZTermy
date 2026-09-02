@@ -82,6 +82,7 @@ private slots:
     void mapsWindowsPhysicalKeys();
     void confirmsMultilinePaste();
     void selectsCellsAndCopiesOnMouseRelease();
+    void positionsSelectionActionsOutsideDragDirection();
     void supportsClassicClipboardAliasesAndContextActions();
     void selectsWordsOnDoubleClick();
     void separatesShellPromptIdentityWords();
@@ -943,6 +944,31 @@ void TerminalItemTests::selectsCellsAndCopiesOnMouseRelease()
     QCOMPARE(gestures.at(9).type, ztermy::terminal::TerminalSelectionGestureType::release);
     QCOMPARE(copySpy.count(), 2);
     QVERIFY(!item.selectionActionVisible());
+}
+
+void TerminalItemTests::positionsSelectionActionsOutsideDragDirection()
+{
+    TestableTerminalItem item;
+    item.setSnapshot(snapshotAt(0, 0));
+    item.setSize(QSizeF{800, 480});
+    const QRectF origin = item.inputMethodQuery(Qt::ImCursorRectangle).toRectF();
+    const auto point = [&origin](const int column, const int row) {
+        return QPointF{origin.x() + ((static_cast<qreal>(column) + 0.5) * origin.width()),
+                       origin.y() + ((static_cast<qreal>(row) + 0.5) * origin.height())};
+    };
+    const auto drag = [&item](const QPointF &from, const QPointF &to) {
+        QMouseEvent press(QEvent::MouseButtonPress, from, from, from, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        item.mousePressEvent(&press);
+        QMouseEvent move(QEvent::MouseMove, to, to, to, Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+        item.mouseMoveEvent(&move);
+        QMouseEvent release(QEvent::MouseButtonRelease, to, to, to, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+        item.mouseReleaseEvent(&release);
+    };
+
+    drag(point(2, 2), point(4, 6));
+    QVERIFY(!item.selectionActionPreferBelow());
+    drag(point(4, 6), point(2, 2));
+    QVERIFY(item.selectionActionPreferBelow());
 }
 
 void TerminalItemTests::autoscrollsSelectionNearViewportEdges()

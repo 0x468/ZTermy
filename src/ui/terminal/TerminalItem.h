@@ -65,6 +65,7 @@ class TerminalItem : public QQuickItem
     Q_PROPERTY(qreal scrollbarPageRatio READ scrollbarPageRatio NOTIFY scrollbarChanged)
     Q_PROPERTY(bool selectionActionVisible READ selectionActionVisible NOTIFY selectionActionChanged)
     Q_PROPERTY(QPointF selectionActionPosition READ selectionActionPosition NOTIFY selectionActionChanged)
+    Q_PROPERTY(bool selectionActionPreferBelow READ selectionActionPreferBelow NOTIFY selectionActionChanged)
     Q_PROPERTY(QString hoveredLink READ hoveredLink NOTIFY hoveredLinkChanged)
     Q_PROPERTY(QPointF hoveredLinkPosition READ hoveredLinkPosition NOTIFY hoveredLinkPositionChanged)
     Q_PROPERTY(bool quickSelectActive READ quickSelectActive NOTIFY quickSelectChanged)
@@ -110,6 +111,7 @@ public:
     [[nodiscard]] qreal scrollbarPageRatio() const noexcept;
     [[nodiscard]] bool selectionActionVisible() const noexcept;
     [[nodiscard]] QPointF selectionActionPosition() const noexcept;
+    [[nodiscard]] bool selectionActionPreferBelow() const noexcept;
     [[nodiscard]] QString hoveredLink() const;
     [[nodiscard]] QPointF hoveredLinkPosition() const noexcept;
     [[nodiscard]] bool quickSelectActive() const noexcept;
@@ -158,6 +160,7 @@ public slots:
     Q_INVOKABLE void scrollPage(int pages);
     Q_INVOKABLE void dismissSelectionAction();
     Q_INVOKABLE void copySelection();
+    Q_INVOKABLE void copySelectionWithPolicy(bool keepSelection);
     Q_INVOKABLE void pasteClipboard();
     Q_INVOKABLE void selectVisibleTerminal();
     Q_INVOKABLE void selectAllTerminal();
@@ -298,6 +301,7 @@ private:
     bool m_selectionMoved = false;
     bool m_selectionClickSelected = false;
     bool m_selectionActionVisible = false;
+    bool m_selectionActionPreferBelow = false;
     bool m_hoverInside = false;
     bool m_controlModifierDown = false;
     bool m_quickSelectActive = false;
