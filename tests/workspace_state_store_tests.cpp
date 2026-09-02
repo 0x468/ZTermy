@@ -19,6 +19,7 @@ private slots:
     void migratesVersionThreeWithoutSftpNavigationPreferences();
     void migratesVersionFourWithoutSftpListingPreferences();
     void migratesVersionFiveWithoutTerminalWorkspaces();
+    void migratesVersionSixWithoutRestoreGuardState();
     void togglesAndBoundsSftpBookmarks();
     void rejectsMalformedDuplicateAndInvalidState();
     void rejectsMalformedTerminalWorkspaceTopology();
@@ -74,6 +75,8 @@ void WorkspaceStateStoreTests::savesAndLoadsVersionedNonSecretState()
                                                  ztermy::workbench::TerminalSplitOrientation::Vertical, 0.5, true));
     expected.terminalWorkspaces.push_back(std::move(workspace));
     expected.activeTerminalWorkspaceId = "workspace-a";
+    expected.quarantinedRestoreIntentIds = {"intent-b"};
+    expected.restoreAttemptIntentId = "intent-a";
 
     QVERIFY(store.save(expected).has_value());
     const auto loaded = store.load();
@@ -88,6 +91,24 @@ void WorkspaceStateStoreTests::savesAndLoadsVersionedNonSecretState()
     QVERIFY(payload.contains("activeTerminalWorkspaceId"));
     QVERIFY(!payload.contains("password"));
     QVERIFY(!payload.contains("secret"));
+}
+
+void WorkspaceStateStoreTests::migratesVersionSixWithoutRestoreGuardState()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("workspace.json"));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    const QByteArray payload =
+        R"({"schemaVersion":6,"profiles":[],"collapsedHostSections":[],"terminalWorkspaces":[],"activeTerminalWorkspaceId":""})";
+    QCOMPARE(file.write(payload), payload.size());
+    file.close();
+
+    const auto loaded = ztermy::workbench::WorkspaceStateStore(path).load();
+    QVERIFY(loaded);
+    QVERIFY(loaded->quarantinedRestoreIntentIds.empty());
+    QVERIFY(loaded->restoreAttemptIntentId.empty());
 }
 
 void WorkspaceStateStoreTests::migratesVersionFiveWithoutTerminalWorkspaces()

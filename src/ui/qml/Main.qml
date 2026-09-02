@@ -1737,6 +1737,37 @@ Rectangle {
         onAccepted: root.controller.exportQuickCommands(selectedFile.toString())
     }
 
+    FileDialog {
+        id: workspaceImportDialog
+
+        title: qsTr("Import workspace")
+        fileMode: FileDialog.OpenFile
+        nameFilters: [qsTr("ztermy workspaces (*.ztermy-workspace.json)"), qsTr("JSON files (*.json)"), qsTr("All files (*)")]
+        onAccepted: {
+            const succeeded = root.controller.importWorkspace(selectedFile.toString());
+            terminalActionToast.present({
+                "title": succeeded ? qsTr("Workspace imported") : qsTr("Import failed"),
+                "message": root.controller.workspaceOperationMessage
+            });
+        }
+    }
+
+    FileDialog {
+        id: workspaceExportDialog
+
+        title: qsTr("Export workspace")
+        fileMode: FileDialog.SaveFile
+        nameFilters: [qsTr("ztermy workspaces (*.ztermy-workspace.json)"), qsTr("JSON files (*.json)"), qsTr("All files (*)")]
+        defaultSuffix: "ztermy-workspace.json"
+        onAccepted: {
+            const succeeded = root.controller.exportWorkspace(selectedFile.toString());
+            terminalActionToast.present({
+                "title": succeeded ? qsTr("Workspace exported") : qsTr("Export failed"),
+                "message": root.controller.workspaceOperationMessage
+            });
+        }
+    }
+
     Dialog {
         id: renameTerminalDialog
 
@@ -1970,6 +2001,24 @@ Rectangle {
                     compact: root.workspaceNavigationCompact
                     selected: root.workspaceSection === "logs"
                     onActivated: root.workspaceSection = "logs"
+                }
+
+                SideNavigationItem {
+                    actionObjectName: "sideImportWorkspaceAction"
+                    Layout.fillWidth: true
+                    iconName: "upload"
+                    text: qsTr("Import workspace")
+                    compact: root.workspaceNavigationCompact
+                    onActivated: workspaceImportDialog.open()
+                }
+
+                SideNavigationItem {
+                    actionObjectName: "sideExportWorkspaceAction"
+                    Layout.fillWidth: true
+                    iconName: "download"
+                    text: qsTr("Export workspace")
+                    compact: root.workspaceNavigationCompact
+                    onActivated: workspaceExportDialog.open()
                 }
 
                 Item {

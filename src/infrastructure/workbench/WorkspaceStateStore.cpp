@@ -17,7 +17,7 @@ namespace ztermy::workbench
 namespace
 {
 
-constexpr int currentSchemaVersion = 6;
+constexpr int currentSchemaVersion = 7;
 
 QString text(const std::string &value)
 {
@@ -404,6 +404,20 @@ std::expected<WorkspaceState, WorkspaceStateStoreError> parseWorkspacePayload(co
         }
         state.activeTerminalWorkspaceId = bytes(activeWorkspaceValue.toString());
     }
+    if (schemaVersion >= 7)
+    {
+        const QJsonValue quarantinedValue = root.value(QStringLiteral("quarantinedRestoreIntentIds"));
+        const QJsonValue attemptValue = root.value(QStringLiteral("restoreAttemptIntentId"));
+        if (!quarantinedValue.isArray() || !attemptValue.isString())
+            return std::unexpected(WorkspaceStateStoreError::InvalidDocument);
+        for (const QJsonValue value : quarantinedValue.toArray())
+        {
+            if (!value.isString())
+                return std::unexpected(WorkspaceStateStoreError::InvalidDocument);
+            state.quarantinedRestoreIntentIds.push_back(bytes(value.toString()));
+        }
+        state.restoreAttemptIntentId = bytes(attemptValue.toString());
+    }
     return validWorkspaceState(state) ? std::expected<WorkspaceState, WorkspaceStateStoreError>{std::move(state)}
                                       : std::unexpected(WorkspaceStateStoreError::InvalidDocument);
 }
@@ -529,12 +543,17 @@ std::expected<void, WorkspaceStateStoreError> WorkspaceStateStore::save(const Wo
     {
         terminalWorkspaces.push_back(serializeTerminalWorkspace(workspace));
     }
+    QJsonArray quarantinedRestoreIntentIds;
+    for (const std::string &intentId : state.quarantinedRestoreIntentIds)
+        quarantinedRestoreIntentIds.push_back(text(intentId));
     const QByteArray payload =
         QJsonDocument(QJsonObject{{QStringLiteral("schemaVersion"), currentSchemaVersion},
                                   {QStringLiteral("profiles"), profiles},
                                   {QStringLiteral("collapsedHostSections"), collapsedSections},
                                   {QStringLiteral("terminalWorkspaces"), terminalWorkspaces},
-                                  {QStringLiteral("activeTerminalWorkspaceId"), text(state.activeTerminalWorkspaceId)}})
+                                  {QStringLiteral("activeTerminalWorkspaceId"), text(state.activeTerminalWorkspaceId)},
+                                  {QStringLiteral("quarantinedRestoreIntentIds"), quarantinedRestoreIntentIds},
+                                  {QStringLiteral("restoreAttemptIntentId"), text(state.restoreAttemptIntentId)}})
             .toJson(QJsonDocument::Indented);
     return writeWorkspacePayload(m_filePath, payload);
 }

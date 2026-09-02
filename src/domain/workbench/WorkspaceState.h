@@ -93,6 +93,8 @@ struct WorkspaceState final
     std::vector<std::string> collapsedHostSections;
     std::vector<TerminalWorkspaceLayout> terminalWorkspaces;
     std::string activeTerminalWorkspaceId;
+    std::vector<std::string> quarantinedRestoreIntentIds;
+    std::string restoreAttemptIntentId;
 
     [[nodiscard]] friend bool operator==(const WorkspaceState &, const WorkspaceState &) = default;
 };

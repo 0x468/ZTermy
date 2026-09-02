@@ -1099,6 +1099,25 @@ Item {
             }
 
             StatePanel {
+                objectName: "restoreQuarantinePanel"
+                anchors.centerIn: parent
+                width: Math.max(180, Math.min(440, parent.width - 24))
+                visible: !!leaf.tab.restoreQuarantined
+                z: 10
+                kind: "warning"
+                heading: qsTr("Terminal restore quarantined")
+                description: leaf.tab.status || qsTr("This terminal did not complete startup during the previous restore attempt.")
+                detail: qsTr("Other panes remain available. Retry only this terminal when you are ready.")
+
+                ActionButton {
+                    text: qsTr("Retry terminal")
+                    accessibleName: qsTr("Retry quarantined terminal pane")
+                    variant: "primary"
+                    onClicked: root.controller.retryQuarantinedTerminalPane(leaf.node.id)
+                }
+            }
+
+            StatePanel {
                 objectName: "sshConnectionProgressPanel"
                 anchors.centerIn: parent
                 width: Math.max(180, Math.min(440, parent.width - 24))

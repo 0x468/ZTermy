@@ -2786,6 +2786,11 @@ QString AppController::startupRecoveryNotice() const
     return m_startupRecoveryNotice;
 }
 
+QString AppController::workspaceOperationMessage() const
+{
+    return m_workspaceOperationMessage;
+}
+
 void AppController::dismissStartupRecoveryNotice()
 {
     if (m_startupRecoveryNotice.isEmpty())
@@ -2954,6 +2959,7 @@ QVariantMap AppController::terminalTabValue(const TerminalTab &tab, const QStrin
         {QStringLiteral("logDroppedBytes"),
          QVariant::fromValue<qulonglong>(tab.sessionLog ? tab.sessionLog->droppedBytes() : 0)},
         {QStringLiteral("running"), tab.running},
+        {QStringLiteral("restoreQuarantined"), tab.restoreQuarantined},
         {QStringLiteral("reconnecting"), tab.reconnectPending},
         {QStringLiteral("reconnectAttempt"), static_cast<int>(tab.reconnectAttempt)},
         {QStringLiteral("canReconnect"),
@@ -5403,6 +5409,36 @@ bool AppController::moveTerminalPane(const QString &paneId, const QString &targe
     return true;
 }
 
+bool AppController::retryQuarantinedTerminalPane(const QString &paneId)
+{
+    TerminalTab *tab = findTabForPane(paneId);
+    if (tab == nullptr || tab->kind != TerminalTabKind::Local || tab->local == nullptr || !tab->restoreQuarantined)
+        return false;
+    workbench::WorkspaceState candidate = m_workspaceState;
+    std::erase(candidate.quarantinedRestoreIntentIds, utf8String(tab->id));
+    candidate.restoreAttemptIntentId = utf8String(tab->id);
+    if (!m_workspaceStateStore.save(candidate))
+        return false;
+    m_workspaceState = std::move(candidate);
+    tab->restoreQuarantined = false;
+    tab->status = tr("Retrying restored terminal...");
+    const std::error_code error = tab->local->start({.columns = 100, .rows = 30});
+    m_workspaceState.restoreAttemptIntentId.clear();
+    if (error)
+    {
+        tab->restoreQuarantined = true;
+        tab->status = tr("Unable to restore local terminal: %1").arg(QString::fromStdString(error.message()));
+        m_workspaceState.quarantinedRestoreIntentIds.push_back(utf8String(tab->id));
+    }
+    if (!m_workspaceStateStore.save(m_workspaceState))
+    {
+        m_workspaceOperationMessage = tr("The restore quarantine state could not be saved.");
+        emit workspaceOperationChanged();
+    }
+    emit terminalTabsChanged();
+    return !error;
+}
+
 bool AppController::closeActiveTerminalPane()
 {
     TerminalTab *tab = activeTab();
@@ -6515,6 +6551,47 @@ bool AppController::importQuickCommands(const QString &localFileUrl)
     }
     m_scripts = std::move(candidate);
     setQuickCommandOperationError({});
+    return true;
+}
+
+bool AppController::exportWorkspace(const QString &localFileUrl)
+{
+    const QUrl url(localFileUrl);
+    const QString path = url.isLocalFile() ? url.toLocalFile() : localFileUrl;
+    if (path.trimmed().isEmpty()
+        || !workbench::WorkspaceStateStore(path).save(persistableWorkspaceState(m_workspaceState)))
+    {
+        m_workspaceOperationMessage = tr("The workspace could not be exported.");
+        emit workspaceOperationChanged();
+        return false;
+    }
+    m_workspaceOperationMessage = tr("Workspace exported.");
+    emit workspaceOperationChanged();
+    return true;
+}
+
+bool AppController::importWorkspace(const QString &localFileUrl)
+{
+    if (!m_tabs.empty())
+    {
+        m_workspaceOperationMessage = tr("Close open terminal tabs before importing a workspace.");
+        emit workspaceOperationChanged();
+        return false;
+    }
+    const QUrl url(localFileUrl);
+    const QString path = url.isLocalFile() ? url.toLocalFile() : localFileUrl;
+    auto imported = workbench::WorkspaceStateStore(path).load();
+    if (path.trimmed().isEmpty() || !imported || !m_workspaceStateStore.save(*imported))
+    {
+        m_workspaceOperationMessage = tr("The workspace file is invalid or could not be imported.");
+        emit workspaceOperationChanged();
+        return false;
+    }
+    m_workspaceState = std::move(*imported);
+    restoreTerminalWorkspaces();
+    m_workspaceOperationMessage = tr("Workspace imported.");
+    emit workspaceOperationChanged();
+    emit terminalTabsChanged();
     return true;
 }
 
@@ -16198,19 +16275,7 @@ bool AppController::persistTerminalWorkspaces()
 
 bool AppController::saveWorkspaceStateCandidate(const workbench::WorkspaceState &candidate)
 {
-    workbench::WorkspaceState persistable = candidate;
-    std::erase_if(persistable.terminalWorkspaces, [](const workbench::TerminalWorkspaceLayout &workspace) {
-        return std::ranges::any_of(workspace.restoreIntents, [](const workbench::TerminalRestoreIntent &intent) {
-            return intent.kind == workbench::TerminalRestoreKind::Transient;
-        });
-    });
-    const auto active = std::ranges::find(persistable.terminalWorkspaces, persistable.activeTerminalWorkspaceId,
-                                          &workbench::TerminalWorkspaceLayout::id);
-    if (active == persistable.terminalWorkspaces.end())
-    {
-        persistable.activeTerminalWorkspaceId =
-            persistable.terminalWorkspaces.empty() ? std::string{} : persistable.terminalWorkspaces.front().id;
-    }
+    const workbench::WorkspaceState persistable = persistableWorkspaceState(candidate);
     if (!workbench::validWorkspaceState(persistable))
     {
         qCWarning(appControllerLog) << "Terminal workspace candidate failed domain validation"
@@ -16232,6 +16297,38 @@ bool AppController::saveWorkspaceStateCandidate(const workbench::WorkspaceState 
         return false;
     }
     return true;
+}
+
+workbench::WorkspaceState
+AppController::persistableWorkspaceState(const workbench::WorkspaceState &candidate) const
+{
+    workbench::WorkspaceState persistable = candidate;
+    std::erase_if(persistable.terminalWorkspaces, [](const workbench::TerminalWorkspaceLayout &workspace) {
+        return std::ranges::any_of(workspace.restoreIntents, [](const workbench::TerminalRestoreIntent &intent) {
+            return intent.kind == workbench::TerminalRestoreKind::Transient;
+        });
+    });
+    const auto containsIntent = [&persistable](const std::string_view intentId) {
+        return std::ranges::any_of(
+            persistable.terminalWorkspaces, [intentId](const workbench::TerminalWorkspaceLayout &workspace) {
+                return std::ranges::find(workspace.restoreIntents, intentId,
+                                         &workbench::TerminalRestoreIntent::id)
+                       != workspace.restoreIntents.end();
+            });
+    };
+    std::erase_if(persistable.quarantinedRestoreIntentIds, [&containsIntent](const std::string &intentId) {
+        return !containsIntent(intentId);
+    });
+    if (!persistable.restoreAttemptIntentId.empty() && !containsIntent(persistable.restoreAttemptIntentId))
+        persistable.restoreAttemptIntentId.clear();
+    const auto active = std::ranges::find(persistable.terminalWorkspaces, persistable.activeTerminalWorkspaceId,
+                                          &workbench::TerminalWorkspaceLayout::id);
+    if (active == persistable.terminalWorkspaces.end())
+    {
+        persistable.activeTerminalWorkspaceId =
+            persistable.terminalWorkspaces.empty() ? std::string{} : persistable.terminalWorkspaces.front().id;
+    }
+    return persistable;
 }
 
 void AppController::emitActiveTerminalContextChanged()
@@ -16814,6 +16911,17 @@ void AppController::loadWorkspaceState()
         return;
     }
     m_workspaceState = std::move(*state);
+    if (!m_workspaceState.restoreAttemptIntentId.empty())
+    {
+        if (std::ranges::find(m_workspaceState.quarantinedRestoreIntentIds,
+                              m_workspaceState.restoreAttemptIntentId)
+            == m_workspaceState.quarantinedRestoreIntentIds.end())
+            m_workspaceState.quarantinedRestoreIntentIds.push_back(m_workspaceState.restoreAttemptIntentId);
+        m_workspaceState.restoreAttemptIntentId.clear();
+        if (!m_workspaceStateStore.save(m_workspaceState))
+            qCWarning(appControllerLog) << "Unable to persist the recovered restore quarantine";
+        m_startupRecoveryNotice = tr("A terminal that interrupted startup was quarantined. Retry it from its pane when ready.");
+    }
     if (m_workspaceStateStore.lastLoadRecoveredFromBackup())
     {
         qCWarning(appControllerLog) << "Recovered workspace state from the last-known-good backup";
@@ -16864,20 +16972,39 @@ void AppController::restoreTerminalWorkspaces()
                 {
                     continue;
                 }
+                tab->restoreQuarantined = std::ranges::find(m_workspaceState.quarantinedRestoreIntentIds, intent->id)
+                                          != m_workspaceState.quarantinedRestoreIntentIds.end();
+                if (tab->restoreQuarantined)
+                    tab->status = tr("This terminal was quarantined after a restore failure.");
                 initializeSessionLog(*tab);
                 initializeTerminalOutputSink(*tab);
                 connectLocalTabSignals(*tab);
                 const QString tabId = tab->id;
                 m_tabs.push_back(std::move(tab));
                 TerminalTab *created = findTab(tabId);
-                if (created != nullptr)
+                if (created != nullptr && !created->restoreQuarantined)
                 {
+                    m_workspaceState.restoreAttemptIntentId = intent->id;
+                    if (!m_workspaceStateStore.save(m_workspaceState))
+                    {
+                        created->restoreQuarantined = true;
+                        created->status = tr("This terminal was quarantined because its restore guard could not be saved.");
+                        m_workspaceState.restoreAttemptIntentId.clear();
+                        continue;
+                    }
                     const std::error_code error = created->local->start({.columns = 100, .rows = 30});
+                    m_workspaceState.restoreAttemptIntentId.clear();
                     if (error)
                     {
                         created->status =
                             tr("Unable to restore local terminal: %1").arg(QString::fromStdString(error.message()));
+                        created->restoreQuarantined = true;
+                        if (std::ranges::find(m_workspaceState.quarantinedRestoreIntentIds, intent->id)
+                            == m_workspaceState.quarantinedRestoreIntentIds.end())
+                            m_workspaceState.quarantinedRestoreIntentIds.push_back(intent->id);
                     }
+                    if (!m_workspaceStateStore.save(m_workspaceState))
+                        qCWarning(appControllerLog) << "Unable to persist the terminal restore outcome";
                 }
                 continue;
             }

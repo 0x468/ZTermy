@@ -55,6 +55,7 @@ struct FakeLocalSessionState final
     bool deferSelectedText = false;
     bool searchBackwards = false;
     bool searchCaseSensitive = false;
+    std::error_code startError;
 };
 
 class FakeLocalTerminalSession final : public ztermy::terminal::LocalTerminalSessionBackend
@@ -65,6 +66,8 @@ public:
     [[nodiscard]] std::error_code start(const ztermy::terminal::TerminalGeometry) override
     {
         ++m_state->starts;
+        if (m_state->startError)
+            return m_state->startError;
         m_running = true;
         emit statusChanged(QStringLiteral("Fake local terminal connected"));
         emit runningChanged(true);
@@ -215,6 +218,7 @@ private slots:
     void createsKeywordHighlightFromSshSelection();
     void managesFreshTerminalTabWorkflows();
     void managesPersistentTerminalWorkspaceSplits();
+    void importsExportsAndQuarantinesFailedWorkspaceRestore();
     void restoresSavedSshWorkspaceWithoutConnecting();
     void managesSessionAppearanceAndStructuredRecording();
     void orderlyShutdownStopsAllLocalTabsOnce();
@@ -2351,6 +2355,63 @@ void AppControllerTests::managesPersistentTerminalWorkspaceSplits()
     QVERIFY(restored.closeTerminalTab(restored.activeTerminalTabId()));
     QVERIFY(restored.terminalTabs().isEmpty());
     QCOMPARE(restoredState->stops, 2);
+}
+
+void AppControllerTests::importsExportsAndQuarantinesFailedWorkspaceRestore()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString exportedPath = directory.filePath(QStringLiteral("exported.ztermy-workspace.json"));
+    const auto sourceState = std::make_shared<FakeLocalSessionState>();
+    {
+        ztermy::AppController source(directory.filePath(QStringLiteral("source/profiles.json")),
+                                     directory.filePath(QStringLiteral("source/known_hosts.json")),
+                                     directory.filePath(QStringLiteral("source/settings.json")), [sourceState] {
+                                         return std::make_unique<FakeLocalTerminalSession>(sourceState);
+                                     });
+        QVERIFY(!source.startLocalTerminal().isEmpty());
+        QVERIFY(source.exportWorkspace(QUrl::fromLocalFile(exportedPath).toString()));
+        QCOMPARE(source.workspaceOperationMessage(), QStringLiteral("Workspace exported."));
+    }
+
+    const auto importedState = std::make_shared<FakeLocalSessionState>();
+    ztermy::AppController imported(directory.filePath(QStringLiteral("imported/profiles.json")),
+                                   directory.filePath(QStringLiteral("imported/known_hosts.json")),
+                                   directory.filePath(QStringLiteral("imported/settings.json")), [importedState] {
+                                       return std::make_unique<FakeLocalTerminalSession>(importedState);
+                                   });
+    QVERIFY(imported.importWorkspace(QUrl::fromLocalFile(exportedPath).toString()));
+    QCOMPARE(imported.terminalTabs().size(), 1);
+    QCOMPARE(importedState->starts, 1);
+    QVERIFY(!imported.importWorkspace(QUrl::fromLocalFile(exportedPath).toString()));
+
+    const QString quarantineDirectory = directory.filePath(QStringLiteral("quarantine"));
+    QVERIFY(QDir().mkpath(quarantineDirectory));
+    ztermy::workbench::WorkspaceState workspaceState;
+    workspaceState.terminalWorkspaces.push_back(ztermy::workbench::makeSinglePaneTerminalWorkspace(
+        "workspace", "pane", {.id = "intent", .title = "Recovered PowerShell"}));
+    workspaceState.activeTerminalWorkspaceId = "workspace";
+    workspaceState.restoreAttemptIntentId = "intent";
+    QVERIFY(ztermy::workbench::WorkspaceStateStore(quarantineDirectory + QStringLiteral("/workspace_state.json"))
+                .save(workspaceState));
+
+    const auto quarantineState = std::make_shared<FakeLocalSessionState>();
+    quarantineState->startError = std::make_error_code(std::errc::io_error);
+    ztermy::AppController quarantined(quarantineDirectory + QStringLiteral("/profiles.json"),
+                                      quarantineDirectory + QStringLiteral("/known_hosts.json"),
+                                      quarantineDirectory + QStringLiteral("/settings.json"), [quarantineState] {
+                                          return std::make_unique<FakeLocalTerminalSession>(quarantineState);
+                                      });
+    QCOMPARE(quarantineState->starts, 0);
+    const QVariantMap quarantinedTab = quarantined.terminalTabs().constFirst().toMap();
+    QVERIFY(quarantinedTab.value(QStringLiteral("restoreQuarantined")).toBool());
+    const QString paneId = quarantinedTab.value(QStringLiteral("paneId")).toString();
+    QVERIFY(!quarantined.retryQuarantinedTerminalPane(paneId));
+    QCOMPARE(quarantineState->starts, 1);
+    quarantineState->startError.clear();
+    QVERIFY(quarantined.retryQuarantinedTerminalPane(paneId));
+    QCOMPARE(quarantineState->starts, 2);
+    QVERIFY(!quarantined.terminalTabs().constFirst().toMap().value(QStringLiteral("restoreQuarantined")).toBool());
 }
 
 void AppControllerTests::restoresSavedSshWorkspaceWithoutConnecting()

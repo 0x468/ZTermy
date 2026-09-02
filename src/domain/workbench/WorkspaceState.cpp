@@ -129,6 +129,7 @@ bool validWorkspaceState(const WorkspaceState &state) noexcept
 {
     if (state.collapsedHostSections.size() > maximumCollapsedHostSections
         || state.terminalWorkspaces.size() > maximumTerminalWorkspaces
+        || state.quarantinedRestoreIntentIds.size() > maximumRestorableTerminalSessions
         || !std::ranges::all_of(state.profiles, validProfileWorkspaceState)
         || !std::ranges::all_of(state.terminalWorkspaces, validTerminalWorkspaceLayout))
     {
@@ -152,9 +153,27 @@ bool validWorkspaceState(const WorkspaceState &state) noexcept
             return false;
         }
     }
+    const auto containsIntent = [&state](const std::string_view intentId) {
+        return std::ranges::any_of(state.terminalWorkspaces, [intentId](const TerminalWorkspaceLayout &workspace) {
+            return std::ranges::find(workspace.restoreIntents, intentId, &TerminalRestoreIntent::id)
+                   != workspace.restoreIntents.end();
+        });
+    };
+    for (auto intent = state.quarantinedRestoreIntentIds.begin(); intent != state.quarantinedRestoreIntentIds.end();
+         ++intent)
+    {
+        if (!validBoundedText(*intent, 128, false) || !containsIntent(*intent)
+            || std::ranges::find(std::next(intent), state.quarantinedRestoreIntentIds.end(), *intent)
+                   != state.quarantinedRestoreIntentIds.end())
+            return false;
+    }
+    if ((!state.restoreAttemptIntentId.empty() && !validBoundedText(state.restoreAttemptIntentId, 128, false))
+        || (!state.restoreAttemptIntentId.empty() && !containsIntent(state.restoreAttemptIntentId)))
+        return false;
     if (state.terminalWorkspaces.empty())
     {
-        return state.activeTerminalWorkspaceId.empty();
+        return state.activeTerminalWorkspaceId.empty() && state.quarantinedRestoreIntentIds.empty()
+               && state.restoreAttemptIntentId.empty();
     }
     return std::ranges::find(state.terminalWorkspaces, state.activeTerminalWorkspaceId, &TerminalWorkspaceLayout::id)
            != state.terminalWorkspaces.end();

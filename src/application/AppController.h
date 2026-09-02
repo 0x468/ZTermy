@@ -116,6 +116,7 @@ class AppController final : public QObject
     Q_OBJECT
     Q_PROPERTY(bool sshActive READ sshActive NOTIFY sshActiveChanged)
     Q_PROPERTY(QString startupRecoveryNotice READ startupRecoveryNotice NOTIFY startupRecoveryNoticeChanged)
+    Q_PROPERTY(QString workspaceOperationMessage READ workspaceOperationMessage NOTIFY workspaceOperationChanged)
     Q_PROPERTY(bool hostKeyPromptVisible READ hostKeyPromptVisible NOTIFY hostKeyPromptChanged)
     Q_PROPERTY(QString hostKeyEndpoint READ hostKeyEndpoint NOTIFY hostKeyPromptChanged)
     Q_PROPERTY(QString hostKeyAlgorithm READ hostKeyAlgorithm NOTIFY hostKeyPromptChanged)
@@ -287,6 +288,7 @@ public:
 
     [[nodiscard]] bool sshActive() const noexcept;
     [[nodiscard]] QString startupRecoveryNotice() const;
+    [[nodiscard]] QString workspaceOperationMessage() const;
     [[nodiscard]] bool hostKeyPromptVisible() const noexcept;
     [[nodiscard]] QString hostKeyEndpoint() const;
     [[nodiscard]] QString hostKeyAlgorithm() const;
@@ -447,6 +449,7 @@ public:
     Q_INVOKABLE bool splitActiveTerminal(const QString &orientation, bool duplicateActive = false);
     Q_INVOKABLE bool moveTerminalPane(const QString &paneId, const QString &targetPaneId, const QString &orientation,
                                       bool placeAfter);
+    Q_INVOKABLE bool retryQuarantinedTerminalPane(const QString &paneId);
     Q_INVOKABLE bool closeActiveTerminalPane();
     Q_INVOKABLE bool focusRelativeTerminalPane(int offset);
     Q_INVOKABLE bool resizeActiveTerminalPane(qreal delta);
@@ -499,6 +502,8 @@ public:
     Q_INVOKABLE bool moveQuickCommand(const QString &id, int targetIndex);
     Q_INVOKABLE bool importQuickCommands(const QString &localFileUrl);
     Q_INVOKABLE bool exportQuickCommands(const QString &localFileUrl);
+    Q_INVOKABLE bool exportWorkspace(const QString &localFileUrl);
+    Q_INVOKABLE bool importWorkspace(const QString &localFileUrl);
     Q_INVOKABLE void refreshNotes();
     Q_INVOKABLE bool openNote(const QString &relativePath, bool discardUnsavedChanges = false);
     Q_INVOKABLE void updateActiveNoteContent(const QString &content);
@@ -734,6 +739,7 @@ signals:
     void mcpConfigurationChanged();
     void portForwardingRulesChanged();
     void startupRecoveryNoticeChanged();
+    void workspaceOperationChanged();
 
 private:
     Q_SIGNAL void terminalHistoryTaskCompleted(const QString &tabId, quint64 requestId, ShellHistoryEntries entries,
@@ -915,6 +921,7 @@ private:
         bool running = false;
         bool recentConnectionRecorded = false;
         bool reconnectPending = false;
+        bool restoreQuarantined = false;
         std::optional<ssh::SshFailureKind> sshFailure;
     };
 
@@ -1111,6 +1118,8 @@ private:
                                                       std::string_view nodeId) const;
     [[nodiscard]] bool persistTerminalWorkspaces();
     [[nodiscard]] bool saveWorkspaceStateCandidate(const workbench::WorkspaceState &candidate);
+    [[nodiscard]] workbench::WorkspaceState
+    persistableWorkspaceState(const workbench::WorkspaceState &candidate) const;
     void emitActiveTerminalContextChanged();
     void showTabInViewport(const TerminalTab &tab);
     void showAllTerminalViewports();
@@ -1135,6 +1144,7 @@ private:
     config::ApplicationSettingsStore m_settingsStore;
     config::ApplicationSettings m_settings;
     QString m_startupRecoveryNotice;
+    QString m_workspaceOperationMessage;
     actions::ActionRegistry m_actionRegistry;
     workbench::ScriptStore m_scriptStore;
     QString m_legacyQuickCommandPath;
