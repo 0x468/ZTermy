@@ -10,7 +10,8 @@ Item {
     required property var controller
     property real reveal: 0.0
     property var focusRestoreItem: null
-    readonly property var filteredActions: filterActions(controller.actions, searchField.text)
+    property var items: []
+    readonly property var filteredActions: filterActions(items, searchField.text)
     readonly property string commandPaletteShortcut: shortcutFor("application.commandPalette")
 
     visible: false
@@ -25,9 +26,6 @@ Item {
         const result = [];
         for (let index = 0; index < source.length; ++index) {
             const action = source[index];
-            if (!action.paletteVisible) {
-                continue;
-            }
             const haystack = (action.label + " " + action.description + " " + action.categoryLabel + " " + action.id + " " + action.shortcut).toLocaleLowerCase();
             if (needle.length === 0 || haystack.indexOf(needle) >= 0) {
                 result.push(action);
@@ -71,11 +69,11 @@ Item {
         if (actionList.currentIndex < 0 || actionList.currentIndex >= filteredActions.length) {
             return;
         }
-        execute(filteredActions[actionList.currentIndex].id);
+        execute(filteredActions[actionList.currentIndex]);
     }
 
-    function execute(actionId) {
-        if (controller.triggerAction(actionId)) {
+    function execute(item) {
+        if (controller.triggerCommandPaletteItem(item)) {
             close();
         }
     }
@@ -85,6 +83,7 @@ Item {
             focusRestoreItem = palette.Window.window.activeFocusItem;
         }
         visible = true;
+        items = controller.commandPaletteItems();
         searchField.text = "";
         reveal = Theme.animationsEnabled ? 0.0 : 1.0;
         actionList.currentIndex = firstEnabledIndex(0, 1);
@@ -308,7 +307,7 @@ Item {
 
                     TapHandler {
                         enabled: actionRow.modelData.enabled
-                        onTapped: palette.execute(actionRow.modelData.id)
+                        onTapped: palette.execute(actionRow.modelData)
                     }
                 }
 

@@ -249,6 +249,11 @@ private:
     return QFileInfo(profileStorePath).dir().filePath(QStringLiteral("connection-history.json"));
 }
 
+[[nodiscard]] QString siblingCommandHistoryFile(const QString &profileStorePath)
+{
+    return QFileInfo(profileStorePath).dir().filePath(QStringLiteral("command-history.json"));
+}
+
 [[nodiscard]] QString siblingSettingsFile(const QString &profileStorePath)
 {
     return QFileInfo(profileStorePath).dir().filePath(QStringLiteral("settings.json"));
@@ -2521,6 +2526,10 @@ void AppController::initializeRuntime()
     m_knownHostsController = std::make_unique<ssh::KnownHostsController>(m_knownHostsPath, this);
     m_connectionHistoryController = std::make_unique<logging::ConnectionHistoryController>(
         siblingConnectionHistoryFile(m_profileStore.filePath()), this);
+    m_commandHistoryController = std::make_unique<workbench::CommandHistoryController>(
+        siblingCommandHistoryFile(m_profileStore.filePath()), this);
+    QObject::connect(m_commandHistoryController.get(), &workbench::CommandHistoryController::changed, this,
+                     &AppController::terminalHistoryChanged);
     qRegisterMetaType<ShellHistoryEntries>();
     qRegisterMetaType<NoteSearchResults>();
     qRegisterMetaType<AiTextAttachments>();
@@ -3174,7 +3183,149 @@ QVariantList AppController::terminalGlobalHistory() const
             appendTab(*tab);
         }
     }
+    if (m_commandHistoryController != nullptr && result.size() < static_cast<qsizetype>(maximumHistoryEntries))
+    {
+        for (const QVariant &value : m_commandHistoryController->entries())
+        {
+            const QVariantMap entry = value.toMap();
+            const QString key = entry.value(QStringLiteral("sourceId")).toString() + QChar{u'\0'}
+                                + entry.value(QStringLiteral("command")).toString();
+            if (!seen.contains(key))
+            {
+                seen.insert(key);
+                result.push_back(entry);
+            }
+            if (result.size() >= static_cast<qsizetype>(maximumHistoryEntries))
+                break;
+        }
+    }
     return result;
+}
+
+QVariantList AppController::terminalCompletionCandidates(const QString &prefix, const int limit) const
+{
+    if (prefix.trimmed().size() < 2 || limit <= 0)
+        return {};
+    QVariantList result;
+    QSet<QString> seen;
+    const auto append = [&result, &seen, limit](const QVariantMap &value) {
+        const QString command = value.value(QStringLiteral("command")).toString();
+        if (command.isEmpty() || seen.contains(command) || result.size() >= limit)
+            return;
+        seen.insert(command);
+        result.push_back(value);
+    };
+    if (m_commandHistoryController != nullptr)
+    {
+        for (const QVariant &candidate : m_commandHistoryController->suggestions(prefix, limit))
+        {
+            QVariantMap value = candidate.toMap();
+            value.insert(QStringLiteral("kind"), QStringLiteral("history"));
+            append(value);
+        }
+    }
+    for (const workbench::ScriptDefinition &script : m_scripts)
+    {
+        if (script.steps.size() != 1 || !script.variables.empty())
+            continue;
+        const QString command = utf8QString(script.steps.front().command);
+        if (command.contains(prefix.trimmed(), Qt::CaseInsensitive))
+        {
+            QVariantMap value;
+            value.insert(QStringLiteral("command"), command);
+            value.insert(QStringLiteral("sourceLabel"), utf8QString(script.name));
+            value.insert(QStringLiteral("kind"), QStringLiteral("quick-command"));
+            append(value);
+        }
+    }
+    for (const QVariant &candidate : terminalHistory())
+    {
+        QVariantMap value = candidate.toMap();
+        if (value.value(QStringLiteral("command")).toString().contains(prefix.trimmed(), Qt::CaseInsensitive))
+        {
+            value.insert(QStringLiteral("kind"), QStringLiteral("session"));
+            append(value);
+        }
+    }
+    return result;
+}
+
+QVariantList AppController::commandPaletteItems() const
+{
+    QVariantList result;
+    const auto append = [&result](const QVariantMap &item) {
+        result.push_back(item);
+    };
+    for (const QVariant &actionValue : actions())
+    {
+        QVariantMap action = actionValue.toMap();
+        if (!action.value(QStringLiteral("paletteVisible")).toBool())
+            continue;
+        action.insert(QStringLiteral("kind"), QStringLiteral("action"));
+        append(action);
+    }
+    for (const QVariant &profileValue : hostProfiles())
+    {
+        const QVariantMap profile = profileValue.toMap();
+        QVariantMap item;
+        item.insert(QStringLiteral("kind"), QStringLiteral("host"));
+        item.insert(QStringLiteral("id"), profile.value(QStringLiteral("id")));
+        item.insert(QStringLiteral("label"), profile.value(QStringLiteral("name")));
+        item.insert(QStringLiteral("description"),
+                    tr("Connect to %1@%2").arg(profile.value(QStringLiteral("username")).toString(),
+                                                profile.value(QStringLiteral("host")).toString()));
+        item.insert(QStringLiteral("categoryLabel"), tr("Hosts"));
+        item.insert(QStringLiteral("shortcut"), QString{});
+        item.insert(QStringLiteral("enabled"), true);
+        append(item);
+    }
+    for (const workbench::ScriptDefinition &script : m_scripts)
+    {
+        if (script.steps.size() != 1 || !script.variables.empty())
+            continue;
+        const QString command = utf8QString(script.steps.front().command);
+        QVariantMap item;
+        item.insert(QStringLiteral("kind"), QStringLiteral("quick-command"));
+        item.insert(QStringLiteral("id"), utf8QString(script.id));
+        item.insert(QStringLiteral("label"), utf8QString(script.name));
+        item.insert(QStringLiteral("description"), command);
+        item.insert(QStringLiteral("command"), command);
+        item.insert(QStringLiteral("categoryLabel"), tr("Command snippets"));
+        item.insert(QStringLiteral("shortcut"), QString{});
+        item.insert(QStringLiteral("enabled"), activeTab() != nullptr);
+        append(item);
+    }
+    int historyCount = 0;
+    for (const QVariant &historyValue : terminalGlobalHistory())
+    {
+        if (historyCount++ >= 40)
+            break;
+        const QVariantMap history = historyValue.toMap();
+        const QString command = history.value(QStringLiteral("command")).toString();
+        QVariantMap item;
+        item.insert(QStringLiteral("kind"), QStringLiteral("history"));
+        item.insert(QStringLiteral("id"), QStringLiteral("history-%1").arg(historyCount));
+        item.insert(QStringLiteral("label"), command);
+        item.insert(QStringLiteral("description"), history.value(QStringLiteral("sourceLabel")));
+        item.insert(QStringLiteral("command"), command);
+        item.insert(QStringLiteral("categoryLabel"), tr("Command history"));
+        item.insert(QStringLiteral("shortcut"), QString{});
+        item.insert(QStringLiteral("enabled"), activeTab() != nullptr);
+        append(item);
+    }
+    return result;
+}
+
+bool AppController::triggerCommandPaletteItem(const QVariantMap &item)
+{
+    const QString kind = item.value(QStringLiteral("kind")).toString();
+    if (kind == QStringLiteral("action"))
+        return triggerAction(item.value(QStringLiteral("id")).toString());
+    if (kind == QStringLiteral("host"))
+        return connectHostProfile(item.value(QStringLiteral("id")).toString(), {});
+    if (kind == QStringLiteral("quick-command") || kind == QStringLiteral("history"))
+        return insertTerminalCommand(item.value(QStringLiteral("command")).toString());
+    return false;
 }
 
 QVariantList AppController::actions() const
@@ -15867,6 +16018,12 @@ void AppController::appendCapturedHistory(TerminalTab &tab, const QString &comma
         {
             tab.capturedHistory.resize(maximumHistoryEntries);
         }
+    }
+    if (m_commandHistoryController != nullptr)
+    {
+        const QString sourceId = !tab.sourceProfileId.isEmpty() ? tab.sourceProfileId : tab.id;
+        const QString sourceLabel = !tab.title.isEmpty() ? tab.title : tab.identity;
+        m_commandHistoryController->record(normalized, shell, sourceId, sourceLabel, timestamp);
     }
     emit terminalHistoryChanged();
 }

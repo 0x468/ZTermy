@@ -22,6 +22,7 @@
 #include "application/ssh/SshTerminalSession.h"
 #include "application/terminal/LocalTerminalSession.h"
 #include "application/terminal/WindowsLocalShellCatalog.h"
+#include "application/workbench/CommandHistoryController.h"
 #include "core/config/ApplicationPaths.h"
 #include "core/config/ApplicationSettings.h"
 #include "domain/ai/AiCommandTracker.h"
@@ -606,6 +607,9 @@ public:
     Q_INVOKABLE bool saveLocalShellPreference(const QString &preference);
     Q_INVOKABLE bool saveTerminalSelectionPopupSettings(bool enabled, const QVariantList &actions);
     Q_INVOKABLE void refreshLocalShells();
+    [[nodiscard]] Q_INVOKABLE QVariantList terminalCompletionCandidates(const QString &prefix, int limit = 8) const;
+    [[nodiscard]] Q_INVOKABLE QVariantList commandPaletteItems() const;
+    Q_INVOKABLE bool triggerCommandPaletteItem(const QVariantMap &item);
     Q_INVOKABLE bool saveAiProviderSettings(const QString &provider, const QString &baseUrl,
                                             const QString &endpointPath, const QString &model, bool automaticContext,
                                             const QString &permissionMode);
@@ -1162,6 +1166,7 @@ private:
     std::unique_ptr<ssh::KnownHostsController> m_knownHostsController;
     std::unique_ptr<ssh::KeychainController> m_keychainController;
     std::unique_ptr<logging::ConnectionHistoryController> m_connectionHistoryController;
+    std::unique_ptr<workbench::CommandHistoryController> m_commandHistoryController;
     std::vector<ssh::SshProfile> m_profiles;
     std::vector<forwarding::PortForwardingRule> m_portForwardingRules;
     std::vector<std::unique_ptr<PortForwardingRuntime>> m_portForwardingRuntimes;

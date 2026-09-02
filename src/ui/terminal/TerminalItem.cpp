@@ -379,6 +379,31 @@ bool TerminalItem::selectionActionPreferBelow() const noexcept
     return m_selectionActionPreferBelow;
 }
 
+QString TerminalItem::inputBuffer() const
+{
+    return m_inputBuffer;
+}
+
+QRectF TerminalItem::terminalCursorRectangle() const
+{
+    return inputCursorRectangle();
+}
+
+QVariantList TerminalItem::completionCandidates() const
+{
+    return m_completionCandidates;
+}
+
+int TerminalItem::completionIndex() const noexcept
+{
+    return m_completionIndex;
+}
+
+QString TerminalItem::ghostText() const
+{
+    return m_ghostText;
+}
+
 QVariantList TerminalItem::keywordHighlightRules() const
 {
     return m_keywordHighlightRuleValues;
@@ -436,6 +461,7 @@ TerminalRenderMetricsSnapshot TerminalItem::performanceMetrics() const noexcept
 
 void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
 {
+    const QRectF previousCursor = inputCursorRectangle();
     if (m_quickSelectActive)
     {
         cancelQuickSelect();
@@ -451,6 +477,7 @@ void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
         invalidateRenderer(true);
         notifyInputMethod();
         emit scrollbarChanged();
+        emit cursorGeometryChanged();
         return;
     }
     const bool focusReportingBecameActive =
@@ -482,6 +509,10 @@ void TerminalItem::setSnapshot(terminal::TerminalSnapshotPtr snapshot)
     invalidateRenderer(true);
     notifyInputMethod();
     emit scrollbarChanged();
+    if (previousCursor != inputCursorRectangle())
+    {
+        emit cursorGeometryChanged();
+    }
 }
 
 QString TerminalItem::hoveredLink() const
@@ -899,6 +930,56 @@ void TerminalItem::copySelectionWithPolicy(const bool keepSelection)
     }
 }
 
+void TerminalItem::setCompletionCandidates(const QVariantList &candidates)
+{
+    m_completionCandidates = candidates;
+    m_completionIndex = candidates.isEmpty() ? -1 : 0;
+    refreshGhostText();
+    emit completionChanged();
+}
+
+void TerminalItem::moveCompletion(const int delta)
+{
+    if (m_completionCandidates.isEmpty())
+    {
+        return;
+    }
+    const int count = static_cast<int>(m_completionCandidates.size());
+    m_completionIndex = (m_completionIndex + delta + count) % count;
+    refreshGhostText();
+    emit completionChanged();
+}
+
+bool TerminalItem::acceptCompletion(const int index)
+{
+    const int selected = index >= 0 ? index : m_completionIndex;
+    if (selected < 0 || selected >= m_completionCandidates.size())
+    {
+        return false;
+    }
+    const QString command = m_completionCandidates.at(selected).toMap().value(QStringLiteral("command")).toString();
+    if (!command.startsWith(m_inputBuffer, Qt::CaseInsensitive) || command.size() <= m_inputBuffer.size())
+    {
+        return false;
+    }
+    emit inputGenerated(command.sliced(m_inputBuffer.size()).toUtf8());
+    setInputBuffer(command);
+    dismissCompletion();
+    return true;
+}
+
+void TerminalItem::dismissCompletion()
+{
+    if (m_completionCandidates.isEmpty() && m_ghostText.isEmpty())
+    {
+        return;
+    }
+    m_completionCandidates.clear();
+    m_completionIndex = -1;
+    m_ghostText.clear();
+    emit completionChanged();
+}
+
 void TerminalItem::pasteClipboard()
 {
     requestPasteBytes(readClipboardText().toUtf8());
@@ -923,6 +1004,7 @@ void TerminalItem::requestPasteBytes(const QByteArray &bytes)
         emit multilinePasteConfirmationRequested(static_cast<int>(std::min(lineBreaks + 1, maximumLineCount)));
         return;
     }
+    setInputBuffer({});
     emit pasteRequested(bytes);
 }
 
@@ -1525,6 +1607,27 @@ void TerminalItem::keyPressEvent(QKeyEvent *event)
         event->accept();
         return;
     }
+    if (!m_completionCandidates.isEmpty())
+    {
+        const bool completionControl = event->modifiers().testFlag(Qt::ControlModifier);
+        if (event->key() == Qt::Key_Tab && acceptCompletion())
+        {
+            event->accept();
+            return;
+        }
+        if (completionControl && (event->key() == Qt::Key_Down || event->key() == Qt::Key_Up))
+        {
+            moveCompletion(event->key() == Qt::Key_Down ? 1 : -1);
+            event->accept();
+            return;
+        }
+        if (event->key() == Qt::Key_Escape)
+        {
+            dismissCompletion();
+            event->accept();
+            return;
+        }
+    }
     if (event->key() == Qt::Key_Control && m_hoverInside)
     {
         m_controlModifierDown = true;
@@ -1566,6 +1669,28 @@ void TerminalItem::keyPressEvent(QKeyEvent *event)
         clearSelection();
     }
     emit keyEventGenerated(key);
+    const bool resetsTrackedInput = event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter
+                                    || (control && event->key() == Qt::Key_U) || event->key() == Qt::Key_Left
+                                    || event->key() == Qt::Key_Right || event->key() == Qt::Key_Up
+                                    || event->key() == Qt::Key_Down || event->key() == Qt::Key_Home
+                                    || event->key() == Qt::Key_End;
+    if (resetsTrackedInput)
+    {
+        setInputBuffer({});
+    }
+    else if (event->key() == Qt::Key_Backspace && !m_inputBuffer.isEmpty())
+    {
+        QString buffer = m_inputBuffer;
+        buffer.chop(1);
+        setInputBuffer(std::move(buffer));
+    }
+    else if (!control && !event->modifiers().testFlag(Qt::AltModifier) && !event->text().isEmpty()
+             && std::ranges::all_of(event->text(), [](const QChar character) {
+                    return character.isPrint();
+                }))
+    {
+        setInputBuffer(m_inputBuffer + event->text());
+    }
     event->accept();
 }
 
@@ -1625,6 +1750,7 @@ void TerminalItem::inputMethodEvent(QInputMethodEvent *event)
     if (!event->commitString().isEmpty())
     {
         emit inputGenerated(event->commitString().toUtf8());
+        setInputBuffer(m_inputBuffer + event->commitString());
     }
 
     invalidateRenderer(true);
@@ -2614,6 +2740,32 @@ QRectF TerminalItem::inputCursorRectangle() const
     }
     const qreal cursorWidth = m_snapshot ? m_snapshot->cursor.width * cellWidth() : cellWidth();
     return {cursorX, cursorY, cursorWidth, cellHeight()};
+}
+
+void TerminalItem::setInputBuffer(QString buffer)
+{
+    if (m_inputBuffer == buffer)
+    {
+        return;
+    }
+    m_inputBuffer = std::move(buffer);
+    dismissCompletion();
+    emit inputBufferChanged();
+}
+
+void TerminalItem::refreshGhostText()
+{
+    m_ghostText.clear();
+    if (m_completionIndex < 0 || m_completionIndex >= m_completionCandidates.size())
+    {
+        return;
+    }
+    const QString command =
+        m_completionCandidates.at(m_completionIndex).toMap().value(QStringLiteral("command")).toString();
+    if (command.startsWith(m_inputBuffer, Qt::CaseInsensitive) && command.size() > m_inputBuffer.size())
+    {
+        m_ghostText = command.sliced(m_inputBuffer.size());
+    }
 }
 
 void TerminalItem::clearPreedit()

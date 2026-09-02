@@ -66,6 +66,11 @@ class TerminalItem : public QQuickItem
     Q_PROPERTY(bool selectionActionVisible READ selectionActionVisible NOTIFY selectionActionChanged)
     Q_PROPERTY(QPointF selectionActionPosition READ selectionActionPosition NOTIFY selectionActionChanged)
     Q_PROPERTY(bool selectionActionPreferBelow READ selectionActionPreferBelow NOTIFY selectionActionChanged)
+    Q_PROPERTY(QString inputBuffer READ inputBuffer NOTIFY inputBufferChanged)
+    Q_PROPERTY(QRectF terminalCursorRectangle READ terminalCursorRectangle NOTIFY cursorGeometryChanged)
+    Q_PROPERTY(QVariantList completionCandidates READ completionCandidates NOTIFY completionChanged)
+    Q_PROPERTY(int completionIndex READ completionIndex NOTIFY completionChanged)
+    Q_PROPERTY(QString ghostText READ ghostText NOTIFY completionChanged)
     Q_PROPERTY(QString hoveredLink READ hoveredLink NOTIFY hoveredLinkChanged)
     Q_PROPERTY(QPointF hoveredLinkPosition READ hoveredLinkPosition NOTIFY hoveredLinkPositionChanged)
     Q_PROPERTY(bool quickSelectActive READ quickSelectActive NOTIFY quickSelectChanged)
@@ -112,6 +117,11 @@ public:
     [[nodiscard]] bool selectionActionVisible() const noexcept;
     [[nodiscard]] QPointF selectionActionPosition() const noexcept;
     [[nodiscard]] bool selectionActionPreferBelow() const noexcept;
+    [[nodiscard]] QString inputBuffer() const;
+    [[nodiscard]] QRectF terminalCursorRectangle() const;
+    [[nodiscard]] QVariantList completionCandidates() const;
+    [[nodiscard]] int completionIndex() const noexcept;
+    [[nodiscard]] QString ghostText() const;
     [[nodiscard]] QString hoveredLink() const;
     [[nodiscard]] QPointF hoveredLinkPosition() const noexcept;
     [[nodiscard]] bool quickSelectActive() const noexcept;
@@ -161,6 +171,10 @@ public slots:
     Q_INVOKABLE void dismissSelectionAction();
     Q_INVOKABLE void copySelection();
     Q_INVOKABLE void copySelectionWithPolicy(bool keepSelection);
+    Q_INVOKABLE void setCompletionCandidates(const QVariantList &candidates);
+    Q_INVOKABLE void moveCompletion(int delta);
+    Q_INVOKABLE bool acceptCompletion(int index = -1);
+    Q_INVOKABLE void dismissCompletion();
     Q_INVOKABLE void pasteClipboard();
     Q_INVOKABLE void selectVisibleTerminal();
     Q_INVOKABLE void selectAllTerminal();
@@ -203,6 +217,9 @@ signals:
     void selectionMatchesKeywordHighlightChanged();
     void scrollbarChanged();
     void selectionActionChanged();
+    void inputBufferChanged();
+    void cursorGeometryChanged();
+    void completionChanged();
     void searchHighlightChanged();
     void keywordHighlightRulesChanged();
     void paletteOverrideChanged();
@@ -269,6 +286,8 @@ private:
                const QPointF &position, Qt::KeyboardModifiers modifiers, Qt::MouseButtons buttons) const;
     void reportFocus(bool focused);
     void requestPasteBytes(const QByteArray &bytes);
+    void setInputBuffer(QString buffer);
+    void refreshGhostText();
 
     ztermy::terminal::TerminalSnapshotPtr m_snapshot;
     QFont m_font;
@@ -294,6 +313,9 @@ private:
     QString m_preeditText;
     QString m_quickSelectInput;
     QString m_searchQuery;
+    QString m_inputBuffer;
+    QString m_ghostText;
+    QVariantList m_completionCandidates;
     qsizetype m_preeditCursorPosition = 0;
     bool m_preeditCursorVisible = true;
     bool m_selecting = false;
@@ -327,6 +349,7 @@ private:
     TerminalRenderMetrics m_renderMetrics;
     int m_wheelRemainder = 0;
     int m_scrollRowsPerWheel = 3;
+    int m_completionIndex = -1;
     qreal m_pixelWheelRemainder = 0.0;
     int m_selectionAutoscrollDirection = 0;
     quint64 m_lastDoubleClickTimestamp = 0;

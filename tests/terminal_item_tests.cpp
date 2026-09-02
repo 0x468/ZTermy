@@ -78,6 +78,7 @@ private slots:
     void commitsImeTextExactlyOnce();
     void appliesRendererPreferences();
     void routesCopyPasteAndTextKeys();
+    void completesTypedCommandsWithoutForwardingAcceptanceKeys();
     void dismissesSelectionAfterExplicitCopyUnlessConfiguredToKeepIt();
     void mapsWindowsPhysicalKeys();
     void confirmsMultilinePaste();
@@ -546,6 +547,49 @@ void TerminalItemTests::routesCopyPasteAndTextKeys()
     QCOMPARE(keyEvents.front().key, ztermy::terminal::TerminalKey::keyA);
     QCOMPARE(keyEvents.front().text, std::string("a"));
     QVERIFY(textEvent.isAccepted());
+}
+
+void TerminalItemTests::completesTypedCommandsWithoutForwardingAcceptanceKeys()
+{
+    TestableTerminalItem item;
+    QSignalSpy inputSpy(&item, &ztermy::ui::TerminalItem::inputGenerated);
+    std::vector<ztermy::terminal::TerminalKeyEvent> keyEvents;
+    QObject::connect(&item, &ztermy::ui::TerminalItem::keyEventGenerated, &item,
+                     [&keyEvents](const ztermy::terminal::TerminalKeyEvent &event) {
+                         keyEvents.push_back(event);
+                     });
+
+    for (const QChar character : QStringLiteral("git"))
+    {
+        QKeyEvent event(QEvent::KeyPress, character.toUpper().unicode(), Qt::NoModifier, QString{character});
+        item.keyPressEvent(&event);
+    }
+    QCOMPARE(item.inputBuffer(), QStringLiteral("git"));
+    QCOMPARE(keyEvents.size(), std::size_t{3});
+
+    QVariantMap statusCandidate;
+    statusCandidate.insert(QStringLiteral("command"), QStringLiteral("git status"));
+    statusCandidate.insert(QStringLiteral("sourceLabel"), QStringLiteral("Gateway"));
+    QVariantMap logCandidate;
+    logCandidate.insert(QStringLiteral("command"), QStringLiteral("git log"));
+    logCandidate.insert(QStringLiteral("sourceLabel"), QStringLiteral("Gateway"));
+    item.setCompletionCandidates(QVariantList{statusCandidate, logCandidate});
+    QCOMPARE(item.completionIndex(), 0);
+    QCOMPARE(item.ghostText(), QStringLiteral(" status"));
+
+    QKeyEvent cycleEvent(QEvent::KeyPress, Qt::Key_Down, Qt::ControlModifier);
+    item.keyPressEvent(&cycleEvent);
+    QCOMPARE(item.completionIndex(), 1);
+    QCOMPARE(item.ghostText(), QStringLiteral(" log"));
+
+    const std::size_t forwardedBeforeAcceptance = keyEvents.size();
+    QKeyEvent acceptEvent(QEvent::KeyPress, Qt::Key_Tab, Qt::NoModifier);
+    item.keyPressEvent(&acceptEvent);
+    QCOMPARE(item.inputBuffer(), QStringLiteral("git log"));
+    QCOMPARE(inputSpy.count(), 1);
+    QCOMPARE(inputSpy.front().front().toByteArray(), QByteArrayLiteral(" log"));
+    QCOMPARE(keyEvents.size(), forwardedBeforeAcceptance);
+    QVERIFY(item.completionCandidates().isEmpty());
 }
 
 void TerminalItemTests::dismissesSelectionAfterExplicitCopyUnlessConfiguredToKeepIt()

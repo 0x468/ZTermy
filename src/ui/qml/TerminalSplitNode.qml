@@ -427,6 +427,7 @@ Item {
                     terminalContextMenu.open();
                 }
                 onLinkActivated: uri => root.controller.openTerminalLink(uri)
+                onInputBufferChanged: setCompletionCandidates(root.controller.terminalCompletionCandidates(inputBuffer, 8))
 
                 Connections {
                     target: root
@@ -437,6 +438,123 @@ Item {
 
                     function onNodeChanged() {
                         Qt.callLater(viewport.attachToController);
+                    }
+                }
+            }
+
+            Text {
+                id: terminalGhostText
+
+                x: Math.min(leaf.width - width - 8, viewport.x + viewport.terminalCursorRectangle.right)
+                y: viewport.y + viewport.terminalCursorRectangle.y
+                visible: leaf.node.active && viewport.ghostText.length > 0 && !viewport.multilinePastePending
+                z: 11
+                text: viewport.ghostText
+                color: Theme.textMuted
+                opacity: 0.58
+                font.family: viewport.fontFamily
+                font.pixelSize: viewport.fontPixelSize
+                renderType: Text.NativeRendering
+            }
+
+            Rectangle {
+                id: terminalCompletionPopup
+
+                readonly property int visibleRows: Math.min(6, viewport.completionCandidates.length)
+                readonly property real belowY: viewport.y + viewport.terminalCursorRectangle.bottom + 6
+                readonly property real aboveY: viewport.y + viewport.terminalCursorRectangle.top - height - 6
+
+                objectName: "terminalCompletionPopup"
+                width: Math.min(420, Math.max(240, leaf.width - 24))
+                height: visibleRows * 42 + 8
+                x: Math.max(8, Math.min(leaf.width - width - 8, viewport.x + viewport.terminalCursorRectangle.x))
+                y: belowY + height <= leaf.height - 8 ? belowY : Math.max(8, aboveY)
+                visible: leaf.node.active && visibleRows > 0 && viewport.inputBuffer.trim().length >= 2
+                z: 12
+                radius: Theme.radiusControl
+                color: Theme.elevatedBackground
+                border.color: Theme.borderStrong
+                border.width: 1
+                clip: true
+
+                Column {
+                    anchors.fill: parent
+                    anchors.margins: 4
+
+                    Repeater {
+                        model: viewport.completionCandidates.slice(0, terminalCompletionPopup.visibleRows)
+
+                        delegate: Rectangle {
+                            id: completionRow
+                            required property int index
+                            required property var modelData
+
+                            width: terminalCompletionPopup.width - 8
+                            height: 42
+                            radius: Theme.radiusSmall
+                            color: index === viewport.completionIndex ? Theme.controlHover : "transparent"
+                            Accessible.role: Accessible.ListItem
+                            Accessible.name: modelData.command
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 8
+                                anchors.rightMargin: 8
+                                spacing: 8
+
+                                AppIcon {
+                                    Layout.preferredWidth: 14
+                                    Layout.preferredHeight: 14
+                                    name: completionRow.modelData.kind === "quick-command" ? "script" : "history"
+                                    color: completionRow.index === viewport.completionIndex ? Theme.accent : Theme.textMuted
+                                }
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 0
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: completionRow.modelData.command
+                                        color: Theme.text
+                                        elide: Text.ElideRight
+                                        font.family: Theme.terminalFont
+                                        font.pixelSize: Theme.textCompact
+                                    }
+                                    Text {
+                                        Layout.fillWidth: true
+                                        visible: text.length > 0
+                                        text: completionRow.modelData.sourceLabel || completionRow.modelData.kind || ""
+                                        color: Theme.textMuted
+                                        elide: Text.ElideRight
+                                        font.family: Theme.uiFont
+                                        font.pixelSize: Theme.textCompact
+                                    }
+                                }
+
+                                Text {
+                                    visible: completionRow.index === viewport.completionIndex
+                                    text: qsTr("Tab")
+                                    color: Theme.textMuted
+                                    font.family: Theme.terminalFont
+                                    font.pixelSize: Theme.textCompact
+                                }
+                            }
+
+                            HoverHandler {
+                                onHoveredChanged: {
+                                    if (hovered && completionRow.index !== viewport.completionIndex)
+                                        viewport.moveCompletion(completionRow.index - viewport.completionIndex);
+                                }
+                            }
+
+                            TapHandler {
+                                onTapped: {
+                                    viewport.acceptCompletion(completionRow.index);
+                                    viewport.forceActiveFocus();
+                                }
+                            }
+                        }
                     }
                 }
             }
