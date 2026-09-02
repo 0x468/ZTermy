@@ -10,6 +10,8 @@ private slots:
     void resolvesAutomaticInStableOrder();
     void fallsBackWithoutOverwritingPreference();
     void createsLaunchSpec();
+    void resolvesNushellAndWslProfiles();
+    void detectsStableCatalogEntriesWithoutDuplicateIds();
 };
 
 void WindowsLocalShellCatalogTests::resolvesAutomaticInStableOrder()
@@ -68,6 +70,47 @@ void WindowsLocalShellCatalogTests::createsLaunchSpec()
     QCOMPARE(spec.arguments, profile.arguments);
     QCOMPARE(spec.workingDirectory, QStringLiteral("D:/Repo/Qt/ztermy"));
     QVERIFY(!spec.powerShellIntegration);
+}
+
+void WindowsLocalShellCatalogTests::resolvesNushellAndWslProfiles()
+{
+    const QList<ztermy::terminal::LocalShellProfile> profiles{
+        {.id = QStringLiteral("nushell"),
+         .name = QStringLiteral("Nushell"),
+         .executable = QStringLiteral("C:/Tools/nu.exe"),
+         .available = true},
+        {.id = QStringLiteral("wsl"),
+         .name = QStringLiteral("WSL · Debian"),
+         .executable = QStringLiteral("C:/Windows/System32/wsl.exe"),
+         .arguments = {QStringLiteral("~")},
+         .available = true},
+    };
+    const auto nushell = ztermy::terminal::WindowsLocalShellCatalog::resolve(profiles, QStringLiteral("nushell"));
+    QVERIFY(nushell);
+    if (!nushell)
+        return;
+    QCOMPARE(nushell->id, QStringLiteral("nushell"));
+    const auto wsl = ztermy::terminal::WindowsLocalShellCatalog::resolve(profiles, QStringLiteral("wsl"));
+    QVERIFY(wsl);
+    if (!wsl)
+        return;
+    QCOMPARE(wsl->arguments, QStringList{QStringLiteral("~")});
+}
+
+void WindowsLocalShellCatalogTests::detectsStableCatalogEntriesWithoutDuplicateIds()
+{
+    const QList<ztermy::terminal::LocalShellProfile> profiles = ztermy::terminal::WindowsLocalShellCatalog::detect();
+    QCOMPARE(profiles.size(), 6);
+    QSet<QString> ids;
+    for (const ztermy::terminal::LocalShellProfile &profile : profiles)
+    {
+        QVERIFY(!profile.id.isEmpty());
+        QVERIFY(!profile.name.isEmpty());
+        QVERIFY(!ids.contains(profile.id));
+        ids.insert(profile.id);
+    }
+    QVERIFY(ids.contains(QStringLiteral("nushell")));
+    QVERIFY(ids.contains(QStringLiteral("wsl")));
 }
 
 QTEST_GUILESS_MAIN(WindowsLocalShellCatalogTests)

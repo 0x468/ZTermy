@@ -64,6 +64,8 @@ enum class LocalShellPreference : std::uint8_t
     windowsPowerShell,
     commandPrompt,
     gitBash,
+    nushell,
+    wsl,
 };
 
 enum class CredentialStoragePreference : std::uint8_t

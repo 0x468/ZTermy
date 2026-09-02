@@ -1669,11 +1669,10 @@ void TerminalItem::keyPressEvent(QKeyEvent *event)
         clearSelection();
     }
     emit keyEventGenerated(key);
-    const bool resetsTrackedInput = event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter
-                                    || (control && event->key() == Qt::Key_U) || event->key() == Qt::Key_Left
-                                    || event->key() == Qt::Key_Right || event->key() == Qt::Key_Up
-                                    || event->key() == Qt::Key_Down || event->key() == Qt::Key_Home
-                                    || event->key() == Qt::Key_End;
+    const bool resetsTrackedInput =
+        event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter || (control && event->key() == Qt::Key_U)
+        || event->key() == Qt::Key_Left || event->key() == Qt::Key_Right || event->key() == Qt::Key_Up
+        || event->key() == Qt::Key_Down || event->key() == Qt::Key_Home || event->key() == Qt::Key_End;
     if (resetsTrackedInput)
     {
         setInputBuffer({});

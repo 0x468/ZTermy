@@ -21,26 +21,29 @@ private slots:
 void CommandHistoryTests::recordDeduplicatesAndKeepsMostRecentFirst()
 {
     CommandHistoryIndex index;
-    recordIndexedCommand(index, IndexedCommand{.command = "git status",
-                                                .sourceId = "host-a",
-                                                .sourceLabel = "Host A",
-                                                .shell = ShellKind::bash,
-                                                .firstUsedUtcSeconds = 10,
-                                                .lastUsedUtcSeconds = 10},
+    recordIndexedCommand(index,
+                         IndexedCommand{.command = "git status",
+                                        .sourceId = "host-a",
+                                        .sourceLabel = "Host A",
+                                        .shell = ShellKind::bash,
+                                        .firstUsedUtcSeconds = 10,
+                                        .lastUsedUtcSeconds = 10},
                          2);
-    recordIndexedCommand(index, IndexedCommand{.command = "git log",
-                                                .sourceId = "host-a",
-                                                .sourceLabel = "Host A",
-                                                .shell = ShellKind::bash,
-                                                .firstUsedUtcSeconds = 20,
-                                                .lastUsedUtcSeconds = 20},
+    recordIndexedCommand(index,
+                         IndexedCommand{.command = "git log",
+                                        .sourceId = "host-a",
+                                        .sourceLabel = "Host A",
+                                        .shell = ShellKind::bash,
+                                        .firstUsedUtcSeconds = 20,
+                                        .lastUsedUtcSeconds = 20},
                          2);
-    recordIndexedCommand(index, IndexedCommand{.command = "git status",
-                                                .sourceId = "host-a",
-                                                .sourceLabel = "Renamed host",
-                                                .shell = ShellKind::bash,
-                                                .firstUsedUtcSeconds = 30,
-                                                .lastUsedUtcSeconds = 30},
+    recordIndexedCommand(index,
+                         IndexedCommand{.command = "git status",
+                                        .sourceId = "host-a",
+                                        .sourceLabel = "Renamed host",
+                                        .shell = ShellKind::bash,
+                                        .firstUsedUtcSeconds = 30,
+                                        .lastUsedUtcSeconds = 30},
                          2);
 
     QCOMPARE(index.entries.size(), std::size_t{2});
@@ -58,12 +61,19 @@ void CommandHistoryTests::storeRoundTripsAndRejectsFutureSchema()
     const QString path = directory.filePath(QStringLiteral("command-history.json"));
     CommandHistoryIndex index;
     index.entries.push_back(IndexedCommand{.command = "df -h",
-                                            .sourceId = "gateway",
-                                            .sourceLabel = "Gateway",
-                                            .shell = ShellKind::bash,
-                                            .firstUsedUtcSeconds = 10,
-                                            .lastUsedUtcSeconds = 12,
-                                            .useCount = 3});
+                                           .sourceId = "gateway",
+                                           .sourceLabel = "Gateway",
+                                           .shell = ShellKind::bash,
+                                           .firstUsedUtcSeconds = 10,
+                                           .lastUsedUtcSeconds = 12,
+                                           .useCount = 3});
+    index.entries.push_back(IndexedCommand{.command = "ls | where type == dir",
+                                           .sourceId = "local-nu",
+                                           .sourceLabel = "Nushell",
+                                           .shell = ShellKind::nushell,
+                                           .firstUsedUtcSeconds = 20,
+                                           .lastUsedUtcSeconds = 20,
+                                           .useCount = 1});
     CommandHistoryStore store(path);
     QVERIFY(store.save(index).has_value());
     const auto loaded = store.load();
@@ -84,8 +94,8 @@ void CommandHistoryTests::controllerMergesPendingRecordsAndRanksSuggestions()
     QVERIFY(directory.isValid());
     const QString path = directory.filePath(QStringLiteral("command-history.json"));
     CommandHistoryController controller(path);
-    controller.record(QStringLiteral("docker ps"), ShellKind::bash, QStringLiteral("host-a"),
-                      QStringLiteral("Host A"), 10);
+    controller.record(QStringLiteral("docker ps"), ShellKind::bash, QStringLiteral("host-a"), QStringLiteral("Host A"),
+                      10);
     controller.record(QStringLiteral("docker compose ps"), ShellKind::bash, QStringLiteral("host-a"),
                       QStringLiteral("Host A"), 20);
     controller.record(QStringLiteral("docker compose ps"), ShellKind::bash, QStringLiteral("host-a"),

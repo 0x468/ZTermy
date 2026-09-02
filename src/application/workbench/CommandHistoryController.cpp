@@ -36,6 +36,8 @@ namespace
             return QStringLiteral("fish");
         case ShellKind::powershell:
             return QStringLiteral("powershell");
+        case ShellKind::nushell:
+            return QStringLiteral("nushell");
         case ShellKind::unknown:
         default:
             return QStringLiteral("unknown");

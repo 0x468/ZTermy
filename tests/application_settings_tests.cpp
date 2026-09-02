@@ -87,7 +87,7 @@ void ApplicationSettingsTests::savesAndLoadsEveryPreference()
                                          QStringLiteral("ai"), QStringLiteral("unhighlight")},
         .terminalSelectionPrimaryActions = {QStringLiteral("search"), QStringLiteral("copy")},
         .terminalSelectionRetainActions = {QStringLiteral("search")},
-        .localShell = ztermy::config::LocalShellPreference::gitBash,
+        .localShell = ztermy::config::LocalShellPreference::nushell,
         .theme = ztermy::config::ThemePreference::light,
         .backdrop = ztermy::config::BackdropPreference::solid,
         .accent = ztermy::config::AccentPreference::custom,
@@ -185,7 +185,7 @@ void ApplicationSettingsTests::migratesLegacyWindowOpacityAndNoneBackdrop()
     QFile saved(path);
     QVERIFY(saved.open(QIODevice::ReadOnly));
     const QByteArray persisted = saved.readAll();
-    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 30")));
+    QVERIFY(persisted.contains(QByteArrayLiteral("\"version\": 31")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdropOpacity\": 0.75")));
     QVERIFY(persisted.contains(QByteArrayLiteral("\"backdrop\": \"transparent\"")));
     QVERIFY(!persisted.contains(QByteArrayLiteral("windowOpacity")));
@@ -471,7 +471,7 @@ void ApplicationSettingsTests::migratesRecentPermissionSchemasAndAllowsResave()
 
         QVERIFY(file.open(QIODevice::ReadOnly));
         const auto persisted = QJsonDocument::fromJson(file.readAll()).object();
-        QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 30);
+        QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 31);
         QCOMPARE(persisted.value(QStringLiteral("aiPermission")).toString(), QStringLiteral("ask"));
         QCOMPARE(persisted.value(QStringLiteral("terminalFontSize")).toInt(), 16);
     }
@@ -508,7 +508,7 @@ void ApplicationSettingsTests::migratesRetiredExternalAgentSchemaWithoutLosingPr
     QVERIFY(store.save(*loaded));
     QVERIFY(file.open(QIODevice::ReadOnly));
     const auto persisted = QJsonDocument::fromJson(file.readAll()).object();
-    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 30);
+    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 31);
     QVERIFY(!persisted.contains(QStringLiteral("aiAgent")));
     QCOMPARE(persisted.value(QStringLiteral("aiBaseUrl")).toString(), expected.aiBaseUrl);
     QCOMPARE(persisted.value(QStringLiteral("aiModel")).toString(), expected.aiModel);
@@ -548,7 +548,7 @@ void ApplicationSettingsTests::migratesNativeChatGptSchemaWithSystemAiProxy()
     QVERIFY(store.save(*loaded));
     QVERIFY(file.open(QIODevice::ReadOnly));
     const auto persisted = QJsonDocument::fromJson(file.readAll()).object();
-    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 30);
+    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 31);
     QCOMPARE(persisted.value(QStringLiteral("aiProxy")).toString(), QStringLiteral("system"));
     QVERIFY(!loaded->closeToTray);
     QVERIFY(!loaded->performanceMode);
@@ -581,7 +581,7 @@ void ApplicationSettingsTests::migratesPrePerformanceSchemaWithPerformanceDisabl
     QVERIFY(store.save(*loaded));
     QVERIFY(file.open(QIODevice::ReadOnly));
     const auto persisted = QJsonDocument::fromJson(file.readAll()).object();
-    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 30);
+    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 31);
     QCOMPARE(persisted.value(QStringLiteral("performanceMode")).toBool(), false);
 }
 
@@ -656,7 +656,7 @@ void ApplicationSettingsTests::migratesPreSelectionRetentionSchemaWithDismissDef
     QVERIFY(store.save(*loaded));
     QVERIFY(file.open(QIODevice::ReadOnly));
     const auto persisted = QJsonDocument::fromJson(file.readAll()).object();
-    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 30);
+    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 31);
     QCOMPARE(persisted.value(QStringLiteral("keepSelectionAfterCopy")).toBool(), false);
 }
 
@@ -709,7 +709,7 @@ void ApplicationSettingsTests::migratesPreLocalShellSchemaWithAutomaticDefault()
     QVERIFY(store.save(*migrated));
     QVERIFY(file.open(QIODevice::ReadOnly));
     const auto persisted = QJsonDocument::fromJson(file.readAll()).object();
-    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 30);
+    QCOMPARE(persisted.value(QStringLiteral("version")).toInt(), 31);
     QCOMPARE(persisted.value(QStringLiteral("localShell")).toString(), QStringLiteral("automatic"));
 }
 
@@ -725,7 +725,7 @@ void ApplicationSettingsTests::rejectsMalformedUnsupportedAndIncompleteDocuments
     QVERIFY(!malformed);
     QCOMPARE(malformed.error(), ztermy::config::ApplicationSettingsStoreError::invalidFormat);
 
-    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":31})")));
+    QVERIFY(writeFile(path, QByteArrayLiteral(R"({"version":32})")));
     const auto unsupported = store.load();
     QVERIFY(!unsupported);
     QCOMPARE(unsupported.error(), ztermy::config::ApplicationSettingsStoreError::unsupportedVersion);

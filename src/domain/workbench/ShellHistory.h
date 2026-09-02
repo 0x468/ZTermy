@@ -17,6 +17,7 @@ enum class ShellKind : std::uint8_t
     zsh,
     fish,
     powershell,
+    nushell,
 };
 
 struct ShellHistoryEntry final

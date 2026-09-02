@@ -83,6 +83,34 @@ namespace
     return {};
 }
 
+[[nodiscard]] QString defaultWslDistribution()
+{
+    QSettings settings(QStringLiteral("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Lxss"),
+                       QSettings::NativeFormat);
+    const QString defaultId = settings.value(QStringLiteral("DefaultDistribution")).toString();
+    if (!defaultId.isEmpty())
+    {
+        settings.beginGroup(defaultId);
+        const QString name = settings.value(QStringLiteral("DistributionName")).toString().trimmed();
+        settings.endGroup();
+        if (!name.isEmpty())
+        {
+            return name;
+        }
+    }
+    for (const QString &group : settings.childGroups())
+    {
+        settings.beginGroup(group);
+        const QString name = settings.value(QStringLiteral("DistributionName")).toString().trimmed();
+        settings.endGroup();
+        if (!name.isEmpty())
+        {
+            return name;
+        }
+    }
+    return {};
+}
+
 } // namespace
 
 namespace ztermy::terminal
@@ -102,6 +130,12 @@ QList<LocalShellProfile> WindowsLocalShellCatalog::detect()
     const QString gitBash = firstExecutable({QDir(gitRoot).filePath(QStringLiteral("bin/bash.exe")),
                                              QDir(programFiles).filePath(QStringLiteral("Git/bin/bash.exe")),
                                              QDir(localAppData).filePath(QStringLiteral("Programs/Git/bin/bash.exe"))});
+    const QString nushell =
+        firstExecutable({QStandardPaths::findExecutable(QStringLiteral("nu.exe")), appPath(QStringLiteral("nu.exe")),
+                         QDir(qEnvironmentVariable("USERPROFILE")).filePath(QStringLiteral(".cargo/bin/nu.exe")),
+                         QDir(localAppData).filePath(QStringLiteral("Programs/nu/nu.exe"))});
+    const QString wsl = firstExecutable({systemExecutable(QStringLiteral("wsl.exe"))});
+    const QString wslDistribution = defaultWslDistribution();
 
     return {
         {.id = QStringLiteral("powerShellCore"),
@@ -126,6 +160,15 @@ QList<LocalShellProfile> WindowsLocalShellCatalog::detect()
          .executable = gitBash,
          .arguments = {QStringLiteral("--login"), QStringLiteral("-i")},
          .available = !gitBash.isEmpty()},
+        {.id = QStringLiteral("nushell"),
+         .name = QStringLiteral("Nushell"),
+         .executable = nushell,
+         .available = !nushell.isEmpty()},
+        {.id = QStringLiteral("wsl"),
+         .name = wslDistribution.isEmpty() ? QStringLiteral("WSL") : QStringLiteral("WSL · %1").arg(wslDistribution),
+         .executable = wsl,
+         .arguments = {QStringLiteral("~")},
+         .available = !wsl.isEmpty() && !wslDistribution.isEmpty()},
     };
 }
 

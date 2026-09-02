@@ -436,6 +436,7 @@ public:
     [[nodiscard]] QObject *localFiles() const noexcept;
 
     Q_INVOKABLE QString startLocalTerminal();
+    Q_INVOKABLE QString startLocalTerminalWithShell(const QString &shellId);
     Q_INVOKABLE bool activateTerminalTab(const QString &id);
     Q_INVOKABLE bool closeTerminalTab(const QString &id);
     Q_INVOKABLE bool duplicateTerminalTab(const QString &id);
@@ -1086,7 +1087,8 @@ private:
                                                bool rememberProxyCredential = false, bool manageProxyCredential = false,
                                                const QVariantMap &routeOptions = {});
     void setCredentialOperationError(QString message);
-    [[nodiscard]] QString startLocalTerminalAt(const QString &workingDirectory, const QString &preferredTitle = {});
+    [[nodiscard]] QString startLocalTerminalAt(const QString &workingDirectory, const QString &preferredTitle = {},
+                                               const QString &shellPreference = {});
     [[nodiscard]] bool closeTerminalTabInternal(const QString &id, bool recordClosed);
     void recordClosedTerminal(const QString &workspaceId);
     [[nodiscard]] bool startSshConnection(ssh::SshConnectionRequest request, QString sourceProfileId = {});

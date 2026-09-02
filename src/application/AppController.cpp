@@ -1299,9 +1299,13 @@ semanticCapability(const ztermy::terminal::SemanticTerminalSnapshot &snapshot) n
 
 [[nodiscard]] std::string localShellSemanticName(const QString &id)
 {
-    if (id == QStringLiteral("gitBash"))
+    if (id == QStringLiteral("gitBash") || id == QStringLiteral("wsl"))
     {
         return "bash";
+    }
+    if (id == QStringLiteral("nushell"))
+    {
+        return "nu";
     }
     if (id == QStringLiteral("commandPrompt"))
     {
@@ -1312,9 +1316,10 @@ semanticCapability(const ztermy::terminal::SemanticTerminalSnapshot &snapshot) n
 
 [[nodiscard]] ztermy::workbench::ShellKind localShellHistoryKind(const QString &id) noexcept
 {
-    return id == QStringLiteral("gitBash")         ? ztermy::workbench::ShellKind::bash
-           : id == QStringLiteral("commandPrompt") ? ztermy::workbench::ShellKind::unknown
-                                                   : ztermy::workbench::ShellKind::powershell;
+    return id == QStringLiteral("gitBash") || id == QStringLiteral("wsl") ? ztermy::workbench::ShellKind::bash
+           : id == QStringLiteral("nushell")                              ? ztermy::workbench::ShellKind::nushell
+           : id == QStringLiteral("commandPrompt")                        ? ztermy::workbench::ShellKind::unknown
+                                                                          : ztermy::workbench::ShellKind::powershell;
 }
 
 [[nodiscard]] QString normalizedQuickCommandText(QString value)
@@ -4696,7 +4701,13 @@ QString AppController::startLocalTerminal()
     return startLocalTerminalAt({});
 }
 
-QString AppController::startLocalTerminalAt(const QString &workingDirectory, const QString &preferredTitle)
+QString AppController::startLocalTerminalWithShell(const QString &shellId)
+{
+    return startLocalTerminalAt({}, {}, shellId);
+}
+
+QString AppController::startLocalTerminalAt(const QString &workingDirectory, const QString &preferredTitle,
+                                            const QString &shellPreference)
 {
     TabLifecycleTiming timing("open-local");
     if (m_tabs.size() >= maximumTerminalTabs)
@@ -4712,7 +4723,9 @@ QString AppController::startLocalTerminalAt(const QString &workingDirectory, con
     {
         refreshLocalShellCatalog();
     }
-    const QString preference = config::localShellPreferenceToken(m_settings.localShell);
+    const QString preference = shellPreference.trimmed().isEmpty()
+                                   ? config::localShellPreferenceToken(m_settings.localShell)
+                                   : shellPreference.trimmed();
     const auto shell = terminal::WindowsLocalShellCatalog::resolve(m_localShellProfiles, preference);
     if (!shell)
     {

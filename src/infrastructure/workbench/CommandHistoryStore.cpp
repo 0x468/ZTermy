@@ -41,6 +41,8 @@ constexpr qint64 maximumFileSize = qint64{16} * 1024 * 1024;
             return QStringLiteral("fish");
         case ShellKind::powershell:
             return QStringLiteral("powershell");
+        case ShellKind::nushell:
+            return QStringLiteral("nushell");
         case ShellKind::unknown:
         default:
             return QStringLiteral("unknown");
@@ -58,6 +60,8 @@ constexpr qint64 maximumFileSize = qint64{16} * 1024 * 1024;
         return ShellKind::fish;
     if (token == QStringLiteral("powershell"))
         return ShellKind::powershell;
+    if (token == QStringLiteral("nushell"))
+        return ShellKind::nushell;
     if (token == QStringLiteral("unknown"))
         return ShellKind::unknown;
     return std::nullopt;

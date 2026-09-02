@@ -412,10 +412,13 @@ Rectangle {
         Qt.callLater(root.applyWindowAppearance);
     }
 
-    function startLocalTerminalTab() {
+    function startLocalTerminalTab(shellId) {
         currentPage = "terminal";
         Qt.callLater(() => {
-            controller.startLocalTerminal();
+            if (shellId && shellId.length > 0)
+                controller.startLocalTerminalWithShell(shellId);
+            else
+                controller.startLocalTerminal();
             terminalViewport.forceActiveFocus();
         });
     }
@@ -1232,6 +1235,29 @@ Rectangle {
                         onTriggered: {
                             root.startLocalTerminalTab();
                             Qt.callLater(terminalViewport.forceActiveFocus);
+                        }
+                    }
+
+                    AppMenu {
+                        id: localShellMenu
+
+                        title: qsTr("New terminal with")
+
+                        Instantiator {
+                            model: root.controller.availableLocalShells.filter(shell => shell.id !== "automatic" && shell.available)
+                            delegate: AppMenuItem {
+                                id: shellMenuItem
+
+                                required property var modelData
+                                text: modelData.name
+                                onTriggered: root.startLocalTerminalTab(modelData.id)
+
+                                AppToolTip {
+                                    text: shellMenuItem.modelData.detail
+                                }
+                            }
+                            onObjectAdded: (index, object) => localShellMenu.insertItem(index, object)
+                            onObjectRemoved: (index, object) => localShellMenu.removeItem(object)
                         }
                     }
 

@@ -61,7 +61,9 @@ constexpr qint64 terminalSelectionInteractionSchemaVersion = 27;
 constexpr qint64 terminalPromptDelimiterSchemaVersion = 28;
 constexpr qint64 localShellSchemaVersion = 29;
 constexpr qint64 terminalSelectionPopupSchemaVersion = 30;
-constexpr qint64 currentSchemaVersion = terminalSelectionPopupSchemaVersion;
+// Version 31 adds persisted Nushell and WSL default-shell preferences.
+constexpr qint64 extendedLocalShellSchemaVersion = 31;
+constexpr qint64 currentSchemaVersion = extendedLocalShellSchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::AiPermissionPreference;
@@ -281,6 +283,14 @@ template <>
     if (token == QStringLiteral("gitBash"))
     {
         return LocalShellPreference::gitBash;
+    }
+    if (token == QStringLiteral("nushell"))
+    {
+        return LocalShellPreference::nushell;
+    }
+    if (token == QStringLiteral("wsl"))
+    {
+        return LocalShellPreference::wsl;
     }
     return std::nullopt;
 }
@@ -1053,6 +1063,10 @@ QString localShellPreferenceToken(const LocalShellPreference preference)
             return QStringLiteral("commandPrompt");
         case LocalShellPreference::gitBash:
             return QStringLiteral("gitBash");
+        case LocalShellPreference::nushell:
+            return QStringLiteral("nushell");
+        case LocalShellPreference::wsl:
+            return QStringLiteral("wsl");
         case LocalShellPreference::automatic:
         default:
             return QStringLiteral("automatic");

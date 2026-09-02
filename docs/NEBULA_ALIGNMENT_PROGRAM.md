@@ -174,9 +174,16 @@ OpenSSH 导入覆盖 `Host`、`HostName`、`User`、`Port`、`IdentityFile`、`P
 
 #### N5.5 Shell 覆盖
 
-- [ ] WSL 检测与启动；
-- [ ] Nushell 本地会话；
-- [ ] Bash、Zsh、Fish、PowerShell、Nushell 的 shell integration 能力矩阵与补齐。
+- [x] WSL 检测与启动；
+- [x] Nushell 本地会话；
+- [x] Bash、Zsh、Fish、PowerShell、Nushell 的 shell integration 能力矩阵与补齐。
+
+实施记录（2026-09-03）：本地 shell catalog 增加 Nushell 与当前用户已注册的默认 WSL 发行版，发现过程
+只读取可执行文件与 WSL 注册状态，不在 GUI 线程运行外部探测命令；两者可设为默认，也可从新建终端
+菜单显式启动。Nushell 沿用其默认 OSC 133/633 语义区，WSL 与 Git Bash 在未配置集成时保持 basic
+能力，不以 shell 名称伪装成 rich。能力和降级边界记录在
+[shell coverage matrix](research/SHELL_INTEGRATION_MATRIX.md)，设置 schema 31、Nushell 历史类型、catalog
+稳定 ID 和启动规格均有回归测试。
 
 ### N6：C++ 规范与重构门禁
 
@@ -205,3 +212,4 @@ OpenSSH 导入覆盖 `Host`、`HostName`、`User`、`Port`、`IdentityFile`、`P
 | 2026-09-02 | 增加终端选区快捷浮窗专项：可配置动作、分层菜单、选区保留、单次隐藏、超时淡化和方向感知避让。 |
 | 2026-09-03 | 完成 N1 已知主机中心；记录 OpenSSH 导入边界、事务写入和自动化运行证据。 |
 | 2026-09-03 | 完成 N5.4：OpenSSH 配置导入、远程文件信息架构统一及异步本地文件抽屉。 |
+| 2026-09-03 | 完成 N5.5：Nushell/WSL 本地会话、显式 shell 启动入口和语义能力矩阵。 |
