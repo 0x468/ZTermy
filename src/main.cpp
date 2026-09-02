@@ -1959,11 +1959,12 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
 
 [[nodiscard]] bool verifyHostEditorTabOrder(ztermy::NativeWindow &window, QQuickItem *rootObject)
 {
-    constexpr std::array<const char *, 12> passwordOrder{
+    constexpr std::array<const char *, 13> passwordOrder{
         "hostName",
         "hostGroup",
         "hostAddress",
         "hostPort",
+        "hostIdentity",
         "hostUsername",
         "hostAuthentication",
         "hostCredential",

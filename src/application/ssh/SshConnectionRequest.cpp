@@ -33,9 +33,9 @@ template <typename Endpoint>
         case SshAuthenticationMethod::PrivateKey:
             return !endpoint.privateKeyPath.isEmpty();
         case SshAuthenticationMethod::Password:
-            return endpoint.privateKeyPath.isEmpty() && !endpoint.secret.empty();
+            return endpoint.privateKeyPath.isEmpty() && endpoint.publicKeyPath.isEmpty() && !endpoint.secret.empty();
         case SshAuthenticationMethod::Agent:
-            return endpoint.privateKeyPath.isEmpty() && endpoint.secret.empty();
+            return endpoint.privateKeyPath.isEmpty() && endpoint.publicKeyPath.isEmpty() && endpoint.secret.empty();
     }
     return false;
 }

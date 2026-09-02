@@ -115,8 +115,9 @@ public:
                              std::chrono::milliseconds timeout, const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] std::expected<void, SshTransportError>
     authenticateWithPrivateKeyFile(SshByteTransport &transport, std::string_view username,
-                                   std::string_view privateKeyPath, std::string_view passphrase,
-                                   std::chrono::milliseconds timeout, const std::stop_token &stopToken = {}) noexcept;
+                                   std::string_view privateKeyPath, std::string_view publicKeyPath,
+                                   std::string_view passphrase, std::chrono::milliseconds timeout,
+                                   const std::stop_token &stopToken = {}) noexcept;
     [[nodiscard]] std::expected<void, SshTransportError>
     authenticateWithAgent(SshByteTransport &transport, std::string_view username, std::chrono::milliseconds timeout,
                           const std::stop_token &stopToken = {}) noexcept;

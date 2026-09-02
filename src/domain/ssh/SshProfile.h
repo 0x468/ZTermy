@@ -97,6 +97,7 @@ struct SshProfile
     std::string host;
     std::uint16_t port = 22;
     std::string username;
+    std::optional<std::string> identityReference;
     SshAuthenticationMethod authentication = SshAuthenticationMethod::PrivateKey;
     std::string privateKeyPath;
     bool privateKeyPassphraseRequired = false;

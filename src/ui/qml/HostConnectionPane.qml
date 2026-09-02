@@ -28,6 +28,7 @@ Rectangle {
     property bool nameWasAutoFilled: false
     property bool editingCredentialStored: false
     property bool editingProxyCredentialStored: false
+    property string selectedIdentityId: ""
     property var jumpProfileIds: []
     property var pendingQuickTarget: ({})
     property string quickConnectMessage: ""
@@ -73,7 +74,51 @@ Rectangle {
         return authenticationBox.currentIndex === 1 ? "password" : "agent";
     }
 
+    function selectedIdentity() {
+        if (selectedIdentityId.length === 0 || !controller.keychain) {
+            return null;
+        }
+        for (const identity of controller.keychain.identities) {
+            if (identity.id === selectedIdentityId) {
+                return identity;
+            }
+        }
+        return null;
+    }
+
+    function applySelectedIdentity() {
+        const identity = selectedIdentity();
+        if (!identity) {
+            return;
+        }
+        usernameField.text = identity.username;
+        authenticationBox.currentIndex = identity.authentication === "password" ? 1 : (identity.authentication === "agent" ? 2 : 0);
+        const keys = controller.keychain.keys;
+        for (const key of keys) {
+            if (key.id === identity.keyId) {
+                keyPathField.text = key.privateKeyPath;
+                break;
+            }
+        }
+        passphraseRequiredBox.checked = identity.credentialRequired;
+        credentialField.text = "";
+        editingCredentialStored = identity.credentialStored === true;
+    }
+
+    function syncIdentityBox() {
+        if (!controller.keychain) {
+            identityBox.currentIndex = 0;
+            return;
+        }
+        const ids = [""].concat(controller.keychain.identities.map(identity => identity.id));
+        identityBox.currentIndex = Math.max(0, ids.indexOf(selectedIdentityId));
+    }
+
     function authenticationSummary() {
+        const identity = selectedIdentity();
+        if (identity) {
+            return qsTr("Identity: %1").arg(identity.label);
+        }
         if (authenticationBox.currentIndex === 0) {
             return qsTr("Private-key authentication");
         }
@@ -127,7 +172,8 @@ Rectangle {
 
     function routeOptionsMap() {
         return {
-            jumpProfileIds: jumpProfileIds.slice(0)
+            jumpProfileIds: jumpProfileIds.slice(0),
+            identityReference: selectedIdentityId
         };
     }
 
@@ -345,8 +391,9 @@ Rectangle {
 
     function validate(requireName, requireCredential) {
         const authentication = authenticationToken();
+        const identity = selectedIdentity();
         const privateKey = authentication === "private-key";
-        if ((requireName && nameField.text.trim().length === 0) || hostField.text.trim().length === 0 || usernameField.text.trim().length === 0 || (privateKey && keyPathField.text.trim().length === 0) || portField.text.length === 0) {
+        if ((requireName && nameField.text.trim().length === 0) || hostField.text.trim().length === 0 || (!identity && usernameField.text.trim().length === 0) || (!identity && privateKey && keyPathField.text.trim().length === 0) || portField.text.length === 0) {
             showStatus(qsTr("Complete every required field."), true);
             return false;
         }
@@ -355,7 +402,7 @@ Rectangle {
             showStatus(qsTr("Port must be between 1 and 65535."), true);
             return false;
         }
-        const needsCredential = authentication === "password" || (privateKey && passphraseRequiredBox.checked);
+        const needsCredential = !identity && (authentication === "password" || (privateKey && passphraseRequiredBox.checked));
         if (requireCredential && needsCredential && credentialField.text.length === 0) {
             showStatus(privateKey ? qsTr("Enter the private-key passphrase.") : qsTr("Enter the SSH password."), true);
             return false;
@@ -395,6 +442,8 @@ Rectangle {
         proxyCredentialField.passwordVisible = false;
         rememberProxyCredentialSwitch.checked = true;
         editingProxyCredentialStored = false;
+        selectedIdentityId = "";
+        identityBox.currentIndex = 0;
         jumpProfileIds = [];
         terminalTypeField.text = "xterm-256color";
         connectionTimeoutField.text = "10";
@@ -422,6 +471,9 @@ Rectangle {
 
     function refreshEditingCredential() {
         if (!editorExpanded || editingProfileId.length === 0) {
+            return;
+        }
+        if (selectedIdentityId.length > 0) {
             return;
         }
         if (controller.effectiveCredentialStorage === "portable" && controller.portableVaultLocked) {
@@ -479,6 +531,17 @@ Rectangle {
         }
     }
 
+    Connections {
+        target: pane.controller.keychain
+
+        function onCatalogChanged() {
+            pane.syncIdentityBox();
+            if (pane.selectedIdentityId.length > 0) {
+                pane.applySelectedIdentity();
+            }
+        }
+    }
+
     function editProfile(profile) {
         forwardingPane.closeEditor();
         editorExpanded = true;
@@ -495,6 +558,11 @@ Rectangle {
         rememberCredentialSwitch.checked = true;
         nameWasAutoFilled = false;
         editingCredentialStored = profile.credentialStored;
+        selectedIdentityId = profile.identityReference || "";
+        syncIdentityBox();
+        if (selectedIdentityId.length > 0) {
+            applySelectedIdentity();
+        }
         const proxy = profile.proxy || {};
         proxyTypeBox.currentIndex = proxy.type === "socks5" ? 1 : (proxy.type === "http-connect" ? 2 : 0);
         proxyHostField.text = proxy.host || "";
@@ -582,12 +650,12 @@ Rectangle {
             showStatus(qsTr("Save the required credentials in every jump profile before connecting."), true);
             return;
         }
-        const needsHostCredential = (profile.authentication === "password" || profile.privateKeyPassphraseRequired) && !profile.credentialStored;
+        const needsHostCredential = profile.credentialRequired === true && !profile.credentialStored;
         const proxy = profile.proxy || {};
         const needsProxyCredential = proxy.type !== "none" && (proxy.username || "").length > 0 && !proxy.credentialStored;
         pendingConnectId = profile.id;
         pendingConnectName = profile.name;
-        pendingConnectAuthentication = profile.authentication;
+        pendingConnectAuthentication = profile.effectiveAuthentication || profile.authentication;
         pendingConnectNeedsHostCredential = needsHostCredential;
         pendingConnectNeedsProxyCredential = needsProxyCredential;
 
@@ -605,6 +673,10 @@ Rectangle {
             savedCredentialField.text = "";
             savedProxyCredentialField.text = "";
             savedCredentialRemember.checked = true;
+            savedCredentialRemember.enabled = (profile.identityReference || "").length === 0;
+            if (!savedCredentialRemember.enabled) {
+                savedCredentialRemember.checked = false;
+            }
             savedProxyCredentialRemember.checked = true;
             credentialDialog.open();
             return;
@@ -1278,7 +1350,7 @@ Rectangle {
                             RowLayout {
                                 Layout.fillWidth: true
                                 spacing: Theme.spacingControl
-                                visible: authenticationBox.currentIndex !== 2 && pane.controller.effectiveCredentialStorage === "portable" && (!pane.controller.portableVaultInitialized || pane.controller.portableVaultLocked)
+                                visible: pane.selectedIdentityId.length === 0 && authenticationBox.currentIndex !== 2 && pane.controller.effectiveCredentialStorage === "portable" && (!pane.controller.portableVaultInitialized || pane.controller.portableVaultLocked)
 
                                 StatusMessage {
                                     Layout.fillWidth: true
@@ -1382,6 +1454,26 @@ Rectangle {
                                 }
 
                                 Label {
+                                    text: qsTr("Identity")
+                                    color: pane.textColor
+                                }
+                                AppComboBox {
+                                    id: identityBox
+                                    objectName: "hostIdentity"
+                                    Layout.fillWidth: true
+                                    readonly property var identityItems: pane.controller.keychain ? pane.controller.keychain.identities : []
+                                    model: [""].concat(identityItems.map(identity => identity.id))
+                                    displayTextModel: [qsTr("Use profile fields")].concat(identityItems.map(identity => identity.label + " · " + identity.username))
+                                    accessibleName: qsTr("SSH identity")
+                                    onActivated: index => {
+                                        pane.selectedIdentityId = model[index] || "";
+                                        if (pane.selectedIdentityId.length > 0) {
+                                            pane.applySelectedIdentity();
+                                        }
+                                    }
+                                }
+
+                                Label {
                                     text: qsTr("Username")
                                     color: pane.textColor
                                 }
@@ -1392,6 +1484,7 @@ Rectangle {
                                     placeholderText: qsTr("username")
                                     accessibleName: qsTr("SSH username")
                                     selectByMouse: true
+                                    enabled: pane.selectedIdentityId.length === 0
                                 }
 
                                 Label {
@@ -1404,6 +1497,7 @@ Rectangle {
                                     Layout.fillWidth: true
                                     model: [qsTr("Private key"), qsTr("Password"), qsTr("SSH agent")]
                                     accessibleName: qsTr("SSH authentication method")
+                                    enabled: pane.selectedIdentityId.length === 0
                                     onCurrentIndexChanged: {
                                         credentialField.text = "";
                                         if (currentIndex !== 0) {
@@ -1415,7 +1509,7 @@ Rectangle {
                                 Text {
                                     Layout.fillWidth: true
                                     Layout.columnSpan: pane.compactLayout ? 1 : 2
-                                    visible: authenticationBox.currentIndex === 2
+                                    visible: pane.selectedIdentityId.length === 0 && authenticationBox.currentIndex === 2
                                     text: qsTr("Uses identities already loaded in your Windows SSH agent. ztermy never reads the private-key material.")
                                     color: pane.mutedColor
                                     wrapMode: Text.WordWrap
@@ -1426,27 +1520,27 @@ Rectangle {
                                 Label {
                                     text: qsTr("Private key")
                                     color: pane.textColor
-                                    visible: authenticationBox.currentIndex === 0
+                                    visible: pane.selectedIdentityId.length === 0 && authenticationBox.currentIndex === 0
                                 }
                                 AppTextField {
                                     id: keyPathField
                                     objectName: "hostKeyPath"
                                     Layout.fillWidth: true
-                                    visible: authenticationBox.currentIndex === 0
+                                    visible: pane.selectedIdentityId.length === 0 && authenticationBox.currentIndex === 0
                                     text: pane.controller.defaultPrivateKeyPath
                                     accessibleName: qsTr("Private-key file path")
                                     selectByMouse: true
                                 }
 
                                 Item {
-                                    visible: !pane.compactLayout && authenticationBox.currentIndex === 0
+                                    visible: pane.selectedIdentityId.length === 0 && !pane.compactLayout && authenticationBox.currentIndex === 0
                                     implicitHeight: passphraseRequiredBox.implicitHeight
                                 }
                                 AppCheckBox {
                                     id: passphraseRequiredBox
                                     objectName: "hostPassphraseRequired"
                                     Layout.fillWidth: true
-                                    visible: authenticationBox.currentIndex === 0
+                                    visible: pane.selectedIdentityId.length === 0 && authenticationBox.currentIndex === 0
                                     text: qsTr("This private key requires a passphrase")
                                     accessibleName: qsTr("Private key requires a passphrase")
                                     onCheckedChanged: credentialField.text = ""
@@ -1455,13 +1549,13 @@ Rectangle {
                                 Label {
                                     text: authenticationBox.currentIndex === 0 ? qsTr("Passphrase") : qsTr("Password")
                                     color: pane.textColor
-                                    visible: authenticationBox.currentIndex === 1 || passphraseRequiredBox.checked
+                                    visible: pane.selectedIdentityId.length === 0 && (authenticationBox.currentIndex === 1 || passphraseRequiredBox.checked)
                                 }
                                 AppTextField {
                                     id: credentialField
                                     objectName: "hostCredential"
                                     Layout.fillWidth: true
-                                    visible: authenticationBox.currentIndex === 1 || passphraseRequiredBox.checked
+                                    visible: pane.selectedIdentityId.length === 0 && (authenticationBox.currentIndex === 1 || passphraseRequiredBox.checked)
                                     placeholderText: authenticationBox.currentIndex === 0 ? qsTr("Private-key passphrase") : qsTr("SSH password")
                                     passwordRevealable: true
                                     accessibleName: authenticationBox.currentIndex === 0 ? qsTr("Private-key passphrase") : qsTr("SSH password")

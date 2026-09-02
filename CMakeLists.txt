@@ -283,6 +283,10 @@ add_library(ztermy_ssh_domain STATIC
     src/domain/ssh/SshConnectionState.h
     src/domain/ssh/SshHostKey.cpp
     src/domain/ssh/SshHostKey.h
+    src/domain/ssh/SshIdentityResolver.cpp
+    src/domain/ssh/SshIdentityResolver.h
+    src/domain/ssh/SshKeychain.cpp
+    src/domain/ssh/SshKeychain.h
     src/domain/ssh/SshProfile.cpp
     src/domain/ssh/SshProfile.h
     src/domain/ssh/SshTarget.cpp
@@ -327,6 +331,8 @@ add_library(ztermy_ssh_persistence STATIC
     src/infrastructure/ssh/KnownHostsStore.h
     src/infrastructure/ssh/OpenSshKnownHostsImporter.cpp
     src/infrastructure/ssh/OpenSshKnownHostsImporter.h
+    src/infrastructure/ssh/SshKeychainStore.cpp
+    src/infrastructure/ssh/SshKeychainStore.h
     src/infrastructure/ssh/SshProfileStore.cpp
     src/infrastructure/ssh/SshProfileStore.h
 )
@@ -426,6 +432,31 @@ target_link_libraries(ztermy_known_hosts_application
 )
 if(MSVC)
     target_compile_options(ztermy_known_hosts_application PRIVATE
+        /permissive-
+        /utf-8
+        /W4
+        /Zc:__cplusplus
+    )
+endif()
+
+add_library(ztermy_keychain_application STATIC
+    src/application/ssh/KeychainController.cpp
+    src/application/ssh/KeychainController.h
+    src/application/ssh/SshKeychainMigration.cpp
+    src/application/ssh/SshKeychainMigration.h
+)
+target_compile_features(ztermy_keychain_application PUBLIC cxx_std_23)
+target_include_directories(ztermy_keychain_application PUBLIC src)
+target_link_libraries(ztermy_keychain_application
+    PUBLIC
+        ztermy_ssh_persistence
+        ztermy_credential_vault
+        Qt6::Core
+    PRIVATE
+        Qt6::Gui
+)
+if(MSVC)
+    target_compile_options(ztermy_keychain_application PRIVATE
         /permissive-
         /utf-8
         /W4
@@ -673,6 +704,12 @@ target_link_libraries(ztermy_ai_application
 )
 
 add_library(ztermy_session_logging STATIC
+    src/application/logging/ConnectionHistoryController.cpp
+    src/application/logging/ConnectionHistoryController.h
+    src/domain/logging/ConnectionHistory.cpp
+    src/domain/logging/ConnectionHistory.h
+    src/infrastructure/logging/ConnectionHistoryStore.cpp
+    src/infrastructure/logging/ConnectionHistoryStore.h
     src/infrastructure/logging/SessionLogWriter.cpp
     src/infrastructure/logging/SessionLogWriter.h
 )
@@ -878,6 +915,7 @@ target_link_libraries(ztermy_application_controller
         ztermy_forwarding_persistence
         ztermy_forwarding_session
         ztermy_known_hosts_application
+        ztermy_keychain_application
         ztermy_ssh_persistence
         ztermy_ssh_session
         ztermy_sftp_session
@@ -972,6 +1010,7 @@ set(ZTERMY_INTERFACE_ICON_FILES
     resources/icons/highlight.svg
     resources/icons/home.svg
     resources/icons/hosts.svg
+    resources/icons/key.svg
     resources/icons/lock.svg
     resources/icons/list.svg
     resources/icons/memory.svg
@@ -1003,6 +1042,7 @@ set(ZTERMY_INTERFACE_ICON_FILES
     resources/icons/tree.svg
     resources/icons/trash.svg
     resources/icons/upload.svg
+    resources/icons/user.svg
     resources/icons/warning.svg
     resources/icons/activity.svg
     resources/icons/ai.svg
@@ -2778,6 +2818,104 @@ if(BUILD_TESTING)
 
     add_test(NAME known-hosts-controller COMMAND ztermy_known_hosts_controller_tests)
 
+    qt_add_executable(ztermy_ssh_keychain_store_tests
+        tests/ssh_keychain_store_tests.cpp
+    )
+
+    target_compile_features(ztermy_ssh_keychain_store_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ssh_keychain_store_tests PRIVATE
+        ztermy_ssh_persistence
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ssh_keychain_store_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ssh-keychain-store COMMAND ztermy_ssh_keychain_store_tests)
+
+    qt_add_executable(ztermy_ssh_identity_resolver_tests
+        tests/ssh_identity_resolver_tests.cpp
+    )
+
+    target_compile_features(ztermy_ssh_identity_resolver_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ssh_identity_resolver_tests PRIVATE
+        ztermy_ssh_domain
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ssh_identity_resolver_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ssh-identity-resolver COMMAND ztermy_ssh_identity_resolver_tests)
+
+    qt_add_executable(ztermy_ssh_keychain_migration_tests
+        tests/ssh_keychain_migration_tests.cpp
+    )
+
+    target_compile_features(ztermy_ssh_keychain_migration_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_ssh_keychain_migration_tests PRIVATE
+        ztermy_keychain_application
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_ssh_keychain_migration_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME ssh-keychain-migration COMMAND ztermy_ssh_keychain_migration_tests)
+
+    qt_add_executable(ztermy_keychain_controller_tests
+        tests/keychain_controller_tests.cpp
+    )
+    target_compile_features(ztermy_keychain_controller_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_keychain_controller_tests PRIVATE
+        ztermy_keychain_application
+        ztermy_credential_vault
+        Qt6::Test
+    )
+    if(MSVC)
+        target_compile_options(ztermy_keychain_controller_tests PRIVATE
+            /W4
+            /permissive-
+            /utf-8
+        )
+    endif()
+    add_test(NAME keychain-controller COMMAND ztermy_keychain_controller_tests)
+
+    qt_add_executable(ztermy_connection_history_tests
+        tests/connection_history_tests.cpp
+    )
+    target_compile_features(ztermy_connection_history_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_connection_history_tests PRIVATE
+        ztermy_session_logging
+        Qt6::Test
+    )
+    if(MSVC)
+        target_compile_options(ztermy_connection_history_tests PRIVATE
+            /W4
+            /permissive-
+            /utf-8
+        )
+    endif()
+    add_test(NAME connection-history COMMAND ztermy_connection_history_tests)
+
     qt_add_executable(ztermy_ssh_profile_store_tests
         tests/ssh_profile_store_tests.cpp
     )
@@ -4451,6 +4589,9 @@ if(BUILD_TESTING)
             ztermy_ssh_connection_state_tests
             ztermy_ssh_host_key_tests
             ztermy_known_hosts_store_tests
+            ztermy_ssh_keychain_store_tests
+            ztermy_ssh_keychain_migration_tests
+            ztermy_ssh_identity_resolver_tests
             ztermy_ssh_profile_store_tests
             ztermy_ssh_target_tests
             ztermy_windows_tcp_socket_tests

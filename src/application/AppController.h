@@ -14,6 +14,7 @@
 #include "application/ai/AiTurnRunner.h"
 #include "application/ai/McpRuntimeManager.h"
 #include "application/forwarding/PortForwardingJob.h"
+#include "application/logging/ConnectionHistoryController.h"
 #include "application/security/CredentialVaultCoordinator.h"
 #include "application/sftp/SftpDirectoryModel.h"
 #include "application/sftp/TransferBatchCoordinator.h"
@@ -39,6 +40,7 @@
 #include "infrastructure/ai/ProviderModelCatalog.h"
 #include "infrastructure/forwarding/PortForwardingRuleStore.h"
 #include "infrastructure/logging/SessionLogWriter.h"
+#include "infrastructure/ssh/SshKeychainStore.h"
 #include "infrastructure/ssh/SshProfileStore.h"
 #include "infrastructure/workbench/NoteStore.h"
 #include "infrastructure/workbench/PowerShellHistoryReader.h"
@@ -84,8 +86,9 @@ class WindowsProtectedClipboard;
 
 namespace ztermy::ssh
 {
+class KeychainController;
 class KnownHostsController;
-}
+} // namespace ztermy::ssh
 
 namespace ztermy
 {
@@ -249,6 +252,8 @@ class AppController final : public QObject
     Q_PROPERTY(QVariantList portForwardingRules READ portForwardingRules NOTIFY portForwardingRulesChanged)
     Q_PROPERTY(QString portForwardingOperationError READ portForwardingOperationError NOTIFY portForwardingRulesChanged)
     Q_PROPERTY(QObject *knownHosts READ knownHosts CONSTANT)
+    Q_PROPERTY(QObject *keychain READ keychain CONSTANT)
+    Q_PROPERTY(QObject *connectionHistory READ connectionHistory CONSTANT)
 
 public:
     using LocalTerminalSessionFactory = std::function<std::unique_ptr<terminal::LocalTerminalSessionBackend>()>;
@@ -417,6 +422,8 @@ public:
     [[nodiscard]] QVariantList portForwardingRules() const;
     [[nodiscard]] QString portForwardingOperationError() const;
     [[nodiscard]] QObject *knownHosts() const noexcept;
+    [[nodiscard]] QObject *keychain() const noexcept;
+    [[nodiscard]] QObject *connectionHistory() const noexcept;
 
     Q_INVOKABLE QString startLocalTerminal();
     Q_INVOKABLE bool activateTerminalTab(const QString &id);
@@ -1111,6 +1118,8 @@ private:
     LocalTerminalSessionFactory m_localSessionFactory;
     std::unique_ptr<windowing::WindowsProtectedClipboard> m_aiClipboard;
     ssh::SshProfileStore m_profileStore;
+    ssh::SshKeychainStore m_keychainStore;
+    ssh::SshKeychainCatalog m_keychain;
     forwarding::PortForwardingRuleStore m_portForwardingStore;
     config::ApplicationSettingsStore m_settingsStore;
     config::ApplicationSettings m_settings;
@@ -1146,6 +1155,8 @@ private:
     QString m_credentialOperationError;
     QString m_knownHostsPath;
     std::unique_ptr<ssh::KnownHostsController> m_knownHostsController;
+    std::unique_ptr<ssh::KeychainController> m_keychainController;
+    std::unique_ptr<logging::ConnectionHistoryController> m_connectionHistoryController;
     std::vector<ssh::SshProfile> m_profiles;
     std::vector<forwarding::PortForwardingRule> m_portForwardingRules;
     std::vector<std::unique_ptr<PortForwardingRuntime>> m_portForwardingRuntimes;

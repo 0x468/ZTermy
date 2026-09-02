@@ -6,11 +6,14 @@
 #include "application/ai/AiTerminalFrameTool.h"
 #include "application/ai/AiUserSkillTool.h"
 #include "application/ai/AiWaitCommandTool.h"
+#include "application/ssh/KeychainController.h"
 #include "application/ssh/KnownHostsController.h"
+#include "application/ssh/SshKeychainMigration.h"
 #include "domain/ai/AiCommandEcho.h"
 #include "domain/ai/AiContextCompactor.h"
 #include "domain/ai/AiContextSerializer.h"
 #include "domain/ai/AiProviderRecoveryPolicy.h"
+#include "domain/ssh/SshIdentityResolver.h"
 #include "domain/ssh/SshTarget.h"
 #include "domain/terminal/ShellPathQuoter.h"
 #include "infrastructure/ai/AiTraceSanitizer.h"
@@ -48,6 +51,7 @@
 #include <QSet>
 #include <QStandardPaths>
 #include <QStringDecoder>
+#include <QSysInfo>
 #include <QThreadPool>
 #include <QTimer>
 #include <QUrl>
@@ -228,6 +232,21 @@ private:
 [[nodiscard]] QString siblingKnownHostsFile(const QString &profileStorePath)
 {
     return QFileInfo(profileStorePath).dir().filePath(QStringLiteral("known_hosts.json"));
+}
+
+[[nodiscard]] QString siblingKeychainFile(const QString &profileStorePath)
+{
+    return QFileInfo(profileStorePath).dir().filePath(QStringLiteral("keychain.json"));
+}
+
+[[nodiscard]] QString siblingKeyDirectory(const QString &profileStorePath)
+{
+    return QFileInfo(profileStorePath).dir().filePath(QStringLiteral("keys"));
+}
+
+[[nodiscard]] QString siblingConnectionHistoryFile(const QString &profileStorePath)
+{
+    return QFileInfo(profileStorePath).dir().filePath(QStringLiteral("connection-history.json"));
 }
 
 [[nodiscard]] QString siblingSettingsFile(const QString &profileStorePath)
@@ -1627,6 +1646,21 @@ mergeJumpProfileIds(const QVariantMap &routeOptions, std::vector<std::string> ju
 }
 
 [[nodiscard]] ztermy::security::CredentialKind credentialKind(const ztermy::ssh::SshProfile &profile) noexcept;
+[[nodiscard]] ztermy::security::CredentialKind
+credentialKind(ztermy::ssh::SshAuthenticationMethod authentication) noexcept;
+
+[[nodiscard]] bool credentialAvailable(const std::vector<ztermy::security::CredentialKey> *availableKeys,
+                                       const std::string &reference,
+                                       const ztermy::ssh::SshAuthenticationMethod authentication)
+{
+    if (availableKeys == nullptr)
+    {
+        return true;
+    }
+    return std::ranges::find(*availableKeys, ztermy::security::CredentialKey{.profileId = reference,
+                                                                             .kind = credentialKind(authentication)})
+           != availableKeys->end();
+}
 
 [[nodiscard]] std::expected<std::vector<ztermy::ssh::SshJumpHostRequest>, ztermy::sftp::TransferCredentialError>
 storedJumpHostRequests(const ztermy::ssh::SshProfile &profile, const std::vector<ztermy::ssh::SshProfile> &profiles,
@@ -1700,9 +1734,13 @@ storedJumpHostRequests(const ztermy::ssh::SshProfile &profile, const std::vector
 
 [[nodiscard]] QVariantMap profileVariantMap(const ztermy::ssh::SshProfile &profile,
                                             const std::vector<ztermy::ssh::SshProfile> &profiles,
+                                            const ztermy::ssh::SshKeychainCatalog &keychain,
                                             const std::vector<ztermy::security::CredentialKey> *availableKeys)
 {
-    const bool credentialStored = profileHasStoredCredential(profile, availableKeys);
+    const auto resolvedIdentity = ztermy::ssh::resolveSshIdentity(profile, keychain);
+    const bool credentialStored =
+        resolvedIdentity && resolvedIdentity->credentialReference
+        && credentialAvailable(availableKeys, *resolvedIdentity->credentialReference, resolvedIdentity->authentication);
     const bool proxyCredentialStored = profileHasStoredProxyCredential(profile, availableKeys);
     QVariantList jumpProfileIds;
     QVariantList jumpProfiles;
@@ -1719,9 +1757,12 @@ storedJumpHostRequests(const ztermy::ssh::SshProfile &profile, const std::vector
             jumpProfilesReady = false;
             continue;
         }
-        const bool jumpCredentialStored = profileHasStoredCredential(*jump, availableKeys);
+        const auto resolvedJump = ztermy::ssh::resolveSshIdentity(*jump, keychain);
+        const bool jumpCredentialStored =
+            resolvedJump && resolvedJump->credentialReference
+            && credentialAvailable(availableKeys, *resolvedJump->credentialReference, resolvedJump->authentication);
         const bool jumpProxyCredentialStored = profileHasStoredProxyCredential(*jump, availableKeys);
-        const bool ready = (!profileRequiresCredential(*jump) || jumpCredentialStored)
+        const bool ready = resolvedJump && (!resolvedJump->credentialRequired || jumpCredentialStored)
                            && (!proxyRequiresCredential(*jump) || jumpProxyCredentialStored);
         jumpProfilesReady = jumpProfilesReady && ready;
         connectionCredentialStored = connectionCredentialStored || jumpCredentialStored || jumpProxyCredentialStored;
@@ -1743,6 +1784,15 @@ storedJumpHostRequests(const ztermy::ssh::SshProfile &profile, const std::vector
         {QStringLiteral("authentication"), authenticationToken(profile.authentication)},
         {QStringLiteral("privateKeyPath"), utf8QString(profile.privateKeyPath)},
         {QStringLiteral("privateKeyPassphraseRequired"), profile.privateKeyPassphraseRequired},
+        {QStringLiteral("identityReference"),
+         profile.identityReference ? utf8QString(*profile.identityReference) : QString{}},
+        {QStringLiteral("identityReady"), resolvedIdentity.has_value()},
+        {QStringLiteral("effectiveUsername"),
+         resolvedIdentity ? utf8QString(resolvedIdentity->username) : utf8QString(profile.username)},
+        {QStringLiteral("effectiveAuthentication"), resolvedIdentity
+                                                        ? authenticationToken(resolvedIdentity->authentication)
+                                                        : authenticationToken(profile.authentication)},
+        {QStringLiteral("credentialRequired"), resolvedIdentity ? resolvedIdentity->credentialRequired : false},
         {QStringLiteral("credentialStored"), credentialStored},
         {QStringLiteral("sessionOptions"), sessionOptionsVariantMap(profile.sessionOptions)},
         {QStringLiteral("proxy"), proxyOptionsVariantMap(profile.proxy, proxyCredentialStored)},
@@ -1973,6 +2023,14 @@ private:
 [[nodiscard]] ztermy::security::CredentialKind credentialKind(const ztermy::ssh::SshProfile &profile) noexcept
 {
     return profile.authentication == ztermy::ssh::SshAuthenticationMethod::Password
+               ? ztermy::security::CredentialKind::Password
+               : ztermy::security::CredentialKind::PrivateKeyPassphrase;
+}
+
+[[nodiscard]] ztermy::security::CredentialKind
+credentialKind(const ztermy::ssh::SshAuthenticationMethod authentication) noexcept
+{
+    return authentication == ztermy::ssh::SshAuthenticationMethod::Password
                ? ztermy::security::CredentialKind::Password
                : ztermy::security::CredentialKind::PrivateKeyPassphrase;
 }
@@ -2383,6 +2441,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
       m_localSessionFactory(std::move(localSessionFactory)),
       m_aiClipboard(std::make_unique<windowing::WindowsProtectedClipboard>()),
       m_profileStore(std::move(profileStorePath)),
+      m_keychainStore(siblingKeychainFile(m_profileStore.filePath())),
       m_portForwardingStore(siblingPortForwardingFile(m_profileStore.filePath())),
       m_settingsStore(settingsPath.isEmpty() ? siblingSettingsFile(m_profileStore.filePath())
                                              : std::move(settingsPath)),
@@ -2424,6 +2483,7 @@ AppController::AppController(QString profileStorePath, QString knownHostsPath, Q
       m_localSessionFactory(std::move(localSessionFactory)),
       m_aiClipboard(std::make_unique<windowing::WindowsProtectedClipboard>()),
       m_profileStore(std::move(profileStorePath)),
+      m_keychainStore(siblingKeychainFile(m_profileStore.filePath())),
       m_portForwardingStore(siblingPortForwardingFile(m_profileStore.filePath())),
       m_settingsStore(settingsPath.isEmpty() ? siblingSettingsFile(m_profileStore.filePath())
                                              : std::move(settingsPath)),
@@ -2459,6 +2519,8 @@ void AppController::initializeRuntime()
     Q_ASSERT(m_localSessionFactory);
     Q_ASSERT(m_credentialVaults);
     m_knownHostsController = std::make_unique<ssh::KnownHostsController>(m_knownHostsPath, this);
+    m_connectionHistoryController = std::make_unique<logging::ConnectionHistoryController>(
+        siblingConnectionHistoryFile(m_profileStore.filePath()), this);
     qRegisterMetaType<ShellHistoryEntries>();
     qRegisterMetaType<NoteSearchResults>();
     qRegisterMetaType<AiTextAttachments>();
@@ -2482,6 +2544,16 @@ void AppController::initializeRuntime()
     initializeAiPrivacySignals();
     initializePortForwardingSignalBridges();
     loadHostProfiles();
+    m_keychainController = std::make_unique<ssh::KeychainController>(m_keychainStore.filePath(),
+                                                                     siblingKeyDirectory(m_profileStore.filePath()),
+                                                                     m_keychain, m_credentialVaults.get(), this);
+    m_keychainController->setProfiles(m_profiles);
+    QObject::connect(m_keychainController.get(), &ssh::KeychainController::catalogChanged, this, [this] {
+        m_keychain = m_keychainController->catalog();
+    });
+    QObject::connect(this, &AppController::hostProfilesChanged, m_keychainController.get(), [this] {
+        m_keychainController->setProfiles(m_profiles);
+    });
     loadPortForwardingRules();
     loadApplicationSettings();
     refreshLocalShellCatalog();
@@ -2754,7 +2826,7 @@ QVariantList AppController::hostProfiles() const
     result.reserve(static_cast<qsizetype>(m_profiles.size()));
     for (const ssh::SshProfile &profile : m_profiles)
     {
-        result.append(profileVariantMap(profile, m_profiles, availableKeys));
+        result.append(profileVariantMap(profile, m_profiles, m_keychain, availableKeys));
     }
     return result;
 }
@@ -2784,7 +2856,7 @@ QVariantList AppController::recentHostProfiles() const
     result.reserve(static_cast<qsizetype>(recent.size()));
     for (const ssh::SshProfile *profile : recent)
     {
-        result.append(profileVariantMap(*profile, m_profiles, availableKeys));
+        result.append(profileVariantMap(*profile, m_profiles, m_keychain, availableKeys));
     }
     return result;
 }
@@ -4392,6 +4464,16 @@ QObject *AppController::knownHosts() const noexcept
     return m_knownHostsController.get();
 }
 
+QObject *AppController::keychain() const noexcept
+{
+    return m_keychainController.get();
+}
+
+QObject *AppController::connectionHistory() const noexcept
+{
+    return m_connectionHistoryController.get();
+}
+
 QString AppController::startLocalTerminal()
 {
     return startLocalTerminalAt({});
@@ -4465,6 +4547,23 @@ QString AppController::startLocalTerminalAt(const QString &workingDirectory, con
     timing.mark("tab-list-published");
     activateTerminalTab(tabId);
     timing.mark("tab-published");
+
+    if (m_connectionHistoryController)
+    {
+        const QString machine = QSysInfo::machineHostName();
+        m_connectionHistoryController->recordStarted({
+            .id = utf8String(tabId),
+            .sessionId = utf8String(tabId),
+            .hostLabel = utf8String(preferredTitle.trimmed().isEmpty() ? shell->name : preferredTitle.trimmed()),
+            .hostname = "localhost",
+            .protocol = "local",
+            .localUsername = utf8String(qEnvironmentVariable("USERNAME", QStringLiteral("unknown"))),
+            .localHostname = utf8String(machine.isEmpty() ? QStringLiteral("localhost") : machine),
+            .status = "connecting",
+            .phase = "opening-terminal",
+            .startedUtcMs = QDateTime::currentMSecsSinceEpoch(),
+        });
+    }
 
     TerminalTab *created = findTab(tabId);
     if (created == nullptr || !created->local)
@@ -4584,6 +4683,10 @@ bool AppController::closeTerminalTabInternal(const QString &id, const bool recor
         if (tab->id == m_hostKeyTabId)
         {
             clearHostKeyPrompt();
+        }
+        if (m_connectionHistoryController)
+        {
+            m_connectionHistoryController->recordEnded(tab->id);
         }
         if (tab->local)
         {
@@ -7415,6 +7518,25 @@ bool AppController::startSshConnection(ssh::SshConnectionRequest request, QStrin
     activateTerminalTab(tabId);
     timing.mark("tab-published");
 
+    if (m_connectionHistoryController)
+    {
+        const QString machine = QSysInfo::machineHostName();
+        m_connectionHistoryController->recordStarted({
+            .id = utf8String(tabId),
+            .sessionId = utf8String(tabId),
+            .profileId = profileId,
+            .hostLabel = utf8String(profileName.isEmpty() ? fallbackTitle : profileName),
+            .hostname = utf8String(request.host),
+            .username = utf8String(request.username),
+            .protocol = "ssh",
+            .localUsername = utf8String(qEnvironmentVariable("USERNAME", QStringLiteral("unknown"))),
+            .localHostname = utf8String(machine.isEmpty() ? QStringLiteral("localhost") : machine),
+            .status = "connecting",
+            .phase = "resolving",
+            .startedUtcMs = QDateTime::currentMSecsSinceEpoch(),
+        });
+    }
+
     TerminalTab *created = findTab(tabId);
     if (created == nullptr || !created->ssh)
     {
@@ -8096,11 +8218,32 @@ bool AppController::saveHostProfileInternal(const QString &id, const QString &na
     {
         return false;
     }
-    const bool supportsCredential = *authenticationMethod != ssh::SshAuthenticationMethod::Agent;
-    const bool effectiveRememberCredential = rememberCredential && supportsCredential;
-
     const std::string storedProfileId = utf8String(profileId);
     const auto storedProfile = std::ranges::find(m_profiles, storedProfileId, &ssh::SshProfile::id);
+    std::optional<std::string> resolvedIdentityReference =
+        storedProfile == m_profiles.end() ? std::nullopt : storedProfile->identityReference;
+    if (routeOptions.contains(QStringLiteral("identityReference")))
+    {
+        const QString requestedIdentity = routeOptions.value(QStringLiteral("identityReference")).toString().trimmed();
+        if (requestedIdentity.isEmpty())
+        {
+            resolvedIdentityReference.reset();
+        }
+        else
+        {
+            const std::string requestedId = utf8String(requestedIdentity);
+            if (std::ranges::find(m_keychain.identities, requestedId, &ssh::SshIdentity::id)
+                == m_keychain.identities.end())
+            {
+                setCredentialOperationError(tr("Select an identity that still exists in the keychain."));
+                return false;
+            }
+            resolvedIdentityReference = requestedId;
+        }
+    }
+    const bool supportsCredential =
+        !resolvedIdentityReference && *authenticationMethod != ssh::SshAuthenticationMethod::Agent;
+    const bool effectiveRememberCredential = rememberCredential && supportsCredential;
     ssh::SshSessionOptions resolvedSessionOptions =
         storedProfile == m_profiles.end() ? ssh::SshSessionOptions{} : storedProfile->sessionOptions;
     if (!sessionOptions.isEmpty())
@@ -8139,6 +8282,7 @@ bool AppController::saveHostProfileInternal(const QString &id, const QString &na
         .host = utf8String(normalizedHost),
         .port = port > 0 && port <= 65535 ? static_cast<std::uint16_t>(port) : std::uint16_t{0},
         .username = utf8String(normalizedUsername),
+        .identityReference = std::move(resolvedIdentityReference),
         .authentication = *authenticationMethod,
         .privateKeyPath = *authenticationMethod == ssh::SshAuthenticationMethod::PrivateKey
                               ? utf8String(normalizedPrivateKeyPath)
@@ -8477,8 +8621,32 @@ bool AppController::forgetHostCredential(const QString &id)
 bool AppController::saveHostCredential(const QString &id, const QString &secret)
 {
     const auto profile = std::ranges::find(m_profiles, utf8String(id.trimmed()), &ssh::SshProfile::id);
-    if (profile == m_profiles.end() || profile->authentication == ssh::SshAuthenticationMethod::Agent
-        || secret.isEmpty())
+    if (profile == m_profiles.end() || secret.isEmpty())
+    {
+        return false;
+    }
+    if (profile->identityReference)
+    {
+        const auto resolved = ssh::resolveSshIdentity(*profile, m_keychain);
+        if (!resolved || resolved->authentication == ssh::SshAuthenticationMethod::Agent
+            || !resolved->credentialReference)
+        {
+            return false;
+        }
+        auto stored = m_credentialVaults->active().store(
+            {.profileId = *resolved->credentialReference, .kind = credentialKind(resolved->authentication)},
+            security::SensitiveByteArray(secret.toUtf8()));
+        if (!stored)
+        {
+            setCredentialOperationError(credentialVaultErrorMessage(stored.error()));
+            return false;
+        }
+        setCredentialOperationError({});
+        emit credentialVaultChanged();
+        emit hostProfilesChanged();
+        return true;
+    }
+    if (profile->authentication == ssh::SshAuthenticationMethod::Agent)
     {
         return false;
     }
@@ -8554,13 +8722,20 @@ std::optional<ssh::SshConnectionRequest> AppController::connectionRequestForProf
                                                                                     const QString &secret,
                                                                                     const QString &proxySecret)
 {
-    security::SensitiveByteArray connectionSecret = profile.authentication == ssh::SshAuthenticationMethod::Agent
-                                                        ? security::SensitiveByteArray{}
-                                                        : security::SensitiveByteArray(secret.toUtf8());
-    if (connectionSecret.empty() && profile.credentialReference)
+    const auto resolvedProfile = ssh::resolveSshIdentity(profile, m_keychain);
+    if (!resolvedProfile)
     {
-        auto stored = m_credentialVaults->active().read(
-            {.profileId = *profile.credentialReference, .kind = credentialKind(profile)});
+        setCredentialOperationError(tr("The identity selected by this host is missing or incomplete."));
+        return std::nullopt;
+    }
+    security::SensitiveByteArray connectionSecret =
+        resolvedProfile->authentication == ssh::SshAuthenticationMethod::Agent
+            ? security::SensitiveByteArray{}
+            : security::SensitiveByteArray(secret.toUtf8());
+    if (connectionSecret.empty() && resolvedProfile->credentialReference)
+    {
+        auto stored = m_credentialVaults->active().read({.profileId = *resolvedProfile->credentialReference,
+                                                         .kind = credentialKind(resolvedProfile->authentication)});
         if (!stored)
         {
             setCredentialOperationError(credentialVaultErrorMessage(stored.error()));
@@ -8568,8 +8743,7 @@ std::optional<ssh::SshConnectionRequest> AppController::connectionRequestForProf
         }
         connectionSecret = std::move(*stored);
     }
-    if ((profile.authentication == ssh::SshAuthenticationMethod::Password || profile.privateKeyPassphraseRequired)
-        && connectionSecret.empty())
+    if (resolvedProfile->credentialRequired && connectionSecret.empty())
     {
         setCredentialOperationError(tr("Enter the credential required by this host."));
         return std::nullopt;
@@ -8602,11 +8776,19 @@ std::optional<ssh::SshConnectionRequest> AppController::connectionRequestForProf
             return std::nullopt;
         }
 
-        security::SensitiveByteArray jumpSecret;
-        if (jump->credentialReference)
+        const auto resolvedJump = ssh::resolveSshIdentity(*jump, m_keychain);
+        if (!resolvedJump)
         {
-            auto stored = m_credentialVaults->active().read(
-                {.profileId = *jump->credentialReference, .kind = credentialKind(*jump)});
+            setCredentialOperationError(
+                tr("The identity selected by jump host \"%1\" is missing or incomplete.").arg(utf8QString(jump->name)));
+            return std::nullopt;
+        }
+
+        security::SensitiveByteArray jumpSecret;
+        if (resolvedJump->credentialReference)
+        {
+            auto stored = m_credentialVaults->active().read({.profileId = *resolvedJump->credentialReference,
+                                                             .kind = credentialKind(resolvedJump->authentication)});
             if (!stored)
             {
                 setCredentialOperationError(credentialVaultErrorMessage(stored.error()));
@@ -8614,7 +8796,7 @@ std::optional<ssh::SshConnectionRequest> AppController::connectionRequestForProf
             }
             jumpSecret = std::move(*stored);
         }
-        if (profileRequiresCredential(*jump) && jumpSecret.empty())
+        if (resolvedJump->credentialRequired && jumpSecret.empty())
         {
             setCredentialOperationError(
                 tr("Save the credential for jump host \"%1\" before using this chain.").arg(utf8QString(jump->name)));
@@ -8645,9 +8827,10 @@ std::optional<ssh::SshConnectionRequest> AppController::connectionRequestForProf
             .displayName = utf8QString(jump->name),
             .host = utf8QString(jump->host),
             .port = jump->port,
-            .username = utf8QString(jump->username),
-            .authentication = jump->authentication,
-            .privateKeyPath = utf8QString(jump->privateKeyPath),
+            .username = utf8QString(resolvedJump->username),
+            .authentication = resolvedJump->authentication,
+            .privateKeyPath = utf8QString(resolvedJump->privateKeyPath),
+            .publicKeyPath = utf8QString(resolvedJump->publicKeyPath),
             .secret = std::move(jumpSecret),
             .proxy = jump->proxy,
             .proxySecret = std::move(jumpProxySecret),
@@ -8658,9 +8841,10 @@ std::optional<ssh::SshConnectionRequest> AppController::connectionRequestForProf
     return ssh::SshConnectionRequest{
         .host = utf8QString(profile.host),
         .port = profile.port,
-        .username = utf8QString(profile.username),
-        .authentication = profile.authentication,
-        .privateKeyPath = utf8QString(profile.privateKeyPath),
+        .username = utf8QString(resolvedProfile->username),
+        .authentication = resolvedProfile->authentication,
+        .privateKeyPath = utf8QString(resolvedProfile->privateKeyPath),
+        .publicKeyPath = utf8QString(resolvedProfile->publicKeyPath),
         .secret = std::move(connectionSecret),
         .proxy = profile.proxy,
         .proxySecret = std::move(connectionProxySecret),
@@ -14320,6 +14504,10 @@ void AppController::initializeSessionLog(TerminalTab &tab)
                 terminal->setStatusText(updated->status);
             }
         }
+        if (m_connectionHistoryController && updated->sessionLog->state() == logging::SessionLogState::Active)
+        {
+            m_connectionHistoryController->setRawLogPath(tabId, updated->sessionLog->path());
+        }
         emit terminalTabsChanged();
     });
 }
@@ -14578,6 +14766,18 @@ void AppController::connectLocalTabSignals(TerminalTab &tab)
                              {
                                  updated->connectedUtcMs = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
                              }
+                             if (m_connectionHistoryController)
+                             {
+                                 if (running)
+                                 {
+                                     m_connectionHistoryController->recordPhase(tabId, QStringLiteral("connected"),
+                                                                                QStringLiteral("connected"));
+                                 }
+                                 else
+                                 {
+                                     m_connectionHistoryController->recordEnded(tabId);
+                                 }
+                             }
                              emit terminalTabsChanged();
                          }
                      });
@@ -14679,6 +14879,16 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
                          if (TerminalTab *updated = findTab(tabId))
                          {
                              updated->sshPhase = phase;
+                             if (m_connectionHistoryController)
+                             {
+                                 const QString status =
+                                     phase == ssh::SshConnectionPhase::Connected ? QStringLiteral("connected")
+                                     : phase == ssh::SshConnectionPhase::Failed  ? QStringLiteral("failed")
+                                                                                 : QStringLiteral("connecting");
+                                 m_connectionHistoryController->recordPhase(
+                                     tabId, sshConnectionPhaseToken(phase), status,
+                                     updated->sshFailure ? ssh::sshFailureStatus(*updated->sshFailure) : QString{});
+                             }
                              if (phase == ssh::SshConnectionPhase::Connected)
                              {
                                  updated->reconnectPending = false;
@@ -14698,6 +14908,12 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
                          if (TerminalTab *updated = findTab(tabId))
                          {
                              updated->sshFailure = failure;
+                             if (m_connectionHistoryController)
+                             {
+                                 m_connectionHistoryController->recordPhase(
+                                     tabId, sshConnectionPhaseToken(updated->sshPhase), QStringLiteral("failed"),
+                                     ssh::sshFailureStatus(failure));
+                             }
                              scheduleTerminalTabsChanged();
                          }
                      });
@@ -16052,6 +16268,41 @@ void AppController::loadHostProfiles()
         qCWarning(appControllerLog) << "Recovered SSH profiles from the last-known-good backup";
         recordPersistenceRecovery();
     }
+
+    auto keychain = m_keychainStore.load();
+    if (!keychain)
+    {
+        qCWarning(appControllerLog) << "Unable to load SSH keychain; legacy profile authentication remains active";
+        return;
+    }
+    m_keychain = std::move(*keychain);
+    if (m_keychainStore.lastLoadRecoveredFromBackup())
+    {
+        qCWarning(appControllerLog) << "Recovered SSH keychain from the last-known-good backup";
+        recordPersistenceRecovery();
+    }
+    auto migration = ssh::planLegacyKeychainMigration(m_profiles, m_keychain);
+    if (!migration)
+    {
+        qCWarning(appControllerLog) << "Unable to plan SSH keychain migration; legacy profiles remain active";
+        return;
+    }
+    if (!migration->changed)
+    {
+        return;
+    }
+    if (!m_keychainStore.save(migration->catalog))
+    {
+        qCWarning(appControllerLog) << "Unable to persist migrated SSH keychain; legacy profiles remain active";
+        return;
+    }
+    m_keychain = migration->catalog;
+    if (!m_profileStore.save(migration->profiles))
+    {
+        qCWarning(appControllerLog) << "Unable to attach migrated SSH identities to profiles; retrying next launch";
+        return;
+    }
+    m_profiles = std::move(migration->profiles);
 }
 
 void AppController::loadApplicationSettings()

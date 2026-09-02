@@ -351,16 +351,18 @@ authenticateEndpoint(Endpoint &endpoint, SshByteTransport &transport, const QStr
     publishPhase(callbacks, SshConnectionPhase::Authenticating);
     const QByteArray usernameUtf8 = endpoint.username.toUtf8();
     const QByteArray privateKeyPathUtf8 = endpoint.privateKeyPath.toUtf8();
+    const QByteArray publicKeyPathUtf8 = endpoint.publicKeyPath.toUtf8();
     const std::string username(usernameUtf8.constData(), static_cast<std::size_t>(usernameUtf8.size()));
     const std::string privateKeyPath(privateKeyPathUtf8.constData(),
                                      static_cast<std::size_t>(privateKeyPathUtf8.size()));
+    const std::string publicKeyPath(publicKeyPathUtf8.constData(), static_cast<std::size_t>(publicKeyPathUtf8.size()));
     std::expected<void, SshTransportError> authentication;
     switch (endpoint.authentication)
     {
         case SshAuthenticationMethod::PrivateKey:
-            authentication =
-                (*session)->authenticateWithPrivateKeyFile(transport, username, privateKeyPath, endpoint.secret.view(),
-                                                           endpointAuthenticationTimeout(endpoint), stopToken);
+            authentication = (*session)->authenticateWithPrivateKeyFile(
+                transport, username, privateKeyPath, publicKeyPath, endpoint.secret.view(),
+                endpointAuthenticationTimeout(endpoint), stopToken);
             break;
         case SshAuthenticationMethod::Password:
             authentication = (*session)->authenticateWithPassword(transport, username, endpoint.secret.view(),

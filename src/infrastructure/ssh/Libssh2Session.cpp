@@ -547,14 +547,13 @@ Libssh2Session::authenticateWithPassword(SshByteTransport &transport, const std:
     }
 }
 
-std::expected<void, SshTransportError>
-Libssh2Session::authenticateWithPrivateKeyFile(SshByteTransport &transport, const std::string_view username,
-                                               const std::string_view privateKeyPath, const std::string_view passphrase,
-                                               const std::chrono::milliseconds timeout,
-                                               const std::stop_token &stopToken) noexcept
+std::expected<void, SshTransportError> Libssh2Session::authenticateWithPrivateKeyFile(
+    SshByteTransport &transport, const std::string_view username, const std::string_view privateKeyPath,
+    const std::string_view publicKeyPath, const std::string_view passphrase, const std::chrono::milliseconds timeout,
+    const std::stop_token &stopToken) noexcept
 {
     if (username.empty() || privateKeyPath.empty() || privateKeyPath.find('\0') != std::string_view::npos
-        || passphrase.find('\0') != std::string_view::npos
+        || publicKeyPath.find('\0') != std::string_view::npos || passphrase.find('\0') != std::string_view::npos
         || username.size() > static_cast<std::size_t>((std::numeric_limits<unsigned int>::max)()))
     {
         return std::unexpected(SshTransportError{.kind = SshTransportErrorKind::InvalidArgument});
@@ -576,14 +575,16 @@ Libssh2Session::authenticateWithPrivateKeyFile(SshByteTransport &transport, cons
     try
     {
         const std::string privateKeyPathCopy(privateKeyPath);
+        const std::string publicKeyPathCopy(publicKeyPath);
         const SensitiveString passphraseCopy(passphrase);
         auto *session = static_cast<LIBSSH2_SESSION *>(m_session);
         const auto deadline = std::chrono::steady_clock::now() + timeout;
         while (true)
         {
             const int result = libssh2_userauth_publickey_fromfile_ex(
-                session, username.data(), static_cast<unsigned int>(username.size()), nullptr,
-                privateKeyPathCopy.c_str(), passphraseCopy.c_str());
+                session, username.data(), static_cast<unsigned int>(username.size()),
+                publicKeyPathCopy.empty() ? nullptr : publicKeyPathCopy.c_str(), privateKeyPathCopy.c_str(),
+                passphraseCopy.c_str());
             if (result == 0)
             {
                 m_authenticated = true;

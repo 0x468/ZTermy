@@ -194,6 +194,7 @@ bool validSshProfile(const SshProfile &profile) noexcept
     if (!nonEmptyWithin(profile.id, maximumIdLength) || !nonEmptyWithin(profile.name, maximumNameLength)
         || profile.group.size() > maximumGroupLength || !nonEmptyWithin(profile.host, maximumHostLength)
         || !nonEmptyWithin(profile.username, maximumUsernameLength) || profile.port == 0
+        || !validCredentialReference(profile.identityReference)
         || !validCredentialReference(profile.credentialReference)
         || profile.keywordHighlightRules.size() > maximumKeywordRuleCount
         || !std::ranges::all_of(profile.keywordHighlightRules, validKeywordHighlightRule)

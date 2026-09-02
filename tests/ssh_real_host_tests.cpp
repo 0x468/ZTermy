@@ -184,7 +184,7 @@ void SshRealHostTests::authenticatesWithExplicitPrivateKey()
 
     const std::string username(usernameValue.constData(), static_cast<std::size_t>(usernameValue.size()));
     const std::string privateKey(privateKeyValue.constData(), static_cast<std::size_t>(privateKeyValue.size()));
-    auto authentication = (*session)->authenticateWithPrivateKeyFile(*socket, username, privateKey, {}, 10s);
+    auto authentication = (*session)->authenticateWithPrivateKeyFile(*socket, username, privateKey, {}, {}, 10s);
     if (!authentication)
     {
         QFAIL(qPrintable(QStringLiteral("Private-key authentication failed: kind=%1 libssh2=%2")
@@ -255,7 +255,7 @@ void SshRealHostTests::authenticatesThroughConfiguredProxy()
 
     const std::string username(usernameValue.constData(), static_cast<std::size_t>(usernameValue.size()));
     const std::string privateKey(privateKeyValue.constData(), static_cast<std::size_t>(privateKeyValue.size()));
-    QVERIFY((*session)->authenticateWithPrivateKeyFile(*socket, username, privateKey, {}, 10s));
+    QVERIFY((*session)->authenticateWithPrivateKeyFile(*socket, username, privateKey, {}, {}, 10s));
     qInfo("Private-key authentication through the configured proxy succeeded");
 }
 
@@ -301,7 +301,7 @@ void SshRealHostTests::authenticatesThroughConfiguredJumpHost()
     QCOMPARE(*outerTrust, ztermy::ssh::HostKeyTrust::Trusted);
     const std::string username(usernameValue.constData(), static_cast<std::size_t>(usernameValue.size()));
     const std::string privateKey(privateKeyValue.constData(), static_cast<std::size_t>(privateKeyValue.size()));
-    QVERIFY((*outerSession)->authenticateWithPrivateKeyFile(*outerTransport, username, privateKey, {}, 10s));
+    QVERIFY((*outerSession)->authenticateWithPrivateKeyFile(*outerTransport, username, privateKey, {}, {}, 10s));
 
     auto tunneled = ztermy::ssh::SshDirectTcpipTransport::create(std::move(outerTransport), std::move(*outerSession),
                                                                  host, port, 10s);
@@ -316,7 +316,7 @@ void SshRealHostTests::authenticatesThroughConfiguredJumpHost()
     auto innerTrust = (*innerSession)->verifyHostKey(endpoint, knownHosts);
     QVERIFY(innerTrust);
     QCOMPARE(*innerTrust, ztermy::ssh::HostKeyTrust::Trusted);
-    QVERIFY((*innerSession)->authenticateWithPrivateKeyFile(*innerTransport, username, privateKey, {}, 10s));
+    QVERIFY((*innerSession)->authenticateWithPrivateKeyFile(*innerTransport, username, privateKey, {}, {}, 10s));
     qInfo("Private-key authentication through the configured jump host succeeded");
 }
 
@@ -426,7 +426,7 @@ void SshRealHostTests::opensAndClosesTerminalWithExplicitPrivateKey()
 
     const std::string username(usernameValue.constData(), static_cast<std::size_t>(usernameValue.size()));
     const std::string privateKey(privateKeyValue.constData(), static_cast<std::size_t>(privateKeyValue.size()));
-    QVERIFY((*session)->authenticateWithPrivateKeyFile(*socket, username, privateKey, {}, 10s));
+    QVERIFY((*session)->authenticateWithPrivateKeyFile(*socket, username, privateKey, {}, {}, 10s));
 
     auto open = (*session)->openTerminal(*socket, 80, 24, "xterm-256color", 10s);
     QVERIFY(open);
@@ -486,7 +486,7 @@ void SshRealHostTests::listsSftpDirectoryWithExplicitPrivateKey()
 
     const std::string username(usernameValue.constData(), static_cast<std::size_t>(usernameValue.size()));
     const std::string privateKey(privateKeyValue.constData(), static_cast<std::size_t>(privateKeyValue.size()));
-    QVERIFY((*session)->authenticateWithPrivateKeyFile(*socket, username, privateKey, {}, 10s));
+    QVERIFY((*session)->authenticateWithPrivateKeyFile(*socket, username, privateKey, {}, {}, 10s));
     QVERIFY((*session)->openSftp(*socket, 10s));
     QVERIFY((*session)->sftpOpen());
 

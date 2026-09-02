@@ -1710,7 +1710,7 @@ Rectangle {
                     actionObjectName: "sideCredentialsAction"
                     Layout.fillWidth: true
                     iconName: "security"
-                    text: qsTr("Credentials")
+                    text: qsTr("Keychain")
                     compact: root.workspaceNavigationCompact
                     selected: root.workspaceSection === "credentials"
                     onActivated: root.workspaceSection = "credentials"

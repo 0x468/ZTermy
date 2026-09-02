@@ -211,22 +211,22 @@ void SshHandshakeTests::rejectsInvalidPrivateKeyCredentials()
         QFAIL("libssh2 session creation failed");
     }
 
-    auto emptyUsername = (*session)->authenticateWithPrivateKeyFile(socket, {}, "key", {}, 2s);
+    auto emptyUsername = (*session)->authenticateWithPrivateKeyFile(socket, {}, "key", {}, {}, 2s);
     QVERIFY(!emptyUsername);
     QCOMPARE(emptyUsername.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidArgument);
 
-    auto emptyPath = (*session)->authenticateWithPrivateKeyFile(socket, "user", {}, {}, 2s);
+    auto emptyPath = (*session)->authenticateWithPrivateKeyFile(socket, "user", {}, {}, {}, 2s);
     QVERIFY(!emptyPath);
     QCOMPARE(emptyPath.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidArgument);
 
     const std::string embeddedNullPath("key\0path", 8);
-    auto invalidPath = (*session)->authenticateWithPrivateKeyFile(socket, "user", embeddedNullPath, {}, 2s);
+    auto invalidPath = (*session)->authenticateWithPrivateKeyFile(socket, "user", embeddedNullPath, {}, {}, 2s);
     QVERIFY(!invalidPath);
     QCOMPARE(invalidPath.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidArgument);
 
     const std::string embeddedNullPassphrase("pass\0phrase", 11);
     auto invalidPassphrase =
-        (*session)->authenticateWithPrivateKeyFile(socket, "user", "key", embeddedNullPassphrase, 2s);
+        (*session)->authenticateWithPrivateKeyFile(socket, "user", "key", {}, embeddedNullPassphrase, 2s);
     QVERIFY(!invalidPassphrase);
     QCOMPARE(invalidPassphrase.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidArgument);
 }
@@ -242,7 +242,7 @@ void SshHandshakeTests::rejectsPrivateKeyAuthenticationBeforeHandshake()
         QFAIL("libssh2 session creation failed");
     }
 
-    auto result = (*session)->authenticateWithPrivateKeyFile(peer.socket, "user", "key", {}, 2s);
+    auto result = (*session)->authenticateWithPrivateKeyFile(peer.socket, "user", "key", {}, {}, 2s);
     QVERIFY(!result);
     QCOMPARE(result.error().kind, ztermy::ssh::SshTransportErrorKind::InvalidState);
     QVERIFY(!(*session)->authenticated());

@@ -20,6 +20,7 @@ struct SshJumpHostRequest final
     QString username;
     SshAuthenticationMethod authentication = SshAuthenticationMethod::PrivateKey;
     QString privateKeyPath;
+    QString publicKeyPath;
     security::SensitiveByteArray secret;
     SshProxyOptions proxy;
     security::SensitiveByteArray proxySecret;
@@ -34,6 +35,7 @@ struct SshConnectionRequest final
     QString username;
     SshAuthenticationMethod authentication = SshAuthenticationMethod::PrivateKey;
     QString privateKeyPath;
+    QString publicKeyPath;
     security::SensitiveByteArray secret;
     SshProxyOptions proxy;
     security::SensitiveByteArray proxySecret;
