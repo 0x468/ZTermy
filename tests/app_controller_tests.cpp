@@ -219,6 +219,7 @@ private slots:
     void managesFreshTerminalTabWorkflows();
     void managesPersistentTerminalWorkspaceSplits();
     void importsExportsAndQuarantinesFailedWorkspaceRestore();
+    void importsOpenSshProfilesAndJumpRoutes();
     void restoresSavedSshWorkspaceWithoutConnecting();
     void managesSessionAppearanceAndStructuredRecording();
     void orderlyShutdownStopsAllLocalTabsOnce();
@@ -2324,9 +2325,12 @@ void AppControllerTests::managesPersistentTerminalWorkspaceSplits()
         workspace = controller.activeTerminalWorkspace();
         root = workspace.value(QStringLiteral("root")).toMap();
         QCOMPARE(root.value(QStringLiteral("orientation")).toString(), QStringLiteral("vertical"));
-        const QString restoredFirstPane = root.value(QStringLiteral("first")).toMap().value(QStringLiteral("id")).toString();
-        const QString restoredSecondPane = root.value(QStringLiteral("second")).toMap().value(QStringLiteral("id")).toString();
-        QVERIFY(controller.moveTerminalPane(restoredSecondPane, restoredFirstPane, QStringLiteral("horizontal"), false));
+        const QString restoredFirstPane =
+            root.value(QStringLiteral("first")).toMap().value(QStringLiteral("id")).toString();
+        const QString restoredSecondPane =
+            root.value(QStringLiteral("second")).toMap().value(QStringLiteral("id")).toString();
+        QVERIFY(
+            controller.moveTerminalPane(restoredSecondPane, restoredFirstPane, QStringLiteral("horizontal"), false));
         QCOMPARE(controller.activeTerminalWorkspace()
                      .value(QStringLiteral("root"))
                      .toMap()
@@ -2412,6 +2416,40 @@ void AppControllerTests::importsExportsAndQuarantinesFailedWorkspaceRestore()
     QVERIFY(quarantined.retryQuarantinedTerminalPane(paneId));
     QCOMPARE(quarantineState->starts, 2);
     QVERIFY(!quarantined.terminalTabs().constFirst().toMap().value(QStringLiteral("restoreQuarantined")).toBool());
+}
+
+void AppControllerTests::importsOpenSshProfilesAndJumpRoutes()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString configPath = directory.filePath(QStringLiteral("config"));
+    QFile config(configPath);
+    QVERIFY(config.open(QIODevice::WriteOnly));
+    config.write(
+        "Host gateway\n HostName 192.168.1.22\n User root\n"
+        "Host app\n HostName app.example.test\n User deploy\n IdentityFile ./id_ed25519\n ProxyJump gateway\n");
+    config.close();
+
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")));
+    QSignalSpy changed(&controller, &ztermy::AppController::workspaceOperationChanged);
+    QVERIFY(controller.importOpenSshConfig(QUrl::fromLocalFile(configPath).toString()));
+    QTRY_VERIFY_WITH_TIMEOUT(changed.count() >= 2, 2'000);
+    QCOMPARE(controller.hostProfiles().size(), 2);
+
+    const auto profileByName = [&controller](const QString &name) {
+        const QVariantList profiles = controller.hostProfiles();
+        const auto position = std::ranges::find(profiles, name, [](const QVariant &value) {
+            return value.toMap().value(QStringLiteral("name")).toString();
+        });
+        return position == profiles.end() ? QVariantMap{} : position->toMap();
+    };
+    const QVariantMap gateway = profileByName(QStringLiteral("gateway"));
+    const QVariantMap app = profileByName(QStringLiteral("app"));
+    QCOMPARE(gateway.value(QStringLiteral("group")).toString(), QStringLiteral("OpenSSH"));
+    QCOMPARE(app.value(QStringLiteral("authentication")).toString(), QStringLiteral("private-key"));
+    QCOMPARE(app.value(QStringLiteral("jumpProfileIds")).toList().size(), 1);
+    QCOMPARE(app.value(QStringLiteral("jumpProfileIds")).toList().front().toString(),
+             gateway.value(QStringLiteral("id")).toString());
 }
 
 void AppControllerTests::restoresSavedSshWorkspaceWithoutConnecting()

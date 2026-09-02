@@ -52,6 +52,7 @@ Rectangle {
     signal connectionStarted
     signal securitySettingsRequested
     signal localTerminalRequested
+    signal openSshImportRequested
 
     color: backgroundColor
     palette.base: Theme.raisedBackground
@@ -774,6 +775,15 @@ Rectangle {
                     iconName: "terminal"
                     accessibleName: qsTr("Open local terminal")
                     onClicked: pane.localTerminalRequested()
+                }
+
+                ActionButton {
+                    objectName: "hostImportOpenSsh"
+                    visible: !pane.compactLayout
+                    text: qsTr("Import SSH")
+                    iconName: "upload"
+                    accessibleName: qsTr("Import or synchronize OpenSSH configuration")
+                    onClicked: pane.openSshImportRequested()
                 }
 
                 ActionButton {

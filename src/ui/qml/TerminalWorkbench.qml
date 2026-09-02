@@ -140,7 +140,7 @@ Rectangle {
     focus: visible
     Keys.onEscapePressed: closeRequested()
     Accessible.role: Accessible.Pane
-    Accessible.name: currentPage === "sftp" ? qsTr("SFTP file browser") : currentPage === "history" ? qsTr("Command history") : currentPage === "notes" ? qsTr("Notes") : currentPage === "ai" ? qsTr("Terminal AI assistant") : qsTr("Scripts")
+    Accessible.name: currentPage === "sftp" ? qsTr("Remote files") : currentPage === "history" ? qsTr("Command history") : currentPage === "notes" ? qsTr("Notes") : currentPage === "ai" ? qsTr("Terminal AI assistant") : qsTr("Scripts")
     onVisibleChanged: {
         if (visible && currentPage === "history" && controller.terminalHistoryState === "idle") {
             controller.refreshTerminalHistory();
@@ -252,14 +252,14 @@ Rectangle {
                     checked: workbench.currentPage === "sftp"
                     selected: checked
                     onClicked: workbench.controller.toggleTerminalWorkbench("sftp")
-                    Accessible.name: qsTr("SFTP file browser")
+                    Accessible.name: qsTr("Remote files")
                     contentItem: AppIcon {
                         name: "folder"
                         color: sftpPageButton.checked ? Theme.accent : Theme.textSoft
                     }
 
                     AppToolTip {
-                        text: qsTr("SFTP files")
+                        text: qsTr("Remote files")
                     }
                 }
 

@@ -23,6 +23,7 @@
 #include "application/terminal/LocalTerminalSession.h"
 #include "application/terminal/WindowsLocalShellCatalog.h"
 #include "application/workbench/CommandHistoryController.h"
+#include "application/workbench/LocalFileBrowserController.h"
 #include "core/config/ApplicationPaths.h"
 #include "core/config/ApplicationSettings.h"
 #include "domain/ai/AiCommandTracker.h"
@@ -258,6 +259,7 @@ class AppController final : public QObject
     Q_PROPERTY(QObject *knownHosts READ knownHosts CONSTANT)
     Q_PROPERTY(QObject *keychain READ keychain CONSTANT)
     Q_PROPERTY(QObject *connectionHistory READ connectionHistory CONSTANT)
+    Q_PROPERTY(QObject *localFiles READ localFiles CONSTANT)
 
 public:
     using LocalTerminalSessionFactory = std::function<std::unique_ptr<terminal::LocalTerminalSessionBackend>()>;
@@ -431,6 +433,7 @@ public:
     [[nodiscard]] QObject *knownHosts() const noexcept;
     [[nodiscard]] QObject *keychain() const noexcept;
     [[nodiscard]] QObject *connectionHistory() const noexcept;
+    [[nodiscard]] QObject *localFiles() const noexcept;
 
     Q_INVOKABLE QString startLocalTerminal();
     Q_INVOKABLE bool activateTerminalTab(const QString &id);
@@ -470,6 +473,7 @@ public:
     Q_INVOKABLE bool copyActiveTerminalAddress();
     Q_INVOKABLE bool copyActiveSftpPath();
     Q_INVOKABLE bool insertTerminalCommand(const QString &command);
+    Q_INVOKABLE bool insertLocalFilePath(const QString &path);
     Q_INVOKABLE bool openTerminalLink(const QString &uri);
     Q_INVOKABLE bool runTerminalCommand(const QString &command);
     Q_INVOKABLE bool startTerminalLog(const QString &localFileUrl);
@@ -504,6 +508,7 @@ public:
     Q_INVOKABLE bool exportQuickCommands(const QString &localFileUrl);
     Q_INVOKABLE bool exportWorkspace(const QString &localFileUrl);
     Q_INVOKABLE bool importWorkspace(const QString &localFileUrl);
+    Q_INVOKABLE bool importOpenSshConfig(const QString &localFileUrl = {});
     Q_INVOKABLE void refreshNotes();
     Q_INVOKABLE bool openNote(const QString &relativePath, bool discardUnsavedChanges = false);
     Q_INVOKABLE void updateActiveNoteContent(const QString &content);
@@ -740,6 +745,7 @@ signals:
     void portForwardingRulesChanged();
     void startupRecoveryNoticeChanged();
     void workspaceOperationChanged();
+    void openSshConfigImportCompleted(QVariantList hosts, QString error);
 
 private:
     Q_SIGNAL void terminalHistoryTaskCompleted(const QString &tabId, quint64 requestId, ShellHistoryEntries entries,
@@ -1052,6 +1058,7 @@ private:
     void loadAiQuickMessages();
     void loadQuickCommands();
     void loadWorkspaceState();
+    void applyOpenSshConfigImport(const QVariantList &hosts, const QString &error);
     void restoreTerminalWorkspaces();
     void initializeActionRegistry();
     [[nodiscard]] QVariantMap shortcutResult(const actions::ShortcutValidation &validation) const;
@@ -1118,8 +1125,7 @@ private:
                                                       std::string_view nodeId) const;
     [[nodiscard]] bool persistTerminalWorkspaces();
     [[nodiscard]] bool saveWorkspaceStateCandidate(const workbench::WorkspaceState &candidate);
-    [[nodiscard]] workbench::WorkspaceState
-    persistableWorkspaceState(const workbench::WorkspaceState &candidate) const;
+    [[nodiscard]] workbench::WorkspaceState persistableWorkspaceState(const workbench::WorkspaceState &candidate) const;
     void emitActiveTerminalContextChanged();
     void showTabInViewport(const TerminalTab &tab);
     void showAllTerminalViewports();
@@ -1179,6 +1185,7 @@ private:
     std::unique_ptr<ssh::KeychainController> m_keychainController;
     std::unique_ptr<logging::ConnectionHistoryController> m_connectionHistoryController;
     std::unique_ptr<workbench::CommandHistoryController> m_commandHistoryController;
+    std::unique_ptr<workbench::LocalFileBrowserController> m_localFilesController;
     std::vector<ssh::SshProfile> m_profiles;
     std::vector<forwarding::PortForwardingRule> m_portForwardingRules;
     std::vector<std::unique_ptr<PortForwardingRuntime>> m_portForwardingRuntimes;
@@ -1235,6 +1242,7 @@ private:
     bool m_hostKeyChangedWarning = false;
     bool m_hostKeyForSftp = false;
     bool m_shutdownStarted = false;
+    bool m_openSshImportRunning = false;
     bool m_terminalTelemetryVisible = false;
     bool m_terminalTabsChangePending = false;
     QTimer m_scriptExecutionTimer;

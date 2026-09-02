@@ -20,6 +20,7 @@
 #include "infrastructure/ai/ProviderEndpointResolver.h"
 #include "infrastructure/ai/ProviderErrorParser.h"
 #include "infrastructure/security/InMemoryCredentialVault.h"
+#include "infrastructure/ssh/OpenSshConfigImporter.h"
 #include "infrastructure/workbench/QuickCommandStore.h"
 #include "platform/windows/WindowsProtectedClipboard.h"
 #include "ui/terminal/TerminalItem.h"
@@ -2528,8 +2529,11 @@ void AppController::initializeRuntime()
         siblingConnectionHistoryFile(m_profileStore.filePath()), this);
     m_commandHistoryController = std::make_unique<workbench::CommandHistoryController>(
         siblingCommandHistoryFile(m_profileStore.filePath()), this);
+    m_localFilesController = std::make_unique<workbench::LocalFileBrowserController>(this);
     QObject::connect(m_commandHistoryController.get(), &workbench::CommandHistoryController::changed, this,
                      &AppController::terminalHistoryChanged);
+    QObject::connect(this, &AppController::openSshConfigImportCompleted, this, &AppController::applyOpenSshConfigImport,
+                     Qt::QueuedConnection);
     qRegisterMetaType<ShellHistoryEntries>();
     qRegisterMetaType<NoteSearchResults>();
     qRegisterMetaType<AiTextAttachments>();
@@ -3277,9 +3281,9 @@ QVariantList AppController::commandPaletteItems() const
         item.insert(QStringLiteral("kind"), QStringLiteral("host"));
         item.insert(QStringLiteral("id"), profile.value(QStringLiteral("id")));
         item.insert(QStringLiteral("label"), profile.value(QStringLiteral("name")));
-        item.insert(QStringLiteral("description"),
-                    tr("Connect to %1@%2").arg(profile.value(QStringLiteral("username")).toString(),
-                                                profile.value(QStringLiteral("host")).toString()));
+        item.insert(QStringLiteral("description"), tr("Connect to %1@%2")
+                                                       .arg(profile.value(QStringLiteral("username")).toString(),
+                                                            profile.value(QStringLiteral("host")).toString()));
         item.insert(QStringLiteral("categoryLabel"), tr("Hosts"));
         item.insert(QStringLiteral("shortcut"), QString{});
         item.insert(QStringLiteral("enabled"), true);
@@ -4682,6 +4686,11 @@ QObject *AppController::connectionHistory() const noexcept
     return m_connectionHistoryController.get();
 }
 
+QObject *AppController::localFiles() const noexcept
+{
+    return m_localFilesController.get();
+}
+
 QString AppController::startLocalTerminal()
 {
     return startLocalTerminalAt({});
@@ -5825,6 +5834,31 @@ bool AppController::insertTerminalCommand(const QString &command)
     return true;
 }
 
+bool AppController::insertLocalFilePath(const QString &path)
+{
+    const TerminalTab *tab = activeTab();
+    const QFileInfo source(path);
+    if (tab == nullptr || tab->kind != TerminalTabKind::Local || !tab->running || !source.exists())
+    {
+        return false;
+    }
+
+    terminal::ShellDialect dialect = terminal::ShellDialect::Posix;
+    if (tab->localShellId.contains(QStringLiteral("powershell"), Qt::CaseInsensitive)
+        || tab->localShellId.contains(QStringLiteral("pwsh"), Qt::CaseInsensitive))
+    {
+        dialect = terminal::ShellDialect::PowerShell;
+    }
+    else if (tab->localShellId.contains(QStringLiteral("cmd"), Qt::CaseInsensitive))
+    {
+        dialect = terminal::ShellDialect::Cmd;
+    }
+
+    const std::string localPath = utf8String(source.absoluteFilePath());
+    const std::string quoted = terminal::quoteShellPath(localPath, dialect);
+    return insertTerminalCommand(QString::fromUtf8(quoted.data(), static_cast<qsizetype>(quoted.size())));
+}
+
 bool AppController::openTerminalLink(const QString &uri)
 {
     const QUrl url = QUrl::fromUserInput(uri);
@@ -6593,6 +6627,118 @@ bool AppController::importWorkspace(const QString &localFileUrl)
     emit workspaceOperationChanged();
     emit terminalTabsChanged();
     return true;
+}
+
+bool AppController::importOpenSshConfig(const QString &localFileUrl)
+{
+    if (m_openSshImportRunning)
+        return false;
+    const QUrl url(localFileUrl);
+    const QString requestedPath = url.isLocalFile() ? url.toLocalFile() : localFileUrl;
+    const QString path =
+        requestedPath.trimmed().isEmpty() ? QDir::home().filePath(QStringLiteral(".ssh/config")) : requestedPath;
+    m_openSshImportRunning = true;
+    m_workspaceOperationMessage = tr("Importing OpenSSH configuration...");
+    emit workspaceOperationChanged();
+    const QPointer<AppController> self(this);
+    QThreadPool::globalInstance()->start([self, path]() noexcept {
+        QVariantList values;
+        QString error;
+        try
+        {
+            const auto imported = ssh::loadOpenSshConfig(path);
+            if (!imported)
+                error = QStringLiteral("load-failed");
+            else
+            {
+                values.reserve(static_cast<qsizetype>(imported->hosts.size()));
+                for (const ssh::OpenSshHostConfig &host : imported->hosts)
+                {
+                    values.push_back(QVariantMap{{QStringLiteral("alias"), host.alias},
+                                                 {QStringLiteral("hostName"), host.hostName},
+                                                 {QStringLiteral("user"), host.user},
+                                                 {QStringLiteral("port"), host.port},
+                                                 {QStringLiteral("identityFile"), host.identityFile},
+                                                 {QStringLiteral("proxyJump"), host.proxyJump}});
+                }
+            }
+        }
+        catch (...)
+        {
+            error = QStringLiteral("resource");
+        }
+        if (self)
+            emit self->openSshConfigImportCompleted(std::move(values), std::move(error));
+    });
+    return true;
+}
+
+void AppController::applyOpenSshConfigImport(const QVariantList &hosts, const QString &error)
+{
+    m_openSshImportRunning = false;
+    if (!error.isEmpty())
+    {
+        m_workspaceOperationMessage = tr("OpenSSH configuration could not be imported.");
+        emit workspaceOperationChanged();
+        return;
+    }
+    std::vector<ssh::SshProfile> candidate = m_profiles;
+    QHash<QString, std::string> profileIds;
+    for (const QVariant &value : hosts)
+    {
+        const QString alias = value.toMap().value(QStringLiteral("alias")).toString();
+        const auto existing = std::ranges::find_if(candidate, [&alias](const ssh::SshProfile &profile) {
+            return profile.group == "OpenSSH" && utf8QString(profile.name).compare(alias, Qt::CaseInsensitive) == 0;
+        });
+        profileIds.insert(alias, existing == candidate.end()
+                                     ? utf8String(QUuid::createUuid().toString(QUuid::WithoutBraces))
+                                     : existing->id);
+    }
+    const QString defaultUser = qEnvironmentVariable("USERNAME").trimmed();
+    for (const QVariant &value : hosts)
+    {
+        const QVariantMap imported = value.toMap();
+        const QString alias = imported.value(QStringLiteral("alias")).toString();
+        const std::string id = profileIds.value(alias);
+        auto existing = std::ranges::find(candidate, id, &ssh::SshProfile::id);
+        ssh::SshProfile profile = existing == candidate.end() ? ssh::SshProfile{} : *existing;
+        profile.id = id;
+        profile.name = utf8String(alias);
+        profile.group = "OpenSSH";
+        profile.host = utf8String(imported.value(QStringLiteral("hostName")).toString());
+        profile.port = static_cast<std::uint16_t>(imported.value(QStringLiteral("port"), 22).toUInt());
+        const QString importedUser = imported.value(QStringLiteral("user")).toString().trimmed();
+        profile.username = utf8String(importedUser.isEmpty() ? defaultUser : importedUser);
+        profile.privateKeyPath = utf8String(imported.value(QStringLiteral("identityFile")).toString());
+        profile.authentication = profile.privateKeyPath.empty() ? ssh::SshAuthenticationMethod::Agent
+                                                                : ssh::SshAuthenticationMethod::PrivateKey;
+        profile.privateKeyPassphraseRequired = false;
+        profile.identityReference.reset();
+        profile.credentialReference.reset();
+        profile.jumpProfileIds.clear();
+        QString jump = imported.value(QStringLiteral("proxyJump")).toString();
+        if (jump.contains(QLatin1Char('@')))
+            jump = jump.section(QLatin1Char('@'), -1);
+        jump = jump.section(QLatin1Char(':'), 0, 0);
+        if (profileIds.contains(jump) && profileIds.value(jump) != profile.id)
+            profile.jumpProfileIds.push_back(profileIds.value(jump));
+        if (!ssh::validSshProfile(profile))
+            continue;
+        if (existing == candidate.end())
+            candidate.push_back(std::move(profile));
+        else
+            *existing = std::move(profile);
+    }
+    if (!m_profileStore.save(candidate))
+    {
+        m_workspaceOperationMessage = tr("Imported OpenSSH hosts could not be saved.");
+        emit workspaceOperationChanged();
+        return;
+    }
+    m_profiles = std::move(candidate);
+    m_workspaceOperationMessage = tr("Imported %n OpenSSH host(s).", "", static_cast<int>(hosts.size()));
+    emit hostProfilesChanged();
+    emit workspaceOperationChanged();
 }
 
 bool AppController::exportQuickCommands(const QString &localFileUrl)
@@ -16299,8 +16445,7 @@ bool AppController::saveWorkspaceStateCandidate(const workbench::WorkspaceState 
     return true;
 }
 
-workbench::WorkspaceState
-AppController::persistableWorkspaceState(const workbench::WorkspaceState &candidate) const
+workbench::WorkspaceState AppController::persistableWorkspaceState(const workbench::WorkspaceState &candidate) const
 {
     workbench::WorkspaceState persistable = candidate;
     std::erase_if(persistable.terminalWorkspaces, [](const workbench::TerminalWorkspaceLayout &workspace) {
@@ -16311,8 +16456,7 @@ AppController::persistableWorkspaceState(const workbench::WorkspaceState &candid
     const auto containsIntent = [&persistable](const std::string_view intentId) {
         return std::ranges::any_of(
             persistable.terminalWorkspaces, [intentId](const workbench::TerminalWorkspaceLayout &workspace) {
-                return std::ranges::find(workspace.restoreIntents, intentId,
-                                         &workbench::TerminalRestoreIntent::id)
+                return std::ranges::find(workspace.restoreIntents, intentId, &workbench::TerminalRestoreIntent::id)
                        != workspace.restoreIntents.end();
             });
     };
@@ -16913,14 +17057,14 @@ void AppController::loadWorkspaceState()
     m_workspaceState = std::move(*state);
     if (!m_workspaceState.restoreAttemptIntentId.empty())
     {
-        if (std::ranges::find(m_workspaceState.quarantinedRestoreIntentIds,
-                              m_workspaceState.restoreAttemptIntentId)
+        if (std::ranges::find(m_workspaceState.quarantinedRestoreIntentIds, m_workspaceState.restoreAttemptIntentId)
             == m_workspaceState.quarantinedRestoreIntentIds.end())
             m_workspaceState.quarantinedRestoreIntentIds.push_back(m_workspaceState.restoreAttemptIntentId);
         m_workspaceState.restoreAttemptIntentId.clear();
         if (!m_workspaceStateStore.save(m_workspaceState))
             qCWarning(appControllerLog) << "Unable to persist the recovered restore quarantine";
-        m_startupRecoveryNotice = tr("A terminal that interrupted startup was quarantined. Retry it from its pane when ready.");
+        m_startupRecoveryNotice =
+            tr("A terminal that interrupted startup was quarantined. Retry it from its pane when ready.");
     }
     if (m_workspaceStateStore.lastLoadRecoveredFromBackup())
     {
@@ -16988,7 +17132,8 @@ void AppController::restoreTerminalWorkspaces()
                     if (!m_workspaceStateStore.save(m_workspaceState))
                     {
                         created->restoreQuarantined = true;
-                        created->status = tr("This terminal was quarantined because its restore guard could not be saved.");
+                        created->status =
+                            tr("This terminal was quarantined because its restore guard could not be saved.");
                         m_workspaceState.restoreAttemptIntentId.clear();
                         continue;
                     }

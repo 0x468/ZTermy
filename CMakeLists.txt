@@ -331,6 +331,8 @@ add_library(ztermy_ssh_persistence STATIC
     src/infrastructure/ssh/KnownHostsStore.h
     src/infrastructure/ssh/OpenSshKnownHostsImporter.cpp
     src/infrastructure/ssh/OpenSshKnownHostsImporter.h
+    src/infrastructure/ssh/OpenSshConfigImporter.cpp
+    src/infrastructure/ssh/OpenSshConfigImporter.h
     src/infrastructure/ssh/SshKeychainStore.cpp
     src/infrastructure/ssh/SshKeychainStore.h
     src/infrastructure/ssh/SshProfileStore.cpp
@@ -898,6 +900,8 @@ add_library(ztermy_application_controller STATIC
     src/application/AppController.h
     src/application/workbench/CommandHistoryController.cpp
     src/application/workbench/CommandHistoryController.h
+    src/application/workbench/LocalFileBrowserController.cpp
+    src/application/workbench/LocalFileBrowserController.h
 )
 target_compile_features(ztermy_application_controller PUBLIC cxx_std_23)
 target_include_directories(ztermy_application_controller PUBLIC src)
@@ -1286,6 +1290,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/PortForwardingPane.qml
         src/ui/qml/HostKeyPrompt.qml
         src/ui/qml/KeyboardAction.qml
+        src/ui/qml/LocalFilesPane.qml
         src/ui/qml/Main.qml
         src/ui/qml/NotesPane.qml
         src/ui/qml/ReleaseIdentityCard.qml
@@ -2802,6 +2807,26 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME known-hosts-store COMMAND ztermy_known_hosts_store_tests)
+
+    qt_add_executable(ztermy_open_ssh_config_importer_tests
+        tests/open_ssh_config_importer_tests.cpp
+    )
+    target_compile_features(ztermy_open_ssh_config_importer_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_open_ssh_config_importer_tests PRIVATE ztermy_ssh_persistence Qt6::Test)
+    if(MSVC)
+        target_compile_options(ztermy_open_ssh_config_importer_tests PRIVATE /W4 /permissive- /utf-8)
+    endif()
+    add_test(NAME open-ssh-config-importer COMMAND ztermy_open_ssh_config_importer_tests)
+
+    qt_add_executable(ztermy_local_file_browser_controller_tests
+        tests/local_file_browser_controller_tests.cpp
+    )
+    target_compile_features(ztermy_local_file_browser_controller_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_local_file_browser_controller_tests PRIVATE ztermy_application_controller Qt6::Test)
+    if(MSVC)
+        target_compile_options(ztermy_local_file_browser_controller_tests PRIVATE /W4 /permissive- /utf-8)
+    endif()
+    add_test(NAME local-file-browser-controller COMMAND ztermy_local_file_browser_controller_tests)
 
     qt_add_executable(ztermy_known_hosts_controller_tests
         tests/known_hosts_controller_tests.cpp

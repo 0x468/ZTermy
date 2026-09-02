@@ -1768,6 +1768,15 @@ Rectangle {
         }
     }
 
+    FileDialog {
+        id: openSshConfigImportDialog
+
+        title: qsTr("Import OpenSSH configuration")
+        fileMode: FileDialog.OpenFile
+        nameFilters: [qsTr("OpenSSH configuration (config)"), qsTr("All files (*)")]
+        onAccepted: root.controller.importOpenSshConfig(selectedFile.toString())
+    }
+
     Dialog {
         id: renameTerminalDialog
 
@@ -2001,6 +2010,16 @@ Rectangle {
                     compact: root.workspaceNavigationCompact
                     selected: root.workspaceSection === "logs"
                     onActivated: root.workspaceSection = "logs"
+                }
+
+                SideNavigationItem {
+                    actionObjectName: "sideLocalFilesAction"
+                    Layout.fillWidth: true
+                    iconName: "folder"
+                    text: qsTr("Local files")
+                    compact: root.workspaceNavigationCompact
+                    selected: root.workspaceSection === "local-files"
+                    onActivated: root.workspaceSection = "local-files"
                 }
 
                 SideNavigationItem {
@@ -2240,14 +2259,14 @@ Rectangle {
                                 onClicked: root.controller.toggleTerminalWorkbench("sftp")
                                 Keys.onReturnPressed: click()
                                 Keys.onEnterPressed: click()
-                                Accessible.name: qsTr("Open SFTP")
+                                Accessible.name: qsTr("Open remote files")
                                 contentItem: AppIcon {
                                     name: "folder"
                                     color: sftpToolbarButton.checked ? Theme.accent : root.mutedColor
                                 }
                                 AppToolTip {
                                     visible: sftpToolbarButton.hovered
-                                    text: qsTr("Open SFTP")
+                                    text: qsTr("Open remote files")
                                 }
                             }
 
@@ -2462,7 +2481,7 @@ Rectangle {
                                     }
 
                                     AppMenuItem {
-                                        text: qsTr("Open SFTP")
+                                        text: qsTr("Open remote files")
                                         visible: !sftpToolbarButton.visible
                                         enabled: root.activeTerminalTab !== null && root.activeTerminalTab.connected
                                         onTriggered: root.controller.toggleTerminalWorkbench("sftp")
@@ -2973,6 +2992,7 @@ Rectangle {
                 onConnectionStarted: root.currentPage = "terminal"
                 onSecuritySettingsRequested: root.openSecuritySettingsTab()
                 onLocalTerminalRequested: root.startLocalTerminalTab()
+                onOpenSshImportRequested: openSshConfigImportDialog.open()
 
                 transform: Translate {
                     x: -Theme.motionDistanceSmall * (1.0 - root.pageReveal)
@@ -3039,6 +3059,16 @@ Rectangle {
                     root.currentPage = "terminal";
                 }
                 onToggleActiveLogRequested: root.toggleSessionLog()
+            }
+
+            LocalFilesPane {
+                anchors.fill: parent
+                visible: root.currentPage === "hosts" && root.workspaceSection === "local-files"
+                controller: root.controller
+                onInsertRequested: path => {
+                    if (root.controller.insertLocalFilePath(path))
+                        root.currentPage = "terminal";
+                }
             }
 
             SettingsPane {
