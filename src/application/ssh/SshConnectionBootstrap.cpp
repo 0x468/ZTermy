@@ -319,17 +319,27 @@ authenticateEndpoint(Endpoint &endpoint, SshByteTransport &transport, const QStr
             return std::unexpected(connectionError(stopToken.stop_requested() ? SshFailureKind::Cancelled
                                                                               : SshFailureKind::HostKeyInvalid));
         }
-        knownHosts->push_back(KnownHostEntry{
+        const KnownHostEntry accepted{
             .endpoint = observedEndpoint,
             .algorithm = hostKey->algorithm,
             .encodedKey = hostKey->encodedKey,
-        });
-        if (decision == UnknownHostKeyDecision::AcceptAndRemember && !knownHostsStore.save(*knownHosts))
+        };
+        if (decision == UnknownHostKeyDecision::AcceptAndRemember)
         {
-            return std::unexpected(SshBootstrapError{
-                .failure = SshFailureKind::HostKeyInvalid,
-                .reason = SshBootstrapErrorReason::KnownHostsSaveFailed,
-            });
+            const std::array acceptedEntries{accepted};
+            auto merged = knownHostsStore.mergeMissing(acceptedEntries);
+            if (!merged || merged->conflicts != 0)
+            {
+                return std::unexpected(SshBootstrapError{
+                    .failure = SshFailureKind::HostKeyInvalid,
+                    .reason = SshBootstrapErrorReason::KnownHostsSaveFailed,
+                });
+            }
+            knownHosts = std::move(merged->entries);
+        }
+        else
+        {
+            knownHosts->push_back(accepted);
         }
         trust = (*session)->verifyHostKey(observedEndpoint, *knownHosts);
         if (!trust || *trust != HostKeyTrust::Trusted)

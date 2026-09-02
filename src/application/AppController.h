@@ -82,6 +82,11 @@ namespace ztermy::windowing
 class WindowsProtectedClipboard;
 }
 
+namespace ztermy::ssh
+{
+class KnownHostsController;
+}
+
 namespace ztermy
 {
 
@@ -243,6 +248,7 @@ class AppController final : public QObject
     Q_PROPERTY(QString credentialOperationError READ credentialOperationError NOTIFY credentialVaultChanged)
     Q_PROPERTY(QVariantList portForwardingRules READ portForwardingRules NOTIFY portForwardingRulesChanged)
     Q_PROPERTY(QString portForwardingOperationError READ portForwardingOperationError NOTIFY portForwardingRulesChanged)
+    Q_PROPERTY(QObject *knownHosts READ knownHosts CONSTANT)
 
 public:
     using LocalTerminalSessionFactory = std::function<std::unique_ptr<terminal::LocalTerminalSessionBackend>()>;
@@ -410,6 +416,7 @@ public:
     [[nodiscard]] QString credentialOperationError() const;
     [[nodiscard]] QVariantList portForwardingRules() const;
     [[nodiscard]] QString portForwardingOperationError() const;
+    [[nodiscard]] QObject *knownHosts() const noexcept;
 
     Q_INVOKABLE QString startLocalTerminal();
     Q_INVOKABLE bool activateTerminalTab(const QString &id);
@@ -1138,6 +1145,7 @@ private:
     security::CredentialStorage m_defaultCredentialStorage = security::CredentialStorage::Session;
     QString m_credentialOperationError;
     QString m_knownHostsPath;
+    std::unique_ptr<ssh::KnownHostsController> m_knownHostsController;
     std::vector<ssh::SshProfile> m_profiles;
     std::vector<forwarding::PortForwardingRule> m_portForwardingRules;
     std::vector<std::unique_ptr<PortForwardingRuntime>> m_portForwardingRuntimes;

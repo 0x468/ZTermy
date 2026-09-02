@@ -325,6 +325,8 @@ add_library(ztermy_forwarding_session STATIC
 add_library(ztermy_ssh_persistence STATIC
     src/infrastructure/ssh/KnownHostsStore.cpp
     src/infrastructure/ssh/KnownHostsStore.h
+    src/infrastructure/ssh/OpenSshKnownHostsImporter.cpp
+    src/infrastructure/ssh/OpenSshKnownHostsImporter.h
     src/infrastructure/ssh/SshProfileStore.cpp
     src/infrastructure/ssh/SshProfileStore.h
 )
@@ -408,6 +410,28 @@ target_link_libraries(ztermy_ssh_persistence
     PUBLIC ztermy_ssh_domain
     PRIVATE ztermy_core_persistence Qt6::Core
 )
+
+add_library(ztermy_known_hosts_application STATIC
+    src/application/ssh/KnownHostsController.cpp
+    src/application/ssh/KnownHostsController.h
+)
+target_compile_features(ztermy_known_hosts_application PUBLIC cxx_std_23)
+target_include_directories(ztermy_known_hosts_application PUBLIC src)
+target_link_libraries(ztermy_known_hosts_application
+    PUBLIC
+        ztermy_ssh_persistence
+        Qt6::Core
+    PRIVATE
+        Qt6::Gui
+)
+if(MSVC)
+    target_compile_options(ztermy_known_hosts_application PRIVATE
+        /permissive-
+        /utf-8
+        /W4
+        /Zc:__cplusplus
+    )
+endif()
 
 target_compile_features(ztermy_ssh_transport PUBLIC cxx_std_23)
 target_include_directories(ztermy_ssh_transport PUBLIC src)
@@ -853,6 +877,7 @@ target_link_libraries(ztermy_application_controller
         ztermy_core_config
         ztermy_forwarding_persistence
         ztermy_forwarding_session
+        ztermy_known_hosts_application
         ztermy_ssh_persistence
         ztermy_ssh_session
         ztermy_sftp_session
@@ -1240,6 +1265,7 @@ qt_add_qml_module(ztermy
         src/ui/qml/TransferToast.qml
         src/ui/qml/ActionToast.qml
         src/ui/qml/WorkspaceCredentialsPane.qml
+        src/ui/qml/WorkspaceKnownHostsPane.qml
         src/ui/qml/WorkspaceLogsPane.qml
         src/ui/qml/WorkspaceProxiesPane.qml
         src/ui/qml/WorkspaceScriptsPane.qml
@@ -1253,6 +1279,7 @@ qt_add_translations(ztermy
     SOURCE_TARGETS
         ztermy
         ztermy_application_controller
+        ztermy_known_hosts_application
         ztermy_terminal_session
         ztermy_ssh_session
         ztermy_terminal_ui
@@ -2729,6 +2756,27 @@ if(BUILD_TESTING)
     endif()
 
     add_test(NAME known-hosts-store COMMAND ztermy_known_hosts_store_tests)
+
+    qt_add_executable(ztermy_known_hosts_controller_tests
+        tests/known_hosts_controller_tests.cpp
+    )
+
+    target_compile_features(ztermy_known_hosts_controller_tests PRIVATE cxx_std_23)
+    target_link_libraries(ztermy_known_hosts_controller_tests PRIVATE
+        ztermy_known_hosts_application
+        Qt6::Test
+    )
+
+    if(MSVC)
+        target_compile_options(ztermy_known_hosts_controller_tests PRIVATE
+            /permissive-
+            /utf-8
+            /W4
+            /Zc:__cplusplus
+        )
+    endif()
+
+    add_test(NAME known-hosts-controller COMMAND ztermy_known_hosts_controller_tests)
 
     qt_add_executable(ztermy_ssh_profile_store_tests
         tests/ssh_profile_store_tests.cpp

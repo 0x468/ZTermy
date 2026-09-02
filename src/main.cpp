@@ -654,6 +654,18 @@ struct ResizeHitRuntimeCase
         && quickConnectTarget->property("width").toReal() > 0.0 && quickConnectAction->property("width").toReal() > 0.0
         && newHostAction->property("width").toReal() > 0.0 && workspaceNavigationMatches;
 
+    rootObject->setProperty("workspaceSection", QStringLiteral("known-hosts"));
+    processWindowEventsFor(std::chrono::milliseconds{250});
+    auto *knownHostsPane = rootObject->findChild<QObject *>(QStringLiteral("workspaceKnownHostsPane"));
+    auto *knownHostsImport = rootObject->findChild<QObject *>(QStringLiteral("knownHostsImportCurrent"));
+    const bool knownHostsCaptured =
+        captureLayout(window, outputDirectory, capturePrefix + QStringLiteral("-known-hosts"));
+    const bool knownHostsMatches =
+        knownHostsPane != nullptr && knownHostsPane->property("visible").toBool()
+        && knownHostsPane->property("width").toReal() > 0.0 && knownHostsImport != nullptr
+        && knownHostsImport->property("visible").toBool() && knownHostsImport->property("width").toReal() > 0.0
+        && knownHostsImport->property("width").toReal() <= knownHostsPane->property("width").toReal();
+
     rootObject->setProperty("currentPage", QStringLiteral("settings"));
     processWindowEventsFor(std::chrono::milliseconds{100});
     auto *settingsPane = rootObject->findChild<QObject *>(QStringLiteral("settingsPane"));
@@ -764,13 +776,15 @@ struct ResizeHitRuntimeCase
     qCInfo(applicationLog) << "UI layout breakpoint check"
                            << "theme=" << themeName << "size=" << size << "compact=" << compact
                            << "hostPaneWidth=" << hostPaneWidth << "hostContentWidth=" << hostContentWidth
-                           << "hostMatches=" << hostMatches << "settingsMatch=" << settingsMatch
-                           << "applicationMatches=" << applicationMatches << "aboutMatches=" << aboutMatches
-                           << "securityMatches=" << securityMatches << "shortcutsMatch=" << shortcutsMatch
-                           << "sftpMatches=" << sftpMatches << "aiSettingsMatch=" << aiSettingsMatch;
-    return hostMatches && settingsMatch && applicationMatches && aboutMatches && securityMatches && shortcutsMatch
-           && sftpMatches && aiSettingsMatch && hostCaptured && settingsCaptured && applicationCaptured && aboutCaptured
-           && securityCaptured && shortcutsCaptured && sftpCaptured && aiSettingsCaptured;
+                           << "hostMatches=" << hostMatches << "knownHostsMatches=" << knownHostsMatches
+                           << "settingsMatch=" << settingsMatch << "applicationMatches=" << applicationMatches
+                           << "aboutMatches=" << aboutMatches << "securityMatches=" << securityMatches
+                           << "shortcutsMatch=" << shortcutsMatch << "sftpMatches=" << sftpMatches
+                           << "aiSettingsMatch=" << aiSettingsMatch;
+    return hostMatches && knownHostsMatches && settingsMatch && applicationMatches && aboutMatches && securityMatches
+           && shortcutsMatch && sftpMatches && aiSettingsMatch && hostCaptured && knownHostsCaptured && settingsCaptured
+           && applicationCaptured && aboutCaptured && securityCaptured && shortcutsCaptured && sftpCaptured
+           && aiSettingsCaptured;
 }
 
 [[nodiscard]] QQuickItem *quickItem(QQuickItem *rootObject, const char *objectName);
@@ -1857,6 +1871,8 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
         "settingsShowAllTerminalFonts",
         "settingsFontSize",
         "settingsTerminalOpacity",
+        "settingsLocalShell",
+        "settingsLocalShellRefresh",
         "settingsCursor",
         "settingsCursorBlink",
         "settingsCopyOnSelect",
@@ -2025,6 +2041,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
         std::pair{"maximizeCaptionButton", "Maximize"},
         std::pair{"closeCaptionButton", "Close"},
         std::pair{"sideHostsAction", "Hosts"},
+        std::pair{"sideKnownHostsAction", "Known hosts"},
         std::pair{"commandPaletteAction", "Open command palette"},
         std::pair{"settingsShortcutAction", "Open Settings"},
         std::pair{"hostLocalTerminal", "Open local terminal"},

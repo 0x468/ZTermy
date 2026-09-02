@@ -6,6 +6,7 @@
 #include "application/ai/AiTerminalFrameTool.h"
 #include "application/ai/AiUserSkillTool.h"
 #include "application/ai/AiWaitCommandTool.h"
+#include "application/ssh/KnownHostsController.h"
 #include "domain/ai/AiCommandEcho.h"
 #include "domain/ai/AiContextCompactor.h"
 #include "domain/ai/AiContextSerializer.h"
@@ -2457,6 +2458,7 @@ void AppController::initializeRuntime()
     }
     Q_ASSERT(m_localSessionFactory);
     Q_ASSERT(m_credentialVaults);
+    m_knownHostsController = std::make_unique<ssh::KnownHostsController>(m_knownHostsPath, this);
     qRegisterMetaType<ShellHistoryEntries>();
     qRegisterMetaType<NoteSearchResults>();
     qRegisterMetaType<AiTextAttachments>();
@@ -4383,6 +4385,11 @@ QVariantList AppController::portForwardingRules() const
 QString AppController::portForwardingOperationError() const
 {
     return m_portForwardingOperationError;
+}
+
+QObject *AppController::knownHosts() const noexcept
+{
+    return m_knownHostsController.get();
 }
 
 QString AppController::startLocalTerminal()

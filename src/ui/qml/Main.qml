@@ -286,6 +286,12 @@ Rectangle {
         }
     }
 
+    function createWorkspaceHost(host, port) {
+        workspaceSection = "hosts";
+        currentPage = "hosts";
+        Qt.callLater(() => hostConnectionPane.beginNewProfileForHost(host, port));
+    }
+
     function openAiSettingsTab() {
         settingsPane.currentCategory = "ai";
         openSettingsTab();
@@ -1741,6 +1747,16 @@ Rectangle {
                 }
 
                 SideNavigationItem {
+                    actionObjectName: "sideKnownHostsAction"
+                    Layout.fillWidth: true
+                    iconName: "bookmark"
+                    text: qsTr("Known hosts")
+                    compact: root.workspaceNavigationCompact
+                    selected: root.workspaceSection === "known-hosts"
+                    onActivated: root.workspaceSection = "known-hosts"
+                }
+
+                SideNavigationItem {
                     actionObjectName: "sideLogsAction"
                     Layout.fillWidth: true
                     iconName: "history"
@@ -2744,6 +2760,13 @@ Rectangle {
                 anchors.fill: parent
                 visible: root.currentPage === "hosts" && root.workspaceSection === "scripts"
                 controller: root.controller
+            }
+
+            WorkspaceKnownHostsPane {
+                anchors.fill: parent
+                visible: root.currentPage === "hosts" && root.workspaceSection === "known-hosts"
+                controller: root.controller
+                onCreateHostRequested: (host, port) => root.createWorkspaceHost(host, port)
             }
 
             WorkspaceLogsPane {

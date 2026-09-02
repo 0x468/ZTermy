@@ -454,6 +454,15 @@ Rectangle {
         Qt.callLater(nameField.forceActiveFocus);
     }
 
+    function beginNewProfileForHost(host, port) {
+        beginNewProfile();
+        hostField.text = host;
+        portField.text = String(port);
+        nameField.text = host;
+        nameWasAutoFilled = true;
+        Qt.callLater(usernameField.forceActiveFocus);
+    }
+
     Component.onCompleted: {
         if (controller.hostProfiles.length === 0) {
             clearEditor();

@@ -12,8 +12,10 @@
 #include <QString>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -26,6 +28,7 @@ constexpr qsizetype MaximumEntryCount = 4096;
 constexpr qsizetype MaximumEncodedKeySize = 16LL * 1024;
 constexpr qsizetype MaximumHostLength = 1024;
 constexpr int CurrentSchemaVersion = 1;
+std::mutex KnownHostsStoreMutex;
 
 [[nodiscard]] bool duplicateEndpointAlgorithm(const std::span<const ztermy::ssh::KnownHostEntry> entries,
                                               const ztermy::ssh::KnownHostEntry &candidate) noexcept
@@ -119,6 +122,12 @@ const QString &KnownHostsStore::filePath() const noexcept
 
 std::expected<std::vector<KnownHostEntry>, KnownHostsStoreError> KnownHostsStore::load() const
 {
+    const std::scoped_lock lock(KnownHostsStoreMutex);
+    return loadUnlocked();
+}
+
+std::expected<std::vector<KnownHostEntry>, KnownHostsStoreError> KnownHostsStore::loadUnlocked() const
+{
     if (m_filePath.isEmpty())
     {
         return std::unexpected(KnownHostsStoreError::InvalidPath);
@@ -177,6 +186,13 @@ std::expected<std::vector<KnownHostEntry>, KnownHostsStoreError> KnownHostsStore
 
 std::expected<void, KnownHostsStoreError> KnownHostsStore::save(const std::span<const KnownHostEntry> entries) const
 {
+    const std::scoped_lock lock(KnownHostsStoreMutex);
+    return saveUnlocked(entries);
+}
+
+std::expected<void, KnownHostsStoreError>
+KnownHostsStore::saveUnlocked(const std::span<const KnownHostEntry> entries) const
+{
     if (m_filePath.isEmpty())
     {
         return std::unexpected(KnownHostsStoreError::InvalidPath);
@@ -222,6 +238,83 @@ std::expected<void, KnownHostsStoreError> KnownHostsStore::save(const std::span<
         return std::unexpected(KnownHostsStoreError::IoError);
     }
     return {};
+}
+
+std::expected<KnownHostsMergeResult, KnownHostsStoreError>
+KnownHostsStore::mergeMissing(const std::span<const KnownHostEntry> entries) const
+{
+    const std::scoped_lock lock(KnownHostsStoreMutex);
+    auto stored = loadUnlocked();
+    if (!stored)
+    {
+        return std::unexpected(stored.error());
+    }
+
+    KnownHostsMergeResult result{.entries = std::move(*stored)};
+    for (const KnownHostEntry &candidate : entries)
+    {
+        if (!validEntry(candidate))
+        {
+            return std::unexpected(KnownHostsStoreError::InvalidFormat);
+        }
+        const auto existing = std::ranges::find_if(result.entries, [&candidate](const KnownHostEntry &entry) {
+            return entry.endpoint == candidate.endpoint && entry.algorithm == candidate.algorithm;
+        });
+        if (existing != result.entries.end())
+        {
+            if (existing->encodedKey == candidate.encodedKey)
+            {
+                ++result.duplicates;
+            }
+            else
+            {
+                ++result.conflicts;
+            }
+            continue;
+        }
+        if (result.entries.size() >= static_cast<std::size_t>(MaximumEntryCount))
+        {
+            return std::unexpected(KnownHostsStoreError::InvalidFormat);
+        }
+        result.entries.push_back(candidate);
+        ++result.added;
+    }
+    if (result.added > 0)
+    {
+        const auto saved = saveUnlocked(result.entries);
+        if (!saved)
+        {
+            return std::unexpected(saved.error());
+        }
+    }
+    return result;
+}
+
+std::expected<std::vector<KnownHostEntry>, KnownHostsStoreError>
+KnownHostsStore::remove(const SshEndpoint &endpoint, const HostKeyAlgorithm algorithm) const
+{
+    const std::scoped_lock lock(KnownHostsStoreMutex);
+    auto stored = loadUnlocked();
+    if (!stored)
+    {
+        return std::unexpected(stored.error());
+    }
+    std::erase_if(*stored, [&endpoint, algorithm](const KnownHostEntry &entry) {
+        return entry.endpoint == endpoint && entry.algorithm == algorithm;
+    });
+    const auto saved = saveUnlocked(*stored);
+    if (!saved)
+    {
+        return std::unexpected(saved.error());
+    }
+    return stored;
+}
+
+std::expected<void, KnownHostsStoreError> KnownHostsStore::clear() const
+{
+    const std::scoped_lock lock(KnownHostsStoreMutex);
+    const std::array<KnownHostEntry, 0> empty;
+    return saveUnlocked(empty);
 }
 
 } // namespace ztermy::ssh

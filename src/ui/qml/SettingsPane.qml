@@ -1384,6 +1384,7 @@ Rectangle {
                         }
 
                         ActionButton {
+                            objectName: "settingsLocalShellRefresh"
                             text: qsTr("Refresh")
                             iconName: "refresh"
                             accessibleName: qsTr("Detect installed local shells again")
