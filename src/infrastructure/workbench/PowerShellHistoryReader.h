@@ -19,6 +19,10 @@ enum class PowerShellHistoryReadError : std::uint8_t
 };
 
 [[nodiscard]] QString defaultPowerShellHistoryPath();
+[[nodiscard]] QString defaultLocalShellHistoryPath(const QString &shellId);
+[[nodiscard]] std::expected<std::vector<ShellHistoryEntry>, PowerShellHistoryReadError>
+readShellHistoryFile(const QString &path, ShellKind shell, std::size_t maximumEntries = 1000,
+                     qint64 maximumSourceBytes = qint64{2} * 1024 * 1024);
 [[nodiscard]] std::expected<std::vector<ShellHistoryEntry>, PowerShellHistoryReadError>
 readPowerShellHistory(const QString &path, std::size_t maximumEntries = 1000,
                       qint64 maximumSourceBytes = qint64{2} * 1024 * 1024);

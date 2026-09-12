@@ -78,12 +78,13 @@ private slots:
     void commitsImeTextExactlyOnce();
     void appliesRendererPreferences();
     void routesCopyPasteAndTextKeys();
-    void completesTypedCommandsWithoutForwardingAcceptanceKeys();
+    void preservesShellCompletionAndNavigationKeys();
     void dismissesSelectionAfterExplicitCopyUnlessConfiguredToKeepIt();
     void mapsWindowsPhysicalKeys();
     void confirmsMultilinePaste();
     void selectsCellsAndCopiesOnMouseRelease();
     void positionsSelectionActionsOutsideDragDirection();
+    void tracksSelectionActionsWhileScrolling();
     void supportsClassicClipboardAliasesAndContextActions();
     void selectsWordsOnDoubleClick();
     void separatesShellPromptIdentityWords();
@@ -549,47 +550,29 @@ void TerminalItemTests::routesCopyPasteAndTextKeys()
     QVERIFY(textEvent.isAccepted());
 }
 
-void TerminalItemTests::completesTypedCommandsWithoutForwardingAcceptanceKeys()
+void TerminalItemTests::preservesShellCompletionAndNavigationKeys()
 {
     TestableTerminalItem item;
     QSignalSpy inputSpy(&item, &ztermy::ui::TerminalItem::inputGenerated);
-    std::vector<ztermy::terminal::TerminalKeyEvent> keyEvents;
-    QObject::connect(&item, &ztermy::ui::TerminalItem::keyEventGenerated, &item,
-                     [&keyEvents](const ztermy::terminal::TerminalKeyEvent &event) {
-                         keyEvents.push_back(event);
-                     });
-
-    for (const QChar character : QStringLiteral("git"))
+    std::vector<ztermy::terminal::TerminalKeyEvent> keys;
+    QObject::connect(&item, &ztermy::ui::TerminalItem::keyEventGenerated, &item, [&keys](const auto &event) {
+        keys.push_back(event);
+    });
+    for (const int key : {Qt::Key_Tab, Qt::Key_Up, Qt::Key_Down, Qt::Key_Return})
     {
-        QKeyEvent event(QEvent::KeyPress, character.toUpper().unicode(), Qt::NoModifier, QString{character});
+        QKeyEvent event(QEvent::KeyPress, key, Qt::NoModifier);
+        const auto before = keys.size();
         item.keyPressEvent(&event);
+        QCOMPARE(keys.size(), before + 1);
     }
-    QCOMPARE(item.inputBuffer(), QStringLiteral("git"));
-    QCOMPARE(keyEvents.size(), std::size_t{3});
-
-    QVariantMap statusCandidate;
-    statusCandidate.insert(QStringLiteral("command"), QStringLiteral("git status"));
-    statusCandidate.insert(QStringLiteral("sourceLabel"), QStringLiteral("Gateway"));
-    QVariantMap logCandidate;
-    logCandidate.insert(QStringLiteral("command"), QStringLiteral("git log"));
-    logCandidate.insert(QStringLiteral("sourceLabel"), QStringLiteral("Gateway"));
-    item.setCompletionCandidates(QVariantList{statusCandidate, logCandidate});
-    QCOMPARE(item.completionIndex(), 0);
-    QCOMPARE(item.ghostText(), QStringLiteral(" status"));
-
-    QKeyEvent cycleEvent(QEvent::KeyPress, Qt::Key_Down, Qt::ControlModifier);
-    item.keyPressEvent(&cycleEvent);
-    QCOMPARE(item.completionIndex(), 1);
-    QCOMPARE(item.ghostText(), QStringLiteral(" log"));
-
-    const std::size_t forwardedBeforeAcceptance = keyEvents.size();
-    QKeyEvent acceptEvent(QEvent::KeyPress, Qt::Key_Tab, Qt::NoModifier);
-    item.keyPressEvent(&acceptEvent);
-    QCOMPARE(item.inputBuffer(), QStringLiteral("git log"));
-    QCOMPARE(inputSpy.count(), 1);
-    QCOMPARE(inputSpy.front().front().toByteArray(), QByteArrayLiteral(" log"));
-    QCOMPARE(keyEvents.size(), forwardedBeforeAcceptance);
-    QVERIFY(item.completionCandidates().isEmpty());
+    for (const int key : {Qt::Key_Up, Qt::Key_Down})
+    {
+        QKeyEvent event(QEvent::KeyPress, key, Qt::ControlModifier);
+        const auto before = keys.size();
+        item.keyPressEvent(&event);
+        QCOMPARE(keys.size(), before + 1);
+    }
+    QCOMPARE(inputSpy.count(), 0);
 }
 
 void TerminalItemTests::dismissesSelectionAfterExplicitCopyUnlessConfiguredToKeepIt()
@@ -1010,9 +993,40 @@ void TerminalItemTests::positionsSelectionActionsOutsideDragDirection()
     };
 
     drag(point(2, 2), point(4, 6));
-    QVERIFY(!item.selectionActionPreferBelow());
-    drag(point(4, 6), point(2, 2));
     QVERIFY(item.selectionActionPreferBelow());
+    drag(point(4, 6), point(2, 2));
+    QVERIFY(!item.selectionActionPreferBelow());
+}
+
+void TerminalItemTests::tracksSelectionActionsWhileScrolling()
+{
+    TestableTerminalItem item;
+    auto initial = snapshotAt(0, 0);
+    initial->scrollbar = {.total = 100, .offset = 50, .visible = 24};
+    item.setSnapshot(initial);
+    item.setSize(QSizeF{800, 480});
+    const QRectF cell = item.inputMethodQuery(Qt::ImCursorRectangle).toRectF();
+    const QPointF from{cell.x() + (2.5 * cell.width()), cell.y() + (2.5 * cell.height())};
+    const QPointF to{cell.x() + (4.5 * cell.width()), cell.y() + (6.5 * cell.height())};
+    QMouseEvent press(QEvent::MouseButtonPress, from, from, from, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    item.mousePressEvent(&press);
+    QMouseEvent move(QEvent::MouseMove, to, to, to, Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+    item.mouseMoveEvent(&move);
+    QMouseEvent release(QEvent::MouseButtonRelease, to, to, to, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    item.mouseReleaseEvent(&release);
+
+    const qreal originalY = item.selectionActionPosition().y();
+    auto scrolledUp = snapshotAt(0, 0);
+    scrolledUp->selectionPresent = true;
+    scrolledUp->scrollbar = {.total = 100, .offset = 48, .visible = 24};
+    item.setSnapshot(scrolledUp);
+    QCOMPARE(item.selectionActionPosition().y(), originalY + (2.0 * cell.height()));
+
+    auto scrolledDown = snapshotAt(0, 0);
+    scrolledDown->selectionPresent = true;
+    scrolledDown->scrollbar = {.total = 100, .offset = 51, .visible = 24};
+    item.setSnapshot(scrolledDown);
+    QCOMPARE(item.selectionActionPosition().y(), originalY - cell.height());
 }
 
 void TerminalItemTests::autoscrollsSelectionNearViewportEdges()
@@ -1206,6 +1220,11 @@ void TerminalItemTests::exposesScrollbarAndRequestsAbsoluteScroll()
     item.scrollToFraction(0.75);
     QCOMPARE(scrollSpy.count(), 1);
     QCOMPARE(scrollSpy.constFirst().constFirst().toInt(), 20);
+    item.scrollFractionDelta(0.5, 0.625);
+    item.scrollFractionDelta(0.625, 0.75);
+    QCOMPARE(scrollSpy.at(1).at(0).toInt(), 10);
+    QCOMPARE(scrollSpy.at(2).at(0).toInt(), 10);
+    scrollSpy.clear();
 
     // Keyboard bindings are dispatched exclusively by ActionRegistry/Main.qml
     // so customized or cleared shortcuts cannot fall through to hard-coded
@@ -1216,12 +1235,12 @@ void TerminalItemTests::exposesScrollbarAndRequestsAbsoluteScroll()
     item.scrollToFraction(0.0);
     item.scrollToFraction(1.0);
 
-    QCOMPARE(scrollSpy.count(), 6);
-    QCOMPARE(scrollSpy.at(1).at(0).toInt(), -23);
-    QCOMPARE(scrollSpy.at(2).at(0).toInt(), 23);
-    QCOMPARE(scrollSpy.at(3).at(0).toInt(), -1);
-    QCOMPARE(scrollSpy.at(4).at(0).toInt(), -40);
-    QCOMPARE(scrollSpy.at(5).at(0).toInt(), 40);
+    QCOMPARE(scrollSpy.count(), 5);
+    QCOMPARE(scrollSpy.at(0).at(0).toInt(), -23);
+    QCOMPARE(scrollSpy.at(1).at(0).toInt(), 23);
+    QCOMPARE(scrollSpy.at(2).at(0).toInt(), -1);
+    QCOMPARE(scrollSpy.at(3).at(0).toInt(), -40);
+    QCOMPARE(scrollSpy.at(4).at(0).toInt(), 40);
 }
 
 void TerminalItemTests::rendersStyledWideCellsAndCursorPixels()

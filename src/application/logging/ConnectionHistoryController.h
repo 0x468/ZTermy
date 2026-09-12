@@ -31,6 +31,7 @@ public:
                      const QString &failure = {});
     void recordEnded(const QString &sessionId, const QString &status = QStringLiteral("disconnected"));
     void setRawLogPath(const QString &sessionId, const QString &path);
+    void setRecordingEnabled(bool enabled);
 
     Q_INVOKABLE void setFilter(const QString &search, const QString &date, const QString &host, bool savedOnly);
     Q_INVOKABLE void loadMore();
@@ -58,6 +59,7 @@ private:
     int m_visibleLimit = 30;
     bool m_savedOnly = false;
     bool m_hasMore = false;
+    bool m_recordingEnabled = true;
 };
 
 } // namespace ztermy::logging

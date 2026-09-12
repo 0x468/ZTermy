@@ -91,8 +91,32 @@ ConnectionHistoryController::ConnectionHistoryController(QString storePath, QObj
 
 ConnectionHistoryController::~ConnectionHistoryController()
 {
-    m_worker.clear();
     m_worker.waitForDone();
+}
+
+void ConnectionHistoryController::setRecordingEnabled(const bool enabled)
+{
+    if (m_recordingEnabled == enabled)
+        return;
+    m_recordingEnabled = enabled;
+    if (enabled)
+        return;
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    bool stopped = false;
+    for (auto &entry : m_history.entries)
+    {
+        if (entry.endedUtcMs != 0)
+            continue;
+        entry.endedUtcMs = (std::max)(entry.startedUtcMs, now);
+        entry.status = "interrupted";
+        entry.phase = "recording-stopped";
+        stopped = true;
+    }
+    if (stopped)
+    {
+        rebuildProjection();
+        persist();
+    }
 }
 
 QVariantList ConnectionHistoryController::entries() const
@@ -114,7 +138,7 @@ bool ConnectionHistoryController::hasMore() const noexcept
 
 void ConnectionHistoryController::recordStarted(ConnectionHistoryEntry entry)
 {
-    if (!validConnectionHistoryEntry(entry))
+    if (!m_recordingEnabled || !validConnectionHistoryEntry(entry))
     {
         return;
     }
@@ -130,9 +154,11 @@ void ConnectionHistoryController::recordStarted(ConnectionHistoryEntry entry)
 void ConnectionHistoryController::recordPhase(const QString &sessionId, const QString &phase, const QString &status,
                                               const QString &failure)
 {
+    if (!m_recordingEnabled)
+        return;
     const std::string id = text(sessionId);
     const auto entry = std::ranges::find(m_history.entries, id, &ConnectionHistoryEntry::sessionId);
-    if (entry == m_history.entries.end())
+    if (entry == m_history.entries.end() || entry->endedUtcMs != 0)
     {
         return;
     }
@@ -145,6 +171,8 @@ void ConnectionHistoryController::recordPhase(const QString &sessionId, const QS
 
 void ConnectionHistoryController::recordEnded(const QString &sessionId, const QString &status)
 {
+    if (!m_recordingEnabled)
+        return;
     const std::string id = text(sessionId);
     const auto entry = std::ranges::find(m_history.entries, id, &ConnectionHistoryEntry::sessionId);
     if (entry == m_history.entries.end() || entry->endedUtcMs != 0)
@@ -160,8 +188,10 @@ void ConnectionHistoryController::recordEnded(const QString &sessionId, const QS
 
 void ConnectionHistoryController::setRawLogPath(const QString &sessionId, const QString &path)
 {
+    if (!m_recordingEnabled)
+        return;
     const auto entry = std::ranges::find(m_history.entries, text(sessionId), &ConnectionHistoryEntry::sessionId);
-    if (entry != m_history.entries.end())
+    if (entry != m_history.entries.end() && entry->phase != "recording-stopped")
     {
         entry->rawLogPath = text(path);
         rebuildProjection();
@@ -226,6 +256,8 @@ bool ConnectionHistoryController::clearUnsaved()
 
 void ConnectionHistoryController::persist()
 {
+    // Only the latest queued snapshot is needed; let an in-flight atomic save finish first.
+    m_worker.clear();
     const QString path = m_storePath;
     const auto snapshot = std::make_shared<const ConnectionHistory>(m_history);
     const QPointer<ConnectionHistoryController> self(this);

@@ -25,6 +25,8 @@ namespace
 $global:__ztermyNonce = '%1'
 $global:__ztermyCommandStarted = $false
 $global:__ztermyOriginalPrompt = $function:prompt
+$global:__ztermyEsc = [char] 27
+$global:__ztermyBel = [char] 7
 
 function global:__ztermyEscapeCommand([string] $value) {
     $result = [System.Text.StringBuilder]::new()
@@ -54,29 +56,32 @@ function global:prompt {
     $exitCode = __ztermyLastExitCode
     $output = ''
     if ($global:__ztermyCommandStarted) {
-        $output += "`e]633;D;$exitCode`a"
+        $output += "${global:__ztermyEsc}]633;D;$exitCode${global:__ztermyBel}"
         $global:__ztermyCommandStarted = $false
     }
-    $output += "`e]633;A`a`e]633;P;Cwd=$($PWD.Path)`a`e]633;P;HasRichCommandDetection=True`a"
+    $output += "${global:__ztermyEsc}]633;A${global:__ztermyBel}${global:__ztermyEsc}]633;P;Cwd=$($PWD.Path)${global:__ztermyBel}${global:__ztermyEsc}]633;P;HasRichCommandDetection=True${global:__ztermyBel}"
     $promptText = if ($global:__ztermyOriginalPrompt) {
         & $global:__ztermyOriginalPrompt
     } else {
         "PS $PWD> "
     }
     $output += $promptText
-    $output += "`e]633;B`a"
+    $output += "${global:__ztermyEsc}]633;B${global:__ztermyBel}"
     return $output
 }
 
 try {
     Import-Module PSReadLine -ErrorAction Stop
+    if ($env:ZTERMY_TEST_SHELL_HISTORY) {
+        Set-PSReadLineOption -HistorySavePath $env:ZTERMY_TEST_SHELL_HISTORY -HistorySaveStyle SaveNothing
+    }
     Set-PSReadLineKeyHandler -Chord Enter -ScriptBlock {
         param($key, $arg)
         $line = $null
         $cursor = $null
         [Microsoft.PowerShell.PSConsoleReadLine]::GetBufferState([ref] $line, [ref] $cursor)
         $encoded = __ztermyEscapeCommand $line
-        [Console]::Write("`e]633;E;$encoded;$global:__ztermyNonce`a`e]633;C`a")
+        [Console]::Write("${global:__ztermyEsc}]633;E;$encoded;$global:__ztermyNonce${global:__ztermyBel}${global:__ztermyEsc}]633;C${global:__ztermyBel}")
         $global:__ztermyCommandStarted = $true
         [Microsoft.PowerShell.PSConsoleReadLine]::AcceptLine()
     }
@@ -103,7 +108,10 @@ std::optional<std::wstring> powerShellLaunchCommand(const std::wstring_view exec
     }
     const QByteArray encoded = utf16LittleEndian(integrationScript(nonce)).toBase64();
     std::wstring command(executable);
-    command.append(L" -NoLogo -NoExit -EncodedCommand ");
+    command.append(L" -NoLogo");
+    if (!qEnvironmentVariableIsEmpty("ZTERMY_TEST_SHELL_HISTORY"))
+        command.append(L" -NoProfile");
+    command.append(L" -NoExit -EncodedCommand ");
     command.append(QString::fromLatin1(encoded).toStdWString());
     return command;
 }

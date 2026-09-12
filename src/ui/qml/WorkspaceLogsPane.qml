@@ -10,7 +10,8 @@ Rectangle {
     objectName: "workspaceLogsPane"
     required property var controller
     property var activeTab: null
-    property var selectedEntry: null
+    readonly property var selectedEntry: details.payload
+    property string recordingSettingError: ""
     readonly property var history: controller.connectionHistory
     readonly property bool compactLayout: width < 760
     signal openTerminalRequested(string tabId)
@@ -18,7 +19,32 @@ Rectangle {
 
     color: Theme.workspaceBackground
 
-    function statusLabel(status) {
+    onVisibleChanged: {
+        if (!visible)
+            details.requestClose();
+    }
+
+    function refreshDetails() {
+        if (!details.visible)
+            return;
+        const key = details.pendingKey || details.entryKey;
+        const entry = history.entries.find(item => item.id === key);
+        if (entry)
+            details.refresh(key, entry);
+        else
+            details.requestClose();
+    }
+
+    Connections {
+        target: root.history
+        function onChanged() {
+            Qt.callLater(root.refreshDetails);
+        }
+    }
+
+    function statusLabel(status, phase) {
+        if (phase === "recording-stopped")
+            return qsTr("Recording stopped");
         if (status === "connected")
             return qsTr("Connected");
         if (status === "connecting")
@@ -91,6 +117,31 @@ Rectangle {
             }
         }
 
+        RowLayout {
+            Layout.fillWidth: true
+            AppSwitch {
+                objectName: "connectionHistoryRecordingSwitch"
+                text: qsTr("Record connection history")
+                checked: root.controller.connectionHistoryEnabled
+                onToggled: {
+                    root.recordingSettingError = root.controller.setConnectionHistoryEnabled(checked) ? "" : qsTr("The recording preference could not be saved.");
+                    checked = Qt.binding(() => root.controller.connectionHistoryEnabled);
+                }
+            }
+            Text {
+                Layout.fillWidth: true
+                text: qsTr("Turning this off stops history recording, not your connections. Existing records remain; Shell history and raw terminal logging are separate.")
+                wrapMode: Text.Wrap
+                color: Theme.textMuted
+                font.pixelSize: Theme.textCompact
+            }
+        }
+        StatusMessage {
+            Layout.fillWidth: true
+            kind: "error"
+            text: root.recordingSettingError
+        }
+
         Flow {
             Layout.fillWidth: true
             Layout.preferredHeight: implicitHeight
@@ -152,11 +203,15 @@ Rectangle {
                 spacing: 14
                 Text {
                     Layout.preferredWidth: 125
+                    Layout.maximumWidth: 125
+                    Layout.minimumWidth: 125
                     text: qsTr("Date")
                     color: Theme.textMuted
                 }
                 Text {
                     Layout.preferredWidth: 210
+                    Layout.maximumWidth: 210
+                    Layout.minimumWidth: 210
                     text: qsTr("Local user")
                     color: Theme.textMuted
                 }
@@ -167,15 +222,20 @@ Rectangle {
                 }
                 Text {
                     Layout.preferredWidth: 95
+                    Layout.maximumWidth: 95
+                    Layout.minimumWidth: 95
                     text: qsTr("Status")
                     color: Theme.textMuted
                 }
                 Item {
-                    Layout.preferredWidth: 76
+                    Layout.preferredWidth: 86
+                    Layout.maximumWidth: 86
+                    Layout.minimumWidth: 86
                 }
             }
         }
         ListView {
+            objectName: "connectionHistoryList"
             Layout.fillWidth: true
             Layout.fillHeight: true
             visible: root.history.entries.length > 0
@@ -190,6 +250,7 @@ Rectangle {
             delegate: Rectangle {
                 id: row
                 required property var modelData
+                objectName: "connectionHistoryRow-" + modelData.id
                 width: ListView.view.width
                 height: root.compactLayout ? 104 : 66
                 radius: Theme.radiusControl
@@ -199,15 +260,17 @@ Rectangle {
                     id: hover
                 }
                 TapHandler {
-                    onTapped: root.selectedEntry = row.modelData
+                    onTapped: details.present(row.modelData.id, row.modelData)
                 }
 
                 RowLayout {
                     anchors.fill: parent
-                    anchors.margins: 10
-                    spacing: 12
+                    anchors.margins: 12
+                    spacing: 14
                     ColumnLayout {
-                        Layout.preferredWidth: root.compactLayout ? 92 : 115
+                        Layout.preferredWidth: root.compactLayout ? 92 : 125
+                        Layout.minimumWidth: Layout.preferredWidth
+                        Layout.maximumWidth: Layout.preferredWidth
                         Text {
                             text: root.dateText(row.modelData.startedUtcMs)
                             color: Theme.text
@@ -221,7 +284,9 @@ Rectangle {
                     }
                     ColumnLayout {
                         visible: !root.compactLayout
-                        Layout.preferredWidth: 198
+                        Layout.preferredWidth: 210
+                        Layout.minimumWidth: 210
+                        Layout.maximumWidth: 210
                         Text {
                             Layout.fillWidth: true
                             text: row.modelData.localUsername
@@ -238,6 +303,8 @@ Rectangle {
                     }
                     Rectangle {
                         Layout.preferredWidth: 38
+                        Layout.minimumWidth: 38
+                        Layout.maximumWidth: 38
                         Layout.preferredHeight: 38
                         radius: Theme.radiusControl
                         color: Theme.selectedBackground
@@ -268,8 +335,10 @@ Rectangle {
                     }
                     Text {
                         visible: !root.compactLayout
-                        Layout.preferredWidth: 88
-                        text: root.statusLabel(row.modelData.status)
+                        Layout.preferredWidth: 95
+                        Layout.minimumWidth: 95
+                        Layout.maximumWidth: 95
+                        text: root.statusLabel(row.modelData.status, row.modelData.phase)
                         color: root.statusColor(row.modelData.status)
                         font.weight: Font.DemiBold
                     }
@@ -300,103 +369,67 @@ Rectangle {
         }
     }
 
-    Rectangle {
-        anchors.top: parent.top
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        width: root.selectedEntry ? Math.min(420, root.width) : 0
-        visible: width > 0
-        clip: true
-        z: 20
-        color: Theme.elevatedBackground
-        border.color: Theme.border
-        Behavior on width {
-            NumberAnimation {
-                duration: Theme.motionMedium
-                easing.type: Easing.OutCubic
-            }
-        }
+    AppSideDrawer {
+        id: details
+        objectName: "connectionHistoryDetails"
+        parent: root
+        panelTitle: qsTr("Session details")
 
-        ColumnLayout {
-            anchors.fill: parent
-            anchors.margins: 18
-            spacing: 12
-            RowLayout {
+        Text {
+            Layout.fillWidth: true
+            text: root.selectedEntry ? root.selectedEntry.hostLabel : ""
+            color: Theme.text
+            font.pixelSize: 16
+            font.weight: Font.DemiBold
+            wrapMode: Text.Wrap
+        }
+        Text {
+            Layout.fillWidth: true
+            text: root.selectedEntry ? (root.selectedEntry.username ? root.selectedEntry.username + "@" : "") + root.selectedEntry.hostname : ""
+            color: Theme.textMuted
+            wrapMode: Text.WrapAnywhere
+        }
+        SectionCard {
+            Layout.fillWidth: true
+            heading: qsTr("Connection")
+            ColumnLayout {
                 Layout.fillWidth: true
                 Text {
-                    Layout.fillWidth: true
-                    text: qsTr("Session details")
+                    text: root.selectedEntry ? qsTr("Status: %1").arg(root.statusLabel(root.selectedEntry.status, root.selectedEntry.phase)) : ""
                     color: Theme.text
-                    font.pixelSize: 18
-                    font.weight: Font.Bold
                 }
-                ActionButton {
-                    iconName: "close"
-                    text: ""
-                    implicitWidth: 36
-                    accessibleName: qsTr("Close session details")
-                    onClicked: root.selectedEntry = null
+                Text {
+                    text: root.selectedEntry ? qsTr("Phase: %1").arg(root.selectedEntry.phase || qsTr("Unknown")) : ""
+                    color: Theme.text
                 }
-            }
-            Text {
-                Layout.fillWidth: true
-                text: root.selectedEntry ? root.selectedEntry.hostLabel : ""
-                color: Theme.text
-                font.pixelSize: 16
-                font.weight: Font.DemiBold
-                wrapMode: Text.Wrap
-            }
-            Text {
-                Layout.fillWidth: true
-                text: root.selectedEntry ? (root.selectedEntry.username ? root.selectedEntry.username + "@" : "") + root.selectedEntry.hostname : ""
-                color: Theme.textMuted
-                wrapMode: Text.WrapAnywhere
-            }
-            SectionCard {
-                Layout.fillWidth: true
-                heading: qsTr("Connection")
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    Text {
-                        text: root.selectedEntry ? qsTr("Status: %1").arg(root.statusLabel(root.selectedEntry.status)) : ""
-                        color: Theme.text
-                    }
-                    Text {
-                        text: root.selectedEntry ? qsTr("Phase: %1").arg(root.selectedEntry.phase || qsTr("Unknown")) : ""
-                        color: Theme.text
-                    }
-                    Text {
-                        Layout.fillWidth: true
-                        visible: root.selectedEntry && root.selectedEntry.failure.length > 0
-                        text: root.selectedEntry ? qsTr("Failure: %1").arg(root.selectedEntry.failure) : ""
-                        color: Theme.danger
-                        wrapMode: Text.Wrap
-                    }
-                }
-            }
-            SectionCard {
-                Layout.fillWidth: true
-                heading: qsTr("Local origin")
                 Text {
                     Layout.fillWidth: true
-                    text: root.selectedEntry ? root.selectedEntry.localUsername + " · " + root.selectedEntry.localHostname : ""
-                    color: Theme.text
+                    visible: root.selectedEntry && root.selectedEntry.failure.length > 0
+                    text: root.selectedEntry ? qsTr("Failure: %1").arg(root.selectedEntry.failure) : ""
+                    color: Theme.danger
                     wrapMode: Text.Wrap
                 }
             }
-            SectionCard {
+        }
+        SectionCard {
+            Layout.fillWidth: true
+            heading: qsTr("Local origin")
+            Text {
                 Layout.fillWidth: true
-                visible: root.selectedEntry && root.selectedEntry.rawLogPath.length > 0
-                heading: qsTr("Raw terminal log")
-                Text {
-                    Layout.fillWidth: true
-                    text: root.selectedEntry ? root.selectedEntry.rawLogPath : ""
-                    color: Theme.textMuted
-                    wrapMode: Text.WrapAnywhere
-                }
+                text: root.selectedEntry ? root.selectedEntry.localUsername + " · " + root.selectedEntry.localHostname : ""
+                color: Theme.text
+                wrapMode: Text.Wrap
             }
-            Item {
-                Layout.fillHeight: true
+        }
+        SectionCard {
+            Layout.fillWidth: true
+            visible: root.selectedEntry && root.selectedEntry.rawLogPath.length > 0
+            heading: qsTr("Raw terminal log")
+            Text {
+                Layout.fillWidth: true
+                text: root.selectedEntry ? root.selectedEntry.rawLogPath : ""
+                color: Theme.textMuted
+                wrapMode: Text.WrapAnywhere
             }
         }
     }

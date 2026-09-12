@@ -45,7 +45,30 @@ private slots:
     void rejectsUnsafeOrOversizedCommands();
     void readsBoundedPowerShellHistoryTail();
     void readsLargePowerShellHistoryWithinBudget();
+    void historyNeverFallsBackToAnotherShell();
 };
+
+void QuickCommandStoreTests::historyNeverFallsBackToAnotherShell()
+{
+    using namespace ztermy::workbench;
+    QCOMPARE(defaultLocalShellHistoryPath(QStringLiteral("powerShellCore")), defaultPowerShellHistoryPath());
+    QCOMPARE(defaultLocalShellHistoryPath(QStringLiteral("windowsPowerShell")), defaultPowerShellHistoryPath());
+    QVERIFY(defaultLocalShellHistoryPath(QStringLiteral("commandPrompt")).isEmpty());
+    QVERIFY(defaultLocalShellHistoryPath(QStringLiteral("wsl")).isEmpty());
+    QVERIFY(defaultLocalShellHistoryPath(QStringLiteral("nushell")).isEmpty());
+    QTemporaryDir directory;
+    const QString path = directory.filePath(QStringLiteral("history"));
+    const QByteArray contents("#1700000000\necho bash\n");
+    QVERIFY(writeFile(path, contents));
+    const auto entries = readShellHistoryFile(path, ShellKind::bash);
+    QVERIFY(entries.has_value());
+    QCOMPARE(entries->size(), std::size_t{1});
+    QCOMPARE(entries->front().command, std::string("echo bash"));
+    QCOMPARE(entries->front().shell, ShellKind::bash);
+    QFile unchanged(path);
+    QVERIFY(unchanged.open(QIODevice::ReadOnly));
+    QCOMPARE(unchanged.readAll(), contents);
+}
 
 void QuickCommandStoreTests::missingFileLoadsAsEmpty()
 {

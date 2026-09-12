@@ -22,7 +22,7 @@ Button {
     rightPadding: 14
     topPadding: 7
     bottomPadding: 7
-    implicitWidth: Math.max(72, contentItem.implicitWidth + leftPadding + rightPadding)
+    implicitWidth: Math.max(72, implicitContentWidth + leftPadding + rightPadding)
     implicitHeight: 34
     Accessible.role: Accessible.Button
     Accessible.name: accessibleName.length > 0 ? accessibleName : text

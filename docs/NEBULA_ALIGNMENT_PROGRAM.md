@@ -29,6 +29,9 @@ Nebula、Netcatty 和其他产品只提供行为与体验参照。实现必须�
 - Netcatty 数据侧栏、Nebula 终端效率和最终重构三个里程碑执行 Debug + static Release 全量门禁；
 - UI、IME、终端延迟和 Windows 原生行为必须保留人工运行证据，不能只凭单元测试宣布完成。
 
+产品所有者统一回归入口见
+[Netcatty / Nebula 对齐功能验收清单](testing/NETCATTY_NEBULA_ALIGNMENT_ACCEPTANCE.md)。
+
 ## 3. 执行顺序
 
 ### N1：已知主机中心

@@ -4,8 +4,8 @@ import QtQuick.Controls
 Menu {
     id: control
 
-    implicitWidth: Math.max(196, implicitBackgroundWidth + leftInset + rightInset, contentItem.implicitWidth + leftPadding + rightPadding)
-    implicitHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset, contentItem.implicitHeight + topPadding + bottomPadding)
+    implicitWidth: Math.max(196, implicitBackgroundWidth + leftInset + rightInset, implicitContentWidth + leftPadding + rightPadding)
+    implicitHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset, implicitContentHeight + topPadding + bottomPadding)
     margins: 8
     overlap: 4
     topPadding: 6

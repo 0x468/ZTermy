@@ -3,6 +3,10 @@
 ## Product boundary
 
 - ztermy is a Windows 11-first native SSH terminal.
+- Preserve native terminal interaction above all auxiliary features. Shells own
+  completion and line editing; do not intercept their ordinary input for
+  application suggestions. Read Shell history files without injecting history
+  commands, and keep captured session commands in memory by default.
 - ztermy is a personal tool for technical and expert users. Default workflows
   must favor directness, mainstream conventions, and low friction. Keep
   necessary safety mechanisms transparent and contextual; never expose

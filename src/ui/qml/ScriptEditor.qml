@@ -104,22 +104,15 @@ Item {
             Layout.fillWidth: true
             spacing: 6
 
-            ToolButton {
+            AppIconButton {
                 id: backButton
 
                 Layout.preferredWidth: 30
                 Layout.preferredHeight: 30
-                hoverEnabled: true
                 onClicked: root.closed()
-                Accessible.name: qsTr("Back to script library")
-                contentItem: AppIcon {
-                    name: "chevron-left"
-                    color: Theme.text
-                }
-                background: Rectangle {
-                    radius: height / 2
-                    color: backButton.down ? Theme.controlPressed : backButton.hovered ? Theme.controlHover : "transparent"
-                }
+                label: qsTr("Back to script library")
+                iconName: "chevron-left"
+                iconColor: Theme.text
             }
 
             Text {
@@ -140,12 +133,16 @@ Item {
         }
 
         ScrollView {
+            id: editorScroll
+            objectName: "scriptFormScroll"
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
+            contentWidth: availableWidth
 
             ColumnLayout {
-                width: Math.max(0, parent.width - 12)
+                objectName: "scriptFormContent"
+                width: editorScroll.availableWidth
                 spacing: 10
 
                 Text {
@@ -236,12 +233,13 @@ Item {
                         required property bool required
 
                         Layout.fillWidth: true
-                        Layout.preferredHeight: variableCard.type === "choice" ? 146 : 112
+                        implicitHeight: variableFields.implicitHeight + 16
                         radius: Theme.radiusControl
                         color: Theme.raisedBackground
                         border.color: Theme.border
 
                         ColumnLayout {
+                            id: variableFields
                             anchors.fill: parent
                             anchors.margins: 8
                             spacing: 6
@@ -268,21 +266,14 @@ Item {
                                     onTextEdited: variableModel.setProperty(variableCard.index, "label", text)
                                 }
 
-                                ToolButton {
+                                AppIconButton {
                                     id: removeVariableButton
                                     Layout.preferredWidth: 28
                                     Layout.preferredHeight: 28
-                                    hoverEnabled: true
                                     onClicked: variableModel.remove(variableCard.index)
-                                    Accessible.name: qsTr("Remove variable")
-                                    contentItem: AppIcon {
-                                        name: "trash"
-                                        color: Theme.danger
-                                    }
-                                    background: Rectangle {
-                                        radius: height / 2
-                                        color: removeVariableButton.down ? Theme.controlPressed : removeVariableButton.hovered ? Theme.controlHover : "transparent"
-                                    }
+                                    label: qsTr("Remove variable")
+                                    iconName: "trash"
+                                    iconColor: Theme.danger
                                 }
                             }
 
@@ -359,6 +350,7 @@ Item {
 
                     delegate: Rectangle {
                         id: stepCard
+                        objectName: "scriptStepCard"
 
                         required property int index
                         required property string command
@@ -367,12 +359,14 @@ Item {
                         required property string timeoutMs
 
                         Layout.fillWidth: true
-                        Layout.preferredHeight: stepCard.continuation === "literal-output" ? 196 : 144
+                        implicitHeight: stepFields.implicitHeight + 16
                         radius: Theme.radiusControl
                         color: Theme.raisedBackground
                         border.color: Theme.border
 
                         ColumnLayout {
+                            id: stepFields
+                            objectName: "scriptStepFields"
                             anchors.fill: parent
                             anchors.margins: 8
                             spacing: 6
@@ -389,22 +383,15 @@ Item {
                                     font.weight: Font.DemiBold
                                 }
 
-                                ToolButton {
+                                AppIconButton {
                                     id: removeStepButton
                                     Layout.preferredWidth: 28
                                     Layout.preferredHeight: 28
                                     enabled: stepModel.count > 1
-                                    hoverEnabled: true
                                     onClicked: stepModel.remove(stepCard.index)
-                                    Accessible.name: qsTr("Remove script step")
-                                    contentItem: AppIcon {
-                                        name: "trash"
-                                        color: removeStepButton.enabled ? Theme.danger : Theme.textSubtle
-                                    }
-                                    background: Rectangle {
-                                        radius: height / 2
-                                        color: removeStepButton.down ? Theme.controlPressed : removeStepButton.hovered ? Theme.controlHover : "transparent"
-                                    }
+                                    label: qsTr("Remove script step")
+                                    iconName: "trash"
+                                    iconColor: removeStepButton.enabled ? Theme.danger : Theme.textSubtle
                                 }
                             }
 

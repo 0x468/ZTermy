@@ -1,4 +1,5 @@
 #pragma once
+#include "application/AppControllerResultTypes.h"
 
 #include "application/actions/ActionRegistry.h"
 #include "application/ai/AiActionToolDispatcher.h"
@@ -22,7 +23,6 @@
 #include "application/ssh/SshTerminalSession.h"
 #include "application/terminal/LocalTerminalSession.h"
 #include "application/terminal/WindowsLocalShellCatalog.h"
-#include "application/workbench/CommandHistoryController.h"
 #include "application/workbench/LocalFileBrowserController.h"
 #include "core/config/ApplicationPaths.h"
 #include "core/config/ApplicationSettings.h"
@@ -59,6 +59,7 @@
 #include <QSet>
 #include <QString>
 #include <QStringList>
+#include <QThreadPool>
 #include <QTimer>
 #include <QVariantList>
 #include <QVariantMap>
@@ -95,23 +96,6 @@ class KnownHostsController;
 namespace ztermy
 {
 
-using ShellHistoryEntries = std::vector<workbench::ShellHistoryEntry>;
-using NoteSearchResults = std::vector<workbench::NoteSearchResult>;
-using AiTextAttachments = std::vector<ai::AiExplicitContext>;
-using AiImageAttachments = std::vector<ai::AiImageAttachment>;
-using AiUserSkills = std::vector<ai::AiUserSkill>;
-
-} // namespace ztermy
-
-Q_DECLARE_METATYPE(ztermy::ShellHistoryEntries)
-Q_DECLARE_METATYPE(ztermy::NoteSearchResults)
-Q_DECLARE_METATYPE(ztermy::AiTextAttachments)
-Q_DECLARE_METATYPE(ztermy::AiImageAttachments)
-Q_DECLARE_METATYPE(ztermy::AiUserSkills)
-
-namespace ztermy
-{
-
 class AppController final : public QObject
 {
     Q_OBJECT
@@ -140,7 +124,6 @@ class AppController final : public QObject
     Q_PROPERTY(QString noteSearchState READ noteSearchState NOTIFY notesChanged)
     Q_PROPERTY(QString noteOperationError READ noteOperationError NOTIFY notesChanged)
     Q_PROPERTY(QVariantList terminalHistory READ terminalHistory NOTIFY terminalHistoryChanged)
-    Q_PROPERTY(QVariantList terminalGlobalHistory READ terminalGlobalHistory NOTIFY terminalHistoryChanged)
     Q_PROPERTY(QVariantList actions READ actions NOTIFY actionRegistryChanged)
     Q_PROPERTY(QString terminalHistoryState READ terminalHistoryState NOTIFY terminalHistoryChanged)
     Q_PROPERTY(QString terminalHistoryError READ terminalHistoryError NOTIFY terminalHistoryChanged)
@@ -200,6 +183,7 @@ class AppController final : public QObject
     Q_PROPERTY(bool sftpShowHiddenFiles READ sftpShowHiddenFiles NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool sftpConfirmDelete READ sftpConfirmDelete NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool closeToTray READ closeToTray NOTIFY applicationSettingsChanged)
+    Q_PROPERTY(QVariantMap windowInteractionSettings READ windowInteractionSettings NOTIFY applicationSettingsChanged)
     Q_PROPERTY(bool performanceMode READ performanceMode NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString languagePreference READ languagePreference NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QString aiProviderPreference READ aiProviderPreference NOTIFY applicationSettingsChanged)
@@ -259,6 +243,7 @@ class AppController final : public QObject
     Q_PROPERTY(QObject *knownHosts READ knownHosts CONSTANT)
     Q_PROPERTY(QObject *keychain READ keychain CONSTANT)
     Q_PROPERTY(QObject *connectionHistory READ connectionHistory CONSTANT)
+    Q_PROPERTY(bool connectionHistoryEnabled READ connectionHistoryEnabled NOTIFY applicationSettingsChanged)
     Q_PROPERTY(QObject *localFiles READ localFiles CONSTANT)
 
 public:
@@ -313,7 +298,6 @@ public:
     [[nodiscard]] QString noteSearchState() const;
     [[nodiscard]] QString noteOperationError() const;
     [[nodiscard]] QVariantList terminalHistory() const;
-    [[nodiscard]] QVariantList terminalGlobalHistory() const;
     [[nodiscard]] QVariantList actions() const;
     [[nodiscard]] QString terminalHistoryState() const;
     [[nodiscard]] QString terminalHistoryError() const;
@@ -341,6 +325,7 @@ public:
     [[nodiscard]] QString activeTerminalTabId() const;
     [[nodiscard]] bool activeTerminalTabPinned() const;
     [[nodiscard]] QVariantMap activeTerminalWorkspace() const;
+    [[nodiscard]] Q_INVOKABLE QVariantMap terminalWorkspace(const QString &workspaceId) const;
     [[nodiscard]] QVariantMap activeRemoteTelemetry() const;
     [[nodiscard]] QString terminalSearchQuery() const;
     [[nodiscard]] int terminalSearchCurrent() const noexcept;
@@ -373,6 +358,8 @@ public:
     [[nodiscard]] bool sftpShowHiddenFiles() const noexcept;
     [[nodiscard]] bool sftpConfirmDelete() const noexcept;
     [[nodiscard]] bool closeToTray() const noexcept;
+    [[nodiscard]] QVariantMap windowInteractionSettings() const;
+    Q_INVOKABLE bool saveWindowInteractionSettings(const QVariantMap &changes);
     [[nodiscard]] bool performanceMode() const noexcept;
     [[nodiscard]] QString languagePreference() const;
     [[nodiscard]] QString aiProviderPreference() const;
@@ -433,6 +420,8 @@ public:
     [[nodiscard]] QObject *knownHosts() const noexcept;
     [[nodiscard]] QObject *keychain() const noexcept;
     [[nodiscard]] QObject *connectionHistory() const noexcept;
+    [[nodiscard]] bool connectionHistoryEnabled() const noexcept;
+    Q_INVOKABLE bool setConnectionHistoryEnabled(bool enabled);
     [[nodiscard]] QObject *localFiles() const noexcept;
 
     Q_INVOKABLE QString startLocalTerminal();
@@ -450,7 +439,8 @@ public:
     Q_INVOKABLE bool copyLastTerminalCommand();
     Q_INVOKABLE bool copyLastTerminalCommandOutput();
     Q_INVOKABLE bool activateTerminalPane(const QString &paneId);
-    Q_INVOKABLE bool splitActiveTerminal(const QString &orientation, bool duplicateActive = false);
+    Q_INVOKABLE bool splitActiveTerminal(const QString &orientation, bool duplicateActive = false,
+                                         const QString &profileId = {}, const QString &shellId = {});
     Q_INVOKABLE bool moveTerminalPane(const QString &paneId, const QString &targetPaneId, const QString &orientation,
                                       bool placeAfter);
     Q_INVOKABLE bool retryQuarantinedTerminalPane(const QString &paneId);
@@ -466,6 +456,7 @@ public:
     Q_INVOKABLE bool undoTerminalKeywordHighlight(const QString &tabId, const QString &ruleId);
     Q_INVOKABLE void clearTerminalSearch();
     Q_INVOKABLE bool toggleTerminalWorkbench(const QString &page);
+    Q_INVOKABLE bool ensureSftpBrowser();
     Q_INVOKABLE void closeTerminalWorkbench();
     Q_INVOKABLE void setTerminalWorkbenchWidth(qreal width);
     Q_INVOKABLE void moveTerminalWorkbench();
@@ -523,6 +514,7 @@ public:
     Q_INVOKABLE bool importNote(const QString &localFileUrl, const QString &destinationFolder = {});
     Q_INVOKABLE bool exportActiveNote(const QString &localFileUrl);
     Q_INVOKABLE void refreshTerminalHistory();
+    Q_INVOKABLE void refreshSessionHistory();
     Q_INVOKABLE void setTerminalTelemetryVisible(bool visible);
     Q_INVOKABLE void refreshRemoteTelemetry();
     Q_INVOKABLE void refreshSftpDirectory();
@@ -620,7 +612,6 @@ public:
     Q_INVOKABLE bool saveLocalShellPreference(const QString &preference);
     Q_INVOKABLE bool saveTerminalSelectionPopupSettings(bool enabled, const QVariantList &actions);
     Q_INVOKABLE void refreshLocalShells();
-    [[nodiscard]] Q_INVOKABLE QVariantList terminalCompletionCandidates(const QString &prefix, int limit = 8) const;
     [[nodiscard]] Q_INVOKABLE QVariantList commandPaletteItems() const;
     Q_INVOKABLE bool triggerCommandPaletteItem(const QVariantMap &item);
     Q_INVOKABLE bool saveAiProviderSettings(const QString &provider, const QString &baseUrl,
@@ -749,6 +740,7 @@ signals:
     void openSshConfigImportCompleted(QVariantList hosts, QString error);
 
 private:
+    friend class AppControllerTestAccess;
     Q_SIGNAL void terminalHistoryTaskCompleted(const QString &tabId, quint64 requestId, ShellHistoryEntries entries,
                                                const QString &error);
     Q_SIGNAL void noteSearchTaskCompleted(quint64 requestId, NoteSearchResults results, const QString &error);
@@ -895,6 +887,8 @@ private:
         std::vector<ssh::SshKeywordHighlightRule> keywordHighlightRules;
         std::vector<workbench::ShellHistoryEntry> history;
         std::vector<workbench::ShellHistoryEntry> capturedHistory;
+        std::shared_ptr<std::stop_source> historyCancellation;
+        sftp::TransferRequestProvider remoteRequestProvider;
         std::deque<telemetry::Sample> telemetryHistory;
         workbench::ScriptRecorder scriptRecorder;
         workbench::ScriptExecution scriptExecution;
@@ -1101,6 +1095,8 @@ private:
     [[nodiscard]] std::expected<ssh::SshConnectionRequest, sftp::TransferCredentialError>
     sftpConnectionRequest(const TerminalTab &tab);
     [[nodiscard]] sftp::TransferRequestProvider transferRequestProvider(const QString &profileId);
+    [[nodiscard]] static sftp::TransferRequestProvider terminalTransferRequestProvider(const TerminalTab &tab);
+    void bindSshConnectionContext(TerminalTab &tab, const ssh::SshConnectionRequest &request);
     [[nodiscard]] bool enqueueSftpUploadBatchForTab(const TerminalTab &tab, const QStringList &localFileUrls,
                                                     const QString &destinationRoot);
     void initializeTransferManager();
@@ -1108,6 +1104,8 @@ private:
     void applyTransferBatchSnapshot(const sftp::TransferBatchesPtr &batches);
     void stopSftpSession(TerminalTab &tab);
     void deferSftpSessionStop(std::unique_ptr<sftp::SftpSession> session);
+    void retireTerminalTab(std::unique_ptr<TerminalTab> tab);
+    void reapClosedTerminalTabs();
     void reapStoppedSftpSession(sftp::SftpSession *session);
     void requestSftpDirectory(TerminalTab &tab, const QString &remotePath);
     void applyWorkspaceState(TerminalTab &tab) const;
@@ -1141,7 +1139,7 @@ private:
 
     static constexpr std::size_t maximumTerminalTabs = 32;
 
-    ui::TerminalItem *m_terminal = nullptr;
+    QPointer<ui::TerminalItem> m_terminal;
     QHash<QString, QPointer<ui::TerminalItem>> m_terminalViewports;
     LocalTerminalSessionFactory m_localSessionFactory;
     std::unique_ptr<windowing::WindowsProtectedClipboard> m_aiClipboard;
@@ -1186,7 +1184,6 @@ private:
     std::unique_ptr<ssh::KnownHostsController> m_knownHostsController;
     std::unique_ptr<ssh::KeychainController> m_keychainController;
     std::unique_ptr<logging::ConnectionHistoryController> m_connectionHistoryController;
-    std::unique_ptr<workbench::CommandHistoryController> m_commandHistoryController;
     std::unique_ptr<workbench::LocalFileBrowserController> m_localFilesController;
     std::vector<ssh::SshProfile> m_profiles;
     std::vector<forwarding::PortForwardingRule> m_portForwardingRules;
@@ -1229,6 +1226,9 @@ private:
     ai::AiReadToolDispatcher m_aiReadToolDispatcher;
     ai::AiToolDispatchLedger m_mcpDispatchLedger;
     std::vector<std::unique_ptr<TerminalTab>> m_tabs;
+    std::vector<std::unique_ptr<TerminalTab>> m_closingTabs;
+    QThreadPool m_historyWorker;
+    QVariantList m_presentedTerminalHistory;
     QList<terminal::LocalShellProfile> m_localShellProfiles;
     std::deque<ClosedTerminalDescription> m_closedTerminalTabs;
     std::vector<std::unique_ptr<sftp::SftpSession>> m_stoppingSftpSessions;

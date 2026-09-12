@@ -4,22 +4,24 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
-Rectangle {
+SidePanelSurface {
     id: workbench
 
     required property var controller
     required property var activeTab
     required property string panelSide
     property real panelWidth: 360
-    property real dragStartGlobalX: 0
-    property real dragStartWidth: panelWidth
     property string pendingDeleteId: ""
     property string pendingDeleteName: ""
-    property string historyScope: "profile"
     property string appliedHistorySearch: ""
     property string scriptSurface: "library"
     readonly property string currentPage: activeTab ? activeTab.workbenchPage : "history"
-    readonly property var historySource: historyScope === "global" ? controller.terminalGlobalHistory : controller.terminalHistory
+    readonly property var historySource: controller.terminalHistory
+    readonly property string historySessionId: activeTab ? activeTab.sessionId || "" : ""
+    readonly property bool historySessionRunning: !!activeTab && !!activeTab.running
+    property string presentedHistorySession: ""
+    property string presentedHistorySearch: ""
+    property int historyPresentationRevision: 0
     readonly property var filteredQuickCommands: {
         const needle = quickCommandSearch.text.trim().toLocaleLowerCase();
         if (needle.length === 0) {
@@ -34,8 +36,11 @@ Rectangle {
         }
         return historySource.filter(entry => entry.command.toLocaleLowerCase().includes(needle) || (entry.sourceLabel || "").toLocaleLowerCase().includes(needle));
     }
+    onFilteredHistoryChanged: Qt.callLater(syncHistoryModel)
 
     signal panelWidthRequested(real width)
+    signal panelResizeStarted
+    signal panelResizeFinished
     signal insertRequested(string command)
     signal runRequested(string command, var sourceItem)
     signal importLibraryRequested
@@ -43,63 +48,11 @@ Rectangle {
     signal aiSettingsRequested
     signal closeRequested
 
-    component WorkbenchToolButton: ToolButton {
-        id: control
-
-        property bool selected: false
-
-        hoverEnabled: true
-        focusPolicy: Qt.StrongFocus
-        Keys.onReturnPressed: event => {
-            if (!event.isAutoRepeat) {
-                control.click();
-            }
-            event.accepted = true;
-        }
-        Keys.onEnterPressed: event => {
-            if (!event.isAutoRepeat) {
-                control.click();
-            }
-            event.accepted = true;
-        }
-
-        background: Item {
-            Rectangle {
-                anchors.centerIn: parent
-                width: Math.min(parent.width, parent.height)
-                height: width
-                radius: width / 2
-                color: control.down ? Theme.controlPressed : control.hovered ? Theme.controlHover : "transparent"
-                border.color: control.visualFocus ? Theme.focus : "transparent"
-                border.width: control.visualFocus ? 2 : 0
-
-                Behavior on color {
-                    ColorAnimation {
-                        duration: Theme.motionFast
-                    }
-                }
-            }
-
-            Rectangle {
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.bottom: parent.bottom
-                width: control.selected ? 12 : 0
-                height: 2
-                radius: 1
-                color: Theme.accent
-
-                Behavior on width {
-                    NumberAnimation {
-                        duration: Theme.motionFast
-                        easing.type: Easing.OutCubic
-                    }
-                }
-            }
-        }
-
-        HoverHandler {
-            cursorShape: control.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-        }
+    Timer {
+        interval: 1000
+        running: workbench.visible && workbench.currentPage === "history"
+        repeat: true
+        onTriggered: workbench.controller.refreshSessionHistory()
     }
 
     component ScopeButton: Button {
@@ -135,21 +88,61 @@ Rectangle {
         }
     }
 
-    color: Theme.panelBackground
-    border.color: Theme.border
     focus: visible
     Keys.onEscapePressed: closeRequested()
-    Accessible.role: Accessible.Pane
-    Accessible.name: currentPage === "sftp" ? qsTr("Remote files") : currentPage === "history" ? qsTr("Command history") : currentPage === "notes" ? qsTr("Notes") : currentPage === "ai" ? qsTr("Terminal AI assistant") : qsTr("Scripts")
+    panelTitle: currentPage === "sftp" ? qsTr("Remote files") : currentPage === "history" ? qsTr("Command history") : currentPage === "notes" ? qsTr("Notes") : currentPage === "ai" ? qsTr("Terminal AI assistant") : qsTr("Scripts")
     onVisibleChanged: {
-        if (visible && currentPage === "history" && controller.terminalHistoryState === "idle") {
-            controller.refreshTerminalHistory();
-        }
+        Qt.callLater(ensureHistoryLoaded);
+    }
+    onHistorySessionIdChanged: {
+        Qt.callLater(ensureHistoryLoaded);
+        Qt.callLater(syncHistoryModel);
+    }
+    onHistorySessionRunningChanged: Qt.callLater(ensureHistoryLoaded)
+    Component.onCompleted: {
+        Qt.callLater(ensureHistoryLoaded);
+        Qt.callLater(syncHistoryModel);
     }
     onCurrentPageChanged: {
         if (currentPage !== "scripts") {
             scriptSurface = "library";
         }
+        Qt.callLater(ensureHistoryLoaded);
+    }
+
+    function ensureHistoryLoaded() {
+        if (visible && currentPage === "history" && historySessionRunning)
+            controller.refreshTerminalHistory();
+    }
+
+    function syncHistoryModel() {
+        replaceHistoryEntries(filteredHistory, historySessionId, appliedHistorySearch);
+    }
+
+    function replaceHistoryEntries(entries, sessionId, search) {
+        if (!historyList)
+            return;
+        const sameContext = presentedHistorySession === sessionId && presentedHistorySearch === search;
+        const previous = historyList.model || [];
+        const rowHeight = 48 + historyList.spacing;
+        const topIndex = Math.max(0, Math.floor((historyList.contentY - historyList.originY) / rowHeight));
+        const topCommand = sameContext && topIndex < previous.length ? previous[topIndex].command : "";
+        const selectedCommand = sameContext && historyList.currentIndex >= 0 && historyList.currentIndex < previous.length ? previous[historyList.currentIndex].command : "";
+        const offset = sameContext ? historyList.contentY - historyList.originY - topIndex * rowHeight : 0;
+        presentedHistorySession = sessionId;
+        presentedHistorySearch = search;
+        const revision = ++historyPresentationRevision;
+        historyList.model = entries;
+        historyList.currentIndex = entries.findIndex(entry => entry.command === selectedCommand);
+        Qt.callLater(() => {
+            if (revision !== historyPresentationRevision)
+                return;
+            historyList.forceLayout();
+            const restoredIndex = topCommand.length > 0 ? entries.findIndex(entry => entry.command === topCommand) : -1;
+            const desiredY = restoredIndex >= 0 ? restoredIndex * rowHeight + offset : sameContext ? topIndex * rowHeight + offset : 0;
+            const maximumY = Math.max(0, historyList.contentHeight - historyList.height);
+            historyList.contentY = historyList.originY + Math.max(0, Math.min(maximumY, desiredY));
+        });
     }
 
     function beginNewCommand(prefill) {
@@ -194,7 +187,7 @@ Rectangle {
         }
     }
 
-    MouseArea {
+    ResizeGrip {
         id: resizeHandle
 
         objectName: "terminalWorkbenchResizeHandle"
@@ -203,20 +196,19 @@ Rectangle {
         width: 7
         x: workbench.panelSide === "right" ? 0 : parent.width - width
         z: 20
-        hoverEnabled: true
-        cursorShape: Qt.SizeHorCursor
-        onPressed: mouse => {
-            workbench.dragStartGlobalX = mapToGlobal(mouse.x, mouse.y).x;
-            workbench.dragStartWidth = workbench.panelWidth;
+        value: workbench.panelWidth
+        minimum: 320
+        maximum: 800
+        defaultValue: 520
+        direction: workbench.panelSide === "left" ? 1 : -1
+        snapPoints: [400, 520, 640]
+        onPressedChanged: {
+            if (pressed)
+                workbench.panelResizeStarted();
+            else
+                workbench.panelResizeFinished();
         }
-        onPositionChanged: mouse => {
-            if (!pressed) {
-                return;
-            }
-            const globalX = mapToGlobal(mouse.x, mouse.y).x;
-            const delta = workbench.panelSide === "left" ? globalX - workbench.dragStartGlobalX : workbench.dragStartGlobalX - globalX;
-            workbench.panelWidthRequested(Math.max(320, Math.min(800, workbench.dragStartWidth + delta)));
-        }
+        onValueEdited: value => workbench.panelWidthRequested(value)
     }
 
     Timer {
@@ -242,8 +234,9 @@ Rectangle {
                 anchors.rightMargin: 4
                 spacing: 4
 
-                WorkbenchToolButton {
+                AppIconButton {
                     id: sftpPageButton
+                    objectName: "terminalRemoteFilesPageButton"
 
                     Layout.alignment: Qt.AlignVCenter
                     Layout.preferredWidth: 28
@@ -252,19 +245,16 @@ Rectangle {
                     checked: workbench.currentPage === "sftp"
                     selected: checked
                     onClicked: workbench.controller.toggleTerminalWorkbench("sftp")
-                    Accessible.name: qsTr("Remote files")
-                    contentItem: AppIcon {
-                        name: "folder"
-                        color: sftpPageButton.checked ? Theme.accent : Theme.textSoft
-                    }
+                    label: qsTr("Remote files")
+                    iconName: "folder"
+                    iconColor: sftpPageButton.checked ? Theme.accent : Theme.textSoft
 
-                    AppToolTip {
-                        text: qsTr("Remote files")
-                    }
+                    toolTipText: qsTr("Remote files")
                 }
 
-                WorkbenchToolButton {
+                AppIconButton {
                     id: historyPageButton
+                    objectName: "terminalHistoryPageButton"
 
                     Layout.alignment: Qt.AlignVCenter
                     Layout.preferredWidth: 28
@@ -273,15 +263,15 @@ Rectangle {
                     checked: workbench.currentPage === "history"
                     selected: checked
                     onClicked: workbench.controller.toggleTerminalWorkbench("history")
-                    Accessible.name: qsTr("Command history")
-                    contentItem: AppIcon {
-                        name: "history"
-                        color: historyPageButton.checked ? Theme.accent : Theme.textSoft
-                    }
+                    label: qsTr("Command history")
+                    iconName: "history"
+                    iconColor: historyPageButton.checked ? Theme.accent : Theme.textSoft
+                    toolTipText: qsTr("Command history")
                 }
 
-                WorkbenchToolButton {
+                AppIconButton {
                     id: quickCommandsPageButton
+                    objectName: "terminalScriptsPageButton"
 
                     Layout.alignment: Qt.AlignVCenter
                     Layout.preferredWidth: 28
@@ -290,15 +280,15 @@ Rectangle {
                     checked: workbench.currentPage === "scripts"
                     selected: checked
                     onClicked: workbench.controller.toggleTerminalWorkbench("scripts")
-                    Accessible.name: qsTr("Scripts")
-                    contentItem: AppIcon {
-                        name: "commands"
-                        color: quickCommandsPageButton.checked ? Theme.accent : Theme.textSoft
-                    }
+                    label: qsTr("Scripts")
+                    iconName: "commands"
+                    iconColor: quickCommandsPageButton.checked ? Theme.accent : Theme.textSoft
+                    toolTipText: qsTr("Scripts")
                 }
 
-                WorkbenchToolButton {
+                AppIconButton {
                     id: notesPageButton
+                    objectName: "terminalNotesPageButton"
 
                     Layout.alignment: Qt.AlignVCenter
                     Layout.preferredWidth: 28
@@ -307,18 +297,14 @@ Rectangle {
                     checked: workbench.currentPage === "notes"
                     selected: checked
                     onClicked: workbench.controller.toggleTerminalWorkbench("notes")
-                    Accessible.name: qsTr("Notes")
-                    contentItem: AppIcon {
-                        name: "file"
-                        color: notesPageButton.checked ? Theme.accent : Theme.textSoft
-                    }
+                    label: qsTr("Notes")
+                    iconName: "file"
+                    iconColor: notesPageButton.checked ? Theme.accent : Theme.textSoft
 
-                    AppToolTip {
-                        text: qsTr("Notes")
-                    }
+                    toolTipText: qsTr("Notes")
                 }
 
-                WorkbenchToolButton {
+                AppIconButton {
                     id: aiPageButton
 
                     objectName: "terminalAiAssistantButton"
@@ -329,45 +315,37 @@ Rectangle {
                     checked: workbench.currentPage === "ai"
                     selected: checked
                     onClicked: workbench.controller.toggleTerminalWorkbench("ai")
-                    Accessible.name: qsTr("Terminal AI assistant")
-                    contentItem: AppIcon {
-                        name: "ai"
-                        color: aiPageButton.checked ? Theme.accent : Theme.textSoft
-                    }
+                    label: qsTr("Terminal AI assistant")
+                    iconName: "ai"
+                    iconColor: aiPageButton.checked ? Theme.accent : Theme.textSoft
 
-                    AppToolTip {
-                        text: qsTr("AI assistant")
-                    }
+                    toolTipText: qsTr("AI assistant")
                 }
 
                 Item {
                     Layout.fillWidth: true
                 }
 
-                WorkbenchToolButton {
+                AppIconButton {
                     objectName: "moveTerminalWorkbenchButton"
                     Layout.alignment: Qt.AlignVCenter
                     Layout.preferredWidth: 28
                     Layout.preferredHeight: 28
                     onClicked: workbench.controller.moveTerminalWorkbench()
-                    Accessible.name: workbench.panelSide === "left" ? qsTr("Move terminal workbench right") : qsTr("Move terminal workbench left")
-                    contentItem: AppIcon {
-                        name: "swap-horizontal"
-                        color: Theme.textSoft
-                    }
+                    label: workbench.panelSide === "left" ? qsTr("Move terminal workbench right") : qsTr("Move terminal workbench left")
+                    iconName: "swap-horizontal"
+                    iconColor: Theme.textSoft
                 }
 
-                WorkbenchToolButton {
+                AppIconButton {
                     objectName: "closeTerminalWorkbenchButton"
                     Layout.alignment: Qt.AlignVCenter
                     Layout.preferredWidth: 28
                     Layout.preferredHeight: 28
                     onClicked: workbench.closeRequested()
-                    Accessible.name: qsTr("Close terminal workbench")
-                    contentItem: AppIcon {
-                        name: "close"
-                        color: Theme.textSoft
-                    }
+                    label: qsTr("Close terminal workbench")
+                    iconName: "close"
+                    iconColor: Theme.textSoft
                 }
             }
         }
@@ -427,22 +405,19 @@ Rectangle {
                                 onTextChanged: historySearchDelay.restart()
                             }
 
-                            WorkbenchToolButton {
+                            AppIconButton {
                                 Layout.preferredWidth: 32
                                 Layout.preferredHeight: 32
-                                visible: workbench.historyScope === "profile"
                                 enabled: workbench.controller.terminalHistoryState !== "loading"
                                 onClicked: workbench.controller.refreshTerminalHistory()
-                                Accessible.name: qsTr("Refresh command history")
-                                contentItem: AppIcon {
-                                    name: "history"
-                                    color: Theme.text
-                                    rotation: parent.enabled ? 0 : 180
+                                label: qsTr("Refresh command history")
+                                iconName: "history"
+                                iconColor: Theme.text
+                                rotation: parent.enabled ? 0 : 180
 
-                                    Behavior on rotation {
-                                        NumberAnimation {
-                                            duration: Theme.motionMedium
-                                        }
+                                Behavior on rotation {
+                                    NumberAnimation {
+                                        duration: Theme.motionMedium
                                     }
                                 }
                             }
@@ -453,19 +428,12 @@ Rectangle {
                             Layout.preferredHeight: 26
                             spacing: 3
 
-                            ScopeButton {
-                                Layout.maximumWidth: 160
-                                active: workbench.historyScope === "profile"
-                                text: workbench.activeTab && workbench.activeTab.title.length > 0 ? workbench.activeTab.title : qsTr("Current profile")
-                                Accessible.name: qsTr("Current profile history")
-                                onClicked: workbench.historyScope = "profile"
-                            }
-
-                            ScopeButton {
-                                active: workbench.historyScope === "global"
-                                text: qsTr("Global")
-                                Accessible.name: qsTr("Global command history")
-                                onClicked: workbench.historyScope = "global"
+                            Text {
+                                Layout.fillWidth: true
+                                text: qsTr("Session + Shell history file")
+                                color: Theme.textSubtle
+                                font.pixelSize: Theme.textCompact
+                                elide: Text.ElideRight
                             }
 
                             Item {
@@ -483,18 +451,20 @@ Rectangle {
                         StatusMessage {
                             Layout.fillWidth: true
                             kind: "error"
-                            text: workbench.historyScope === "profile" ? workbench.controller.terminalHistoryError : ""
+                            text: workbench.controller.terminalHistoryError
                         }
 
                         ListView {
                             id: historyList
 
+                            objectName: "terminalHistoryList"
+
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            visible: workbench.filteredHistory.length > 0
+                            visible: count > 0
                             clip: true
                             spacing: 1
-                            model: workbench.filteredHistory
+                            model: []
                             keyNavigationEnabled: true
                             activeFocusOnTab: true
 
@@ -505,7 +475,7 @@ Rectangle {
                                 required property int index
 
                                 width: ListView.view.width
-                                height: workbench.historyScope === "global" && (modelData.sourceLabel || "").length > 0 ? 48 : 38
+                                height: 48
                                 radius: Theme.radiusSmall
                                 color: historyDelegate.ListView.isCurrentItem ? Theme.selectedBackground : historyHover.hovered ? Theme.controlHover : "transparent"
                                 border.color: historyDelegate.activeFocus ? Theme.focus : "transparent"
@@ -548,7 +518,7 @@ Rectangle {
                                     anchors.leftMargin: 8
                                     anchors.bottom: parent.bottom
                                     anchors.bottomMargin: 4
-                                    visible: workbench.historyScope === "global" && (historyDelegate.modelData.sourceLabel || "").length > 0
+                                    visible: (historyDelegate.modelData.sourceLabel || "").length > 0
                                     text: historyDelegate.modelData.sourceLabel || ""
                                     color: Theme.textSubtle
                                     font.family: Theme.uiFont
@@ -564,51 +534,39 @@ Rectangle {
                                     visible: historyHover.hovered || historyDelegate.ListView.isCurrentItem || historyDelegate.activeFocus
                                     spacing: 2
 
-                                    WorkbenchToolButton {
+                                    AppIconButton {
                                         id: runHistoryCommandButton
 
                                         width: 26
                                         height: 26
                                         onClicked: workbench.runRequested(historyDelegate.modelData.command, runHistoryCommandButton)
-                                        Accessible.name: qsTr("Run history command")
-                                        contentItem: AppIcon {
-                                            name: "play"
-                                            color: Theme.textSoft
-                                        }
+                                        label: qsTr("Run history command")
+                                        iconName: "play"
+                                        iconColor: Theme.textSoft
 
-                                        AppToolTip {
-                                            text: qsTr("Run")
-                                        }
+                                        toolTipText: qsTr("Run")
                                     }
 
-                                    WorkbenchToolButton {
+                                    AppIconButton {
                                         width: 26
                                         height: 26
                                         onClicked: workbench.insertRequested(historyDelegate.modelData.command)
-                                        Accessible.name: qsTr("Insert history command")
-                                        contentItem: AppIcon {
-                                            name: "compose"
-                                            color: Theme.textSoft
-                                        }
+                                        label: qsTr("Insert history command")
+                                        iconName: "compose"
+                                        iconColor: Theme.textSoft
 
-                                        AppToolTip {
-                                            text: qsTr("Insert")
-                                        }
+                                        toolTipText: qsTr("Insert")
                                     }
 
-                                    WorkbenchToolButton {
+                                    AppIconButton {
                                         width: 26
                                         height: 26
                                         onClicked: workbench.saveHistoryCommand(historyDelegate.modelData.command)
-                                        Accessible.name: qsTr("Save history command")
-                                        contentItem: AppIcon {
-                                            name: "save"
-                                            color: Theme.textSoft
-                                        }
+                                        label: qsTr("Save history command")
+                                        iconName: "save"
+                                        iconColor: Theme.textSoft
 
-                                        AppToolTip {
-                                            text: qsTr("Save as script")
-                                        }
+                                        toolTipText: qsTr("Save as script")
                                     }
                                 }
 
@@ -627,15 +585,15 @@ Rectangle {
                         StatePanel {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            visible: workbench.filteredHistory.length === 0
-                            kind: workbench.historyScope === "profile" && workbench.controller.terminalHistoryState === "loading" ? "loading" : "empty"
+                            visible: historyList.count === 0
+                            kind: workbench.controller.terminalHistoryState === "loading" ? "loading" : "empty"
                             centered: true
-                            heading: workbench.historyScope === "profile" && workbench.controller.terminalHistoryState === "loading" ? qsTr("Loading history") : historySearch.text.length > 0 ? qsTr("No matching history") : workbench.historyScope === "global" ? qsTr("No global command history") : qsTr("No command history")
-                            description: workbench.historyScope === "profile" && workbench.controller.terminalHistoryState === "loading" ? qsTr("Reading a bounded snapshot outside the interface thread.") : historySearch.text.length > 0 ? qsTr("Try a different search term.") : workbench.historyScope === "global" ? qsTr("Commands from open terminal sessions appear here without being written to disk.") : qsTr("History is read from the active shell and remains in memory for this tab.")
+                            heading: workbench.controller.terminalHistoryState === "loading" ? qsTr("Loading history") : historySearch.text.length > 0 ? qsTr("No matching history") : qsTr("No command history")
+                            description: workbench.controller.terminalHistoryState === "loading" ? qsTr("Reading a bounded snapshot outside the interface thread.") : historySearch.text.length > 0 ? qsTr("Try a different search term.") : qsTr("Only this session and its Shell history file are shown. Nothing is saved by ztermy.")
 
                             ActionButton {
                                 text: qsTr("Refresh history")
-                                visible: workbench.historyScope === "profile" && workbench.controller.terminalHistoryState !== "loading"
+                                visible: workbench.controller.terminalHistoryState !== "loading"
                                 accessibleName: qsTr("Refresh command history")
                                 onClicked: workbench.controller.refreshTerminalHistory()
                             }
@@ -682,17 +640,16 @@ Rectangle {
                             font.pixelSize: Theme.textCompact
                         }
 
-                        WorkbenchToolButton {
+                        AppIconButton {
                             id: scriptLibraryMenuButton
 
                             Layout.preferredWidth: 28
                             Layout.preferredHeight: 26
                             onClicked: scriptLibraryMenu.open()
-                            Accessible.name: qsTr("Script library actions")
-                            contentItem: AppIcon {
-                                name: "more"
-                                color: Theme.textSoft
-                            }
+                            label: qsTr("Script library actions")
+                            iconName: "more"
+                            iconColor: Theme.textSoft
+                            toolTipEnabled: !scriptLibraryMenu.visible
 
                             AppMenu {
                                 id: scriptLibraryMenu
@@ -727,15 +684,13 @@ Rectangle {
                             accessibleName: qsTr("Search scripts")
                         }
 
-                        WorkbenchToolButton {
+                        AppIconButton {
                             Layout.preferredWidth: 32
                             Layout.preferredHeight: 32
                             onClicked: workbench.beginNewCommand("")
-                            Accessible.name: qsTr("New script")
-                            contentItem: AppIcon {
-                                name: "plus"
-                                color: Theme.text
-                            }
+                            label: qsTr("New script")
+                            iconName: "plus"
+                            iconColor: Theme.text
                         }
                     }
 
@@ -861,104 +816,80 @@ Rectangle {
                                 visible: commandHover.hovered || commandDelegate.ListView.isCurrentItem || commandDelegate.activeFocus
                                 spacing: 2
 
-                                WorkbenchToolButton {
+                                AppIconButton {
                                     id: moveCommandUpButton
 
                                     width: 26
                                     height: 28
                                     enabled: workbench.quickCommandIndex(commandDelegate.modelData.id) > 0
                                     onClicked: workbench.moveQuickCommand(commandDelegate.modelData.id, -1)
-                                    Accessible.name: qsTr("Move script up")
-                                    contentItem: AppIcon {
-                                        name: "chevron-up"
-                                        color: moveCommandUpButton.enabled ? Theme.textSoft : Theme.textSubtle
-                                    }
+                                    label: qsTr("Move script up")
+                                    iconName: "chevron-up"
+                                    iconColor: moveCommandUpButton.enabled ? Theme.textSoft : Theme.textSubtle
 
-                                    AppToolTip {
-                                        text: qsTr("Move up")
-                                    }
+                                    toolTipText: qsTr("Move up")
                                 }
 
-                                WorkbenchToolButton {
+                                AppIconButton {
                                     id: moveCommandDownButton
 
                                     width: 26
                                     height: 28
                                     enabled: workbench.quickCommandIndex(commandDelegate.modelData.id) + 1 < workbench.controller.quickCommands.length
                                     onClicked: workbench.moveQuickCommand(commandDelegate.modelData.id, 1)
-                                    Accessible.name: qsTr("Move script down")
-                                    contentItem: AppIcon {
-                                        name: "chevron-down"
-                                        color: moveCommandDownButton.enabled ? Theme.textSoft : Theme.textSubtle
-                                    }
+                                    label: qsTr("Move script down")
+                                    iconName: "chevron-down"
+                                    iconColor: moveCommandDownButton.enabled ? Theme.textSoft : Theme.textSubtle
 
-                                    AppToolTip {
-                                        text: qsTr("Move down")
-                                    }
+                                    toolTipText: qsTr("Move down")
                                 }
 
-                                WorkbenchToolButton {
+                                AppIconButton {
                                     id: runQuickCommandButton
 
                                     width: 26
                                     height: 28
                                     onClicked: workbench.beginRunScript(commandDelegate.modelData)
-                                    Accessible.name: qsTr("Review and run script")
-                                    contentItem: AppIcon {
-                                        name: "play"
-                                        color: Theme.textSoft
-                                    }
+                                    label: qsTr("Review and run script")
+                                    iconName: "play"
+                                    iconColor: Theme.textSoft
 
-                                    AppToolTip {
-                                        text: qsTr("Run")
-                                    }
+                                    toolTipText: qsTr("Run")
                                 }
 
-                                WorkbenchToolButton {
+                                AppIconButton {
                                     width: 26
                                     height: 28
                                     onClicked: workbench.insertRequested(commandDelegate.modelData.command)
-                                    Accessible.name: qsTr("Insert script text")
-                                    contentItem: AppIcon {
-                                        name: "compose"
-                                        color: Theme.textSoft
-                                    }
+                                    label: qsTr("Insert script text")
+                                    iconName: "compose"
+                                    iconColor: Theme.textSoft
 
-                                    AppToolTip {
-                                        text: qsTr("Insert")
-                                    }
+                                    toolTipText: qsTr("Insert")
                                 }
 
-                                WorkbenchToolButton {
+                                AppIconButton {
                                     width: 26
                                     height: 28
                                     onClicked: workbench.beginEditCommand(commandDelegate.modelData)
-                                    Accessible.name: qsTr("Edit script")
-                                    contentItem: AppIcon {
-                                        name: "edit"
-                                        color: Theme.textSoft
-                                    }
+                                    label: qsTr("Edit script")
+                                    iconName: "edit"
+                                    iconColor: Theme.textSoft
 
-                                    AppToolTip {
-                                        text: qsTr("Edit")
-                                    }
+                                    toolTipText: qsTr("Edit")
                                 }
 
-                                WorkbenchToolButton {
+                                AppIconButton {
                                     id: deleteCommandButton
 
                                     width: 26
                                     height: 28
                                     onClicked: workbench.requestDeleteCommand(commandDelegate.modelData, deleteCommandButton)
-                                    Accessible.name: qsTr("Delete script")
-                                    contentItem: AppIcon {
-                                        name: "trash"
-                                        color: Theme.danger
-                                    }
+                                    label: qsTr("Delete script")
+                                    iconName: "trash"
+                                    iconColor: Theme.danger
 
-                                    AppToolTip {
-                                        text: qsTr("Delete")
-                                    }
+                                    toolTipText: qsTr("Delete")
                                 }
                             }
 

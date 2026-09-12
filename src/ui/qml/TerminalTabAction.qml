@@ -16,6 +16,9 @@ Rectangle {
     property bool canMoveLeft: false
     property bool canMoveRight: false
     property string iconName: ""
+    property bool compact: false
+    property string doubleClickAction: "rename"
+    property string closeButtonMode: "hover"
     property string actionObjectName: ""
     property string closeActionObjectName: ""
     readonly property bool hovered: activateAction.hovered || closeAction.hovered
@@ -31,13 +34,15 @@ Rectangle {
     signal dragMoved(real sceneX)
     signal dragFinished(real sceneX)
 
-    implicitWidth: Math.min(184, Math.max(112, titleText.implicitWidth + 54))
+    implicitWidth: compact ? 38 : 112
     implicitHeight: Theme.titleBarHeight
-    color: control.selected ? Theme.controlBackground : (control.hovered || activateAction.visualFocus ? Theme.controlHover : "transparent")
+    property real feedbackAmount: control.selected || control.hovered || activateAction.visualFocus ? 1 : 0
+    readonly property color feedbackColor: control.selected ? Theme.controlBackground : Theme.controlHover
+    color: Theme.withAlpha(feedbackColor, feedbackColor.a * feedbackAmount)
     border.color: activateAction.visualFocus ? Theme.focus : "transparent"
     border.width: activateAction.visualFocus ? 1 : 0
-    Behavior on color {
-        ColorAnimation {
+    Behavior on feedbackAmount {
+        NumberAnimation {
             duration: Theme.motionFast
         }
     }
@@ -45,8 +50,7 @@ Rectangle {
     Rectangle {
         id: statusDot
 
-        anchors.left: parent.left
-        anchors.leftMargin: 10
+        x: control.compact ? (control.width - width) / 2 : 10
         anchors.verticalCenter: parent.verticalCenter
         width: 6
         height: 6
@@ -71,14 +75,14 @@ Rectangle {
     }
 
     AppIcon {
-        anchors.left: parent.left
-        anchors.leftMargin: 10
+        x: control.compact ? (control.width - width) / 2 : 10
         anchors.verticalCenter: parent.verticalCenter
         width: 14
         height: 14
         visible: control.iconName.length > 0
         name: control.iconName
-        color: control.selected ? Theme.text : Theme.textMuted
+        color: control.iconName === "terminal" && (control.running || control.connecting) ? Theme.accent : control.selected ? Theme.text : Theme.textMuted
+        opacity: control.connecting ? statusDot.opacity : 1
     }
 
     Text {
@@ -90,6 +94,7 @@ Rectangle {
         anchors.rightMargin: 3
         anchors.verticalCenter: parent.verticalCenter
         text: control.title
+        visible: !control.compact
         color: Theme.text
         elide: Text.ElideRight
         font.family: Theme.uiFont
@@ -101,12 +106,19 @@ Rectangle {
 
         objectName: control.actionObjectName
         anchors.left: parent.left
-        anchors.right: closeButton.left
+        anchors.right: control.compact ? parent.right : closeButton.left
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.margins: 2
         accessibleName: qsTr("Activate %1").arg(control.title)
         onActivated: control.activated()
+        doubleClickEnabled: control.doubleClickAction !== "none"
+        onDoubleActivated: {
+            if (control.doubleClickAction === "close")
+                control.closeRequested();
+            else if (control.doubleClickAction === "rename")
+                control.renameRequested();
+        }
     }
 
     DragHandler {
@@ -188,16 +200,18 @@ Rectangle {
         anchors.right: parent.right
         anchors.rightMargin: 4
         anchors.verticalCenter: parent.verticalCenter
-        width: 24
+        width: control.closeButtonMode === "hidden" ? 0 : 24
         height: 24
         radius: 5
-        color: closeAction.hovered || closeAction.visualFocus ? Theme.borderStrong : "transparent"
-        opacity: control.selected || control.hovered || activateAction.visualFocus || closeAction.visualFocus ? 1.0 : 0.45
+        property real feedbackAmount: closeAction.hovered || closeAction.visualFocus ? 1 : 0
+        color: Theme.withAlpha(Theme.borderStrong, Theme.borderStrong.a * feedbackAmount)
+        visible: !control.compact && control.closeButtonMode !== "hidden"
+        opacity: control.closeButtonMode === "always" || control.hovered || activateAction.visualFocus || closeAction.visualFocus ? 1.0 : 0
         border.color: closeAction.visualFocus ? Theme.focus : "transparent"
         border.width: closeAction.visualFocus ? 1 : 0
 
-        Behavior on color {
-            ColorAnimation {
+        Behavior on feedbackAmount {
+            NumberAnimation {
                 duration: Theme.motionFast
             }
         }
@@ -225,5 +239,10 @@ Rectangle {
             accessibleName: qsTr("Close %1").arg(control.title)
             onActivated: control.closeRequested()
         }
+    }
+
+    AppToolTip {
+        visible: control.compact && activateAction.hovered
+        text: control.title
     }
 }

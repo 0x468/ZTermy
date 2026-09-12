@@ -8,6 +8,7 @@
 #include <QLoggingCategory>
 #include <QOperatingSystemVersion>
 #include <QQmlEngine>
+#include <QSGRendererInterface>
 #include <QScreen>
 #include <QStyleHints>
 #include <QVariant>
@@ -85,6 +86,15 @@ namespace ztermy
 NativeWindow::NativeWindow(const bool performanceMode, const bool opaqueSurface, QWindow *parent)
     : QQuickView(parent), m_performanceMode(performanceMode), m_opaqueSurface(opaqueSurface || performanceMode)
 {
+    // Qt's D3D flip swapchains compose directly. A second GDI redirection surface
+    // can retain its initial white rectangle underneath translucent terminal content.
+    const auto graphics = QQuickWindow::graphicsApi();
+    if ((graphics == QSGRendererInterface::Direct3D11 || graphics == QSGRendererInterface::Direct3D12)
+        && qEnvironmentVariableIntValue("QT_D3D_NO_FLIP") == 0
+        && !qEnvironmentVariableIsSet("QT_QPA_DISABLE_REDIRECTION_SURFACE"))
+        qputenv("QT_QPA_DISABLE_REDIRECTION_SURFACE", "1");
+    qCInfo(windowLog) << "Window composition backend=" << graphics
+                      << "noRedirectionSurface=" << qEnvironmentVariableIntValue("QT_QPA_DISABLE_REDIRECTION_SURFACE");
     (void)m_animationPreference.update(windowing::queryClientAreaAnimationsEnabled());
     if (const auto highContrast = windowing::queryHighContrastState())
     {
@@ -271,6 +281,11 @@ void NativeWindow::toggleMaximize()
 void NativeWindow::closeWindow()
 {
     close();
+}
+
+bool NativeWindow::beginSystemMove()
+{
+    return startSystemMove();
 }
 
 void NativeWindow::toggleAlwaysOnTop()
@@ -896,14 +911,32 @@ void NativeWindow::exitFromTray()
     QCoreApplication::quit();
 }
 
-bool NativeWindow::applyBackdrop()
+bool NativeWindow::configureDetachedWindow(QQuickWindow *window)
 {
-    const auto windowHandle = reinterpret_cast<HWND>(winId()); // NOLINT(performance-no-int-to-ptr)
+    if (!window)
+        return false;
+    window->setIcon(icon());
+    return applyBackdrop(window);
+}
+
+bool NativeWindow::applyBackdrop(QQuickWindow *target)
+{
+    if (!target)
+        target = this;
     const BOOL darkMode = m_darkMode ? TRUE : FALSE;
     const int cornerPreference = kDwmWindowCornerRound;
     const bool solidSurface = m_opaqueSurface || m_backdropPreference == QStringLiteral("solid");
-    setColor(solidSurface ? (m_darkMode ? QColor(QStringLiteral("#0B0F14")) : QColor(QStringLiteral("#F8FAFC")))
-                          : QColor(Qt::transparent));
+    target->setColor(solidSurface ? (m_darkMode ? QColor(QStringLiteral("#0B0F14")) : QColor(QStringLiteral("#F8FAFC")))
+                                  : QColor(Qt::transparent));
+    // QQuickWindow::setColor(opaque) drops the requested alpha size. A window created
+    // with an alpha swapchain must retain that format even while painting solid colors.
+    if (!m_opaqueSurface && target->format().alphaBufferSize() != 8)
+    {
+        auto format = target->format();
+        format.setAlphaBufferSize(8);
+        target->setFormat(format);
+    }
+    const auto windowHandle = reinterpret_cast<HWND>(target->winId()); // NOLINT(performance-no-int-to-ptr)
     int backdropType = kDwmSystemBackdropNone;
     if (!solidSurface && !m_highContrastState.enabled && m_backdropPreference == QStringLiteral("mica"))
     {
@@ -917,8 +950,6 @@ bool NativeWindow::applyBackdrop()
     {
         backdropType = kDwmSystemBackdropTabbedWindow;
     }
-    const MARGINS frameMargins =
-        solidSurface ? MARGINS{} : MARGINS{.cxLeftWidth = 1, .cxRightWidth = 1, .cyTopHeight = 1, .cyBottomHeight = 1};
 
     const HRESULT darkResult =
         DwmSetWindowAttribute(windowHandle, kDwmUseImmersiveDarkMode, &darkMode, sizeof(darkMode));
@@ -933,13 +964,15 @@ bool NativeWindow::applyBackdrop()
                                                ? DwmSetWindowAttribute(windowHandle, kDwmRedirectionBitmapAlpha,
                                                                        &redirectionAlpha, sizeof(redirectionAlpha))
                                                : S_OK;
-    const HRESULT frameResult = DwmExtendFrameIntoClientArea(windowHandle, &frameMargins);
+    const MARGINS margins =
+        solidSurface ? MARGINS{} : MARGINS{.cxLeftWidth = 1, .cxRightWidth = 1, .cyTopHeight = 1, .cyBottomHeight = 1};
+    const HRESULT frameResult = DwmExtendFrameIntoClientArea(windowHandle, &margins);
     const bool applied = SUCCEEDED(darkResult) && SUCCEEDED(cornerResult) && SUCCEEDED(backdropResult)
                          && SUCCEEDED(redirectionAlphaResult) && SUCCEEDED(frameResult);
     qCInfo(windowLog) << "applied DWM appearance"
                       << "backdropType=" << backdropType << "redirectionAlphaSupported=" << redirectionAlphaSupported
                       << "redirectionAlpha=" << static_cast<bool>(redirectionAlpha)
-                      << "surfaceAlphaBits=" << format().alphaBufferSize() << "opaqueSurface=" << solidSurface
+                      << "surfaceAlphaBits=" << target->format().alphaBufferSize() << "opaqueSurface=" << solidSurface
                       << "performanceMode=" << m_performanceMode << "result=" << applied;
     if (!applied)
     {

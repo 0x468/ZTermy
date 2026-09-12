@@ -10,52 +10,11 @@ Rectangle {
     required property var controller
     required property var activeTab
     property real panelHeight: 132
-    property real dragStartGlobalY: 0
-    property real dragStartHeight: panelHeight
     property string currentTabId: ""
     property var drafts: ({})
 
     signal heightRequested(real height)
     signal closeRequested
-
-    component ComposerToolButton: ToolButton {
-        id: control
-
-        hoverEnabled: true
-        focusPolicy: Qt.StrongFocus
-        Keys.onReturnPressed: event => {
-            if (!event.isAutoRepeat) {
-                control.click();
-            }
-            event.accepted = true;
-        }
-        Keys.onEnterPressed: event => {
-            if (!event.isAutoRepeat) {
-                control.click();
-            }
-            event.accepted = true;
-        }
-
-        background: Rectangle {
-            anchors.centerIn: parent
-            width: Math.min(parent.width, parent.height)
-            height: width
-            radius: width / 2
-            color: control.down ? Theme.controlPressed : control.hovered ? Theme.controlHover : "transparent"
-            border.color: control.visualFocus ? Theme.focus : "transparent"
-            border.width: control.visualFocus ? 2 : 0
-
-            Behavior on color {
-                ColorAnimation {
-                    duration: Theme.motionFast
-                }
-            }
-        }
-
-        HoverHandler {
-            cursorShape: control.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-        }
-    }
 
     color: Theme.panelBackground
     border.color: Theme.border
@@ -103,25 +62,21 @@ Rectangle {
         return snippet.name + detail + "\n\n" + snippet.command + "\n\n" + qsTr("Click to insert · Shift+click to send");
     }
 
-    MouseArea {
+    ResizeGrip {
+        objectName: "terminalComposerResizeHandle"
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
         height: 6
         z: 10
-        hoverEnabled: true
-        cursorShape: Qt.SizeVerCursor
-        onPressed: mouse => {
-            composer.dragStartGlobalY = mapToGlobal(mouse.x, mouse.y).y;
-            composer.dragStartHeight = composer.panelHeight;
-        }
-        onPositionChanged: mouse => {
-            if (!pressed) {
-                return;
-            }
-            const globalY = mapToGlobal(mouse.x, mouse.y).y;
-            composer.heightRequested(Math.max(92, Math.min(360, composer.dragStartHeight + composer.dragStartGlobalY - globalY)));
-        }
+        value: composer.panelHeight
+        minimum: 92
+        maximum: 360
+        defaultValue: 132
+        snapPoints: [132, 240]
+        horizontal: false
+        direction: -1
+        onValueEdited: value => composer.heightRequested(value)
     }
 
     ColumnLayout {
@@ -210,36 +165,28 @@ Rectangle {
                 }
             }
 
-            ComposerToolButton {
+            AppIconButton {
                 objectName: "manageComposerQuickCommandsButton"
                 Layout.preferredWidth: 26
                 Layout.preferredHeight: 26
                 onClicked: composer.controller.toggleTerminalWorkbench("scripts")
-                Accessible.name: qsTr("Manage command snippets")
-                contentItem: AppIcon {
-                    name: "commands"
-                    color: Theme.textSoft
-                }
+                label: qsTr("Manage command snippets")
+                iconName: "commands"
+                iconColor: Theme.textSoft
 
-                AppToolTip {
-                    text: qsTr("Command snippets")
-                }
+                toolTipText: qsTr("Command snippets")
             }
 
-            ComposerToolButton {
+            AppIconButton {
                 objectName: "closeTerminalComposerButton"
                 Layout.preferredWidth: 26
                 Layout.preferredHeight: 26
                 onClicked: composer.closeRequested()
-                Accessible.name: qsTr("Close command composer")
-                contentItem: AppIcon {
-                    name: "close"
-                    color: Theme.textSoft
-                }
+                label: qsTr("Close command composer")
+                iconName: "close"
+                iconColor: Theme.textSoft
 
-                AppToolTip {
-                    text: qsTr("Close")
-                }
+                toolTipText: qsTr("Close")
             }
         }
 

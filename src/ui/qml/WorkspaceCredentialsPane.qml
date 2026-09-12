@@ -35,7 +35,6 @@ Rectangle {
         rememberSecretSwitch.checked = source.credentialStored === undefined ? true : source.credentialStored;
         privateKeyPathField.text = "";
         certificatePathField.text = "";
-        copyKeySwitch.checked = true;
         keyTypeBox.currentIndex = 0;
         editorDialog.open();
         Qt.callLater(labelField.forceActiveFocus);
@@ -185,7 +184,12 @@ Rectangle {
             visible: !root.store.busy && root.visibleEntries.length === 0 && root.store.operationError.length === 0
             centered: true
             heading: root.filterText.length > 0 ? qsTr("No matching keychain items") : root.section === "identities" ? qsTr("No identities yet") : root.section === "certificates" ? qsTr("No certificates yet") : qsTr("No keys yet")
-            description: root.height < 440 ? "" : root.section === "identities" ? qsTr("Create an identity to reuse a username and authentication source across hosts.") : qsTr("Generate a key, import it into ztermy, or keep a reference to an existing OpenSSH key file.")
+            description: root.height < 440 ? "" : root.section === "identities" ? qsTr("Create an identity to reuse a username and authentication source across hosts.") : qsTr("Generate a key or import an existing OpenSSH key into ztermy-managed storage.")
+        }
+
+        Item {
+            Layout.fillHeight: true
+            visible: root.visibleEntries.length === 0
         }
 
         ListView {
@@ -407,12 +411,14 @@ Rectangle {
                         onClicked: certificateFileDialog.open()
                     }
                 }
-                AppSwitch {
-                    id: copyKeySwitch
+                Text {
                     Layout.fillWidth: true
                     visible: editorDialog.mode === "import" || editorDialog.mode === "certificate"
-                    text: qsTr("Copy files into the ztermy keychain")
-                    accessibleName: text
+                    text: qsTr("The imported key is copied into ztermy-managed storage. Profiles reference the keychain identity instead of the original system path.")
+                    color: Theme.textMuted
+                    wrapMode: Text.WordWrap
+                    font.family: Theme.uiFont
+                    font.pixelSize: Theme.textLabel
                 }
                 Label {
                     visible: editorDialog.mode === "identity"
@@ -496,9 +502,9 @@ Rectangle {
                             if (editorDialog.mode === "generate")
                                 started = root.store.generateKey(labelField.text, keyTypeBox.model[keyTypeBox.currentIndex], Number(keyBitsBox.model[keyBitsBox.currentIndex] || 0), secretField.text);
                             else if (editorDialog.mode === "import")
-                                started = root.store.importKey(privateKeyPathField.text, labelField.text, copyKeySwitch.checked, secretField.text);
+                                started = root.store.importKey(privateKeyPathField.text, labelField.text, true, secretField.text);
                             else if (editorDialog.mode === "certificate")
-                                started = root.store.importCertificate(privateKeyPathField.text, certificatePathField.text, labelField.text, copyKeySwitch.checked, secretField.text);
+                                started = root.store.importCertificate(privateKeyPathField.text, certificatePathField.text, labelField.text, true, secretField.text);
                             else
                                 started = root.store.saveIdentity(editorDialog.editingItem.id || "", labelField.text, usernameField.text, authenticationBox.model[authenticationBox.currentIndex], keyBox.model.length > 0 ? keyBox.model[Math.max(0, keyBox.currentIndex)] : "", credentialRequiredSwitch.checked, secretField.text, rememberSecretSwitch.checked);
                             if (started) {

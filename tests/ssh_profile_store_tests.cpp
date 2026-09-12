@@ -289,6 +289,13 @@ void SshProfileStoreTests::rejectsInvalidProfilesAndDuplicateIds()
 
     auto invalid = privateKeyProfile();
     invalid.privateKeyPath.clear();
+    // Managed profiles resolve their key through the identity, not this field.
+    const std::array managedProfiles{invalid};
+    QVERIFY(store.save(managedProfiles));
+    const auto managedLoaded = store.load();
+    QVERIFY(managedLoaded);
+    QCOMPARE(*managedLoaded, std::vector<ztermy::ssh::SshProfile>{invalid});
+    invalid.identityReference.reset();
     const std::array invalidProfiles{invalid};
     auto invalidResult = store.save(invalidProfiles);
     QVERIFY(!invalidResult);

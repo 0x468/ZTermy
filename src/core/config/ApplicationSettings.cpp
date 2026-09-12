@@ -63,7 +63,9 @@ constexpr qint64 localShellSchemaVersion = 29;
 constexpr qint64 terminalSelectionPopupSchemaVersion = 30;
 // Version 31 adds persisted Nushell and WSL default-shell preferences.
 constexpr qint64 extendedLocalShellSchemaVersion = 31;
-constexpr qint64 currentSchemaVersion = extendedLocalShellSchemaVersion;
+constexpr qint64 windowInteractionSchemaVersion = extendedLocalShellSchemaVersion + 1;
+constexpr qint64 connectionHistorySchemaVersion = 33;
+constexpr qint64 currentSchemaVersion = connectionHistorySchemaVersion;
 
 using ztermy::config::AccentPreference;
 using ztermy::config::AiPermissionPreference;
@@ -457,6 +459,8 @@ template <>
 
 [[nodiscard]] bool validSettings(const ApplicationSettings &settings)
 {
+    if (!settings.windowInteraction.valid())
+        return false;
     const QString fontFamily = settings.terminalFontFamily.trimmed();
     const QString uiFontFamily = settings.uiFontFamily.trimmed();
     const QString customAccent = settings.customAccent.trimmed();
@@ -544,6 +548,7 @@ template <>
     const QJsonValue sftpConfirmDeleteValue = root.value(QStringLiteral("sftpConfirmDelete"));
     const QJsonValue closeToTrayValue = root.value(QStringLiteral("closeToTray"));
     const QJsonValue performanceModeValue = root.value(QStringLiteral("performanceMode"));
+    const QJsonValue connectionHistoryValue = root.value(QStringLiteral("connectionHistoryEnabled"));
     const QJsonValue credentialStorageValue = root.value(QStringLiteral("credentialStorage"));
     const QJsonValue languageValue = root.value(QStringLiteral("language"));
     const QJsonValue shortcutOverridesValue = root.value(QStringLiteral("shortcutOverrides"));
@@ -596,11 +601,9 @@ template <>
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
-    if (version >= closeToTraySchemaVersion && !closeToTrayValue.isBool())
-    {
-        return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
-    }
-    if (version >= performanceModeSchemaVersion && !performanceModeValue.isBool())
+    if ((version >= closeToTraySchemaVersion && !closeToTrayValue.isBool())
+        || (version >= performanceModeSchemaVersion && !performanceModeValue.isBool())
+        || (version >= connectionHistorySchemaVersion && !connectionHistoryValue.isBool()))
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
     }
@@ -778,6 +781,7 @@ template <>
         .sftpConfirmDelete = version < sftpSchemaVersion || sftpConfirmDeleteValue.toBool(),
         .closeToTray = version >= closeToTraySchemaVersion && closeToTrayValue.toBool(),
         .performanceMode = version >= performanceModeSchemaVersion && performanceModeValue.toBool(),
+        .connectionHistoryEnabled = version < connectionHistorySchemaVersion || connectionHistoryValue.toBool(),
         .credentialStorage = *credentialStorage,
         .language = *language,
         .aiProvider = *aiProvider,
@@ -789,6 +793,14 @@ template <>
         .aiReasoning = *aiReasoning,
         .aiProxy = *aiProxy,
     };
+    if (version >= windowInteractionSchemaVersion)
+    {
+        const auto window = ztermy::config::WindowInteractionSettings::fromJson(
+            root.value(QStringLiteral("windowInteraction")).toObject());
+        if (!window)
+            return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
+        settings.windowInteraction = *window;
+    }
     if (!validSettings(settings))
     {
         return std::unexpected(ApplicationSettingsStoreError::invalidFormat);
@@ -898,6 +910,8 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
 
     const QJsonObject root{
         {QStringLiteral("version"), currentSchemaVersion},
+        {QStringLiteral("connectionHistoryEnabled"), settings.connectionHistoryEnabled},
+        {QStringLiteral("windowInteraction"), settings.windowInteraction.toJson()},
         {QStringLiteral("theme"), themePreferenceToken(settings.theme)},
         {QStringLiteral("backdropOpacity"), settings.backdropOpacity},
         {QStringLiteral("backdrop"), backdropPreferenceToken(settings.backdrop)},
@@ -960,16 +974,9 @@ ApplicationSettingsStore::save(const ApplicationSettings &settings) const
 
 QString themePreferenceToken(const ThemePreference preference)
 {
-    switch (preference)
-    {
-        case ThemePreference::system:
-            return QStringLiteral("system");
-        case ThemePreference::light:
-            return QStringLiteral("light");
-        case ThemePreference::dark:
-        default:
-            return QStringLiteral("dark");
-    }
+    return preference == ThemePreference::system  ? QStringLiteral("system")
+           : preference == ThemePreference::light ? QStringLiteral("light")
+                                                  : QStringLiteral("dark");
 }
 
 QString backdropPreferenceToken(const BackdropPreference preference)
@@ -1039,16 +1046,9 @@ QString terminalRightClickPreferenceToken(const TerminalRightClickPreference pre
 
 QString terminalMiddleClickPreferenceToken(const TerminalMiddleClickPreference preference)
 {
-    switch (preference)
-    {
-        case TerminalMiddleClickPreference::paste:
-            return QStringLiteral("paste");
-        case TerminalMiddleClickPreference::contextMenu:
-            return QStringLiteral("context-menu");
-        case TerminalMiddleClickPreference::disabled:
-        default:
-            return QStringLiteral("disabled");
-    }
+    return preference == TerminalMiddleClickPreference::paste         ? QStringLiteral("paste")
+           : preference == TerminalMiddleClickPreference::contextMenu ? QStringLiteral("context-menu")
+                                                                      : QStringLiteral("disabled");
 }
 
 QString localShellPreferenceToken(const LocalShellPreference preference)

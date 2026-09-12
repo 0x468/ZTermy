@@ -450,6 +450,12 @@ bool moveTerminalPane(TerminalWorkspaceLayout &layout, const std::string_view pa
     const std::string sourceId(paneId);
     const std::string sourceParentId = parent->id;
     const std::string siblingId = parent->firstChildId == paneId ? parent->secondChildId : parent->firstChildId;
+    if (siblingId == targetPaneId && parent->orientation == orientation
+        && (parent->secondChildId == paneId) == placeAfter)
+    {
+        // Dropping back into the same slot must preserve IDs, ratios and session bindings.
+        return true;
+    }
     TerminalLayoutNode *grandparent = findParentNode(candidate, sourceParentId);
     if (grandparent == nullptr)
         candidate.rootNodeId = siblingId;

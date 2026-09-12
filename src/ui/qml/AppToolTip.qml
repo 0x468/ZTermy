@@ -8,8 +8,8 @@ ToolTip {
 
     x: parent ? Math.round((parent.width - implicitWidth) / 2) : 0
     y: -implicitHeight - 6
-    implicitWidth: Math.min(420, Math.max(implicitBackgroundWidth + leftInset + rightInset, contentItem.implicitWidth + leftPadding + rightPadding))
-    implicitHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset, contentItem.implicitHeight + topPadding + bottomPadding)
+    implicitWidth: Math.min(420, Math.max(implicitBackgroundWidth + leftInset + rightInset, contentWidth + leftPadding + rightPadding))
+    implicitHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset, contentHeight + topPadding + bottomPadding)
     margins: 8
     horizontalPadding: 10
     verticalPadding: 7

@@ -1,4 +1,5 @@
 #pragma once
+#include "core/config/WindowInteractionSettings.h"
 
 #include <QMap>
 #include <QString>
@@ -163,6 +164,7 @@ struct ApplicationSettings final
     bool sftpConfirmDelete = true;
     bool closeToTray = false;
     bool performanceMode = false;
+    bool connectionHistoryEnabled = true;
     CredentialStoragePreference credentialStorage = CredentialStoragePreference::automatic;
     LanguagePreference language = LanguagePreference::system;
     AiProviderPreference aiProvider = AiProviderPreference::openAiResponses;
@@ -172,6 +174,7 @@ struct ApplicationSettings final
     bool aiDebugTraceEnabled = false;
     AiReasoningPreference aiReasoning = AiReasoningPreference::automatic;
     AiProxyPreference aiProxy = AiProxyPreference::system;
+    WindowInteractionSettings windowInteraction;
 
     [[nodiscard]] friend bool operator==(const ApplicationSettings &, const ApplicationSettings &) = default;
 };

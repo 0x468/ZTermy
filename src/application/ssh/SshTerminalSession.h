@@ -49,6 +49,8 @@ public:
 
     [[nodiscard]] std::error_code start(SshConnectionRequest request, terminal::TerminalGeometry geometry);
     void stop() noexcept;
+    void requestStop();
+    [[nodiscard]] bool stopFinished() const noexcept { return m_stopFinished.load(); }
     void setOutputSink(const std::shared_ptr<terminal::TerminalOutputSink> &sink);
     [[nodiscard]] diagnostics::LatencySummary inputQueueLatencySummary() const noexcept;
 
@@ -74,7 +76,6 @@ public slots:
     [[nodiscard]] std::expected<ztermy::terminal::TerminalScrollbackPage, std::error_code>
     scrollbackPage(ztermy::terminal::TerminalScrollbackRequest request) const;
     void setEncoding(const QString &encoding);
-    void requestShellHistory(quint64 requestId);
     void setRemoteTelemetryVisible(bool visible);
     void refreshRemoteTelemetry();
 
@@ -89,7 +90,6 @@ signals:
     void hostKeyConfirmationRequired(const QString &endpoint, const QString &algorithm, const QString &fingerprint);
     void hostKeyChanged(const QString &endpoint, const QString &algorithm, const QString &fingerprint);
     void searchResultReady(const QString &query, quint32 current, quint32 total, bool wrapped);
-    void shellHistoryReady(quint64 requestId, const QString &shell, const QByteArray &contents, const QString &error);
     void remoteTelemetryReady(const ztermy::telemetry::Sample &sample);
     void remoteTelemetryStateChanged(const QString &state);
 
@@ -105,7 +105,6 @@ private slots:
     void deliverClipboardText(const QString &text);
     void deliverSelectedText(const QString &text);
     void deliverSearchResult(const QString &query, quint32 current, quint32 total, bool wrapped);
-    void deliverShellHistory(quint64 requestId, const QString &shell, const QByteArray &contents, const QString &error);
     void deliverRemoteTelemetry(const ztermy::telemetry::Sample &sample);
     void deliverRemoteTelemetryState(const QString &state);
 
@@ -170,10 +169,6 @@ private:
     {
         terminal::TerminalEncoding encoding = terminal::TerminalEncoding::Utf8;
     };
-    struct HistoryCommand final
-    {
-        quint64 requestId = 0;
-    };
     struct TelemetryVisibilityCommand final
     {
         bool visible = false;
@@ -186,7 +181,7 @@ private:
         std::variant<InputCommand, PasteCommand, KeyCommand, MouseCommand, FocusCommand, terminal::TerminalGeometry,
                      ScrollCommand, SelectionCommand, SelectionGestureCommand, CopyModeCommand, SelectAllCommand,
                      CopyCommand, SelectedTextCommand, SearchCommand, ClearSearchCommand, EncodingCommand,
-                     HistoryCommand, TelemetryVisibilityCommand, TelemetryRefreshCommand>;
+                     TelemetryVisibilityCommand, TelemetryRefreshCommand>;
 
     void queueByteCommand(Command command, std::size_t byteCount);
     void run(SshConnectionRequest &request, terminal::TerminalGeometry geometry, const std::stop_token &stopToken);
@@ -200,7 +195,6 @@ private:
     void postClipboardText(const QString &text);
     void postSelectedText(const QString &text);
     void postSearchResult(const QString &query, quint32 current, quint32 total, bool wrapped);
-    void postShellHistory(quint64 requestId, const QString &shell, const QByteArray &contents, const QString &error);
     void postRemoteTelemetry(const telemetry::Sample &sample);
     void postRemoteTelemetryState(const QString &state);
     void finishWorker(const QString &status, SshConnectionPhase phase);
@@ -214,6 +208,8 @@ private:
     std::unique_ptr<terminal::GhosttyTerminalEngine> m_engine;
     std::shared_ptr<terminal::TerminalOutputSink> m_outputSink;
     std::jthread m_worker;
+    std::jthread m_stopThread;
+    std::atomic_bool m_stopFinished = true;
 
     std::mutex m_commandMutex;
     std::deque<Command> m_commands;

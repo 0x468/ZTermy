@@ -57,6 +57,8 @@ LocalTerminalSession::LocalTerminalSession(QObject *parent) : LocalTerminalSessi
     m_snapshotDeliveryTimer.setInterval(8);
     m_snapshotDeliveryTimer.setSingleShot(true);
     QObject::connect(&m_snapshotDeliveryTimer, &QTimer::timeout, this, &LocalTerminalSession::deliverLatestSnapshot);
+    QObject::connect(this, &LocalTerminalSession::processExitObserved, this, &LocalTerminalSession::postProcessExited,
+                     Qt::QueuedConnection);
 }
 
 LocalTerminalSession::~LocalTerminalSession()
@@ -151,28 +153,49 @@ std::error_code LocalTerminalSession::start(const TerminalGeometry geometry)
             postStatus(tr("Terminal write worker failed with an unknown error"));
         }
     });
+    m_exitThread = std::jthread([this](const std::stop_token &token) {
+        monitorProcessExit(token);
+    });
     qCInfo(terminalSessionLog) << "Local terminal session started";
     return {};
 }
 
-void LocalTerminalSession::stop() noexcept
+void LocalTerminalSession::requestStop()
 {
+    if (m_stopThread.joinable())
+        return;
+    m_snapshotDeliveryTimer.stop();
+    m_stopFinished.store(false);
+    m_stopThread = std::jthread([this] {
+        stopWorkers();
+        m_stopFinished.store(true);
+    });
+}
+
+void LocalTerminalSession::stopWorkers() noexcept
+{
+    m_exitThread.request_stop();
     m_writeThread.request_stop();
     m_readThread.request_stop();
     m_commandAvailable.notify_all();
 
-    if (m_readThread.joinable())
+    for (std::jthread *worker : {&m_writeThread, &m_readThread})
     {
-        const auto threadHandle = static_cast<HANDLE>(m_readThread.native_handle());
-        CancelSynchronousIo(threadHandle);
+        if (!worker->joinable())
+            continue;
+        const auto handle = static_cast<HANDLE>(worker->native_handle());
+        // Cancellation can race the next ReadFile/WriteFile. Repeat until the
+        // worker exits so a successful stop cannot leave a newly blocked I/O.
+        while (WaitForSingleObject(handle, 0) == WAIT_TIMEOUT)
+        {
+            CancelSynchronousIo(handle);
+            WaitForSingleObject(handle, 10);
+        }
+        worker->join();
     }
-    if (m_writeThread.joinable())
+    if (m_exitThread.joinable())
     {
-        m_writeThread.join();
-    }
-    if (m_readThread.joinable())
-    {
-        m_readThread.join();
+        m_exitThread.join();
     }
 
     if (m_process)
@@ -181,6 +204,15 @@ void LocalTerminalSession::stop() noexcept
     }
     m_process.reset();
     m_engine.reset();
+}
+
+void LocalTerminalSession::stop() noexcept
+{
+    if (m_stopThread.joinable())
+        m_stopThread.join();
+    else
+        stopWorkers();
+    m_stopFinished.store(true);
 
     {
         std::scoped_lock lock(m_commandMutex);
@@ -589,7 +621,7 @@ void LocalTerminalSession::readLoop(const std::stop_token &stopToken)
 
     if (!stopToken.stop_requested())
     {
-        postStatus(tr("Local shell exited"));
+        emit processExitObserved();
     }
 }
 
@@ -940,6 +972,31 @@ void LocalTerminalSession::writeLoop(const std::stop_token &stopToken)
     }
 }
 
+void LocalTerminalSession::monitorProcessExit(const std::stop_token &stopToken)
+{
+    using namespace std::chrono_literals;
+    while (!stopToken.stop_requested())
+    {
+        const auto exited = m_process->waitForExit(50ms);
+        if (!exited)
+        {
+            postStatus(tr("Unable to monitor local shell: %1").arg(QString::fromStdString(exited.error().message())));
+            return;
+        }
+        if (!*exited)
+        {
+            continue;
+        }
+        if (m_readThread.joinable())
+        {
+            const auto readHandle = static_cast<HANDLE>(m_readThread.native_handle());
+            CancelSynchronousIo(readHandle);
+        }
+        emit processExitObserved();
+        return;
+    }
+}
+
 void LocalTerminalSession::publishSnapshot()
 {
     TerminalSnapshotPtr snapshot;
@@ -1039,6 +1096,28 @@ void LocalTerminalSession::deliverLatestSnapshot()
 void LocalTerminalSession::postStatus(const QString &status)
 {
     emit statusChanged(status);
+}
+
+void LocalTerminalSession::postProcessExited()
+{
+    if (m_stopThread.joinable() || !m_running.load())
+    {
+        return;
+    }
+    // Preserve the last prompt/output frame before the stopped state disables
+    // normal coalesced snapshot delivery.
+    deliverLatestSnapshot();
+    m_snapshotDeliveryTimer.stop();
+    if (!m_running.exchange(false))
+    {
+        return;
+    }
+    m_writeThread.request_stop();
+    m_commandAvailable.notify_all();
+    emit statusChanged(tr("Local shell exited"));
+    emit runningChanged(false);
+    logMetrics();
+    qCInfo(terminalSessionLog) << "Local shell process exited";
 }
 
 void LocalTerminalSession::resetMetrics() noexcept

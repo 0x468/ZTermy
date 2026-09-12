@@ -1,4 +1,5 @@
 #include "application/sftp/SftpSession.h"
+#include "application/workbench/RemoteShellHistoryReader.h"
 
 #include "core/security/SensitiveByteArray.h"
 
@@ -9,6 +10,7 @@
 #include <algorithm>
 #include <atomic>
 #include <condition_variable>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -31,6 +33,8 @@ struct FakeState final
     std::vector<std::pair<std::string, bool>> removed;
     std::string openedPath;
     std::string fileContents = "hello world";
+    std::map<std::string, std::string> historyFiles;
+    std::vector<std::string> openedFiles;
     std::size_t readOffset = 0;
 };
 
@@ -115,6 +119,15 @@ public:
     {
         std::scoped_lock lock(m_state->mutex);
         m_state->openedPath = remotePath;
+        m_state->openedFiles.emplace_back(remotePath);
+        if (!m_state->historyFiles.empty())
+        {
+            const auto file = m_state->historyFiles.find(std::string(remotePath));
+            if (file == m_state->historyFiles.end())
+                return std::unexpected(
+                    ztermy::ssh::SshTransportError{.kind = ztermy::ssh::SshTransportErrorKind::InvalidState});
+            m_state->fileContents = file->second;
+        }
         m_state->readOffset = 0;
         return {};
     }
@@ -193,6 +206,7 @@ class SftpSessionTests final : public QObject
 
 private slots:
     void initTestCase();
+    void readsRemoteHistoryWithoutCommandsOrWrites();
     void rejectsInvalidConnectionRequests();
     void suppressesStaleDirectoryResults();
     void deliversIndependentTreeDirectoryResults();
@@ -205,6 +219,27 @@ private slots:
     void readsBoundedRegularFilesAndRejectsSymlinks();
     void cancelsActiveFileReads();
 };
+
+void SftpSessionTests::readsRemoteHistoryWithoutCommandsOrWrites()
+{
+    const auto state = std::make_shared<FakeState>();
+    state->historyFiles = {{"/etc/passwd", "root:x:0:0::/root:/bin/bash\ntester:x:1000:1000::/home/tester:/bin/zsh\n"},
+                           {"/home/tester/.zsh_history", ": 1700000000:0;echo correct-user\n"}};
+    const auto original = state->historyFiles;
+    FakeSftpClient client(state);
+    const auto result = ztermy::workbench::readRemoteShellHistory(client, QStringLiteral("tester"), {});
+    QVERIFY(result);
+    QCOMPARE(result->size(), std::size_t{1});
+    QCOMPARE(result->front().command, std::string("echo correct-user"));
+    QCOMPARE(state->openedFiles, (std::vector<std::string>{"/etc/passwd", "/home/tester/.zsh_history"}));
+    QCOMPARE(state->historyFiles, original);
+    QVERIFY(state->created.empty());
+    QVERIFY(state->renamed.empty());
+    QVERIFY(state->removed.empty());
+    state->openedFiles.clear();
+    QVERIFY(!ztermy::workbench::readRemoteShellHistory(client, QStringLiteral("missing-user"), {}));
+    QCOMPARE(state->openedFiles, (std::vector<std::string>{"/etc/passwd"}));
+}
 
 void SftpSessionTests::initTestCase()
 {

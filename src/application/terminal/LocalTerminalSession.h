@@ -52,6 +52,8 @@ public:
 
     [[nodiscard]] virtual std::error_code start(TerminalGeometry geometry) = 0;
     virtual void stop() noexcept = 0;
+    virtual void requestStop() { stop(); }
+    [[nodiscard]] virtual bool stopFinished() const noexcept { return true; }
     virtual void setOutputSink(const std::shared_ptr<TerminalOutputSink> &) {}
     virtual void setShellIntegrationNonce(const std::string &) {}
     virtual void setLaunchSpec(const LocalTerminalLaunchSpec &) {}
@@ -98,6 +100,8 @@ public:
     LocalTerminalSession &operator=(const LocalTerminalSession &) = delete;
 
     [[nodiscard]] std::error_code start(TerminalGeometry geometry) override;
+    void requestStop() override;
+    [[nodiscard]] bool stopFinished() const noexcept override { return m_stopFinished.load(); }
     void stop() noexcept override;
     void setOutputSink(const std::shared_ptr<TerminalOutputSink> &sink) override;
     void setShellIntegrationNonce(const std::string &nonce) override;
@@ -126,9 +130,13 @@ public slots:
     [[nodiscard]] std::expected<ztermy::terminal::TerminalScrollbackPage, std::error_code>
     scrollbackPage(ztermy::terminal::TerminalScrollbackRequest request) const override;
 
+signals:
+    void processExitObserved();
+
 private slots:
     void scheduleLatestSnapshotDelivery();
     void deliverLatestSnapshot();
+    void postProcessExited();
 
 private:
     struct InputCommand
@@ -195,6 +203,8 @@ private:
     void queueByteCommand(Command command, std::size_t byteCount);
     void readLoop(const std::stop_token &stopToken);
     void writeLoop(const std::stop_token &stopToken);
+    void monitorProcessExit(const std::stop_token &stopToken);
+    void stopWorkers() noexcept;
     void publishSnapshot();
     void postStatus(const QString &status);
     void resetMetrics() noexcept;
@@ -210,6 +220,9 @@ private:
     LocalTerminalLaunchSpec m_launchSpec;
     std::jthread m_readThread;
     std::jthread m_writeThread;
+    std::jthread m_exitThread;
+    std::jthread m_stopThread;
+    std::atomic_bool m_stopFinished = true;
 
     std::mutex m_engineMutex;
     std::mutex m_commandMutex;

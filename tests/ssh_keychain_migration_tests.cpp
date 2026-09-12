@@ -13,6 +13,7 @@ private slots:
     void isIdempotentAfterProfilesReferenceIdentities();
     void completesAfterCatalogWasSavedBeforeProfiles();
     void leavesNewProfilesOnProfileFieldsAfterMigrationCompleted();
+    void deduplicatesKeysByMaterialPath();
     void rejectsCatalogIdConflicts();
 };
 
@@ -47,10 +48,37 @@ void SshKeychainMigrationTests::migratesLegacyProfilesWithoutMovingSecrets()
     QCOMPARE(migrated->catalog.keys.size(), std::size_t{1});
     QCOMPARE(migrated->catalog.identities.size(), std::size_t{3});
     QCOMPARE(migrated->profiles[1].identityReference, std::optional<std::string>{"key-profile"});
+    QVERIFY(migrated->profiles[1].privateKeyPath.empty());
+    QVERIFY(!migrated->profiles[1].privateKeyPassphraseRequired);
+    QVERIFY(!migrated->profiles[1].credentialReference);
     QCOMPARE(migrated->catalog.keys.front().privateKeyPath, std::string("C:/Users/test/.ssh/id_ed25519"));
     QCOMPARE(migrated->catalog.keys.front().type, ztermy::ssh::SshKeyType::Unknown);
     QCOMPARE(migrated->catalog.identities[0].credentialReference, std::optional<std::string>{"password-profile"});
     QCOMPARE(migrated->catalog.identities[2].authentication, ztermy::ssh::SshIdentityAuthentication::Agent);
+}
+
+void SshKeychainMigrationTests::deduplicatesKeysByMaterialPath()
+{
+    const ztermy::ssh::SshKeychainCatalog catalog{
+        .keys = {{.id = "first", .label = "First", .privateKeyPath = R"(C:\Users\test\.ssh\id_ed25519)"},
+                 {.id = "second", .label = "Second", .privateKeyPath = "c:/users/test/.ssh/id_ed25519"}},
+        .identities = {{.id = "first-identity",
+                        .label = "First identity",
+                        .username = "root",
+                        .authentication = ztermy::ssh::SshIdentityAuthentication::PrivateKey,
+                        .keyId = "first"},
+                       {.id = "second-identity",
+                        .label = "Second identity",
+                        .username = "operator",
+                        .authentication = ztermy::ssh::SshIdentityAuthentication::PrivateKey,
+                        .keyId = "second"}},
+        .legacyProfilesMigrated = true,
+    };
+    const auto migration = ztermy::ssh::planLegacyKeychainMigration({}, catalog);
+    QVERIFY(migration);
+    QVERIFY(migration->changed);
+    QCOMPARE(migration->catalog.keys.size(), std::size_t{1});
+    QCOMPARE(migration->catalog.identities[0].keyId, migration->catalog.identities[1].keyId);
 }
 
 void SshKeychainMigrationTests::completesAfterCatalogWasSavedBeforeProfiles()

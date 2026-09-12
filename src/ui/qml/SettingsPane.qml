@@ -610,9 +610,12 @@ Rectangle {
         loadSelectionActionDraft();
         sftpShowHiddenSwitch.checked = controller.sftpShowHiddenFiles;
         sftpConfirmDeleteSwitch.checked = controller.sftpConfirmDelete;
-        closeToTraySwitch.checked = controller.closeToTray;
+        windowBehavior.closeToTray = controller.closeToTray;
+        windowBehavior.singleInstance = controller.windowInteractionSettings.singleInstance;
+        windowBehavior.tabDoubleClickIndex = ["rename", "close", "none"].indexOf(controller.windowInteractionSettings.tabDoubleClick);
+        windowBehavior.tabCloseButtonIndex = ["always", "hover", "hidden"].indexOf(controller.windowInteractionSettings.tabCloseButton);
         performanceModeDraft = controller.performanceMode;
-        performanceModeSwitch.checked = performanceModeDraft;
+        windowBehavior.performanceMode = performanceModeDraft;
         languageDraft = controller.languagePreference;
         credentialStorageBox.currentIndex = credentialStorageIndex(controller.effectiveCredentialStorage);
         credentialCleanupStorageBox.currentIndex = credentialStorageIndex(controller.effectiveCredentialStorage);
@@ -641,14 +644,21 @@ Rectangle {
             presentStatus(qsTr("Custom accent must use the #RRGGBB format."), true, false);
             return;
         }
-        const wantsOpaqueSurface = performanceModeDraft || backdropToken() === "solid";
+        const wantsOpaqueSurface = performanceModeDraft;
         const restartRequired = wantsOpaqueSurface !== windowChrome.opaqueSurface || performanceModeDraft !== windowChrome.performanceModeActive;
-        const applicationSaved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), accentToken(), customAccentField.text, uiFontDraft, terminalFontDraft, fontSizeBox.value, showAllFontsSwitch.checked, ligatureSwitch.checked, terminalOpacitySlider.value, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, keepSelectionAfterCopySwitch.checked, multilinePasteSwitch.checked, languageDraft, sftpShowHiddenSwitch.checked, sftpConfirmDeleteSwitch.checked, closeToTraySwitch.checked, performanceModeDraft, rightClickToken(), middleClickToken(), wordDelimitersField.text, wheelRowsBox.value);
+        const applicationSaved = controller.saveApplicationSettings(themeToken(), opacitySlider.value, backdropToken(), accentToken(), customAccentField.text, uiFontDraft, terminalFontDraft, fontSizeBox.value, showAllFontsSwitch.checked, ligatureSwitch.checked, terminalOpacitySlider.value, cursorToken(), cursorBlinkSwitch.checked, copyOnSelectSwitch.checked, keepSelectionAfterCopySwitch.checked, multilinePasteSwitch.checked, languageDraft, sftpShowHiddenSwitch.checked, sftpConfirmDeleteSwitch.checked, windowBehavior.closeToTray, performanceModeDraft, rightClickToken(), middleClickToken(), wordDelimitersField.text, wheelRowsBox.value);
         const shellSaved = applicationSaved && controller.saveLocalShellPreference(localShellTokens[Math.max(0, localShellBox.currentIndex)] || "automatic");
-        const saved = shellSaved && controller.saveTerminalSelectionPopupSettings(selectionPopupSwitch.checked, selectionActionDraftValues());
+        const selectionSaved = shellSaved && controller.saveTerminalSelectionPopupSettings(selectionPopupSwitch.checked, selectionActionDraftValues());
+        const saved = selectionSaved && controller.saveWindowInteractionSettings({
+            singleInstance: windowBehavior.singleInstance,
+            tabDoubleClick: ["rename", "close", "none"][windowBehavior.tabDoubleClickIndex],
+            tabCloseButton: ["always", "hover", "hidden"][windowBehavior.tabCloseButtonIndex]
+        });
         presentStatus(saved ? restartRequired ? qsTr("Settings saved. Restart ztermy to apply the rendering mode.") : qsTr("Settings saved and applied.") : qsTr("These settings could not be saved. Check the font and numeric ranges."), !saved, saved);
         if (!saved) {
             loadDraft();
+        } else if (restartRequired) {
+            restartDialog.open();
         }
     }
 
@@ -980,54 +990,11 @@ Rectangle {
                 verse: "紫衣惊鸿影"
             }
 
-            SectionCard {
-                objectName: "settingsWindowBehaviorCard"
+            WindowBehaviorSettings {
+                id: windowBehavior
                 Layout.fillWidth: true
                 visible: pane.currentCategory === "application"
-                heading: qsTr("Window behavior")
-                compact: true
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: Theme.spacingControl
-
-                    AppSwitch {
-                        id: closeToTraySwitch
-
-                        objectName: "settingsCloseToTraySwitch"
-                        Layout.fillWidth: true
-                        text: qsTr("Keep ztermy running in the notification area when the window is closed")
-                        accessibleName: text
-                    }
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: qsTr("The tray menu can show or hide the window and exit ztermy completely.")
-                        color: Theme.textMuted
-                        wrapMode: Text.WordWrap
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.textLabel
-                    }
-
-                    AppSwitch {
-                        id: performanceModeSwitch
-
-                        objectName: "settingsPerformanceModeSwitch"
-                        Layout.fillWidth: true
-                        text: qsTr("Prioritize performance on software-rendered or low-power machines")
-                        accessibleName: text
-                        onToggled: pane.performanceModeDraft = checked
-                    }
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: qsTr("Uses a truly opaque window, disables Windows backdrop materials, and reduces decorative motion. Your selected material is restored when this mode is turned off. Restart required.")
-                        color: Theme.textMuted
-                        wrapMode: Text.WordWrap
-                        font.family: Theme.uiFont
-                        font.pixelSize: Theme.textLabel
-                    }
-                }
+                onPerformanceModeEdited: enabled => pane.performanceModeDraft = enabled
             }
 
             SectionCard {
@@ -3578,6 +3545,14 @@ Rectangle {
         acceptText: qsTr("Delete history")
         destructive: true
         onAccepted: pane.controller.aiConversationHistory.clear()
+    }
+
+    ConfirmationDialog {
+        id: restartDialog
+        heading: qsTr("Restart ztermy now?")
+        description: qsTr("The rendering mode is saved. Restarting closes current terminal connections; saved tabs can be restored afterwards.")
+        acceptText: qsTr("Restart now")
+        onAccepted: pane.windowChrome.requestRestart()
     }
 
     ConfirmationDialog {

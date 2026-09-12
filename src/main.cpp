@@ -1,4 +1,5 @@
 #include "application/AppController.h"
+#include "application/ApplicationInstance.h"
 #include "application/FontCatalog.h"
 #include "application/LocalizationManager.h"
 #include "application/ai/AiConversationModel.h"
@@ -7,8 +8,11 @@
 #include "core/logging/Logging.h"
 #include "platform/windows/CrashDiagnostics.h"
 #include "platform/windows/NativeWindow.h"
+#include "ui/RuntimeSmokeItems.h"
+#include "ui/WorkbenchRuntimeSmoke.h"
 #include "ui/icons/SvgIconImageProvider.h"
 #include "ui/terminal/TerminalItem.h"
+#include "ui/terminal/TerminalPaneRuntimeSmoke.h"
 #include "ztermy_version.h"
 
 #include <QAbstractItemModel>
@@ -47,6 +51,7 @@
 #include <QUuid>
 #include <QVariant>
 #include <QVariantMap>
+#include <QWheelEvent>
 
 #include <dwmapi.h>
 
@@ -77,14 +82,10 @@ constexpr DWORD kSystemBackdropTypeAttribute = 38;
 
 [[nodiscard]] bool rawArgumentPresent(const int argc, char *const *argv, const std::string_view expected) noexcept
 {
-    for (int index = 1; index < argc; ++index)
-    {
-        if (argv[index] != nullptr && std::string_view{argv[index]} == expected)
-        {
-            return true;
-        }
-    }
-    return false;
+    return std::ranges::any_of(std::views::counted(argv, std::max(argc, 0)) | std::views::drop(1),
+                               [expected](const char *argument) {
+                                   return argument && std::string_view(argument) == expected;
+                               });
 }
 
 [[nodiscard]] bool validPerformanceBackdrop(const QString &value)
@@ -99,17 +100,14 @@ constexpr DWORD kSystemBackdropTypeAttribute = 38;
     return requested.isEmpty() ? QStringLiteral("acrylic") : requested;
 }
 
-[[nodiscard]] QString settingsBackdropForPerformance(const QString &requested)
-{
-    return requested == QStringLiteral("opaque") ? QStringLiteral("transparent") : requested;
-}
-
-void processWindowEventsFor(const std::chrono::milliseconds duration)
-{
-    QEventLoop eventLoop;
-    QTimer::singleShot(duration, &eventLoop, &QEventLoop::quit);
-    eventLoop.exec();
-}
+using ztermy::ui::namedFocusItem;
+using ztermy::ui::processWindowEventsFor;
+using ztermy::ui::quickItem;
+using ztermy::ui::sendMouseClick;
+using ztermy::ui::sendMouseMove;
+using ztermy::ui::terminalViewportHasFocus;
+using ztermy::ui::terminalViewportItem;
+using ztermy::ui::visualQuickItem;
 
 template <typename Predicate>
 [[nodiscard]] bool processWindowEventsUntil(Predicate predicate, const std::chrono::milliseconds timeout)
@@ -606,6 +604,7 @@ struct ResizeHitRuntimeCase
     }
 
     rootObject->setProperty("currentPage", QStringLiteral("hosts"));
+    rootObject->setProperty("workspaceSection", QStringLiteral("hosts"));
     processWindowEventsFor(std::chrono::milliseconds{100});
     auto *hostPane = rootObject->findChild<QObject *>(QStringLiteral("hostConnectionPane"));
     auto *hostContent = rootObject->findChild<QObject *>(QStringLiteral("hostContentColumn"));
@@ -619,11 +618,11 @@ struct ResizeHitRuntimeCase
     auto *workspaceNavigationResizeHandle =
         rootObject->findChild<QObject *>(QStringLiteral("workspaceNavigationResizeHandle"));
     rootObject->setProperty("workspaceNavigationWidth", 210.0);
-    processWindowEventsFor(std::chrono::milliseconds{250});
+    ztermy::ui::settleWindowLayout(window);
     const qreal expandedNavigationWidth =
         workspaceNavigation == nullptr ? 0.0 : workspaceNavigation->property("width").toReal();
     rootObject->setProperty("workspaceNavigationWidth", 56.0);
-    processWindowEventsFor(std::chrono::milliseconds{250});
+    ztermy::ui::settleWindowLayout(window);
     const qreal collapsedNavigationWidth =
         workspaceNavigation == nullptr ? 0.0 : workspaceNavigation->property("width").toReal();
     rootObject->setProperty("workspaceNavigationWidth", 120.0);
@@ -787,8 +786,6 @@ struct ResizeHitRuntimeCase
            && aiSettingsCaptured;
 }
 
-[[nodiscard]] QQuickItem *quickItem(QQuickItem *rootObject, const char *objectName);
-[[nodiscard]] QQuickItem *visualQuickItem(QQuickItem *rootObject, const char *objectName);
 [[nodiscard]] bool verifyAccessibleButton(QQuickItem *rootObject, const char *objectName, const char *expectedName);
 [[nodiscard]] bool verifyAccessibleToggle(QQuickItem *rootObject, const char *objectName, const char *expectedName);
 
@@ -1140,7 +1137,7 @@ struct ResizeHitRuntimeCase
         aiMarkdownFixturePrepared = markdownAdded && toolActivityAdded && toolDetailsAdded && secondToolAdded
                                     && aiConversation->completeAssistantMessage(markdownMessageId);
     }
-    processWindowEventsFor(std::chrono::milliseconds{500});
+    ztermy::ui::settleWindowLayout(window);
     QQuickItem *aiContextToggle = quickItem(rootObject, "aiContextToggle");
     QAccessibleInterface *aiContextInterface =
         aiContextToggle == nullptr ? nullptr : QAccessible::queryAccessibleInterface(aiContextToggle);
@@ -1249,7 +1246,7 @@ struct ResizeHitRuntimeCase
         aiApprovalCard->setVisible(false);
     }
     window.resize(QSize{500, 360});
-    processWindowEventsFor(std::chrono::milliseconds{250});
+    ztermy::ui::settleWindowLayout(window);
     auto *aiPromptHorizontalScrollBar = quickItem(rootObject, "aiPromptHorizontalScrollBar");
     const bool compactPromptHasNoHorizontalScroll =
         aiPromptHorizontalScrollBar != nullptr && !aiPromptHorizontalScrollBar->isVisible();
@@ -1406,76 +1403,6 @@ struct ResizeHitRuntimeCase
            && longApprovalBounded && clipboardPastePassed && providerFailureRecoveryPassed && restoredDark;
 }
 
-[[nodiscard]] QQuickItem *quickItem(QQuickItem *rootObject, const char *objectName)
-{
-    return rootObject == nullptr ? nullptr : rootObject->findChild<QQuickItem *>(QString::fromLatin1(objectName));
-}
-
-[[nodiscard]] QQuickItem *visualQuickItem(QQuickItem *rootObject, const char *objectName)
-{
-    if (rootObject == nullptr)
-    {
-        return nullptr;
-    }
-    const QString expectedName = QString::fromLatin1(objectName);
-    std::vector<QQuickItem *> pending{rootObject};
-    QQuickItem *fallback = nullptr;
-    for (std::size_t index = 0; index < pending.size(); ++index)
-    {
-        QQuickItem *candidate = pending[index];
-        if (candidate->objectName() == expectedName)
-        {
-            fallback = fallback == nullptr ? candidate : fallback;
-            if (candidate->isVisible())
-            {
-                return candidate;
-            }
-        }
-        const QList<QQuickItem *> children = candidate->childItems();
-        pending.insert(pending.end(), children.cbegin(), children.cend());
-    }
-    return fallback;
-}
-
-[[nodiscard]] QString namedFocusItem(const ztermy::NativeWindow &window)
-{
-    for (QQuickItem *item = window.activeFocusItem(); item != nullptr; item = item->parentItem())
-    {
-        if (!item->objectName().isEmpty())
-        {
-            return item->objectName();
-        }
-    }
-    return {};
-}
-
-[[nodiscard]] bool terminalViewportHasFocus(const ztermy::NativeWindow &window)
-{
-    const QString focusName = namedFocusItem(window);
-    return focusName == QStringLiteral("terminalViewport") || focusName.startsWith(QStringLiteral("terminalViewport-"));
-}
-
-[[nodiscard]] QQuickItem *terminalViewportItem(QQuickItem *rootObject)
-{
-    if (rootObject == nullptr)
-    {
-        return nullptr;
-    }
-    std::vector<QQuickItem *> pending{rootObject};
-    for (std::size_t index = 0; index < pending.size(); ++index)
-    {
-        QQuickItem *candidate = pending[index];
-        const QString name = candidate->objectName();
-        if (name == QStringLiteral("terminalViewport") || name.startsWith(QStringLiteral("terminalViewport-")))
-        {
-            return candidate;
-        }
-        const QList<QQuickItem *> children = candidate->childItems();
-        pending.insert(pending.end(), children.cbegin(), children.cend());
-    }
-    return nullptr;
-}
-
 void sendKey(ztermy::NativeWindow &window, const Qt::Key key, const Qt::KeyboardModifiers modifiers = {})
 {
     qt_handleKeyEvent(&window, QEvent::KeyPress, key, modifiers);
@@ -1495,26 +1422,74 @@ void sendText(ztermy::NativeWindow &window, const QStringView text)
     processWindowEventsFor(std::chrono::milliseconds{40});
 }
 
-void sendMouseClick(ztermy::NativeWindow &window, QQuickItem &item, const QPointF itemPosition)
+[[nodiscard]] bool runTitleNavigationMouseSmoke(ztermy::NativeWindow &window, ztermy::AppController &controller)
 {
-    static int timestamp = 1;
-    const QPointF local = item.mapToScene(itemPosition);
-    const QPointF global = window.mapToGlobal(local.toPoint());
-    qt_handleMouseEvent(&window, local, global, Qt::LeftButton, Qt::LeftButton, QEvent::MouseButtonPress, {},
-                        timestamp++);
-    QCoreApplication::processEvents();
-    qt_handleMouseEvent(&window, local, global, Qt::NoButton, Qt::LeftButton, QEvent::MouseButtonRelease, {},
-                        timestamp++);
-    processWindowEventsFor(std::chrono::milliseconds{80});
-}
-
-void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF itemPosition)
-{
-    static int timestamp = 10'000;
-    const QPointF local = item.mapToScene(itemPosition);
-    const QPointF global = window.mapToGlobal(local.toPoint());
-    qt_handleMouseEvent(&window, local, global, Qt::NoButton, Qt::NoButton, QEvent::MouseMove, {}, timestamp++);
-    processWindowEventsFor(std::chrono::milliseconds{250});
+    // Exercise hit testing, not signals or keyboard activation, in an isolated data directory.
+    window.show();
+    window.hide();
+    window.show(); // Override an inherited STARTUPINFO/SW_HIDE in automated launches.
+    window.requestActivate();
+    auto *root = window.rootObject();
+    if (root == nullptr || !controller.terminalTabs().isEmpty())
+        return false;
+    const auto click = [&](const char *name) {
+        processWindowEventsFor(std::chrono::milliseconds{350});
+        auto *item = quickItem(root, name);
+        if (item == nullptr || !item->isVisible() || !item->isEnabled())
+            return false;
+        const QPointF center{item->width() / 2, item->height() / 2};
+        sendMouseMove(window, *item, center);
+        sendMouseClick(window, *item, center);
+        processWindowEventsFor(std::chrono::milliseconds{350});
+        return true;
+    };
+    const auto pageIs = [&](const char *page) {
+        return root->property("currentPage").toString() == QLatin1StringView{page};
+    };
+    bool passed = true;
+    for (const int width : {1120, 600})
+    {
+        window.resize(1120, 800);
+        const bool settings = click("settingsShortcutAction") && pageIs("settings");
+        window.resize(width, 800);
+        const bool hosts = click("hostsTitleAction") && pageIs("hosts");
+        auto *settingsAction = quickItem(root, "settingsTitleAction");
+        const bool settingsCollapsed = settingsAction && settingsAction->parentItem()->width() <= 38.5;
+        auto *sftpAction = quickItem(root, "sftpTitleAction");
+        const bool sftpCollapsed = sftpAction && sftpAction->parentItem()->width() <= 38.5;
+        auto *sftpIcon = quickItem(root, "sftpTitleAction-icon");
+        const bool sftpCentered = sftpIcon && sftpAction
+                                  && qAbs(sftpIcon->mapToItem(sftpAction->parentItem(), sftpIcon->width() / 2, 0).x()
+                                          - sftpAction->parentItem()->width() / 2)
+                                         < 0.5;
+        const bool sftp = click("sftpTitleAction") && pageIs("sftp");
+        const bool sftpExpanded =
+            sftpAction && qAbs(sftpAction->parentItem()->width() - (width >= 700 ? 82 : 38)) < 0.5;
+        const bool settingsTab = click("settingsTitleAction") && pageIs("settings");
+        const bool settingsExpanded = settingsAction && settingsAction->parentItem()->width() >= 112;
+        const bool menu = click("titleNewTabAction") && click("browseHostsMenuAction") && pageIs("hosts");
+        const bool close = click("settingsTitleAction") && click("settingsTitleCloseAction")
+                           && !root->property("settingsTabOpen").toBool();
+        qCInfo(applicationLog) << "Title navigation mouse check" << "width=" << width << "settings=" << settings
+                               << "hosts=" << hosts << "sftp=" << sftp << "settingsTab=" << settingsTab
+                               << "menu=" << menu << "close=" << close << "sftpCollapsed=" << sftpCollapsed
+                               << "sftpExpanded=" << sftpExpanded << "settingsCollapsed=" << settingsCollapsed
+                               << "settingsExpanded=" << settingsExpanded;
+        passed = settings && hosts && sftp && settingsTab && menu && close && sftpCollapsed && sftpExpanded
+                 && settingsCollapsed && settingsExpanded && sftpCentered && passed;
+        root->setProperty("currentPage", QStringLiteral("hosts"));
+        root->setProperty("workspaceSection", QStringLiteral("logs"));
+        const bool before = controller.connectionHistoryEnabled();
+        const bool switched =
+            click("connectionHistoryRecordingSwitch") && controller.connectionHistoryEnabled() != before;
+        const bool restored =
+            click("connectionHistoryRecordingSwitch") && controller.connectionHistoryEnabled() == before;
+        qCInfo(applicationLog) << "Connection history switch mouse check" << "width=" << width
+                               << "switched=" << switched << "restored=" << restored;
+        passed = switched && restored && passed;
+        root->setProperty("workspaceSection", QStringLiteral("hosts"));
+    }
+    return passed && controller.terminalTabs().isEmpty();
 }
 
 [[nodiscard]] bool focusItem(ztermy::NativeWindow &window, QQuickItem *item, const QString &expectedName)
@@ -1578,8 +1553,6 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     }
     return true;
 }
-
-[[nodiscard]] bool verifyAccessibleButton(QQuickItem *rootObject, const char *objectName, const char *expectedName);
 
 [[nodiscard]] bool verifyTerminalSelectionActionStrip(ztermy::NativeWindow &window, QQuickItem *rootObject)
 {
@@ -2441,7 +2414,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
         return false;
     }
     window.resize(QSize{500, 360});
-    processWindowEventsFor(std::chrono::milliseconds{150});
+    ztermy::ui::settleWindowLayout(window);
     const bool compactQuickConnectFits = quickConnectDialog->property("width").toReal() <= 452.0
                                          && quickConnectDialog->property("height").toReal() <= 312.0
                                          && verifyQuickConnectTabOrder(window, rootObject);
@@ -2861,10 +2834,10 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     }
     keywordHighlightAction->setVisible(true);
     keywordHighlightAction->setEnabled(true);
-    processWindowEventsFor(std::chrono::milliseconds{100});
+    ztermy::ui::settleWindowLayout(window);
     const bool keywordPopoverOpened =
         clickKeywordHighlightAction() && processWindowEventsUntil(keywordPopoverVisible, std::chrono::seconds{1});
-    processWindowEventsFor(std::chrono::milliseconds{100});
+    ztermy::ui::settleWindowLayout(window);
     QQuickItem *keywordRulesScrollView = quickItem(rootObject, "keywordRulesScrollView");
     QQuickItem *keywordRulesColumn = quickItem(rootObject, "keywordRulesColumn");
     const bool twoRuleViewportFits = keywordRulesScrollView != nullptr && keywordRulesColumn != nullptr
@@ -2921,7 +2894,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     const bool manyRuleFixtureApplied = keywordHighlightPopover->setProperty("terminalTab", keywordTerminalFixture(8));
     const bool keywordReopenedForScroll = manyRuleFixtureApplied && clickKeywordHighlightAction()
                                           && processWindowEventsUntil(keywordPopoverVisible, std::chrono::seconds{1});
-    processWindowEventsFor(std::chrono::milliseconds{100});
+    ztermy::ui::settleWindowLayout(window);
     QQuickItem *keywordRulesScrollBar = quickItem(rootObject, "keywordRulesScrollBar");
     const qreal maximumRulesHeight = keywordHighlightPopover->property("maximumRulesHeight").toReal();
     const bool manyRulesScroll =
@@ -3135,23 +3108,31 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
             return false;
         }
     }
+    window.resize(600, 800);
     processWindowEventsFor(std::chrono::milliseconds{350});
     QQuickItem *titleTerminalTabs = quickItem(rootObject, "titleTerminalTabs");
+    const QVariantList overflowTabs = controller.terminalTabs();
     const bool activeOverflowTabVisible =
         titleTerminalTabs != nullptr
         && titleTerminalTabs->property("currentIndex").toInt() == controller.terminalTabs().size() - 1
         && titleTerminalTabs->property("contentX").toReal() > 0.0;
-    if (!activeOverflowTabVisible)
+    const qreal beforeWheel = titleTerminalTabs ? titleTerminalTabs->property("contentX").toReal() : 0;
+    const QPointF wheelPosition =
+        titleTerminalTabs ? titleTerminalTabs->mapToScene({titleTerminalTabs->width() / 2, 18}) : QPointF{};
+    QWheelEvent wheel(wheelPosition, window.mapToGlobal(wheelPosition.toPoint()), {}, {0, 120}, Qt::NoButton,
+                      Qt::NoModifier, Qt::NoScrollPhase, false);
+    QCoreApplication::sendEvent(&window, &wheel);
+    processWindowEventsFor(std::chrono::milliseconds{30});
+    const bool tabWheel =
+        titleTerminalTabs && titleTerminalTabs->property("contentX").toReal() < beforeWheel
+        && controller.activeTerminalTabId() == overflowTabs.constLast().toMap().value(QStringLiteral("id")).toString();
+    if (!activeOverflowTabVisible || !tabWheel)
     {
-        qCWarning(applicationLog)
-            << "Active overflow tab was not scrolled into view"
-            << "tabCount=" << controller.terminalTabs().size() << "currentIndex="
-            << (titleTerminalTabs == nullptr ? -1 : titleTerminalTabs->property("currentIndex").toInt())
-            << "contentX=" << (titleTerminalTabs == nullptr ? -1.0 : titleTerminalTabs->property("contentX").toReal());
+        qCWarning(applicationLog) << "Terminal tab overflow or navigation contract failed"
+                                  << "overflow=" << activeOverflowTabVisible << "wheel=" << tabWheel;
         return false;
     }
 
-    const QVariantList overflowTabs = controller.terminalTabs();
     for (qsizetype index = overflowTabs.size() - 1; index > 0; --index)
     {
         controller.closeTerminalTab(overflowTabs.at(index).toMap().value(QStringLiteral("id")).toString());
@@ -3187,6 +3168,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
     QQuickItem *tabStrip = quickItem(rootObject, "titleTerminalTabs");
     QQuickItem *newTabContainer = quickItem(rootObject, "titleNewTabContainer");
     const bool singleTabLayout = tabStrip != nullptr && newTabContainer != nullptr && tabStrip->width() > 0.0
+                                 && tabStrip->width() <= 184.5
                                  && qAbs(newTabContainer->x() - (tabStrip->x() + tabStrip->width())) < 0.5;
     sendMouseMove(window, *hostsAction, QPointF{hostsAction->width() / 2.0, hostsAction->height() / 2.0});
     const bool titleHoverStable = hostsAction->property("hovered").toBool();
@@ -3214,11 +3196,13 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
             controller.terminalTabs().constFirst().toMap().value(QStringLiteral("id")).toString());
         processWindowEventsFor(std::chrono::milliseconds{50});
     }
-    processWindowEventsFor(std::chrono::milliseconds{250});
+    ztermy::ui::settleWindowLayout(window);
     QQuickItem *hostsContainer = hostsAction->parentItem();
+    QQuickItem *sftpTitleAction = quickItem(rootObject, "sftpTitleAction");
+    QQuickItem *sftpContainer = sftpTitleAction == nullptr ? nullptr : sftpTitleAction->parentItem();
     const bool emptyTabLayout = tabStrip != nullptr && qFuzzyIsNull(tabStrip->width()) && newTabContainer != nullptr
-                                && hostsContainer != nullptr
-                                && qAbs(newTabContainer->x() - (hostsContainer->x() + hostsContainer->width())) < 0.5;
+                                && hostsContainer != nullptr && sftpContainer != nullptr
+                                && qAbs(newTabContainer->x() - (sftpContainer->x() + sftpContainer->width())) < 0.5;
     const bool lastTabReturnedToHosts = rootObject->property("currentPage").toString() == QStringLiteral("hosts")
                                         && namedFocusItem(window) == QStringLiteral("hostsTitleAction");
     qCInfo(applicationLog) << "UI keyboard route check"
@@ -3805,12 +3789,15 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
 {
     window.resize(QSize{1120, 800});
     window.show();
-    window.requestActivate();
-    if (exerciseSplitWorkspace)
+    if (!IsWindowVisible(reinterpret_cast<HWND>(window.winId()))) // NOLINT(performance-no-int-to-ptr)
     {
-        processWindowEventsFor(std::chrono::milliseconds{250});
+        // A CLI launch can inherit STARTUPINFO's SW_HIDE for the first show.
+        window.hide();
+        window.show();
     }
-    else
+    window.requestActivate();
+    window.raise();
+    // Both the split smoke and the benchmark need a live rendering surface.
     {
         if (!processWindowEventsUntil(
                 [&window] {
@@ -3972,7 +3959,8 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
                            << "terminalRendered=" << terminalRendered << "scrollbarPassed=" << scrollbarPassed
                            << "capture=" << capturePath;
     const bool baselinePassed = completed && responsive && progressiveFrames && resizeCompleted && captureSaved
-                                && terminalRendered && scrollbarPassed;
+                                && terminalRendered && scrollbarPassed
+                                && ztermy::ui::verifyWorkbenchResizeWhileDragging(window, controller);
     bool splitWorkspacePassed = false;
     QString splitCapturePath;
     if (!exerciseSplitWorkspace)
@@ -4017,6 +4005,8 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
         });
         splitCapturePath = QDir(outputDirectory).filePath(QStringLiteral("terminal-workspace-split.png"));
         const bool splitCaptureSaved = window.grabWindow().save(splitCapturePath);
+        const bool interactionsPassed =
+            ztermy::ui::verifyTerminalPaneWindowInteractions(window, controller, outputDirectory);
         const QString focusedBefore =
             controller.activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString();
         const bool focusMoved =
@@ -4025,7 +4015,8 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
         const bool paneClosed = controller.closeActiveTerminalPane()
                                 && controller.activeTerminalWorkspace().value(QStringLiteral("paneCount")).toInt() == 1;
         splitWorkspacePassed = secondPaneRunning && activePaneFound && splitOutputReady && ratioStored
-                               && usablePaneCount == 2 && splitCaptureSaved && focusMoved && paneClosed;
+                               && usablePaneCount == 2 && splitCaptureSaved && focusMoved && paneClosed
+                               && interactionsPassed;
         qCInfo(applicationLog) << "Terminal workspace runtime check"
                                << "secondPaneRunning=" << secondPaneRunning << "activePaneFound=" << activePaneFound
                                << "splitOutputReady=" << splitOutputReady << "ratioStored=" << ratioStored
@@ -4458,8 +4449,7 @@ void sendMouseMove(ztermy::NativeWindow &window, QQuickItem &item, const QPointF
 
 } // namespace
 
-// Qt framework entry points are exception-opaque. Let unexpected failures reach
-// the process crash-diagnostics boundary instead of swallowing them here.
+// Let unexpected failures reach the process crash-diagnostics boundary.
 // NOLINTNEXTLINE(bugprone-exception-escape)
 int main(int argc, char *argv[])
 {
@@ -4497,6 +4487,10 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
+    ztermy::ApplicationInstance instance;
+    const auto ownership = instance.claimConfigured(paths->dataDirectory, paths->settingsFile);
+    if (ownership != ztermy::ApplicationInstance::Result::Primary)
+        return ownership == ztermy::ApplicationInstance::Result::Existing ? EXIT_SUCCESS : EXIT_FAILURE;
     ztermy::logging::initialize(paths->logsDirectory);
     ztermy::diagnostics::initialize(paths->crashDirectory);
     ztermy::diagnostics::DiagnosticReporter diagnosticReporter(*paths);
@@ -4549,7 +4543,8 @@ int main(int argc, char *argv[])
     const bool automatedSettingsSaved =
         performanceBenchmark
             ? applyUiLayoutSmokeTheme(appController, QStringLiteral("dark"), QStringLiteral("en"),
-                                      settingsBackdropForPerformance(performanceBackdrop))
+                                      performanceBackdrop == QStringLiteral("opaque") ? QStringLiteral("transparent")
+                                                                                      : performanceBackdrop)
             : (!(uiLayoutSmoke || uiKeyboardSmoke || realHostUiSmoke)
                || applyUiLayoutSmokeTheme(appController, QStringLiteral("dark"), QStringLiteral("en")));
     if (!automatedSettingsSaved)
@@ -4568,10 +4563,12 @@ int main(int argc, char *argv[])
     }
 
     const bool performanceModeActive = !performanceBenchmark && appController.performanceMode();
-    const bool opaqueSurface = opaquePerformanceSurface || performanceModeActive
-                               || appController.backdropPreference() == QStringLiteral("solid");
+    const bool opaqueSurface = opaquePerformanceSurface || performanceModeActive;
     QQuickWindow::setDefaultAlphaBuffer(!opaqueSurface);
     ztermy::NativeWindow window(performanceModeActive, opaqueSurface);
+    instance.setWindow(&window);
+    QObject::connect(&window, &ztermy::NativeWindow::restartRequested, &instance,
+                     &ztermy::ApplicationInstance::requestRestart);
     auto iconImageProvider = std::make_unique<ztermy::ui::SvgIconImageProvider>();
     window.engine()->addImageProvider(QStringLiteral("ztermy-icons"), iconImageProvider.release());
     auto brandImageProvider = std::make_unique<ztermy::ui::SvgIconImageProvider>(QStringLiteral(":/ztermy/branding"));
@@ -4685,6 +4682,19 @@ int main(int argc, char *argv[])
         qCInfo(applicationLog) << "Responsive UI layout runtime smoke test completed";
         return EXIT_SUCCESS;
     }
+    if (const auto checked = ztermy::ui::runWorkbenchRuntimeCheck(window, appController, QCoreApplication::arguments()))
+    {
+        appController.shutdown();
+        window.releaseResources();
+        return *checked ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+    if (QCoreApplication::arguments().contains(QStringLiteral("--title-navigation-mouse-smoke")))
+    {
+        const bool passed = runTitleNavigationMouseSmoke(window, appController);
+        appController.shutdown();
+        window.releaseResources();
+        return passed ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
     if (uiKeyboardSmoke)
     {
         const bool passed = runUiKeyboardRuntimeSmoke(window, appController, paths->dataDirectory);
@@ -4769,5 +4779,5 @@ int main(int argc, char *argv[])
     appController.shutdown();
     window.releaseQmlResources();
     qCInfo(applicationLog) << "Terminal and scene graph resources released";
-    return exitCode;
+    return instance.finish(exitCode);
 }

@@ -90,22 +90,15 @@ Item {
             Layout.fillWidth: true
             spacing: 6
 
-            ToolButton {
+            AppIconButton {
                 id: backButton
 
                 Layout.preferredWidth: 30
                 Layout.preferredHeight: 30
-                hoverEnabled: true
                 onClicked: root.closed()
-                Accessible.name: qsTr("Back to script library")
-                contentItem: AppIcon {
-                    name: "chevron-left"
-                    color: Theme.text
-                }
-                background: Rectangle {
-                    radius: height / 2
-                    color: backButton.down ? Theme.controlPressed : backButton.hovered ? Theme.controlHover : "transparent"
-                }
+                label: qsTr("Back to script library")
+                iconName: "chevron-left"
+                iconColor: Theme.text
             }
 
             ColumnLayout {
@@ -230,12 +223,16 @@ Item {
         }
 
         ScrollView {
+            id: runScroll
+            objectName: "scriptFormScroll"
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
+            contentWidth: availableWidth
 
             ColumnLayout {
-                width: Math.max(0, parent.width - 12)
+                objectName: "scriptFormContent"
+                width: runScroll.availableWidth
                 spacing: 10
 
                 Text {

@@ -11,16 +11,15 @@ Popup {
     property var terminalTab: null
     property string editingId: ""
     readonly property real maximumRulesHeight: 172
+    parent: Overlay.overlay
 
     function openFor(item) {
         const overlay = Overlay.overlay;
         const point = item.mapToItem(overlay, 0, item.height + 6);
         const targetX = Math.max(8, Math.min(point.x, overlay.width - width - 8));
         const targetY = Math.max(8, Math.min(point.y, overlay.height - height - 8));
-        const localPoint = overlay.mapToItem(item, targetX, targetY);
-        parent = item;
-        x = localPoint.x;
-        y = localPoint.y;
+        x = targetX;
+        y = targetY;
         open();
         patternField.forceActiveFocus();
     }
@@ -50,7 +49,7 @@ Popup {
     padding: 14
     modal: false
     focus: true
-    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
+    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
     background: Rectangle {
         radius: Theme.radiusPanel

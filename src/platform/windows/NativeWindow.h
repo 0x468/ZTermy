@@ -55,14 +55,18 @@ public:
     Q_INVOKABLE void minimizeWindow();
     Q_INVOKABLE void toggleMaximize();
     Q_INVOKABLE void closeWindow();
+    Q_INVOKABLE bool beginSystemMove();
     Q_INVOKABLE void setAlwaysOnTop(bool enabled);
     Q_INVOKABLE void toggleAlwaysOnTop();
     void setCloseToTrayEnabled(bool enabled);
     Q_INVOKABLE bool applyAppearance(const QString &backdropPreference, bool darkMode);
+    Q_INVOKABLE bool configureDetachedWindow(QQuickWindow *window);
+    Q_INVOKABLE void requestRestart() { emit restartRequested(); }
     Q_INVOKABLE void setTitleBarMetrics(qreal titleHeight, qreal captionLeft, qreal controlsLeft, qreal maximizeLeft,
                                         qreal maximizeWidth);
 
 signals:
+    void restartRequested();
     void maximizedChanged();
     void maximizeButtonHoveredChanged();
     void maximizeButtonPressedChanged();
@@ -85,7 +89,7 @@ private:
     void installWindowProcedure(HWND windowHandle);
     void uninstallWindowProcedure();
     void configureNativeWindow();
-    [[nodiscard]] bool applyBackdrop();
+    [[nodiscard]] bool applyBackdrop(QQuickWindow *target = nullptr);
     void updateTrayIcon();
     void removeTrayIcon() noexcept;
     void showTrayMenu();

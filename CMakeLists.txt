@@ -340,8 +340,6 @@ add_library(ztermy_ssh_persistence STATIC
 )
 
 add_library(ztermy_workbench_domain STATIC
-    src/domain/workbench/CommandHistoryIndex.cpp
-    src/domain/workbench/CommandHistoryIndex.h
     src/domain/workbench/QuickCommand.cpp
     src/domain/workbench/QuickCommand.h
     src/domain/workbench/ScriptDefinition.cpp
@@ -357,8 +355,6 @@ add_library(ztermy_workbench_domain STATIC
 )
 
 add_library(ztermy_workbench_persistence STATIC
-    src/infrastructure/workbench/CommandHistoryStore.cpp
-    src/infrastructure/workbench/CommandHistoryStore.h
     src/infrastructure/workbench/PowerShellHistoryReader.cpp
     src/infrastructure/workbench/PowerShellHistoryReader.h
     src/infrastructure/workbench/QuickCommandStore.cpp
@@ -833,6 +829,8 @@ target_link_libraries(ztermy_ssh_session
 )
 
 add_library(ztermy_terminal_ui STATIC
+    src/ui/SplitHandleObserver.cpp
+    src/ui/SplitHandleObserver.h
     src/platform/windows/WindowsTerminalInput.cpp
     src/platform/windows/WindowsTerminalInput.h
     src/ui/terminal/TerminalItem.cpp
@@ -898,9 +896,11 @@ target_link_libraries(ztermy_icon_rendering
 add_library(ztermy_application_controller STATIC
     src/application/AppController.cpp
     src/application/AppControllerWorkspace.cpp
+    src/application/ApplicationInstance.cpp
+    src/application/ApplicationInstance.h
+    src/application/workbench/RemoteShellHistoryReader.cpp
+    src/application/workbench/RemoteShellHistoryReader.h
     src/application/AppController.h
-    src/application/workbench/CommandHistoryController.cpp
-    src/application/workbench/CommandHistoryController.h
     src/application/workbench/LocalFileBrowserController.cpp
     src/application/workbench/LocalFileBrowserController.h
 )
@@ -1126,6 +1126,12 @@ set_source_files_properties(
     src/ui/qml/AppToolTip.qml
     PROPERTIES QT_RESOURCE_ALIAS AppToolTip.qml
 )
+set_source_files_properties(src/ui/qml/AppIconButton.qml PROPERTIES QT_RESOURCE_ALIAS AppIconButton.qml)
+set_source_files_properties(src/ui/qml/SidePanelSurface.qml PROPERTIES QT_RESOURCE_ALIAS SidePanelSurface.qml)
+set_source_files_properties(src/ui/qml/AppSideDrawer.qml PROPERTIES QT_RESOURCE_ALIAS AppSideDrawer.qml)
+set_source_files_properties(src/ui/qml/ResizeSnap.qml PROPERTIES QT_RESOURCE_ALIAS ResizeSnap.qml)
+set_source_files_properties(src/ui/qml/ResizeGrip.qml PROPERTIES QT_RESOURCE_ALIAS ResizeGrip.qml)
+set_source_files_properties(src/ui/qml/AppSplitView.qml PROPERTIES QT_RESOURCE_ALIAS AppSplitView.qml)
 set_source_files_properties(
     src/ui/qml/CaptionButton.qml
     PROPERTIES QT_RESOURCE_ALIAS CaptionButton.qml
@@ -1153,6 +1159,10 @@ set_source_files_properties(
 set_source_files_properties(
     src/ui/qml/SftpBrowser.qml
     PROPERTIES QT_RESOURCE_ALIAS SftpBrowser.qml
+)
+set_source_files_properties(
+    src/ui/qml/SftpWorkspacePane.qml
+    PROPERTIES QT_RESOURCE_ALIAS SftpWorkspacePane.qml
 )
 set_source_files_properties(
     src/ui/qml/ShortcutSettings.qml
@@ -1199,6 +1209,22 @@ set_source_files_properties(
 set_source_files_properties(
     src/ui/qml/TerminalTabAction.qml
     PROPERTIES QT_RESOURCE_ALIAS TerminalTabAction.qml
+)
+set_source_files_properties(
+    src/ui/qml/TitleTabNavigationAction.qml
+    PROPERTIES QT_RESOURCE_ALIAS TitleTabNavigationAction.qml
+)
+set_source_files_properties(
+    src/ui/qml/TitlePageAction.qml
+    PROPERTIES QT_RESOURCE_ALIAS TitlePageAction.qml
+)
+set_source_files_properties(
+    src/ui/qml/TitleTabOverflow.qml
+    PROPERTIES QT_RESOURCE_ALIAS TitleTabOverflow.qml
+)
+set_source_files_properties(
+    src/ui/qml/TerminalSessionStateOverlay.qml
+    PROPERTIES QT_RESOURCE_ALIAS TerminalSessionStateOverlay.qml
 )
 set_source_files_properties(
     src/ui/qml/RemoteTelemetryStrip.qml
@@ -1261,6 +1287,11 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS ActionToast.qml
 )
 
+set_source_files_properties(src/ui/qml/TerminalPaneToolbar.qml PROPERTIES QT_RESOURCE_ALIAS TerminalPaneToolbar.qml)
+set_source_files_properties(src/ui/qml/DetachedTerminalWindow.qml PROPERTIES QT_RESOURCE_ALIAS DetachedTerminalWindow.qml)
+set_source_files_properties(src/ui/qml/WindowBehaviorSettings.qml PROPERTIES QT_RESOURCE_ALIAS WindowBehaviorSettings.qml)
+set_source_files_properties(src/ui/qml/TitleWindowActions.qml PROPERTIES QT_RESOURCE_ALIAS TitleWindowActions.qml)
+
 qt_add_qml_module(ztermy
     URI Ztermy
     VERSION 1.0
@@ -1273,6 +1304,12 @@ qt_add_qml_module(ztermy
         src/ui/qml/AppCheckBox.qml
         src/ui/qml/AppComboBox.qml
         src/ui/qml/AppIcon.qml
+        src/ui/qml/AppIconButton.qml
+        src/ui/qml/SidePanelSurface.qml
+        src/ui/qml/AppSideDrawer.qml
+        src/ui/qml/ResizeSnap.qml
+        src/ui/qml/ResizeGrip.qml
+        src/ui/qml/AppSplitView.qml
         src/ui/qml/BrandIcon.qml
         src/ui/qml/AppMenu.qml
         src/ui/qml/AppMenuItem.qml
@@ -1301,16 +1338,25 @@ qt_add_qml_module(ztermy
         src/ui/qml/SectionCard.qml
         src/ui/qml/SettingsPane.qml
         src/ui/qml/SftpBrowser.qml
+        src/ui/qml/SftpWorkspacePane.qml
         src/ui/qml/ShortcutSettings.qml
         src/ui/qml/SideNavigationItem.qml
         src/ui/qml/StatePanel.qml
         src/ui/qml/StatusMessage.qml
         src/ui/qml/TerminalTabAction.qml
+        src/ui/qml/TitleTabNavigationAction.qml
+        src/ui/qml/TitlePageAction.qml
+        src/ui/qml/TitleTabOverflow.qml
+        src/ui/qml/TerminalSessionStateOverlay.qml
         src/ui/qml/TelemetrySparkline.qml
         src/ui/qml/TerminalComposer.qml
         src/ui/qml/TerminalKeywordPopover.qml
         src/ui/qml/TerminalSessionSettingsPopover.qml
         src/ui/qml/TerminalSplitNode.qml
+        src/ui/qml/TerminalPaneToolbar.qml
+        src/ui/qml/DetachedTerminalWindow.qml
+        src/ui/qml/WindowBehaviorSettings.qml
+        src/ui/qml/TitleWindowActions.qml
         src/ui/qml/TerminalRecordingPopover.qml
         src/ui/qml/TerminalWorkbench.qml
         src/ui/qml/TransferCenter.qml
@@ -1393,6 +1439,7 @@ target_include_directories(ztermy PRIVATE
     "${ZTERMY_GENERATED_DIRECTORY}"
     src
     src/ui/terminal
+    src/ui
 )
 
 target_compile_definitions(ztermy PRIVATE
@@ -1509,6 +1556,16 @@ add_custom_target(ztermy_ui_keyboard_runtime_smoke
             --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/ui-keyboard-smoke"
     DEPENDS ztermy
     COMMENT "Checking the real-window keyboard route and shared control behavior"
+    USES_TERMINAL
+    VERBATIM
+)
+
+add_custom_target(ztermy_title_navigation_mouse_smoke
+    COMMAND "$<TARGET_FILE:ztermy>"
+            --title-navigation-mouse-smoke
+            --data-dir "${CMAKE_CURRENT_BINARY_DIR}/test-data/title-navigation-mouse"
+    DEPENDS ztermy
+    COMMENT "Checking mouse navigation with no terminal tabs"
     USES_TERMINAL
     VERBATIM
 )
@@ -2318,6 +2375,7 @@ if(BUILD_TESTING)
 
     target_compile_features(ztermy_sftp_session_tests PRIVATE cxx_std_23)
     target_link_libraries(ztermy_sftp_session_tests PRIVATE
+        ztermy_application_controller
         ztermy_sftp_session
         Qt6::Test
     )
@@ -2965,24 +3023,6 @@ if(BUILD_TESTING)
         )
     endif()
     add_test(NAME connection-history COMMAND ztermy_connection_history_tests)
-
-    qt_add_executable(ztermy_command_history_tests
-        tests/command_history_tests.cpp
-    )
-    target_compile_features(ztermy_command_history_tests PRIVATE cxx_std_23)
-    target_link_libraries(ztermy_command_history_tests PRIVATE
-        ztermy_application_controller
-        ztermy_workbench_persistence
-        Qt6::Test
-    )
-    if(MSVC)
-        target_compile_options(ztermy_command_history_tests PRIVATE
-            /W4
-            /permissive-
-            /utf-8
-        )
-    endif()
-    add_test(NAME command-history COMMAND ztermy_command_history_tests)
 
     qt_add_executable(ztermy_ssh_profile_store_tests
         tests/ssh_profile_store_tests.cpp
@@ -4662,7 +4702,6 @@ if(BUILD_TESTING)
             ztermy_known_hosts_controller_tests
             ztermy_keychain_controller_tests
             ztermy_connection_history_tests
-            ztermy_command_history_tests
             ztermy_ssh_keychain_store_tests
             ztermy_ssh_keychain_migration_tests
             ztermy_ssh_identity_resolver_tests

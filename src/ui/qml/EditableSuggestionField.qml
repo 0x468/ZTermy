@@ -155,7 +155,7 @@ ComboBox {
     popup: Popup {
         y: control.height + 4
         width: control.width
-        implicitHeight: Math.min(contentItem.implicitHeight + 2, 240)
+        implicitHeight: Math.min(implicitContentHeight + 2, 240)
         padding: 1
 
         contentItem: ListView {

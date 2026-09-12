@@ -5,6 +5,7 @@
 #include <QDebug>
 #include <QElapsedTimer>
 #include <QSignalSpy>
+#include <QStandardPaths>
 #include <QString>
 #include <QTest>
 #include <QTimer>
@@ -55,6 +56,12 @@ public:
         return m_bytes.contains(needle);
     }
 
+    [[nodiscard]] QByteArray bytes() const
+    {
+        std::scoped_lock lock(m_mutex);
+        return m_bytes;
+    }
+
 private:
     mutable std::mutex m_mutex;
     QByteArray m_bytes;
@@ -80,6 +87,10 @@ class LocalTerminalSessionTests final : public QObject
 
 private slots:
     void buildsEphemeralPowerShellIntegrationCommand();
+    void emitsPowerShell5CompatibleOscSequences();
+    void recognizesLocalShellExit();
+    void repeatedlyStopsWithoutBlockingCaller();
+    void keepsNushellPromptsOnAdjacentRows();
     void capturesRichPowerShellCommandLifecycle();
     void runsPowerShellAndStopsPromptly();
     void routesWorkerEncodedKeyEventsToPowerShell();
@@ -107,12 +118,115 @@ void LocalTerminalSessionTests::buildsEphemeralPowerShellIntegrationCommand()
                                               utf16.size() / static_cast<qsizetype>(sizeof(char16_t)));
     QVERIFY(script.contains(QString::fromLatin1(nonce)));
     QVERIFY(script.contains(QStringLiteral("Set-PSReadLineKeyHandler -Chord Enter")));
-    QVERIFY(script.contains(QStringLiteral("`e]633;E;")));
+    QVERIFY(script.contains(QStringLiteral("${global:__ztermyEsc}]633;E;")));
+    QVERIFY(!script.contains(QStringLiteral("`e]633")));
     QVERIFY(script.contains(QStringLiteral("HasRichCommandDetection=True")));
+    QVERIFY(script.contains(QStringLiteral("-HistorySaveStyle SaveNothing")));
+    QVERIFY(script.contains(QStringLiteral("$env:ZTERMY_TEST_SHELL_HISTORY")));
     QVERIFY(!script.contains(QStringLiteral("Set-Content")));
     QVERIFY(!script.contains(QStringLiteral("$PROFILE")));
 
     QVERIFY(!ztermy::terminal::powerShellLaunchCommand(L"pwsh.exe", "unsafe';command").has_value());
+}
+
+void LocalTerminalSessionTests::recognizesLocalShellExit()
+{
+    ztermy::terminal::LocalTerminalSession session;
+    const auto output = std::make_shared<MemoryOutputSink>();
+    session.setOutputSink(output);
+    session.setLaunchSpec(
+        {.id = QStringLiteral("commandPrompt"),
+         .displayName = QStringLiteral("Command Prompt"),
+         .executable = QStandardPaths::findExecutable(QStringLiteral("cmd.exe")),
+         .arguments = {QStringLiteral("/D"), QStringLiteral("/Q"), QStringLiteral("/C"), QStringLiteral("exit")},
+         .powerShellIntegration = false});
+    QSignalSpy runningSpy(&session, &ztermy::terminal::LocalTerminalSession::runningChanged);
+    QSignalSpy statusSpy(&session, &ztermy::terminal::LocalTerminalSession::statusChanged);
+    QVERIFY(!session.start({.columns = 80, .rows = 24}));
+    QTRY_VERIFY_WITH_TIMEOUT(runningSpy.size() >= 2, 5000);
+    QCOMPARE(runningSpy.constLast().constFirst().toBool(), false);
+    QTRY_VERIFY_WITH_TIMEOUT(
+        !statusSpy.isEmpty() && statusSpy.constLast().constFirst().toString().contains(QStringLiteral("exited")), 5000);
+    session.stop();
+}
+
+void LocalTerminalSessionTests::repeatedlyStopsWithoutBlockingCaller()
+{
+    const QString executable = QStandardPaths::findExecutable(QStringLiteral("cmd.exe"));
+    QVERIFY(!executable.isEmpty());
+    for (int iteration = 0; iteration < 16; ++iteration)
+    {
+        ztermy::terminal::LocalTerminalSession session;
+        session.setLaunchSpec({.id = QStringLiteral("commandPrompt"),
+                               .displayName = QStringLiteral("Command Prompt"),
+                               .executable = executable,
+                               .arguments = {QStringLiteral("/D"), QStringLiteral("/Q")},
+                               .powerShellIntegration = false});
+        QVERIFY(!session.start({.columns = 80, .rows = 24}));
+        // Exercise both startup and an idle reader already blocked in ReadFile.
+        QTest::qWait(iteration % 2 == 0 ? 1 : 30);
+        QElapsedTimer elapsed;
+        elapsed.start();
+        session.requestStop();
+        QVERIFY(elapsed.elapsed() < 100);
+        QTRY_VERIFY_WITH_TIMEOUT(session.stopFinished(), 3000);
+        session.stop();
+    }
+}
+
+void LocalTerminalSessionTests::emitsPowerShell5CompatibleOscSequences()
+{
+    const QString executable = QStandardPaths::findExecutable(QStringLiteral("powershell.exe"));
+    QVERIFY(!executable.isEmpty());
+    ztermy::terminal::LocalTerminalSession session;
+    const auto output = std::make_shared<MemoryOutputSink>();
+    session.setOutputSink(output);
+    session.setShellIntegrationNonce("12345678-abcd-4321-abcd-1234567890ab");
+    session.setLaunchSpec({.id = QStringLiteral("windowsPowerShell"),
+                           .displayName = QStringLiteral("Windows PowerShell"),
+                           .executable = executable,
+                           .arguments = {QStringLiteral("-NoLogo")},
+                           .powerShellIntegration = true});
+    QVERIFY(!session.start({.columns = 100, .rows = 30}));
+    QTRY_VERIFY_WITH_TIMEOUT(output->contains(QByteArrayLiteral("HasRichCommandDetection=True")), 5000);
+    QVERIFY(!output->contains(QByteArrayLiteral("e]633")));
+    QVERIFY(output->contains(QByteArray("\x1b]633", 5)));
+    session.stop();
+}
+
+void LocalTerminalSessionTests::keepsNushellPromptsOnAdjacentRows()
+{
+    const QString executable = QStandardPaths::findExecutable(QStringLiteral("nu.exe"));
+    if (executable.isEmpty())
+    {
+        QSKIP("Nushell is not installed");
+    }
+    ztermy::terminal::LocalTerminalSession session;
+    const auto output = std::make_shared<MemoryOutputSink>();
+    session.setOutputSink(output);
+    session.setLaunchSpec({.id = QStringLiteral("nushell"),
+                           .displayName = QStringLiteral("Nushell"),
+                           .executable = executable,
+                           .arguments = {QStringLiteral("--no-config-file"), QStringLiteral("--no-history")},
+                           .powerShellIntegration = false});
+    ztermy::terminal::TerminalSnapshotPtr snapshot;
+    connect(&session, &ztermy::terminal::LocalTerminalSession::snapshotReady, this,
+            [&snapshot](ztermy::terminal::TerminalSnapshotPtr next) {
+                snapshot = std::move(next);
+            });
+    QVERIFY(!session.start({.columns = 100, .rows = 40}));
+    QTRY_VERIFY_WITH_TIMEOUT(output->bytes().size() >= 900, 5000);
+    QTest::qWait(250);
+    QTRY_VERIFY_WITH_TIMEOUT(snapshot && snapshot->cursor.visible, 5000);
+    quint16 previousRow = snapshot->cursor.row;
+    for (int index = 0; index < 4; ++index)
+    {
+        session.queueInput(QByteArrayLiteral("\r"));
+        QTRY_VERIFY_WITH_TIMEOUT(snapshot && snapshot->cursor.row != previousRow, 3000);
+        QCOMPARE(snapshot->cursor.row, static_cast<quint16>(previousRow + 1));
+        previousRow = snapshot->cursor.row;
+    }
+    session.stop();
 }
 
 void LocalTerminalSessionTests::capturesRichPowerShellCommandLifecycle()

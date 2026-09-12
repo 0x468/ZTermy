@@ -16,9 +16,9 @@ Rectangle {
     readonly property int titleBarHeight: Theme.titleBarHeight
     readonly property int captionButtonWidth: 46
     readonly property int titleQuickActionWidth: 40
-    readonly property int titleQuickActionsWidth: titleQuickActionWidth * 4
+    readonly property int titleQuickActionsWidth: titleQuickActionWidth * (width < 700 ? 2 : 4)
     readonly property int titleSecurityActionWidth: portableVaultNeedsAttention ? 40 : 0
-    readonly property int titleNavigationWidth: Math.min(830, Math.max(310, width - (captionButtonWidth * 3) - titleQuickActionsWidth - titleSecurityActionWidth - 96))
+    readonly property int titleNavigationWidth: Math.max(0, width - (captionButtonWidth * 3) - titleQuickActionsWidth - titleSecurityActionWidth - (width < 700 ? 4 : 24))
     readonly property color backgroundColor: Theme.windowBackground
     readonly property color panelColor: Theme.panelBackground
     readonly property color chromeColor: Theme.chromeBackground
@@ -54,12 +54,19 @@ Rectangle {
     property bool lastPinPreviousWindowState: false
     property bool lastPinPreviousTabState: false
     property bool titleBarMetricsPending: false
+    property real liveWorkbenchWidth: -1
+    property bool workbenchResizeInProgress: false
     property string draggedTerminalTabId: ""
     property real draggedTerminalTabSceneX: 0
-    property string zoomedTerminalPaneId: ""
+    property var paneZoomByWorkspace: ({})
+    property var paneHeadersByWorkspace: ({})
+    readonly property string zoomedTerminalPaneId: paneZoomByWorkspace[controller.activeTerminalTabId] || ""
+    readonly property bool paneHeadersVisible: !!paneHeadersByWorkspace[controller.activeTerminalTabId]
+    property string detachedTerminalWorkspaceId: ""
+    property var detachedTerminalWorkspace: ({})
     property string detachedTerminalPaneId: ""
-    property real workspaceNavigationWidth: Theme.navigationWidth
-    property real workspaceNavigationExpandedWidth: Theme.navigationWidth
+    property real workspaceNavigationWidth: controller.windowInteractionSettings.navigationWidth
+    property real workspaceNavigationExpandedWidth: controller.windowInteractionSettings.navigationExpandedWidth
     readonly property real workspaceNavigationMinimumWidth: 56
     readonly property real workspaceNavigationMaximumWidth: 320
     readonly property real workspaceNavigationLabelThreshold: 132
@@ -78,7 +85,7 @@ Rectangle {
     readonly property bool activeSshReconnecting: activeTerminalTab !== null && activeTerminalTab.kind === "ssh" && activeTerminalTab.reconnecting
     readonly property bool activeSshDisconnected: activeTerminalTab !== null && activeTerminalTab.kind === "ssh" && activeTerminalTab.remoteClosed
     readonly property string activeTerminalWorkbenchSide: activeTerminalTab !== null ? activeTerminalTab.workbenchSide : "left"
-    readonly property real activeTerminalWorkbenchWidth: activeTerminalTab !== null && activeTerminalTab.workbenchOpen ? Math.min(activeTerminalTab.workbenchWidth, Math.max(0, terminalBody.width - 240)) : 0
+    readonly property real activeTerminalWorkbenchWidth: activeTerminalTab !== null && activeTerminalTab.workbenchOpen ? Math.min(liveWorkbenchWidth >= 0 ? liveWorkbenchWidth : activeTerminalTab.workbenchWidth, Math.max(0, terminalBody.width - 240)) : 0
     readonly property real activeTerminalComposerHeight: activeTerminalTab !== null && activeTerminalTab.composerOpen ? Math.min(activeTerminalTab.composerHeight, Math.max(0, terminalBody.height - 120)) : 0
     readonly property bool portableVaultNeedsAttention: controller.effectiveCredentialStorage === "portable" && (!controller.portableVaultInitialized || controller.portableVaultLocked)
     readonly property bool terminalTelemetryVisible: currentPage === "terminal" && visible && root.Window.window !== null && root.Window.window.active
@@ -87,6 +94,8 @@ Rectangle {
             return activeTerminalTab.title.length > 0 ? activeTerminalTab.title : qsTr("Terminal");
         if (currentPage === "settings")
             return qsTr("Settings");
+        if (currentPage === "sftp")
+            return qsTr("SFTP files");
         return qsTr("Workspace");
     }
     readonly property string applicationWindowTitle: qsTr("%1 — ztermy").arg(currentContextTitle)
@@ -118,24 +127,49 @@ Rectangle {
             return second;
         if (!second)
             return first;
-        return {
-            "kind": "split",
-            "id": node.id,
-            "orientation": node.orientation,
-            "ratio": node.ratio,
-            "first": first,
-            "second": second
-        };
+        return Object.assign({}, node, {
+            first: first,
+            second: second
+        });
     }
 
     function toggleTerminalPaneZoom(paneId) {
-        detachedTerminalPaneId = "";
-        zoomedTerminalPaneId = zoomedTerminalPaneId === paneId ? "" : paneId;
+        const next = Object.assign({}, paneZoomByWorkspace);
+        next[controller.activeTerminalTabId] = zoomedTerminalPaneId === paneId ? "" : paneId;
+        paneZoomByWorkspace = next;
+    }
+
+    function requestTerminalTabClose(tab) {
+        if (!tab.running && !tab.connecting) {
+            controller.closeTerminalTab(tab.id);
+            return;
+        }
+        closeTabDialog.tabId = tab.id;
+        closeTabDialog.description = qsTr("Close %1 and end its terminal connections?").arg(tab.title);
+        Qt.callLater(closeTabDialog.open);
+    }
+
+    ConfirmationDialog {
+        id: closeTabDialog
+        property string tabId: ""
+        heading: qsTr("Close connected tab?")
+        acceptText: qsTr("Close tab")
+        onAccepted: root.controller.closeTerminalTab(tabId)
+    }
+
+    function toggleTerminalPaneHeaders() {
+        const next = Object.assign({}, paneHeadersByWorkspace);
+        next[controller.activeTerminalTabId] = !paneHeadersVisible;
+        paneHeadersByWorkspace = next;
     }
 
     function detachTerminalPane(paneId) {
-        zoomedTerminalPaneId = "";
+        if (detachedTerminalPaneId.length > 0)
+            reattachTerminalPane();
+        detachedTerminalWorkspaceId = controller.activeTerminalTabId;
+        detachedTerminalWorkspace = controller.terminalWorkspace(detachedTerminalWorkspaceId);
         detachedTerminalPaneId = paneId;
+        windowChrome.configureDetachedWindow(detachedTerminalWindow);
         detachedTerminalWindow.show();
         detachedTerminalWindow.raise();
         detachedTerminalWindow.requestActivate();
@@ -143,6 +177,8 @@ Rectangle {
 
     function reattachTerminalPane() {
         detachedTerminalPaneId = "";
+        detachedTerminalWorkspaceId = "";
+        detachedTerminalWorkspace = ({});
         detachedTerminalWindow.hide();
         Qt.callLater(terminalViewport.forceActiveFocus);
     }
@@ -152,6 +188,21 @@ Rectangle {
         workspaceNavigationWidth = boundedWidth;
         if (boundedWidth >= workspaceNavigationLabelThreshold)
             workspaceNavigationExpandedWidth = boundedWidth;
+        navigationSaveTimer.restart();
+    }
+
+    Timer {
+        id: navigationSaveTimer
+        interval: 350
+        onTriggered: {
+            if (workspaceNavigationResizeHandle.pressed)
+                restart();
+            else
+                root.controller.saveWindowInteractionSettings({
+                    navigationWidth: Math.round(root.workspaceNavigationWidth),
+                    navigationExpandedWidth: Math.round(root.workspaceNavigationExpandedWidth)
+                });
+        }
     }
 
     function toggleWorkspaceNavigation() {
@@ -169,54 +220,25 @@ Rectangle {
         value: root.applicationWindowTitle
     }
 
-    component TerminalToolbarButton: ToolButton {
-        id: control
+    color: root.currentPage === "terminal" ? "transparent" : backgroundColor
 
-        property bool selected: false
+    FontMetrics {
+        id: titleTabFontMetrics
 
-        hoverEnabled: true
-        focusPolicy: Qt.StrongFocus
-
-        background: Item {
-            Rectangle {
-                anchors.centerIn: parent
-                width: Math.min(parent.width, parent.height)
-                height: width
-                radius: width / 2
-                color: control.down ? Theme.controlPressed : control.hovered ? Theme.controlHover : "transparent"
-                border.color: control.visualFocus ? Theme.focus : "transparent"
-                border.width: control.visualFocus ? 2 : 0
-
-                Behavior on color {
-                    ColorAnimation {
-                        duration: Theme.motionFast
-                    }
-                }
-            }
-
-            Rectangle {
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.bottom: parent.bottom
-                width: control.selected ? 10 : 0
-                height: 2
-                radius: 1
-                color: Theme.accent
-
-                Behavior on width {
-                    NumberAnimation {
-                        duration: Theme.motionFast
-                        easing.type: Easing.OutCubic
-                    }
-                }
-            }
-        }
-
-        HoverHandler {
-            cursorShape: control.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-        }
+        font.family: Theme.uiFont
+        font.pixelSize: Theme.textLabel
     }
 
-    color: root.currentPage === "terminal" ? "transparent" : backgroundColor
+    function terminalTabPreferredWidth(title) {
+        return Math.min(184, Math.max(112, titleTabFontMetrics.advanceWidth(String(title || "")) + 54));
+    }
+
+    function terminalTabStripDesiredWidth() {
+        let width = Math.max(0, root.controller.terminalTabs.length - 1) * 2;
+        for (let index = 0; index < root.controller.terminalTabs.length; ++index)
+            width += root.currentPage === "terminal" && root.controller.terminalTabs[index].id === root.controller.activeTerminalTabId ? terminalTabPreferredWidth(root.controller.terminalTabs[index].title) : 38;
+        return width;
+    }
 
     function reportTitleBarMetrics() {
         root.windowChrome.setTitleBarMetrics(titleBarHeight, titleNavigation.width + 8, width - (captionButtonWidth * 3) - titleQuickActionsWidth - titleSecurityActionWidth, width - (captionButtonWidth * 2), captionButtonWidth);
@@ -391,6 +413,8 @@ Rectangle {
 
     function applyWindowAppearance() {
         root.windowChrome.applyAppearance(Theme.backdropPreference, Theme.dark);
+        if (detachedTerminalWindow.visible)
+            root.windowChrome.configureDetachedWindow(detachedTerminalWindow);
     }
 
     function previewWindowAppearance(theme, opacity, backdrop, accent, customAccent) {
@@ -419,8 +443,15 @@ Rectangle {
                 controller.startLocalTerminalWithShell(shellId);
             else
                 controller.startLocalTerminal();
-            terminalViewport.forceActiveFocus();
+            focusTerminalAfterLayout();
         });
+    }
+
+    function focusTerminalAfterLayout() {
+        // A new recursive TerminalSplitNode Loader is materialized after the
+        // controller publishes its workspace model. One extra event-loop turn
+        // avoids focusing the viewport from the previous tab.
+        Qt.callLater(() => Qt.callLater(terminalViewport.forceActiveFocus));
     }
 
     function closeActiveTerminalTab() {
@@ -451,7 +482,7 @@ Rectangle {
         const nextIndex = (currentIndex + offset + tabs.length) % tabs.length;
         controller.activateTerminalTab(tabs[nextIndex].id);
         currentPage = "terminal";
-        terminalViewport.forceActiveFocus();
+        focusTerminalAfterLayout();
     }
 
     function shortcutFor(actionId) {
@@ -762,6 +793,10 @@ Rectangle {
         }
 
         function onApplicationSettingsChanged() {
+            if (!workspaceNavigationResizeHandle.pressed) {
+                root.workspaceNavigationWidth = root.controller.windowInteractionSettings.navigationWidth;
+                root.workspaceNavigationExpandedWidth = root.controller.windowInteractionSettings.navigationExpandedWidth;
+            }
             Qt.callLater(root.applyWindowAppearance);
         }
 
@@ -772,13 +807,15 @@ Rectangle {
                 root.currentPage = "hosts";
                 Qt.callLater(hostsTitleAction.forceActiveFocus);
             }
-            if (root.detachedTerminalPaneId.length > 0 && !root.findTerminalPane(root.terminalLayoutRoot, root.detachedTerminalPaneId))
-                root.reattachTerminalPane();
-            if (root.zoomedTerminalPaneId.length > 0 && !root.findTerminalPane(root.terminalLayoutRoot, root.zoomedTerminalPaneId))
-                root.zoomedTerminalPaneId = "";
+            if (root.detachedTerminalPaneId.length > 0) {
+                root.detachedTerminalWorkspace = root.controller.terminalWorkspace(root.detachedTerminalWorkspaceId);
+                if (!root.findTerminalPane(root.detachedTerminalWorkspace.root, root.detachedTerminalPaneId))
+                    root.reattachTerminalPane();
+            }
         }
 
         function onActiveTerminalTabChanged() {
+            root.liveWorkbenchWidth = -1;
             Qt.callLater(titleTerminalTabs.syncCurrentIndex);
             Qt.callLater(root.applyAlwaysOnTopPreference);
         }
@@ -864,6 +901,7 @@ Rectangle {
         Row {
             id: titleNavigation
 
+            objectName: "titleNavigation"
             anchors.left: parent.left
             anchors.top: parent.top
             width: childrenRect.width
@@ -874,14 +912,16 @@ Rectangle {
             Rectangle {
                 id: hostsTitleTab
 
-                width: root.currentPage === "hosts" ? 124 : 44
+                width: root.currentPage === "hosts" && root.width >= 700 ? 124 : 44
                 height: titleNavigation.height
-                color: root.currentPage === "hosts" ? Theme.controlBackground : (hostsTitleAction.hovered || hostsTitleAction.visualFocus ? Theme.controlHover : "transparent")
+                property real feedbackAmount: root.currentPage === "hosts" || hostsTitleAction.hovered || hostsTitleAction.visualFocus ? 1 : 0
+                readonly property color feedbackColor: root.currentPage === "hosts" ? Theme.controlBackground : Theme.controlHover
+                color: Theme.withAlpha(feedbackColor, feedbackColor.a * feedbackAmount)
                 border.color: hostsTitleAction.visualFocus ? Theme.focus : "transparent"
                 border.width: hostsTitleAction.visualFocus ? 1 : 0
 
-                Behavior on color {
-                    ColorAnimation {
+                Behavior on feedbackAmount {
+                    NumberAnimation {
                         duration: Theme.motionFast
                     }
                 }
@@ -910,7 +950,7 @@ Rectangle {
 
                     Text {
                         Layout.alignment: Qt.AlignVCenter
-                        visible: root.currentPage === "hosts"
+                        visible: root.currentPage === "hosts" && root.width >= 700
                         text: qsTr("Workspace")
                         color: root.currentPage === "hosts" ? root.textColor : root.mutedColor
                         font.family: Theme.uiFont
@@ -935,14 +975,34 @@ Rectangle {
                 }
             }
 
+            TitlePageAction {
+                id: sftpTitleTab
+                width: root.currentPage === "sftp" && root.width >= 700 ? 82 : 38
+                height: titleNavigation.height
+                title: root.currentPage === "sftp" && root.width >= 700 ? qsTr("SFTP") : ""
+                iconName: "folder"
+                selected: root.currentPage === "sftp"
+                actionObjectName: "sftpTitleAction"
+                accessibleName: qsTr("SFTP files")
+                toolTip: qsTr("Open local and remote files")
+                onActivated: root.currentPage = "sftp"
+                Behavior on width {
+                    NumberAnimation {
+                        duration: Theme.animationsEnabled ? Theme.motionMedium : 0
+                        easing.type: Easing.OutCubic
+                    }
+                }
+            }
+
             TerminalTabAction {
                 id: settingsTitleTab
 
                 visible: root.settingsTabOpen
-                width: visible ? implicitWidth : 0
+                width: visible ? (compact ? 38 : 112) : 0
                 height: titleNavigation.height
                 title: qsTr("Settings")
                 iconName: "settings"
+                compact: root.currentPage !== "settings"
                 actionObjectName: "settingsTitleAction"
                 closeActionObjectName: "settingsTitleCloseAction"
                 selected: root.currentPage === "settings"
@@ -954,8 +1014,10 @@ Rectangle {
                 id: titleTerminalTabs
 
                 objectName: "titleTerminalTabs"
+                readonly property real availableWidth: Math.max(0, root.titleNavigationWidth - hostsTitleTab.width - sftpTitleTab.width - 36 - settingsTitleTab.width - titleTabOverflow.width)
+                readonly property real desiredTabWidth: root.terminalTabStripDesiredWidth()
                 currentIndex: -1
-                width: count === 0 ? 0 : Math.min(contentWidth, Math.max(140, root.titleNavigationWidth - hostsTitleTab.width - 36 - settingsTitleTab.width - titleTabOverflow.width))
+                width: count === 0 ? 0 : Math.min(availableWidth, desiredTabWidth)
                 height: titleNavigation.height
                 orientation: ListView.Horizontal
                 spacing: 2
@@ -964,6 +1026,16 @@ Rectangle {
                 onCountChanged: Qt.callLater(ensureCurrentTabVisible)
                 onCurrentIndexChanged: Qt.callLater(ensureCurrentTabVisible)
                 onWidthChanged: Qt.callLater(ensureCurrentTabVisible)
+
+                WheelHandler {
+                    target: null
+                    blocking: true
+                    onWheel: event => {
+                        const delta = event.pixelDelta.x !== 0 ? event.pixelDelta.x : event.pixelDelta.y !== 0 ? event.pixelDelta.y : event.angleDelta.x !== 0 ? event.angleDelta.x / 2 : event.angleDelta.y / 2;
+                        titleTerminalTabs.contentX = Math.max(0, Math.min(titleTerminalTabs.contentWidth - titleTerminalTabs.width, titleTerminalTabs.contentX - delta));
+                        event.accepted = true;
+                    }
+                }
 
                 addDisplaced: Transition {
                     NumberAnimation {
@@ -1042,6 +1114,8 @@ Rectangle {
 
                     title: modelData.title
                     selected: root.currentPage === "terminal" && root.controller.activeTerminalTabId === modelData.id
+                    doubleClickAction: root.controller.windowInteractionSettings.tabDoubleClick
+                    closeButtonMode: root.controller.windowInteractionSettings.tabCloseButton
                     connecting: modelData.connecting === true
                     running: modelData.running
                     canReconnect: modelData.canReconnect
@@ -1050,7 +1124,9 @@ Rectangle {
                     canCloseToRight: modelData.canCloseToRight
                     canMoveLeft: modelData.canMoveLeft
                     canMoveRight: modelData.canMoveRight
-                    width: implicitWidth
+                    iconName: "terminal"
+                    compact: !selected
+                    width: selected ? root.terminalTabPreferredWidth(modelData.title) : 38
                     height: titleTerminalTabs.height
                     onActivated: {
                         root.controller.activateTerminalTab(modelData.id);
@@ -1074,116 +1150,18 @@ Rectangle {
                 }
             }
 
-            Rectangle {
+            TitleTabOverflow {
                 id: titleTabOverflow
 
-                width: visible ? 78 : 0
+                width: implicitWidth
                 height: titleNavigation.height
-                visible: titleTerminalTabs.contentWidth > titleTerminalTabs.width + 1
-                color: "transparent"
-
-                Row {
-                    anchors.fill: parent
-
-                    Repeater {
-                        model: [
-                            {
-                                "icon": "chevron-left",
-                                "name": qsTr("Previous tab page"),
-                                "direction": -1
-                            },
-                            {
-                                "icon": "chevron-right",
-                                "name": qsTr("Next tab page"),
-                                "direction": 1
-                            }
-                        ]
-
-                        Rectangle {
-                            id: pageButton
-
-                            required property var modelData
-                            width: 26
-                            height: parent.height
-                            color: pageAction.hovered || pageAction.visualFocus ? Theme.controlHover : "transparent"
-
-                            AppIcon {
-                                anchors.centerIn: parent
-                                width: 13
-                                height: 13
-                                name: pageButton.modelData.icon
-                                color: root.textColor
-                            }
-
-                            KeyboardAction {
-                                id: pageAction
-                                anchors.fill: parent
-                                anchors.margins: 2
-                                accessibleName: pageButton.modelData.name
-                                onActivated: {
-                                    const maximum = Math.max(0, titleTerminalTabs.contentWidth - titleTerminalTabs.width);
-                                    titleTerminalTabs.contentX = Math.max(0, Math.min(maximum, titleTerminalTabs.contentX + pageButton.modelData.direction * titleTerminalTabs.width * 0.8));
-                                }
-                            }
-
-                            AppToolTip {
-                                visible: pageAction.hovered
-                                text: pageButton.modelData.name
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        width: 26
-                        height: parent.height
-                        color: titleTabOverflowAction.hovered || titleTabOverflowAction.visualFocus ? Theme.controlHover : "transparent"
-
-                        AppIcon {
-                            anchors.centerIn: parent
-                            width: 14
-                            height: 14
-                            name: "chevron-down"
-                            color: root.textColor
-                        }
-
-                        KeyboardAction {
-                            id: titleTabOverflowAction
-
-                            objectName: "titleTabOverflowAction"
-                            anchors.fill: parent
-                            anchors.margins: 2
-                            accessibleName: qsTr("Show all terminal tabs")
-                            onActivated: titleTabOverflowMenu.open()
-                        }
-
-                        AppToolTip {
-                            visible: titleTabOverflowAction.hovered && !titleTabOverflowMenu.visible
-                            text: qsTr("All terminal tabs")
-                        }
-                    }
-                }
-
-                AppMenu {
-                    id: titleTabOverflowMenu
-
-                    y: parent.height
-
-                    Instantiator {
-                        model: root.controller.terminalTabs
-                        delegate: AppMenuItem {
-                            required property var modelData
-                            text: modelData.title
-                            checkable: true
-                            checked: root.controller.activeTerminalTabId === modelData.id
-                            onTriggered: {
-                                root.controller.activateTerminalTab(modelData.id);
-                                root.currentPage = "terminal";
-                                terminalViewport.forceActiveFocus();
-                            }
-                        }
-                        onObjectAdded: (index, object) => titleTabOverflowMenu.insertItem(index, object)
-                        onObjectRemoved: (index, object) => titleTabOverflowMenu.removeItem(object)
-                    }
+                controller: root.controller
+                iconColor: root.textColor
+                onTerminalCloseRequested: tab => root.requestTerminalTabClose(tab)
+                onTerminalActivated: tabId => {
+                    root.controller.activateTerminalTab(tabId);
+                    root.currentPage = "terminal";
+                    terminalViewport.forceActiveFocus();
                 }
             }
 
@@ -1191,12 +1169,13 @@ Rectangle {
                 objectName: "titleNewTabContainer"
                 width: 36
                 height: titleNavigation.height
-                color: titleNewTabAction.hovered || titleNewTabAction.visualFocus ? Theme.controlHover : "transparent"
+                property real feedbackAmount: titleNewTabAction.hovered || titleNewTabAction.visualFocus ? 1 : 0
+                color: Theme.withAlpha(Theme.controlHover, Theme.controlHover.a * feedbackAmount)
                 border.color: titleNewTabAction.visualFocus ? Theme.focus : "transparent"
                 border.width: titleNewTabAction.visualFocus ? 1 : 0
 
-                Behavior on color {
-                    ColorAnimation {
+                Behavior on feedbackAmount {
+                    NumberAnimation {
                         duration: Theme.motionFast
                     }
                 }
@@ -1288,342 +1267,30 @@ Rectangle {
             }
         }
 
-        Row {
-            id: titleControls
+        Item {
+            id: titleBlankDragRegion
 
-            anchors.right: parent.right
+            objectName: "titleBlankDragRegion"
+            anchors.left: titleNavigation.right
+            anchors.right: titleControls.left
             anchors.top: parent.top
-            height: parent.height
+            anchors.bottom: parent.bottom
 
-            Rectangle {
-                width: root.titleSecurityActionWidth
-                height: titleBar.height
-                visible: root.portableVaultNeedsAttention
-                color: portableVaultStatusAction.hovered || portableVaultStatusAction.visualFocus ? Theme.controlHover : "transparent"
-                border.color: portableVaultStatusAction.visualFocus ? Theme.focus : "transparent"
-                border.width: portableVaultStatusAction.visualFocus ? 1 : 0
-
-                Behavior on color {
-                    ColorAnimation {
-                        duration: Theme.motionFast
-                    }
-                }
-
-                AppIcon {
-                    anchors.centerIn: parent
-                    width: 16
-                    height: 16
-                    name: "lock"
-                    color: Theme.dangerText
-                }
-
-                Rectangle {
-                    anchors.right: parent.right
-                    anchors.rightMargin: 7
-                    anchors.top: parent.top
-                    anchors.topMargin: 7
-                    width: 6
-                    height: 6
-                    radius: 3
-                    color: Theme.danger
-                    border.color: Theme.chromeBackground
-                    border.width: 1
-                }
-
-                KeyboardAction {
-                    id: portableVaultStatusAction
-
-                    objectName: "portableVaultStatusAction"
-                    anchors.fill: parent
-                    anchors.margins: 2
-                    accessibleName: root.controller.portableVaultInitialized ? qsTr("Portable vault locked; unlock") : qsTr("Portable vault not configured; open Security settings")
-                    onActivated: root.requestPortableVaultAccess(portableVaultStatusAction)
+            DragHandler {
+                target: null
+                acceptedButtons: Qt.LeftButton
+                onActiveChanged: {
+                    if (active)
+                        root.windowChrome.beginSystemMove();
                 }
             }
+        }
 
-            Rectangle {
-                id: alwaysOnTopContainer
-
-                objectName: "alwaysOnTopContainer"
-                width: root.titleQuickActionWidth
-                height: titleBar.height
-                color: "transparent"
-
-                Row {
-                    anchors.fill: parent
-
-                    Rectangle {
-                        width: 26
-                        height: parent.height
-                        color: alwaysOnTopAction.hovered || alwaysOnTopAction.visualFocus ? Theme.controlHover : "transparent"
-
-                        AppIcon {
-                            anchors.centerIn: parent
-                            width: 16
-                            height: 16
-                            name: root.windowAlwaysOnTopRequested ? "pin-window" : root.currentTerminalTabPinned ? "pin-tab" : "pin"
-                            color: root.windowAlwaysOnTopRequested || root.currentTerminalTabPinned ? Theme.accent : root.mutedColor
-                        }
-
-                        KeyboardAction {
-                            id: alwaysOnTopAction
-
-                            objectName: "alwaysOnTopAction"
-                            anchors.fill: parent
-                            anchors.margins: 2
-                            enabled: true
-                            doubleClickEnabled: true
-                            accessibleName: root.windowAlwaysOnTopRequested ? qsTr("Turn off window always on top") : root.currentPage !== "terminal" || root.activeTerminalTab === null ? qsTr("Keep window always on top") : root.currentTerminalTabPinned ? qsTr("Unpin current terminal tab") : qsTr("Pin current terminal tab")
-                            onActivated: root.activatePinPrimary()
-                            onDoubleActivated: root.activatePinDouble()
-                        }
-
-                        AppToolTip {
-                            visible: alwaysOnTopAction.hovered && !alwaysOnTopMenu.visible
-                            text: {
-                                if (root.windowAlwaysOnTopRequested && root.currentTerminalTabPinned) {
-                                    return qsTr("Current tab pinned · window always on top\nDouble-click to turn off window pinning");
-                                }
-                                if (root.windowAlwaysOnTopRequested) {
-                                    return qsTr("Window always on top\nClick to turn off · Double-click toggles window pinning");
-                                }
-                                if (root.currentTerminalTabPinned) {
-                                    return qsTr("Current terminal tab pinned\nClick to unpin · Double-click pins the whole window");
-                                }
-                                if (root.currentPage !== "terminal" || root.activeTerminalTab === null) {
-                                    return qsTr("Click or double-click to keep the whole window always on top");
-                                }
-                                return qsTr("Click to pin this tab · Double-click to pin the whole window");
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        width: 14
-                        height: parent.height
-                        color: alwaysOnTopMenuAction.hovered || alwaysOnTopMenuAction.visualFocus || alwaysOnTopMenu.visible ? Theme.controlHover : "transparent"
-                        border.color: alwaysOnTopMenuAction.visualFocus ? Theme.focus : "transparent"
-                        border.width: alwaysOnTopMenuAction.visualFocus ? 1 : 0
-
-                        AppIcon {
-                            anchors.centerIn: parent
-                            width: 10
-                            height: 10
-                            name: "chevron-down"
-                            color: root.mutedColor
-                        }
-
-                        KeyboardAction {
-                            id: alwaysOnTopMenuAction
-
-                            objectName: "alwaysOnTopMenuAction"
-                            anchors.fill: parent
-                            accessibleName: qsTr("Open pin options")
-                            onActivated: alwaysOnTopMenu.open()
-                        }
-
-                        AppToolTip {
-                            visible: alwaysOnTopMenuAction.hovered && !alwaysOnTopMenu.visible
-                            text: qsTr("Pin options")
-                        }
-                    }
-                }
-
-                AppMenu {
-                    id: alwaysOnTopMenu
-
-                    objectName: "alwaysOnTopMenu"
-                    x: alwaysOnTopContainer.width - width
-                    y: alwaysOnTopContainer.height
-
-                    AppMenuItem {
-                        objectName: "pinCurrentTerminalTabMenuAction"
-                        text: qsTr("Pin current terminal tab")
-                        iconName: "pin-tab"
-                        checkable: true
-                        checked: root.currentTerminalTabPinned
-                        enabled: root.currentPage === "terminal" && root.activeTerminalTab !== null
-                        onTriggered: root.toggleActiveTerminalPin()
-                    }
-
-                    AppMenuItem {
-                        objectName: "pinWindowMenuAction"
-                        text: qsTr("Keep window always on top")
-                        iconName: "pin-window"
-                        checkable: true
-                        checked: root.windowAlwaysOnTopRequested
-                        onTriggered: root.setWindowAlwaysOnTopRequested(!root.windowAlwaysOnTopRequested)
-                    }
-
-                    AppMenuSeparator {}
-
-                    AppMenuItem {
-                        objectName: "disablePinningMenuAction"
-                        text: qsTr("Turn off pinning")
-                        iconName: "close"
-                        enabled: root.windowAlwaysOnTopRequested || root.currentTerminalTabPinned
-                        onTriggered: root.clearAlwaysOnTopPreference()
-                    }
-                }
-            }
-
-            Rectangle {
-                width: root.titleQuickActionWidth
-                height: titleBar.height
-                color: transferCenterAction.hovered || transferCenterAction.visualFocus ? Theme.controlHover : "transparent"
-                border.color: transferCenterAction.visualFocus ? Theme.focus : "transparent"
-                border.width: transferCenterAction.visualFocus ? 1 : 0
-
-                AppIcon {
-                    anchors.centerIn: parent
-                    width: 16
-                    height: 16
-                    name: "transfer"
-                    color: transferCenter.visible ? root.textColor : root.mutedColor
-                }
-
-                Rectangle {
-                    anchors.right: parent.right
-                    anchors.rightMargin: 6
-                    anchors.top: parent.top
-                    anchors.topMargin: 5
-                    visible: root.controller.activeTransferCount > 0
-                    width: Math.max(12, transferCountText.implicitWidth + 4)
-                    height: 12
-                    radius: 6
-                    color: Theme.accent
-
-                    Text {
-                        id: transferCountText
-
-                        anchors.centerIn: parent
-                        text: root.controller.activeTransferCount > 9 ? "9+" : root.controller.activeTransferCount
-                        color: Theme.accentText
-                        font.family: Theme.uiFont
-                        font.pixelSize: 8
-                        font.weight: Font.Bold
-                    }
-                }
-
-                KeyboardAction {
-                    id: transferCenterAction
-
-                    objectName: "transferCenterAction"
-                    anchors.fill: parent
-                    anchors.margins: 2
-                    accessibleName: qsTr("Open file transfers")
-                    onActivated: transferCenter.visible ? transferCenter.close() : transferCenter.open()
-                }
-
-                AppToolTip {
-                    visible: transferCenterAction.hovered
-                    text: qsTr("File transfers")
-                }
-            }
-
-            Rectangle {
-                width: root.titleQuickActionWidth
-                height: titleBar.height
-                color: commandPaletteAction.hovered || commandPaletteAction.visualFocus ? Theme.controlHover : "transparent"
-                border.color: commandPaletteAction.visualFocus ? Theme.focus : "transparent"
-                border.width: commandPaletteAction.visualFocus ? 1 : 0
-
-                Behavior on color {
-                    ColorAnimation {
-                        duration: Theme.motionFast
-                    }
-                }
-
-                AppIcon {
-                    anchors.centerIn: parent
-                    width: 16
-                    height: 16
-                    name: "search"
-                    color: commandPalette.visible ? root.textColor : root.mutedColor
-                }
-
-                KeyboardAction {
-                    id: commandPaletteAction
-
-                    objectName: "commandPaletteAction"
-                    anchors.fill: parent
-                    anchors.margins: 2
-                    accessibleName: qsTr("Open command palette")
-                    onActivated: commandPalette.open()
-                }
-
-                AppToolTip {
-                    visible: commandPaletteAction.hovered
-                    text: {
-                        const shortcut = root.shortcutFor("application.commandPalette");
-                        return shortcut.length > 0 ? qsTr("Command palette") + " · " + shortcut : qsTr("Command palette");
-                    }
-                }
-            }
-
-            Rectangle {
-                width: root.titleQuickActionWidth
-                height: titleBar.height
-                color: settingsShortcutAction.hovered || settingsShortcutAction.visualFocus ? Theme.controlHover : "transparent"
-                border.color: settingsShortcutAction.visualFocus ? Theme.focus : "transparent"
-                border.width: settingsShortcutAction.visualFocus ? 1 : 0
-
-                Behavior on color {
-                    ColorAnimation {
-                        duration: Theme.motionFast
-                    }
-                }
-
-                AppIcon {
-                    anchors.centerIn: parent
-                    width: 16
-                    height: 16
-                    name: "settings"
-                    color: root.currentPage === "settings" ? root.textColor : root.mutedColor
-                }
-
-                KeyboardAction {
-                    id: settingsShortcutAction
-
-                    objectName: "settingsShortcutAction"
-                    anchors.fill: parent
-                    anchors.margins: 2
-                    accessibleName: qsTr("Open Settings")
-                    onActivated: root.openSettingsTab()
-                }
-            }
-
-            CaptionButton {
-                objectName: "minimizeCaptionButton"
-                width: root.captionButtonWidth
-                height: titleBar.height
-                kind: "minimize"
-                chrome: root.windowChrome
-                accessibleName: qsTr("Minimize")
-                onActivated: root.windowChrome.minimizeWindow()
-            }
-
-            CaptionButton {
-                objectName: "maximizeCaptionButton"
-                width: root.captionButtonWidth
-                height: titleBar.height
-                kind: "maximize"
-                chrome: root.windowChrome
-                accessibleName: root.windowChrome.maximized ? qsTr("Restore") : qsTr("Maximize")
-                externallyHovered: root.windowChrome.maximizeButtonHovered
-                externallyPressed: root.windowChrome.maximizeButtonPressed
-                onActivated: root.windowChrome.toggleMaximize()
-            }
-
-            CaptionButton {
-                objectName: "closeCaptionButton"
-                width: root.captionButtonWidth
-                height: titleBar.height
-                kind: "close"
-                chrome: root.windowChrome
-                accessibleName: qsTr("Close")
-                onActivated: root.windowChrome.closeWindow()
-            }
+        TitleWindowActions {
+            id: titleControls
+            hostRoot: root
+            transferPopup: transferCenter
+            commandPopup: commandPalette
         }
     }
 
@@ -1906,7 +1573,7 @@ Rectangle {
             }
 
             Behavior on Layout.preferredWidth {
-                enabled: !workspaceNavigationResizeDrag.active
+                enabled: !workspaceNavigationResizeHandle.pressed
 
                 NumberAnimation {
                     duration: Theme.motionMedium
@@ -2039,16 +1706,6 @@ Rectangle {
                 }
 
                 SideNavigationItem {
-                    actionObjectName: "sideLocalFilesAction"
-                    Layout.fillWidth: true
-                    iconName: "folder"
-                    text: qsTr("Local files")
-                    compact: root.workspaceNavigationCompact
-                    selected: root.workspaceSection === "local-files"
-                    onActivated: root.workspaceSection = "local-files"
-                }
-
-                SideNavigationItem {
                     actionObjectName: "sideImportWorkspaceAction"
                     Layout.fillWidth: true
                     iconName: "upload"
@@ -2080,7 +1737,7 @@ Rectangle {
                 }
             }
 
-            Rectangle {
+            ResizeGrip {
                 id: workspaceNavigationResizeHandle
 
                 objectName: "workspaceNavigationResizeHandle"
@@ -2089,29 +1746,15 @@ Rectangle {
                 anchors.bottom: parent.bottom
                 width: 6
                 z: 5
-                color: workspaceNavigationResizeHover.hovered || workspaceNavigationResizeDrag.active ? Theme.mixColor("transparent", Theme.accent, 0.24) : "transparent"
-
-                HoverHandler {
-                    id: workspaceNavigationResizeHover
-
-                    cursorShape: Qt.SizeHorCursor
-                }
-
-                DragHandler {
-                    id: workspaceNavigationResizeDrag
-
-                    property real initialWidth: root.workspaceNavigationWidth
-                    target: null
-                    xAxis.enabled: true
-                    yAxis.enabled: false
-                    onActiveChanged: {
-                        if (active)
-                            initialWidth = root.workspaceNavigationWidth;
-                    }
-                    onTranslationChanged: {
-                        if (active)
-                            root.resizeWorkspaceNavigation(initialWidth + translation.x);
-                    }
+                value: root.workspaceNavigationWidth
+                minimum: root.workspaceNavigationMinimumWidth
+                maximum: root.workspaceNavigationMaximumWidth
+                defaultValue: 208
+                snapPoints: [56, 208]
+                onValueEdited: value => root.resizeWorkspaceNavigation(value)
+                Rectangle {
+                    anchors.fill: parent
+                    color: workspaceNavigationResizeHandle.containsMouse || workspaceNavigationResizeHandle.pressed ? Theme.withAlpha(Theme.accent, 0.24) : "transparent"
                 }
             }
         }
@@ -2174,23 +1817,18 @@ Rectangle {
                                 font.weight: Font.DemiBold
                             }
 
-                            TerminalToolbarButton {
+                            AppIconButton {
                                 id: copyAddressButton
 
                                 Layout.preferredWidth: 24
                                 Layout.preferredHeight: 22
                                 visible: root.activeTerminalTab !== null && root.activeTerminalTab.address.length > 0
                                 onClicked: root.controller.copyActiveTerminalAddress()
-                                Accessible.name: qsTr("Copy host address")
-                                contentItem: AppIcon {
-                                    name: "copy"
-                                    color: root.mutedColor
-                                }
+                                label: qsTr("Copy host address")
+                                iconName: "copy"
+                                iconColor: root.mutedColor
 
-                                AppToolTip {
-                                    visible: copyAddressButton.hovered
-                                    text: qsTr("Copy host address")
-                                }
+                                toolTipText: qsTr("Copy host address")
                             }
 
                             Rectangle {
@@ -2241,7 +1879,7 @@ Rectangle {
                                 visible: !terminalSessionStatus.visible
                             }
 
-                            TerminalToolbarButton {
+                            AppIconButton {
                                 id: keywordHighlightButton
 
                                 objectName: "terminalKeywordHighlightAction"
@@ -2258,20 +1896,14 @@ Rectangle {
                                     else
                                         keywordHighlightPopover.openFor(keywordHighlightButton);
                                 }
-                                Keys.onReturnPressed: click()
-                                Keys.onEnterPressed: click()
-                                Accessible.name: qsTr("Host keyword highlighting")
-                                contentItem: AppIcon {
-                                    name: "highlight"
-                                    color: keywordHighlightButton.checked ? Theme.accent : root.mutedColor
-                                }
-                                AppToolTip {
-                                    visible: keywordHighlightButton.hovered && !keywordHighlightPopover.visible
-                                    text: qsTr("Host keyword highlighting")
-                                }
+                                label: qsTr("Host keyword highlighting")
+                                iconName: "highlight"
+                                iconColor: keywordHighlightButton.checked ? Theme.accent : root.mutedColor
+                                toolTipText: qsTr("Host keyword highlighting")
+                                toolTipEnabled: !keywordHighlightPopover.visible
                             }
 
-                            TerminalToolbarButton {
+                            AppIconButton {
                                 id: sftpToolbarButton
 
                                 objectName: "terminalSftpAction"
@@ -2283,20 +1915,13 @@ Rectangle {
                                 visible: root.width >= 900
                                 enabled: root.activeTerminalTab !== null && root.activeTerminalTab.connected
                                 onClicked: root.controller.toggleTerminalWorkbench("sftp")
-                                Keys.onReturnPressed: click()
-                                Keys.onEnterPressed: click()
-                                Accessible.name: qsTr("Open remote files")
-                                contentItem: AppIcon {
-                                    name: "folder"
-                                    color: sftpToolbarButton.checked ? Theme.accent : root.mutedColor
-                                }
-                                AppToolTip {
-                                    visible: sftpToolbarButton.hovered
-                                    text: qsTr("Open remote files")
-                                }
+                                label: qsTr("Open remote files")
+                                iconName: "folder"
+                                iconColor: sftpToolbarButton.checked ? Theme.accent : root.mutedColor
+                                toolTipText: qsTr("Open remote files")
                             }
 
-                            TerminalToolbarButton {
+                            AppIconButton {
                                 id: composerToolbarButton
 
                                 objectName: "terminalComposerAction"
@@ -2316,21 +1941,14 @@ Rectangle {
                                         terminalViewport.forceActiveFocus();
                                     }
                                 }
-                                Keys.onReturnPressed: click()
-                                Keys.onEnterPressed: click()
-                                Accessible.name: qsTr("Command composer")
-                                contentItem: AppIcon {
-                                    name: "compose"
-                                    color: composerToolbarButton.checked ? Theme.accent : root.mutedColor
-                                }
+                                label: qsTr("Command composer")
+                                iconName: "compose"
+                                iconColor: composerToolbarButton.checked ? Theme.accent : root.mutedColor
 
-                                AppToolTip {
-                                    visible: composerToolbarButton.hovered
-                                    text: qsTr("Command composer")
-                                }
+                                toolTipText: qsTr("Command composer")
                             }
 
-                            TerminalToolbarButton {
+                            AppIconButton {
                                 id: terminalFindButton
 
                                 objectName: "terminalFindAction"
@@ -2339,20 +1957,13 @@ Rectangle {
                                 visible: root.width >= 700
                                 enabled: root.activeTerminalTab !== null
                                 onClicked: root.toggleTerminalSearch()
-                                Keys.onReturnPressed: click()
-                                Keys.onEnterPressed: click()
-                                Accessible.name: qsTr("Find in terminal")
-                                contentItem: AppIcon {
-                                    name: "search"
-                                    color: root.mutedColor
-                                }
-                                AppToolTip {
-                                    visible: terminalFindButton.hovered
-                                    text: qsTr("Find in terminal")
-                                }
+                                label: qsTr("Find in terminal")
+                                iconName: "search"
+                                iconColor: root.mutedColor
+                                toolTipText: qsTr("Find in terminal")
                             }
 
-                            TerminalToolbarButton {
+                            AppIconButton {
                                 id: sessionLogToolbarButton
 
                                 Layout.preferredWidth: 28
@@ -2363,18 +1974,13 @@ Rectangle {
                                 visible: root.width >= 860
                                 enabled: root.activeTerminalTab !== null
                                 onClicked: root.toggleSessionLog()
-                                Accessible.name: checked ? qsTr("Stop session log") : qsTr("Start session log")
-                                contentItem: AppIcon {
-                                    name: "save"
-                                    color: root.activeTerminalTab !== null && root.activeTerminalTab.logDroppedBytes > 0 ? Theme.warning : sessionLogToolbarButton.checked ? Theme.accent : root.mutedColor
-                                }
-                                AppToolTip {
-                                    visible: sessionLogToolbarButton.hovered
-                                    text: root.activeTerminalTab !== null && root.activeTerminalTab.logDroppedBytes > 0 ? qsTr("Session log is incomplete: %1 byte(s) were dropped.").arg(root.activeTerminalTab.logDroppedBytes) : sessionLogToolbarButton.checked ? qsTr("Stop session log") : qsTr("Start session log")
-                                }
+                                label: checked ? qsTr("Stop session log") : qsTr("Start session log")
+                                iconName: "save"
+                                iconColor: root.activeTerminalTab !== null && root.activeTerminalTab.logDroppedBytes > 0 ? Theme.warning : sessionLogToolbarButton.checked ? Theme.accent : root.mutedColor
+                                toolTipText: root.activeTerminalTab !== null && root.activeTerminalTab.logDroppedBytes > 0 ? qsTr("Session log is incomplete: %1 byte(s) were dropped.").arg(root.activeTerminalTab.logDroppedBytes) : sessionLogToolbarButton.checked ? qsTr("Stop session log") : qsTr("Start session log")
                             }
 
-                            TerminalToolbarButton {
+                            AppIconButton {
                                 id: scriptsToolbarButton
 
                                 objectName: "terminalScriptsAction"
@@ -2386,21 +1992,16 @@ Rectangle {
                                 visible: root.width >= 940
                                 enabled: root.activeTerminalTab !== null
                                 onClicked: root.controller.toggleTerminalWorkbench("scripts")
-                                Keys.onReturnPressed: click()
-                                Keys.onEnterPressed: click()
-                                Accessible.name: qsTr("Command snippets")
-                                contentItem: AppIcon {
-                                    name: "commands"
-                                    color: scriptsToolbarButton.checked ? Theme.accent : root.mutedColor
-                                }
-                                AppToolTip {
-                                    visible: scriptsToolbarButton.hovered
-                                    text: qsTr("Command snippets")
-                                }
+                                label: qsTr("Command snippets")
+                                iconName: "commands"
+                                iconColor: scriptsToolbarButton.checked ? Theme.accent : root.mutedColor
+                                toolTipText: qsTr("Command snippets")
                             }
 
-                            TerminalToolbarButton {
+                            AppIconButton {
                                 id: scriptRecordingIndicator
+                                iconName: "commands"
+                                label: toolTipText
 
                                 objectName: "terminalScriptRecordingIndicator"
                                 Layout.preferredWidth: root.activeTerminalTab !== null && root.activeTerminalTab.scriptRecordingState === "review" ? 42 : 50
@@ -2434,13 +2035,11 @@ Rectangle {
                                         font.weight: Font.DemiBold
                                     }
                                 }
-                                AppToolTip {
-                                    visible: scriptRecordingIndicator.hovered && !terminalRecordingPopover.visible
-                                    text: root.activeTerminalTab !== null && root.activeTerminalTab.scriptRecordingState === "recording" ? qsTr("Pause script recording") : root.activeTerminalTab !== null && root.activeTerminalTab.scriptRecordingState === "paused" ? qsTr("Resume script recording") : qsTr("Review recorded commands")
-                                }
+                                toolTipText: root.activeTerminalTab !== null && root.activeTerminalTab.scriptRecordingState === "recording" ? qsTr("Pause script recording") : root.activeTerminalTab !== null && root.activeTerminalTab.scriptRecordingState === "paused" ? qsTr("Resume script recording") : qsTr("Review recorded commands")
+                                toolTipEnabled: !terminalRecordingPopover.visible
                             }
 
-                            TerminalToolbarButton {
+                            AppIconButton {
                                 id: aiToolbarButton
 
                                 objectName: "terminalAiAction"
@@ -2451,21 +2050,14 @@ Rectangle {
                                 selected: checked
                                 enabled: root.activeTerminalTab !== null
                                 onClicked: root.controller.toggleTerminalWorkbench("ai")
-                                Keys.onReturnPressed: click()
-                                Keys.onEnterPressed: click()
-                                Accessible.name: qsTr("AI assistant")
-                                contentItem: AppIcon {
-                                    name: "ai"
-                                    color: aiToolbarButton.checked ? Theme.accent : root.mutedColor
-                                }
+                                label: qsTr("AI assistant")
+                                iconName: "ai"
+                                iconColor: aiToolbarButton.checked ? Theme.accent : root.mutedColor
 
-                                AppToolTip {
-                                    visible: aiToolbarButton.hovered
-                                    text: qsTr("AI assistant")
-                                }
+                                toolTipText: qsTr("AI assistant")
                             }
 
-                            TerminalToolbarButton {
+                            AppIconButton {
                                 id: terminalMoreButton
                                 objectName: "terminalMoreAction"
 
@@ -2473,18 +2065,12 @@ Rectangle {
                                 Layout.preferredHeight: 22
                                 enabled: root.activeTerminalTab !== null
                                 onClicked: terminalMoreMenu.open()
-                                Keys.onReturnPressed: click()
-                                Keys.onEnterPressed: click()
-                                Accessible.name: qsTr("More terminal actions")
-                                contentItem: AppIcon {
-                                    name: "more"
-                                    color: root.mutedColor
-                                }
+                                label: qsTr("More terminal actions")
+                                iconName: "more"
+                                iconColor: root.mutedColor
 
-                                AppToolTip {
-                                    visible: terminalMoreButton.hovered && !terminalMoreMenu.visible
-                                    text: qsTr("More terminal actions")
-                                }
+                                toolTipText: qsTr("More terminal actions")
+                                toolTipEnabled: !terminalMoreMenu.visible
 
                                 AppMenu {
                                     id: terminalMoreMenu
@@ -2625,10 +2211,13 @@ Rectangle {
                             anchors.leftMargin: root.activeTerminalWorkbenchSide === "left" ? root.activeTerminalWorkbenchWidth : 0
                             anchors.rightMargin: root.activeTerminalWorkbenchSide === "right" ? root.activeTerminalWorkbenchWidth : 0
                             anchors.bottomMargin: root.activeTerminalComposerHeight
-                            visible: root.activeTerminalTab !== null && root.visibleTerminalLayoutRoot.kind
+                            visible: root.activeTerminalTab !== null && !!root.visibleTerminalLayoutRoot.kind
                             controller: root.controller
                             node: root.visibleTerminalLayoutRoot
                             zoomedPaneId: root.zoomedTerminalPaneId
+                            paneCount: root.controller.activeTerminalWorkspace.paneCount || 1
+                            headersVisible: root.paneHeadersVisible
+                            onToggleHeadersRequested: root.toggleTerminalPaneHeaders()
                             defaultFontFamily: root.controller.terminalFontFamily
                             defaultFontSize: root.controller.terminalFontSize
                             defaultLigatures: root.controller.terminalLigatures
@@ -2660,14 +2249,14 @@ Rectangle {
 
                             Behavior on anchors.rightMargin {
                                 NumberAnimation {
-                                    duration: Theme.animationsEnabled ? Theme.motionMedium : 0
+                                    duration: Theme.animationsEnabled && !root.workbenchResizeInProgress ? Theme.motionMedium : 0
                                     easing.type: Easing.OutCubic
                                 }
                             }
 
                             Behavior on anchors.leftMargin {
                                 NumberAnimation {
-                                    duration: Theme.animationsEnabled ? Theme.motionMedium : 0
+                                    duration: Theme.animationsEnabled && !root.workbenchResizeInProgress ? Theme.motionMedium : 0
                                     easing.type: Easing.OutCubic
                                 }
                             }
@@ -2697,73 +2286,6 @@ Rectangle {
                             id: terminalRecordingPopover
                             controller: root.controller
                             terminalTab: root.activeTerminalTab
-                        }
-
-                        Item {
-                            id: terminalScrollbar
-
-                            anchors.top: parent.top
-                            anchors.right: parent.right
-                            anchors.bottom: parent.bottom
-                            anchors.topMargin: 8
-                            anchors.rightMargin: (root.activeTerminalWorkbenchSide === "right" ? root.activeTerminalWorkbenchWidth : 0) + 9
-                            anchors.bottomMargin: root.activeTerminalComposerHeight + 8
-                            width: 16
-                            visible: terminalViewport.scrollbarVisible && root.activeTerminalTab !== null
-                            enabled: visible
-                            z: 12
-
-                            Rectangle {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                width: 4
-                                height: parent.height
-                                radius: 2
-                                color: Theme.dark ? "#66334155" : "#6694A3B8"
-                            }
-
-                            Rectangle {
-                                id: terminalScrollbarThumb
-
-                                readonly property real travel: Math.max(0, terminalScrollbar.height - height)
-
-                                x: (terminalScrollbar.width - width) / 2
-                                y: travel * terminalViewport.scrollbarPosition
-                                width: terminalScrollbarMouse.containsMouse || terminalScrollbarMouse.pressed ? 8 : 6
-                                height: Math.min(terminalScrollbar.height, Math.max(28, terminalScrollbar.height * terminalViewport.scrollbarPageRatio))
-                                radius: width / 2
-                                color: terminalScrollbarMouse.pressed ? Theme.text : terminalScrollbarMouse.containsMouse ? Theme.textSoft : Theme.textMuted
-                            }
-
-                            MouseArea {
-                                id: terminalScrollbarMouse
-
-                                property real grabOffset: terminalScrollbarThumb.height / 2
-
-                                function applyPointer(pointerY) {
-                                    if (terminalScrollbarThumb.travel <= 0) {
-                                        return;
-                                    }
-                                    const thumbTop = Math.max(0, Math.min(terminalScrollbarThumb.travel, pointerY - grabOffset));
-                                    terminalViewport.scrollToFraction(thumbTop / terminalScrollbarThumb.travel);
-                                }
-
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onPressed: mouse => {
-                                    if (mouse.y >= terminalScrollbarThumb.y && mouse.y <= terminalScrollbarThumb.y + terminalScrollbarThumb.height) {
-                                        grabOffset = mouse.y - terminalScrollbarThumb.y;
-                                    } else {
-                                        grabOffset = terminalScrollbarThumb.height / 2;
-                                        applyPointer(mouse.y);
-                                    }
-                                }
-                                onPositionChanged: mouse => {
-                                    if (pressed) {
-                                        applyPointer(mouse.y);
-                                    }
-                                }
-                            }
                         }
 
                         Rectangle {
@@ -2943,8 +2465,16 @@ Rectangle {
                                 controller: root.controller
                                 activeTab: root.activeTerminalTab
                                 panelSide: root.activeTerminalWorkbenchSide
-                                panelWidth: root.activeTerminalTab !== null ? root.activeTerminalTab.workbenchWidth : 520
-                                onPanelWidthRequested: width => root.controller.setTerminalWorkbenchWidth(width)
+                                panelWidth: root.activeTerminalWorkbenchWidth
+                                onPanelWidthRequested: width => root.liveWorkbenchWidth = width
+                                onPanelResizeStarted: root.workbenchResizeInProgress = true
+                                onPanelResizeFinished: {
+                                    root.workbenchResizeInProgress = false;
+                                    if (root.liveWorkbenchWidth >= 0) {
+                                        root.controller.setTerminalWorkbenchWidth(root.liveWorkbenchWidth);
+                                        root.liveWorkbenchWidth = -1;
+                                    }
+                                }
                                 onInsertRequested: command => {
                                     if (root.controller.insertTerminalCommand(command)) {
                                         terminalViewport.forceActiveFocus();
@@ -3087,14 +2617,13 @@ Rectangle {
                 onToggleActiveLogRequested: root.toggleSessionLog()
             }
 
-            LocalFilesPane {
+            SftpWorkspacePane {
                 anchors.fill: parent
-                visible: root.currentPage === "hosts" && root.workspaceSection === "local-files"
+                visible: root.currentPage === "sftp"
                 controller: root.controller
-                onInsertRequested: path => {
-                    if (root.controller.insertLocalFilePath(path))
-                        root.currentPage = "terminal";
-                }
+                activeTab: root.activeTerminalTab
+                onBrowseHostsRequested: root.currentPage = "hosts"
+                onTerminalRequested: root.currentPage = "terminal"
             }
 
             SettingsPane {
@@ -3259,56 +2788,9 @@ Rectangle {
         }
     }
 
-    Window {
+    DetachedTerminalWindow {
         id: detachedTerminalWindow
-
-        width: 920
-        height: 620
-        minimumWidth: 480
-        minimumHeight: 320
-        visible: false
-        title: root.activeTerminalTab !== null ? qsTr("%1 — Detached pane").arg(root.activeTerminalTab.title) : qsTr("Detached terminal pane")
-        color: Theme.windowBackground
-        onClosing: close => {
-            if (root.detachedTerminalPaneId.length > 0) {
-                close.accepted = false;
-                root.reattachTerminalPane();
-            }
-        }
-
-        TerminalSplitNode {
-            anchors.fill: parent
-            controller: root.controller
-            node: root.findTerminalPane(root.terminalLayoutRoot, root.detachedTerminalPaneId) || ({})
-            detachedPane: true
-            defaultFontFamily: root.controller.terminalFontFamily
-            defaultFontSize: root.controller.terminalFontSize
-            defaultLigatures: root.controller.terminalLigatures
-            defaultBackgroundOpacity: root.controller.terminalBackgroundOpacity
-            defaultCursor: root.controller.cursorPreference
-            cursorBlink: root.controller.cursorBlink
-            copyOnSelect: root.controller.copyOnSelect
-            keepSelectionAfterCopy: root.controller.keepSelectionAfterCopy
-            selectionActionPopupEnabled: root.controller.terminalSelectionPopupEnabled
-            selectionActions: root.controller.terminalSelectionActions
-            confirmMultilinePaste: root.controller.confirmMultilinePaste
-            rightClickBehavior: root.controller.terminalRightClickBehavior
-            middleClickBehavior: root.controller.terminalMiddleClickBehavior
-            wordDelimiters: root.controller.terminalWordDelimiters
-            scrollRowsPerWheel: root.controller.terminalScrollRows
-            onDetachPaneRequested: paneId => root.reattachTerminalPane()
-            onZoomPaneRequested: paneId => {}
-            onMultilinePasteConfirmationRequested: (viewport, lineCount) => {
-                root.pendingPasteLineCount = lineCount;
-                root.pendingPasteViewport = viewport;
-                multilinePasteDialog.open();
-            }
-            onTerminalSearchRequested: root.openTerminalSearch()
-            onBrowseHostsRequested: {
-                root.reattachTerminalPane();
-                root.currentPage = "hosts";
-            }
-        }
+        hostRoot: root
     }
 
     HostKeyPrompt {

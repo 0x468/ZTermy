@@ -217,6 +217,14 @@ bool validSshProfile(const SshProfile &profile) noexcept
         }
     }
 
+    // The identity is authoritative. Keep accepting legacy profiles that still
+    // contain duplicated raw fields so the keychain migration can load and
+    // clean them; newly saved profiles omit those fields.
+    if (profile.identityReference)
+    {
+        return true;
+    }
+
     switch (profile.authentication)
     {
         case SshAuthenticationMethod::PrivateKey:

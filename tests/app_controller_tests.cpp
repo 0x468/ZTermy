@@ -1,6 +1,8 @@
 #include "application/AppController.h"
+#include "application/ApplicationInstance.h"
 #include "application/ai/AiConversationHistoryModel.h"
 #include "application/ai/AiConversationModel.h"
+#include "application/logging/ConnectionHistoryController.h"
 #include "core/config/ApplicationSettings.h"
 #include "infrastructure/security/PortableCredentialVault.h"
 #include "infrastructure/ssh/SshProfileStore.h"
@@ -13,10 +15,12 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QHostAddress>
 #include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QScopeGuard>
 #include <QSet>
 #include <QSignalSpy>
 #include <QTcpServer>
@@ -29,6 +33,7 @@
 #include <QVariantMap>
 
 #include <array>
+#include <future>
 #include <ranges>
 #include <span>
 #include <vector>
@@ -38,6 +43,7 @@ namespace
 
 struct FakeLocalSessionState final
 {
+    QList<ztermy::terminal::LocalTerminalLaunchSpec> launchSpecs;
     int starts = 0;
     int stops = 0;
     QList<QByteArray> inputs;
@@ -62,6 +68,10 @@ class FakeLocalTerminalSession final : public ztermy::terminal::LocalTerminalSes
 {
 public:
     explicit FakeLocalTerminalSession(std::shared_ptr<FakeLocalSessionState> state) : m_state(std::move(state)) {}
+    void setLaunchSpec(const ztermy::terminal::LocalTerminalLaunchSpec &spec) override
+    {
+        m_state->launchSpecs.push_back(spec);
+    }
 
     [[nodiscard]] std::error_code start(const ztermy::terminal::TerminalGeometry) override
     {
@@ -182,11 +192,38 @@ private:
 
 } // namespace
 
+namespace ztermy
+{
+class AppControllerTestAccess
+{
+public:
+    static auto &active(AppController &controller) { return *controller.activeTab(); }
+    static void wireSftp(AppController &controller) { controller.connectSftpTabSignals(active(controller)); }
+    static void bind(AppController &controller, const ssh::SshConnectionRequest &request)
+    {
+        controller.bindSshConnectionContext(active(controller), request);
+    }
+    static auto remoteRequest(AppController &controller)
+    {
+        return controller.sftpConnectionRequest(active(controller));
+    }
+    static bool start(AppController &controller, ssh::SshConnectionRequest request, const QString &profile)
+    {
+        return controller.startSshConnection(std::move(request), profile);
+    }
+    static void historyResult(AppController &controller, quint64 generation, ShellHistoryEntries entries)
+    {
+        controller.applyTerminalHistoryTaskResult(active(controller).id, generation, std::move(entries), {});
+    }
+};
+} // namespace ztermy
+
 class AppControllerTests final : public QObject
 {
     Q_OBJECT
 
 private slots:
+    void instanceOwnershipIsScopedToDataDirectory();
     void savesUpdatesReloadsAndDeletesProfiles();
     void persistsAndPreservesSessionOptions();
     void managesExplicitProxyProfilesAndCredentials();
@@ -213,11 +250,13 @@ private slots:
     void retriesProviderResponseWithoutRepeatingCompletedTool();
     void compactsConversationContextWithoutDeletingTranscript();
     void managesMultipleLocalTerminalTabs();
+    void closesMultipleWorkspacesWithReentrantObservers();
     void tracksTemporaryTerminalWorkspacePins();
     void routesTerminalSelectionActionsToOwningTab();
     void createsKeywordHighlightFromSshSelection();
     void managesFreshTerminalTabWorkflows();
     void managesPersistentTerminalWorkspaceSplits();
+    void preservesSessionRoutingForNoOpPaneMove();
     void importsExportsAndQuarantinesFailedWorkspaceRestore();
     void importsOpenSshProfilesAndJumpRoutes();
     void restoresSavedSshWorkspaceWithoutConnecting();
@@ -225,6 +264,9 @@ private slots:
     void orderlyShutdownStopsAllLocalTabsOnce();
     void exposesAndDismissesStartupRecoveryNotice();
     void persistsQuickCommandsAndPerTabWorkbenchState();
+    void refreshesShellHistoryWithoutInputAndPreservesSnapshotOnFailure();
+    void bindsRemoteRequestsAndHistoryToConnectionIdentity();
+    void persistsConnectionHistorySwitchWithoutStoppingSessions();
     void persistsAiQuickMessages();
     void scansAndExposesAiUserSkills();
     void importsAndExportsScriptLibraryWithoutOverwritingIds();
@@ -1818,6 +1860,210 @@ void AppControllerTests::compactsConversationContextWithoutDeletingTranscript()
     QVERIFY(!controller.activeAiError().isEmpty());
 }
 
+void AppControllerTests::persistsConnectionHistorySwitchWithoutStoppingSessions()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString profiles = directory.filePath(QStringLiteral("profiles.json"));
+    const QString hosts = directory.filePath(QStringLiteral("known_hosts.json"));
+    const QString settings = directory.filePath(QStringLiteral("settings.json"));
+    const auto state = std::make_shared<FakeLocalSessionState>();
+    {
+        ztermy::AppController controller(profiles, hosts, settings, [state] {
+            return std::make_unique<FakeLocalTerminalSession>(state);
+        });
+        auto *history = qobject_cast<ztermy::logging::ConnectionHistoryController *>(controller.connectionHistory());
+        QVERIFY(history);
+        QVERIFY(controller.connectionHistoryEnabled());
+        QVERIFY(controller.setConnectionHistoryEnabled(false));
+        QVERIFY(!controller.startLocalTerminal().isEmpty());
+        QVERIFY(history->entries().isEmpty());
+        QVERIFY(controller.setConnectionHistoryEnabled(true));
+        QVERIFY(history->entries().isEmpty());
+        QVERIFY(!controller.startLocalTerminal().isEmpty());
+        QCOMPARE(history->entries().size(), 1);
+        QVERIFY(controller.setConnectionHistoryEnabled(false));
+        QCOMPARE(history->entries().front().toMap().value(QStringLiteral("phase")).toString(),
+                 QStringLiteral("recording-stopped"));
+        QVERIFY(controller.saveLocalShellPreference(QStringLiteral("windowsPowerShell")));
+        QVERIFY(!controller.connectionHistoryEnabled());
+        QTRY_COMPARE(state->starts, 2);
+        QCOMPARE(state->stops, 0);
+    }
+    {
+        ztermy::AppController reopened(profiles, hosts, settings, [state] {
+            return std::make_unique<FakeLocalTerminalSession>(state);
+        });
+        QVERIFY(!reopened.connectionHistoryEnabled());
+        auto *history = qobject_cast<ztermy::logging::ConnectionHistoryController *>(reopened.connectionHistory());
+        QVERIFY(history);
+        const auto existing = history->entries();
+        QVERIFY(!reopened.startLocalTerminal().isEmpty());
+        QCOMPARE(history->entries(), existing);
+        QVERIFY(reopened.resetApplicationSettings());
+        QVERIFY(reopened.connectionHistoryEnabled());
+        QFile futureSettings(settings);
+        QVERIFY(futureSettings.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        QVERIFY(futureSettings.write("{\"version\":9999}") > 0);
+        futureSettings.close();
+        QVERIFY(!reopened.setConnectionHistoryEnabled(false));
+        QVERIFY(reopened.connectionHistoryEnabled()); // Failed persistence cannot change runtime policy.
+    }
+}
+
+void AppControllerTests::bindsRemoteRequestsAndHistoryToConnectionIdentity()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    QTcpServer firstServer;
+    QTcpServer secondServer;
+    QVERIFY(firstServer.listen(QHostAddress::LocalHost));
+    QVERIFY(secondServer.listen(QHostAddress::LocalHost));
+    const QString profilesPath = directory.filePath(QStringLiteral("profiles.json"));
+    const std::array profiles{
+        ztermy::ssh::SshProfile{.id = "bound-session",
+                                .name = "Fixture",
+                                .host = "127.0.0.1",
+                                .port = firstServer.serverPort(),
+                                .username = "first-user",
+                                .authentication = ztermy::ssh::SshAuthenticationMethod::PrivateKey,
+                                .privateKeyPath = "unused-test-key"}};
+    QVERIFY(ztermy::ssh::SshProfileStore(profilesPath).save(profiles));
+    ztermy::AppController controller(profilesPath, directory.filePath(QStringLiteral("known_hosts.json")));
+    using Access = ztermy::AppControllerTestAccess;
+    QVERIFY(Access::start(controller,
+                          {.host = QStringLiteral("127.0.0.1"),
+                           .port = firstServer.serverPort(),
+                           .username = QStringLiteral("first-user"),
+                           .privateKeyPath = QStringLiteral("unused-test-key"),
+                           .knownHostsPath = directory.filePath(QStringLiteral("known_hosts.json"))},
+                          QStringLiteral("bound-session")));
+    auto &tab = Access::active(controller);
+    tab.ssh->stop(); // The loopback fixture never authenticates or executes a Shell command.
+    tab.running = false;
+    const quint64 previousGeneration = tab.historyRequestId;
+    Access::historyResult(controller, previousGeneration, {{.command = "first-user-only"}});
+    tab.capturedHistory.push_back({.command = "session-only"});
+    tab.inputHistoryBuffer = "partial-input";
+    auto oldCancellation = std::make_shared<std::stop_source>();
+    tab.historyCancellation = oldCancellation;
+    tab.pendingDropLocalFiles = {QStringLiteral("pending-old-upload")};
+    tab.terminalWorkingDirectory = QStringLiteral("/old-user-directory");
+    tab.sftpSession = std::make_unique<ztermy::sftp::SftpSession>();
+    Access::wireSftp(controller);
+    auto queuedOldSignal = std::async(std::launch::async, [source = tab.sftpSession.get()] {
+        emit source->homeDirectoryReady(QStringLiteral("/old-user-home"));
+    });
+    queuedOldSignal.get();
+    const auto queuedBeforeReconnect = tab.remoteRequestProvider;
+    QCOMPARE(tab.history.size(), std::size_t{1});
+
+    QVERIFY(controller.saveHostProfileWithCredential(QStringLiteral("bound-session"), QStringLiteral("Edited"),
+                                                     QStringLiteral("127.0.0.1"), secondServer.serverPort(),
+                                                     QStringLiteral("second-user"), QStringLiteral("private-key"),
+                                                     QStringLiteral("unused-test-key"), false, {}, {}, false, {}, {},
+                                                     {}, false, {{QStringLiteral("identityReference"), QString{}}}));
+    auto beforeReconnect = Access::remoteRequest(controller);
+    QVERIFY(beforeReconnect.has_value());
+    QCOMPARE(beforeReconnect->port, firstServer.serverPort());
+    QCOMPARE(beforeReconnect->username, QStringLiteral("first-user"));
+
+    QVERIFY(controller.reconnectTerminalTab(tab.id));
+    tab.ssh->stop();
+    tab.sftpSession = std::make_unique<ztermy::sftp::SftpSession>();
+    tab.sftpHomePath = QStringLiteral("/new-user-home");
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::MetaCall);
+    QCOMPARE(tab.sftpHomePath, QStringLiteral("/new-user-home"));
+    auto afterReconnect = Access::remoteRequest(controller);
+    QVERIFY(afterReconnect.has_value());
+    QCOMPARE(afterReconnect->port, secondServer.serverPort());
+    QCOMPARE(afterReconnect->username, QStringLiteral("second-user"));
+    QVERIFY(oldCancellation->stop_requested());
+    QVERIFY(tab.history.empty());
+    QVERIFY(tab.capturedHistory.empty());
+    QVERIFY(tab.inputHistoryBuffer.isEmpty());
+    QVERIFY(tab.pendingDropLocalFiles.isEmpty());
+    QVERIFY(tab.terminalWorkingDirectory.isEmpty());
+    const auto alreadyQueued = queuedBeforeReconnect();
+    QVERIFY(alreadyQueued.has_value());
+    QCOMPARE(alreadyQueued->port, firstServer.serverPort());
+    QCOMPARE(alreadyQueued->username, QStringLiteral("first-user"));
+    QVERIFY(tab.historyRequestId > previousGeneration);
+    Access::historyResult(controller, previousGeneration, {{.command = "late-first-user-result"}});
+    QVERIFY(tab.history.empty());
+    Access::historyResult(controller, tab.historyRequestId, {{.command = "second-user-only"}});
+    QCOMPARE(tab.history.size(), std::size_t{1});
+    QCOMPARE(tab.history.front().command, std::string("second-user-only"));
+    tab.remoteRequestProvider = {};
+    QVERIFY(!Access::remoteRequest(controller).has_value());
+    Access::bind(controller, {.host = QStringLiteral("127.0.0.1"),
+                              .port = firstServer.serverPort(),
+                              .username = QStringLiteral("mismatched-user")});
+    QVERIFY(!Access::remoteRequest(controller).has_value());
+}
+
+void AppControllerTests::refreshesShellHistoryWithoutInputAndPreservesSnapshotOnFailure()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const bool hadAppData = qEnvironmentVariableIsSet("APPDATA");
+    const QByteArray originalAppData = qgetenv("APPDATA");
+    const auto restoreEnvironment = qScopeGuard([&] {
+        if (hadAppData)
+            qputenv("APPDATA", originalAppData);
+        else
+            qunsetenv("APPDATA");
+    });
+    qputenv("APPDATA", directory.path().toUtf8());
+    const QString historyPath =
+        directory.filePath(QStringLiteral("Microsoft/Windows/PowerShell/PSReadLine/ConsoleHost_history.txt"));
+    QVERIFY(QDir{}.mkpath(QFileInfo(historyPath).absolutePath()));
+    QFile history(historyPath);
+    QVERIFY(history.open(QIODevice::WriteOnly));
+    QCOMPARE(history.write("Get-Date\n"), 9);
+    history.close();
+    const auto state = std::make_shared<FakeLocalSessionState>();
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
+                                     directory.filePath(QStringLiteral("known_hosts.json")), [state] {
+                                         return std::make_unique<FakeLocalTerminalSession>(state);
+                                     });
+    const QString first = controller.startLocalTerminalWithShell(QStringLiteral("windowsPowerShell"));
+    QVERIFY(!first.isEmpty());
+    QSignalSpy completed(&controller,
+                         SIGNAL(terminalHistoryTaskCompleted(QString, quint64, ShellHistoryEntries, QString)));
+    QVERIFY(completed.isValid());
+    controller.refreshTerminalHistory();
+    controller.refreshTerminalHistory();
+    QTRY_COMPARE(controller.terminalHistoryState(), QStringLiteral("ready"));
+    QCOMPARE(completed.count(), 1);
+    QCOMPARE(controller.terminalHistory().size(), 1);
+    QCOMPARE(controller.terminalHistory().constFirst().toMap().value(QStringLiteral("command")).toString(),
+             QStringLiteral("Get-Date"));
+    QVERIFY(history.open(QIODevice::Append));
+    QCOMPARE(history.write("Get-Location\n"), 13);
+    history.close();
+    controller.refreshTerminalHistory();
+    QCOMPARE(controller.terminalHistory().size(), 1); // Old snapshot stays visible while reading.
+    QTRY_COMPARE(controller.terminalHistoryState(), QStringLiteral("ready"));
+    QCOMPARE(completed.count(), 2);
+    QCOMPARE(controller.terminalHistory().size(), 2);
+    const auto snapshot = controller.terminalHistory();
+    // A directory at the file path is a deterministic I/O failure, not an empty history file.
+    QVERIFY(history.remove());
+    QVERIFY(QDir{}.mkpath(historyPath));
+    controller.refreshTerminalHistory();
+    QTRY_COMPARE(controller.terminalHistoryState(), QStringLiteral("error"));
+    QCOMPARE(controller.terminalHistory(), snapshot);
+    QVERIFY(!controller.terminalHistoryError().isEmpty());
+    const QString second = controller.startLocalTerminalWithShell(QStringLiteral("windowsPowerShell"));
+    QVERIFY(!second.isEmpty());
+    QVERIFY(controller.terminalHistory().isEmpty());
+    QVERIFY(controller.activateTerminalTab(first));
+    QCOMPARE(controller.terminalHistory(), snapshot);
+    QVERIFY(state->inputs.isEmpty());
+    QVERIFY(state->pastes.isEmpty());
+}
+
 void AppControllerTests::managesMultipleLocalTerminalTabs()
 {
     QTemporaryDir directory;
@@ -1947,7 +2193,9 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
     QCOMPARE(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("workbenchWidth")).toDouble(), 700.0);
     QVERIFY(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("composerOpen")).toBool());
     QCOMPARE(controller.terminalTabs().constFirst().toMap().value(QStringLiteral("composerHeight")).toDouble(), 240.0);
+    const QVariantList historyBeforeInsert = controller.terminalHistory();
     QVERIFY(controller.insertTerminalCommand(QStringLiteral("Get-Date")));
+    QCOMPARE(controller.terminalHistory(), historyBeforeInsert);
     QCOMPARE(sessionState->pastes.constLast(), QByteArray("Get-Date"));
     QVERIFY(controller.runTerminalCommand(QStringLiteral("Get-Date")));
     QCOMPARE(sessionState->inputs.constLast(), QByteArray("Get-Date\r"));
@@ -1989,11 +2237,10 @@ void AppControllerTests::managesMultipleLocalTerminalTabs()
     QCOMPARE(controller.terminalTabs().at(1).toMap().value(QStringLiteral("workbenchPage")).toString(),
              QStringLiteral("notes"));
     QVERIFY(controller.runTerminalCommand(QStringLiteral("Write-Output second-tab")));
-    const QVariantList globalHistory = controller.terminalGlobalHistory();
-    QVERIFY(globalHistory.size() >= 3);
+    const QVariantList globalHistory = controller.terminalHistory();
+    QCOMPARE(globalHistory.size(), 1);
     const QVariantMap newestGlobalEntry = globalHistory.constFirst().toMap();
     QCOMPARE(newestGlobalEntry.value(QStringLiteral("command")).toString(), QStringLiteral("Write-Output second-tab"));
-    QCOMPARE(newestGlobalEntry.value(QStringLiteral("sourceId")).toString(), second);
     QVERIFY(!newestGlobalEntry.value(QStringLiteral("sourceLabel")).toString().isEmpty());
 
     QVERIFY(controller.activateTerminalTab(first));
@@ -2276,6 +2523,27 @@ void AppControllerTests::managesFreshTerminalTabWorkflows()
     QCOMPARE(sessionState->starts, 5);
 }
 
+void AppControllerTests::instanceOwnershipIsScopedToDataDirectory()
+{
+    QTemporaryDir installed;
+    QTemporaryDir portable;
+    ztermy::ApplicationInstance first;
+    ztermy::ApplicationInstance second;
+    ztermy::ApplicationInstance other;
+    QSignalSpy activated(&first, &ztermy::ApplicationInstance::activationRequested);
+    using Result = ztermy::ApplicationInstance::Result;
+    QCOMPARE(first.claim(installed.path()), Result::Primary);
+    auto launch = std::async(std::launch::async, [path = installed.path()] {
+        ztermy::ApplicationInstance nextLaunch;
+        return nextLaunch.claim(path);
+    });
+    QTRY_COMPARE(activated.count(), 1);
+    QCOMPARE(launch.get(), Result::Existing);
+    QCOMPARE(other.claim(portable.path()), Result::Primary);
+    first.release();
+    QCOMPARE(second.claim(installed.path()), Result::Primary);
+}
+
 void AppControllerTests::managesPersistentTerminalWorkspaceSplits()
 {
     QTemporaryDir directory;
@@ -2297,6 +2565,8 @@ void AppControllerTests::managesPersistentTerminalWorkspaceSplits()
         QVERIFY(controller.splitActiveTerminal(QStringLiteral("horizontal"), false));
         QCOMPARE(controller.terminalTabs().size(), 1);
         QCOMPARE(firstState->starts, 2);
+        QCOMPARE(firstState->launchSpecs.size(), 2);
+        QCOMPARE(firstState->launchSpecs[0].id, firstState->launchSpecs[1].id);
         QVariantMap workspace = controller.activeTerminalWorkspace();
         QCOMPARE(workspace.value(QStringLiteral("paneCount")).toInt(), 2);
         QVariantMap root = workspace.value(QStringLiteral("root")).toMap();
@@ -2306,6 +2576,11 @@ void AppControllerTests::managesPersistentTerminalWorkspaceSplits()
         const QString secondPaneId =
             root.value(QStringLiteral("second")).toMap().value(QStringLiteral("id")).toString();
         QCOMPARE(workspace.value(QStringLiteral("activePaneId")).toString(), secondPaneId);
+        QVERIFY(controller.moveTerminalPane(firstPaneId, secondPaneId, QStringLiteral("swap"), false));
+        QCOMPARE(firstState->starts, 2);
+        QVERIFY(controller.moveTerminalPane(secondPaneId, firstPaneId, QStringLiteral("swap"), false));
+        QCOMPARE(firstState->starts, 2);
+        QVERIFY(controller.activateTerminalPane(secondPaneId));
 
         QVERIFY(controller.focusRelativeTerminalPane(-1));
         QCOMPARE(controller.activeTerminalWorkspace().value(QStringLiteral("activePaneId")).toString(), firstPaneId);
@@ -2452,6 +2727,40 @@ void AppControllerTests::importsOpenSshProfilesAndJumpRoutes()
              gateway.value(QStringLiteral("id")).toString());
 }
 
+void AppControllerTests::preservesSessionRoutingForNoOpPaneMove()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    std::vector<std::shared_ptr<FakeLocalSessionState>> sessions;
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
+                                     directory.filePath(QStringLiteral("known_hosts.json")), [&] {
+                                         auto state = std::make_shared<FakeLocalSessionState>();
+                                         sessions.push_back(state);
+                                         return std::make_unique<FakeLocalTerminalSession>(std::move(state));
+                                     });
+    QVERIFY(!controller.startLocalTerminal().isEmpty());
+    QVERIFY(controller.splitActiveTerminal(QStringLiteral("horizontal"), true));
+    QCOMPARE(sessions.size(), std::size_t{2});
+    auto root = controller.activeTerminalWorkspace().value(QStringLiteral("root")).toMap();
+    const QString a = root.value(QStringLiteral("first")).toMap().value(QStringLiteral("id")).toString();
+    const QString b = root.value(QStringLiteral("second")).toMap().value(QStringLiteral("id")).toString();
+    QVERIFY(controller.setTerminalSplitRatio(root.value(QStringLiteral("id")).toString(), 0.63));
+    root = controller.activeTerminalWorkspace().value(QStringLiteral("root")).toMap();
+    QVERIFY(controller.moveTerminalPane(b, a, QStringLiteral("horizontal"), true));
+    QCOMPARE(controller.activeTerminalWorkspace().value(QStringLiteral("root")).toMap(), root);
+    QVERIFY(controller.activateTerminalPane(a));
+    QVERIFY(controller.insertTerminalCommand(QStringLiteral("session-a-marker")));
+    QCOMPARE(sessions[0]->pastes, QList<QByteArray>{"session-a-marker"});
+    QVERIFY(sessions[1]->pastes.isEmpty());
+    QVERIFY(controller.moveTerminalPane(a, b, QStringLiteral("horizontal"), false));
+    QVERIFY(controller.activateTerminalPane(b));
+    QVERIFY(controller.insertTerminalCommand(QStringLiteral("session-b-marker")));
+    QCOMPARE(sessions[1]->pastes, QList<QByteArray>{"session-b-marker"});
+    QCOMPARE(sessions[0]->pastes.size(), 1);
+    QCOMPARE(sessions[0]->starts, 1);
+    QCOMPARE(sessions[1]->starts, 1);
+}
+
 void AppControllerTests::restoresSavedSshWorkspaceWithoutConnecting()
 {
     QTemporaryDir directory;
@@ -2501,6 +2810,21 @@ void AppControllerTests::restoresSavedSshWorkspaceWithoutConnecting()
     QVERIFY(tab.value(QStringLiteral("canReconnect")).toBool());
     QVERIFY(tab.value(QStringLiteral("status")).toString().contains(QStringLiteral("reconnect"), Qt::CaseInsensitive));
     QVERIFY(!controller.hostKeyPromptVisible());
+
+    const QString originalIdentity = tab.value(QStringLiteral("identity")).toString();
+    QCOMPARE(originalIdentity, QStringLiteral("operator@192.0.2.44:22"));
+    QVERIFY(controller.splitActiveTerminal(QStringLiteral("horizontal"), true));
+    const QVariantMap splitRoot = controller.activeTerminalWorkspace().value(QStringLiteral("root")).toMap();
+    for (const auto *side : {"first", "second"})
+    {
+        QCOMPARE(splitRoot.value(QLatin1StringView{side})
+                     .toMap()
+                     .value(QStringLiteral("tab"))
+                     .toMap()
+                     .value(QStringLiteral("identity"))
+                     .toString(),
+                 originalIdentity);
+    }
 
     QSignalSpy workspaceChanged(&controller, &ztermy::AppController::terminalWorkspaceChanged);
     QVERIFY(!controller.startLocalTerminal().isEmpty());
@@ -2970,6 +3294,38 @@ void AppControllerTests::reconnectsSavedKeyProfileOnRealHost()
     };
     QTRY_VERIFY_WITH_TIMEOUT(reconnectBudgetExhausted(), 20'000);
     QVERIFY(!fingerprintMismatch);
+}
+
+void AppControllerTests::closesMultipleWorkspacesWithReentrantObservers()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    auto state = std::make_shared<FakeLocalSessionState>();
+    ztermy::AppController controller(directory.filePath(QStringLiteral("profiles.json")),
+                                     directory.filePath(QStringLiteral("known_hosts.json")), [state] {
+                                         return std::make_unique<FakeLocalTerminalSession>(state);
+                                     });
+    QObject::connect(&controller, &ztermy::AppController::terminalTabsChanged, &controller, [&controller] {
+        for (const auto &entry : controller.terminalTabs())
+            QVERIFY(!entry.toMap().value(QStringLiteral("id")).toString().isEmpty());
+        static_cast<void>(controller.activeTerminalWorkspace());
+        static_cast<void>(controller.terminalHistory());
+    });
+    QStringList ids;
+    for (int index = 0; index < 8; ++index)
+    {
+        ids.append(controller.startLocalTerminal());
+        QVERIFY(!ids.back().isEmpty());
+        QVERIFY(controller.splitActiveTerminal(QStringLiteral("horizontal"), true));
+    }
+    for (const QString &id : ids)
+        QVERIFY(controller.closeTerminalTab(id));
+    QVERIFY(controller.terminalTabs().isEmpty());
+    QCOMPARE(state->starts, 16);
+    QCOMPARE(state->stops, 16);
+    QTest::qWait(40);
+    controller.shutdown();
+    QCOMPARE(state->stops, 16);
 }
 
 QTEST_GUILESS_MAIN(AppControllerTests)

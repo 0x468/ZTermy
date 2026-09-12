@@ -1,4 +1,5 @@
 #include "application/AppController.h"
+#include "application/workbench/RemoteShellHistoryReader.h"
 
 #include "application/ai/AiNativeToolCatalog.h"
 #include "application/ai/AiPrivacyDiagnostics.h"
@@ -248,11 +249,6 @@ private:
 [[nodiscard]] QString siblingConnectionHistoryFile(const QString &profileStorePath)
 {
     return QFileInfo(profileStorePath).dir().filePath(QStringLiteral("connection-history.json"));
-}
-
-[[nodiscard]] QString siblingCommandHistoryFile(const QString &profileStorePath)
-{
-    return QFileInfo(profileStorePath).dir().filePath(QStringLiteral("command-history.json"));
 }
 
 [[nodiscard]] QString siblingSettingsFile(const QString &profileStorePath)
@@ -1675,6 +1671,7 @@ credentialKind(ztermy::ssh::SshAuthenticationMethod authentication) noexcept;
 
 [[nodiscard]] std::expected<std::vector<ztermy::ssh::SshJumpHostRequest>, ztermy::sftp::TransferCredentialError>
 storedJumpHostRequests(const ztermy::ssh::SshProfile &profile, const std::vector<ztermy::ssh::SshProfile> &profiles,
+                       const ztermy::ssh::SshKeychainCatalog &keychain,
                        ztermy::security::CredentialVault &vault) noexcept
 {
     using ztermy::sftp::TransferCredentialError;
@@ -1690,9 +1687,13 @@ storedJumpHostRequests(const ztermy::ssh::SshProfile &profile, const std::vector
                 return std::unexpected(TransferCredentialError::Unavailable);
             }
             ztermy::security::SensitiveByteArray secret;
-            if (jump->credentialReference)
+            const auto identity = ztermy::ssh::resolveSshIdentity(*jump, keychain);
+            if (!identity)
+                return std::unexpected(TransferCredentialError::Unavailable);
+            if (identity->credentialReference)
             {
-                auto stored = vault.read({.profileId = *jump->credentialReference, .kind = credentialKind(*jump)});
+                auto stored = vault.read(
+                    {.profileId = *identity->credentialReference, .kind = credentialKind(identity->authentication)});
                 if (!stored)
                 {
                     return std::unexpected(stored.error() == ztermy::security::CredentialVaultError::Locked
@@ -1701,7 +1702,7 @@ storedJumpHostRequests(const ztermy::ssh::SshProfile &profile, const std::vector
                 }
                 secret = std::move(*stored);
             }
-            if (profileRequiresCredential(*jump) && secret.empty())
+            if (identity->credentialRequired && secret.empty())
             {
                 return std::unexpected(TransferCredentialError::Unavailable);
             }
@@ -1727,9 +1728,10 @@ storedJumpHostRequests(const ztermy::ssh::SshProfile &profile, const std::vector
                 .displayName = utf8QString(jump->name),
                 .host = utf8QString(jump->host),
                 .port = jump->port,
-                .username = utf8QString(jump->username),
-                .authentication = jump->authentication,
-                .privateKeyPath = utf8QString(jump->privateKeyPath),
+                .username = utf8QString(identity->username),
+                .authentication = identity->authentication,
+                .privateKeyPath = utf8QString(identity->privateKeyPath),
+                .publicKeyPath = utf8QString(identity->publicKeyPath),
                 .secret = std::move(secret),
                 .proxy = jump->proxy,
                 .proxySecret = std::move(proxySecret),
@@ -2532,11 +2534,7 @@ void AppController::initializeRuntime()
     m_knownHostsController = std::make_unique<ssh::KnownHostsController>(m_knownHostsPath, this);
     m_connectionHistoryController = std::make_unique<logging::ConnectionHistoryController>(
         siblingConnectionHistoryFile(m_profileStore.filePath()), this);
-    m_commandHistoryController = std::make_unique<workbench::CommandHistoryController>(
-        siblingCommandHistoryFile(m_profileStore.filePath()), this);
     m_localFilesController = std::make_unique<workbench::LocalFileBrowserController>(this);
-    QObject::connect(m_commandHistoryController.get(), &workbench::CommandHistoryController::changed, this,
-                     &AppController::terminalHistoryChanged);
     QObject::connect(this, &AppController::openSshConfigImportCompleted, this, &AppController::applyOpenSshConfigImport,
                      Qt::QueuedConnection);
     qRegisterMetaType<ShellHistoryEntries>();
@@ -2700,6 +2698,11 @@ void AppController::shutdown() noexcept
         return;
     }
     m_shutdownStarted = true;
+    for (const auto &tab : m_tabs)
+        if (tab->historyCancellation)
+            tab->historyCancellation->request_stop();
+    m_historyWorker.clear();
+    m_historyWorker.waitForDone();
     m_scriptExecutionTimer.stop();
     ++m_aiModelsRequestGeneration;
     if (m_aiModelsReply)
@@ -2767,6 +2770,7 @@ void AppController::shutdown() noexcept
         m_transferManager.reset();
     }
     m_tabs.clear();
+    m_closingTabs.clear();
     m_stoppingSftpSessions.clear();
     m_transferTasks.clear();
     m_transferBatches.clear();
@@ -2968,6 +2972,7 @@ QVariantMap AppController::terminalTabValue(const TerminalTab &tab, const QStrin
         {QStringLiteral("logDroppedBytes"),
          QVariant::fromValue<qulonglong>(tab.sessionLog ? tab.sessionLog->droppedBytes() : 0)},
         {QStringLiteral("running"), tab.running},
+        {QStringLiteral("localExited"), tab.kind == TerminalTabKind::Local && !tab.running && tab.connectedUtcMs > 0},
         {QStringLiteral("restoreQuarantined"), tab.restoreQuarantined},
         {QStringLiteral("reconnecting"), tab.reconnectPending},
         {QStringLiteral("reconnectAttempt"), static_cast<int>(tab.reconnectAttempt)},
@@ -3125,7 +3130,8 @@ QVariantList AppController::terminalHistory() const
     result.reserve(
         static_cast<qsizetype>(std::min(maximumHistoryEntries, tab->capturedHistory.size() + tab->history.size())));
     QSet<QString> seen;
-    const auto appendEntries = [&result, &seen](const std::vector<workbench::ShellHistoryEntry> &entries) {
+    const auto appendEntries = [&result, &seen](const std::vector<workbench::ShellHistoryEntry> &entries,
+                                                const QString &source) {
         for (const workbench::ShellHistoryEntry &entry : entries)
         {
             const QString command = utf8QString(entry.command);
@@ -3134,133 +3140,27 @@ QVariantList AppController::terminalHistory() const
                 continue;
             }
             seen.insert(command);
-            result.append(terminalHistoryValue(entry));
+            result.append(terminalHistoryValue(entry, source));
             if (result.size() >= static_cast<qsizetype>(maximumHistoryEntries))
             {
                 break;
             }
         }
     };
-    appendEntries(tab->capturedHistory);
+    auto sessionCommands = tab->capturedHistory;
+    if (tab->semanticObserver)
+    {
+        const auto snapshot = tab->semanticObserver->snapshot();
+        for (const auto &block : std::views::reverse(snapshot.commandBlocks))
+            if (!block.command.empty() && block.commandProvenance != terminal::CommandProvenance::unknown
+                && block.commandProvenance != terminal::CommandProvenance::heuristicInput)
+                sessionCommands.push_back({.command = block.command, .timestampUtcSeconds = block.startedUtcMs / 1000});
+    }
+    std::ranges::stable_sort(sessionCommands, std::greater{}, &workbench::ShellHistoryEntry::timestampUtcSeconds);
+    appendEntries(sessionCommands, tr("This session"));
     if (result.size() < static_cast<qsizetype>(maximumHistoryEntries))
     {
-        appendEntries(tab->history);
-    }
-    return result;
-}
-
-QVariantList AppController::terminalGlobalHistory() const
-{
-    QVariantList result;
-    result.reserve(static_cast<qsizetype>(maximumHistoryEntries));
-    QSet<QString> seen;
-
-    const auto appendTab = [&result, &seen](const TerminalTab &tab) {
-        const QString sourceId = !tab.sourceProfileId.isEmpty() ? tab.sourceProfileId : tab.id;
-        const QString sourceLabel = !tab.title.isEmpty() ? tab.title : tab.identity;
-        const auto appendEntries = [&](const std::vector<workbench::ShellHistoryEntry> &entries) {
-            for (const workbench::ShellHistoryEntry &entry : entries)
-            {
-                const QString command = utf8QString(entry.command);
-                const QString key = sourceId + QChar{u'\0'} + command;
-                if (seen.contains(key))
-                {
-                    continue;
-                }
-                seen.insert(key);
-                result.append(terminalHistoryValue(entry, sourceLabel, sourceId));
-                if (result.size() >= static_cast<qsizetype>(maximumHistoryEntries))
-                {
-                    break;
-                }
-            }
-        };
-        appendEntries(tab.capturedHistory);
-        if (result.size() < static_cast<qsizetype>(maximumHistoryEntries))
-        {
-            appendEntries(tab.history);
-        }
-    };
-
-    const TerminalTab *active = activeTab();
-    if (active != nullptr)
-    {
-        appendTab(*active);
-    }
-    for (const std::unique_ptr<TerminalTab> &tab : m_tabs)
-    {
-        if (result.size() >= static_cast<qsizetype>(maximumHistoryEntries))
-        {
-            break;
-        }
-        if (tab && tab.get() != active)
-        {
-            appendTab(*tab);
-        }
-    }
-    if (m_commandHistoryController != nullptr && result.size() < static_cast<qsizetype>(maximumHistoryEntries))
-    {
-        for (const QVariant &value : m_commandHistoryController->entries())
-        {
-            const QVariantMap entry = value.toMap();
-            const QString key = entry.value(QStringLiteral("sourceId")).toString() + QChar{u'\0'}
-                                + entry.value(QStringLiteral("command")).toString();
-            if (!seen.contains(key))
-            {
-                seen.insert(key);
-                result.push_back(entry);
-            }
-            if (result.size() >= static_cast<qsizetype>(maximumHistoryEntries))
-                break;
-        }
-    }
-    return result;
-}
-
-QVariantList AppController::terminalCompletionCandidates(const QString &prefix, const int limit) const
-{
-    if (prefix.trimmed().size() < 2 || limit <= 0)
-        return {};
-    QVariantList result;
-    QSet<QString> seen;
-    const auto append = [&result, &seen, limit](const QVariantMap &value) {
-        const QString command = value.value(QStringLiteral("command")).toString();
-        if (command.isEmpty() || seen.contains(command) || result.size() >= limit)
-            return;
-        seen.insert(command);
-        result.push_back(value);
-    };
-    if (m_commandHistoryController != nullptr)
-    {
-        for (const QVariant &candidate : m_commandHistoryController->suggestions(prefix, limit))
-        {
-            QVariantMap value = candidate.toMap();
-            value.insert(QStringLiteral("kind"), QStringLiteral("history"));
-            append(value);
-        }
-    }
-    for (const workbench::ScriptDefinition &script : m_scripts)
-    {
-        if (script.steps.size() != 1 || !script.variables.empty())
-            continue;
-        const QString command = utf8QString(script.steps.front().command);
-        if (command.contains(prefix.trimmed(), Qt::CaseInsensitive))
-        {
-            QVariantMap value;
-            value.insert(QStringLiteral("command"), command);
-            value.insert(QStringLiteral("sourceLabel"), utf8QString(script.name));
-            value.insert(QStringLiteral("kind"), QStringLiteral("quick-command"));
-            append(value);
-        }
-    }
-    for (const QVariant &candidate : terminalHistory())
-    {
-        QVariantMap value = candidate.toMap();
-        if (value.value(QStringLiteral("command")).toString().contains(prefix.trimmed(), Qt::CaseInsensitive))
-        {
-            value.insert(QStringLiteral("kind"), QStringLiteral("session"));
-            append(value);
-        }
+        appendEntries(tab->history, tr("Shell history file"));
     }
     return result;
 }
@@ -3311,7 +3211,7 @@ QVariantList AppController::commandPaletteItems() const
         append(item);
     }
     int historyCount = 0;
-    for (const QVariant &historyValue : terminalGlobalHistory())
+    for (const QVariant &historyValue : terminalHistory())
     {
         if (historyCount++ >= 40)
             break;
@@ -3538,7 +3438,12 @@ bool AppController::activeTerminalTabPinned() const
 
 QVariantMap AppController::activeTerminalWorkspace() const
 {
-    const workbench::TerminalWorkspaceLayout *workspace = findTerminalWorkspace(m_activeTabId);
+    return terminalWorkspace(m_activeTabId);
+}
+
+QVariantMap AppController::terminalWorkspace(const QString &workspaceId) const
+{
+    const workbench::TerminalWorkspaceLayout *workspace = findTerminalWorkspace(workspaceId);
     if (workspace == nullptr)
     {
         return {};
@@ -3890,6 +3795,36 @@ bool AppController::sftpConfirmDelete() const noexcept
 bool AppController::closeToTray() const noexcept
 {
     return m_settings.closeToTray;
+}
+
+QVariantMap AppController::windowInteractionSettings() const
+{
+    const auto &settings = m_settings.windowInteraction;
+    return {{QStringLiteral("singleInstance"), settings.singleInstance},
+            {QStringLiteral("navigationWidth"), settings.navigationWidth},
+            {QStringLiteral("navigationExpandedWidth"), settings.navigationExpandedWidth},
+            {QStringLiteral("tabDoubleClick"), settings.tabDoubleClick},
+            {QStringLiteral("tabCloseButton"), settings.tabCloseButton}};
+}
+
+bool AppController::saveWindowInteractionSettings(const QVariantMap &changes)
+{
+    auto updated = m_settings;
+    auto values = windowInteractionSettings();
+    for (auto it = changes.cbegin(); it != changes.cend(); ++it)
+    {
+        if (!values.contains(it.key()))
+            return false;
+        values[it.key()] = it.value();
+    }
+    updated.windowInteraction = {
+        .singleInstance = values.value(QStringLiteral("singleInstance")).toBool(),
+        .navigationWidth = values.value(QStringLiteral("navigationWidth")).toInt(),
+        .navigationExpandedWidth = values.value(QStringLiteral("navigationExpandedWidth")).toInt(),
+        .tabDoubleClick = values.value(QStringLiteral("tabDoubleClick")).toString(),
+        .tabCloseButton = values.value(QStringLiteral("tabCloseButton")).toString(),
+    };
+    return persistApplicationSettings(updated);
 }
 
 bool AppController::performanceMode() const noexcept
@@ -4691,6 +4626,18 @@ QObject *AppController::connectionHistory() const noexcept
     return m_connectionHistoryController.get();
 }
 
+bool AppController::connectionHistoryEnabled() const noexcept
+{
+    return m_settings.connectionHistoryEnabled;
+}
+
+bool AppController::setConnectionHistoryEnabled(const bool enabled)
+{
+    auto updated = m_settings;
+    updated.connectionHistoryEnabled = enabled;
+    return persistApplicationSettings(updated);
+}
+
 QObject *AppController::localFiles() const noexcept
 {
     return m_localFilesController.get();
@@ -4905,50 +4852,20 @@ bool AppController::closeTerminalTabInternal(const QString &id, const bool recor
     const bool closingActive = workspaceId == m_activeTabId;
     const auto workspaceIndex =
         static_cast<std::size_t>(std::distance(m_workspaceState.terminalWorkspaces.begin(), workspacePosition));
-    std::erase_if(m_tabs, [this, &workspaceId](const std::unique_ptr<TerminalTab> &tab) {
-        if (tab->workspaceId != workspaceId)
-        {
-            return false;
-        }
-        if (tab->id == m_hostKeyTabId)
-        {
-            clearHostKeyPrompt();
-        }
-        if (m_connectionHistoryController)
-        {
-            m_connectionHistoryController->recordEnded(tab->id);
-        }
-        if (tab->local)
-        {
-            tab->local->stop();
-        }
-        if (tab->ssh)
-        {
-            tab->ssh->stop();
-        }
-        if (tab->semanticObserver)
-        {
-            tab->semanticObserver->finish(terminal::CommandCompletionReason::disconnect);
-        }
-        if (tab->sessionLog)
-        {
-            tab->sessionLog->stop();
-        }
-        if (!tab->aiConversationId.isEmpty())
-        {
-            m_aiActionToolDispatcher.clearConversation(utf8String(tab->aiConversationId));
-            m_aiCommandTracker.clearConversation(utf8String(tab->aiConversationId));
-        }
-        stopSftpSession(*tab);
-        m_terminalViewports.remove(tab->paneId);
-        return true;
-    });
-    timing.mark("sessions-stopped");
+    std::vector<std::unique_ptr<TerminalTab>> removed;
+    for (auto &tab : m_tabs)
+        if (tab->workspaceId == workspaceId)
+            removed.push_back(std::move(tab));
+    std::erase(m_tabs, nullptr);
+    timing.mark("sessions-detached");
     m_workspaceState.terminalWorkspaces.erase(workspacePosition);
     m_pinnedTerminalWorkspaceIds.remove(workspaceId);
-    emit terminalTabsChanged();
-    timing.mark("tab-unpublished");
-
+    // Publish no callbacks while the container has moved-from entries.
+    if (closingActive)
+        m_terminal = nullptr;
+    for (auto &tab : removed)
+        retireTerminalTab(std::move(tab));
+    timing.mark("sessions-retired");
     if (closingActive)
     {
         if (m_workspaceState.terminalWorkspaces.empty())
@@ -4962,9 +4879,13 @@ bool AppController::closeTerminalTabInternal(const QString &id, const bool recor
         {
             const std::size_t nextIndex = std::min(workspaceIndex, m_workspaceState.terminalWorkspaces.size() - 1U);
             m_activeTabId.clear();
+            m_workspaceState.activeTerminalWorkspaceId = m_workspaceState.terminalWorkspaces[nextIndex].id;
             activateTerminalTab(utf8QString(m_workspaceState.terminalWorkspaces[nextIndex].id));
         }
     }
+    timing.mark("active-changed");
+    emit terminalTabsChanged();
+    timing.mark("tab-unpublished");
     static_cast<void>(persistTerminalWorkspaces());
     timing.mark("workspace-persisted");
     return true;
@@ -5285,7 +5206,8 @@ bool AppController::activateTerminalPane(const QString &paneId)
     return true;
 }
 
-bool AppController::splitActiveTerminal(const QString &orientation, const bool duplicateActive)
+bool AppController::splitActiveTerminal(const QString &orientation, const bool duplicateActive,
+                                        const QString &profileId, const QString &shellId)
 {
     TerminalTab *source = activeTab();
     workbench::TerminalWorkspaceLayout *workspace = findTerminalWorkspace(m_activeTabId);
@@ -5317,13 +5239,21 @@ bool AppController::splitActiveTerminal(const QString &orientation, const bool d
     tab->workspaceId = source->workspaceId;
     tab->paneId = QUuid::createUuid().toString(QUuid::WithoutBraces);
     workbench::TerminalRestoreKind restoreKind = workbench::TerminalRestoreKind::Local;
-    if (duplicateActive && source->kind == TerminalTabKind::Ssh)
+    if (!profileId.isEmpty() || (duplicateActive && source->kind == TerminalTabKind::Ssh))
     {
+        const QString requestedProfile = profileId.isEmpty() ? source->sourceProfileId : profileId;
+        const auto profile = std::ranges::find(m_profiles, utf8String(requestedProfile), &ssh::SshProfile::id);
+        if (profile == m_profiles.end())
+            return false;
         tab->kind = TerminalTabKind::Ssh;
-        tab->title = source->title;
-        tab->identity = source->identity;
-        tab->address = source->address;
-        tab->sourceProfileId = source->sourceProfileId;
+        tab->title = utf8QString(profile->name);
+        tab->address = utf8QString(profile->host);
+        tab->identity = duplicateActive && profileId.isEmpty()
+                            ? source->identity
+                            : QStringLiteral("%1@%2:%3")
+                                  .arg(utf8QString(profile->username), utf8QString(profile->host))
+                                  .arg(profile->port);
+        tab->sourceProfileId = requestedProfile;
         tab->status = tr("SSH pane duplicated; reconnecting...");
         tab->keywordHighlightRules = source->keywordHighlightRules;
         tab->keywordHighlightEnabled = source->keywordHighlightEnabled;
@@ -5334,8 +5264,15 @@ bool AppController::splitActiveTerminal(const QString &orientation, const bool d
     }
     else
     {
+        const QString preference = !shellId.isEmpty() ? shellId
+                                   : duplicateActive  ? source->localShellId
+                                                      : config::localShellPreferenceToken(m_settings.localShell);
+        const auto shell = terminal::WindowsLocalShellCatalog::resolve(m_localShellProfiles, preference);
+        if (!shell)
+            return false;
         tab->kind = TerminalTabKind::Local;
-        tab->title = tr("PowerShell %1").arg(m_nextLocalTabNumber++);
+        tab->title = QStringLiteral("%1 %2").arg(shell->name).arg(m_nextLocalTabNumber++);
+        tab->localShellId = shell->id;
         tab->status = tr("Starting local terminal...");
         tab->local = m_localSessionFactory();
         if (!tab->local)
@@ -5344,6 +5281,12 @@ bool AppController::splitActiveTerminal(const QString &orientation, const bool d
         }
     }
 
+    if (tab->local)
+    {
+        const auto shell = terminal::WindowsLocalShellCatalog::resolve(m_localShellProfiles, tab->localShellId);
+        tab->local->setLaunchSpec(terminal::WindowsLocalShellCatalog::launchSpec(
+            *shell, duplicateActive ? source->terminalWorkingDirectory : QString{}));
+    }
     const QString tabId = tab->id;
     const QString paneId = tab->paneId;
     const workbench::TerminalWorkspaceLayout previous = *workspace;
@@ -5408,6 +5351,28 @@ bool AppController::moveTerminalPane(const QString &paneId, const QString &targe
     workbench::TerminalWorkspaceLayout *workspace = findTerminalWorkspace(m_activeTabId);
     if (workspace == nullptr)
         return false;
+    if (orientation == QStringLiteral("swap"))
+    {
+        TerminalTab *first = findTabForPane(paneId);
+        TerminalTab *second = findTabForPane(targetPaneId);
+        if (!first || !second || first == second || first->workspaceId != m_activeTabId
+            || second->workspaceId != m_activeTabId)
+            return false;
+        const auto previous = *workspace;
+        if (!workbench::swapTerminalPanes(*workspace, utf8String(paneId), utf8String(targetPaneId)))
+            return false;
+        std::swap(first->paneId, second->paneId);
+        if (!persistTerminalWorkspaces())
+        {
+            std::swap(first->paneId, second->paneId);
+            *workspace = previous;
+            return false;
+        }
+        static_cast<void>(activateTerminalPane(first->paneId));
+        emit terminalWorkspaceChanged();
+        showAllTerminalViewports();
+        return true;
+    }
     workbench::TerminalSplitOrientation splitOrientation;
     if (orientation == QStringLiteral("horizontal"))
         splitOrientation = workbench::TerminalSplitOrientation::Horizontal;
@@ -5421,6 +5386,8 @@ bool AppController::moveTerminalPane(const QString &paneId, const QString &targe
                                      utf8String(QUuid::createUuid().toString(QUuid::WithoutBraces)), splitOrientation,
                                      placeAfter))
         return false;
+    if (*workspace == previous)
+        return activateTerminalPane(paneId);
     if (!persistTerminalWorkspaces())
     {
         *workspace = previous;
@@ -5484,25 +5451,12 @@ bool AppController::closeActiveTerminalPane()
         *workspace = previous;
         return false;
     }
-    if (tab->local)
-    {
-        tab->local->stop();
-    }
-    if (tab->ssh)
-    {
-        tab->ssh->stop();
-    }
-    if (tab->sessionLog)
-    {
-        tab->sessionLog->stop();
-    }
-    stopSftpSession(*tab);
-    m_terminalViewports.remove(tab->paneId);
-    const QString closedId = tab->id;
-    std::erase_if(m_tabs, [&closedId](const std::unique_ptr<TerminalTab> &candidate) {
-        return candidate->id == closedId;
-    });
+    const auto position = std::ranges::find(m_tabs, tab, &std::unique_ptr<TerminalTab>::get);
+    auto removed = std::move(*position);
+    m_tabs.erase(position);
     m_focusedTabId = next->id;
+    m_terminal = nullptr;
+    retireTerminalTab(std::move(removed));
     emit terminalTabsChanged();
     emitActiveTerminalContextChanged();
     return true;
@@ -5692,6 +5646,13 @@ void AppController::clearTerminalSearch()
     emit terminalWorkspaceChanged();
 }
 
+bool AppController::ensureSftpBrowser()
+{
+    TerminalTab *tab = activeTab();
+    return tab && tab->kind == TerminalTabKind::Ssh && tab->sshPhase == ssh::SshConnectionPhase::Connected
+           && startSftpSession(*tab);
+}
+
 bool AppController::toggleTerminalWorkbench(const QString &page)
 {
     TerminalTab *tab = activeTab();
@@ -5710,17 +5671,9 @@ bool AppController::toggleTerminalWorkbench(const QString &page)
     if (tab->workbenchOpen && tab->workbenchPage == page)
     {
         tab->workbenchOpen = false;
-        if (page == QStringLiteral("sftp"))
-        {
-            stopSftpSession(*tab);
-        }
     }
     else
     {
-        if (tab->workbenchOpen && tab->workbenchPage == QStringLiteral("sftp"))
-        {
-            stopSftpSession(*tab);
-        }
         tab->workbenchPage = page;
         tab->workbenchOpen = true;
         if (page == QStringLiteral("sftp"))
@@ -5748,10 +5701,6 @@ void AppController::closeTerminalWorkbench()
         return;
     }
     tab->workbenchOpen = false;
-    if (tab->workbenchPage == QStringLiteral("sftp"))
-    {
-        stopSftpSession(*tab);
-    }
     emit terminalTabsChanged();
     emit sftpChanged();
 }
@@ -6868,10 +6817,19 @@ bool AppController::exportActiveNote(const QString &localFileUrl)
     return true;
 }
 
+void AppController::refreshSessionHistory()
+{
+    auto entries = terminalHistory();
+    if (entries == m_presentedTerminalHistory)
+        return;
+    m_presentedTerminalHistory = std::move(entries);
+    emit terminalHistoryChanged();
+}
+
 void AppController::refreshTerminalHistory()
 {
     TerminalTab *tab = activeTab();
-    if (tab == nullptr)
+    if (tab == nullptr || tab->historyState == QStringLiteral("loading"))
     {
         return;
     }
@@ -6888,15 +6846,54 @@ void AppController::refreshTerminalHistory()
         tab->historyError.clear();
         const std::uint64_t requestId = ++tab->historyRequestId;
         emit terminalHistoryChanged();
-        tab->ssh->requestShellHistory(requestId);
+        if (tab->historyCancellation)
+            tab->historyCancellation->request_stop();
+        tab->historyCancellation = std::make_shared<std::stop_source>();
+        const auto cancellation = tab->historyCancellation;
+        const auto provider = terminalTransferRequestProvider(*tab);
+        const QString tabId = tab->id;
+        const QPointer<AppController> self(this);
+        const QString failed =
+            tr("Shell history could not be read through SFTP. Check the connection and history file.");
+        m_historyWorker.start([provider, cancellation, self, tabId, requestId, failed] {
+            std::vector<workbench::ShellHistoryEntry> entries;
+            QString error = failed;
+            try
+            {
+                auto request = provider();
+                if (request)
+                {
+                    auto client = sftp::createSftpClient(*request, {}, cancellation->get_token());
+                    if (client)
+                    {
+                        auto loaded =
+                            workbench::readRemoteShellHistory(**client, request->username, cancellation->get_token());
+                        if (loaded)
+                        {
+                            entries = std::move(*loaded);
+                            error.clear();
+                        }
+                        else
+                            error = loaded.error();
+                    }
+                }
+            }
+            catch (const std::exception &)
+            {
+                error = failed;
+            }
+            if (self && !cancellation->stop_requested())
+                emit self->terminalHistoryTaskCompleted(tabId, requestId, std::move(entries), error);
+        });
         return;
     }
 
-    const QString historyPath = workbench::defaultPowerShellHistoryPath();
+    const QString historyPath = workbench::defaultLocalShellHistoryPath(tab->localShellId);
     if (historyPath.isEmpty())
     {
         tab->historyState = QStringLiteral("error");
-        tab->historyError = tr("The PowerShell history location is unavailable.");
+        tab->historyError = tr("The Shell history file could not be identified. Only this session's commands are "
+                               "shown; no command will be injected to discover history.");
         emit terminalHistoryChanged();
         return;
     }
@@ -6905,16 +6902,17 @@ void AppController::refreshTerminalHistory()
     tab->historyError.clear();
     const QString tabId = tab->id;
     const std::uint64_t requestId = ++tab->historyRequestId;
-    const QString historyReadError = tr("PowerShell history could not be read.");
+    const QString historyReadError = tr("Shell history file could not be read.");
+    const auto shell = localShellHistoryKind(tab->localShellId);
     emit terminalHistoryChanged();
 
     const QPointer<AppController> self(this);
-    QThreadPool::globalInstance()->start([self, historyPath, tabId, requestId, historyReadError] {
+    m_historyWorker.start([self, historyPath, shell, tabId, requestId, historyReadError] {
         std::vector<workbench::ShellHistoryEntry> entries;
         bool readFailed = true;
         try
         {
-            auto result = workbench::readPowerShellHistory(historyPath);
+            auto result = workbench::readShellHistoryFile(historyPath, shell);
             if (result)
             {
                 entries = std::move(*result);
@@ -7248,7 +7246,7 @@ bool AppController::enqueueSftpDownload(const QString &remotePath, const QString
         .sourceModifiedUtcSeconds =
             modifiedUtcSeconds >= 0 ? std::optional<std::int64_t>{modifiedUtcSeconds} : std::nullopt,
     };
-    const auto queued = m_transferManager->enqueue(std::move(task), transferRequestProvider(tab->sourceProfileId), {});
+    const auto queued = m_transferManager->enqueue(std::move(task), terminalTransferRequestProvider(*tab), {});
     return queued.has_value();
 }
 
@@ -7287,7 +7285,7 @@ bool AppController::enqueueSftpUpload(const QString &localFileUrl)
         .totalBytes = static_cast<std::uint64_t>(source.size()),
         .sourceModifiedUtcSeconds = source.lastModified().toSecsSinceEpoch(),
     };
-    const auto queued = m_transferManager->enqueue(std::move(task), transferRequestProvider(tab->sourceProfileId), {});
+    const auto queued = m_transferManager->enqueue(std::move(task), terminalTransferRequestProvider(*tab), {});
     return queued.has_value();
 }
 
@@ -7331,8 +7329,7 @@ bool AppController::enqueueSftpUploadBatchForTab(const TerminalTab &tab, const Q
         .direction = sftp::TransferBatchDirection::Upload,
     };
     return m_transferBatchCoordinator
-        ->enqueue(std::move(request), transferRequestProvider(tab.sourceProfileId),
-                  utf8String(tab.sftpFilenameEncoding))
+        ->enqueue(std::move(request), terminalTransferRequestProvider(tab), utf8String(tab.sftpFilenameEncoding))
         .has_value();
 }
 
@@ -7373,8 +7370,7 @@ bool AppController::enqueueSftpDownloadBatch(const QStringList &remotePaths, con
         .direction = sftp::TransferBatchDirection::Download,
     };
     return m_transferBatchCoordinator
-        ->enqueue(std::move(request), transferRequestProvider(tab->sourceProfileId),
-                  utf8String(tab->sftpFilenameEncoding))
+        ->enqueue(std::move(request), terminalTransferRequestProvider(*tab), utf8String(tab->sftpFilenameEncoding))
         .has_value();
 }
 
@@ -7665,7 +7661,6 @@ void AppController::applyTerminalHistoryTaskResult(const QString &tabId, const q
     }
     if (!error.isEmpty())
     {
-        target->history.clear();
         target->historyState = QStringLiteral("error");
         target->historyError = error;
     }
@@ -7810,6 +7805,7 @@ bool AppController::startSshConnection(ssh::SshConnectionRequest request, QStrin
     tab->status = tr("Starting SSH connection...");
     tab->kind = TerminalTabKind::Ssh;
     tab->sourceProfileId = std::move(sourceProfileId);
+    bindSshConnectionContext(*tab, request);
     if (sourceProfile != m_profiles.end())
     {
         tab->keywordHighlightRules = sourceProfile->keywordHighlightRules;
@@ -7955,8 +7951,11 @@ void AppController::attemptSshReconnect(const QString &tabId, const std::uint64_
         return;
     }
 
+    bindSshConnectionContext(*tab, *request);
     tab->sshFailure.reset();
     tab->sshPhase = ssh::SshConnectionPhase::Resolving;
+    tab->identity = QStringLiteral("%1@%2:%3").arg(request->username, request->host).arg(request->port);
+    tab->address = request->host;
     tab->status = tr("Reconnecting to SSH host...");
     emit terminalTabsChanged();
     const std::error_code error = tab->ssh->start(std::move(*request), {.columns = 100, .rows = 30});
@@ -8032,70 +8031,47 @@ bool AppController::cancelTerminalReconnect(const QString &id)
 std::expected<ssh::SshConnectionRequest, sftp::TransferCredentialError>
 AppController::sftpConnectionRequest(const TerminalTab &tab)
 {
-    if (tab.sourceProfileId.isEmpty())
-    {
-        return std::unexpected(sftp::TransferCredentialError::Unavailable);
-    }
-    const std::string profileId = utf8String(tab.sourceProfileId);
-    const auto profile = std::ranges::find(m_profiles, profileId, &ssh::SshProfile::id);
-    if (profile == m_profiles.end())
-    {
-        return std::unexpected(sftp::TransferCredentialError::Unavailable);
-    }
+    return terminalTransferRequestProvider(tab)();
+}
 
-    security::SensitiveByteArray secret;
-    if (profile->credentialReference)
-    {
-        auto stored = m_credentialVaults->active().read(
-            {.profileId = *profile->credentialReference, .kind = credentialKind(*profile)});
-        if (!stored)
-        {
-            return std::unexpected(stored.error() == security::CredentialVaultError::Locked
-                                       ? sftp::TransferCredentialError::Locked
-                                       : sftp::TransferCredentialError::Unavailable);
-        }
-        secret = std::move(*stored);
-    }
-    if ((profile->authentication == ssh::SshAuthenticationMethod::Password || profile->privateKeyPassphraseRequired)
-        && secret.empty())
-    {
+sftp::TransferRequestProvider AppController::terminalTransferRequestProvider(const TerminalTab &tab)
+{
+    if (tab.remoteRequestProvider)
+        return tab.remoteRequestProvider;
+    return []() -> std::expected<ssh::SshConnectionRequest, sftp::TransferCredentialError> {
         return std::unexpected(sftp::TransferCredentialError::Unavailable);
-    }
-    security::SensitiveByteArray proxySecret;
-    if (profile->proxy.credentialReference)
-    {
-        auto stored = m_credentialVaults->active().read(
-            {.profileId = *profile->proxy.credentialReference, .kind = security::CredentialKind::ProxyPassword});
-        if (!stored)
-        {
-            return std::unexpected(stored.error() == security::CredentialVaultError::Locked
-                                       ? sftp::TransferCredentialError::Locked
-                                       : sftp::TransferCredentialError::Unavailable);
-        }
-        proxySecret = std::move(*stored);
-    }
-    if (!profile->proxy.username.empty() && proxySecret.empty())
-    {
-        return std::unexpected(sftp::TransferCredentialError::Unavailable);
-    }
-    auto jumpHosts = storedJumpHostRequests(*profile, m_profiles, m_credentialVaults->active());
-    if (!jumpHosts)
-    {
-        return std::unexpected(jumpHosts.error());
-    }
-    return ssh::SshConnectionRequest{
-        .host = utf8QString(profile->host),
-        .port = profile->port,
-        .username = utf8QString(profile->username),
-        .authentication = profile->authentication,
-        .privateKeyPath = utf8QString(profile->privateKeyPath),
-        .secret = std::move(secret),
-        .proxy = profile->proxy,
-        .proxySecret = std::move(proxySecret),
-        .jumpHosts = std::move(*jumpHosts),
-        .knownHostsPath = m_knownHostsPath,
-        .sessionOptions = profile->sessionOptions,
     };
+}
+
+void AppController::bindSshConnectionContext(TerminalTab &tab, const ssh::SshConnectionRequest &request)
+{
+    static_cast<void>(cancelAiTurn(tab));
+    tab.pendingAiSftpRead.reset();
+    tab.pendingAiSftpList.reset();
+    if (tab.historyCancellation)
+        tab.historyCancellation->request_stop();
+    ++tab.historyRequestId;
+    tab.historyCancellation.reset();
+    tab.history.clear();
+    tab.capturedHistory.clear();
+    tab.inputHistoryBuffer.clear();
+    tab.historyState = QStringLiteral("idle");
+    tab.historyError.clear();
+    stopSftpSession(tab);
+    tab.sftpPath = QStringLiteral("/");
+    tab.sftpRequestedPath = tab.sftpPath;
+    tab.terminalWorkingDirectory.clear();
+    tab.pendingDropLocalFiles.clear();
+    // Freeze routing and identity at connection start; credentials stay in the existing vault.
+    tab.remoteRequestProvider = [provider = transferRequestProvider(tab.sourceProfileId), host = request.host,
+                                 port = request.port, username = request.username]() {
+        auto resolved = provider();
+        if (resolved && (resolved->host != host || resolved->port != port || resolved->username != username))
+            return std::expected<ssh::SshConnectionRequest, sftp::TransferCredentialError>{
+                std::unexpected(sftp::TransferCredentialError::Unavailable)};
+        return resolved;
+    };
+    emit terminalHistoryChanged();
 }
 
 sftp::TransferRequestProvider AppController::transferRequestProvider(const QString &profileId)
@@ -8112,15 +8088,19 @@ sftp::TransferRequestProvider AppController::transferRequestProvider(const QStri
     std::vector<ssh::SshProfile> profiles = m_profiles;
     security::CredentialVault *vault = &m_credentialVaults->active();
     QString knownHostsPath = m_knownHostsPath;
-    return [profile = std::move(profile), profiles = std::move(profiles), vault,
+    return [profile = std::move(profile), profiles = std::move(profiles), keychain = m_keychain, vault,
             knownHostsPath = std::move(
                 knownHostsPath)]() noexcept -> std::expected<ssh::SshConnectionRequest, sftp::TransferCredentialError> {
         try
         {
             security::SensitiveByteArray secret;
-            if (profile.credentialReference)
+            const auto identity = ssh::resolveSshIdentity(profile, keychain);
+            if (!identity)
+                return std::unexpected(sftp::TransferCredentialError::Unavailable);
+            if (identity->credentialReference)
             {
-                auto stored = vault->read({.profileId = *profile.credentialReference, .kind = credentialKind(profile)});
+                auto stored = vault->read(
+                    {.profileId = *identity->credentialReference, .kind = credentialKind(identity->authentication)});
                 if (!stored)
                 {
                     return std::unexpected(stored.error() == security::CredentialVaultError::Locked
@@ -8129,9 +8109,7 @@ sftp::TransferRequestProvider AppController::transferRequestProvider(const QStri
                 }
                 secret = std::move(*stored);
             }
-            if ((profile.authentication == ssh::SshAuthenticationMethod::Password
-                 || profile.privateKeyPassphraseRequired)
-                && secret.empty())
+            if (identity->credentialRequired && secret.empty())
             {
                 return std::unexpected(sftp::TransferCredentialError::Unavailable);
             }
@@ -8152,7 +8130,7 @@ sftp::TransferRequestProvider AppController::transferRequestProvider(const QStri
             {
                 return std::unexpected(sftp::TransferCredentialError::Unavailable);
             }
-            auto jumpHosts = storedJumpHostRequests(profile, profiles, *vault);
+            auto jumpHosts = storedJumpHostRequests(profile, profiles, keychain, *vault);
             if (!jumpHosts)
             {
                 return std::unexpected(jumpHosts.error());
@@ -8160,9 +8138,10 @@ sftp::TransferRequestProvider AppController::transferRequestProvider(const QStri
             return ssh::SshConnectionRequest{
                 .host = utf8QString(profile.host),
                 .port = profile.port,
-                .username = utf8QString(profile.username),
-                .authentication = profile.authentication,
-                .privateKeyPath = utf8QString(profile.privateKeyPath),
+                .username = utf8QString(identity->username),
+                .authentication = identity->authentication,
+                .privateKeyPath = utf8QString(identity->privateKeyPath),
+                .publicKeyPath = utf8QString(identity->publicKeyPath),
                 .secret = std::move(secret),
                 .proxy = profile.proxy,
                 .proxySecret = std::move(proxySecret),
@@ -8423,6 +8402,50 @@ void AppController::stopSftpSession(TerminalTab &tab)
     ++tab.sftpGeneration;
 }
 
+void AppController::retireTerminalTab(std::unique_ptr<TerminalTab> tab)
+{
+    if (tab->historyCancellation)
+        tab->historyCancellation->request_stop();
+    if (tab->id == m_hostKeyTabId)
+        clearHostKeyPrompt();
+    m_terminalViewports.remove(tab->paneId);
+    if (m_connectionHistoryController)
+        m_connectionHistoryController->recordEnded(tab->id);
+    if (tab->local)
+    {
+        QObject::disconnect(tab->local.get(), nullptr, this, nullptr);
+        tab->local->requestStop();
+    }
+    if (tab->ssh)
+    {
+        QObject::disconnect(tab->ssh.get(), nullptr, this, nullptr);
+        tab->ssh->requestStop();
+    }
+    stopSftpSession(*tab);
+    if (!tab->aiConversationId.isEmpty())
+    {
+        m_aiActionToolDispatcher.clearConversation(utf8String(tab->aiConversationId));
+        m_aiCommandTracker.clearConversation(utf8String(tab->aiConversationId));
+    }
+    const bool first = m_closingTabs.empty();
+    m_closingTabs.push_back(std::move(tab));
+    if (first)
+        QTimer::singleShot(16, this, &AppController::reapClosedTerminalTabs);
+}
+
+void AppController::reapClosedTerminalTabs()
+{
+    std::erase_if(m_closingTabs, [](const auto &tab) {
+        if ((tab->local && !tab->local->stopFinished()) || (tab->ssh && !tab->ssh->stopFinished()))
+            return false;
+        if (tab->semanticObserver)
+            tab->semanticObserver->finish(terminal::CommandCompletionReason::disconnect);
+        return true;
+    });
+    if (!m_closingTabs.empty() && !m_shutdownStarted)
+        QTimer::singleShot(16, this, &AppController::reapClosedTerminalTabs);
+}
+
 void AppController::deferSftpSessionStop(std::unique_ptr<sftp::SftpSession> session)
 {
     if (session == nullptr)
@@ -8527,7 +8550,6 @@ bool AppController::saveAndConnectHostProfile(const QString &id, const QString &
     }
     return false;
 }
-
 bool AppController::saveHostProfileInternal(const QString &id, const QString &name, const QString &host, const int port,
                                             const QString &username, const QString &authentication,
                                             const QString &privateKeyPath, const bool privateKeyPassphraseRequired,
@@ -8604,7 +8626,7 @@ bool AppController::saveHostProfileInternal(const QString &id, const QString &na
         setCredentialOperationError(tr("Select up to three distinct saved jump hosts."));
         return false;
     }
-
+    const bool usesKeychainIdentity = resolvedIdentityReference.has_value();
     ssh::SshProfile profile{
         .id = storedProfileId,
         .name = utf8String(normalizedName),
@@ -8614,11 +8636,12 @@ bool AppController::saveHostProfileInternal(const QString &id, const QString &na
         .username = utf8String(normalizedUsername),
         .identityReference = std::move(resolvedIdentityReference),
         .authentication = *authenticationMethod,
-        .privateKeyPath = *authenticationMethod == ssh::SshAuthenticationMethod::PrivateKey
+        .privateKeyPath = !usesKeychainIdentity && *authenticationMethod == ssh::SshAuthenticationMethod::PrivateKey
                               ? utf8String(normalizedPrivateKeyPath)
                               : std::string{},
-        .privateKeyPassphraseRequired =
-            *authenticationMethod == ssh::SshAuthenticationMethod::PrivateKey && privateKeyPassphraseRequired,
+        .privateKeyPassphraseRequired = !usesKeychainIdentity
+                                        && *authenticationMethod == ssh::SshAuthenticationMethod::PrivateKey
+                                        && privateKeyPassphraseRequired,
         .sessionOptions = std::move(resolvedSessionOptions),
         .proxy = std::move(resolvedProxy),
         .jumpProfileIds = std::move(*resolvedJumpProfileIds),
@@ -8627,7 +8650,6 @@ bool AppController::saveHostProfileInternal(const QString &id, const QString &na
     {
         return false;
     }
-
     std::vector<ssh::SshProfile> updated = m_profiles;
     const auto existing = std::ranges::find(updated, profile.id, &ssh::SshProfile::id);
     std::optional<security::CredentialKey> previousKey;
@@ -8668,7 +8690,6 @@ bool AppController::saveHostProfileInternal(const QString &id, const QString &na
         }
         *existing = profile;
     }
-
     const security::CredentialKey desiredKey{.profileId = profile.id, .kind = credentialKind(profile)};
     const bool shouldStore = manageCredential && effectiveRememberCredential && !secret.isEmpty();
     const bool effectiveRememberProxyCredential =
@@ -9331,6 +9352,7 @@ bool AppController::saveApplicationSettings(
         .sftpConfirmDelete = shouldConfirmSftpDelete,
         .closeToTray = shouldCloseToTray,
         .performanceMode = shouldPreferPerformance,
+        .connectionHistoryEnabled = m_settings.connectionHistoryEnabled,
         .credentialStorage = m_settings.credentialStorage,
         .language = *parsedLanguage,
         .aiProvider = m_settings.aiProvider,
@@ -9340,6 +9362,7 @@ bool AppController::saveApplicationSettings(
         .aiDebugTraceEnabled = m_settings.aiDebugTraceEnabled,
         .aiReasoning = m_settings.aiReasoning,
         .aiProxy = m_settings.aiProxy,
+        .windowInteraction = m_settings.windowInteraction,
     });
 }
 
@@ -14132,7 +14155,7 @@ std::string AppController::executeAiSftpTransfer(TerminalTab &tab, const ai::AiT
         .totalBytes = upload ? static_cast<std::uint64_t>(localFile.size()) : 0,
         .sourceModifiedUtcSeconds =
             upload ? std::optional<std::int64_t>{localFile.lastModified().toSecsSinceEpoch()} : std::nullopt};
-    const auto queued = m_transferManager->enqueue(std::move(task), transferRequestProvider(tab.sourceProfileId), {});
+    const auto queued = m_transferManager->enqueue(std::move(task), terminalTransferRequestProvider(tab), {});
     if (!queued)
     {
         return aiToolFailureJson(QStringLiteral("queue_failed"), tr("The SFTP transfer could not be queued."));
@@ -15306,72 +15329,7 @@ void AppController::connectSshTabSignals(TerminalTab &tab)
                              emit terminalWorkspaceChanged();
                          }
                      });
-    QObject::connect(
-        tab.ssh.get(), &ssh::SshTerminalSession::shellHistoryReady, this,
-        [this, tabId](const quint64 requestId, const QString &shell, const QByteArray &contents, const QString &error) {
-            TerminalTab *updated = findTab(tabId);
-            if (updated == nullptr || updated->historyRequestId != requestId)
-            {
-                return;
-            }
-            if (!error.isEmpty())
-            {
-                updated->history.clear();
-                updated->historyState = QStringLiteral("error");
-                updated->historyError = error;
-                if (m_focusedTabId == tabId)
-                {
-                    emit terminalHistoryChanged();
-                }
-                return;
-            }
-            constexpr qsizetype maximumHistoryBytes = qsizetype{2} * 1024 * 1024;
-            if (contents.size() > maximumHistoryBytes)
-            {
-                updated->history.clear();
-                updated->historyState = QStringLiteral("error");
-                updated->historyError = tr("Remote shell history exceeded the safety limit.");
-                if (m_focusedTabId == tabId)
-                {
-                    emit terminalHistoryChanged();
-                }
-                return;
-            }
 
-            const QPointer<AppController> self(this);
-            QThreadPool::globalInstance()->start([self, tabId, requestId, shell, contents] {
-                std::vector<workbench::ShellHistoryEntry> parsed;
-                QString parseError;
-                try
-                {
-                    const std::string_view source(contents.constData(), static_cast<std::size_t>(contents.size()));
-                    if (shell == QStringLiteral("bash"))
-                    {
-                        parsed = workbench::parseBashHistory(source);
-                    }
-                    else if (shell == QStringLiteral("zsh"))
-                    {
-                        parsed = workbench::parseZshHistory(source);
-                    }
-                    else if (shell == QStringLiteral("fish"))
-                    {
-                        parsed = workbench::parseFishHistory(source);
-                    }
-                    else
-                    {
-                        parseError = AppController::tr("This remote shell is not supported yet.");
-                    }
-                }
-                catch (const std::bad_alloc &)
-                {
-                    parseError = AppController::tr("Remote shell history could not be parsed.");
-                }
-                if (self)
-                {
-                    emit self->terminalHistoryTaskCompleted(tabId, requestId, std::move(parsed), parseError);
-                }
-            });
-        });
     QObject::connect(tab.ssh.get(), &ssh::SshTerminalSession::remoteTelemetryReady, this,
                      [this, tabId](const telemetry::Sample &sample) {
                          TerminalTab *updated = findTab(tabId);
@@ -15457,9 +15415,13 @@ void AppController::updateTelemetryVisibility()
 void AppController::connectSftpTabSignals(TerminalTab &tab)
 {
     const QString tabId = tab.id;
+    const auto currentTab = [this, tabId, source = QPointer<sftp::SftpSession>(tab.sftpSession.get())]() {
+        TerminalTab *updated = findTab(tabId);
+        return source && updated && updated->sftpSession.get() == source.data() ? updated : nullptr;
+    };
     QObject::connect(tab.sftpSession.get(), &sftp::SftpSession::runningChanged, this,
-                     [this, tabId](const bool running) {
-                         TerminalTab *updated = findTab(tabId);
+                     [this, tabId, currentTab](const bool running) {
+                         TerminalTab *updated = currentTab();
                          if (updated == nullptr || updated->sftpSession == nullptr)
                          {
                              return;
@@ -15470,36 +15432,37 @@ void AppController::connectSftpTabSignals(TerminalTab &tab)
                              emit sftpChanged();
                          }
                      });
-    QObject::connect(
-        tab.sftpSession.get(), &sftp::SftpSession::homeDirectoryReady, this, [this, tabId](const QString &homePath) {
-            TerminalTab *updated = findTab(tabId);
-            if (updated == nullptr || updated->sftpSession == nullptr)
-            {
-                return;
-            }
-            updated->sftpHomePath = homePath;
-            if (!updated->pendingDropLocalFiles.isEmpty())
-            {
-                const QStringList pending = std::exchange(updated->pendingDropLocalFiles, {});
-                QString destination = updated->terminalWorkingDirectory;
-                if (!sftp::normalizeRemotePath(utf8String(destination)))
-                {
-                    destination = homePath;
-                }
-                if (!enqueueSftpUploadBatchForTab(*updated, pending, destination))
-                {
-                    updated->status = tr("The dropped files could not be queued for upload.");
-                    emit terminalTabsChanged();
-                }
-            }
-            const QString requestedPath =
-                !updated->sftpHasListing && updated->sftpPath == QStringLiteral("/") ? homePath : updated->sftpPath;
-            requestSftpDirectory(*updated, requestedPath);
-        });
+    QObject::connect(tab.sftpSession.get(), &sftp::SftpSession::homeDirectoryReady, this,
+                     [this, tabId, currentTab](const QString &homePath) {
+                         TerminalTab *updated = currentTab();
+                         if (updated == nullptr || updated->sftpSession == nullptr)
+                         {
+                             return;
+                         }
+                         updated->sftpHomePath = homePath;
+                         if (!updated->pendingDropLocalFiles.isEmpty())
+                         {
+                             const QStringList pending = std::exchange(updated->pendingDropLocalFiles, {});
+                             QString destination = updated->terminalWorkingDirectory;
+                             if (!sftp::normalizeRemotePath(utf8String(destination)))
+                             {
+                                 destination = homePath;
+                             }
+                             if (!enqueueSftpUploadBatchForTab(*updated, pending, destination))
+                             {
+                                 updated->status = tr("The dropped files could not be queued for upload.");
+                                 emit terminalTabsChanged();
+                             }
+                         }
+                         const QString requestedPath =
+                             !updated->sftpHasListing && updated->sftpPath == QStringLiteral("/") ? homePath
+                                                                                                  : updated->sftpPath;
+                         requestSftpDirectory(*updated, requestedPath);
+                     });
     QObject::connect(tab.sftpSession.get(), &sftp::SftpSession::directoryReady, this,
-                     [this, tabId](const quint64 requestId, const quint64 generation, const QString &remotePath,
-                                   const sftp::DirectoryListingPtr &entries) {
-                         TerminalTab *updated = findTab(tabId);
+                     [this, tabId, currentTab](const quint64 requestId, const quint64 generation,
+                                               const QString &remotePath, const sftp::DirectoryListingPtr &entries) {
+                         TerminalTab *updated = currentTab();
                          if (updated == nullptr || updated->sftpModel == nullptr || requestId != updated->sftpRequestId
                              || generation != updated->sftpGeneration)
                          {
@@ -15519,9 +15482,9 @@ void AppController::connectSftpTabSignals(TerminalTab &tab)
                      });
     QObject::connect(
         tab.sftpSession.get(), &sftp::SftpSession::treeDirectoryReady, this,
-        [this, tabId](const quint64 requestId, const quint64 generation, const QString &remotePath,
-                      const sftp::DirectoryListingPtr &entries) {
-            TerminalTab *updated = findTab(tabId);
+        [this, tabId, currentTab](const quint64 requestId, const quint64 generation, const QString &remotePath,
+                                  const sftp::DirectoryListingPtr &entries) {
+            TerminalTab *updated = currentTab();
             if ((requestId & aiSftpListRequestFlag) != 0)
             {
                 if (updated == nullptr || !updated->pendingAiSftpList.has_value()
@@ -15557,9 +15520,9 @@ void AppController::connectSftpTabSignals(TerminalTab &tab)
         });
     QObject::connect(
         tab.sftpSession.get(), &sftp::SftpSession::treeDirectoryFailed, this,
-        [this, tabId](const quint64 requestId, const quint64 generation, const QString &remotePath,
-                      const ssh::SshTransportErrorKind error) {
-            TerminalTab *updated = findTab(tabId);
+        [this, tabId, currentTab](const quint64 requestId, const quint64 generation, const QString &remotePath,
+                                  const ssh::SshTransportErrorKind error) {
+            TerminalTab *updated = currentTab();
             if ((requestId & aiSftpListRequestFlag) != 0)
             {
                 if (updated == nullptr || !updated->pendingAiSftpList.has_value()
@@ -15592,9 +15555,9 @@ void AppController::connectSftpTabSignals(TerminalTab &tab)
         });
     QObject::connect(
         tab.sftpSession.get(), &sftp::SftpSession::fileReadReady, this,
-        [this, tabId](const quint64 requestId, const quint64 generation, const QString &remotePath,
-                      const sftp::FileReadBytesPtr &bytes, const bool truncated) {
-            TerminalTab *updated = findTab(tabId);
+        [this, tabId, currentTab](const quint64 requestId, const quint64 generation, const QString &remotePath,
+                                  const sftp::FileReadBytesPtr &bytes, const bool truncated) {
+            TerminalTab *updated = currentTab();
             if (updated == nullptr || !updated->pendingAiSftpRead.has_value() || bytes == nullptr
                 || updated->pendingAiSftpRead->requestId != requestId
                 || updated->pendingAiSftpRead->request.target.sessionGeneration != generation
@@ -15627,9 +15590,9 @@ void AppController::connectSftpTabSignals(TerminalTab &tab)
         });
     QObject::connect(
         tab.sftpSession.get(), &sftp::SftpSession::fileReadFailed, this,
-        [this, tabId](const quint64 requestId, const quint64 generation, const QString &remotePath,
-                      const ssh::SshTransportErrorKind error) {
-            TerminalTab *updated = findTab(tabId);
+        [this, tabId, currentTab](const quint64 requestId, const quint64 generation, const QString &remotePath,
+                                  const ssh::SshTransportErrorKind error) {
+            TerminalTab *updated = currentTab();
             if (updated == nullptr || !updated->pendingAiSftpRead.has_value()
                 || updated->pendingAiSftpRead->requestId != requestId
                 || updated->pendingAiSftpRead->request.target.sessionGeneration != generation
@@ -15658,38 +15621,39 @@ void AppController::connectSftpTabSignals(TerminalTab &tab)
                 ai::AiToolOutput{.callId = pending.call.id, .name = pending.call.name, .outputJson = output}));
         });
     QObject::connect(tab.sftpSession.get(), &sftp::SftpSession::operationSucceeded, this,
-                     [this, tabId](const quint64, const sftp::SftpOperationKind) {
-                         TerminalTab *updated = findTab(tabId);
+                     [this, tabId, currentTab](const quint64, const sftp::SftpOperationKind) {
+                         TerminalTab *updated = currentTab();
                          if (updated != nullptr && updated->sftpSession != nullptr)
                          {
                              requestSftpDirectory(*updated, updated->sftpPath);
                          }
                      });
-    QObject::connect(
-        tab.sftpSession.get(), &sftp::SftpSession::operationFailed, this,
-        [this, tabId](const quint64, const sftp::SftpOperationKind operation, const ssh::SshTransportErrorKind) {
-            TerminalTab *updated = findTab(tabId);
-            if (updated == nullptr)
-            {
-                return;
-            }
-            if (operation == sftp::SftpOperationKind::ListDirectory)
-            {
-                updated->sftpState = updated->sftpHasListing ? QStringLiteral("ready") : QStringLiteral("error");
-                updated->sftpError = tr("The remote directory could not be loaded.");
-            }
-            else
-            {
-                updated->sftpError = tr("The remote file operation failed.");
-            }
-            if (m_focusedTabId == tabId)
-            {
-                emit sftpChanged();
-            }
-        });
+    QObject::connect(tab.sftpSession.get(), &sftp::SftpSession::operationFailed, this,
+                     [this, tabId, currentTab](const quint64, const sftp::SftpOperationKind operation,
+                                               const ssh::SshTransportErrorKind) {
+                         TerminalTab *updated = currentTab();
+                         if (updated == nullptr)
+                         {
+                             return;
+                         }
+                         if (operation == sftp::SftpOperationKind::ListDirectory)
+                         {
+                             updated->sftpState =
+                                 updated->sftpHasListing ? QStringLiteral("ready") : QStringLiteral("error");
+                             updated->sftpError = tr("The remote directory could not be loaded.");
+                         }
+                         else
+                         {
+                             updated->sftpError = tr("The remote file operation failed.");
+                         }
+                         if (m_focusedTabId == tabId)
+                         {
+                             emit sftpChanged();
+                         }
+                     });
     QObject::connect(tab.sftpSession.get(), &sftp::SftpSession::connectionFailed, this,
-                     [this, tabId](const ssh::SshFailureKind) {
-                         TerminalTab *updated = findTab(tabId);
+                     [this, tabId, currentTab](const ssh::SshFailureKind) {
+                         TerminalTab *updated = currentTab();
                          if (updated == nullptr)
                          {
                              return;
@@ -15701,20 +15665,26 @@ void AppController::connectSftpTabSignals(TerminalTab &tab)
                              emit sftpChanged();
                          }
                      });
-    QObject::connect(tab.sftpSession.get(), &sftp::SftpSession::hostKeyConfirmationRequired, this,
-                     [this, tabId](const QString &endpoint, const QString &algorithm, const QString &fingerprint) {
-                         m_hostKeyTabId = tabId;
-                         m_hostKeyForSftp = true;
-                         activateTerminalTab(tabId);
-                         setHostKeyPrompt(endpoint, algorithm, fingerprint, false);
-                     });
-    QObject::connect(tab.sftpSession.get(), &sftp::SftpSession::hostKeyChanged, this,
-                     [this, tabId](const QString &endpoint, const QString &algorithm, const QString &fingerprint) {
-                         m_hostKeyTabId = tabId;
-                         m_hostKeyForSftp = true;
-                         activateTerminalTab(tabId);
-                         setHostKeyPrompt(endpoint, algorithm, fingerprint, true);
-                     });
+    QObject::connect(
+        tab.sftpSession.get(), &sftp::SftpSession::hostKeyConfirmationRequired, this,
+        [this, tabId, currentTab](const QString &endpoint, const QString &algorithm, const QString &fingerprint) {
+            if (!currentTab())
+                return;
+            m_hostKeyTabId = tabId;
+            m_hostKeyForSftp = true;
+            activateTerminalTab(tabId);
+            setHostKeyPrompt(endpoint, algorithm, fingerprint, false);
+        });
+    QObject::connect(
+        tab.sftpSession.get(), &sftp::SftpSession::hostKeyChanged, this,
+        [this, tabId, currentTab](const QString &endpoint, const QString &algorithm, const QString &fingerprint) {
+            if (!currentTab())
+                return;
+            m_hostKeyTabId = tabId;
+            m_hostKeyForSftp = true;
+            activateTerminalTab(tabId);
+            setHostKeyPrompt(endpoint, algorithm, fingerprint, true);
+        });
 }
 
 void AppController::recordRecentConnection(TerminalTab &tab)
@@ -16078,7 +16048,6 @@ void AppController::observeTerminalInput(TerminalTab &tab, const QByteArray &byt
             if (tab.inputHistoryBufferReliable)
             {
                 const QString command = QString::fromUtf8(tab.inputHistoryBuffer);
-                appendCapturedHistory(tab, command);
                 if (tab.semanticObserver && !command.isEmpty())
                 {
                     tab.semanticObserver->observeFallbackCommand(utf8String(command));
@@ -16121,7 +16090,7 @@ void AppController::observeTerminalInput(TerminalTab &tab, const QByteArray &byt
 
 void AppController::appendCapturedHistory(TerminalTab &tab, const QString &command)
 {
-    const QString normalized = normalizedQuickCommandText(command).trimmed();
+    const QString normalized = normalizedQuickCommandText(command);
     if (!validTerminalCommand(normalized))
     {
         return;
@@ -16146,12 +16115,6 @@ void AppController::appendCapturedHistory(TerminalTab &tab, const QString &comma
         {
             tab.capturedHistory.resize(maximumHistoryEntries);
         }
-    }
-    if (m_commandHistoryController != nullptr)
-    {
-        const QString sourceId = !tab.sourceProfileId.isEmpty() ? tab.sourceProfileId : tab.id;
-        const QString sourceLabel = !tab.title.isEmpty() ? tab.title : tab.identity;
-        m_commandHistoryController->record(normalized, shell, sourceId, sourceLabel, timestamp);
     }
     emit terminalHistoryChanged();
 }
@@ -16711,6 +16674,7 @@ void AppController::loadApplicationSettings()
         return;
     }
     m_settings = std::move(*settings);
+    m_connectionHistoryController->setRecordingEnabled(m_settings.connectionHistoryEnabled);
     if (m_settingsStore.lastLoadRecoveredFromBackup())
     {
         qCWarning(appControllerLog) << "Recovered application settings from the last-known-good backup";
@@ -17146,6 +17110,8 @@ bool AppController::persistApplicationSettings(const config::ApplicationSettings
     const bool aiProxyChanged = m_settings.aiProxy != settings.aiProxy || m_settings.aiProxyUrl != settings.aiProxyUrl
                                 || m_settings.aiProxyUsername != settings.aiProxyUsername;
     m_settings = settings;
+    if (m_connectionHistoryController)
+        m_connectionHistoryController->setRecordingEnabled(m_settings.connectionHistoryEnabled);
     if (aiDebugTraceChanged)
     {
         configureAiDebugTrace();
