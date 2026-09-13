@@ -40,7 +40,7 @@ Rectangle {
     implicitWidth: compact ? 38 : 112
     implicitHeight: Theme.titleBarHeight
     property real feedbackAmount: control.selected || control.hovered || activateAction.visualFocus ? 1 : 0
-    readonly property color feedbackColor: control.selected ? Theme.controlBackground : Theme.controlHover
+    readonly property color feedbackColor: activateAction.pressed ? Theme.captionPressed : control.selected ? Theme.controlBackground : Theme.captionHover
     color: Theme.withAlpha(feedbackColor, feedbackColor.a * feedbackAmount)
     border.color: activateAction.visualFocus ? Theme.focus : "transparent"
     border.width: activateAction.visualFocus ? 1 : 0
@@ -250,7 +250,7 @@ Rectangle {
         height: 24
         radius: 5
         property real feedbackAmount: closeAction.hovered || closeAction.visualFocus ? 1 : 0
-        color: Theme.withAlpha(Theme.borderStrong, Theme.borderStrong.a * feedbackAmount)
+        color: closeAction.pressed ? Theme.captionPressed : Theme.withAlpha(Theme.borderStrong, Theme.borderStrong.a * feedbackAmount)
         visible: !control.compact && control.closeButtonMode !== "hidden"
         opacity: control.closeButtonMode === "always" || control.hovered || activateAction.visualFocus || closeAction.visualFocus ? 1.0 : 0
         border.color: closeAction.visualFocus ? Theme.focus : "transparent"

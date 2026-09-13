@@ -6,6 +6,17 @@ The project has not published a release.
 
 ## Unreleased
 
+### 0.4.5 local validation build — 2026-09-13
+
+- Align detached-window minimize, maximize and close controls flush with the
+  window's top/right edges, without inherited pane-toolbar gaps.
+- Restrict the persistent pane-drag mouse capture to pane headers and active
+  drags so normal title-bar controls receive hover events again.
+- Restore visible hover and pressed backgrounds for title-bar tool actions,
+  retaining keyboard focus feedback.
+- Compile-only handoff for owner verification; no automated tests, tag or release
+  publication performed for this build.
+
 ### Added
 
 - Persistent terminal workspaces with bounded horizontal and vertical split

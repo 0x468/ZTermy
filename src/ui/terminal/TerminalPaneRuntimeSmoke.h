@@ -294,6 +294,12 @@ inline bool verifyTerminalPaneWindowInteractions(NativeWindow &window, AppContro
     qInfo() << "Window transfer independent native window:" << passed;
     if (detached)
     {
+        const auto *actions = detached->findChild<QQuickItem *>(QStringLiteral("terminalPaneActions-") + paneId);
+        const QPointF toolbarOrigin = actions ? actions->mapToScene(QPointF{}) : QPointF{-1, -1};
+        const bool controlsFlush = actions && qAbs(toolbarOrigin.y()) < 1
+                                   && qAbs(toolbarOrigin.x() + actions->width() - detached->width()) < 1;
+        qInfo() << "Detached window controls align with top and right edges:" << controlsFlush;
+        passed = passed && controlsFlush;
         const auto handle = reinterpret_cast<HWND>(detached->winId()); // NOLINT(performance-no-int-to-ptr)
         passed = passed && GetWindow(handle, GW_OWNER) == nullptr
                  && (GetWindowLongPtrW(handle, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) == 0;

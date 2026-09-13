@@ -1010,8 +1010,8 @@ Item {
                 detached: root.detachedPane
                 anchors.top: parent.top
                 anchors.right: parent.right
-                anchors.topMargin: leaf.paneHeaderVisible ? 2 : 8
-                anchors.rightMargin: leaf.paneHeaderVisible ? 4 : 8
+                anchors.topMargin: root.detachedPane ? 0 : leaf.paneHeaderVisible ? 2 : 8
+                anchors.rightMargin: root.detachedPane ? 0 : leaf.paneHeaderVisible ? 4 : 8
                 visible: (!!leaf.node.active || root.detachedPane) && !!root.controller
                 z: 13
                 onZoomRequested: root.zoomPaneRequested(leaf.node.id)

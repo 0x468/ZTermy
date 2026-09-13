@@ -16,7 +16,7 @@ RowLayout {
     signal zoomRequested
     signal detachRequested
     signal toggleHeadersRequested
-    spacing: 2
+    spacing: detached ? 0 : 2
     opacity: headersVisible || hover.hovered || activeFocus || newPaneMenu.visible || !dimmed ? 1 : detached ? 0 : 0.18
 
     Behavior on opacity {
@@ -95,7 +95,7 @@ RowLayout {
             objectName: "terminalPaneAction-" + modelData.id + "-" + root.paneId
             visible: modelData.shown
             Layout.preferredWidth: 28
-            Layout.preferredHeight: 28
+            Layout.preferredHeight: root.detached ? 32 : 28
             label: modelData.label
             iconName: modelData.icon
             selected: (modelData.id === "headers" && root.headersVisible) || (modelData.id === "zoom" && root.zoomed)
@@ -135,7 +135,7 @@ RowLayout {
         delegate: CaptionButton {
             required property string modelData
             Layout.preferredWidth: 32
-            Layout.preferredHeight: 28
+            Layout.preferredHeight: 32
             kind: modelData
             chrome: detachedChrome
             nativeMaximizeHandling: false

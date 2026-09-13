@@ -18,16 +18,9 @@ Row {
         width: controls.hostRoot.titleSecurityActionWidth
         height: controls.height
         visible: controls.hostRoot.portableVaultNeedsAttention
-        property real feedbackAmount: portableVaultStatusAction.hovered || portableVaultStatusAction.visualFocus ? 1 : 0
-        color: Theme.withAlpha(Theme.controlHover, Theme.controlHover.a * feedbackAmount)
+        color: portableVaultStatusAction.feedbackColor
         border.color: portableVaultStatusAction.visualFocus ? Theme.focus : "transparent"
         border.width: portableVaultStatusAction.visualFocus ? 1 : 0
-
-        Behavior on feedbackAmount {
-            NumberAnimation {
-                duration: Theme.motionFast
-            }
-        }
 
         AppIcon {
             anchors.centerIn: parent
@@ -75,7 +68,7 @@ Row {
             Rectangle {
                 width: 26
                 height: parent.height
-                color: alwaysOnTopAction.hovered || alwaysOnTopAction.visualFocus ? Theme.controlHover : "transparent"
+                color: alwaysOnTopAction.feedbackColor
 
                 AppIcon {
                     anchors.centerIn: parent
@@ -121,7 +114,7 @@ Row {
             Rectangle {
                 width: 14
                 height: parent.height
-                color: alwaysOnTopMenuAction.hovered || alwaysOnTopMenuAction.visualFocus || alwaysOnTopMenu.visible ? Theme.controlHover : "transparent"
+                color: alwaysOnTopMenuAction.pressed ? Theme.captionPressed : alwaysOnTopMenu.visible ? Theme.captionHover : alwaysOnTopMenuAction.feedbackColor
                 border.color: alwaysOnTopMenuAction.visualFocus ? Theme.focus : "transparent"
                 border.width: alwaysOnTopMenuAction.visualFocus ? 1 : 0
 
@@ -191,7 +184,7 @@ Row {
         visible: !controls.compact
         width: visible ? controls.hostRoot.titleQuickActionWidth : 0
         height: controls.height
-        color: transferCenterAction.hovered || transferCenterAction.visualFocus ? Theme.controlHover : "transparent"
+        color: transferCenterAction.feedbackColor
         border.color: transferCenterAction.visualFocus ? Theme.focus : "transparent"
         border.width: transferCenterAction.visualFocus ? 1 : 0
 
@@ -246,16 +239,9 @@ Row {
         visible: !controls.compact
         width: visible ? controls.hostRoot.titleQuickActionWidth : 0
         height: controls.height
-        property real feedbackAmount: commandPaletteAction.hovered || commandPaletteAction.visualFocus ? 1 : 0
-        color: Theme.withAlpha(Theme.controlHover, Theme.controlHover.a * feedbackAmount)
+        color: commandPaletteAction.feedbackColor
         border.color: commandPaletteAction.visualFocus ? Theme.focus : "transparent"
         border.width: commandPaletteAction.visualFocus ? 1 : 0
-
-        Behavior on feedbackAmount {
-            NumberAnimation {
-                duration: Theme.motionFast
-            }
-        }
 
         AppIcon {
             anchors.centerIn: parent
@@ -287,16 +273,9 @@ Row {
     Rectangle {
         width: controls.hostRoot.titleQuickActionWidth
         height: controls.height
-        property real feedbackAmount: settingsShortcutAction.hovered || settingsShortcutAction.visualFocus ? 1 : 0
-        color: Theme.withAlpha(Theme.controlHover, Theme.controlHover.a * feedbackAmount)
+        color: settingsShortcutAction.feedbackColor
         border.color: settingsShortcutAction.visualFocus ? Theme.focus : "transparent"
         border.width: settingsShortcutAction.visualFocus ? 1 : 0
-
-        Behavior on feedbackAmount {
-            NumberAnimation {
-                duration: Theme.motionFast
-            }
-        }
 
         AppIcon {
             anchors.centerIn: parent

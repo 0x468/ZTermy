@@ -24,7 +24,7 @@ Rectangle {
         Rectangle {
             width: 26
             height: parent.height
-            color: overflowAction.hovered || overflowAction.visualFocus ? Theme.controlHover : "transparent"
+            color: overflowAction.feedbackColor
 
             AppIcon {
                 anchors.centerIn: parent

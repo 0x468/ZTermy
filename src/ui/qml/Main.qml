@@ -946,7 +946,7 @@ Rectangle {
                 width: root.currentPage === "hosts" && root.width >= 700 ? 124 : 44
                 height: titleNavigation.height
                 property real feedbackAmount: root.currentPage === "hosts" || hostsTitleAction.hovered || hostsTitleAction.visualFocus ? 1 : 0
-                readonly property color feedbackColor: root.currentPage === "hosts" ? Theme.controlBackground : Theme.controlHover
+                readonly property color feedbackColor: hostsTitleAction.pressed ? Theme.captionPressed : root.currentPage === "hosts" ? Theme.controlBackground : Theme.captionHover
                 color: Theme.withAlpha(feedbackColor, feedbackColor.a * feedbackAmount)
                 border.color: hostsTitleAction.visualFocus ? Theme.focus : "transparent"
                 border.width: hostsTitleAction.visualFocus ? 1 : 0
@@ -1205,16 +1205,9 @@ Rectangle {
                 objectName: "titleNewTabContainer"
                 width: 36
                 height: titleNavigation.height
-                property real feedbackAmount: titleNewTabAction.hovered || titleNewTabAction.visualFocus ? 1 : 0
-                color: Theme.withAlpha(Theme.controlHover, Theme.controlHover.a * feedbackAmount)
+                color: titleNewTabAction.feedbackColor
                 border.color: titleNewTabAction.visualFocus ? Theme.focus : "transparent"
                 border.width: titleNewTabAction.visualFocus ? 1 : 0
-
-                Behavior on feedbackAmount {
-                    NumberAnimation {
-                        duration: Theme.motionFast
-                    }
-                }
 
                 AppIcon {
                     anchors.centerIn: parent
@@ -2836,10 +2829,28 @@ Rectangle {
         terminalArea: terminalViewport
     }
 
+    HoverHandler {
+        id: paneHeaderHover
+        blocking: false
+        property bool overHeader: false
+        onPointChanged: {
+            if (paneDragCapture.pressed)
+                return;
+            const global = root.mapToGlobal(point.position.x, point.position.y);
+            const header = root.currentPage === "terminal" && root.paneHeadersVisible ? terminalWindows.viewportAt(terminalViewport, global, "terminalPaneHeader-") : null;
+            overHeader = !!header && header.mapFromGlobal(global.x, global.y).x < header.dragAreaWidth;
+        }
+        onHoveredChanged: {
+            if (!hovered)
+                overHeader = false;
+        }
+    }
+
     MouseArea {
         id: paneDragCapture
         anchors.fill: parent
         z: 80
+        enabled: pressed || (paneHeaderHover.overHeader && root.currentPage === "terminal" && root.paneHeadersVisible)
         acceptedButtons: Qt.LeftButton
         preventStealing: true
         property point pressPoint: Qt.point(0, 0)
